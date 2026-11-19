@@ -474,6 +474,28 @@ struct Corridor {
     allowed: HashSet<Tile, BuildHasherDefault<TileHasher>>,
     target: (f32, f32),
     frontier: Frontier<Tile>,
+    pull: Option<Pull>,
+}
+
+/// String pulling over the corridor's tile route, suspended between steering updates: from
+/// `at`, the farthest route cell it can walk straight to, scanned from the route's end down to
+/// the next cell (`i`). Each line check is charged to the slice's budget by its length.
+struct Pull {
+    cells: Vec<Tile>,
+    out: Vec<(f32, f32)>,
+    at: (f32, f32),
+    i: usize,
+    j: usize,
+}
+
+/// Line samples a heap pop's worth of work covers (a pop costs up to eight neighbours' lookups).
+const LINE_SAMPLES_PER_POP: usize = 16;
+
+/// What a straight-line check from `a` to `b` costs in heap pops (`Belief::line_open` samples
+/// every quarter metre).
+fn line_cost(a: (f32, f32), b: (f32, f32)) -> usize {
+    let samples = (dist(a, b) * 4.0).ceil() as usize + 1;
+    samples.div_ceil(LINE_SAMPLES_PER_POP)
 }
 
 /// A search over one observation revision, suspended between steering updates.
@@ -559,6 +581,7 @@ impl Search {
                     allowed,
                     target,
                     frontier: Frontier::new(tile(self.from)),
+                    pull: None,
                 });
                 break;
             }
@@ -590,7 +613,7 @@ impl Search {
                 }
             }
         }
-        while budget > 0 {
+        while budget > 0 && self.corridor.as_ref().is_some_and(|c| c.pull.is_none()) {
             self.pops += 1;
             let corridor = self.corridor.as_mut().unwrap();
             let goal = tile(corridor.target);
@@ -600,24 +623,9 @@ impl Search {
             let Some((g, p)) = entry else { continue };
             if p == goal {
                 let cells = corridor.frontier.route(goal);
-                let mut result = Vec::new();
-                let mut at = self.from;
-                let mut i = 1;
-                while i < cells.len() {
-                    let mut j = (i + 2 * CHUNK as usize).min(cells.len() - 1);
-                    while j > i && !b.line_open(at, point(cells[j])) {
-                        j -= 1;
-                    }
-                    at = point(cells[j]);
-                    result.push(at);
-                    i = j + 1;
-                }
-                let before_end = result.iter().rev().nth(1).copied().unwrap_or(self.from);
-                if !result.is_empty() && b.line_open(before_end, corridor.target) {
-                    result.pop();
-                }
-                result.push(corridor.target);
-                return Some(Ok(result));
+                let j = cells.len() - 1;
+                corridor.pull = Some(Pull { cells, out: Vec::new(), at: self.from, i: 1, j });
+                break;
             }
             let mut cost_at = |p: Tile| {
                 let c = chunk(p);
@@ -646,7 +654,35 @@ impl Search {
                 corridor.frontier.push(p, n, g.saturating_add(step), h);
             }
         }
-        None
+        let Some(corridor) = self.corridor.as_mut() else { return None };
+        let Some(pull) = corridor.pull.as_mut() else { return None };
+        loop {
+            if pull.i >= pull.cells.len() {
+                let mut result = std::mem::take(&mut pull.out);
+                let before_end = result.iter().rev().nth(1).copied().unwrap_or(self.from);
+                if !result.is_empty() && b.line_open(before_end, corridor.target) {
+                    result.pop();
+                }
+                result.push(corridor.target);
+                return Some(Ok(result));
+            }
+            if budget == 0 {
+                return None;
+            }
+            let to = point(pull.cells[pull.j]);
+            // The next cell needs no check: the tile route steps to it.
+            if pull.j > pull.i {
+                budget = budget.saturating_sub(line_cost(pull.at, to));
+                if !b.line_open(pull.at, to) {
+                    pull.j -= 1;
+                    continue;
+                }
+            }
+            pull.at = to;
+            pull.out.push(to);
+            pull.i = pull.j + 1;
+            pull.j = pull.cells.len() - 1;
+        }
     }
 }
 
@@ -876,6 +912,48 @@ mod tests {
             }
         }
         panic!("one-pop updates did not finish the search");
+    }
+
+    /// Straightening reaches the farthest route cell in a straight line, not a window ahead of
+    /// it: an open diagonal walk longer than two chunks of route cells is one straight leg, unseen
+    /// ground in the way included, also when every update gets one pop; round a seen wall, the
+    /// leg keeps only the corners it needs.
+    #[test]
+    fn straightening_reaches_the_farthest_cell_in_line() {
+        let m = open(128, 128);
+        let b = belief(&m, &[], &[], HashMap::new());
+        let s = Shape::default();
+        let (from, to) = ((6.5, 6.5), (46.5, 46.5));
+        let route = {
+            let mut search = Search::new(&b, from, to, s).unwrap();
+            while search.corridor.as_ref().is_none_or(|c| c.pull.is_none()) {
+                assert!(search.advance(&b, 1).is_none());
+            }
+            search.corridor.as_ref().unwrap().pull.as_ref().unwrap().cells.len()
+        };
+        assert!(route > 2 * CHUNK as usize, "route of {route} cells is inside the old window");
+        assert_eq!(leg(&b, from, to, &s), Ok(vec![to]));
+        let mut search = Search::new(&b, from, to, s).unwrap();
+        let sliced = loop {
+            if let Some(result) = search.advance(&b, 1) {
+                break result;
+            }
+        };
+        assert_eq!(sliced, Ok(vec![to]));
+
+        let mut walled = open(128, 128);
+        wall(&mut walled, 30, 30, 70);
+        let all = all_chunks(&walled);
+        let seen = belief(&walled, &all, &[], HashMap::new());
+        let (from, to) = ((10.5, 50.5), (50.5, 50.5));
+        let path = leg(&seen, from, to, &s).unwrap();
+        assert!(path.len() <= 3, "{path:?}");
+        let mut at = from;
+        for &p in &path {
+            assert!(seen.line_open(at, p), "{at:?} -> {p:?} in {path:?}");
+            at = p;
+        }
+        assert_eq!(at, to);
     }
 
     /// A long walk goes a leg at a time: the first ends about `leg_m` along, and from there the
