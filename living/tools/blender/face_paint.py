@@ -248,20 +248,27 @@ def paint_skin(hf, look, rng, layer=None):
     beard = look.get("beard")
     grain = value_noise((rows, cols), 3, rng)
     hairs = strands((rows, cols), rng)
+    whiskers = None
     if stub > 0:
         low = smooth((zm + 0.012 - z) / 0.030) * smooth((y + 0.02) / 0.04) * (0.60 + 0.40 * smooth((ax - 0.010) / 0.03))
         low = np.maximum(low, 0.9 * np.exp(-((ax / (mw * 1.15)) ** 2 + ((z - (zs - 0.0085)) / 0.0055) ** 2)))
         low *= smooth((104 - np.abs(az)) / 12)
         low *= 1 - upper - lower
-        c.blend(look["stubble_colour"], stub * low * (0.20 + 0.45 * grain**1.5), where=np.ones_like(front))
+        whiskers = stub * low * (0.08 + 0.36 * grain**1.5) * (0.35 + 0.65 * hairs)
+        c.blend(look["stubble_colour"], whiskers, where=np.ones_like(front))
     # A beard: the hair's colour in fine strokes, its edge broken into hairs.
-    cover = hf.beard_cover(beard, ax, z, az, e=0.0030 * (hairs - 0.5), soft=0.0007)
+    cover = hf.beard_cover(beard, ax, z, az, e=0.0030 * (hairs - 0.5), soft=0.0025)
     if cover is not None:
         cover = cover * smooth((y + 0.03) / 0.03)
         bc = np.array(look["beard_colour"])
         tone = 0.62 + 0.76 * hairs
         hair = bc[None, None, :] * tone[..., None] + (0.10 * np.clip(tone - 1.0, 0, 1))[..., None]
-        a = np.clip(cover * look.get("beard_density", 1.0), 0, 1)
+        density = 0.90 if beard == "full" else 0.76
+        # The short beard shows its hair colour through the core. Its anatomical
+        # mask supplies the cheek taper and the opening around the lips.
+        opacity = (0.95 + 0.05 * hairs) if beard == "short" else density * (0.30 + 0.70 * hairs)
+        a = np.clip(cover * look.get("beard_density", 1.0) * opacity, 0, 1)
+        whiskers = a
         c.img += (np.clip(hair, 0, 1) - c.img) * a[..., None]
     # Age: folds from the nose past the mouth, lines on the forehead and between the brows,
     # crow's feet, bags, lines down from the mouth's corners.
@@ -298,7 +305,7 @@ def paint_skin(hf, look, rng, layer=None):
         layer["rgb"] = np.where(acc["w"][..., None] > 1e-5, acc["sum"] / np.maximum(acc["w"], 1e-5)[..., None], np.array(BLUSH_PIGMENT))
         layer["alpha"] = 1 - acc["clear"]
     # Behind the face the skin is plain; hair or a beard covers most of it.
-    return c.img, dict(x=x, y=y, z=z)
+    return c.img, dict(x=x, y=y, z=z, whiskers=whiskers)
 
 
 # -------------------------------------------------------------------------------------- eyes
