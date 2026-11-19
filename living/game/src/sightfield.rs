@@ -93,9 +93,11 @@ pub struct SightField {
     eye: Option<Vec2>,
     reach: f32,
     /// Where the field was last asked for (the running or last task), and the running task.
-    asked: Option<(Vec2, f32, Option<Facing>)>,
+    asked: Option<(Vec2, f32, Option<Facing>, Option<living_rules::sight::GazeBand>)>,
     /// The facing the shown field was worked out for (none: sight the same all round).
     pub facing: Option<Facing>,
+    pub gaze_band: Option<living_rules::sight::GazeBand>,
+    pub sight: f32,
     task: Option<Task<Computed>>,
     /// The tiles sight is tested on: the hosted land, with the window's edits and shut gates.
     map: Option<Arc<Map>>,
@@ -172,6 +174,8 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         reach: 0.0,
         asked: None,
         facing: None,
+        gaze_band: None,
+        sight: 0.0,
         task: None,
         map: None,
         hosted: None,
@@ -262,6 +266,8 @@ fn tiles(mut field: Option<ResMut<SightField>>, live: Res<crate::live::Live>, is
 
 /// A field worked out off the frame.
 struct Computed {
+    gaze_band: Option<living_rules::sight::GazeBand>,
+    sight: f32,
     seen: Vec<u8>,
     facing: Option<Facing>,
     origin: IVec2,
@@ -281,33 +287,46 @@ fn update(mut field: Option<ResMut<SightField>>, edge: Res<SightEdge>, target: R
     let dt = time.delta_secs();
     let (Some(map), Some(me), Some(want)) = (field.map.clone(), target.0, edge.want) else {
         field.valid = false;
+        if edge.gaze_band.is_some() || field.gaze_band.is_some() {
+            field.asked = None;
+            field.task = None;
+        }
         return;
     };
     let eye = Vec2::new(me.x, me.z);
-    let reach = (want + MARGIN).min(EXTENT * 0.5 - 2.0);
+    let gaze_band = edge.gaze_band;
+    // Keep the full Far circle inside the mask; the shader handles the soft radius beyond it.
+    let reach = if gaze_band.is_some() { want + MARGIN } else { (want + MARGIN).min(EXTENT * 0.5 - 2.0) };
     // A finished field: shown from this frame.
+    if field.asked.is_some_and(|(_, _, _, band)| band != gaze_band) {
+        field.task = None;
+    }
     if let Some(done) = field.task.as_mut().and_then(check_ready) {
         field.task = None;
-        let c = &mut field.cost;
-        c.runs += 1;
-        c.total_ms += done.ms;
-        c.max_ms = c.max_ms.max(done.ms);
-        c.last_ms = done.ms;
-        c.tiles = done.tested;
-        field.origin = done.origin;
-        field.eye = Some(done.eye);
-        field.reach = done.reach;
-        field.facing = done.facing;
-        field.valid = true;
-        field.fresh = true;
-        if let Some(mut img) = images.get_mut(&field.image) {
-            img.data = Some(done.seen.clone());
+        if done.gaze_band == gaze_band {
+            let c = &mut field.cost;
+            c.runs += 1;
+            c.total_ms += done.ms;
+            c.max_ms = c.max_ms.max(done.ms);
+            c.last_ms = done.ms;
+            c.tiles = done.tested;
+            field.origin = done.origin;
+            field.eye = Some(done.eye);
+            field.reach = done.reach;
+            field.facing = done.facing;
+            field.gaze_band = done.gaze_band;
+            field.sight = done.sight;
+            field.valid = true;
+            field.fresh = true;
+            if let Some(mut img) = images.get_mut(&field.image) {
+                img.data = Some(done.seen.clone());
+            }
+            field.seen = done.seen;
+            let t0 = std::time::Instant::now();
+            remember(field, edge.radius, time.elapsed_secs());
+            field.cost.remember.0 += 1;
+            field.cost.remember.1 += t0.elapsed().as_secs_f64() * 1000.0;
         }
-        field.seen = done.seen;
-        let t0 = std::time::Instant::now();
-        remember(field, edge.radius, time.elapsed_secs());
-        field.cost.remember.0 += 1;
-        field.cost.remember.1 += t0.elapsed().as_secs_f64() * 1000.0;
     }
     // The memory look: how recently each texel was seen, about 15 times a second.
     let wants_memory = edge.mode == Mode::Unseen && edge.look == crate::sightedge::Look::Memory;
@@ -326,16 +345,16 @@ fn update(mut field: Option<ResMut<SightField>>, edge: Res<SightEdge>, target: R
     } else if !wants_memory {
         field.memory_live = false;
     }
-    let due = field.asked.is_none_or(|(e, r, f)| e.distance(eye) >= MOVE_M || (reach - r).abs() > 0.01 || turned(&f, facing));
+    let due = field.asked.is_none_or(|(e, r, f, band)| band != gaze_band || e.distance(eye) >= MOVE_M || (reach - r).abs() > 0.01 || turned(&f, facing));
     if due && field.task.is_none() {
-        field.asked = Some((eye, reach, facing));
+        field.asked = Some((eye, reach, facing, gaze_band));
         let half = (EXTENT * 0.5) as i32;
         let origin = IVec2::new(eye.x.floor() as i32 - half, eye.y.floor() as i32 - half);
         field.task = Some(AsyncComputeTaskPool::get().spawn(async move {
             let t0 = std::time::Instant::now();
             let mut seen = vec![0u8; (SIZE * SIZE) as usize];
             let tested = compute(&map, eye, reach, origin, &mut seen, facing.as_ref());
-            Computed { seen, facing, origin, eye, reach, ms: t0.elapsed().as_secs_f64() * 1000.0, tested }
+            Computed { seen, facing, origin, eye, reach, gaze_band, sight: want, ms: t0.elapsed().as_secs_f64() * 1000.0, tested }
         }));
     }
     if crate::perf::has("sightfield") {
@@ -352,7 +371,9 @@ fn update(mut field: Option<ResMut<SightField>>, edge: Res<SightEdge>, target: R
         if let Some(dir) = field.dump.clone() {
             field.next_dump = 1.0;
             field.fresh = false;
-            write_dump(field, &dir, edge.radius, want);
+            let radius = if field.gaze_band.is_some() { field.sight } else { edge.radius };
+            let sight = if field.gaze_band.is_some() { field.sight } else { want };
+            write_dump(field, &dir, radius, sight);
         }
     }
 }
@@ -523,8 +544,9 @@ fn write_dump(field: &mut SightField, dir: &std::path::Path, radius: f32, want: 
     pgm.extend_from_slice(&field.seen);
     let eye = field.eye.unwrap_or_default();
     let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
+    let band = field.gaze_band.map_or_else(|| "null".into(), |band| (band as u8).to_string());
     let json = format!(
-        "{{\"n\": {n}, \"wall_ms\": {ms}, \"origin\": [{}, {}], \"size\": {SIZE}, \"texel\": {TEXEL}, \"eye\": [{:.3}, {:.3}], \"radius\": {radius:.3}, \"sight\": {want:.3}, \"reach\": {:.3}, \"cost_ms\": {:.4}, \"tiles\": {}, \"facing\": {}}}\n",
+        "{{\"n\": {n}, \"wall_ms\": {ms}, \"origin\": [{}, {}], \"size\": {SIZE}, \"texel\": {TEXEL}, \"eye\": [{:.3}, {:.3}], \"band\": {band}, \"radius\": {radius:.3}, \"sight\": {want:.3}, \"reach\": {:.3}, \"cost_ms\": {:.4}, \"tiles\": {}, \"facing\": {}}}\n",
         field.origin.x, field.origin.y, eye.x, eye.y, field.reach, field.cost.last_ms, field.cost.tiles, facing_json(field.facing.as_ref())
     );
     let _ = std::fs::write(dir.join(format!("field-{n:04}.pgm")), pgm);
