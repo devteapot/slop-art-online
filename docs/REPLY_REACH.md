@@ -2,6 +2,27 @@
 
 Four of 33 submitted, directed mind talk replies missed their intended listener across play-tests 8, 9 and the play-test 10 launch (12.1%). The three misses with position samples were inside ordinary speech range around model completion and outside it at submission. The launch evidence identifies Agnes as the mover and leaves her distance at model completion unresolved.
 
+## Paid player-greeting check
+
+The initial miss share fell from **5/6 (83.3%)** on `1848257c` to **1/6 (16.7%)** on `974ef3d8`. Both arms used the same seed, 12 m ordinary voice and 30 m call reach, and the same six starting-distance targets. A stationary non-admin player said “Good morning. What is your name?” to each resident as it walked away. The table shows estimated separation from live authority body segments. Actual delivery comes from matching `said`, `speech` and `silence` rows.
+
+| Staged gap | Before, ready → submission | Before, outcome | After, ready → submission | After, outcome |
+| --- | ---: | --- | ---: | --- |
+| 5.5 m | 6.94 → 10.91 m | Heard | 7.36 → 7.36 m | Heard |
+| 7.7 m | 9.03 → 12.79 m | Missed | 8.87 → 8.87 m | Heard |
+| 8.6 m | 9.77 → 14.09 m | Missed | 10.85 → 10.85 m | Heard |
+| 9.4 m | 10.72 → 14.65 m | Missed | 10.96 → 10.96 m | Heard |
+| 10.3 m | 11.68 → 15.08 m | Missed | 14.65 → 14.65 m | Heard by call |
+| 11.0 m | 12.42 → 16.38 m | Missed | 12.09 → 12.09 m | Missed |
+
+All six before replies used ordinary speech and were submitted 1,981–1,982 ms after the greeting. Four that missed were still in range when the provider finished. After, submission took 431–1,636 ms from the greeting. The first four replies were ordinary speech, and the fifth used a call. Its frame included “A stranger is 10 m west of you. You are walking to a spot 24 m east, away from a stranger” and it called, “Good morning. I'm Walker5. Just passing through here.” The authority delivered the call at about 14.65 m. The model did not choose any act. This is an observed change in choice on one trial with fresh inference.
+
+**The only after-arm miss.** Walker6 said “Walker6. And you?” with `acts: []` at about 12.09 m. The mind's one follow-up showed “A stranger is out of earshot: they could not have heard you.” The model let the exchange go. It chose `say: null`, `acts: []`, `end: true`, and settled it as “the exchange lapsed; nothing more to say”. Its stated reason was “She drifted out of earshot before giving her name, so there's nothing to keep the conversation going from here.” The authority body samples show the resident walking away from the stationary player. The model's explanation therefore misattributes the movement. No follow-up speech or act was submitted.
+
+**Cost and scope.** The paid route matched play-test talk: all 13 paid calls used DeepSeek V4.1 Flash 1017 through Mistral under the shipped `people` talk route. Background purposes used the local fake model. The watcher admitted requests only if charged spend plus reserved in-flight spend stayed under **$0.10**. Maximum exposure was **$0.011231028**. Provider token usage priced out at **$0.003716888** total ($0.001923440 before, $0.001793448 after). The sample targets departure near the speech boundary. It does not estimate a live-world miss share or separate the effect of the frame from ordinary variation in real-model choices. [Mistral API pricing](https://docs.mistral.ai/inference/pricing?currency=usd).
+
+Both arms passed tick-advance checks after installing the reach override and after all greetings. Both scratch databases were paused and deleted, and the private container was removed by exact name. The temporary credential copy was deleted immediately after the watcher loaded it. The scan found **0 matches across 86 evidence files**, checking for 12-byte key fragments and JWT forms. The two runs, reproducible driver, spend ledger and matched authority records are in `~/slop-evidence/reply-reach-paid-2026-11-19.tar.zst` with its verified SHA-256 companion.
+
 ## Paired fake-model replay
 
 The initial-reply miss share fell from **12/12 to 3/12** in deliberately near-boundary scenes. The nine quick replies were within reach when ready in both arms. All nine reached their listeners on the merged implementation. All three slow replies were already outside reach when ready and still missed. One of those three was recovered by a scripted follow-up call.
