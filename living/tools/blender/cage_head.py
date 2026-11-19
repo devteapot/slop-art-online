@@ -318,6 +318,9 @@ class Cage:
                 else:
                     hi = mid
             jz.append(hi)
+        for col in range(C_EAR + 1):
+            depth = p.chin_y - p.at(jz[col], col, self.eye_f)[1]
+            jz[col] += jaw.get("rear_rise", 0.0) * smooth((depth - 0.20) / 0.20)
         self.jaw_z = jz
         grid = np.zeros((nrows, HALF, 3))  # x, y, z in H
         for name, z in top:

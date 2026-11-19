@@ -372,6 +372,7 @@ def compose(measured):
                 jaw = types[tid]["jaw"]
                 jaw.update(angle_z=round(jaw["angle_z"] + 0.100, 3),
                            angle_back=round(jaw["angle_back"] - 0.041, 3),
+                           rear_rise=0.060 if sex == "m" and not elder else 0.0,
                            curve=0.438, inset=0.506, roll=0.072)
                 section = types[tid]["sections"]
                 for key in ("w15", "w30", "wide"):
@@ -380,6 +381,8 @@ def compose(measured):
                             section[key][i] = round(section[key][i] - 0.039 * max(0, 1 - abs(height - 0.16) / 0.15), 3)
                 # The brow is drawn above the head's own brow line, as the reference's is (brow_lift).
                 types[tid]["brow"]["lift"] = brow_lift(types[tid]["eye"], types[tid]["brow"])
+                eye = types[tid]["eye"]
+                eye["h"] = round(eye["h"] * (1.05 if elder or masc else 1.10), 3)
     return types
 
 
