@@ -790,3 +790,9 @@ Both arms ran for 30 minutes with no minds. They used the same replay flags, a s
 The fixed run kept the noticing and sight-event gains and missed both tick criteria in the selected windows. The last windows showed 52.0 ticks/s and 535.62 ms/s for the fixed arm, against 47.9 ticks/s and 600.66 ms/s for C2. The host loads differed across the runs, including at the comparison point.
 
 The eight-hour scenario levels off at about 5,620–5,880 bodies and projects 2.2 MB of seen-range data pages with linear payload growth. The bounded scene serializes up to ten entries at either density. A linear cost sensitivity at fixed request rate projects about 125 ms/s for the whole scene span under the fixed arm's sampled conditions. See [Seen remains](SEEN_REMAINS.md#bounded-scene-replay-against-c2) for workload, timing methodology and projection assumptions.
+
+### Interleaved scene-cache replay
+
+A 30-minute A B A B replay compared C2 with bounded R1/R2 and the transaction-local scene cache. In the quieter pair at minute 27, C2 and cached R1/R2 held 2,812 and 2,668 remains, respectively. Cached R1/R2 reached 45.6 versus 26.7 ticks/s and 291 versus 661 late ticks in a 30-second window. Noticing fell from 210.70 to 90.89 ms/s and `percept:saw` from 4,012.8 to 227.1/s. Scene construction fell from 41.23 to 34.16 ms/s with a 6.98% selection-cache hit rate. The first pair missed the late-tick criterion under unequal host load. Both pairs kept the noticing and sight-event gains.
+
+The updated eight-hour sensitivity reaches about 5,500–6,050 bodies, 2.8–3.0 MB of seen-range pages, and 71–80 ms/s of cached scene construction at fixed request and hit rates. [The complete four-arm table, pause audit, and projection assumptions](SEEN_REMAINS.md#interleaved-scene-cache-replay) are in the design note.

@@ -205,3 +205,40 @@ The uncached bounded selector scans the visible structures to compute the exact 
 The cache lives for one reducer transaction, with one selection per observer at its last exact position and sight radius. A structure or readability mutation bumps the structure generation. A change to name knowledge bumps the perception generation. Each invalidation causes the next scene to recompute its selection. The renderer still reads live inventory and fire state from the selected structures. Neither the authority table schema nor the player view changed. The noticing path continues to count first sights independently. The same-transaction fixture verified an identical repeated selection, an exact increase and decrease on adding and deleting a body, and exclusion of a body after a tablet makes it readable.
 
 The temporary benchmark reducers and pinned-arm source substitutions were built only in the isolated fixture. Their scripts, logs and batch samples are in the evidence archive. The replay arms will use the normal modules. The cache uses transaction-scoped answers and indexed local reads. [SpacetimeDB reducers](https://spacetimedb.com/docs/functions/reducers/) and [table performance](https://spacetimedb.com/docs/tables/performance/).
+
+## Interleaved scene-cache replay
+
+Four 30-minute no-mind runs used SpacetimeDB 2.14.1 on the Spark trial server, in order C2, cached R1/R2, C2, cached R1/R2. The authority heads were `1cd32ab2` and `71e925ea`. Each used 200 fighter slots, 16 walkers, 310 seeded island residents, refill from 30 seconds at a 0.25-second interval, detailed profiling and no observer client. The sampled site and battle trajectories varied. The battle lock serialized all four starts. Each start passed the one-minute load gate of 6 and had zero active builds and zero held build slots.
+
+| Metric at the sample nearest minute 27 | C2 A1 | Cached B1 | C2 A2 | Cached B2 |
+| --- | ---: | ---: | ---: | ---: |
+| Launch load | 2.91 | 2.32 | 5.75 | 2.60 |
+| Sample minute | 27.3 | 27.3 | 26.6 | 27.2 |
+| Sample load, start → end | 44.4 → 39.9 | 3.1 → 3.5 | 4.3 → 3.4 | 4.4 → 3.5 |
+| Sampled load range across run | 3.0–59.7 | 2.6–19.7 | 2.9–22.3 | 2.6–4.9 |
+| Remains at site | 2,890 | 2,828 | 2,812 | 2,668 |
+| Alive at site | 484 | 470 | 492 | 472 |
+| Active fighters / arriving | 134 / 62 | 167 / 31 | 177 / 19 | 159 / 40 |
+| Refills/s | 1.66 | 1.66 | 1.65 | 1.52 |
+| Ticks/s | 12.2 | 37.1 | 26.7 | 45.6 |
+| Late ticks per window (>16.667 ms) | 297 | 505 | 661 | 291 |
+| Late ticks/s | 9.84 | 16.79 | 21.98 | 9.68 |
+| Tick work ms/s | 749.04 | 632.11 | 709.17 | 596.16 |
+| Noticing ms/s | 281.13 | 117.29 | 210.70 | 90.89 |
+| Structure noticing ms/s | 246.97 | 94.68 | 179.44 | 70.85 |
+| `perceive.scene_json` ms/s | 51.73 | 37.83 | 41.23 | 34.16 |
+| Scene calls/s | 39.42 | 49.43 | 55.07 | 46.20 |
+| Cache hits / misses | — | 89 / 1,338 | — | 94 / 1,253 |
+| Cache hit rate | — | 6.24% | — | 6.98% |
+| `percept:saw`/s | 5,017.7 | 265.4 | 4,012.8 | 227.1 |
+| Experiences/s | 5,332.4 | 827.6 | 4,561.2 | 706.5 |
+| `familiar` rows | 460,428 | 57,178 | 513,737 | 57,062 |
+| `seen_structures` rows | — | 675 | — | 698 |
+| Familiarity pages / index keys, MB | 22.260 / 10.607 | 3.012 / 1.471 | 25.272 / 11.807 | 2.815 / 1.370 |
+| Seen-structure pages / index keys, MB | — | 1.301 / 0.014 | — | 1.470 / 0.014 |
+
+Late counts come from the complete reducer profiles over 30.190, 30.085, 30.073 and 30.066 seconds in order. All four runs advanced in every sampled window. The orphan guard logged a live launch lease and no orphan pause for each run. Direct 45-second SQL checks began partway through B1 and covered both second-pair runs. Across 107 direct checks, the launch parent was alive, the world was unpaused, and each comparable tick counter advanced. The harness paused each run during cleanup after measurement.
+
+The quieter second pair met both one-sided tick criteria, with 5.1% fewer remains in B2. The first pair missed the late-tick criterion under substantially different host loads. Both comparisons retained the noticing and sight-event gains. The four runs do not establish repeatable one-sided acceptance at matched load and body counts. The cached module also ran the R1 and R2 changes together, so this replay cannot isolate the cache's marginal contribution.
+
+At the measured accrual rates, one hour of remains retention gives approximately 5,500–6,050 simultaneous bodies by hour eight. At fixed observer and block counts, linear payload scaling gives about 2.8–3.0 MB of seen-range pages, and a linear C2 storage scenario gives roughly 46.6–53.8 MB of familiarity pages. Scaling the observed cached scene span by density at fixed request rates and hit rates gives about 71–80 ms/s, and the analogous structure-noticing scenario gives about 146–201 ms/s. These sensitivities scale fixed overhead with body count and do not project tick cadence or prove eight-hour behavior.
