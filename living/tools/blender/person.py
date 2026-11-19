@@ -1490,13 +1490,13 @@ def make_neck(arm):
     stations = [
         (1.440, y - 0.006, n * 1.14, blend(("J_Bip_C_UpperChest", 0.7), ("J_Bip_C_Neck", 0.3))),
         (1.490, y - 0.003, n * 1.02, {"J_Bip_C_Neck": 1.0}),
-        (cage_head.NECK_RING_Z, y, n, blend(("J_Bip_C_Neck", 0.85), ("J_Bip_C_Head", 0.15))),
+        (cage_head.NECK_RING_Z + (0.003 if TYPED else 0.0), y, n, blend(("J_Bip_C_Neck", 0.85), ("J_Bip_C_Head", 0.15))),
         (1.540, y + 0.001, n * 0.95, blend(("J_Bip_C_Neck", 0.75), ("J_Bip_C_Head", 0.25))),
         (1.590, y + 0.004, n * 0.93, blend(("J_Bip_C_Neck", 0.2), ("J_Bip_C_Head", 0.8))),
         (1.630, y + 0.008, n * 0.86, {"J_Bip_C_Head": 1.0}),
     ]
     if TYPED:
-        # A typed head brings the neck's top with it: the tube ends where the head's ring begins.
+        # Tuck the tube under the head ring so identity and neck scaling cannot open the join.
         stations = stations[:3]
     prev = None
     lateral = [n * 2.85, n * NECK_FLARE]
