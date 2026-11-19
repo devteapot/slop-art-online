@@ -1145,10 +1145,10 @@ index d37907bf..364d91e4 100644
          "fast_lane_on" => if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },
 diff --git a/living/tools/feed_scope_cost.py b/living/tools/feed_scope_cost.py
 new file mode 100644
-index 00000000..44586889
+index 00000000..d6cff5ca
 --- /dev/null
 +++ b/living/tools/feed_scope_cost.py
-@@ -0,0 +1,238 @@
+@@ -0,0 +1,242 @@
 +#!/usr/bin/env python3
 +"""Run one shadow-feed arm on a private SpacetimeDB server, under the Spark battle lock."""
 +import argparse
@@ -1325,6 +1325,10 @@ index 00000000..44586889
 +            raise RuntimeError("missing tick samples or live SDK workload")
 +        diags, diag_seconds = battle.diag_counts(type("Run", (), {"db": db})(), start, end)
 +        elapsed = end - start
++        (evidence / "window.json").write_text(json.dumps({
++            "unix_s": [start, end], "stats": [first_stats, last_stats],
++            "metrics": [m0, m1], "host": [host_before, host()],
++        }, indent=2) + "\n")
 +        actions = sql(f"SELECT COUNT(*) AS n FROM skill_use WHERE accepted_ms >= {int(start * 1000)} AND accepted_ms < {int(end * 1000)}")[0]["n"]
 +        sight = {key: sum(values) / elapsed for key, values in spans.items()
 +                 if key.startswith(("sight.", "scene.sensed"))}

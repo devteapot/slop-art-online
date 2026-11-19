@@ -77,10 +77,39 @@ Use fresh interleaved off/on runs from the same build and layout with the law as
 - Log load averages, memory, free disk, service version, instance PID, duration and start/end tick advancement per arm under `flock ~/slop-mq/battle.lock`. Exclude warm-up, initial snapshot and reconnect from steady-state rates. Use an explicit reconnect trial with the same identity and time to applied current projection. Keep the reconnect outside the bandwidth window. Sample authority WASM linear memory or the attributable server WASM metric, separately from service RSS. Count inserts, updates and deletes at the copy diff, and sample view-call and WebSocket-byte counter deltas. Record tick body time and whole transaction time because view refresh happens outside the tick body.
 - Sum the non-overlapping sight spans per elapsed second. Include local candidate enumeration and use the same structure notice/scene timing boundaries in both arms. Compare each on sample to 1.15 times the same workload's off mean. Ticks/s must be at least the lowest off value. The share of tick bodies over 16.7 ms must be at most the highest off value, using the cover acceptance definition. [Standing cost rule](COVER_SIGHT.md#switch-on-gate-standing-rule-2026-11-19), [tick metric definitions](TICK_RATE.md), [performance contract](PERFORMANCE_CONTRACT.md).
 
-| Workload | Arm | Completed | Sight ms/s | Tick ms | Ticks/s | Late share | Delivery writes/s | Subscription kB/s/client | Reconnect | WASM memory |
-| --- | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- |
-| Cullet 216 Round | Off / on | 0 / 0 | — | — | — | — | — | — | — | — |
-| Cullet 216 Middle | Off / on | 0 / 0 | — | — | — | — | — | — | — | — |
-| Wooded battle | Off / on | 0 / 0 | — | — | — | — | — | — | — | — |
+### Spark measurement, 2026-11-19
 
-Budget verdict pending matched runs. Production cutover, live privacy proof, compatibility on existing worlds and sustained performance acceptance remain unverified.
+The run window was 30 seconds after warm-up on each fresh scratch database, at matched starting daylight. In Cullet, 64 seeded residents and 152 independent SDK clients gave 216 live characters at both sampled endpoints. The SDK clients walked in seven clusters at 1.5 s intent intervals with the land game queries, the workload's `my_skill_uses` query, and terrain, lot, resource and structure windows opened after placement. The extra `my_feed_probe` subscription was requested in both arms. No model service or observer joined. One early publish was rejected because the scratch law needed a Rhai description. The server returned no named database and the corrected module was used for the whole measured series.
+
+The wooded fixture used the archived cover-acceptance land around (276, 224), 310 ambient characters, 96 fighters, 48 staged remains and eight walking SDK witnesses. The fighter cast was intact at the endpoints, and all 96 body anchors were within 16 m of the battle centre in each of five census samples per arm. Attacks used the reduced-damage settings from the acceptance fixture. Accepted skill uses per second by off/on pair were 70.07/70.27, 66.40/27.57, 20.03/6.43 and 8.00/7.47. Fighter density held across the series and action pressure varied. The first pair had closely matched action rates.
+
+The wooded CLI tail captured around 500 of the roughly 1,600–1,800 tick profiles per run. The table uses the full retained server module logs, cut to the recorded profiling timestamps. Recovered tick counts agree with the independently sampled authority tick counts within six ticks in every battle window. The archive preserves the truncated results as well as the corrected ones and the recovery script. Recover complete logs before using the woods driver output to judge the budget.
+
+Tick ms is the mean tick reducer-body stopwatch and late share uses those body samples strictly over 16.7 ms. Ticks/s is the delta of authority tick counters divided by their authority-time interval. Sight totals sum the existing creature sight and mind sensing spans, both arms' local structure selection/notice spans, and the added player structure scan when enabled. Copy writes count inserts, updates and deletes in per-second diagnostic reports. Bandwidth is the aggregate per-database counter delta divided by elapsed time and SDK count, in decimal kB. Reconnect measures one retained nonowner SDK identity from connection start to application of the probe view on loopback. WASM is the per-database worker memory gauge at the beginning and end of the window.
+
+| Workload | Arm | Runs | Sight ms/s | Tick ms | Ticks/s | Late % | Copy writes/s | kB/s/client | Reconnect ms | WASM MiB |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Cullet 216 Round | off | 2 | 31.99–33.21 | 2.78–3.04 | 59.03–59.10 | 0.00–0.00 | 0.0–0.0 | 7.17–7.58 | 45.9–83.3 | 188.9–188.9 |
+| Cullet 216 Round | on | 2 | 33.24–41.69 | 2.53–3.15 | 59.12–59.30 | 0.00–0.00 | 113.7–117.1 | 7.46–8.65 | 45.0–51.0 | 186.4–186.4 |
+| Cullet 216 Middle | off | 2 | 27.48–28.20 | 2.87–2.97 | 58.58–58.75 | 0.00–0.00 | 0.0–0.0 | 6.26–6.32 | 9.2–29.5 | 186.4–189.1 |
+| Cullet 216 Middle | on | 2 | 45.48–45.97 | 4.24–4.25 | 56.76–57.22 | 0.00–0.00 | 221.3–227.3 | 5.30–5.50 | 13.5–56.9 | 186.4–186.4 |
+| Wooded battle | off | 4 | 4.72–5.68 | 5.79–7.04 | 56.41–58.07 | 1.32–2.83 | 0.0–0.0 | 9.53–10.11 | 21.5–62.2 | 125.9–126.2 |
+| Wooded battle | on | 4 | 4.97–7.03 | 5.01–8.02 | 54.22–59.50 | 0.39–4.79 | 52.6–58.0 | 10.29–10.66 | 49.2–58.5 | 125.6–126.5 |
+
+**Verdict. Keep the law off.** No workload met the complete budget.
+
+| Workload | Worst on sight vs. off mean | Ticks/s floor | Late-share ceiling |
+| --- | ---: | ---: | ---: |
+| Cullet Round | +27.9% vs. +15% allowed | Pass, 59.03 | Pass, 0.00% |
+| Cullet Middle | +65.1% vs. +15% allowed | Fail, 58.58 | Pass, 0.00% |
+| Wooded battle | +32.5% vs. +15% allowed | Fail, 56.41 | Fail, 2.83% |
+
+The added player structure scan in Cullet took 5.19–6.95 ms/s in Round and 7.86–7.91 ms/s in Middle. These spans exceed the respective 4.89 and 4.18 ms/s headroom on their own. Host load varied, with Middle starting at a one-minute load of 12.4–15.1 off and 19.6–32.2 on. The wooded pair at about 70 accepted skill uses/s had higher sight time and late share with the law on despite a lower starting load. Treat the other battle pairs as samples at different action pressure. Lower aggregate bytes in Cullet Middle do not establish a bandwidth saving from closing the public feeds because the probe kept them subscribed.
+
+The next design iteration should keep the indexed copy/view boundary and reduce candidate work before adding writes. Build a chunk-local mutable candidate list and share the actor's validated structure look where pose, senses, structure revisions and cover/gate revisions match. Preserve the full geometric test and run the same cost gate on the revised path.
+
+Evidence is archived in `~/slop-evidence/feed-scoping-2026-11-19.tar.zst` with its `.sha256` sidecar. It includes the exact wooded seed, per-run host load, census, counters, raw samples, and the failed initial publish. The dedicated databases were paused and deleted by the harness. The lowest recorded starting MemAvailable and disk free during profiled windows were 100.4 GiB and 172.9 GiB.
+
+### Coverage limits
+
+The probe exercises the indexed copy/view delivery, player sweeps, structure noticing and mind-scene selection on the real authority. It leaves the public source feeds accessible. The production schema cutover, direct nonowner denial and reconnect across that cutover, remembered object delivery, live stock and transient terrain projections, added illumination from objects, and the full game client's presentation were outside these runs. The local SDK reconnect number measures the probe snapshot only. These 30-second windows also leave the 30-minute and eight-hour performance gates open.
