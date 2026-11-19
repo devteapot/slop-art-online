@@ -208,11 +208,11 @@ def watch(config):
         report(f"armed with {idle_seconds:g} s inactivity lease")
     while (state := current()) is not None:
         mind = state["mind"]
+        if state["epoch"] is not None:
+            epoch = state["epoch"]
         if idle_seconds is None:
             reason = f"driver PID {driver[0]} exited" if dead(driver) else None
         else:
-            if state["epoch"] is not None:
-                epoch = state["epoch"]
             reason = f"no verification activity for {idle_seconds:g} s" if time.monotonic() - state["activity"] >= idle_seconds else None
         if idle_seconds is None and reason is None and mind and dead(mind):
             reason = f"mind PID {mind[0]} exited"
