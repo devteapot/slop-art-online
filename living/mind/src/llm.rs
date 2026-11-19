@@ -673,14 +673,14 @@ impl Queue {
 
     /// How many tickets beyond the free slots may hold a prepared or preparing prompt: the
     /// slots expected to free while one prompt is prepared (recent grant rate times the mean
-    /// preparation time, with a quarter's margin), at least one per sixteen slots.
+    /// preparation time, with a quarter's margin, rounded). No floor: when slots free rarely
+    /// (one slot, long calls), a turn prepares when its slot frees, and reads the latest request.
     fn lookahead(&mut self, now: Instant) -> usize {
         while self.grants.front().is_some_and(|at| now.saturating_duration_since(*at) > GRANT_WINDOW) {
             self.grants.pop_front();
         }
         let per_s = self.grants.len() as f64 / GRANT_WINDOW.as_secs_f64();
-        let cover = (per_s * self.preparation_ms / 1000.0 * 1.25).ceil() as usize;
-        cover.max((self.concurrency / 16).max(1)).min(self.concurrency)
+        ((per_s * self.preparation_ms / 1000.0 * 1.25).round() as usize).min(self.concurrency)
     }
 
     /// The shared pool's waiting tickets, the first `limit` in the order they are expected to
@@ -2487,6 +2487,27 @@ mod tests {
         assert_eq!(requests[0]["body"]["prompt_cache_key"], requests[2]["body"]["prompt_cache_key"]);
         assert_ne!(requests[2]["body"]["prompt_cache_key"], requests[3]["body"]["prompt_cache_key"]);
         println!("fake transport evidence: {}", directory.display());
+    }
+
+    /// One slot, held by a long call, and grants are rare: a waiting turn is not nominated a
+    /// whole call early (it would miss the reasons that merge meanwhile); it prepares when the
+    /// slot frees. (verify-minds `urgent-merge`.)
+    #[test]
+    fn a_turn_behind_a_long_call_prepares_when_its_slot_frees() {
+        let scheduler = Scheduler::new(&one_profile(), 1, 0.0);
+        let mut q = scheduler.queue.lock().unwrap();
+        let now = q.global_next;
+        let holder = enqueue(&mut q, Lane::Urgent, 10);
+        assert!(matches!(q.poll(holder, now).0, Step::Start(..)));
+        q.preparation_ms = 300.0;
+        q.sequence += 1;
+        let turn = q.sequence;
+        q.waiting.push_back(Waiting { id: turn, profile: "p".into(), lane: Lane::Urgent, cost: 10, prompt: Prompt::NeedsPreparation });
+        for s in [1, 7, 14] {
+            assert_eq!(q.poll(turn, now + Duration::from_secs(s)).0, Step::Wait, "nominated {s} s into the 15 s call");
+        }
+        complete(&mut q, Lane::Urgent);
+        assert_eq!(q.poll(turn, now + Duration::from_secs(15)).0, Step::Prepare);
     }
 
     /// The battles' grant stall (docs/MIND_HARNESS.md §8): many ready calls, free slots and no
