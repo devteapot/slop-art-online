@@ -113,3 +113,177 @@ Evidence is archived in `~/slop-evidence/feed-scoping-2026-11-19.tar.zst` with i
 ### Coverage limits
 
 The probe exercises the indexed copy/view delivery, player sweeps, structure noticing and mind-scene selection on the real authority. It leaves the public source feeds accessible. The production schema cutover, direct nonowner denial and reconnect across that cutover, remembered object delivery, live stock and transient terrain projections, added illumination from objects, and the full game client's presentation were outside these runs. The local SDK reconnect number measures the probe snapshot only. These 30-second windows also leave the 30-minute and eight-hour performance gates open.
+
+## Authority shapes
+
+Checkpoint for branch `feed-scope`, 2026-11-19, against `origin/main` at `f93f05ad`. These shapes are for laptop review. No code is written until the coordinator gives the go. Everything here is new tables and views: no column is appended to an existing table (2.14.1 `AddColumns` rewrites the table and disconnects every client), and no existing table changes its access. A table whose rows must stop being public gets a new private canonical table and a public projection, and its rows move at the world's cutover.
+
+### The law and the stage
+
+- **Laws:** `feed_scope_on` (bool, default `false`) and `feed_scope_grace_s` (default `10`), as typed scalar laws with `laws_about` entries, like `cover_sight_on`.
+- **`feed_scope`** (**public**, one row, `id = 0`): `{ id: u8 #pk, stage: u8, since_ms: u64 }`. This is the only thing a client reads to choose its subscriptions. It carries no per-character settings. With the row absent, the stage is 0.
+
+| Stage | When | Canonical rows | Added authority work | Legacy public feeds |
+| ---: | --- | --- | --- | --- |
+| 0 | Law off, never cut over | `structure`, `gate`, `resource_node` and `lot.structure`, as on main | None. No new rows are written, and the new views read empty tables. | Open, as on main |
+| 1 | Law turned on | Still the legacy tables | Map projections backfilled. The shared sight test runs for noticing, scenes, R1/R2 and the player sweep. Copies, memory and owner labels are written. | Still open, labelled **shadow**, the only state where both exist |
+| 2 | `feed_scope_grace_s` after stage 1, in housekeeping | Private `*_held` tables. The legacy tables are emptied, and `lot.structure` is written 0. | As stage 1 | **Closed for every moved row.** The legacy tables stay in the schema and stay empty. |
+
+- **Stage 2 is latched.** If the law goes off after the move, the world stays at stage 2 and logs a warning. This fails closed: no fallback re-exposes current rows. Law off during stage 1 returns to stage 0. That clears the copies, the owner labels and the map projections, and keeps characters' memories.
+- **The move from stage 1 to 2** is one transaction. It copies every row with its id, deletes the legacy rows, writes `lot.structure = 0` and seeds the id allocators. Its time is measured on a scratch Cullet and a wooded battle. If one transaction breaks the tick budget, the move goes chunk by chunk, with the accessors reading both tables until it ends. I would report that before building it.
+- **Access goes through accessors.** All authority code reads and writes structures, gates and resources through accessors in `common` that dispatch on the stage, cached per transaction. That is `chunk_structures`, `structure(id)`, `insert_structure`, `update`, `delete`, and the same for gates and resource nodes. There are about 34 call sites today, and only these accessors touch the tables.
+
+### Private canonical tables (stage 2)
+
+| Table | Fields | Indexes | Notes |
+| --- | --- | --- | --- |
+| `structure_held` | Same fields as `Structure`: `id: u64 #pk` (no auto_inc), `kind`, `x`, `y`, `chunk`, `owner`, `built_ms`, `lit_until_ms` | btree `chunk`, btree `owner` | Every structure, architecture included, so `owner`, `built_ms` and `lit_until_ms` are never public. Ids are kept from `structure`, so internal act targets, minds and logs are unchanged. |
+| `gate_held` | Same fields as `Gate` | `id` pk | Open/shut, community, changer and time stay private. |
+| `resource_held` | Same fields as `ResourceNode` (`id` pk, no auto_inc) | btree `chunk` | Amount, max, regrowth and pool stay private. |
+| `id_seq` | `{ name: String #pk, next: u64 }` with rows `structure` and `resource` | pk | Allocates ids after the move. The 2.14.1 docs do not say whether an explicit insert advances an auto_inc sequence, so we don't rely on one. |
+| `lot_door` | `{ lot: u32 #pk, structure: u64 }` | pk | The door link that `lot.structure` held. It is read in seed and island code. |
+
+### Public map projections (stage ≥ 1)
+
+| Table | Fields | Indexes | Contents |
+| --- | --- | --- | --- |
+| `map_structure` | `{ id: u64 #pk, kind: String, x: f32, y: f32, chunk: u32 }` | btree `chunk` | Allowlisted architecture only: `shelter`, `house`, `hall`, `workshop`, `market`, `inn`, `smokehouse`, `furnace` and `gate` (the frame). There is no owner, time or fuel. A kind the allowlist does not name, including any kind a seed or script adds, is private. `id` is the structure id, which is stable for the row's life. A gate's aperture is its tile, `(floor(x), floor(y))`, as `gate.x`/`gate.y` are today. |
+| `map_resource` | `{ id: u64 #pk, kind: String, x: f32, y: f32, chunk: u32 }` | btree `chunk` | Every resource node, as a landmark only: no amount, max, regrowth, `at_ms` or pool. A tree trunk used by cover keeps its public anchor. |
+
+- The projections are written on insert and delete of the canonical row, and on a kind change. A moved kind never enters them.
+- `terrain_chunk`, `land`, `settlement`, `lot` (with `structure` = 0 from stage 2), `world`, `cover_law` and the rule tables are unchanged. `land.params` is not touched: that is the follow-up agreed with the laptop.
+
+### What a viewer sees now: copies and `my_things`
+
+- **`thing_seen`** (**private**), one row per thing a viewer's character sees: `{ id: u64 #pk #auto_inc, viewer: Identity, character: u32, thing: SeenThing }`, with a btree on `viewer`, as `motion_seen` has.
+- **`SeenThing`** (SpacetimeType): `{ key: u64, class: u8, id: u64, kind: String, x: f32, y: f32, open: Option<bool>, lit_until_ms: u64, owner: u32, left: Option<u32> }`.
+  - `class`: 1 is a structure and 0 is a resource, the client's own `scene.things` key.
+  - `key` is `class << 56 | id`.
+  - `open`: gates only.
+  - `lit_until_ms`: fires (kinds that `burns`), 0 otherwise. It is the visible fuel, from which the client derives lit and fuel left as it does today.
+  - `owner`: 0 unless the `owner_shown` law grants this viewer the owner (`common::owner_label`).
+  - `left`: resources only, the whole units on the node now.
+- **What gets a copy:**
+  - every moved kind in sight;
+  - allowlisted kinds that carry state, namely gates and burning kinds, so their state is seen only in sight;
+  - resource nodes in sight with `left` below their max. A node seen at full stock has no copy, and the client draws the landmark full.
+- **No text and no contents.** Sign text and storage contents stay behind reading and inspection.
+- **Writes:** the copies are diffed by payload and carry no observation time, so a sweep where nothing changed writes nothing. All of one viewer's inserts, updates and deletes happen in its sweep's transaction, so its view refreshes once per sweep.
+- **`my_things`** (**public view**, `primary_key = key`): `thing_seen.viewer().filter(ctx.sender()).map(|r| r.thing)`. That is one index key, the same read set as `seen_bodies`. A copy is never kept past its character: copies are deleted at death and at the hand-over to the minds (`perception::forget`), and replaced at reclaim and at join (`sweep_now`).
+- **Where they are written:** in `perception::sweep_one`, in the same candidate pass as people.
+  - That pass's gather radius, senses, heading, map and cover/gaze/light context are reused, not rebuilt as the probe's `Look::new` did.
+  - Candidates come from new chunk-local lists of mutable structures and of depleted resources. These are cached per transaction beside `chunk_structures`, so architecture and full nodes are not tested.
+  - Visibility is the same `living_rules::sight::sees` call as for creatures, with the object anchor and the retention margin for things already seen, and the target's glow for a self-lit fire.
+
+### Owner labels for architecture: `my_owners`
+
+- **`owner_seen`** (**private**): `{ id: u64 #pk #auto_inc, viewer: Identity, structure: u64, owner: u32 }`, with a btree on `viewer`. It holds the architecture whose owner the `owner_shown` law grants the viewer: their own, a known name's, or a kind that `shows_owner`.
+- **When it is written:** at the sweep, only when the viewer's knowledge epoch changed (the sweep's existing `PROJECTED` epoch check), and in the reclaim or join `sweep_now`. The rows come from `structure_held.owner` index reads for the known names, so a sweep where nothing changed writes nothing.
+- **`my_owners`** (**public view**, `primary_key = structure`): returns `{ structure: u64, owner: u32 }` by viewer. The client names the owner from `my_known_names`, as `looks::structure_name` does now.
+
+### Remembered vs current
+
+- **Gates** keep the existing private `remembered` rows (`kind = 1`: `target`, `x`, `y`, `state`, `seen_ms`), bounded at 512 per character and deleted at death. They are now written only by a sighting that passes the shared test, and `known::belief` takes a gate's tile from the memory row, not the live `gate` row.
+- **Other moved things** go in **`remembered_thing`** (**private**): `{ id: u64 #pk #auto_inc, observer: u32, target: u64, kind: String, x: f32, y: f32, open: Option<bool>, lit_until_ms: u64, seen_ms: u64 }`. It has a btree on `observer` and a btree on `(observer, target)`.
+  - **Written:** at the first sighting, and when the seen position or state changes, by the same test, in a player's sweep and in a mind's noticing pass. Both controllers keep the same memory.
+  - **Deleted:** only when the thing is absent from a sighting of its remembered anchor (a witnessed absence), at death, or when the 256-per-character bound evicts the oldest `seen_ms` first.
+  - A remains rotted behind cover stays remembered.
+  - Old radius-only familiarity is never turned into memory.
+- **Resource depletion** stays in the existing `seen_stock`, which both controllers already write.
+- **`my_remembered_things`** (**public view**, `primary_key = key`): `living(ctx)`, then returns `RememberedThing { key, class: 1, id, kind, x, y, open, lit_until_ms, seen_ms }` from `remembered` (gates, `kind = "gate"`, `open = state == 1`) and `remembered_thing`. It reads by `observer` index.
+- **`my_stock`** (**public view**, `primary_key = id`): the living character's `seen_stock` rows (`kind`, `x`, `y`, `count`, `nodes`, `seen_ms`, `gone_ms`).
+- **How the client tells them apart:** a thing in `my_things` is live. A key in `my_remembered_things` and not in `my_things` is last-seen, so the client draws it as remembered, with its stored state and `seen_ms`, not as gone. A key in neither is unknown.
+- The two views are separate tables in the client cache, so there is never a flag to misread.
+- **Gates in the sightfield:** a gate that is shut, live or remembered, blocks in Shade. One the viewer never saw is drawn open, or as the client's explicit unknown, and the authority's collision still decides.
+- `seen_ms` is when that state was last learned or changed, not refreshed while in sight. That would write every sweep. The client has its own leave-sight time while it is connected.
+
+### The look and act path for moved kinds
+
+- **What the client looks at and inspects:** the client's `things()`/`toward()` list and target facts are built from `my_things` (live), `map_structure`/`map_resource` (architecture and landmarks) and `my_remembered_things`.
+- **A remembered target that is no longer in sight** shows its title as last seen, with no live facts and no choices except going to its place. This follows how a creature that is no longer perceived gets no choices.
+- **The authority's check:** a structure target of a moved kind, named by a player's `human_act`, resolves only if the actor's character currently sees it or remembers it. Otherwise it fails with `"it is gone"`, the text an absent structure gets today, so a guessed id, a hidden thing and an absent thing all read the same.
+- Performing the act still needs reach at arrival against the canonical row. A remembered thing that has gone fails there as it does today, and that contact is what reveals it.
+- Minds go through the same check, against their own scene and memory.
+- Text and contents are still read only through the existing read and inspect acts.
+
+### Noticing, mind scenes, R1/R2
+
+- `brain.rs` covers both the list path and the delta path, `perceive.rs::select_scene_structures` and `known::remember_gates`. From stage 1, all of them filter mutable candidates with the same `sees` call and the observer context already built by that pass, before marking, familiarity, counting, grouping and the ten-slot limit.
+- Static candidates keep the C2 disc shortcut. A mutable candidate is always tested.
+- **`seen_structures_scoped`** (**private**), shaped as `seen_structures`: `{ id #pk #auto_inc, actor: u32, block: u32, ranges: Vec<u64> }`, btree `(actor, block)`. It holds mutable ids that passed the test from stage 1. The old `seen_structures` keeps architecture only, so old radius-only ranges never prove a sighting.
+- At the move to stage 2, `familiar` rows (`FAM_STRUCTURE`) for mutable structures are deleted, so legacy familiarity is relearned from real sightings.
+- The scene's transaction cache key gains facing, senses band and the map/gate revision.
+
+### Client subscriptions
+
+| | Stage 0 (law off, as main) | Stage ≥ 1 (scoped) |
+| --- | --- | --- |
+| Static | `cover_law`, `world`, `land`, `settlement`, **+ `feed_scope`** | The same |
+| Perceived | As main | As main **+ `my_things`, `my_remembered_things`, `my_owners`, `my_stock`** |
+| Land base | `gate` | No `gate` |
+| Tiles base | `terrain_chunk` | `terrain_chunk` |
+| Near window | `terrain_chunk` (land), `resource_node`, `structure` by chunk | `terrain_chunk` (land), **`map_resource`, `map_structure`** by chunk |
+| Lot window | `lot` by chunk | `lot` by chunk (`structure` is 0 from stage 2) |
+
+Stage 1 exists so a client can switch while the legacy rows are still there. A live switch goes like this:
+
+1. The client sees `feed_scope.stage` go from 0 to 1.
+2. It subscribes the scoped set: the four views plus the map windows over the same chunks.
+3. On that set's `on_applied`, it unsubscribes the legacy queries (`gate`, `structure` and `resource_node` windows), make-before-break as in frame-views and the 2.0 subscription guidance.
+4. Until `on_applied`, it keeps drawing from the legacy rows, so nothing pops.
+
+- `feed_scope_grace_s` is that window. A client still on legacy queries when stage 2 lands sees its rows deleted, which fails closed.
+- Turning the law off during stage 1 runs the reverse: subscribe legacy first, then drop the scoped set.
+- A client connecting at stage 2 subscribes only the scoped set.
+
+### Reconnect
+
+The snapshot order is:
+
+1. **Static,** including `feed_scope`, which gives the stage.
+2. **Base:** perceived plus the four views and the land queries, in one subscription so they apply together.
+3. **Windows,** after the body is known.
+
+- **Within the presence grace,** the character is still the person's and its copies are still stored. The base subscription's first result is the last sweep's rows, and the next sweep, at most 200 ms on the character's phase, corrects them.
+- **After a hand-over to the minds,** the copies were deleted at the hand-over. Reclaim runs `sweep_now` in its own transaction, so the reclaim's result and the rows arrive together. At join, `sweep_now` runs in the join reducer, as for people.
+- **The client waits** for the base `on_applied` before drawing scoped things. After reclaim or join it also waits for the reducer's result before taking an empty `my_things` as "nothing in sight".
+- Memory (`my_remembered_things`, `my_stock`) and owner labels are stored rows, so they arrive in the first result whatever the presence state.
+
+### Cutaway and scenery fade
+
+They do not key off structure ids:
+
+- The cutaway fades `Occluder` entities built from `lot` rows and island kit parts, plus `Landmark`s.
+- `Indoors(lot)` is found from a thing's position (`island::indoors_of`).
+- Trees fade by the `Tree` entities of the island forest.
+- `scene.things` keys on `(class, id)`.
+
+Structure and resource ids are kept through the move, and `my_things`, `map_structure` and `map_resource` carry the same ids, so the client's keys are unchanged and needs no mapping. Two changes: `lot.structure` becomes 0 from stage 2, and the client never read it; and on land worlds, `LAND_DRAWS` kinds still come from lots, so `map_structure` is used for verbs and the gate tiles.
+
+### Residual and open points for review
+
+- **Ids still show creation order.** A newly seen remains id says how many structures were made since. Hiding that needs per-viewer handles, which would change act targeting for both controllers, so it is out of this build unless asked for.
+- **Fuel is visible.** A fire's `lit_until_ms` in sight gives its fuel left, as the client shows today. If only lit/out should be seen, the copy carries `lit: bool` instead and the fuel stays behind an inspect act.
+- **No copies for resources at full stock.** That keeps writes O(depleted nodes in sight). The client draws unseen and full nodes alike as the landmark.
+
+### Proof and acceptance
+
+As briefed:
+
+- verify-client: nonowner denial by SQL and WebSocket, an owner truth control, and reconnect restoring the copies;
+- verify-core: a body behind a hedge, its sighting, memory after leaving sight, and gate state seen only in sight;
+- verify-player and verify-minds: the mind's scene matches;
+- law off identical to main;
+- the `COVER_SIGHT.md` budget: Cullet 216 at Round and Middle, 2 or more runs per arm, and the wooded battle at 96 fighters, 4 runs per arm, under `battle.lock`.
+
+The measured on arm is stage 2, with the legacy feeds closed. Stage 1 is measured only as a labelled shadow.
+
+SpacetimeDB documentation consulted for these shapes:
+
+- [tables and visibility](https://spacetimedb.com/docs/tables/): private tables are readable only by reducers and the owner;
+- [access permissions](https://spacetimedb.com/docs/tables/access-permissions): views over private tables filtered by `ctx.sender()`;
+- [views](https://spacetimedb.com/docs/functions/views/): re-evaluated per subscriber when the read set changes; index lookups only; `primary_key` gives update deltas;
+- [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/): subscribe before unsubscribing; `on_applied` fires once the initial rows are cached;
+- [auto-increment](https://spacetimedb.com/docs/tables/auto-increment): an explicit nonzero value is used as given, and whether the sequence advances is not stated.
+
+These pages are from the 2.0 docs. The pinned 2.14.1 crate source (`spacetimedb-2.14.1`, `spacetimedb-bindings-macro-2.14.1`) matches the view `primary_key` form this repository already uses. The access-change and `AddColumns` behaviour is the 2.14.1 planner cited above, to be checked on an owned scratch database during the build.
