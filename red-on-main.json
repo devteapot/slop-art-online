@@ -10,5 +10,17 @@
     "reason": "far-guard scene assertion: the routine sees and dodges the guard, but the captured mind scene has no row for the guard; nine checks pass, later assertions not reached. Same failure at the same checkpoint on main and on tick-rate (2026-11-18). An AI scene with no player frames.",
     "skill": "verify-core",
     "times": 0
+  },
+  "skirmish": {
+    "case": "skirmish",
+    "first_main": "3b24a6ba1ac1900ff63b4e656f3f15dcf0b1992b",
+    "first_seen": "2026-11-20T00:34:00+01:00",
+    "last_evidence": "/home/carlid/.local/state/slop-merge/scene-gate/main/.local/living/verify/gate-1120002428-main2-skirmish-island/gate.log (launch or doctor failed)",
+    "last_main": "3b24a6ba1ac1900ff63b4e656f3f15dcf0b1992b",
+    "last_seen": "2026-11-20T00:34:00+01:00",
+    "owner": null,
+    "reason": null,
+    "skill": "verify-core",
+    "times": 1
   }
 }
