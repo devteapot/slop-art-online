@@ -7,7 +7,7 @@ use super::SkillCtx;
 use rhai::{Array, Dynamic, Map};
 
 /// Fields of `a`. The order is the bit order of [`Plan::top`].
-pub const TOP: [&str; 21] = ["actor", "target", "routine", "item", "qty", "night", "hour", "season", "text", "topic", "roll", "raining", "skill", "want", "want_qty", "records", "record", "daylight", "offer_id", "record_id", "offer"];
+pub const TOP: [&str; 22] = ["actor", "target", "routine", "item", "qty", "night", "hour", "season", "text", "topic", "roll", "raining", "skill", "want", "want_qty", "records", "record", "daylight", "offer_id", "record_id", "offer", "gaze_band"];
 /// Fields of `a.actor` (the body genes are `genes::BODY`; `factor` is the skill factor).
 pub const ACTOR: [&str; 34] = [
     "id", "kind", "hp", "hunger", "energy", "near_fire", "near_shelter", "terrain", "activity", "age", "stage", "life", "knows", "inv", "kin_near", "pasture", "hurt_by", "hurt_ago", "hurt_by_near", "yielded_ago", "sensed", "bold", "room", "community", "home", "speed", "strength", "endurance", "vitality", "factor", "lit", "stamina", "focus", "sex",
@@ -435,6 +435,7 @@ fn visit(c: &SkillCtx, knack: &str, p: &Plan, mut f: impl FnMut(Level, &'static 
             "records" => Val::Records(&c.records),
             "record" => Val::Record(c.record.as_ref()),
             "daylight" => Val::F(1.0 - c.dark),
+            "gaze_band" => Val::I(i64::from(c.gaze_band as u8)),
             "offer_id" => Val::I(c.offer_id as i64),
             "record_id" => Val::I(c.record_id as i64),
             "offer" => Val::Offer(c.offer.as_ref()),

@@ -376,14 +376,14 @@ fn needs(p: &mut Probe) -> Result<(), String> {
                 }
                 let d = p.ctx("senses", &c)?;
                 let reach = s.reach();
-                let wide = super::decode_senses(d.clone(), &super::Reach { day: f32::MAX, night: f32::MAX, hearing: f32::MAX, glow: f32::MAX }, c.dark).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+                let wide = super::decode_senses(d.clone(), &super::Reach { day: f32::MAX, night: f32::MAX, hearing: f32::MAX, glow: f32::MAX, glow_day: f32::MAX }, c.dark, None).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
                 if wide.sight > reach.sight(c.dark) || wide.hearing > reach.hearing {
                     return Err(format!("install refused: senses gives sight {} and hearing {} {}, beyond senses_law's reach ({} by {}, hearing {}): raise the reach with the law", wide.sight, wide.hearing, describe(&c), reach.sight(c.dark), if c.dark >= 1.0 { "night" } else if c.dark <= 0.0 { "day" } else { "twilight" }, reach.hearing));
                 }
                 if s.has("glow") {
                     let d = p.ctx("glow", &c)?;
-                    let g = super::decode_glow(d, &super::Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: f32::MAX }).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
-                    if g > reach.glow {
+                    let g = super::decode_glow(d, &super::Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: f32::MAX, glow_day: f32::MAX }).map_err(|e| format!("install refused: {e} ({})", describe(&c)))?;
+                    if g > reach.glow_at(c.dark) {
                         return Err(format!("install refused: glow gives {g} m {}, beyond senses_law's reach.glow ({} m): raise the reach with the law", describe(&c), reach.glow));
                     }
                 }

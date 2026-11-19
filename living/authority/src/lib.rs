@@ -5,6 +5,7 @@
 
 mod act;
 mod acts;
+mod attention;
 mod brain;
 mod breath;
 mod codes;
@@ -174,6 +175,9 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
     ctx.db.clock().id().update(k);
     common::invalidate_scripts_rev();
     common::publish_cover_law(ctx, sc.laws());
+    if !sc.gaze_enabled() {
+        attention::clear_projection(ctx);
+    }
     // Takeovers already pending follow the new `takeover_s` law.
     presence::reschedule(ctx, sc.laws().takeover_s);
     // Looks change band by the life table and the `look_bands` law: their times follow.
@@ -740,6 +744,13 @@ pub fn human_face(ctx: &ReducerContext, dx: f32, dy: f32) -> Result<(), String> 
     }
     let dir = (dx != 0.0 || dy != 0.0).then_some((dx, dy));
     motion::look(ctx, me.id, dir, common::now_ms(ctx))
+}
+
+/// Select Middle (0), Far (1) or Near (2). The scheduled sight sweep applies the new band.
+#[spacetimedb::reducer]
+pub fn human_gaze(ctx: &ReducerContext, band: u8) -> Result<(), String> {
+    let me = my_character(ctx)?;
+    attention::set(ctx, me.id, living_rules::sight::GazeBand::try_from(band)?, common::now_ms(ctx))
 }
 
 /// Move in a direction (screen axes: +x east, +y south; any length) or stop (`0, 0`), at a

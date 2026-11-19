@@ -54,7 +54,7 @@ BASE_QUERIES = [
 ]
 # Private in every build: the authority's bookkeeping and developer audit truth
 # (docs/PERCEPTION.md). The observer and the mind service read them as the database owner.
-PRIVATE = ['cover_ground', 'fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'last_look', 'deliberation', 'rearing',
+PRIVATE = ['attention', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'last_look', 'deliberation', 'rearing',
            'known_ground', 'remembered', 'ground_edit',
            'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry',
            'combat_seen', 'fight_seen', 'missile', 'skill_use', 'readiness', 'skill_code',
@@ -112,11 +112,11 @@ SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'plac
 # The per-sender views: what a player perceives and its own state.
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v_2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
-OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
+OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_senses_v_2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through

@@ -1040,6 +1040,37 @@ def fov_case(run):
     finally:
         run.admin('set_world_law', 'fov_on', 'false')
     return {'status': 'pass', 'heard': heard, 'facing': scene.get('you', {}).get('facing'), 'noticed': [x['text'] for x in told], 'habit_turned': turned[:1], 'facing_after': round(facing, 2)}
+@case('gaze')
+def gaze_case(run):
+    """A real mind executes a gaze act from a loopback scripted response."""
+    actor = prepare(run)[0]['id']
+    run.admin('set_world_law', 'gaze_on', 'true')
+    pending = run.request(actor, 'gaze-before')
+    scene = json.loads(pending[0]['scene'])
+    assert scene['you']['gaze'] == 'middle', scene['you']
+    band = {'do': 'gaze', 'band': 'far'}
+    script = {'replies': {
+        'think': {'thought': 'I look farther ahead.', 'intend': ['look farther ahead'], 'say': None},
+        'deliberate': {'graph': 'keep', 'acts': [band, band, {'do': 'gaze', 'band': 'near'}]},
+        'act_repair': {'replacements': [None]},
+    }}
+    run.start(model(run, script), [actor])
+
+    def attempts():
+        return shared.rows(run.journal / 'outcomes/act_attempts.jsonl')
+
+    attempt = run.wait(attempts, 'gaze act submission')[0]
+    attention = run.private(f'SELECT * FROM attention WHERE id = {actor}', 'attention-far')
+    assert len(attention) == 1 and attention[0]['band'] == 1, attention
+    assert '250 ms' in json.dumps(attempt), attempt
+    run.request(actor, 'gaze-after')
+    requests = run.wait(
+        lambda: [r for r in shared.rows(run.directory / 'fake-requests.jsonl')
+                 if r['purpose'] == 'think' and re.search(r'"gaze":\s*"far"', json.dumps(r['body']).replace(r'\"', '"'))],
+        'a Far scene delivered to the fake endpoint', 30)
+    return {'status': 'pass', 'checks': 4, 'attention': attention, 'far_requests': len(requests)}
+
+
 @case('doing')
 def doing_case(run):
     """What someone is visibly doing reaches a mind (docs/PERCEPTION.md, "What someone is visibly
