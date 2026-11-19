@@ -14,7 +14,12 @@ for entry in entries:
         if source.count(original) != 1:
             raise ValueError(f"Expected one match for {entry['stage']}")
         source = source.replace(original, entry["code"])
-exec(compile(source, str(baseline), "exec"), globals())
+checkpoint = os.environ.get("CHAR_LIVE_START") == "reviewed-stage2"
+if checkpoint:
+    start = next(i for i, e in enumerate(entries) if e.get("checkpoint_only"))
+    entries = entries[start:]
+else:
+    exec(compile(source, str(baseline), "exec"), globals())
 for entry in entries:
-    if "replace_baseline" not in entry:
+    if not entry.get("archived_attempt") and "replace_baseline" not in entry and (checkpoint or not entry.get("checkpoint_only")):
         exec(compile(entry["code"], entry["stage"], "exec"), globals())

@@ -1,0 +1,51 @@
+{
+  "sha256": "7c55612cf8edad24f6698370e8d743232d92259033e95cd4560d48e18081280b",
+  "replay_sha256": "d0175f4368a852e31c4afaf0bedd562667204421dd491fb5e967cbfd6343730a",
+  "sidecar_identical": true,
+  "differing_pixels": {
+    "hair4-front.png": 0,
+    "hair4-three-quarter.png": 0,
+    "hair4-profile.png": 0,
+    "hair4-back.png": 0,
+    "hair4-near.png": 0,
+    "hair4-middle.png": 0
+  },
+  "differing_gltf_sections": {
+    "meshes": 2
+  },
+  "different_buffer_views": [
+    15
+  ],
+  "geometry_differences": [],
+  "export": {
+    "triangles": 48896,
+    "vertices": 51884,
+    "primitives": 10,
+    "materials": 9,
+    "clips": [
+      "idle",
+      "walk",
+      "run",
+      "talk",
+      "sit_idle",
+      "sit_ground"
+    ],
+    "face_keys": [
+      "Fcl_EYE_Close",
+      "Fcl_EYE_Close_L",
+      "Fcl_EYE_Close_R",
+      "Fcl_EYE_Joy",
+      "Fcl_MTH_A",
+      "Fcl_MTH_I",
+      "Fcl_MTH_U",
+      "Fcl_MTH_E",
+      "Fcl_MTH_O",
+      "Fcl_MTH_Fun",
+      "Fcl_MTH_Sorrow",
+      "Fcl_BRW_Angry",
+      "Fcl_BRW_Sorrow",
+      "Fcl_BRW_Surprised",
+      "Fcl_BRW_Fun"
+    ]
+  }
+}
