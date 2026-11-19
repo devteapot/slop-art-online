@@ -1,0 +1,4 @@
+jersey-m         under trousers-m       rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+jersey-m         under trousers-m       sit_ground clear   by    0.5 mm at most (t 0.00 s, on J_Bip_C_Hips, 0 vertices); in 0 of 8 poses
+jersey-m         under trousers-m       sit_idle clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 8 poses
+cloth_check: 1 pairs of pieces over 17 poses: none comes through by more than 2.0 mm
