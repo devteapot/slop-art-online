@@ -57,7 +57,8 @@ def one(a, n, out):
         for law in a.law:
             name, value = law.split("=", 1)
             lc.call(db, "set_world_law", [name, value], token)
-        lc.call(db, "spawn_battle", [a.fighters], token)
+        if not a.battle_after_placing:
+            lc.call(db, "spawn_battle", [a.fighters], token)
         land = lc.sql(db, "SELECT * FROM land", token)[0]
         site = (land["arrive_x"], land["arrive_y"] - 20.0)
         if n:
@@ -65,7 +66,7 @@ def one(a, n, out):
             load = lc.Proc([a.load, "players"], out / f"players-v{n}.stderr")
             load.send(json.dumps({"uri": lc.URL, "db": db, "events": str(out / f"events-v{n}.jsonl"), "battle": list(site),
                                   "behaviour": {"walk_period_ms": 1500, "rejoin_s": 3}, "players": players, "client": "gate",
-                                  "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables}))
+                                  "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables, "fresh_every": a.fresh_every}))
             joined = load.expect("joined", 900)
             lo, hi = (float(x) for x in a.ring.split(",")) if a.ring else (0.0, 6.0)
             for i, p in enumerate(sorted(joined["players"], key=lambda p: p["p"])):
@@ -73,8 +74,16 @@ def one(a, n, out):
                 ang, rr = i * 2.399963, (lo * lo + (hi * hi - lo * lo) * ((i + 0.5) / n)) ** 0.5
                 try:
                     lc.call(db, "place_at", [p["id"], site[0] + rr * math.cos(ang), site[1] + rr * math.sin(ang)], token)
-                except RuntimeError:
+                except RuntimeError as e:
+                    if "no such body" in str(e):
+                        # Killed before it was placed: it joins again (gate-load); counted in its deaths.
+                        res["unplaced"] = res.get("unplaced", 0) + 1
+                        continue
                     lc.call(db, "place_at", [p["id"], site[0], site[1] + 8.0], token)
+            if a.battle_after_placing:
+                # The viewers stand on their ring before the fighters appear (none is killed at the
+                # arrival point, 20 m from the battle, while it waits to be placed).
+                lc.call(db, "spawn_battle", [a.fighters], token)
             load.send("placed")
             ready = load.expect("ready", 900)
             res["held_at_ready"] = ready.get("held")
@@ -87,8 +96,12 @@ def one(a, n, out):
             lc.call(db, "set_profile", [True], token)
             m0, th0, p0 = tc.scrape(ident), tc.thread_cpu(pid), tc.proc_cpu(pid)
         c0, t0 = tick_count(ident), time.time()
+        if load:
+            load.send("fresh on")
         time.sleep(a.seconds)
         c1, t1 = tick_count(ident), time.time()
+        if load:
+            load.send("fresh off")
         if a.detail or a.flip_off:
             m1, th1, p1 = tc.scrape(ident), tc.thread_cpu(pid), tc.proc_cpu(pid)
             dur = t1 - t0
@@ -199,7 +212,27 @@ def one(a, n, out):
         if load:
             load.send("stop")
             try:
-                load.expect("done", 300)
+                done = load.expect("done", 300)
+                # Motion freshness over the window, pooled over the sampled viewers (gate-load `fresh`).
+                fresh = {"near": {}, "all": {}, "players": 0}
+                for pl in done.get("players", []):
+                    f = pl.get("fresh")
+                    if f:
+                        fresh["players"] += 1
+                        for group in ("near", "all"):
+                            for ms, k in f[group].items():
+                                fresh[group][ms] = fresh[group].get(ms, 0) + k
+
+                def pct(h, q):
+                    items = sorted((int(k), v) for k, v in h.items())
+                    idx = sum(v for _, v in items) * q // 100
+                    for k, v in items:
+                        if idx < v:
+                            return k
+                        idx -= v
+                    return None
+                fresh["p50_p90_p95"] = {g: [pct(fresh[g], q) for q in (50, 90, 95)] for g in ("near", "all")}
+                res["fresh"] = fresh
             except RuntimeError:
                 pass
     finally:
@@ -222,6 +255,8 @@ def main():
     ap.add_argument("--cues", action="store_true")
     ap.add_argument("--motion-tables", action="store_true", help="the viewers subscribe seen_body_copy in place of the motion views (battle-views)")
     ap.add_argument("--law", action="append", default=[])
+    ap.add_argument("--fresh-every", type=int, default=0, help="sample every Nth viewer's motion freshness (gate-load `fresh`)")
+    ap.add_argument("--battle-after-placing", action="store_true", help="spawn the battle after the viewers are placed")
     ap.add_argument("--ring", default=None, metavar="LO,HI", help="place the viewers over the ring LO-HI m from the battle's centre (outside the fighters' reach) instead of within 6 m")
     ap.add_argument("--detail", action="store_true", help="profile each window as tick_cost.py does (<out>/v<count>/)")
     ap.add_argument("--flip-off", action="store_true", help="after the window, turn motion_tables_on off and time the kill switch's tick")
