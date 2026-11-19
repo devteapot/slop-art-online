@@ -82,6 +82,8 @@ drive.py's other options (its docstring): `--expect REGEX` (repeatable) must mat
 
 Pass `camera`, `camera-rotate`, `camera-lod`, `camera-faces`, `camera-tuning`, `camera-lol` or `camera-lol-ridge` explicitly for the dedicated Brackenford fixtures in [camera.md](features/camera.md).
 
+`seat` sits skirted and coated residents on the ground in the crowded street and gets them up, the cloth's ground contact on and off (`LIVING_GAME_SEAT_CONTACT=0`), with `LIVING_GAME_PERF=seat` (each seated character's lowest cloth tail above its ground) and `springwake`: [seat.md](features/seat.md).
+
 Pass `gaze` on a Cullet scratch world to exercise the zoom bands, reconnect and the authored hedge. [Gaze evidence and setup](features/gaze.md).
 
 Developer camera controls (`LIVING_GAME_DEV=1`): `settings:camera_preset:ours-fixed|ours|supervive|lol|corepunk`, `settings:camera_pitch:curve|fixed|late`, `settings:camera_slider:height|pitch|fov:far|middle|near`, `settings:camera_slider:pitch:fixed`, `settings:camera_slider:tilt_start|near_pitch|wheel|easing` and `settings:camera_copy`. The tuning drive exports `camera-tuning.json` beside its `settings.json`, including the current bearing. Settings › Camera (`settings:page:rotation`) uses `settings:camera_rotate`, `settings:camera_rotate_speed:0.5|1|2`, and `settings:camera_rotate_invert`. The north snap binding is `bind:NorthUp:0`.

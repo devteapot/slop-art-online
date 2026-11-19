@@ -3,7 +3,7 @@
 
     python3 living/tools/characters/cloth_check.py LINE.json [--styles DIR] [--types DIR]
         [--clips CLIPS.glb] [--clip idle,walk] [--frames 16] [--least 2.0] [--json OUT] [--quiet] [--chair MM]
-        [--springs] [--spring STIFFNESS,DRAG[,GRAVITY]] [--no-spring-scale]
+        [--springs] [--spring STIFFNESS,DRAG[,GRAVITY]] [--no-spring-scale] [--terrain] [--seat-contact]
 
 LINE.json is a person's line (`{"type", "proportions", "styles": {"outfit": [...]}, "belly"}`),
 or a `NAME.params.json` whose `person` is one. The person is posed the client's way: the type's
@@ -43,6 +43,15 @@ second turn, and also says how far the springs carry the cloth from where it rid
 `--spring STIFFNESS,DRAG[,GRAVITY]` tries other values than the files'. `--no-spring-scale` poses
 as a client from before the skirts' change does (a spring bone under a scaled bone without that
 scale).
+
+`--terrain` places the body as the client does for the ground seat's clips (`sit_ground_down`,
+`sit_ground`, `stand_up_ground`, the last at the client's 1.6): the clip's hips' place scaled as
+characters.rs `shape` scales it (`hips_k`), on ground where the client's fit puts the rest
+figure's lowest point. It then also says how far each skirted piece is under that terrain, in
+every pose of those clips. `--seat-contact` (with `--springs`, implied) gives the pieces' cloth
+spring groups (`Skirt`, `Coat`: characters.rs `CLOTH_GROUPS`) the client's ground contact
+(characters.rs `SeatAnchor`): a plane at the terrain, weighted by the clips' time as anim.rs
+`seat_of` weights it, lowered `SEAT_SINK` at weight 0.
 
 Plain Python and numpy.
 """
@@ -120,6 +129,13 @@ class Skeleton:
         self.frames = {name: frame[i] for name, i in self.index.items()}
         return {name: skin[i] for name, i in self.index.items()}, {name: frame[i][:3, 3] for name, i in self.index.items()}
 
+    def place_hips(self, t=None):
+        """The hips' place (file units), as a clip keys it; None puts them back at rest."""
+        i = self.index["J_Bip_C_Hips"]
+        if not hasattr(self, "hips0"):
+            self.hips0 = self.rest[i].copy()
+        self.rest[i] = self.hips0.copy() if t is None else np.array(t, float)
+
     def own_scale(self, name):
         """A bone's own scale (x, y, z), 1 where it has none."""
         s = self.scale.get(self.index.get(name))
@@ -127,6 +143,39 @@ class Skeleton:
 
 
 STEP = 1.0 / 60.0  # characters.rs: the springs' fixed step
+CLOTH_GROUPS = ("skirt", "coat")  # characters.rs `CLOTH_GROUPS`: the spring groups a seat contact applies to
+SEAT_SINK = 0.25  # characters.rs: how far below the ground a contact at weight 0 lies
+SEAT_DOWN_S, SEAT_UP_S, SEAT_RAMP_S = 1.2, 1.3, 0.2  # anim.rs: the ground seat's contact frames and ramp
+SEAT_RATE = {"sit_ground_down": 1.0, "sit_ground": 1.0, "stand_up_ground": 1.6}  # the rates the client plays them at (live.rs STAND_UP)
+
+
+def seat_of(clip, t, rate):
+    """anim.rs `seat_of`: how far a ground seat's clip at time t has the body down (0-1), None for another clip."""
+    ramp = SEAT_RAMP_S * max(rate, 0.01)
+    smooth = lambda x: min(max(x, 0.0), 1.0) ** 2 * (3 - 2 * min(max(x, 0.0), 1.0))
+    if clip == "sit_ground_down":
+        return smooth((t - (SEAT_DOWN_S - ramp)) / ramp)
+    if clip == "sit_ground":
+        return 1.0
+    if clip == "stand_up_ground":
+        return 1.0 - smooth((t - SEAT_UP_S) / ramp)
+    return None
+
+
+def keep_above(ground, pos, nxt, length, r):
+    """characters.rs `Contact::keep` on a level ground at height `ground`: the tail kept r above
+    it, as near nxt as the chain's length lets it; a chain whose root is under it lies flat at most."""
+    if nxt[1] - ground >= r:
+        return nxt
+    d = nxt - pos
+    u = d / np.linalg.norm(d) if np.linalg.norm(d) > 1e-9 else np.array([0.0, -1.0, 0.0])
+    h = pos[1] - ground - r
+    least = min(max(-h / max(length, 1e-6), -1.0), 0.0)
+    if u[1] >= least:
+        return nxt
+    side = u - np.array([0.0, u[1], 0.0])
+    side = side / np.linalg.norm(side) if np.linalg.norm(side) > 1e-9 else np.array([1.0, 0.0, 0.0])
+    return pos + (np.array([0.0, least, 0.0]) + side * max(1 - least * least, 0.0) ** 0.5) * length
 
 
 def arc(a, b):
@@ -167,7 +216,7 @@ class Springs:
             for g in block.get("boneGroups", []):
                 gi = len(self.groups)
                 gd = g.get("gravityDir", {})
-                self.groups.append(dict(stiffness=float(g.get("stiffiness", 0)), gravity=np.array([gd.get("x", 0), gd.get("y", -1), gd.get("z", 0)], float) * float(g.get("gravityPower", 0)),
+                self.groups.append(dict(cloth=str(g.get("comment", "")).strip().lower() in CLOTH_GROUPS, stiffness=float(g.get("stiffiness", 0)), gravity=np.array([gd.get("x", 0), gd.get("y", -1), gd.get("z", 0)], float) * float(g.get("gravityPower", 0)),
                                         drag=min(max(float(g.get("dragForce", 0)), 0.0), 1.0), radius=float(g.get("hitRadius", 0)), spheres=[k for c in g.get("colliderGroups", []) for k in ids[c]]))
                 stack = list(reversed(g["bones"]))
                 while stack:
@@ -185,8 +234,9 @@ class Springs:
                     stack.extend(reversed(kids))
         self.out = {}
 
-    def step(self, sk, steps=1, fresh=False):
-        """`steps` fixed steps against the skeleton's pose now (`sk.frames`); each joint's frame goes to `self.out`."""
+    def step(self, sk, steps=1, fresh=False, contact=None):
+        """`steps` fixed steps against the skeleton's pose now (`sk.frames`); each joint's frame goes to `self.out`.
+        `contact`: (ground height, weight) for the cloth groups' seat contact (characters.rs `Contact`)."""
         centres = []
         for bone, off, r in self.spheres:
             s = sk.own_scale(bone)
@@ -225,6 +275,8 @@ class Springs:
                             pushed = c + (d / np.linalg.norm(d) if np.linalg.norm(d) > 1e-9 else rest_dir) * r
                             e = pushed - pos
                             nxt = pos + (e / np.linalg.norm(e) if np.linalg.norm(e) > 1e-9 else rest_dir) * length
+                    if contact is not None and g["cloth"] and contact[1] > 0:
+                        nxt = keep_above(contact[0] - SEAT_SINK * (1 - min(contact[1], 1.0)), pos, nxt, length, g["radius"] * sc)
                     j["prev"], j["tail"] = j["tail"], nxt
                 to = j["tail"] - pos
                 to = to / np.linalg.norm(to) if np.linalg.norm(to) > 1e-9 else rest_dir
@@ -452,7 +504,11 @@ def main():
     ap.add_argument("--springs", action="store_true", help="simulate the pieces' spring bones (a skirt's chains) through each clip as the client does, a sixtieth of a second a step; without it they rest, as on a character the client does not simulate")
     ap.add_argument("--spring", default="", metavar="STIFFNESS,DRAG[,GRAVITY]", help="with --springs: try these values in place of the files' own, to tune them")
     ap.add_argument("--no-spring-scale", action="store_true", help="pose as a client from before the skirts' change does: a spring bone under a scaled bone does not take its scale")
+    ap.add_argument("--terrain", action="store_true", help="in the ground seat's clips, place the body on the terrain as the client does and say how far the skirted pieces are under it")
+    ap.add_argument("--seat-contact", action="store_true", help="give the cloth spring groups the client's ground contact in the ground seat's clips (implies --springs and --terrain)")
     a = ap.parse_args()
+    if a.seat_contact:
+        a.springs = a.terrain = True
     doc = json.load(open(a.line))
     line = doc.get("person", doc)
     sk = Skeleton(os.path.join(a.types, line["type"] + ".glb"), line.get("proportions") or {}, float(line.get("belly", 0.0)), belly_scaled=not a.old_belly)
@@ -467,7 +523,32 @@ def main():
         for g in springs.groups:
             g.update(stiffness=v[0], drag=v[1], gravity=np.array([0.0, -1.0, 0.0]) * (v[2] if len(v) > 2 else 0.0))
     loops = {c["name"]: c.get("kind") == "loop" for c in json.load(open(os.path.join(HERE, "..", "blender", "clips.json")))["clips"]}
+    # The client's placing of a seated body (characters.rs `shape`): its rest figure's lowest
+    # point on the ground (`Fitted`), the clip's hips' place times hips_k, which keeps the foot
+    # joint at its rest height (by `feet`) above that point under the proportions' legs.
+    mats0, joints0 = sk.pose({})
+    terrain = min(float(p.posed(mats0)[:, 1].min()) for p in pieces)
+    plain = Skeleton(os.path.join(a.types, line["type"] + ".glb"), {}, 0.0)
+    _, plain_joints = plain.pose({})
+    feet = float((line.get("proportions") or {}).get("feet", 1.0))
+    hips_y = terrain + (plain_joints["J_Bip_L_Foot"][1] - terrain) * feet + (joints0["J_Bip_C_Hips"][1] - joints0["J_Bip_L_Foot"][1])
+    hips_k = hips_y / sk.rest[sk.index["J_Bip_C_Hips"]][1]
     at_time = lambda tracks, t: {node: clips_compare.at(times, values, 4, t) for (node, path), (times, values) in tracks.items() if path == "rotation"}
+
+    def posed_at(name, tracks, t):
+        """The bones at time t of a clip: on the terrain (the hips' place keyed) in a ground seat's clip with `--terrain`."""
+        hips = tracks.get(("J_Bip_C_Hips", "translation"))
+        placed = a.terrain and name in SEAT_RATE and hips is not None
+        if placed:
+            sk.place_hips(np.array(clips_compare.at(hips[0], hips[1], 3, t)) * hips_k)
+        out = sk.pose(at_time(tracks, t))
+        if placed:
+            sk.place_hips(None)
+        return out
+
+    def contact(name, t):
+        w = seat_of(name, t, SEAT_RATE.get(name, 1.0)) if a.seat_contact else None
+        return None if w is None else (terrain, w)
 
     def poses():
         """(clip, time, the bones' frames, the bones' places, the spring bones' frames or None), pose by pose."""
@@ -478,22 +559,24 @@ def main():
             if tracks is None:
                 ap.error(f"no clip {name!r} in {a.clips}")
             length = max(t[0][-1] for t in tracks.values())
+            # The ground seat's clips at the client's rates, with --terrain (getting up at 1.6).
+            rate = SEAT_RATE.get(name, 1.0) if a.terrain else 1.0
             if springs and a.springs:
                 # The clip played from its start a sixtieth of a second a step, the springs
                 # following; a loop is played once round first, and measured on its second turn.
-                steps = max(int(round(length / STEP)), 1)
+                steps = max(int(round(length / (STEP * rate))), 1)
                 first = steps if loops.get(name) else 0
                 want = {first + int(round(f * steps / a.frames)) for f in range(a.frames)}
                 for n in range(first + steps):
-                    t = (n % steps) * STEP
-                    mats, joints = sk.pose(at_time(tracks, t))
-                    out = springs.step(sk, 1, fresh=n == 0)
+                    t = (n % steps) * STEP * rate
+                    mats, joints = posed_at(name, tracks, t)
+                    out = springs.step(sk, 1, fresh=n == 0, contact=contact(name, t))
                     if n in want:
                         yield name, t, mats, joints, dict(out)
             else:
                 for f in range(a.frames):
                     t = length * f / a.frames
-                    mats, joints = sk.pose(at_time(tracks, t))
+                    mats, joints = posed_at(name, tracks, t)
                     yield name, t, mats, joints, (dict(springs.step(sk, 0, fresh=True)) if springs else None)
 
     worst, swing, seats, count = {}, {}, {}, 0
@@ -506,9 +589,16 @@ def main():
             for p in pieces:
                 d = float(np.linalg.norm(posed[p.name] - p.posed(mats, dict(springs_rest(springs, sk))), axis=1).max()) * 1000
                 swing[clip] = max(swing.get(clip, 0.0), d)
+        if a.terrain and clip in SEAT_RATE:
+            # Under the terrain the client draws, in every pose of the ground seat's clips.
+            for p in pieces:
+                if p.name.startswith(OUTER):
+                    below = terrain - posed[p.name][:, 1]
+                    r = seats.setdefault((p.name, clip, "terrain"), dict(below=0.0, behind=0.0, vertices=0))
+                    r.update(below=max(r["below"], 1000 * float(below.max(initial=0.0))), vertices=max(r["vertices"], int((below > 0.005).sum())))
         if clip in SEATED or clip in GROUND:
             for name, (below, behind, n) in (chair(pieces, posed, mats, joints) if clip in SEATED else ground(pieces, posed)).items():
-                r = seats.setdefault((name, clip), dict(below=0.0, behind=0.0, vertices=0))
+                r = seats.setdefault((name, clip, "seat"), dict(below=0.0, behind=0.0, vertices=0))
                 r.update(below=max(r["below"], below), behind=max(r["behind"], behind), vertices=max(r["vertices"], n))
         normal = {p.name: p.normals(posed[p.name]) for p in pieces}
         for i, o in pairs:
@@ -530,18 +620,20 @@ def main():
         if fault or not a.quiet:
             print(f"{i:16s} under {o:16s} {clip:6s} {'THROUGH' if fault else 'clear  '} by {r['most']:6.1f} mm at most (t {r.get('at', 0):.2f} s, on {r.get('bone', '-')}, {r.get('out', 0)} vertices); in {r['frames']} of {r['of']} poses")
     cloth_bad = bad
-    for (name, clip), r in sorted(seats.items()):
+    for (name, clip, kind), r in sorted(seats.items()):
         fault = a.chair is not None and max(r["below"], r["behind"]) > a.chair
         bad += fault
         if fault or not a.quiet:
-            if clip in SEATED:
+            if kind == "terrain":
+                print(f"{name:16s} {clip}: terrain   {r['below']:6.1f} mm below")
+            elif clip in SEATED:
                 print(f"{name:16s} {clip}: seat top  {r['below']:6.1f} mm below")
                 print(f"{name:16s} {clip}: seat back {r['behind']:6.1f} mm behind")
             else:
                 print(f"{name:16s} {clip}: ground    {r['below']:6.1f} mm below")
             print(f"  {r['vertices']} vertices beyond 5 mm at most in one pose" + ("; exceeds contact limit" if fault else ""))
     if a.json:
-        json.dump(dict({f"{i}|{o}|{clip}": r for (i, o, clip), r in worst.items()}, **{f"{name}|{'chair' if clip in SEATED else 'ground'}|{clip}": dict(most=max(r["below"], r["behind"]), **r) for (name, clip), r in seats.items()}), open(a.json, "w"), indent=1)
+        json.dump(dict({f"{i}|{o}|{clip}": r for (i, o, clip), r in worst.items()}, **{f"{name}|{'terrain' if kind == 'terrain' else 'chair' if clip in SEATED else 'ground'}|{clip}": dict(most=max(r["below"], r["behind"]), **r) for (name, clip, kind), r in seats.items()}), open(a.json, "w"), indent=1)
     if swing:
         print("cloth_check: springs simulated; the cloth is carried at most " + ", ".join(f"{v:.0f} mm in {c}" for c, v in swing.items()) + " from where it rides at rest")
     print(f"cloth_check: {len(pairs)} pairs of pieces over {count} poses: " + (f"{cloth_bad} pair/clip results come through by more than {a.least} mm" if cloth_bad else f"none comes through by more than {a.least} mm"))
