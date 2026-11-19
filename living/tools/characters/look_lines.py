@@ -193,6 +193,11 @@ def layer_colours(params, line):
         if part == "kerchief":
             outfit[piece] = person_params.hexed(person_params.PAL[accent])
             continue
+        if part == "jersey_coat" and 0.09 <= outer_value < 0.22 and hair_value >= 0.45:
+            # A pale head already supplies the light block. Cut the undershirt
+            # from a deeper, slightly greyer shade of the outer dye.
+            outfit[piece] = stored([0.52 * c + 0.08 * outer_value for c in linear(outer)])
+            continue
         if part.startswith("jersey_") or part == "smock_bands":
             target = dark if dark_inner else light
         elif part == "jersey":
