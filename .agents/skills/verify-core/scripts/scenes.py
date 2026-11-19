@@ -2704,7 +2704,10 @@ SHORT_HOURS = {
 
 
 def compose(base, overlay):
-    for name in overlay:
+    # As `floors::compose`: an overlay that replaces `status_of` alone is asked it whole, the base's
+    # parts kept as `base_status_parts` (docs/STATUS_PARTS.md).
+    names = list(overlay) + (["status_parts"] if "status_of" in overlay and "status_parts" not in overlay else [])
+    for name in names:
         base = base.replace(f"fn {name}(", f"fn base_{name}(")
     return base + "\n" + "\n".join(overlay.values()) + "\n"
 
