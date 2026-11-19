@@ -3600,6 +3600,202 @@ def seat(run, c):
     on, off = arms.get("on", {}), arms.get("off", {})
     c.check(s, "frame cost with the contact on and off (eight near, crowded street)", on.get("p50_ms") and off.get("p50_ms"), json.dumps({k: {x: arms[k].get(x) for x in ("frames", "p50_ms", "p99_ms")} for k in arms}))
 
+FAKE_LLM = os.path.join(ROOT, ".agents/skills/verify-llm/scripts/fake_llm.py")
+
+
+def saying_ms(text):
+    """`living_rules::saying::saying_ms`: 330 ms a word, 1.5 s at least, 8 s at most."""
+    return min(max(len(text.split()) * 330, 1500), 8000)
+
+
+def free_port():
+    import socket
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+@scenario("reply-pace")
+def reply_pace(run, c):
+    """A resident's reply bubble at speaking pace (reply-pace, docs/COMMUNICATION.md §21). Since
+    reply-timing a mind says a reply as soon as it is ready, so its `at_ms` can fall inside the
+    time the answered line takes to say. The client shows the reply's bubble once that line is
+    done being said (its `at_ms` plus `saying_ms`, 330 ms a word, at least 1.5 s), and the
+    answered line's bubble ends then: one bubble an exchange.
+
+    A real mind service (`living-mind`, LIVING_ONLY the one resident) answers through a local fake
+    model (verify-llm's fake_llm.py; no paid call). At noon on open grass (UNHEARD_SPOT, anyone
+    within 25 m put away), resident A is held 2 m west of a fresh player.
+    1. Near: the player says a twelve-word line to A; the fake answers at once. The reply's row
+       comes well within the line's saying time; the client log's `bubble:` line gives when its
+       bubble first showed. Dumps every 0.2 s: never my bubble and A's at once.
+    2. Out of range: the player says a second line and walks east for 4 s; the fake answers after
+       5 s, when the player is beyond a said line's reach (9 m) and within a call's. A's reply
+       gets the authority's `silence` ("… could not have heard you."), A's mind takes its one
+       follow-up turn with those words ("# What came of your last words"), and the fake calls
+       out 4 s later. The player meanwhile walks back west for 2 s, into sight (11 m by day) and
+       within the call's reach: the call shows as said (its bubble not held by A's paced
+       reply before it) and in the Log."""
+    s = "reply-pace"
+    a = residents(run, 1)[0]
+    names = {r["id"]: r["name"] for r in sql(run, f"SELECT id, name FROM character WHERE id = {a}")}
+    cards = {r["name"]: r["carry_m"] for r in sql(run, "SELECT name, carry_m FROM speech_card")}
+    ui = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    ev = os.path.join(ui, s)
+    os.makedirs(ev, exist_ok=True)
+    near_line = "Good morning to you, how is the bread at the bakery today? (rp-near)"
+    far_line = "And what about the honey cakes, are there any left? (rp-far)"
+    follow_head = "# What came of your last words"
+    follow_say = "Did you hear me? The cakes are gone."
+    script = {"replies": {"think": {"thought": "I listen.", "intend": ["wait"], "say": None},
+                          "deliberate": {"graph": {"wait": 300}, "weight": 1.5, "plan": "verify-ui wait"},
+                          "talk": {"thought": "Nothing more.", "say": "", "to": 0, "acts": [], "end": True, "settled": None}},
+              "rules": [
+                  # The follow-up turn first: its prompt carries both lines of the exchange too.
+                  {"purpose": "talk", "contains": follow_head, "times": -1,
+                   "delay_s": 4, "reply": {"thought": "They did not hear me.", "say": follow_say, "way": "call", "to": 0, "acts": [], "end": True, "settled": None}},
+                  {"purpose": "talk", "contains": "rp-far", "times": -1, "delay_s": 5,
+                   "reply": {"thought": "Cakes.", "say": "None left, sorry.", "to": 0, "acts": [], "end": False, "settled": None}},
+                  {"purpose": "talk", "contains": "rp-near", "times": -1,
+                   "reply": {"thought": "A greeting.", "say": "Fresh as ever, come and see.", "to": 0, "acts": [], "end": False, "settled": None}},
+              ]}
+    script_path = os.path.join(ev, "fake-script.json")
+    json.dump(script, open(script_path, "w"), indent=1)
+    requests = os.path.join(ev, "fake-requests.jsonl")
+    port = free_port()
+    target = os.environ.get("CARGO_TARGET_DIR") or os.path.join(ROOT, ".local/target")
+    mind_bin = os.path.join(target, "release/living-mind")
+    if not os.path.exists(mind_bin):
+        c.check(s, "the mind binary is built in CARGO_TARGET_DIR", False, mind_bin)
+        return
+    models = {"default": "local", "profiles": {"local": {"base_url": f"http://127.0.0.1:{port}/v1", "model": "fake-ui", "key_env": "LIVING_VERIFY_FAKE_KEY",
+                                                          "max_tokens": 256, "requests_per_minute": 6000, "reasoning_effort": {p: p for p in ("think", "deliberate", "consolidate", "talk")}}}}
+    models_path = os.path.join(ev, "models.json")
+    json.dump(models, open(models_path, "w"), indent=1)
+    st = verify.load(run)
+    procs = []
+    fake_log = open(os.path.join(ev, "fake-server.log"), "a")
+    mind_log = open(os.path.join(ev, "mind.log"), "a")
+    try:
+        fake = subprocess.Popen([sys.executable, FAKE_LLM, "--port", str(port), "--log", requests, "--script", script_path], cwd=ROOT, stdout=fake_log, stderr=subprocess.STDOUT)
+        procs.append(fake)
+        deadline = time.time() + 10
+        while time.time() < deadline and "READY " not in open(os.path.join(ev, "fake-server.log")).read():
+            time.sleep(0.2)
+        # The fake answers before the mind starts (a first connection once timed out).
+        import urllib.request
+        for attempt in range(20):
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as r:
+                    if r.status == 200:
+                        break
+            except OSError:
+                time.sleep(0.5)
+        else:
+            c.check(s, "the fake model answers its health check", False, f"port {port}")
+            return
+        env = dict(os.environ, LIVING_ROOT=ROOT, LIVING_SERVER=os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300"), LIVING_DB=st["db"], LIVING_RUN=st["db"],
+                   LIVING_SEED="island", LIVING_MODELS=models_path, LIVING_NEO4J="off", LIVING_NEO4J_PASSWORD="", LIVING_ONLY=str(a),
+                   LIVING_LLM_PER_MIN="0", LIVING_CONCURRENCY="4", LIVING_TOKEN=verify.admin_token(), LIVING_VERIFY_FAKE_KEY="dummy-local-only",
+                   LIVING_LOD="0", NO_PROXY="127.0.0.1,localhost", RUST_LOG="info,neo4rs=warn,spacetimedb_sdk=warn")
+        mind = subprocess.Popen([mind_bin], cwd=ROOT, env=env, stdout=mind_log, stderr=subprocess.STDOUT)
+        procs.append(mind)
+        json.dump({"fake_pid": fake.pid, "mind_pid": mind.pid, "only": [a], "port": port}, open(os.path.join(ev, "processes.json"), "w"))
+        deadline = time.time() + 60
+        while time.time() < deadline and "world subscribed:" not in open(os.path.join(ev, "mind.log"), errors="replace").read():
+            if mind.poll() is not None:
+                break
+            time.sleep(0.5)
+        c.check(s, "the mind service minds the resident through the fake model", mind.poll() is None and "world subscribed:" in open(os.path.join(ev, "mind.log"), errors="replace").read(), "see mind.log")
+        people = {r["id"] for r in sql(run, "SELECT id, kind FROM character WHERE kind = 'person'")}
+        ax, ay = UNHEARD_SPOT
+        near0 = [r for r in sql(run, "SELECT id, x, y FROM body") if r["id"] in people and r["id"] != a and ((r["x"] - ax) ** 2 + (r["y"] - ay) ** 2) ** 0.5 < 25]
+        clear = ";".join(f"place_at|{r['id']}|{ax + 40}|{ay + 3 * i}" for i, r in enumerate(near0)) or "sql|SELECT id FROM world"
+        dumps = lambda p, n: "".join(f"wait:0.2;dump:{p}{k:02d};" for k in range(n))
+        plan = ("ready;sync:noon;sync:clear;sync:spot;wait:2;sync:scene;wait:3;"
+                "point:{A};wait:0.5;key:Enter:tap;wait:0.6;dump:n0;type:" + near_line + ";enter;" + dumps("n", 30) + "shot:01_near;wait:3;"
+                "point:{A};wait:0.5;key:Enter:tap;wait:0.6;type:" + far_line + ";enter;wait:0.3;cursor:;walk:90:4;sync:walked;wait:1.5;walk:270:2;sync:back;" + dumps("f", 40) + "shot:02_follow;wait:2;"
+                "key:KeyL:tap;wait:0.6;dump:log;shot:03_log;quit").replace("{A}", str(a))
+        syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"clear={clear}", f"spot=place_at|{{me}}|{ax}|{ay}",
+                 f"walked=sql|SELECT id, x, y FROM body WHERE id = {{me}} OR id = {a}", f"back=sql|SELECT id, x, y FROM body WHERE id = {{me}} OR id = {a}"]
+        tok = os.path.join(ui, f"reply-pace-{int(time.time())}.token")
+        out, code, text = drive(run, s, plan, places=[f"{a}:-2:0"], syncs=syncs, extra=["--token", tok, "--player", "Asker"])
+        time.sleep(2)
+    finally:
+        stops = []
+        for p in reversed(procs):
+            if p.poll() is None:
+                p.terminate()
+                try:
+                    p.wait(timeout=8)
+                    stops.append((p.pid, "SIGTERM"))
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    p.wait(timeout=5)
+                    stops.append((p.pid, "SIGKILL"))
+            else:
+                stops.append((p.pid, f"exited {p.returncode}"))
+        json.dump(stops, open(os.path.join(ev, "stops.json"), "w"))
+        fake_log.close()
+        mind_log.close()
+        # The resident back to the admin's default (no mind): a still graph, as --place left it.
+        call_admin(run, "set_behavior", [a, json.dumps({"wait": 600})])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    L = log(out)
+    rows = sql(run, f"SELECT id, observer, kind, subject, object, at_ms, text FROM experience WHERE (observer = {me} OR observer = {a}) AND (kind = 'said' OR kind = 'speech' OR kind = 'silence')") if me else []
+    rows.sort(key=lambda r: r["at_ms"])
+    said = lambda words: next((r for r in rows if r["observer"] == me and r["kind"] == "said" and words in r["text"]), None)
+    heard = lambda words: next((r for r in rows if r["observer"] == me and r["kind"] == "speech" and r["subject"] == a and words in r["text"]), None)
+    shown = {}
+    for m in re.finditer(r'bubble: #(\d+) to #(\d+) shown at (\d+) ms, said at (\d+) ms(?:, paced to (\d+) ms after #(\d+)\'s line said at (\d+) ms and shown at (\d+) ms \((\d+) ms to say\))?: "(.*)"', L):
+        shown[m[10]] = {"speaker": int(m[1]), "to": int(m[2]), "shown": int(m[3]), "at": int(m[4]), "paced": int(m[5]) if m[5] else None, "after": int(m[7]) if m[7] else None}
+    ended = [(int(t), int(e)) for t, e in re.findall(r"bubble: my line \(sent at (\d+) ms\) ended at (\d+) ms", L)]
+    # 1. Near.
+    mine1, reply1 = said(near_line), heard("Fresh as ever")
+    need = saying_ms(near_line)
+    b1 = shown.get("Fresh as ever, come and see.")
+    result = {"me": me, "a": a, "cards": cards, "near_line_ms_to_say": need}
+    if mine1 and reply1:
+        result["near"] = {"said_at": mine1["at_ms"], "reply_at": reply1["at_ms"], "reply_after_ms": reply1["at_ms"] - mine1["at_ms"],
+                          "bubble_shown": b1 and b1["shown"], "bubble_after_ms": b1 and b1["shown"] - mine1["at_ms"]}
+    c.check(s, "near: the reply was said within the line's saying time (said when ready)", mine1 and reply1 and 0 < reply1["at_ms"] - mine1["at_ms"] < need, json.dumps(result.get("near")))
+    c.check(s, "near: the reply's bubble first shows at least the line's saying time after it was said", b1 and mine1 and b1["shown"] - mine1["at_ms"] >= need and b1["paced"] == mine1["at_ms"] + need, f"{b1}; said {mine1 and mine1['at_ms']}; to say {need} ms")
+    c.check(s, "near: and not much later (within 0.5 s of its paced time)", b1 and b1["paced"] and b1["shown"] - b1["paced"] < 500, str(b1))
+    seq = []
+    for k in ["n0"] + [f"n{i:02d}" for i in range(30)]:
+        bs = {x.get("speaker") for x in (dump(out, k) or {}).get("bubbles") or []}
+        seq.append(("me" if me in bs else "") + ("A" if a in bs else ""))
+    c.check(s, "near: my bubble, then A's in its place, never both at once (dumps every 0.2 s)", "meA" not in seq and "me" in seq and "A" in seq and seq.index("A") > seq.index("me") and "me" not in seq[seq.index("A"):], " ".join(x or "-" for x in seq))
+    c.check(s, "near: my bubble ended in the frame the reply's showed", b1 and any(e <= b1["shown"] and e >= b1["paced"] for _, e in ended), f"ended {ended}; reply {b1}")
+    # 2. Out of range.
+    mine2 = said(far_line)
+    silences = [r for r in rows if r["observer"] == a and r["kind"] == "silence" and r["subject"] == me and mine2 and r["at_ms"] > mine2["at_ms"]]
+    reqs = [json.loads(l) for l in open(requests)] if os.path.exists(requests) else []
+    text_of = lambda e: "\n".join(str(x.get("content", "")) for x in (e.get("body") or {}).get("messages", []))
+    follow = [text_of(e) for e in reqs if e.get("purpose") == "talk" and follow_head in text_of(e)]
+    walked = {r["id"]: (r["x"], r["y"]) for r in (((sc.get("snaps") or {}).get("walked") or [{}])[0].get("rows") or [])}
+    gap = math.dist(walked[me], walked[a]) if me in walked and a in walked else None
+    result["far"] = {"apart_m": gap, "silences": [r["text"] for r in silences], "follow_prompts": len(follow)}
+    c.check(s, "far: the player walked beyond a said line's reach, within a call's", gap is not None and cards.get("say", 9) < gap < cards.get("call", 0), f"{gap} m; cards {cards}")
+    c.check(s, "far: A's reply met the authority's silence (… could not have heard you)", silences and "could not have heard you" in silences[0]["text"], str(silences))
+    c.check(s, "far: A's one follow-up turn weighs those words", len(follow) == 1 and silences and follow[0].rstrip().endswith(f"{follow_head}\n{silences[0]['text']}"), f"{len(follow)} follow-up prompts")
+    f1, b2 = heard(follow_say), shown.get(follow_say)
+    fs = [{x.get("speaker") for x in (dump(out, f"f{i:02d}") or {}).get("bubbles") or []} for i in range(40)]
+    back = {r["id"]: (r["x"], r["y"]) for r in (((sc.get("snaps") or {}).get("back") or [{}])[0].get("rows") or [])}
+    back_m = math.dist(back[me], back[a]) if me in back and a in back else None
+    result["far"]["back_m"] = back_m
+    c.check(s, "far: the follow-up call reaches the player, back in sight, unpaced, and its bubble shows", f1 and b2 and b2["speaker"] == a and b2["shown"] - f1["at_ms"] < 500 and any(a in x for x in fs), f"row {f1 and f1['text']}; bubble {b2}; back {back_m} m; dumps with A {sum(a in x for x in fs)}")
+    logl = [x.get("text") or "" for x in (((dump(out, "log") or {}).get("extra") or {}).get("lines") or [])]
+    c.check(s, "far: the Log has the follow-up too", any(follow_say in t for t in logl), str(logl[-6:]))
+    at = lambda w: next((i for i, t in enumerate(logl) if w in t), None)
+    c.check(s, "the Log keeps every line unpaced, in the order said (my line, then the reply)", None not in (at(near_line), at("Fresh as ever")) and at(near_line) < at("Fresh as ever") < at(far_line), str(logl))
+    result["follow"] = {"row": f1, "bubble": b2}
+    json.dump(result, open(os.path.join(ev, "reply-pace.json"), "w"), indent=1)
+    print(f"{s}: {json.dumps(result)}", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run")
