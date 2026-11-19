@@ -114,7 +114,7 @@ def band_of(stage, age):
 
 def given_for(person, band, age):
     """A person's parameters as given to the generator for a band: who they are, at that age."""
-    g = {k: person[k] for k in ("seed", "sex", "family", "skin") if k in person}
+    g = {k: person[k] for k in ("seed", "sex", "family", "household", "skin") if k in person}
     g["age"] = age
     if band == 0:
         g["hair"] = dict(style="crop")
@@ -165,6 +165,55 @@ def painted(line, rule):
             hh, s, v = colorsys.rgb_to_hsv(*linear(h))
             line["colors"]["outfit"][piece] = stored(colorsys.hsv_to_rgb((hh + dh) % 1.0, min(s * ks, 1.0), min(v * kv, 1.0)))
     return line
+
+
+def layer_colours(params, line):
+    """Set the visible layer values after the generator has measured or estimated the cloth dye."""
+    outfit = line["colors"]["outfit"]
+    seed = params["seed"]
+    home = params.get("household") or params.get("family", seed)
+    house = person_params.rnd(home, "wardrobe.house")
+    wearer = person_params.rnd(seed, "wardrobe.wearer")
+
+    def luminance(rgb):
+        return sum(x * w for x, w in zip(rgb, (0.2126, 0.7152, 0.0722)))
+
+    outer = next((colour for piece, colour in outfit.items()
+                  if stem(piece) == "coat" or (piece.startswith("smock_") and stem(piece) != "smock_bands")), None)
+    outer_value = luminance(linear(outer)) if outer else 0.0
+    hair_value = luminance(linear(line["colors"]["hair"]))
+    # A light dye carries a dark inner layer. At intermediate values the
+    # hair breaks the tie, preserving separation around the head and neck.
+    dark_inner = outer_value >= 0.36 or (outer_value >= 0.22 and hair_value >= 0.25)
+    light = wearer.uniform(0.54, 0.68)
+    dark = wearer.uniform(0.045, 0.075)
+    accent = house.choice(("oxblood", "mustard", "chalk_blue", "sea_green"))
+    for piece, colour in outfit.items():
+        part = stem(piece)
+        if part == "kerchief":
+            outfit[piece] = person_params.hexed(person_params.PAL[accent])
+            continue
+        if part == "jersey_coat" and 0.09 <= outer_value < 0.22 and hair_value >= 0.45:
+            # A pale head already supplies the light block. Cut the undershirt
+            # from a deeper, slightly greyer shade of the outer dye.
+            outfit[piece] = stored([0.52 * c + 0.08 * outer_value for c in linear(outer)])
+            continue
+        if part.startswith("jersey_") or part == "smock_bands":
+            target = dark if dark_inner else light
+        elif part == "jersey":
+            target = 0.38  # stay below the recolour shader’s lightening range to keep the bodice dark
+        else:
+            continue
+        rgb = linear(colour)
+        value = luminance(rgb)
+        if target > value:
+            rgb = [x + (1 - x) * (target - value) / max(1 - value, 1e-6) for x in rgb]
+        else:
+            rgb = [x * target / max(value, 1e-6) for x in rgb]
+        if part == "jersey":
+            scale = min(1.0, 0.44 / max(rgb))
+            rgb = [x * scale for x in rgb]
+        outfit[piece] = stored(rgb)
 
 
 def words_of(p, line, band):
@@ -282,6 +331,7 @@ def book(a):
     for who, b, params, line, made in entries:
         if not made:
             painted(line, rule)
+        layer_colours(params, line)
         line = {k: line[k] for k in DRAWN if k in line}
         k = key_of(line)
         lines[k] = dict(person=line, words=words_of(params, line, b))

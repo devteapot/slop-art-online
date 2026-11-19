@@ -52,8 +52,8 @@ MANIFEST = "MANIFEST.txt"
 
 # The classes, where they are and what they become. `colour` is how the client samples them:
 # sRGB colour, or linear data (the shadow maps, loaded with `is_srgb = false`).
-CLASSES = ["atlas", "face", "overlay", "far", "tint", "iris", "strands"]
-URI_CLASSES = {"pages/atelier-atlas.png": "atlas", "pages/types-far.png": "far", "pages/types-tint.png": "tint", "pages/types-iris.png": "iris", "strands.png": "strands"}
+CLASSES = ["atlas", "face", "overlay", "far", "tint", "iris", "strands", "garment"]
+URI_CLASSES = {"pages/atelier-atlas.png": "atlas", "pages/types-far.png": "far", "pages/types-tint.png": "tint", "pages/types-iris.png": "iris", "strands.png": "strands", "garment.png": "garment"}
 LINEAR = {"face"}
 
 

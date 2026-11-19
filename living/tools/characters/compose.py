@@ -223,7 +223,10 @@ def attach_hair(j, binary, style_path, out_path, colour=None, far=False, node=No
             mixed = np.array(natural)[None, :] * (1 - t) + np.array(silver)[None, :] * t
             mixed = np.where(mixed > 0.04045, ((mixed + 0.055) / 1.055) ** 2.4, mixed / 12.92)
             each = mixed / np.maximum(np.array(colour)[None, :], 1e-4)
-        cloth = "material" in p and h["materials"][p["material"]].get("name", "").endswith("_CLOTH") and "baseColorTexture" not in (h["materials"][p["material"]].get("pbrMetallicRoughness") or {})
+        material = h["materials"][p["material"]] if "material" in p else {}
+        texture = material.get("pbrMetallicRoughness", {}).get("baseColorTexture")
+        garment = texture and os.path.basename(h["images"][h["textures"][texture["index"]]["source"]].get("uri", "")) in ("garment.png", "garment.ktx2")
+        cloth = material.get("name", "").endswith("_CLOTH") and (texture is None or garment)
         weight = None
         if cloth and colour is not None and "indices" in p:
             pos = np.array(read_accessor(h, hbin, p["attributes"]["POSITION"])[0], float).reshape(-1, 3)
