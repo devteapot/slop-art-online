@@ -66,6 +66,8 @@ PRIVATE = ['attention', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle'
            'guest', 'judged', 'rhythm',
            # Attention cues a mind wrote (docs/ATTENTION.md): read only by reducers and the owner.
            'cue',
+           # The world's law revision (docs/LAW_OVERRIDE.md): the authority's cache key; `law_override` is public.
+           'law_revision',
            # Handles for figures too far away to make out (far-handle, docs/STRANGERS.md §1): the authority's only.
            'far_handle',
            # A sleeper's waiting reasons (fix-sleep-thinking): the authority's only.

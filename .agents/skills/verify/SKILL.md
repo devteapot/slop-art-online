@@ -93,6 +93,7 @@ Run it before the first drive and after anything surprising.
   - `--as-player` uses the run's player identity; a player reads its own state through views (`SELECT * FROM my_characters`, `my_experience`, `seen_bodies`, …).
   - `--anonymous` uses no identity and sees only public tables.
   - `--save` writes the rows to `<run>/NAME.json`.
+- **The world's own law values.** A script reads them with `own_laws(query)` from `living/tools/law_values.py`: `sys.path.insert(0, str(ROOT / "living/tools"))`, then `from law_values import own_laws`. `query` is the script's own owner SQL helper, taking a query and returning rows as dicts; the result is `{name: value as JSON text}`. Since `law-override` (docs/LAW_OVERRIDE.md) the values are in the public `law_override` table, and `world_law` is no longer written. The helper lays `law_override` over `world_law`, so it also reads a module from before that branch: main's before arms and older trial wasm tags. Never read `world_law` alone: on a current module it holds only values copied at migration, never a later edit. `python3 living/tools/law_values_selftest.py` checks the helper.
 - Admin calls go through `living/tools/stdb` (the in-container CLI identity is the world admin), for example `living/tools/stdb call -s local verify-<run> place_near 12 40`. Admin calls only set up scenes; they never prove what a player or client can do.
 
 ### Observer

@@ -732,7 +732,9 @@ def check_land(seed, rows, side, tiles):
     if plans:
         checks.extend(check_plans(seed, rows, plans, tile))
     # A seed's `rules` are the world's own law values, kept when it is made (docs/WORLD_RULES.md).
-    kept = {r["name"]: json.loads(r["value"]) for r in rows.get("world_law", [])}
+    # Kept in `law_override` since law-override (docs/LAW_OVERRIDE.md), laid over `world_law`
+    # (which a module from before it writes): living/tools/law_values.py's rule.
+    kept = {r["name"]: json.loads(r["value"]) for r in rows.get("world_law", []) + rows.get("law_override", [])}
     present("the seed's rules are kept as the world's laws", kept == seed.get("rules", {}), {"kept": kept, "seed": seed.get("rules", {})})
     if seed.get("rules", {}).get("minds") is False:
         world = rows["world"][0]
@@ -1233,7 +1235,7 @@ def suite(args):
             write(d / "seed.json", seed_text(seed_path) if seed_name != "malformed" else json.loads(seed_path.read_text()))
             database = "verify-" + active_run
             seed_arg = "none" if seed_name in FLOORS else str(seed_path.with_suffix("")) if seed_name == "malformed" or seed_name in DERIVED else seed_name
-            # A seed's `rules` are world laws kept at creation (`world_law`), not compiled in.
+            # A seed's `rules` are world laws kept at creation (`law_override`), not compiled in.
             launch_env = None
             container = subprocess.run(["docker", "ps", "--filter", f"name=^{CONTAINER}$", "--format", "{{.Status}}"], capture_output=True, text=True, check=True, timeout=30)
             if not container.stdout.strip().startswith("Up"):

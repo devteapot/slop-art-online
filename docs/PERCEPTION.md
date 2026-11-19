@@ -661,9 +661,17 @@ A creature within hearing (`senses(a).hearing`, all round, no sight line) and no
 
 #### Changing a law on a running world: `set_world_law`
 
-`set_world_law(name, value)` (admin only, like the other admin reducers; `value` is JSON text: `"true"`, `"0.5"`) changes any constant of `laws()`, of the law's own kind; another name or kind is refused with nothing written. The value is kept as the world's own (`world_law`, as a seed's `rules` are), and the reducer installs the world's script again with the values written at its end as a generated `fn world_law_values()` block (`script::with_world_laws`). The install is validated like `install_script` and given a new `script.revision`. **This is how clients learn it:** the game client already recompiles the `script` row when its revision changes, so `senses(a)` returns the field there at once; the authority's caches and the mind service do the same. Every install keeps the block from `world_law` (an `install_script` of the plain script no longer drops a world's own law values), and a seed's `rules` are written into it at creation.
+`set_world_law(name, value)` changes any constant of `laws()`, of the law's own kind.
 
-Every change is recorded in `law_change` (private, kept for good: `name`, `old` (the value in force before), `new`, `at_ms`, `by` (the caller's identity), `revision`) and as a chronicle row of kind `law` ("the world's law fov_on changed from false to true (script revision 13)"), so a run's evidence says which laws were live when.
+- **Arguments:** it is admin only, like the other admin reducers. `value` is JSON text: `"true"`, `"0.5"`.
+- **Refusals:** another name or kind is refused with nothing written.
+- **Storage:** since `law-override` (2026-11-19, [docs/LAW_OVERRIDE.md](LAW_OVERRIDE.md)) the value is kept as the world's own in the public `law_override` table, with a new law revision. A seed's `rules` are kept there too. The authority and every client lay these rows over the compiled script in one place (`Scripts::with_overrides`, `apply_overrides`).
+- **A value-only law** (`living_rules::script::VALUE_ONLY`: `cue_transport_on`, `near_tier_on`, the five `cover_*` laws and `gaze_on`, unless the world's script reads one elsewhere) takes effect without an install. The authority keeps the compiled script, runs no validation and gives no new `script.revision`. It refreshes only what the law reaches: the gaze ceilings and senses, the cover policy row and mask, and the owner gaze projection.
+- **Any other law** installs the world's script again, as before, with the values written at its end as a generated `fn world_law_values()` block (`script::with_world_laws`). The install is validated like `install_script` and gets a new `script.revision`.
+
+**This is how clients learn it:** the game client recompiles the `script` row when its revision changes, and lays `law_override` over it (`SELECT * FROM law_override`; a reconnect's first result holds every row). The authority's caches do the same. The mind service reads only laws that install. Every install keeps the block from `law_override`, so an `install_script` of the plain script does not drop a world's own law values.
+
+Every change is recorded in `law_change` (private, kept for good: `name`, `old` (the value in force before), `new`, `at_ms`, `by` (the caller's identity), `revision`) and as a chronicle row of kind `law` ("the world's law fov_on changed from false to true (law revision 4, installed, script revision 13)"), so a run's evidence says which laws were live when. `law_change.revision` is the script revision in force after the change: unchanged for a value-only law.
 
 #### SpacetimeDB documentation consulted (2026-11-11)
 

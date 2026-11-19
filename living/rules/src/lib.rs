@@ -37,6 +37,8 @@ pub mod normalize;
 pub mod floors;
 #[cfg(feature = "scripting")]
 pub mod cullet_check;
+#[cfg(feature = "scripting")]
+mod law_override_check;
 mod making_check;
 mod goods_check;
 #[cfg(feature = "scripting")]

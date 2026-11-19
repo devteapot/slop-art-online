@@ -12,6 +12,9 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "living/tools"))
+from law_values import own_laws  # noqa: E402  (the world's own law values, docs/LAW_OVERRIDE.md)
 
 ROOT = Path(__file__).resolve().parents[4]
 STDB = ROOT / "living/tools/stdb"
@@ -1389,14 +1392,14 @@ def moves(s):
 
 
 def law_value(s, name):
-    """A world law in force: the world's own value (`world_law`, set with `set_world_law`), else
-    the installed script's `laws()` number."""
+    """A world law in force: the world's own value (`law_override`, or `world_law` on an older
+    module: `living/tools/law_values.py`), else the installed script's `laws()` number."""
     def val(v):
         v = str(v).strip().strip('"')
         return {"true": True, "false": False}[v] if v in ("true", "false") else float(v)
-    own = [r for r in s.rows("SELECT * FROM world_law") if r["name"] == name]
-    if own:
-        return val(own[0]["value"])
+    own = own_laws(s.rows)
+    if name in own:
+        return val(own[name])
     src = s.rows("SELECT source FROM script WHERE name = 'skills'")[0]["source"]
     # A world's own values block (`world_law_values`, a seed's `laws`) comes before laws().
     m = re.search(r"\b" + name + r": (true|false|[0-9.]+)", src)
@@ -3523,7 +3526,7 @@ def sleeper_cue(s):
     try:
         set_law(s, "cues_on", True)
         set_cues(s, o, [cue("stance:verify_watch", who="unknown", at="verify bed", within=20.0)], [bed])
-        s.wait(lambda: any(w["name"] == "cues_on" and w["value"] == "true" for w in s.rows("SELECT * FROM world_law")), 10)
+        s.wait(lambda: own_laws(s.rows).get("cues_on") == "true", 10)
         s.graph(o, {"seq": [{"do": "sleep"}]})
         s.wait(lambda: slumber(), seconds=20)
         s.call("place_at", n, line[2][0], line[2][1] + 1.0)
@@ -3889,7 +3892,7 @@ def stranger_filter(s):
         off = waved_at()
         s.expect("law off: the nearest stranger is A, of O's community with no relation row", off == a, {"waved_at": off, "A": a, "N": n})
         set_law(s, "stranger_by_name", True)
-        s.wait(lambda: any(r["name"] == "stranger_by_name" and r["value"] == "true" for r in s.rows("SELECT * FROM world_law")), 10)
+        s.wait(lambda: own_laws(s.rows).get("stranger_by_name") == "true", 10)
         on = waved_at()
         s.expect("law on: the nearest stranger is N, whose name O does not know (its relation row does not count)", on == n, {"waved_at": on, "A": a, "N": n})
         # Too far away to make out: who someone is only within 4 m (as Cullet's law within 24 m).
@@ -4004,7 +4007,7 @@ def cues(s):
         time.sleep(2)
         set_law(s, "cues_on", True)
         set_law(s, "cue_gap_s", 15)
-        s.wait(lambda: any(w["name"] == "cues_on" and w["value"] == "true" for w in s.rows("SELECT * FROM world_law")), 10)
+        s.wait(lambda: own_laws(s.rows).get("cues_on") == "true", 10)
         t1 = now()
         s.call("place_at", n, line[2][0], line[2][1] + 1.0)
         got = s.wait(lambda: noticed(t1), 10)
@@ -6030,7 +6033,7 @@ def first_sight(s):
         # On: refused within think_min_s, owed, asked again while in sight.
         set_law(s, "first_sight_thinks", True)
         set_law(s, "first_sight_gap_s", 40)
-        s.wait(lambda: any(r["name"] == "first_sight_thinks" and r["value"] == "true" for r in s.rows("SELECT * FROM world_law")), 10)
+        s.wait(lambda: own_laws(s.rows).get("first_sight_thinks") == "true", 10)
         t1 = think_now()
         near(u2, 2)
         seen = s.wait(lambda: about(u2, t1), 10)
@@ -6464,7 +6467,7 @@ def heard_first(s):
         s.expect("law off: O's line after L's is said", any("verify hf O1" in c["text"] for c in said_by(o, t0)), said_by(o, t0))
         # On: mind_say (a deliberation carrying on).
         set_law(s, "heard_first_rethinks", True)
-        s.wait(lambda: any(w["name"] == "heard_first_rethinks" and w["value"] == "true" for w in s.rows("SELECT * FROM world_law")), 10)
+        s.wait(lambda: own_laws(s.rows).get("heard_first_rethinks") == "true", 10)
         clear()
         t1 = now()
         l_says("Good day, friend. verify hf L2", u)
@@ -6917,7 +6920,7 @@ def scene_lazy(s):
             {"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if who % 2 == 0 else "block"}}}},
             {"do": {"skill": "strike", "target": {"nearest": "person"}}}]})
     # The world's own fov_on, else the shipped script's (off).
-    fov0 = any(r["name"] == "fov_on" and str(r["value"]).lower() == "true" for r in s.rows("SELECT * FROM world_law"))
+    fov0 = str(own_laws(s.rows).get("fov_on", "")).lower() == "true"
 
     def window(secs):
         # Counts gathered while profiling stopped are reported when it starts again, in the
