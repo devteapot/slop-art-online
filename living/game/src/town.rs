@@ -93,6 +93,14 @@ const MY_ACTS: [MyAct; 3] = [
 ];
 /// Settling down to sit plays this long (s; `sit_ground_down` is 2.97 s).
 const SIT_DOWN_S: f64 = 2.9;
+/// A sitter whose rest row goes stays seated this long (display ms) while it keeps still and
+/// starts nothing else. The authority renews a rest (an 8 s activity) by ending it and starting
+/// the next at the resident's next evaluation, once a second (`tick.rs`'s slots), and a viewer's
+/// frame delivers it up to 200 ms later: the client read the gap between the two rows (0.03–1.05
+/// s in verify-ui's seat runs) as getting up, and the new row's start as settling down again. A
+/// real end of the rest shows as soon as the body moves or starts something else, else after
+/// this.
+const RENEW_MS: f64 = 1600.0;
 
 /// Whether the world's rules say this skill is done on the move (`on_the_move`: moving does not
 /// break it off, so moving does not end its gesture here either).
@@ -171,6 +179,18 @@ pub struct Town {
     /// Who made a gesture at me (a wave, a nod), at display ms (the camera frames us).
     pub greeted_by: HashMap<u32, f64>,
     seen: HashSet<u64>,
+    /// Who is drawn seated on the ground: since when (its first rest row's `since_ms`, which
+    /// settling down is timed from) and when (display ms) its rest row was last there.
+    sits: HashMap<u32, Sit>,
+}
+
+/// One body seated on the ground ([`Town::sits`]).
+#[derive(Clone, Copy, Debug)]
+struct Sit {
+    since: f64,
+    seen: f64,
+    /// The `since_ms` of the rest row it sits on now (a renewal starts a new one).
+    row: u64,
 }
 
 impl Town {
@@ -376,15 +396,39 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
                 } else if raining || crate::world::hash(id, 0x5e47) < 0.3 {
                     // Under the eaves, or standing at ease with the others.
                     show.idle = Some(if raining { "idle_look" } else { "listen" });
-                } else if now - (d.since_ms as f64) < SIT_DOWN_S * 1000.0 {
-                    show.once = Some(Action { clip: "sit_ground_down", rate: 1.0, start_ms: d.since_ms as f64, hold: Some(0.99), face: None, ..Default::default() });
-                    show.idle = Some("sit_ground");
                 } else {
+                    // Seated already (the same rest, or the next one after a renewal's gap): still
+                    // seated, settling down timed from the first.
+                    let since = match town.sits.get(&id) {
+                        Some(s) if now - s.seen <= RENEW_MS => {
+                            if s.row != d.since_ms && crate::perf::has("seat") {
+                                info!("seat: #{id} rest renewed (row since {} after {}), {:.0} ms without a row: still seated", d.since_ms, s.row, now - s.seen);
+                            }
+                            s.since
+                        }
+                        _ => d.since_ms as f64,
+                    };
+                    town.sits.insert(id, Sit { since, seen: now, row: d.since_ms });
+                    if now - since < SIT_DOWN_S * 1000.0 {
+                        show.once = Some(Action { clip: "sit_ground_down", rate: 1.0, start_ms: since, hold: Some(0.99), face: None, ..Default::default() });
+                    }
                     show.idle = Some("sit_ground");
                 }
             }
             (Some(_), Some(Pose::Indoors)) => show.hidden = true,
             _ => {}
+        }
+        // A sitter whose rest row has gone, keeping still and doing nothing else: seated on until
+        // the next rest row (a renewal) or [`RENEW_MS`].
+        if show.idle != Some("sit_ground") {
+            let moving = || crate::net::find_motion(conn, id).is_some_and(|m| m.vx != 0.0 || m.vy != 0.0);
+            match town.sits.get(&id) {
+                Some(s) if row.is_none() && now - s.seen <= RENEW_MS && !moving() => show.idle = Some("sit_ground"),
+                Some(_) => {
+                    town.sits.remove(&id);
+                }
+                None => {}
+            }
         }
         if Some(id) == me {
             if let Some((pose, t, face, on_move)) = town.predicted {
@@ -412,6 +456,7 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
     }
     town.gestures.retain(|id, _| scene.shown.contains_key(id));
     town.started.retain(|id, _| scene.shown.contains_key(id));
+    town.sits.retain(|id, _| scene.shown.contains_key(id));
     town.shows = out;
 }
 

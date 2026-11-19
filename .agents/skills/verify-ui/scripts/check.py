@@ -3576,7 +3576,7 @@ def seat_segments(path, cid):
     originals' (`LIVING_GAME_CLIP_VARIANTS=0`) in the same segment."""
     if not os.path.exists(path):
         return None
-    rows = [r for r in (json.loads(l) for l in open(path) if l.strip()) if r.get("id") == cid and r.get("hips_at")]
+    rows = feet_rows(path, cid)
     rel = lambda r, k: [a - b for a, b in zip(r[k][:3], r["root"])]
     out, cur, seated = [], None, []
     for a, b in zip(rows, rows[1:]):
@@ -3597,6 +3597,42 @@ def seat_segments(path, cid):
     return {"segments": [{k: v for k, v in x.items() if k != "act"} for x in segs], "seated_hips_over_ground_m": round(sum(seated) / len(seated), 4) if seated else None}
 
 
+def script_t(text, step):
+    """The client's clock (s) at the first live-script line for STEP (`live script: STEP (me …,
+    t X s)`), the clock the feet log's `t` uses."""
+    m = re.search(rf"live script: {re.escape(step)} \(me .*?, t ([\d.]+) s\)", text)
+    return float(m.group(1)) if m else None
+
+
+def feet_rows(path, cid):
+    """A feet log's frames of one body (a line cut short when the client stopped is skipped)."""
+    out = []
+    for line in open(path):
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if r.get("id") == cid and r.get("hips_at"):
+            out.append(r)
+    return out
+
+
+def seated_frames(path, cid, t0, t1):
+    """The watched sitter's feet-log frames between t0 and t1 (client s) that show it off the
+    seated loop: any one-shot over it (getting up, settling down again, a turn take) or its hips
+    more than SEATED_HIPS_M over the ground (the seated loop keeps them about 0.11 m up, standing
+    about 0.9). Returns (frames in the window, [(t, clip, action, hips over ground m)])."""
+    if not os.path.exists(path) or t0 is None or t1 is None:
+        return 0, []
+    rows = [r for r in feet_rows(path, cid) if t0 <= r["t"] <= t1]
+    off = [(round(r["t"], 3), r.get("clip"), (r.get("action") or [None])[0], round(r["hips_at"][1] - r["l"][3], 3))
+           for r in rows if r.get("action") or r["hips_at"][1] - r["l"][3] > SEATED_HIPS_M]
+    return len(rows), off
+
+
+SEATED_HIPS_M = 0.35
+
+
 @scenario("seat")
 def seat(run, c):
     """Seated cloth on the ground (seat-2a, docs/seat-contact/): skirted and coated residents
@@ -3604,9 +3640,13 @@ def seat(run, c):
     weather (`set_behavior` `{"do": "rest"}`, scene setup), so town.rs sits them on the ground
     (`sit_ground_down`, then `sit_ground`; about three in ten stand at ease instead), then told to
     go home at `sync:up`, so they get up where they sat (`stand_up_ground`) and walk off.
-    Stills going down, seated, getting up and up. While they sit the camera goes far and back
-    near, so their springs rest and wake (the re-entry
-    reseed, `LIVING_GAME_PERF=springwake`). Two arms: the contact on, and off
+    Stills going down, seated, getting up and up. They sit about 18 s, across two of the
+    authority's 8 s rest renewals (a new `doing` row each, snapshotted at `held0` and `held1`),
+    and meanwhile the camera goes Far, Near, Far and Near, so their springs rest and wake (the
+    re-entry reseed, `LIVING_GAME_PERF=springwake`). Nobody seated may rise before `up`: the
+    watched sitter's feet log stays in the seated loop (no one-shot, hips low) from the seated
+    dump to `up`, every sitter's one `gets up` line comes after `up`, and every seated wake starts
+    where its chains were drawn (under 5° at waking) and does not swing (under 10° a frame). Two arms: the contact on, and off
     (`LIVING_GAME_SEAT_CONTACT=0`); `LIVING_GAME_PERF=seat` logs each seated character's lowest
     cloth tail above its ground, and frames.csv and the springs line give the cost. Each sitter's
     `seat:` line names the animation its seated loop plays: the female ground sit's variant for an
@@ -3629,15 +3669,19 @@ def seat(run, c):
     free = [f"{i}:{x}:{y}" for i, (x, y) in zip(ids, ring)]
     rest = json.dumps(json.dumps({"do": "rest"}))
     home = json.dumps(json.dumps({"do": "goto", "target": "home"}))
+    doing = "sql|SELECT id, since_ms, until_ms FROM doing WHERE " + " OR ".join(f"id = {i}" for i in ids)
     syncs = ['setup=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5;set_weather|false|900',
              "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
              "sit=" + ";".join(f"set_behavior|{i}|{rest}" for i in ids),
+             "held0=" + doing, "held1=" + doing,
              "up=" + ";".join(f"set_behavior|{i}|{home}" for i in ids)]
-    # Replace the graph shortly after the near-camera dump, before the next 8 s rest renewal
-    # can start a brief rise of its own.
+    # Seated from about 4 s after `sit` to `up` about 18 s after it: across the rest renewals at
+    # about 8 and 16 s (the first while the camera is Near between two Far stops), and a
+    # Far → Near → Far → Near zoom.
     plan = ("ready;sync:noon;sync:setup;wait:2;sync:scene;look:180;cursor:0.5,0.55;wait:3;notches:30;wait:2;dump:standing;shot:00_standing;"
-            "sync:sit;wait:1.6;shot:01_down;wait:2.4;dump:seated;shot:02_seated;wait:3;shot:03_idle;"
-            "notches:-30;wait:2;notches:30;wait:3;dump:rewoken;shot:04_rewoken;"
+            "sync:sit;wait:1.6;shot:01_down;wait:2.4;dump:seated;shot:02_seated;sync:held0;"
+            "notches:-30;wait:2;notches:30;wait:2.5;shot:03_idle;notches:-30;wait:2;notches:30;wait:3;dump:rewoken;shot:04_rewoken;"
+            "wait:5;dump:renewed;shot:04b_renewed;sync:held1;"
             "sync:up;wait:0.9;shot:05_rising;wait:1.2;shot:06_rising_late;wait:2;dump:up;shot:07_up;wait:1;quit")
     arms = {}
     # One variant sitter's hips and feet, frame by frame (the feet log): its seat's height, and
@@ -3662,8 +3706,19 @@ def seat(run, c):
         # The seated characters' springs waking as the camera comes back near (their entities, from
         # their seat reports), after they sat.
         seated_e = {e for _, e, k, _ in re.findall(r"seat: (.+?) (\S+): (\d+) cloth joints, lowest tail (-?[\d.]+|inf) mm", L) if int(k) > 0}
-        after = L.split("live script: dump:seated", 1)[-1]
-        wakes = [(e, float(a), float(b)) for e, a, b in re.findall(r"springwake: \S+ (\S+) \(\d+ joints, settle \d+\): largest turn ([\d.]+)° at waking, ([\d.]+)° a frame after", after) if e in seated_e]
+        # Seated: from the seated dump to the `up` request.
+        seated_log = L.split("live script: dump:seated", 1)[-1].split("live script: sync:up (", 1)[0]
+        wakes = [(e, float(a), float(b)) for e, a, b in re.findall(r"springwake: \S+ (\S+) \(\d+ joints, settle \d+\): largest turn ([\d.]+)° at waking, ([\d.]+)° a frame after", seated_log) if e in seated_e]
+        # The authority's rest rows while they sat: a renewal is a new `since_ms`.
+        sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+        held = [{r["id"]: r["since_ms"] for r in ((sc.get("snaps") or {}).get(k) or [{}])[0].get("rows", [])} for k in ("held0", "held1")]
+        renewed = sorted(i for i in sat if i in held[0] and i in held[1] and held[0][i] != held[1][i])
+        # Getting up after `sit` (residents resting already when the scene places them get up then).
+        sit_at = L.find("live script: sync:sit (")
+        gets_up = [(int(i), m.start()) for m in re.finditer(r"seat: #(\d+) gets up", L) for i in [m.group(1)] if int(i) in ids and m.start() > sit_at >= 0]
+        early_up = sorted({i for i, at in gets_up if at < after_up})
+        t_seated, t_far1, t_up = script_t(L, "dump:seated"), script_t(L, "notches:-30"), script_t(L, "sync:up")
+        t_far2 = next((float(x) for x in re.findall(r"live script: notches:-30 \(me .*?, t ([\d.]+) s\)", L)[1:2]), None)
         springs = [float(x) for x in re.findall(r"springs: .*?([\d.]+) µs CPU a character-step", L)]
         rows = []
         if os.path.exists(frames):
@@ -3687,7 +3742,19 @@ def seat(run, c):
         if arm == "on":
             cloth = [x for x in lows if x[1] > 0]
             c.check(s, "on: seated cloth tails stay on the ground's side (at most 5 mm under it)", cloth and min(v for _, _, v in cloth) >= -5.0, f"{len(cloth)} reports; lowest {min((v for _, _, v in cloth), default=None)} mm")
-        c.check(s, f"{arm}: waking seated (far and back near) settles without a swing", wakes and max(b for _, _, b in wakes) < 10.0, f"{wakes}")
+        c.check(s, f"{arm}: the authority renewed the sitters' rest while they sat (a new doing row between held0 and held1)", renewed, f"held0 {held[0]}, held1 {held[1]}")
+        if watch is not None and arm == "on":
+            n, off = seated_frames(feet, watch, t_seated, t_up)
+            arms[arm]["seated_off_loop"] = off[:40]
+            c.check(s, f"on: #{watch} stays seated across the rest renewal (no one-shot, hips under {SEATED_HIPS_M} m, seated dump to up)",
+                    n > 100 and watch in renewed and not off, f"{n} frames; renewed {renewed}; off the loop {off[:6]}")
+            n2, off2 = seated_frames(feet, watch, t_far1, (t_far2 or 0) + 2.0)
+            c.check(s, f"on: #{watch} stays seated across Far → Near → Far", n2 > 50 and t_far2 and not off2, f"{n2} frames, t {t_far1}–{t_far2}; off the loop {off2[:6]}")
+        arms[arm]["gets_up"] = [i for i, _ in gets_up]
+        c.check(s, f"{arm}: every sitter gets up once, after up (`seat: #ID gets up`), none while seated", sat and early_up == [] and sorted(i for i, _ in gets_up) == sat,
+                f"gets up {[i for i, _ in gets_up]} (before up {early_up}), sat {sat}")
+        c.check(s, f"{arm}: seated springs wake (Far → Near) where they were drawn (under 5° at waking) and settle without a swing (under 10° a frame)",
+                wakes and max(a for _, a, _ in wakes) < 5.0 and max(b for _, _, b in wakes) < 10.0, f"{wakes}")
     evidence = os.path.join(ROOT, ".local/living/verify", run, "ui", "seat.json")
     json.dump(arms, open(evidence, "w"), indent=1)
     on, off = arms.get("on", {}), arms.get("off", {})
