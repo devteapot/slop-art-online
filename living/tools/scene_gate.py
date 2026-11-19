@@ -7,12 +7,13 @@ that moves bodies can pass it and still break a scene (fix-place-free, e3f0527f:
 `dealings` and verify-player combat staging went red on main). This gate runs, when a merge
 touches behaviour, these cases with the fake model only:
 
-  verify-core    tick, sight, senses, refusal (one default-seed world), skirmish (an island world)
+  verify-core    tick, sight, senses, refusal (one default-seed world), skirmish (an island world),
+                 mechanics (its own default-seed world)
   verify-minds   roundtrip, acts, dealings, conversation (each its own world, the real living-mind)
   verify-player  combat (combat.py --scene all: the staged fights, an island world)
   living-mind    mind-unit: its cargo tests (`just living-check` builds the mind, tests only the rules)
 
-The four worlds and the tests run at once. A case whose only failures are parts on the red-on-main
+The world groups and the tests run at once. A case whose only failures are parts on the red-on-main
 list (a mind test `living-mind::<test>`, a combat scene `combat:<scene>`) passes and says which. Flakes: a failing case runs again once, alone, on a fresh scratch
 database; it fails the gate only when it fails twice. A case that failed twice is then judged on
 main (the merge's first parent): from the cache of main's results, from the red-on-main list
@@ -77,6 +78,7 @@ REDS_DEFAULT = HOME / "slop-mq/red-on-main.json" if (HOME / "slop-mq").is_dir() 
 BEHAVIOUR = ("living/authority/", "living/rules/", "living/scripts/", "living/mind/", "living/seeds/",
              "living/configs/", "living/bindings/", "living/Cargo.toml", "living/Cargo.lock",
              "living/tools/scene_gate.py", "living/tools/install_script.py", "living/tools/stdb",
+             "living/tools/verify_mechanics.py",
              ".agents/skills/verify/scripts/", ".agents/skills/verify-core/scripts/",
              ".agents/skills/verify-minds/scripts/", ".agents/skills/verify-player/scripts/",
              ".agents/skills/verify-llm/scripts/")
@@ -90,6 +92,7 @@ CASES = {
     "senses":       {"skill": "verify-core", "group": "core"},
     "refusal":      {"skill": "verify-core", "group": "core"},
     "skirmish":     {"skill": "verify-core", "group": "island"},
+    "mechanics":    {"skill": "verify-core", "group": "mechanics"},
     "roundtrip":    {"skill": "verify-minds", "group": "minds"},
     "acts":         {"skill": "verify-minds", "group": "minds"},
     "dealings":     {"skill": "verify-minds", "group": "minds",
@@ -353,12 +356,12 @@ class Runner:
                 with LOCK:
                     self.procs.discard(p)
 
-    def world(self, root, run, seed, log):
+    def world(self, root, run, seed, log, *launch_args):
         """Launch a fresh scratch world; True when launch and doctor pass."""
         with LOCK:
             self.runs.append((root, run))
         args = ["--seed", seed] if seed != "world" else []
-        if self.sh([sys.executable, V, "launch", "--run", run, *args], root, log, 1500):
+        if self.sh([sys.executable, V, "launch", "--run", run, *args, *launch_args], root, log, 1500):
             return False
         return self.sh([sys.executable, V, "doctor", "--run", run], root, log, 300) == 0
 
@@ -402,10 +405,18 @@ class Runner:
         ev = Path(root) / ".local/living/verify" / run
         ev.mkdir(parents=True, exist_ok=True)
         log = ev / "gate.log"
-        seed = "world" if group == "core" else "island"
+        seed = "world" if group in {"core", "mechanics"} else "island"
+        # Mechanics uses the raw CLI, so the gate process supervises its world instead of an inactivity lease.
+        launch_args = ("--driver-pid", str(os.getpid())) if group == "mechanics" else ()
         try:
-            if not self.world(root, run, seed, log):
+            if not self.world(root, run, seed, log, *launch_args):
                 return {c: (False, f"{log} (launch or doctor failed)", time.time() - t0) for c in cases}
+            if group == "mechanics":
+                report = ev / "mechanics.json"
+                code = self.sh([sys.executable, "living/tools/verify_mechanics.py", "--gate-world",
+                                "--db", f"verify-{run}", "--out", report], root, ev / "mechanics.txt", 900)
+                ok = code == 0 and report.is_file()
+                return {"mechanics": (ok, str(report if report.exists() else ev / "mechanics.txt"), time.time() - t0)}
             if group == "player":
                 if self.sh([sys.executable, V, "player", "--run", run, "join", "GateTester"], root, log, 120):
                     return {"combat": (False, f"{log} (join failed)", time.time() - t0)}
@@ -509,6 +520,9 @@ def judge_on_main(a, runner, repo, base, cases, record):
         todo = []
     if todo:
         root = main_checkout(repo, a.main_dir, base)
+        if "mechanics" in todo and "--gate-world" not in (root / "living/tools/verify_mechanics.py").read_text():
+            verdict["mechanics"] = ("unknown", "", f"main {base[:10]}'s mechanics driver predates gate integration")
+            todo.remove("mechanics")
         for need in ("gate-", "--no-unit-tests"):
             if need not in (root / ".agents/skills/verify-minds/scripts/verify_minds.py").read_text():
                 for c in todo:
