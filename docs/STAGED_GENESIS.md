@@ -1,6 +1,10 @@
 # Staged genesis (design note)
 
-Status: 2026-11-20, dev-box, branch `staged-genesis` (from `origin/main` `a407be01a`). A design note for the coordinator, then the Spark, then the GC. Nothing here is built. Designed for main **without** status-parts (the Spark is reverting it; its re-land removes its genesis work rather than staging it), where the island's `init` uses 99.8% of its budget.
+Status: 2026-11-20, dev-box, branch `staged-genesis` (from `origin/main` `a407be01a`). Reviewed by the coordinator and the Spark; the GC's go (2026-11-20), to build after the Spark's revert of status-parts lands. Nothing here is built yet. Designed for main **without** status-parts: its re-land removes its genesis work (filled lazily on first ask) rather than staging it; anything that truly must run per body at genesis becomes one of the steps below, under 50 × 10⁹. Here the island's `init` uses 99.8% of its budget.
+
+**Existing worlds are unaffected.** `init` runs only on a fresh publish (or a clear); a module update of a running world does not run it, and nothing in a made world's tables changes. Only worlds created after this lands take the staged path.
+
+**The GC's decisions** (2026-11-20): populate stays one step (per settlement later, if a seed needs it); the double overlay validation (§1) is fixed first, as its own small merge (`overlay-validate-once`); `join` and `mind_*` before the world is ready are refused with the stable code `world_preparing` (§4).
 
 ## Why
 
@@ -53,7 +57,7 @@ Everything after that is a step, run in order, on every seeded world (one path f
 | `resources` × n | resources by rows of tiles (as floors: 1,024 rows a step) | 9.1 | 1.1 | 0.7 |
 | `populate` | stores, people, animals, settlements' life; then `start_ticking` | 25.4 | 7.7 | 4.2 |
 
-**Targets.** `init` under 15 × 10⁹ for every seed (12.5% of the budget, at least 87% headroom). Every step at most 50 × 10⁹ (about 40%; at least 58% headroom), comfortably inside the Spark guard's 10% floor and leaving room for content growth. `land` is split by `Gen`'s own steps (the island's 72 × 10⁹ into steps under 50); `populate` (25 × 10⁹ on the island, the largest single step) fits now and is the first to split (per settlement) if a seed grows.
+**Targets.** `init` under 15 × 10⁹ for every seed (12.5% of the budget, at least 87% headroom). Every step at most 50 × 10⁹ (about 40%; at least 58% headroom), comfortably inside the Spark guard's 10% floor and leaving room for content growth. `land` is split by `Gen`'s own steps (the island's 72 × 10⁹ into steps under 50); `populate` (25 × 10⁹ on the island, the largest single step) fits now and stays one step (the GC: per settlement later, only if a seed grows past the target). The overlay cut (§1) lands first as `overlay-validate-once`, so the `rules` step here already validates once.
 
 This is the floors' staged path (`floor.rs`, docs/FLOORS.md "Staged generation") made the only path: `INLINE_MAX_M` goes, and `seed::seed`'s inline branch becomes the same steps. The floors' `genesis`, `genesis_timer`, `resume_genesis` and `stop_genesis` stay as they are.
 
@@ -64,17 +68,28 @@ A **resumable cursor**, as floors have it, not a reducer per step:
 - **One reducer, `genesis_step`, on a one-shot schedule** (`ScheduleAt::Time(now)`), which does the next step and schedules the next one in the same transaction. [Schedule tables](https://spacetimedb.com/docs/tables/schedule-tables/): one-shot rows are removed after the reducer runs; scheduling from `init` is the documented pattern (the docs' own `init` inserts a schedule row). A failed step rolls back its own schedule of the next, so the chain stops; `resume_genesis` (admin) carries on, `stop_genesis` stops between steps (both exist).
 - **The cursor is the `genesis` row** (durable): which step, and how far within it (chunks, lots, resource rows done). It gains a `phase` column for the step names above.
 - **Module memory is a cache, never the truth.** [Reducers](https://spacetimedb.com/docs/functions/reducers/), "Global and Static Variables Are Undefined Behavior": values need not survive between calls. As floors do: intermediate land grids stay in memory only while the cursor says they are this seed's and this far; otherwise generation starts again from its first step. Generation is deterministic, so a restart rebuilds the same land, and rows already written are kept.
+- **Back to back**: each step schedules the next at its own `ctx.timestamp` (`ScheduleAt::Time`, "now"), never on an interval, so the chain runs as fast as the scheduler dispatches one-shot rows; the only added time per step is a transaction's commit and the scheduler's dispatch.
 - **No interval tick before `done`**: `start_ticking` runs in the last step, as now.
+
+**Wall time to ready.** The GC's bound: staged within a few seconds of today's inline time, since play-test staging, the scene gate and verify launches all wait on it. Today's inline time (publish start to the first tick; main `5bea89b55`, `sg-stdb`, three publishes each; the publish includes the validity check's own run of `init`): see the table in §8. Staged, the validity check runs only the small `init`, which saves about one genesis' worth of wasm time; each step adds a commit and a dispatch (milliseconds), about 15–25 steps on the island. The build reports the staged times against these.
 
 ## 4. Readiness
 
-"World ready" = `genesis.done` (public row). Until then:
+"World ready" = `genesis.done` (public row). One predicate in the authority, `genesis::ready(ctx)`, decides it, so refusing (the GC's choice) or a later queue is one place to change.
 
-- **The tick and housekeeping do not run** (not scheduled until `done`).
-- **Players**: `join` is refused with "the world is still being made (step i of n)"; the game client shows the `genesis` row's label and progress (a client subscribing `genesis` already can).
-- **The mind service** connects as before and subscribes; it sees no characters until `populate` writes them and the tick starts. Its reducers (`mind_*`) need the world ticking anyway; they are refused before `done` with the same message, so a mind that connects early waits rather than acting on a half-made world.
-- **The verify harness**: `verify.py launch` publishes, arms `world_guard` (unchanged: it arms at publish and pauses or deletes an orphaned world either way), then **waits for `genesis.done`** (with a timeout and the label in the error) before `doctor`; `doctor` reports a world still being made instead of "not ticking". `play.py` already waits this way. The scene gate inherits it through the harness.
-- **`world_guard`**: unchanged. A world it pauses mid-genesis has no tick to pause; its `set_paused` is harmless, and `world_delete.py`'s rule (pause, read back, delete) holds: a staged world between steps is not running wasm.
+**The public `genesis` row** (one row, `id` 0; floors already publish it): `done` (bool), `step` (steps done), `steps` (steps expected so far; grows once a land's wards are known), `phase` (new: `rules`, `land`, `chunks`, `build`, `resources`, `populate`, `done`), `label` (the next step's work, for a progress line), `started_ms`, `updated_ms`, `restarts`. Clients and tools wait on a subscription to it (`SELECT * FROM genesis`), not by polling a reducer.
+
+**The refusal code** (stable, documented, for clients to match): a refused call returns the error string `world_preparing: the world is still being made (step <step> of <steps>: <label>)`. Clients match the prefix `world_preparing`; the rest is for people.
+
+What each consumer sees between `init` and the last step:
+
+- **The tick and housekeeping** do not run (not scheduled until `done`).
+- **Clients (players)**: `join` (and the other player reducers) refuse with `world_preparing`; the game client shows a "preparing" state from the `genesis` row and retries `join` when `done` turns true (the laptop's client half, after this branch).
+- **The mind service**: `mind_*` reducers refuse with `world_preparing`; the service retries quietly (no failed startup, no error log per refusal), and does no deliberation before ready. It sees no characters until `populate` writes them.
+- **`world_guard`**: an unfinished genesis is not orphaned or stalled. The guard arms at publish as now; its lease and inactivity rules count a world whose `genesis.done` is false and whose `updated_ms` advances as alive, and pause or delete it only by the same rules as a made world. Pausing between steps is harmless (no wasm runs between steps), and `world_delete.py`'s rule holds.
+- **The owner's launcher, `living/tools/play.py` (the first priority)**: today it publishes, reads the laws back (`check_laws.py`), then starts the minds and the client. It waits for `genesis.done` after publishing and before the read-back and the minds (it already waits this way for floors).
+- **The verify harness and every publisher**: `verify.py launch` waits for ready before `doctor`; `doctor` reports "world being made: step i of n (label)" instead of "not ticking". Every tool that publishes and then calls admin reducers or SQL waits through **one shared helper**, `living/tools/genesis_wait.py` (`wait_ready(url, db, token, timeout_s=600) -> genesis row`, raising with the last label on a timeout or a stopped chain), as `world_delete.py` and `law_values` are shared. The publishers today: `verify.py`, verify-core's `record_stdb.py` and `updates.py`, `battle_viewers.py`, `bench.py`, `board/board.py`, `duel.py`, `gate.py`, `lab.py`, `latency.py`, `look_cost.py` (and `tick_cost.py` on it), `perception_bench.py`, `play.py`, `soak.py`, `store.py`, `trials.py` (the Spark's), `verify_mechanics.py`, `verify_steering.py`.
+- **The merge gate's scenes** wait through the harness, with its timeout.
 
 ## 5. Consistency
 
@@ -93,20 +108,36 @@ Genesis output must be identical to today's for the same seed. Two things make i
 - **Readiness**: `join` and a `mind_*` call refused before `done` and accepted after; the harness waits; `doctor` reports progress.
 - **Scenes**: the scene gate's island cases (`skirmish`, `combat`), the default-world cases (`tick`, `sight`, `senses`, `refusal`, `cues`, `motion_tables`), the minds' cases, verify-generation's staged cases and a Cullet look scene, all on the staged path.
 - **Unit**: the step table's order and each step's cursor advance (pure functions over the `genesis` row).
+- **Verification skills**: the build runs `maintain-verification-skill` on verify-generation (its staged cases become the seeded path's, and verify-core's world setup goes through it), and updates verify-client's and verify-player's refusal maps for `world_preparing`.
 
 ## 7. Reporting fuel for the Spark's guard
 
-A step cannot read its own fuel (the module has no fuel API), and the server's `reducer_wasmtime_fuel_used{reducer="genesis_step"}` is one counter for all steps. So the interface is a tool, read the same way for `init` and for every step:
+Agreed with the Spark (2026-11-20; its `genesis-fuel-guard` consumes this format). A step cannot read its own fuel (the module has no fuel API), and the server's `reducer_wasmtime_fuel_used{reducer="genesis_step"}` is one counter for all steps. So the interface is a tool, which reads the counter the same way for `init` and for each step:
 
-- **A step-by-step mode**: the admin's `set_genesis_stepping(true)` (stored in the `genesis` row) makes each step schedule nothing; `resume_genesis` then runs exactly one more step. The tool publishes the seed, sets stepping right after publish (the first step is scheduled by `init` for "now"; `init` itself sets stepping when the module is built with `LIVING_GENESIS_STEPPING=1`, a measurement build, so no race), and for each step reads the fuel counter before and after one `resume_genesis`, with the step's `phase` and label from the `genesis` row.
-- **The output** (`living/tools/genesis_fuel.py --seed S`, one JSON object per seed): `{"seed": S, "module": sha, "budget": 120e9, "init": {"fuel": f, "share": f/budget}, "steps": [{"step": i, "phase": p, "label": l, "fuel": f, "share": s}], "max_step_share": m, "total_fuel": t}`.
-- **The guard's rule** (the Spark's): fail when `init.share` or `max_step_share` is above 0.9 (10% headroom), per seed; warn above 0.5.
-- **Production worlds** run the chain unattended, as now; stepping is only for measurement.
+- **A step-by-step mode** for measurement only: a module built with `LIVING_GENESIS_STEPPING=1` has `init` mark the `genesis` row as stepping, so each step schedules nothing; the tool calls `resume_genesis` once per step and reads the counter before and after. Production modules chain unattended.
+- **The output** (`living/tools/genesis_fuel.py --seed S [--wasm W]`, one JSON object per seed):
 
-The Spark's status-parts re-land fits the same shape: whatever genesis work it keeps is a step (or part of `populate`) and shows in the same report, and work it removes from genesis disappears from it.
+```json
+{"seed": "island", "commit": "<sha>", "budget": 120000000000,
+ "init_fuel": 11000000000, "init_runs": 2,
+ "steps": [{"phase": "rules", "label": "…", "fuel": 2000000000, "reducer": "genesis_step"}],
+ "largest_step_share": 0.42}
+```
 
-## Open questions for the GC
+`init_fuel` is per run (the counter divided by `init_runs`, 2 on a fresh publish: the validity check's and the real one); `budget` is 2.14.1's `FunctionBudget::DEFAULT_BUDGET`, recorded in the file; `largest_step_share` is the largest step's `fuel / budget`.
 
-- `populate` as one step (25 × 10⁹ on the island today) or split per settlement now.
-- The overlay double validation (§1): fix it in this work (a pure cut, about 26 × 10⁹ on Cullet), or separately.
-- Whether `join` and `mind_*` should be refused before `done` (proposed) or queue.
+- **Thresholds** (the Spark's guard): fail above 90% of the budget for `init` and for every step (each scheduled step has its own budget); warn above 50%.
+
+## 8. Wall time to ready, inline today
+
+Publish start to the first tick, main `5bea89b55` (without status-parts), the worker's own `sg-stdb` (v2.14.1), three fresh publishes each, 2026-11-20 (1-minute load 3.7 at the start; `.local/sg/wall-inline.jsonl`, `.local/sg/tools/genesis_wall.py`):
+
+| Seed | Publish returns (s) | Ready: first tick (s) |
+|---|---:|---:|
+| island (and the player world, the same seed) | 15.95 / 16.17 / 16.56 | 16.43 / 16.58 / 17.01 |
+| Cullet | 16.04 / 16.26 / 16.47 | 16.38 / 16.56 / 16.96 |
+| default world | 5.73 / 5.81 / 5.89 | 6.00 / 6.10 / 6.31 |
+
+A publish runs `init` twice today (the validity check, then the real one), so about half of the island's and Cullet's time is the check's own genesis. Expected when staged (an estimate from §1's measured wasm time, to be measured by the build): the check runs only the small `init` (about 1 s of wasm), the steps run genesis once (island about 6.7 s of wasm, Cullet about 7 s after the overlay cut), plus a commit and a dispatch per step. So staged should be several seconds *faster* than inline on the island and Cullet, and about the same on the default world.
+
+The staged times are reported by the build against these.
