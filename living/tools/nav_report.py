@@ -64,7 +64,8 @@ class Track:
     """One body's segments in time order."""
 
     def __init__(self, rows):
-        self.rows = sorted(rows, key=lambda r: r["t_ms"])
+        self.observed_rows = list(rows)
+        self.rows = sorted(self.observed_rows, key=lambda r: r["t_ms"])
         self.ts = [r["t_ms"] for r in self.rows]
 
     def at(self, t):
@@ -320,10 +321,13 @@ def walk_response(walk, track, trace, transactions, next_send):
         return result
     captured, pending, writes = transactions
     stop = min(walk.get("end_ms", sent + 2000), next_send)
-    previous = {id(row): before for before, row in zip(track.rows, track.rows[1:])}
-    segment_end = {id(row): following["t_ms"] - 1 for row, following in zip(track.rows, track.rows[1:])}
-    if track.rows:
-        segment_end[id(track.rows[-1])] = stop
+    # A later transaction may re-anchor a segment to an earlier t_ms.
+    # Use subscription order to identify the overwritten body row.
+    observed = track.observed_rows
+    previous = {id(row): before for before, row in zip(observed, observed[1:])}
+    segment_end = {id(row): following["t_ms"] - 1 for row, following in zip(observed, observed[1:])}
+    if observed:
+        segment_end[id(observed[-1])] = stop
     target = walk["waypoints"][0] if walk.get("waypoints") else walk["goal"]
     candidates = []
     segments = []
@@ -600,7 +604,7 @@ def phase_report(folder, response_only=False):
     tracks, ground = load_tracks(folder / "bodies.jsonl")
     tiles_file = Path(ph["tiles_file"]) if ph.get("tiles_file") else None
     W, H = ph.get("W"), ph.get("H")
-    if tiles_file and not tiles_file.exists():
+    if tiles_file:
         for parent in folder.resolve().parents:
             candidate = parent / "verify" / tiles_file.parent.name / tiles_file.name
             if candidate.exists():
