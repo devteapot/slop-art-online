@@ -54,6 +54,8 @@ pub mod community_table;
 pub mod community_type;
 pub mod connection_table;
 pub mod connection_type;
+pub mod contents_seen_table;
+pub mod contents_seen_type;
 pub mod cover_ground_table;
 pub mod cover_ground_type;
 pub mod cover_law_table;
@@ -139,6 +141,7 @@ pub mod infant_need_type;
 pub mod install_script_reducer;
 pub mod inventory_table;
 pub mod inventory_type;
+pub mod item_count_type;
 pub mod join_as_reducer;
 pub mod join_reducer;
 pub mod join_request_table;
@@ -221,6 +224,7 @@ pub mod my_act_outcomes_table;
 pub mod my_body_table;
 pub mod my_characters_table;
 pub mod my_combat_table;
+pub mod my_contents_seen_table;
 pub mod my_deliberations_table;
 pub mod my_doing_table;
 pub mod my_earshot_table;
@@ -455,6 +459,8 @@ pub use community_table::*;
 pub use community_type::Community;
 pub use connection_table::*;
 pub use connection_type::Connection;
+pub use contents_seen_table::*;
+pub use contents_seen_type::ContentsSeen;
 pub use cover_ground_table::*;
 pub use cover_ground_type::CoverGround;
 pub use cover_law_table::*;
@@ -540,6 +546,7 @@ pub use infant_need_type::InfantNeed;
 pub use install_script_reducer::install_script;
 pub use inventory_table::*;
 pub use inventory_type::Inventory;
+pub use item_count_type::ItemCount;
 pub use join_as_reducer::join_as;
 pub use join_reducer::join;
 pub use join_request_table::*;
@@ -622,6 +629,7 @@ pub use my_act_outcomes_table::*;
 pub use my_body_table::*;
 pub use my_characters_table::*;
 pub use my_combat_table::*;
+pub use my_contents_seen_table::*;
 pub use my_deliberations_table::*;
 pub use my_doing_table::*;
 pub use my_earshot_table::*;
@@ -1453,6 +1461,7 @@ pub struct DbUpdate {
     combat_seen: __sdk::TableUpdate<CombatSeen>,
     community: __sdk::TableUpdate<Community>,
     connection: __sdk::TableUpdate<Connection>,
+    contents_seen: __sdk::TableUpdate<ContentsSeen>,
     cover_ground: __sdk::TableUpdate<CoverGround>,
     cover_law: __sdk::TableUpdate<CoverLaw>,
     cue: __sdk::TableUpdate<Cue>,
@@ -1516,6 +1525,7 @@ pub struct DbUpdate {
     my_body: __sdk::TableUpdate<Moving>,
     my_characters: __sdk::TableUpdate<Character>,
     my_combat: __sdk::TableUpdate<CombatSeen>,
+    my_contents_seen: __sdk::TableUpdate<ContentsSeen>,
     my_deliberations: __sdk::TableUpdate<Deliberation>,
     my_doing: __sdk::TableUpdate<Doing>,
     my_earshot: __sdk::TableUpdate<CharacterEarshot>,
@@ -1680,6 +1690,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "connection" => db_update
                     .connection
                     .append(connection_table::parse_table_update(table_update)?),
+                "contents_seen" => db_update
+                    .contents_seen
+                    .append(contents_seen_table::parse_table_update(table_update)?),
                 "cover_ground" => db_update
                     .cover_ground
                     .append(cover_ground_table::parse_table_update(table_update)?),
@@ -1869,6 +1882,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_combat" => db_update
                     .my_combat
                     .append(my_combat_table::parse_table_update(table_update)?),
+                "my_contents_seen" => db_update
+                    .my_contents_seen
+                    .append(my_contents_seen_table::parse_table_update(table_update)?),
                 "my_deliberations" => db_update
                     .my_deliberations
                     .append(my_deliberations_table::parse_table_update(table_update)?),
@@ -2231,6 +2247,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.connection = cache
             .apply_diff_to_table::<Connection>("connection", &self.connection)
             .with_updates_by_pk(|row| &row.id);
+        diff.contents_seen = cache
+            .apply_diff_to_table::<ContentsSeen>("contents_seen", &self.contents_seen)
+            .with_updates_by_pk(|row| &row.id);
         diff.cover_ground = cache
             .apply_diff_to_table::<CoverGround>("cover_ground", &self.cover_ground)
             .with_updates_by_pk(|row| &row.id);
@@ -2586,6 +2605,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .apply_diff_to_table::<Character>("my_characters", &self.my_characters)
             .with_updates_by_pk(|row| &row.id);
         diff.my_combat = cache.apply_diff_to_table::<CombatSeen>("my_combat", &self.my_combat);
+        diff.my_contents_seen = cache
+            .apply_diff_to_table::<ContentsSeen>("my_contents_seen", &self.my_contents_seen)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_deliberations =
             cache.apply_diff_to_table::<Deliberation>("my_deliberations", &self.my_deliberations);
         diff.my_doing = cache
@@ -2755,6 +2777,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "connection" => db_update
                     .connection
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "contents_seen" => db_update
+                    .contents_seen
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "cover_ground" => db_update
                     .cover_ground
@@ -2944,6 +2969,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_combat" => db_update
                     .my_combat
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_contents_seen" => db_update
+                    .my_contents_seen
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_deliberations" => db_update
                     .my_deliberations
@@ -3294,6 +3322,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "connection" => db_update
                     .connection
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "contents_seen" => db_update
+                    .contents_seen
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "cover_ground" => db_update
                     .cover_ground
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3482,6 +3513,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_combat" => db_update
                     .my_combat
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_contents_seen" => db_update
+                    .my_contents_seen
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_deliberations" => db_update
                     .my_deliberations
@@ -3790,6 +3824,7 @@ pub struct AppliedDiff<'r> {
     combat_seen: __sdk::TableAppliedDiff<'r, CombatSeen>,
     community: __sdk::TableAppliedDiff<'r, Community>,
     connection: __sdk::TableAppliedDiff<'r, Connection>,
+    contents_seen: __sdk::TableAppliedDiff<'r, ContentsSeen>,
     cover_ground: __sdk::TableAppliedDiff<'r, CoverGround>,
     cover_law: __sdk::TableAppliedDiff<'r, CoverLaw>,
     cue: __sdk::TableAppliedDiff<'r, Cue>,
@@ -3853,6 +3888,7 @@ pub struct AppliedDiff<'r> {
     my_body: __sdk::TableAppliedDiff<'r, Moving>,
     my_characters: __sdk::TableAppliedDiff<'r, Character>,
     my_combat: __sdk::TableAppliedDiff<'r, CombatSeen>,
+    my_contents_seen: __sdk::TableAppliedDiff<'r, ContentsSeen>,
     my_deliberations: __sdk::TableAppliedDiff<'r, Deliberation>,
     my_doing: __sdk::TableAppliedDiff<'r, Doing>,
     my_earshot: __sdk::TableAppliedDiff<'r, CharacterEarshot>,
@@ -3994,6 +4030,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<CombatSeen>("combat_seen", &self.combat_seen, event);
         callbacks.invoke_table_row_callbacks::<Community>("community", &self.community, event);
         callbacks.invoke_table_row_callbacks::<Connection>("connection", &self.connection, event);
+        callbacks.invoke_table_row_callbacks::<ContentsSeen>(
+            "contents_seen",
+            &self.contents_seen,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<CoverGround>(
             "cover_ground",
             &self.cover_ground,
@@ -4121,6 +4162,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<CombatSeen>("my_combat", &self.my_combat, event);
+        callbacks.invoke_table_row_callbacks::<ContentsSeen>(
+            "my_contents_seen",
+            &self.my_contents_seen,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Deliberation>(
             "my_deliberations",
             &self.my_deliberations,
@@ -5017,6 +5063,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         combat_seen_table::register_table(client_cache);
         community_table::register_table(client_cache);
         connection_table::register_table(client_cache);
+        contents_seen_table::register_table(client_cache);
         cover_ground_table::register_table(client_cache);
         cover_law_table::register_table(client_cache);
         cue_table::register_table(client_cache);
@@ -5080,6 +5127,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_body_table::register_table(client_cache);
         my_characters_table::register_table(client_cache);
         my_combat_table::register_table(client_cache);
+        my_contents_seen_table::register_table(client_cache);
         my_deliberations_table::register_table(client_cache);
         my_doing_table::register_table(client_cache);
         my_earshot_table::register_table(client_cache);
@@ -5194,6 +5242,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "combat_seen",
         "community",
         "connection",
+        "contents_seen",
         "cover_ground",
         "cover_law",
         "cue",
@@ -5257,6 +5306,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_body",
         "my_characters",
         "my_combat",
+        "my_contents_seen",
         "my_deliberations",
         "my_doing",
         "my_earshot",

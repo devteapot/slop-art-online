@@ -970,6 +970,56 @@ def sight_case(run):
             'hidden': names.get(other), 'open': names.get(third)}
 
 
+@case('chest')
+def chest_case(run):
+    """A container's contents in a scoped world (docs/FEED_SCOPING.md: minds match players): a mind
+    beside a storage holding berries is sent it as a storage that it has not looked into, with no
+    contents; told to look, it inspects it and is told what is inside; its next scene says what it
+    found, and it takes the berries. The world goes to stage 2 by the `feed_scope_on` law."""
+    eye, other = [p['id'] for p in prepare(run)]
+    run.admin('set_world_law', 'feed_scope_grace_s', '1')
+    run.admin('set_world_law', 'feed_scope_on', 'true')
+    run.wait(lambda: any(r['stage'] == 2 for r in run.sql('SELECT * FROM feed_scope', 'feed-scope')), 'stage 2', 20)
+    for who in (eye, other):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    body = run.private(f'SELECT * FROM body WHERE id = {other}', 'other-body')[0]
+    run.admin('place_structure', other, 'storage')
+    chest = max((r for r in run.private(f'SELECT * FROM structure_held WHERE owner = {other}', 'chest') if r['kind'] == 'storage'), key=lambda r: r['id'])
+    run.admin('grant_items', other, 'berries', 3)
+    run.admin('mind_act', other, [json.dumps({'do': 'store', 'target': {'id': chest['id']}, 'item': 'berries', 'qty': 3})], 'verify-minds')
+    run.wait(lambda: any(i['item'] == 'berries' and i['qty'] == 3 for i in run.private(f"SELECT * FROM inventory WHERE owner = {(1 << 40) | chest['id']}", 'chest-inv')), 'berries stored', 20)
+    run.admin('place_at', other, body['x'] + 40, body['y'])
+    run.admin('place_at', eye, chest['x'] + 1.2, chest['y'])
+    time.sleep(1.0)
+    look = basic_reply({'seq': [{'do': 'inspect', 'target': {'id': chest['id']}}, {'wait': 120}]}, plan='verify minds look in the chest')
+    take = basic_reply({'seq': [{'do': 'take', 'target': {'id': chest['id']}, 'item': 'berries', 'qty': 3}, {'wait': 120}]}, plan='verify minds take the berries')
+    script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()},
+              'rules': [{'purpose': 'deliberate', 'contains': 'verify chest-look', 'reply': look, 'times': -1},
+                        {'purpose': 'deliberate', 'contains': 'verify chest-take', 'reply': take, 'times': -1}]}
+    models = model(run, script)
+    run.request(eye, 'chest-look')
+    run.start(models, [eye])
+
+    def sent_with(marker):
+        reqs = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate' and marker in json.dumps(e['body'])]
+        return '\n'.join(str(m.get('content', '')) for m in reqs[0]['body'].get('messages', [])) if reqs else None
+
+    sent = run.wait(lambda: sent_with('verify chest-look'), 'the first prompt', 60)
+    (run.directory / 'sent-look.txt').write_text(sent)
+    entry = next((e for e in (scene_sent(sent) or {}).get('structures', []) if e.get('id') == chest['id']), None)
+    assert entry and entry['kind'] == 'storage' and 'not looked into' in entry.get('inside', '') and 'contents' not in entry and 'berries' not in json.dumps(entry), entry
+    found = run.wait(lambda: [r for r in run.private(f'SELECT * FROM contents_seen WHERE observer = {eye}', 'contents-seen') if r['target'] == chest['id']], 'the look inside', 40)
+    told = run.wait(lambda: [e['text'] for e in run.private(f'SELECT * FROM experience WHERE observer = {eye}', 'told') if 'look inside the storage' in e['text']], 'the line', 20)
+    assert '3 berries' in told[0], told
+    run.request(eye, 'chest-take')
+    sent2 = run.wait(lambda: sent_with('verify chest-take'), 'the second prompt', 60)
+    (run.directory / 'sent-take.txt').write_text(sent2)
+    entry2 = next((e for e in (scene_sent(sent2) or {}).get('structures', []) if e.get('id') == chest['id']), None)
+    assert entry2 and '3 berries when you looked inside' in entry2.get('inside', ''), entry2
+    run.wait(lambda: any(i['item'] == 'berries' and i['qty'] >= 3 for i in run.private(f'SELECT * FROM inventory WHERE owner = {eye}', 'eye-inv')), 'the berries taken', 40)
+    return {'status': 'pass', 'first_entry': entry, 'told': told[0], 'second_entry': entry2, 'contents_seen': found[0]['items']}
+
+
 @case('fov')
 def fov_case(run):
     """Sight that depends on facing (docs/PERCEPTION.md, "Heard, not seen"), on by the admin's

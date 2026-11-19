@@ -119,7 +119,7 @@ PRIVATE = ['attention', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle'
            # sightings of sight-scoped kinds, and the cutover's bookkeeping. A player reads its own
            # through my_things, my_remembered_things, my_owners and my_fuel_seen.
            'structure_held', 'gate_held', 'resource_held', 'thing_seen', 'owner_seen',
-           'remembered_thing', 'fuel_seen', 'seen_structures_scoped', 'owned_by', 'lot_door', 'id_seq']
+           'remembered_thing', 'fuel_seen', 'contents_seen', 'seen_structures_scoped', 'owned_by', 'lot_door', 'id_seq']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place', 'audience',
           'inventory', 'know_how']
@@ -129,7 +129,7 @@ VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_bo
          'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex',
          # The near and far tiers of the three copy-backed views (frame-views; scripts/cues.py proves them).
          'seen_bodies_near', 'seen_bodies_far', 'seen_fighters_near', 'seen_fighters_far', 'seen_doing_near', 'seen_doing_far',
-         'my_things', 'my_remembered_things', 'my_owners', 'my_stock', 'my_fuel_seen']
+         'my_things', 'my_remembered_things', 'my_owners', 'my_stock', 'my_fuel_seen', 'my_contents_seen']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']

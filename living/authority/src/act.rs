@@ -1142,6 +1142,12 @@ fn perform(ctx: &ReducerContext, mut act: Activity, now: u64) -> Result<(), Stri
     let sc = common::scripts(ctx);
     act.phase = 1;
     let sctx = skill_ctx(ctx, act.id, &act, now);
+    // At a container to take from it or store in it, one sees what is inside whether the act then
+    // goes ahead or not (a scoped world keeps that, docs/FEED_SCOPING.md): an empty cache is known
+    // empty, and a graph's `holds` does not send the body back to it.
+    if act.target.class == 2 && matches!(act.skill.as_str(), "take" | "store") && crate::store::sighted(ctx) && sctx.target.class == "structure" && crate::scope::container(&sc, &sctx.target.kind) {
+        crate::scope::record_contents(ctx, act.id, act.target.id, now);
+    }
     sc.check(&act.skill, &sctx).inspect_err(|_| refuse(living_rules::outcome::act::CHECK))?;
     let dur = sc.duration_ms(&act.skill, &sctx)?;
     if rooted(&act.skill) {
@@ -1815,12 +1821,19 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 common::inv_add(ctx, STRUCTURE_BIT | a.target.id, &item, qty);
                 move_tablets(ctx, &item, me as u64, STRUCTURE_BIT | a.target.id, qty);
                 notes.push(format!("stored {qty} {item}"));
+                // Storing in it shows what is there (scoped worlds keep what one saw inside).
+                if crate::store::sighted(ctx) {
+                    crate::scope::record_contents(ctx, me, a.target.id, now);
+                }
             }
             Effect::Take { item, qty } => {
                 common::inv_remove(ctx, STRUCTURE_BIT | a.target.id, &item, qty)?;
                 common::inv_add(ctx, me as u64, &item, qty);
                 move_tablets(ctx, &item, STRUCTURE_BIT | a.target.id, me as u64, qty);
                 notes.push(format!("took {qty} {item}"));
+                if crate::store::sighted(ctx) && a.target.class == 2 {
+                    crate::scope::record_contents(ctx, me, a.target.id, now);
+                }
                 // Whether taking it is theft is the `theft(a)` law's to say.
                 if let Some(s) = crate::store::structure(ctx, a.target.id).filter(|_| common::scripts(ctx).holds("theft", sctx)) {
                     crate::perceive::witnessed_owned(ctx, now, at, "took", me, s.owner, &s.kind, &format!("{{a}} took {qty} {item} from {{b}}'s {}", s.kind), 0.5, &[me]);

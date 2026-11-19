@@ -1161,7 +1161,17 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
                 o["home_of"] = json!(whose);
             }
         }
-        if s.kind == "remains" || t.holds.is_some() {
+        if scoped && crate::scope::container(&sc, &s.kind) {
+            // What it is, not what is in it (as a player sees it): what was inside when this
+            // character last looked, if it did (docs/FEED_SCOPING.md).
+            o["inside"] = json!(match crate::scope::known_contents(ctx, id, s.id) {
+                Some(c) => {
+                    let w = common::world(ctx);
+                    format!("{} when you looked inside, {}", crate::scope::contents_words(&c.items), living_rules::day_clock(c.seen_ms, w.epoch_ms, w.day_ms))
+                }
+                None => "not looked into: inspect it (or take from it) to see what it holds".to_string(),
+            });
+        } else if s.kind == "remains" || t.holds.is_some() {
             let inv: JMap<String, Value> = common::inv_list(ctx, STRUCTURE_BIT | s.id).into_iter().map(|(k, q)| (k, json!(q))).collect();
             o["contents"] = Value::Object(inv);
         }

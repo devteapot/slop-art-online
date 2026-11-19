@@ -31,8 +31,10 @@ use std::rc::Rc;
 pub const REMEMBER_THINGS: usize = 256;
 /// Most fires a character remembers the fuel of.
 pub const FUEL_SEEN: usize = 32;
-/// A character's remembered things in one chunk are checked against a sighting of their place
-/// at most this often (and at once in another chunk).
+/// Most containers a character remembers the contents of.
+pub const CONTENTS_SEEN: usize = 32;
+/// A character's remembered things are checked against a sighting of their places at most this
+/// often (and at once in another chunk).
 const RECHECK_MS: u64 = 5_000;
 
 pub fn key(class: u8, id: u64) -> u64 {
@@ -102,21 +104,75 @@ impl Look {
     }
 }
 
-// ---- chunk-local candidates ------------------------------------------------------------------
+// ---- candidates, by coarse cell ----------------------------------------------------------------
+
+/// The side of a candidate cell in chunks (4 × 16 m = 64 m): a player's gather disc (about 50-60 m)
+/// touches at most 3 × 3 cells, where a chunk walk touches about 49 chunks.
+const CELL_CHUNKS: u32 = 4;
+
+/// What the sweep needs of one candidate, read once when its cell is built (no script, world or
+/// table read per test): its place and its light, and what its payload is made from.
+#[derive(Clone)]
+pub struct Cand {
+    pub class: u8,
+    pub id: u64,
+    pub x: f32,
+    pub y: f32,
+    pub kind: Rc<str>,
+    /// Its kind's light (0: none), lent to its own sight test while it burns.
+    pub light: f32,
+    /// A fire that burns fuel (`burns`): lit while `lit_until_ms` is ahead.
+    pub burns: bool,
+    /// A fire that needs no feeding: always lit.
+    pub fire: bool,
+    pub lit_until_ms: u64,
+    pub owner: u32,
+    /// A sight-scoped kind (remembered by the sight test's memory).
+    pub scoped: bool,
+    /// A resource node (class 0) that draws on another's stock (0: its own).
+    pub pool: u64,
+}
+
+fn cell_of_chunk(chunk: u32) -> u32 {
+    let (cx, cy) = living_rules::map::chunk_xy(chunk);
+    living_rules::map::chunk_id(cx / CELL_CHUNKS, cy / CELL_CHUNKS)
+}
 
 thread_local! {
-    /// Per chunk, its structures a player's copies may carry (sight-scoped kinds, gates and
-    /// fires), drawn from the chunk's cached list and again whenever that list is.
-    static CHUNK_COPIED: RefCell<HashMap<u32, (Rc<Vec<Structure>>, Rc<Vec<Structure>>)>> = RefCell::new(HashMap::new());
-    static COPIED_REV: Cell<u32> = const { Cell::new(u32::MAX) };
-    /// Per chunk, its resource nodes that may be short of full (held below their max when last
-    /// written, or drawing on a pool), drawn again whenever the chunk's list is.
-    static CHUNK_SHORT: RefCell<HashMap<u32, (Rc<Vec<ResourceNode>>, Rc<Vec<ResourceNode>>)>> = RefCell::new(HashMap::new());
+    /// Candidates by cell (sight-scoped structures, gates, fires, and resource nodes that may be
+    /// short of full), with the chunk caches' rule: a cell read after a write in a transaction is
+    /// read again in the next one (`common::WriteCache`), invalidated with them.
+    static CELLS: RefCell<common::WriteCache<Rc<Vec<Cand>>>> = RefCell::new(common::WriteCache::new());
+    static CELLS_REV: Cell<u32> = const { Cell::new(u32::MAX) };
+    /// What one transaction worked out of each seen thing (lit, open, stock), shared by every viewer
+    /// swept in it: (stamp, by key).
+    static PAYLOAD: RefCell<(i64, HashMap<u64, Option<(bool, Option<bool>, Option<(u32, u32)>)>>)> = RefCell::new((0, HashMap::new()));
+    /// Each player's character's copies as its sweeps last wrote them (key -> row id and payload).
+    /// Module memory: dropped with the perception sweep's own memory when ticks did not follow on
+    /// (`perception::sweep`, a rollback or another instance), and for a sweep outside the tick; the
+    /// table is read again then.
+    static COPIES: RefCell<HashMap<u32, HashMap<u64, (u64, SeenThing)>>> = RefCell::new(HashMap::new());
     /// Each player's character: the inputs its owner labels were last written from.
     static OWNERS: RefCell<HashMap<u32, ((u64, u64), u64)>> = RefCell::new(HashMap::new());
     static OWNERS_REV: Cell<u64> = const { Cell::new(0) };
-    /// Each character's last memory check per chunk.
-    static CHECKED: RefCell<HashMap<u32, HashMap<u32, u64>>> = RefCell::new(HashMap::new());
+    /// Each character's last memory check: its chunk and when.
+    static CHECKED: RefCell<HashMap<u32, (u32, u64)>> = RefCell::new(HashMap::new());
+}
+
+/// A structure or resource write: the cells it touches are built again (all of them for
+/// structures, as the chunk cache does).
+pub fn invalidate_cells(t: i64, chunk: Option<u32>) {
+    CELLS.with(|c| c.borrow_mut().invalidate(t, chunk.map(cell_of_chunk)));
+}
+
+/// Module memory no longer follows the committed rows (`perception::sweep`).
+pub fn clear_memory() {
+    COPIES.with(|c| c.borrow_mut().clear());
+}
+
+/// One character's copies are read from the table at its next sweep (a sweep outside the tick).
+pub fn forget_memory(id: u32) {
+    COPIES.with(|c| c.borrow_mut().remove(&id));
 }
 
 /// Architecture changed owner (or appeared or went): every viewer's labels are rebuilt.
@@ -128,30 +184,50 @@ fn copied(sc: &Scripts, kind: &str) -> bool {
     store::scoped_kind(kind) || kind == "gate" || sc.structure(kind).fire()
 }
 
-pub fn chunk_copied(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<Structure>> {
-    let all = common::chunk_structures(ctx, chunk);
-    let rev = common::scripts_rev(ctx);
-    if COPIED_REV.with(|r| r.get()) != rev {
-        CHUNK_COPIED.with(|c| c.borrow_mut().clear());
-        COPIED_REV.with(|r| r.set(rev));
-    }
-    if let Some(v) = CHUNK_COPIED.with(|c| c.borrow().get(&chunk).filter(|(src, _)| Rc::ptr_eq(src, &all)).map(|(_, v)| v.clone())) {
-        return v;
-    }
+fn build_cell(ctx: &ReducerContext, cell: u32) -> Rc<Vec<Cand>> {
     let sc = common::scripts(ctx);
-    let v: Rc<Vec<Structure>> = Rc::new(all.iter().filter(|s| copied(&sc, &s.kind)).cloned().collect());
-    CHUNK_COPIED.with(|c| c.borrow_mut().insert(chunk, (all, v.clone())));
-    v
+    let (gx, gy) = living_rules::map::chunk_xy(cell);
+    let w = common::world(ctx);
+    let (nx, ny) = (w.width.div_ceil(16), w.height.div_ceil(16));
+    let mut v = Vec::new();
+    for cy in gy * CELL_CHUNKS..((gy + 1) * CELL_CHUNKS).min(ny) {
+        for cx in gx * CELL_CHUNKS..((gx + 1) * CELL_CHUNKS).min(nx) {
+            let chunk = living_rules::map::chunk_id(cx, cy);
+            for s in common::chunk_structures(ctx, chunk).iter().filter(|s| copied(&sc, &s.kind)) {
+                let t = sc.structure(&s.kind);
+                v.push(Cand { class: 1, id: s.id, x: s.x, y: s.y, kind: Rc::from(s.kind.as_str()), light: t.light(), burns: t.burns.is_some(), fire: t.fire(),
+                              lit_until_ms: s.lit_until_ms, owner: s.owner, scoped: store::scoped_kind(&s.kind), pool: 0 });
+            }
+            for n in common::chunk_resources(ctx, chunk).iter().filter(|n| n.pool != 0 || n.amount < n.max) {
+                v.push(Cand { class: 0, id: n.id, x: n.x, y: n.y, kind: Rc::from(n.kind.as_str()), light: 0.0, burns: false, fire: false, lit_until_ms: 0, owner: 0, scoped: false, pool: n.pool });
+            }
+        }
+    }
+    Rc::new(v)
 }
 
-fn chunk_short(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<ResourceNode>> {
-    let all = common::chunk_resources(ctx, chunk);
-    if let Some(v) = CHUNK_SHORT.with(|c| c.borrow().get(&chunk).filter(|(src, _)| Rc::ptr_eq(src, &all)).map(|(_, v)| v.clone())) {
-        return v;
+fn cell(ctx: &ReducerContext, cell: u32) -> Rc<Vec<Cand>> {
+    let rev = common::scripts_rev(ctx);
+    let t = common::stamp(ctx);
+    if CELLS_REV.with(|r| r.get()) != rev {
+        CELLS.with(|c| c.borrow_mut().invalidate(t, None));
+        CELLS_REV.with(|r| r.set(rev));
     }
-    let v: Rc<Vec<ResourceNode>> = Rc::new(all.iter().filter(|n| n.pool != 0 || n.amount < n.max).cloned().collect());
-    CHUNK_SHORT.with(|c| c.borrow_mut().insert(chunk, (all, v.clone())));
-    v
+    CELLS.with(|c| c.borrow_mut().get(t, cell, || build_cell(ctx, cell)))
+}
+
+/// The cells a disc of radius `r` round `at` touches.
+fn cells_around(at: (f32, f32), r: f32) -> Vec<u32> {
+    let side = (16 * CELL_CHUNKS) as f32;
+    let lo = |v: f32| ((v - r).max(0.0) / side) as u32;
+    let hi = |v: f32| ((v + r).max(0.0) / side) as u32;
+    let mut out = Vec::with_capacity(9);
+    for gy in lo(at.1)..=hi(at.1) {
+        for gx in lo(at.0)..=hi(at.0) {
+            out.push(living_rules::map::chunk_id(gx, gy));
+        }
+    }
+    out
 }
 
 // ---- what is seen of a thing -----------------------------------------------------------------
@@ -167,92 +243,127 @@ fn seen_structure(ctx: &ReducerContext, s: &Structure, owner: u32, now: u64) -> 
     SeenThing { key: key(1, s.id), class: 1, id: s.id, kind: s.kind.clone(), x: s.x, y: s.y, open, lit: lit(ctx, s, now), owner, left: None, max: None }
 }
 
+/// A candidate's lit, open and stock as this transaction sees them (worked out once per
+/// transaction and thing, for every viewer). `None`: a node at full stock (no copy).
+fn payload(ctx: &ReducerContext, c: &Cand, now: u64) -> Option<(bool, Option<bool>, Option<(u32, u32)>)> {
+    let t = common::stamp(ctx);
+    let k = key(c.class, c.id);
+    let hit = PAYLOAD.with(|p| {
+        let mut p = p.borrow_mut();
+        if p.0 != t {
+            *p = (t, HashMap::new());
+        }
+        p.1.get(&k).copied()
+    });
+    if let Some(v) = hit {
+        return v;
+    }
+    let v = if c.class == 0 {
+        let stock = match c.pool {
+            0 => None,
+            pool => store::resource(ctx, pool),
+        };
+        let stock = match stock {
+            Some(s) => s,
+            None => store::resource(ctx, c.id).map(|n| common::stock_of(ctx, &n)).unwrap_or_else(|| ResourceNode { id: c.id, kind: c.kind.to_string(), x: c.x, y: c.y, chunk: 0, amount: 0.0, max: 0.0, regen: 0.0, at_ms: now, pool: 0 }),
+        };
+        let max = stock.max.max(0.0).floor() as u32;
+        let left = common::amount_now(ctx, &stock, now).max(0.0).floor() as u32;
+        (left < max).then_some((false, None, Some((left, max))))
+    } else {
+        let lit = if c.burns { living_rules::fire::lit(c.lit_until_ms, now) } else { c.fire };
+        let open = (&*c.kind == "gate").then(|| store::gate(ctx, c.id).map(|g| g.open)).flatten();
+        Some((lit, open, None))
+    };
+    PAYLOAD.with(|p| p.borrow_mut().1.insert(k, v));
+    v
+}
+
 /// What `me` may be told of a thing's owner (its id, when the `owner_shown` law grants it).
-fn owner_shown(ctx: &ReducerContext, me: &Character, s: &Structure) -> u32 {
-    if s.owner == 0 {
+fn owner_shown(ctx: &ReducerContext, me: &Character, owner: u32, kind: &str) -> u32 {
+    if owner == 0 {
         return 0;
     }
-    common::owner_label(ctx, me, s.owner, &s.kind).map_or(0, |_| s.owner)
+    common::owner_label(ctx, me, owner, kind).map_or(0, |_| owner)
 }
 
 // ---- a player's copies -----------------------------------------------------------------------
 
 /// A player's character's sweep (`perception::sweep_one`, the same pass as the people it sees):
 /// the things in sight now, written as the viewer's copies; what it sees remembered.
-pub fn sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, look: &Look, now: u64) {
+///
+/// `keep`: the sweep is the tick's (its copies may stay in module memory for the next sweep); a
+/// sweep in another transaction (join, reclaim) keeps none, since that transaction may fail.
+pub fn sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, look: &Look, keep: bool, now: u64) {
     let span = common::detail_span("sight.player_things");
     let eye = look.eye();
-    let sc = common::scripts(ctx);
-    let prior: HashMap<u64, ThingSeen> = ctx.db.thing_seen().viewer().filter(viewer).map(|r| (r.thing.key, r)).collect();
+    let mut prior: HashMap<u64, (u64, SeenThing)> = COPIES.with(|c| c.borrow_mut().remove(&me.id)).unwrap_or_else(|| {
+        ctx.db.thing_seen().viewer().filter(viewer).filter(|r| r.character == me.id).map(|r| (r.thing.key, (r.id, r.thing))).collect()
+    });
     let fresh_owners = OWNERS.with(|o| !o.borrow().contains_key(&me.id));
     let mut seen: Vec<(SeenThing, bool)> = Vec::new();
     let mut tests = 0u64;
-    for c in living_rules::map::chunks_around(look.at.0, look.at.1, look.gather) {
-        for s in chunk_copied(ctx, c).iter() {
-            let d = dist(look.at, (s.x, s.y));
-            if d > look.gather {
+    let r2 = look.gather * look.gather;
+    for cid in cells_around(look.at, look.gather) {
+        for c in cell(ctx, cid).iter() {
+            let (dx, dy) = (c.x - look.at.0, c.y - look.at.1);
+            let d2 = dx * dx + dy * dy;
+            if d2 > r2 {
                 continue;
             }
-            tests += 1;
-            let k = key(1, s.id);
+            let k = key(c.class, c.id);
             let before = prior.get(&k);
-            if !eye.sees(&sc, s, d, before.is_some(), now) {
-                continue;
-            }
-            // The owner as this viewer may be told it: worked out when the thing comes into
-            // sight (or this instance has not yet), kept while it stays.
-            let owner = match before {
-                Some(p) if !fresh_owners && (p.thing.owner == 0 || p.thing.owner == s.owner) => p.thing.owner,
-                _ => owner_shown(ctx, me, s),
+            // A node at full stock gets no copy (it is drawn as its landmark): known before any ray.
+            let p = match payload(ctx, c, now) {
+                Some(p) => p,
+                None => continue,
             };
-            seen.push((seen_structure(ctx, s, owner, now), store::scoped_kind(&s.kind)));
-        }
-        for n in chunk_short(ctx, c).iter() {
-            let d = dist(look.at, (n.x, n.y));
-            if d > look.gather {
-                continue;
-            }
-            let stock = common::stock_of(ctx, n);
-            let max = stock.max.max(0.0).floor() as u32;
-            let left = common::amount_now(ctx, &stock, now).max(0.0).floor() as u32;
-            if left >= max {
-                continue;
-            }
             tests += 1;
-            let k = key(0, n.id);
-            if !eye.sees_at((n.x, n.y), d, 0.0, prior.contains_key(&k)) {
+            let glow = if c.light > 0.0 && (!c.burns || p.0) { c.light } else { 0.0 };
+            if !eye.sees_at((c.x, c.y), d2.sqrt(), glow, before.is_some()) {
                 continue;
             }
-            seen.push((SeenThing { key: k, class: 0, id: n.id, kind: n.kind.clone(), x: n.x, y: n.y, open: None, lit: false, owner: 0, left: Some(left), max: Some(max) }, false));
+            let (lit, open, stock) = p;
+            let owner = match before {
+                Some((_, t)) if !fresh_owners && (t.owner == 0 || t.owner == c.owner) => t.owner,
+                _ if c.class == 1 => owner_shown(ctx, me, c.owner, &c.kind),
+                _ => 0,
+            };
+            seen.push((SeenThing { key: k, class: c.class, id: c.id, kind: c.kind.to_string(), x: c.x, y: c.y, open, lit, owner, left: stock.map(|s| s.0), max: stock.map(|s| s.1) }, c.scoped));
         }
     }
     drop(span);
     common::diag(|| "scope:tests", tests);
-    let mut prior = prior;
     let (mut ins, mut upd) = (0u64, 0u64);
     let mut keys: HashSet<u64> = HashSet::with_capacity(seen.len());
+    let mut now_copies: HashMap<u64, (u64, SeenThing)> = HashMap::with_capacity(seen.len());
     for (thing, remember) in seen {
         keys.insert(thing.key);
-        let changed = match prior.remove(&thing.key) {
-            Some(p) if p.thing == thing && p.character == me.id => false,
-            Some(p) => {
-                ctx.db.thing_seen().id().update(ThingSeen { id: p.id, viewer, character: me.id, thing: thing.clone() });
+        let (id, changed) = match prior.remove(&thing.key) {
+            Some((id, p)) if p == thing => (id, false),
+            Some((id, _)) if ctx.db.thing_seen().id().find(id).is_some() => {
+                ctx.db.thing_seen().id().update(ThingSeen { id, viewer, character: me.id, thing: thing.clone() });
                 upd += 1;
-                true
+                (id, true)
             }
-            None => {
-                ctx.db.thing_seen().insert(ThingSeen { id: 0, viewer, character: me.id, thing: thing.clone() });
+            _ => {
+                let row = ctx.db.thing_seen().insert(ThingSeen { id: 0, viewer, character: me.id, thing: thing.clone() });
                 ins += 1;
-                true
+                (row.id, true)
             }
         };
         if changed && remember {
             remember_thing(ctx, me.id, &thing, now);
         }
+        now_copies.insert(thing.key, (id, thing));
     }
     let gone = prior.len() as u64;
-    for (_, p) in prior {
-        ctx.db.thing_seen().id().delete(p.id);
+    for (_, (id, _)) in prior {
+        // A row a stale memory names may be gone already; deleting nothing is harmless.
+        ctx.db.thing_seen().id().delete(id);
+    }
+    if keep {
+        COPIES.with(|c| c.borrow_mut().insert(me.id, now_copies));
     }
     common::diag(|| "scope:copy_insert", ins);
     common::diag(|| "scope:copy_update", upd);
@@ -270,12 +381,14 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
         ctx.db.owner_seen().id().delete(r);
     }
     OWNERS.with(|o| o.borrow_mut().remove(&id));
+    COPIES.with(|c| c.borrow_mut().remove(&id));
 }
 
 /// A character died: what it remembered and found out goes with it.
 pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.remembered_thing().observer().delete(id);
     ctx.db.fuel_seen().observer().delete(id);
+    ctx.db.contents_seen().observer().delete(id);
     ctx.db.seen_structures_scoped().actor().delete(id);
     CHECKED.with(|c| c.borrow_mut().remove(&id));
     OWNERS.with(|o| o.borrow_mut().remove(&id));
@@ -361,27 +474,26 @@ fn remember_thing(ctx: &ReducerContext, observer: u32, t: &SeenThing, now: u64) 
 /// not among what is seen is gone (or moved): the memory goes. Each chunk at most every
 /// [`RECHECK_MS`] per character.
 fn recheck(ctx: &ReducerContext, observer: u32, eye: &Eye, gather: f32, seen: impl Fn(u64) -> bool, now: u64) {
-    let chunks = living_rules::map::chunks_around(eye.at.0, eye.at.1, gather);
-    let due: Vec<u32> = CHECKED.with(|c| {
+    let here = living_rules::map::chunk_of(eye.at.0, eye.at.1);
+    let due = CHECKED.with(|c| {
         let mut c = c.borrow_mut();
-        let m = c.entry(observer).or_default();
-        m.retain(|ch, t| chunks.contains(ch) && now.saturating_sub(*t) < RECHECK_MS);
-        let due: Vec<u32> = chunks.iter().copied().filter(|ch| !m.contains_key(ch)).collect();
-        for ch in &due {
-            m.insert(*ch, now);
+        let due = c.get(&observer).is_none_or(|(ch, t)| *ch != here || now.saturating_sub(*t) >= RECHECK_MS);
+        if due {
+            c.insert(observer, (here, now));
         }
         due
     });
-    for ch in due {
-        for r in ctx.db.remembered_thing().by_observer_chunk().filter((observer, ch)).collect::<Vec<_>>() {
-            let d = dist(eye.at, (r.x, r.y));
-            if d > gather || seen(key(1, r.target)) {
-                continue;
-            }
-            if eye.sees_at((r.x, r.y), d, 0.0, false) {
-                ctx.db.remembered_thing().id().delete(r.id);
-                common::diag(|| "scope:memory_gone", 1);
-            }
+    if !due {
+        return;
+    }
+    for r in ctx.db.remembered_thing().observer().filter(observer).collect::<Vec<_>>() {
+        let d = dist(eye.at, (r.x, r.y));
+        if d > gather || seen(key(1, r.target)) {
+            continue;
+        }
+        if eye.sees_at((r.x, r.y), d, 0.0, false) {
+            ctx.db.remembered_thing().id().delete(r.id);
+            common::diag(|| "scope:memory_gone", 1);
         }
     }
 }
@@ -401,38 +513,89 @@ pub fn remember_seen(ctx: &ReducerContext, observer: u32, look: &Look, visible: 
     recheck(ctx, observer, &look.eye(), look.gather, |k| keys.contains(&k), now);
 }
 
-// ---- looking a fire over ---------------------------------------------------------------------
+// ---- looking a thing over: fuel and contents -------------------------------------------------
 
-/// `inspect` on a fire: how much fuel is left, kept (`fuel_seen`) and told. Returns the line.
+/// A kind whose inside can be looked into: one that `holds` things, remains, a trap.
+pub fn container(sc: &Scripts, kind: &str) -> bool {
+    sc.structure(kind).holds.is_some() || kind == "remains" || kind == "trap"
+}
+
+/// What `me` knows a container holds, as it found it (`None`: it has not looked inside).
+pub fn known_contents(ctx: &ReducerContext, me: u32, target: u64) -> Option<ContentsSeen> {
+    ctx.db.contents_seen().by_observer_target().filter((me, target)).next()
+}
+
+/// `me` sees inside container `target` now (it looked in, took or stored): kept as found.
+pub fn record_contents(ctx: &ReducerContext, me: u32, target: u64, now: u64) -> Vec<ItemCount> {
+    let items: Vec<ItemCount> = common::inv_list(ctx, STRUCTURE_BIT | target).into_iter().filter(|(_, q)| *q > 0).map(|(item, qty)| ItemCount { item, qty }).collect();
+    match known_contents(ctx, me, target) {
+        Some(r) if r.items == items && now.saturating_sub(r.seen_ms) < 60_000 => {}
+        Some(r) => {
+            ctx.db.contents_seen().id().update(ContentsSeen { items: items.clone(), seen_ms: now, ..r });
+        }
+        None => {
+            let mine: Vec<(u64, u64)> = ctx.db.contents_seen().observer().filter(me).map(|r| (r.seen_ms, r.id)).collect();
+            if mine.len() >= CONTENTS_SEEN {
+                let mut mine = mine;
+                mine.sort_unstable();
+                for (_, id) in &mine[..mine.len() + 1 - CONTENTS_SEEN] {
+                    ctx.db.contents_seen().id().delete(*id);
+                }
+            }
+            ctx.db.contents_seen().insert(ContentsSeen { id: 0, observer: me, target, items: items.clone(), seen_ms: now });
+        }
+    }
+    items
+}
+
+pub fn contents_words(items: &[ItemCount]) -> String {
+    if items.is_empty() {
+        return "nothing".into();
+    }
+    items.iter().map(|i| format!("{} {}", i.qty, i.item.replace('_', " "))).collect::<Vec<_>>().join(", ")
+}
+
+/// `inspect`: a fire's fuel left, and a container's contents, found out, kept (`fuel_seen`,
+/// `contents_seen`) and told. Returns the line.
 pub fn inspect(ctx: &ReducerContext, me: u32, target: u64, now: u64) -> Result<String, String> {
     let s = store::structure(ctx, target).ok_or("it is gone")?;
     let sc = common::scripts(ctx);
     let t = sc.structure(&s.kind);
-    let b = t.burns.clone().ok_or_else(|| format!("the {} burns no fuel", s.kind.replace('_', " ")))?;
-    let (lit, fuel) = crate::act::fire_state(ctx, &s, now);
-    let hours = if lit { fuel / b.rate.max(1e-6) } else { 0.0 };
-    match ctx.db.fuel_seen().by_observer_target().filter((me, target)).next() {
-        Some(r) => {
-            ctx.db.fuel_seen().id().update(FuelSeen { left: hours, seen_ms: now, ..r });
-        }
-        None => {
-            let mine: Vec<(u64, u64)> = ctx.db.fuel_seen().observer().filter(me).map(|r| (r.seen_ms, r.id)).collect();
-            if mine.len() >= FUEL_SEEN {
-                let mut mine = mine;
-                mine.sort_unstable();
-                for (_, id) in &mine[..mine.len() + 1 - FUEL_SEEN] {
-                    ctx.db.fuel_seen().id().delete(*id);
-                }
-            }
-            ctx.db.fuel_seen().insert(FuelSeen { id: 0, observer: me, target, left: hours, seen_ms: now });
-        }
-    }
     let kind = s.kind.replace('_', " ");
-    Ok(if lit {
-        format!("You look the {kind} over: about {} hours of {} left on it.", fuel_words(hours), b.fuel.replace('_', " "))
-    } else {
-        format!("You look the {kind} over: it is out, with no {} left on it.", b.fuel.replace('_', " "))
-    })
+    let mut lines = Vec::new();
+    if let Some(b) = t.burns.clone() {
+        let (lit, fuel) = crate::act::fire_state(ctx, &s, now);
+        let hours = if lit { fuel / b.rate.max(1e-6) } else { 0.0 };
+        match ctx.db.fuel_seen().by_observer_target().filter((me, target)).next() {
+            Some(r) => {
+                ctx.db.fuel_seen().id().update(FuelSeen { left: hours, seen_ms: now, ..r });
+            }
+            None => {
+                let mine: Vec<(u64, u64)> = ctx.db.fuel_seen().observer().filter(me).map(|r| (r.seen_ms, r.id)).collect();
+                if mine.len() >= FUEL_SEEN {
+                    let mut mine = mine;
+                    mine.sort_unstable();
+                    for (_, id) in &mine[..mine.len() + 1 - FUEL_SEEN] {
+                        ctx.db.fuel_seen().id().delete(*id);
+                    }
+                }
+                ctx.db.fuel_seen().insert(FuelSeen { id: 0, observer: me, target, left: hours, seen_ms: now });
+            }
+        }
+        lines.push(if lit {
+            format!("You look the {kind} over: about {} hours of {} left on it.", fuel_words(hours), b.fuel.replace('_', " "))
+        } else {
+            format!("You look the {kind} over: it is out, with no {} left on it.", b.fuel.replace('_', " "))
+        });
+    }
+    if container(&sc, &s.kind) {
+        let items = record_contents(ctx, me, target, now);
+        lines.push(format!("You look inside the {kind}: {}.", contents_words(&items)));
+    }
+    if lines.is_empty() {
+        return Err(format!("there is nothing to look over on the {kind}"));
+    }
+    Ok(lines.join(" "))
 }
 
 pub fn fuel_words(hours: f32) -> String {
@@ -491,6 +654,12 @@ pub fn my_owners(ctx: &ViewContext) -> Vec<OwnerLabel> {
 #[spacetimedb::view(accessor = my_stock, public, primary_key = id)]
 pub fn my_stock(ctx: &ViewContext) -> Vec<SeenStock> {
     crate::perception::living(ctx).map(|c| ctx.db.seen_stock().actor().filter(c.id).collect()).unwrap_or_default()
+}
+
+/// What my living character found inside containers when it last looked (`inspect`, take, store).
+#[spacetimedb::view(accessor = my_contents_seen, public, primary_key = id)]
+pub fn my_contents_seen(ctx: &ViewContext) -> Vec<ContentsSeen> {
+    crate::perception::living(ctx).map(|c| ctx.db.contents_seen().observer().filter(c.id).collect()).unwrap_or_default()
 }
 
 /// The fuel my living character found on fires it looked over (`inspect`).

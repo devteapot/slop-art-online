@@ -2608,8 +2608,7 @@ pub struct OwnerLabel {
 /// every controller; gone when a sighting of its place finds it missing, at death, or the
 /// oldest first past `scope::REMEMBER_THINGS`. `lit` as last seen. Private.
 #[spacetimedb::table(accessor = remembered_thing,
-    index(accessor = by_observer_target, btree(columns = [observer, target])),
-    index(accessor = by_observer_chunk, btree(columns = [observer, chunk])))]
+    index(accessor = by_observer_target, btree(columns = [observer, target])))]
 pub struct RememberedThing {
     #[primary_key]
     #[auto_inc]
@@ -2653,5 +2652,30 @@ pub struct FuelSeen {
     pub observer: u32,
     pub target: u64,
     pub left: f32,
+    pub seen_ms: u64,
+}
+
+/// One kind of thing and how many (a container's contents as found).
+#[derive(Clone, Debug, PartialEq, spacetimedb::SpacetimeType)]
+pub struct ItemCount {
+    pub item: String,
+    pub qty: u32,
+}
+
+/// What a character found in a container (storage, a cache, remains, a trap) when it last looked
+/// inside: by `inspect`, or by taking from it or storing in it (contact shows what is there). In a
+/// scoped world a scene and a graph's `holds` read this, never the container's contents now
+/// (docs/FEED_SCOPING.md). Bounded per character; gone at death. Private (`my_contents_seen`).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = contents_seen,
+    index(accessor = by_observer_target, btree(columns = [observer, target])))]
+pub struct ContentsSeen {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub observer: u32,
+    pub target: u64,
+    pub items: Vec<ItemCount>,
     pub seen_ms: u64,
 }

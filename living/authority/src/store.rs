@@ -69,6 +69,7 @@ fn set_stage(ctx: &ReducerContext, stage: u8, now: u64) {
         ctx.db.feed_scope().insert(row);
     }
     STAGE.with(|s| s.set((common::stamp(ctx), stage)));
+    crate::scope::clear_memory();
     common::invalidate_structures(ctx);
     common::invalidate_resources(ctx, None);
     common::invalidate_map();

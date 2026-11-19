@@ -1406,18 +1406,18 @@ pub fn smelled_near(ctx: &ReducerContext, who: u32, kind: &str, at: (f32, f32), 
 /// written nothing are committed state and stay valid until a later write to their key. Like
 /// the map cache, this assumes the database runs its reducers one at a time in this module
 /// instance.
-struct WriteCache<V, K = u32> {
+pub(crate) struct WriteCache<V, K = u32> {
     rows: HashMap<K, (V, i64)>,
     /// Timestamp of the last transaction that wrote.
     wrote: i64,
 }
 
 impl<V: Clone, K: Copy + Eq + std::hash::Hash> WriteCache<V, K> {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self { rows: HashMap::new(), wrote: 0 }
     }
 
-    fn get(&mut self, t: i64, key: K, load: impl FnOnce() -> V) -> V {
+    pub(crate) fn get(&mut self, t: i64, key: K, load: impl FnOnce() -> V) -> V {
         if let Some((v, tag)) = self.rows.get(&key) {
             if *tag == 0 || *tag == t {
                 return v.clone();
@@ -1429,7 +1429,7 @@ impl<V: Clone, K: Copy + Eq + std::hash::Hash> WriteCache<V, K> {
         v
     }
 
-    fn invalidate(&mut self, t: i64, key: Option<K>) {
+    pub(crate) fn invalidate(&mut self, t: i64, key: Option<K>) {
         self.wrote = t;
         match key {
             Some(k) => {
@@ -1517,6 +1517,7 @@ thread_local! {
 pub fn invalidate_resources(ctx: &ReducerContext, chunk: Option<u32>) {
     let t = stamp(ctx);
     CHUNK_RESOURCES.with(|c| c.borrow_mut().invalidate(t, chunk));
+    crate::scope::invalidate_cells(t, chunk);
 }
 
 pub(crate) fn structures_revision() -> u64 {
@@ -1528,6 +1529,7 @@ pub fn invalidate_structures(ctx: &ReducerContext) {
     STRUCTURES_REVISION.with(|revision| revision.set(revision.get().wrapping_add(1)));
     let t = stamp(ctx);
     CHUNK_STRUCTURES.with(|c| c.borrow_mut().invalidate(t, None));
+    crate::scope::invalidate_cells(t, None);
 }
 
 /// The group label and whether this body holds writing. Only a body's observer-independent

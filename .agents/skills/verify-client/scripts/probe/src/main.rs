@@ -46,7 +46,7 @@ macro_rules! primary_tables {
             seen_bodies, seen_characters, seen_fighters, seen_doing, seen_bodies_near, seen_bodies_far, seen_fighters_near, seen_fighters_far, seen_doing_near, seen_doing_far, my_body, my_fighter, my_doing, my_characters, my_vitals,
             my_experience, my_places, my_inventory, my_know_how, my_offers, my_heard, my_senses, my_senses_v_2, my_earshot, my_act_outcomes, my_known_names, my_sex,
             feed_scope, map_structure, map_resource, my_things, my_remembered_things, my_owners, my_stock, my_fuel_seen,
-            structure_held, gate_held, resource_held, thing_seen, remembered_thing, owner_seen, fuel_seen);
+            structure_held, gate_held, resource_held, thing_seen, remembered_thing, owner_seen, fuel_seen, contents_seen, my_contents_seen);
     };
 }
 

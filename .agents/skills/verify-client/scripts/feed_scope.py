@@ -36,7 +36,7 @@ import verify as v  # noqa: E402
 
 DRIVE = ROOT / ".agents/skills/verify-client/scripts/drive.py"
 MAP_KINDS = {"shelter", "house", "hall", "workshop", "market", "inn", "smokehouse", "furnace", "gate"}
-PRIVATE = ("structure_held", "gate_held", "resource_held", "thing_seen", "remembered_thing", "owner_seen", "fuel_seen", "owned_by", "lot_door", "id_seq", "seen_structures_scoped")
+PRIVATE = ("structure_held", "gate_held", "resource_held", "thing_seen", "remembered_thing", "owner_seen", "fuel_seen", "contents_seen", "owned_by", "lot_door", "id_seq", "seen_structures_scoped")
 
 
 def run(*args, check=True):

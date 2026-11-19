@@ -2700,10 +2700,12 @@ fn rework_spec() {
 
 fn wave_spec() { #{ target: true, on_the_move: true, reach: 12.0, about: "Wave to someone you can see: a greeting, a farewell or an answer to one. They see it and may answer.", takes: "someone in sight within 12 tiles, 1.2 s", gives: "they see you wave at them" } }
 fn nod_spec() { #{ target: true, on_the_move: true, reach: 6.0, about: "Nod to someone near you: a quiet greeting or a yes. They see it and may answer.", takes: "someone within 6 tiles, 0.7 s", gives: "they see you nod at them" } }
-// Looking a fire over (docs/FEED_SCOPING.md): seeing a fire shows only whether it burns; how much
-// fuel is left on it is found by looking it over close, and remembered as of then (its scene
-// says so, a player's client shows it from `my_fuel_seen`). The same for every controller.
-fn inspect_spec() { #{ target: true, target_class: "structure", reach: 2.0, listed: having("structures", "burns").len() > 0, about: "Look a fire that burns fuel (a hearth, an oven, a furnace, a lamp) over closely: how much fuel is left on it.", takes: "a fire that burns fuel within 2 tiles, 1 s", gives: "how many hours of fuel it has left, remembered as of now" } }
+// Looking a thing over (docs/FEED_SCOPING.md): seeing a fire shows only whether it burns, and seeing
+// a container only what it is; how much fuel is left, and what is inside, are found by looking it
+// over close (or, inside, by taking from or storing in it), and remembered as of then (its scene says
+// so; a player's client shows them from `my_fuel_seen` and `my_contents_seen`). The same for every
+// controller. In a world whose public feeds are not scoped a scene still shows contents at a glance.
+fn inspect_spec() { #{ target: true, target_class: "structure", reach: 2.0, listed: having("structures", "burns").len() > 0, about: "Look a thing over closely: what is inside a storage, a cache, remains or a trap, and how much fuel is left on a fire that burns it (a hearth, an oven, a furnace, a lamp).", takes: "a container or a fire within 2 tiles, 1 s", gives: "what it holds, or how many hours of fuel it has left, remembered as of now" } }
 fn appraise_spec() { #{ target: true, target_class: "creature", reach: 6.0, about: "Look someone (a person or an animal) over closely: for a while you see exactly how hurt they are.", takes: "someone within 6 tiles, 1.5 s", gives: "for 20 s you see exactly how hurt they are" } }
 fn face_spec() { #{ target: true, reach: 15.0, about: "Turn where you stand to face someone or something you can see (a person coming up to you or speaking, a fight, a sound).", takes: "something or someone in sight", gives: "you turn to face it" } }
 fn step_aside_spec() { #{ target: true, reach: 3.0, about: "Step a pace aside to let someone coming toward you pass, in a narrow street or a doorway.", takes: "someone coming at you where there is little room", gives: "a pace to the side, out of their way" } }
@@ -2740,8 +2742,9 @@ fn appraise_check(a) {
 }
 fn appraise_duration(a) { 1500 }
 fn inspect_check(a) {
-    if a.target.class != "structure" { return "look over a fire that burns fuel"; }
-    if burns_of(a.target.kind) == () { return `the ${a.target.kind} burns no fuel`; }
+    if a.target.class != "structure" { return "look over a thing: a container or a fire"; }
+    let inside = holds_of(a.target.kind) != () || a.target.kind == "remains" || a.target.kind == "trap";
+    if burns_of(a.target.kind) == () && !inside { return `there is nothing to look over on the ${a.target.kind}`; }
     if a.actor.activity == "sleep" { return "you are asleep"; }
     if a.target.dist > 2.0 { return "too far to look it over"; }
     ""

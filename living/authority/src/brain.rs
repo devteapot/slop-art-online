@@ -450,9 +450,9 @@ impl<'a> Ev<'a> {
             return None;
         }
         if self.look.is_none() {
-            let b = self.ctx.db.body().id().find(self.me.id)?;
-            let senses = common::senses_of(self.ctx, self.me.id, &self.w, self.now);
-            self.look = Some(Rc::new(crate::scope::Look::from(self.ctx, common::map(self.ctx), self.at, common::facing_at(&b, self.now), senses)));
+            // The scene's own senses, facing and map (its sensing): nothing read again.
+            let ctx = self.ctx;
+            self.look = Some(Rc::new(self.scene().sensing.scope_look(ctx)));
         }
         self.look.clone()
     }
@@ -1169,7 +1169,19 @@ impl<'a> Ev<'a> {
             }
             living_rules::catalog::KindClass::Structure => {
                 let (me, ctx) = (self.me.id, self.ctx);
-                let holds = |id: u64| f.holds.as_deref().map_or(true, |item| common::inv_count(ctx, STRUCTURE_BIT | id, item) >= 1);
+                // In a scoped world a container's contents are known only from looking inside
+                // (docs/FEED_SCOPING.md): one known to hold the item, or not looked into yet (worth
+                // a look); never one found without it.
+                let scoped = crate::store::sighted(ctx);
+                let holds = |id: u64| {
+                    f.holds.as_deref().map_or(true, |item| {
+                        if scoped {
+                            crate::scope::known_contents(ctx, me, id).is_none_or(|c| c.items.iter().any(|i| i.item == item && i.qty >= 1))
+                        } else {
+                            common::inv_count(ctx, STRUCTURE_BIT | id, item) >= 1
+                        }
+                    })
+                };
                 // A kind `like` the one asked for counts as it (a world's `store` is a storage).
                 let sc = common::scripts(ctx);
                 self.structures()

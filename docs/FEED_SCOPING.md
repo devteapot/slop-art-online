@@ -164,6 +164,7 @@ Checkpoint for branch `feed-scope`, 2026-11-19, against `origin/main` at `f93f05
   - `lit`: whether a fire reads as burning (a kind that `burns` while it has fuel, a campfire always), false for anything else. Fuel is not seen at a glance (the GC's decision at the go): it is found by looking a fire over (`inspect`, below).
   - `owner`: 0 unless the `owner_shown` law grants this viewer the owner (`common::owner_label`).
   - `left` and `max`: resources only, the whole units on the node now and its full stock, so the client draws a depleted node from `left / max` (laptop review).
+- **The sweep (iteration 2):** candidates come from 64 m cells (4 × 4 chunks; a player's gather disc touches at most 3 × 3), each built from the chunk lists with what a test and a payload need (place, kind, light, `burns`, fire, expiry, owner, pool) and invalidated with the chunk caches. A seen thing's payload (lit, gate open, `left`/`max`) is worked out once per transaction and shared by every viewer swept in it; a full node is skipped before any ray. Each player's copies stay in module memory between the tick's sweeps (key → row id and payload), dropped with the perception sweep's memory when ticks do not follow on, and not kept from a sweep outside the tick (join, reclaim). A mind's look comes from its scene's own sensing (senses, facing, map). Remembered places are re-checked on a chunk change or every 5 s, not every sweep.
 - **What gets a copy:**
   - every moved kind in sight;
   - allowlisted kinds that carry state, namely gates and burning kinds, so their state is seen only in sight;
@@ -198,9 +199,10 @@ Checkpoint for branch `feed-scope`, 2026-11-19, against `origin/main` at `f93f05
 - **Gates in the sightfield:** a gate that is shut, live or remembered, blocks in Shade. One the viewer never saw is drawn open, or as the client's explicit unknown, and the authority's collision still decides.
 - `seen_ms` is when that state was last learned or changed, not refreshed while in sight. That would write every sweep. The client has its own leave-sight time while it is connected.
 
-### Fuel: the `inspect` skill
+### Fuel and contents: the `inspect` skill
 
-- **`inspect`** (`living/scripts/skills.rhai`: `inspect_spec`, `inspect_check`, `inspect_done` with the `inspect` effect, `inspect_shows`, `inspect_ui` with the label "Look over", on a thing's wheel). A fire that burns fuel within 2 m, 1 s. Listed only where some structure kind `burns` (Cullet's hearths, ovens, furnaces, lamps). The same for players and minds.
+- **`inspect`** (`living/scripts/skills.rhai`: `inspect_spec`, `inspect_check`, `inspect_done` with the `inspect` effect, `inspect_shows`, `inspect_ui` with the label "Look over", on a thing's wheel). A fire that burns fuel or a container (a kind that `holds`, remains, a trap) within 2 m, 1 s. Listed in a world's skill lists only where some structure kind `burns` (Cullet), so the shipped world's prompts are unchanged; a scoped world's scene names it for a container not looked into. The same for players and minds.
+- **Contents (the GC's decision at iteration 2, minds match players):** in a scoped world a mind's scene shows a container's presence and kind (`"kind": "storage"`), never its contents. Its `inside` field says `"not looked into: inspect it (or take from it) to see what it holds"`, or what was inside when the character last looked (`"3 berries when you looked inside, <time>"`). Looking inside is `inspect`, or reaching a container to take from it or store in it (whether the act then goes ahead or not: an empty cache is known empty). **`contents_seen`** (**private**): `{ id, observer, target, items: Vec<ItemCount { item, qty }>, seen_ms }`, at most 32 per character, gone at death; **`my_contents_seen`** (public view) for a player. A graph's `{"nearest": {"kind": …, "holds": X}}` in a scoped world counts a container known to hold X or not yet looked into, never one found without it, so instinct graphs (wolves and scavengers at remains, residents at stores) still go and look, and an empty one is not revisited. At stage 0 scenes and `holds` are as on main.
 - **`fuel_seen`** (**private**): `{ id: u64 #pk #auto_inc, observer: u32, target: u64, left: f32, seen_ms: u64 }`, btrees on `observer` and `(observer, target)`. `left` is the hours of burning left at the look (0 when out). At most 32 per character, the oldest look first; gone at death.
 - **`my_fuel_seen`** (**public view**, `primary_key = id`): the living character's rows.
 - The actor is told "You look the hearth over: about 4 hours of fuel left on it." A mind's scene shows a fire as `"state": "burning"` or `"out"`, and, once it has looked, `"fuel": "about N hours of … left on it when you looked it over, <time>"`. In a world at stage 0 the scene keeps its old wording with the hours.
@@ -280,7 +282,7 @@ Settled at the go (GC and laptop, 2026-11-19):
 
 Still open, outside this build:
 
-- A mind's scene lists the contents of storage and remains in sight (the existing scene rule). Players see presence only; their contents stay behind the inspect and take acts. Whether minds should see contents at a glance is a separate decision.
+- (Settled at iteration 2: minds see a container's presence and kind only, as players do; above.)
 - Owner labels on a copy are worked out when the thing comes into sight and when the viewer's knowledge changes; a storage claimed by someone else while in view keeps its old label until it leaves sight.
 - `land.params` is the separate follow-up agreed with the laptop.
 

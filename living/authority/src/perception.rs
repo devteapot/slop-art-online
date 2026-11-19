@@ -263,6 +263,12 @@ impl Sensing {
         Sensing { cands, seen, at, heading, gather, hearing, lit, senses, map, w }
     }
 
+    /// The look of the sight test for sight-scoped things (docs/FEED_SCOPING.md), from this
+    /// scene's own senses, facing and map: nothing read again.
+    pub fn scope_look(&self, ctx: &ReducerContext) -> crate::scope::Look {
+        crate::scope::Look::from(ctx, self.map.clone(), self.at, self.heading, self.senses)
+    }
+
     /// Whether candidate `i` is seen, tested once.
     fn sees(&mut self, ctx: &ReducerContext, i: usize, now: u64) -> bool {
         if self.seen[i] == 0 {
@@ -974,6 +980,7 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
     let last = SWEPT_TICK.with(|t| t.replace(tick));
     if last.wrapping_add(1) != tick {
         KEPT.with(|k| k.borrow_mut().clear());
+        crate::scope::clear_memory();
         PROJECTED.with(|p| p.borrow_mut().clear());
         crate::frame::all_full();
         if last != 0 {
@@ -1042,6 +1049,7 @@ pub fn sweep_now(ctx: &ReducerContext, id: u32, viewer: Identity, now: u64) {
     // Its next turn stays on its phase: players who join together are not swept together.
     LAST.with(|l| l.borrow_mut().insert(id, turn_before(id, now)));
     PROJECTED.with(|p| p.borrow_mut().remove(&id));
+    crate::scope::forget_memory(id);
     // Outside the tick: nothing is kept from it, and the next sweep projects every row afresh.
     KEPT.with(|k| k.borrow_mut().remove(&id));
     sweep_one(ctx, id, viewer, &common::world(ctx), &common::map(ctx), now, None);
@@ -1085,7 +1093,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     // worlds, docs/FEED_SCOPING.md).
     if crate::store::sighted(ctx) {
         let look = crate::scope::Look::from(ctx, common::map(ctx), here, heading, senses);
-        crate::scope::sweep(ctx, &me, viewer, &look, now);
+        crate::scope::sweep(ctx, &me, viewer, &look, scheduled, now);
     }
     if scheduled && senses.gaze.is_some() {
         crate::attention::project(ctx, id, &senses, now);

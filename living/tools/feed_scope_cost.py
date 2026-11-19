@@ -46,7 +46,7 @@ SPAN = re.compile(r'^Timing span "([^"]+)": ([\d.]+)(µs|ms|s)\b')
 UNITS = {"µs": 0.001, "ms": 1, "s": 1000}
 NEEDLES = (b'Timing span \\"tick\\"', b'Timing span \\"sight.', b'Timing span \\"scene.sensed\\"', b'"message":"diag: ')
 COMMON = ["cover_law", "feed_scope", "my_offers", "my_known_names", "my_earshot", "speech_card", "my_records", "heard_sounds", "my_senses", "my_act_outcomes"]
-FEEDS = {"off": ["gate"], "on": ["my_things", "my_remembered_things", "my_owners", "my_stock", "my_fuel_seen"]}
+FEEDS = {"off": ["gate"], "on": ["my_things", "my_remembered_things", "my_owners", "my_stock", "my_fuel_seen", "my_contents_seen"]}
 
 
 def host():
@@ -203,7 +203,9 @@ def one(name, workload, arm, seconds, woods_seed, max_load):
             "uri": load.URL, "db": db, "events": str(evidence / "events.jsonl"),
             "battle": center, "behaviour": {"walk_period_ms": 1500},
             "players": [{"token": token, "name": f"Feed{i}", "role": "walk"} for i, token in enumerate(tokens)],
-            "client": "game", "feed": "scoped" if arm == "on" else "legacy",
+            # The game client's perception set as shipped (cue_transport_on and near_tier_on on by
+            # default: the tiers and the cue tables), in both arms.
+            "client": "game", "feed": "scoped" if arm == "on" else "legacy", "tiers": True, "cues": True,
         }))
         joined = client.expect("joined", 300)
         for player, (x, y) in zip(joined["players"], spots):

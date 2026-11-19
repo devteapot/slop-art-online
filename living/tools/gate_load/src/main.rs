@@ -353,7 +353,7 @@ impl Feed {
         let own: &[&str] = match self {
             Feed::Unset => return Vec::new(),
             Feed::Legacy => &["gate"],
-            Feed::Scoped => &["my_things", "my_remembered_things", "my_owners", "my_stock", "my_fuel_seen"],
+            Feed::Scoped => &["my_things", "my_remembered_things", "my_owners", "my_stock", "my_fuel_seen", "my_contents_seen"],
         };
         common.iter().chain(own).map(|t| format!("SELECT * FROM {t}")).collect()
     }
