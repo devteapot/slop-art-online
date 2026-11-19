@@ -26,3 +26,4 @@ Baseline: `verify-<run>` published by `$V launch` and `$V doctor` passing. One i
 Every HTTP call is a connection: `$V player` calls connect and disconnect around each call, so after more than the `takeover_s` law (30 s) without a call the world's minds take the character over, and the next call hands it back before it runs ([verify-client presence](../../verify-client/features/presence.md)).
 
 - [Cover in a player’s live projection](cover.md)
+- [Gaze input and applied senses](gaze.md)

@@ -679,7 +679,7 @@ mod tests {
 
     fn day_field(heading: f32) -> Facing {
         let field = living_rules::sight::Field { focal_deg: 70.0, side_deg: 110.0, side_share: 1.0 / 3.0, near_m: 3.0, margin_deg: 10.0 };
-        Facing { heading, senses: Senses { sight: 11.0, hearing: 9.0, field: Some(field) } }
+        Facing { heading, senses: Senses { sight: 11.0, hearing: 9.0, gaze: None, field: Some(field) } }
     }
 
     /// With facing sight, every texel within sight is the rules' own answer (`sight::sees`, the

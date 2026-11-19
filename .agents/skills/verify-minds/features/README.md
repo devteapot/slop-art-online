@@ -67,3 +67,4 @@ Each free case launches its own database through `verify.py` and passes doctor b
 All evidence stays under `.local/living/verify/`. The paid tier is documented and intentionally unexecuted. Runtime discovery uses the shared `.agents/skills/` source and the existing Claude and Cursor links.
 
 - [Cover in a pending mind scene](cover.md)
+- [Gaze in a mind's scene](gaze.md)

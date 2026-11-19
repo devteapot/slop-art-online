@@ -54,3 +54,4 @@ Use [SKILL.md](../SKILL.md). Admin setup and `mind_act` do not establish player 
 The `living/viewer/src/sync.rs` tests are all this skill covers of the viewer. Controls, panels and rendering need the future UI skill (not built; see `verify`) once that skill exists.
 
 - [The shared cover law and missile collision](cover.md)
+- [Gaze bands and sight](gaze.md)

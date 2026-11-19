@@ -51,7 +51,25 @@ fn submit_inner(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str,
     }
     let mut results = Vec::new();
     for raw in acts.iter().take(rules::MAX_QUEUED) {
-        let parsed = serde_json::from_str::<serde_json::Value>(raw).map_err(|e| format!("not JSON: {e}")).and_then(|v| rules::parse(v, sp.as_ref(), common::scripts(ctx).shapes()));
+        let parsed = serde_json::from_str::<serde_json::Value>(raw).map_err(|e| format!("not JSON: {e}"));
+        if let Ok(v) = &parsed {
+            if !replace && v["do"] == "gaze" {
+                let band = match v["band"].as_str() {
+                    Some("middle") => Ok(living_rules::sight::GazeBand::Middle),
+                    Some("far") => Ok(living_rules::sight::GazeBand::Far),
+                    Some("near") => Ok(living_rules::sight::GazeBand::Near),
+                    _ => Err("gaze band must be middle, far or near".to_owned()),
+                };
+                let refusal = band.and_then(|band| crate::attention::set(ctx, actor, band, now)).err();
+                if let Some(why) = refusal.as_deref() {
+                    let told = Told { kind: kind::ACT, ok: false, skill: "gaze", code: code::REFUSED, what: "change gaze", why, other: 0 };
+                    feedback(ctx, actor, now, format!("You could not change gaze: {why}."), 0.4, false, told);
+                }
+                results.push((None, refusal));
+                continue;
+            }
+        }
+        let parsed = parsed.and_then(|v| rules::parse(v, sp.as_ref(), common::scripts(ctx).shapes()));
         let a = match parsed {
             Ok(a) => a,
             Err(why) => {
@@ -90,9 +108,12 @@ fn submit_inner(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str,
 
 fn refusal_with_names(ctx: &ReducerContext, why: &str) -> String {
     let scripts = common::scripts(ctx);
-    let names = scripts.skills().iter()
+    let mut names = scripts.skills().iter()
         .filter(|s| rules::not_an_act(&s.name, scripts.shapes()).is_none())
         .map(|s| s.name.as_str()).collect::<Vec<_>>().join(", ");
+    if scripts.gaze_enabled() {
+        names.push_str(", gaze");
+    }
     format!("{why}\nValid one-off act names: {names}.")
 }
 

@@ -320,10 +320,9 @@ impl<'a> Ev<'a> {
     fn scene(&mut self) -> &mut Scene {
         if self.scene.is_none() {
             let _span = common::span("brain.scene");
-            let r = common::sight_for(self.ctx, self.me.id, &self.w, self.now);
             // What the body sees: within its sight and with a clear sight line (the rule every
             // observer perceives by, `perception::in_sight`).
-            let sensing = crate::perception::Sensing::new(self.ctx, self.me.id, self.at, r, self.now);
+            let sensing = crate::perception::Sensing::new(self.ctx, self.me.id, self.at, self.now);
             self.scene = Some(Scene { sensing, creatures: None, heard: None, resources: None, structures: None });
             if !common::laws(self.ctx).scene_lazy {
                 self.creatures();
@@ -379,7 +378,7 @@ impl<'a> Ev<'a> {
         let got = self.scene().sensing.first(ctx, now, &mut pred);
         common::diag(|| "scene:first", 1);
         if laws.scene_lazy_check {
-            let full = crate::perception::sensed(ctx, self.me.id, self.at, common::sight_for(ctx, self.me.id, &self.w, now), now).0.into_iter().find(|c| pred(c));
+            let full = crate::perception::sensed(ctx, self.me.id, self.at, now).0.into_iter().find(|c| pred(c));
             common::diag(|| "scene_lazy:checked", 1);
             if full.as_ref().map(|c| c.id) != got.as_ref().map(|c| c.id) {
                 common::diag(|| "scene_lazy:differed", 1);
@@ -400,7 +399,7 @@ impl<'a> Ev<'a> {
         let got = self.scene().sensing.by_id(ctx, now, id);
         common::diag(|| "scene:by_id", 1);
         if laws.scene_lazy_check {
-            let full = crate::perception::sensed(ctx, self.me.id, self.at, common::sight_for(ctx, self.me.id, &self.w, now), now).0.into_iter().find(|c| c.id == id);
+            let full = crate::perception::sensed(ctx, self.me.id, self.at, now).0.into_iter().find(|c| c.id == id);
             common::diag(|| "scene_lazy:checked", 1);
             if full.as_ref().map(|c| c.id) != got.as_ref().map(|c| c.id) {
                 common::diag(|| "scene_lazy:differed", 1);

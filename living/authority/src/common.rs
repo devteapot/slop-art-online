@@ -723,7 +723,8 @@ pub fn age_days(c: &Character, w: &World, now: u64) -> f32 {
 /// The farthest anyone sees now (the `senses` law's reach by day or by night): onlookers are
 /// gathered within it before each one's own sight is tested.
 pub fn widest_sight(ctx: &ReducerContext, w: &World, now: u64) -> f32 {
-    scripts(ctx).reach().seen(dark(ctx, w, now))
+    let sc = scripts(ctx);
+    sc.reach().seen(dark(ctx, w, now)).max(sc.gaze_reach())
 }
 
 /// The farthest anyone hears.
@@ -978,43 +979,63 @@ struct Hot {
 
 thread_local! {
     /// The hot laws' answers by creature for one moment (`now`): every look and step in a tick
-    /// asks the same few creatures again. Cleared when the moment or the script revision changes.
-    static HOT: RefCell<(u64, u32, HashMap<u32, Hot>)> = RefCell::new((0, 0, HashMap::new()));
+    /// asks the same few creatures again. Keyed by transaction, moment and scripts revision.
+    static HOT: RefCell<((i64, u64, u32), HashMap<u32, Hot>)> = RefCell::new(((0, 0, 0), HashMap::new()));
 }
 
 /// A hot law's answer for creature `id` now: kept for this moment here, else the law over the
 /// few facts it reads (gathered by its plan), kept per state by the scripts.
 fn hot<T: Copy>(ctx: &ReducerContext, id: u32, w: &World, now: u64, law: &str, slot: fn(&mut Hot) -> &mut Option<T>, ask: impl FnOnce(&Scripts, &living_rules::script::SkillCtx) -> T) -> T {
-    let rev = scripts_rev(ctx);
+    let key = (stamp(ctx), now, scripts_rev(ctx));
     if let Some(v) = HOT.with(|c| {
         let mut c = c.borrow_mut();
-        if c.0 != now || c.1 != rev {
+        if c.0 != key {
             return None;
         }
-        c.2.get_mut(&id).and_then(|h| *slot(h))
+        c.1.get_mut(&id).and_then(|h| *slot(h))
     }) {
         return v;
     }
     let sc = scripts(ctx);
-    let c = crate::act::law_ctx(ctx, id, w, now, &sc.law_plan(law));
+    let senses = law == "senses";
+    let f = if senses { sc.senses_function() } else { law };
+    let mut c = crate::act::law_ctx(ctx, id, w, now, &sc.law_plan(f));
+    if senses && sc.gaze_enabled() {
+        c.gaze_band = crate::attention::band(ctx, id);
+    }
     let v = ask(&sc, &c);
     HOT.with(|c| {
         let mut c = c.borrow_mut();
-        if c.0 != now || c.1 != rev {
-            *c = (now, rev, HashMap::new());
+        if c.0 != key {
+            *c = (key, HashMap::new());
         }
-        *slot(c.2.entry(id).or_default()) = Some(v);
+        *slot(c.1.entry(id).or_default()) = Some(v);
     });
     v
 }
 
-/// A creature's senses now (the `senses` law).
+/// Drop the current answer after a same-transaction attention change.
+pub fn invalidate_senses(id: u32) {
+    HOT.with(|c| {
+        if let Some(h) = c.borrow_mut().1.get_mut(&id) {
+            h.senses = None;
+        }
+    });
+}
+
+/// A creature's senses now.
 pub fn senses_of(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> living_rules::script::Senses {
     hot(ctx, id, w, now, "senses", |h| &mut h.senses, |sc, c| {
         sc.senses(c).unwrap_or_else(|e| {
             log::warn!("senses for {id}: {e}");
             let r = sc.reach();
-            living_rules::script::Senses { sight: r.sight(c.dark), hearing: r.hearing, field: None }
+            if sc.gaze_enabled() {
+                let mut blind = living_rules::script::Senses::round(0.0, r.hearing);
+                blind.gaze = Some(living_rules::sight::Gaze { band: c.gaze_band, ceiling: 0.0, ground: 0.0, glow: 0.0 });
+                blind
+            } else {
+                living_rules::script::Senses::round(r.sight(c.dark), r.hearing)
+            }
         })
     })
 }
@@ -1026,17 +1047,25 @@ pub fn glow_of(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
         return 0.0;
     }
     hot(ctx, id, w, now, "glow", |h| &mut h.glow, |sc, c| {
-        sc.glow(c).unwrap_or_else(|e| {
+        let glow = sc.glow(c).unwrap_or_else(|e| {
             log::warn!("glow for {id}: {e}");
             0.0
-        })
+        });
+        if sc.gaze_enabled() { glow.min(sc.reach().glow_at(c.dark)) } else { glow }
     })
 }
 
-/// The radius to gather creatures an observer with sight `sight` may see: its sight, widened to
-/// the farthest glow when the script has one.
-pub fn gather_radius(ctx: &ReducerContext, sight: f32) -> f32 {
-    sight.max(scripts(ctx).reach().glow)
+/// Gather within the observer's reach or the world's glow, subject to the gaze ceiling.
+/// The second result says whether each target's glow could affect its visibility.
+pub fn gather_radius(ctx: &ReducerContext, senses: &living_rules::sight::Senses, keep: f32) -> (f32, bool) {
+    let (glow, lit) = match senses.gaze {
+        Some(gaze) => (gaze.glow, gaze.glow > 0.0),
+        None => {
+            let glow = scripts(ctx).reach().glow;
+            (glow, glow > senses.sight)
+        }
+    };
+    (senses.bound(senses.sight.max(glow) + keep), lit)
 }
 
 /// Whether a spot is in lamplight: within the light of a structure that gives it (its kind's

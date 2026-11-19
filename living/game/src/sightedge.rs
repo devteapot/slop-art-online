@@ -299,7 +299,7 @@ pub enum Source {
 /// My senses as the `my_senses` row has them.
 pub fn senses_of_row(r: &CharacterSenses) -> Senses {
     let field = r.field.then_some(living_rules::sight::Field { focal_deg: r.focal_deg, side_deg: r.side_deg, side_share: r.side_share, near_m: r.near_m, margin_deg: r.margin_deg });
-    Senses { sight: r.sight, hearing: r.hearing, field }
+    Senses { sight: r.sight, hearing: r.hearing, field, gaze: None }
 }
 
 /// The installed script's `senses(a)` for my character, by the client's own facts.

@@ -535,7 +535,8 @@ pub const ACTS: &str = "\
 ACTS: deliberate one-off interactions you decide on now. Each is carried out once, in order, right after you decide: \
 the body walks to the target, does it by the same rules as anything else (checks, time, effects), and you learn how it went (done, or why not). \
 While an act is under way your graph's work waits; only its reflexes (flee, dodge, block, attack, throw, yield) break it off. \
-Forms: {\"do\": \"conceive\", \"target\": {\"id\": 6}} (start a family: it happens when you both choose it toward each other within two minutes), \
+Forms: if your scene shows a gaze band, {\"do\": \"gaze\", \"band\": \"middle\"|\"far\"|\"near\"} selects ordinary, longer/narrower, or shorter/wider sight while you continue what you are doing. \
+{\"do\": \"conceive\", \"target\": {\"id\": 6}} (start a family: it happens when you both choose it toward each other within two minutes), \
 {\"do\": \"give\", \"target\": {\"id\": 4}, \"item\": \"berries\", \"qty\": 3}, \
 {\"do\": \"offer\", \"target\": {\"id\": 4}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}, {\"do\": \"accept\", \"target\": {\"id\": 4}, \"offer\": 17} (take what they offered you: \"offer\" names their trade offer, \"record\" their proposed terms, by the id you were shown; without one, their terms come first, then their trade), \
 {\"do\": \"decline\", \"target\": {\"id\": 4}, \"offer\": 17} (say no to it: it ends, and they are told), \

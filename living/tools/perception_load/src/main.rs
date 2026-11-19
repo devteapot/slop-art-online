@@ -15,7 +15,10 @@
 //! on, about a 4 m circle), so they mill about where they were placed. Prints `{"event":"ready"}`
 //! when every connection's subscriptions are applied, then after `seconds` one JSON line with
 //! the row events each connection received per table (inserts, updates, deletes) and the rows
-//! it holds. Bytes come from the server's metrics, not from here.
+//! it holds. Bytes come from the server's metrics.
+//! Optional `"gaze": "off" | "mix" | "far" | "rapid"` subscribes to both senses views.
+//! Mix starts with 80% Middle, 10% Far and 10% Near. Rapid offers one change per player per
+//! 250 ms and records the reducer acknowledgements and their round-trip durations.
 
 use living_bindings::*;
 use serde_json::{json, Value};
@@ -112,6 +115,7 @@ fn main() {
     };
     let seconds = req["seconds"].as_u64().unwrap_or(60);
     let walk = req["walk"].as_bool().unwrap_or(false);
+    let gaze = req["gaze"].as_str().unwrap_or("off");
     let started = Instant::now();
     let mut players = Vec::new();
     for token in req["tokens"].as_array().unwrap() {
@@ -137,6 +141,8 @@ fn main() {
         count!(conn, counts, seen_doing);
         count!(conn, counts, my_vitals);
         count!(conn, counts, my_experience);
+        count!(conn, counts, my_senses);
+        count!(conn, counts, my_senses_v_2);
         count!(conn, counts, terrain_chunk);
         count!(conn, counts, lot);
         conn.run_threaded();
@@ -155,7 +161,14 @@ fn main() {
     if open {
         base.push("SELECT * FROM character WHERE controller = :sender".into());
     } else {
-        base.extend(["seen_bodies", "seen_characters", "seen_fighters", "seen_doing", "my_characters", "my_vitals", "my_experience", "my_places", "my_inventory", "my_know_how"].iter().map(|t| format!("SELECT * FROM {t}")));
+        base.extend(["my_body", "seen_bodies", "seen_characters", "seen_fighters", "seen_doing", "my_characters", "my_vitals", "my_experience", "my_places", "my_inventory", "my_know_how"].iter().map(|t| format!("SELECT * FROM {t}")));
+    }
+    if req["gaze"].is_string() {
+        let tables = ["cover_law", "my_fighter", "my_doing", "my_offers", "my_known_names",
+                      "my_earshot", "speech_card", "my_records", "heard_sounds", "my_senses",
+                      "my_senses_v_2", "my_act_outcomes"];
+        base.extend(tables.map(|t| format!("SELECT * FROM {t}")));
+        base.push("SELECT * FROM script WHERE name = 'skills'".into());
     }
     for p in &players {
         subscribe(p, base.clone());
@@ -178,7 +191,7 @@ fn main() {
             }
         } else {
             let me = p.conn.db.my_characters().iter().find(|c| c.alive).expect("a living character for every token");
-            let b = p.conn.db.seen_bodies().id().find(&me.id).expect("my own body in seen_bodies");
+            let b = p.conn.db.my_body().id().find(&me.id).expect("my own body in my_body");
             (b.x, b.y, me.id)
         };
         let (x, y, id) = at;
@@ -203,25 +216,70 @@ fn main() {
             "experience": if open { p.conn.db.experience().count() } else { p.conn.db.my_experience().count() },
         })
     };
+    if matches!(gaze, "far" | "mix" | "rapid") {
+        let expected: Vec<_> = (0..players.len()).map(|i| match gaze {
+            "far" => 1,
+            "mix" if i % 10 == 0 => 1,
+            "mix" if i % 10 == 1 => 2,
+            _ => 0,
+        }).collect();
+        for (p, band) in players.iter().zip(&expected) {
+            if *band != 0 {
+                p.conn.reducers.human_gaze(*band).expect("initial gaze request");
+            }
+        }
+        let until = Instant::now() + Duration::from_secs(15);
+        while players.iter().zip(&expected).any(|(p, band)| {
+            !p.conn.db.my_senses_v_2().iter().any(|row| row.band == *band)
+        }) {
+            assert!(Instant::now() < until, "initial gaze bands did not reach the load clients");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
     let at_ready: Vec<Value> = players.iter().map(held).collect();
     for p in &players {
         p.counts.lock().unwrap().clear();
     }
     println!("{}", json!({"event": "ready", "after_s": started.elapsed().as_secs_f32(), "held": at_ready}));
-    let end = Instant::now() + Duration::from_secs(seconds);
-    if walk {
-        let n = players.len();
-        let mut turn = 0u64;
-        while Instant::now() < end {
-            // One player in turn every 1.5 s / n, so each turns every 1.5 s.
-            let i = (turn as usize) % n;
-            let a = (turn / n as u64) as f32 * 1.047 + i as f32 * 2.4;
-            let _ = players[i].conn.reducers.human_move(a.cos(), a.sin(), false);
-            turn += 1;
-            std::thread::sleep(Duration::from_secs_f32(1.5 / n as f32));
+    let start = Instant::now();
+    let end = start + Duration::from_secs(seconds);
+    let n = players.len();
+    let mut moves = 0usize;
+    let mut changes = 0usize;
+    let acknowledgments = Arc::new(Mutex::new(Vec::new()));
+    let last_accepted: Vec<_> = (0..n).map(|_| Arc::new(Mutex::new(0u8))).collect();
+    loop {
+        let next_move = if walk { start + Duration::from_secs_f64(moves as f64 * 1.5 / n as f64) } else { end };
+        let next_gaze = if gaze == "rapid" { start + Duration::from_secs_f64(changes as f64 * 0.25 / n as f64) } else { end };
+        let next = next_move.min(next_gaze);
+        if next >= end {
+            std::thread::sleep(end.saturating_duration_since(Instant::now()));
+            break;
         }
-    } else {
-        std::thread::sleep(Duration::from_secs(seconds));
+        std::thread::sleep(next.saturating_duration_since(Instant::now()));
+        if next_gaze <= next_move {
+            let i = changes % n;
+            let current = last_accepted[i].clone();
+            let results = acknowledgments.clone();
+            let band = if *current.lock().unwrap() == 1 { 2 } else { 1 };
+            let sent = Instant::now();
+            players[i].conn.reducers.human_gaze_then(band, move |_, result| {
+                let accepted = matches!(result, Ok(Ok(())));
+                let changed = if accepted {
+                    let mut old = current.lock().unwrap();
+                    std::mem::replace(&mut *old, band) != band
+                } else {
+                    false
+                };
+                results.lock().unwrap().push((sent.elapsed().as_secs_f64() * 1000.0, accepted, changed));
+            }).expect("gaze dispatch");
+            changes += 1;
+        } else {
+            let i = moves % n;
+            let a = (moves / n) as f32 * 1.047 + i as f32 * 2.4;
+            let _ = players[i].conn.reducers.human_move(a.cos(), a.sin(), false);
+            moves += 1;
+        }
     }
     let out: Vec<Value> = players
         .iter()
@@ -234,7 +292,7 @@ fn main() {
             })
         })
         .collect();
-    println!("{}", json!({"event": "done", "seconds": seconds, "players": out}));
+    println!("{}", json!({"event": "done", "seconds": seconds, "players": out, "gaze_offered": changes, "gaze_acknowledgments": *acknowledgments.lock().unwrap()}));
     for p in &players {
         let _ = p.conn.disconnect();
     }
