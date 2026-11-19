@@ -15,6 +15,7 @@ PURPOSES = ('think', 'deliberate', 'consolidate', 'talk', 'internalize', 'reorga
 SPEECH = 'verify fake: I will wait here.'
 CHOICES = [0]
 REPLIES = {
+    "act_repair": {"replacements": [None]},
     # The fast lane (docs/FAST_LANE.md): by default it keeps the plan as it is.
     'fast': {'keep': True, 'thought': 'verify fake: I keep to my plan.'},
     'think': {'thought': 'I can wait here.', 'intend': ['wait briefly'],
@@ -80,6 +81,8 @@ def cite(value, body):
 def purpose_of(body):
     effort = body.get('reasoning_effort')
     system = '\n'.join(m.get('content', '') for m in body.get('messages', []) if m.get('role') == 'system')
+    if 'Repair only the refused one-off actions' in system:
+        return 'act_repair'
     # Calls the mind sends under another purpose's effort map, told apart by their prompt.
     if 'Something has just happened to you (see Why now)' in system:
         return 'fast'

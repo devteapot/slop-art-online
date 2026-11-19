@@ -609,13 +609,25 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, way:
 /// back as an experience. `source` says where it was decided (e.g. "deliberate", "talk").
 #[spacetimedb::reducer]
 pub fn mind_act(ctx: &ReducerContext, actor: u32, acts: Vec<String>, source: String) -> Result<(), String> {
-    let c = authorize(ctx, actor)?;
-    if !c.alive {
+    require_live_controller(ctx, actor)?;
+    crate::acts::submit(ctx, actor, &acts, &source, false, common::now_ms(ctx));
+    Ok(())
+}
+
+/// Commit the same acts and experience feedback as the reducer, and return synchronous
+/// refusals to the controlling caller. A refused act is a committed outcome.
+#[spacetimedb::procedure]
+pub fn mind_act_checked(ctx: &mut spacetimedb::ProcedureContext, actor: u32, acts: Vec<String>, source: String) -> Result<Vec<Option<String>>, String> {
+    ctx.try_with_tx(|tx| {
+        require_live_controller(tx, actor)?;
+        Ok(crate::acts::submit_checked(tx, actor, &acts, &source, common::now_ms(tx)))
+    })
+}
+
+fn require_live_controller(ctx: &ReducerContext, actor: u32) -> Result<(), String> {
+    if !authorize(ctx, actor)?.alive {
         return Err("character is dead".into());
     }
-    let now = common::now_ms(ctx);
-    let notes = crate::acts::submit(ctx, actor, &acts, &source, false, now);
-    log::debug!("{} decides: {}", c.name, notes.join("; "));
     Ok(())
 }
 

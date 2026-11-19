@@ -526,6 +526,10 @@ Every branch must lead to action: a guard whose then-branch can only wait blocks
     }
 }
 
+pub const ACT_REPAIR: &str = "Repair only the refused one-off actions listed by the authority. Keep their original intentions and use the valid act names and known targets. Return one JSON object with \"replacements\": an array in the same order and of the same length as \"rejected\", each entry either one corrected action object or null if you cannot repair it. A walk to a known place is {\"do\":\"goto\",\"target\":{\"place\":\"home\"}}. Do not add speech, repeat any other act, change a plan, or invent targets.";
+
+const SPEECH_AND_ACTION: &str = r#"Speech and action are separate choices in the same turn. If you only mean to talk, leave acts empty. If you independently decide to do something now, include the act even when you also speak. For example, say "Here's a berry" and include {"do":"give","target":{"id":4},"item":"berries","qty":1}; say "I'll go home now" and include {"do":"goto","target":{"place":"home"}} if you mean to leave now. Merely discussing a possible walk or gift calls for words alone."#;
+
 /// What people are told about deliberate acts (shared by deliberation and conversation).
 pub const ACTS: &str = "\
 ACTS: deliberate one-off interactions you decide on now. Each is carried out once, in order, right after you decide: \
@@ -659,6 +663,7 @@ and they may change through what you live. Start from why you are thinking now: 
 Think about it as that person: what you make of it, and what you mean to do. Your body keeps to its habits on its own (eating, sleeping, keeping warm, \
 staying safe, your work) unless you decide otherwise, so decide what this moment calls for, not everything. \
 When one of your habits keeps failing you (see how each has gone), you may decide to sit down and rework it. \
+You can speak and choose something to do now in the same turn. If you mean both, give your words in say and your action in intend. \
 Speech is how you share yourself: what you think, feel, remember, hope or suspect, as well as practical matters; you may also stay silent. \
 Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Do not assume facts you have not perceived.\n\n{}\n\n\
 Reply with ONE JSON object: {{\"thought\": \"what you make of this moment (1-3 sentences)\", \
@@ -790,7 +795,7 @@ pub fn deliberate_system() -> String {
 fn deliberate_system_in(frame: Frame) -> String {
     shared(format!(
         "{} Stay in character: your personality, values, relationships and memories are yours, \
-and they may change through what you live. That person has already decided what to do (see What you decided): express that decision as deliberate acts to carry out now (in order) and, for what goes on over time, an intent weighed among your desires, or routine changes. Don't add intentions of your own or drop any; leave speech to the decision (speaking is not an act).\n\n{}\n\n{}\n\n{}\n\n\
+and they may change through what you live. {} Those examples show the whole decision. The speech was chosen in the preceding step. Return the acts here and leave the speech unchanged. A decision can include speech and an ongoing intent together. Following uses a graph leaf such as {{\"do\":\"follow\",\"target\":{{\"id\":4}},\"distance\":2,\"qty\":10}}, outside the one-off acts list. That person has already decided what to do (see What you decided): express that decision as deliberate acts to carry out now (in order) and, for what goes on over time, an intent weighed among your desires, or routine changes. Don't add intentions of your own or drop any; leave speech to the decision (speaking is not an act).\n\n{}\n\n{}\n\n{}\n\n\
 A graph can span a whole day: hour conditions ({{\"hour\": {{\"above\": 6, \"below\": 12}}}}) let you do different things at different times. \
 Your top level and your routines are all your body does: they began as your habits and they are yours; nothing eats, sleeps or keeps you warm unless they do. \
 To change one, rework it as an act, when what you decided says so. \
@@ -801,6 +806,7 @@ weighed among your desires as \"the plan\": your top level shows each desire's w
 \"graph\": \"keep\" (a graph here counts as your intent), \
 or instead of graph \"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}} to replace only that labeled branch (e.g. adapt how you fight mid-fight) and keep the rest}}",
         opening(frame, THINK_OPENING),
+        SPEECH_AND_ACTION,
         world_rules(),
         grammar(),
         ACTS
@@ -1273,7 +1279,7 @@ or say what you actually want to say — what you think or feel, something you r
 Real conversations are short and have a point. As soon as something is settled between you (you agreed on something, \
 one of you declined, someone will think it over, or there is simply nothing more to say), say so in \"settled\": that line closes \
 the conversation for now; don't restate what was already agreed or keep saying goodbye. You don't have to answer everything: \
-silence (say null) is fine. Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Reply with ONE JSON object: {{\"thought\": \"what you privately make of this (one sentence)\", \
+silence (say null) is fine. {} An ongoing movement such as follow belongs in a behavior graph, outside this turn’s one-off acts. Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Reply with ONE JSON object: {{\"thought\": \"what you privately make of this (one sentence)\", \
 \"say\": \"your words\" or null, \"to\": id of who you speak to, {}\
 \"acts\": [] or deliberate acts you carry out now, e.g. {{\"do\": \"conceive\", \"target\": {{\"id\": id of who you speak to}}}} once you both want a child together, \
 {{\"do\": \"accept\", \"target\": {{\"id\": id of who you speak to}}, \"offer\": id of their offer}} to take a trade they offered (\"record\": id of their proposal, for terms), \
@@ -1285,6 +1291,7 @@ silence (say null) is fine. Refer to people by the ids you see in your acts and 
 \"until\": null or when to take it up again (\"dawn\", \"morning\", \"noon\", \"evening\", \"night\", \"tomorrow\" or an hour 0-23), \
 \"end\": true if this is your last word for now}}{}",
         opening(frame, TALK_OPENING),
+        SPEECH_AND_ACTION,
         ways_text(),
         match talk_acts() {
             a if a.is_empty() => String::new(),
