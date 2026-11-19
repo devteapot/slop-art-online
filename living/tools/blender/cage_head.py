@@ -347,8 +347,8 @@ class Cage:
             top = np.array([1.22 * neck_r * math.sin(th), neck_y + 1.22 * neck_r * math.cos(th), neck_z])
             u = lerp(j, top, jaw.get("inset", UNDER_IN))
             u[2] = lerp(j[2], neck_z, UNDER_DOWN) - 0.006 * (col < C_WIDE)
-            # The skin rolls back and up from the chin before it meets the neck.
-            u[2] += jaw.get("roll", 0.0) * max(0.0, math.cos(th))
+            # Lift the underside around the whole column, with the strongest roll behind the chin.
+            u[2] += jaw.get("roll", 0.0) * (1.3 + max(0.0, math.cos(th)))
             grid[R["under_jaw"], col] = u
             grid[R["neck"], col] = nk
         # The socket: the eye's edge sits behind the brow and the cheek; the rows round it lead in.

@@ -634,7 +634,7 @@ def arm_w(x):
     return blend(("J_Bip_L_Shoulder", sh), ("J_Bip_L_UpperArm", (1 - sh) * (1 - lower)), ("J_Bip_L_LowerArm", lower * (1 - hand)), ("J_Bip_L_Hand", lower * hand))
 
 
-def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=None, cols=None, neck_d=None, tuck=None, folds=0.0):
+def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=None, cols=None, neck_d=None, tuck=None, folds=0.0, neckline=0.0):
     """The left half of a torso-and-arms garment at offset d from the body.
 
     zs: ring heights from the hem up to the armpit ring (exclusive of it); hem / cuff / collar
@@ -715,7 +715,11 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
             phi = math.asin(min(front(1.5) / (base + dr), 1.0))
         s, c = math.sin(phi), math.cos(phi)
         z = 1.488 + 0.016 * smooth(k / 5.0) + dz
-        return Vector((-(base + dr) * s, cage_head.NECK_Y - 0.002 + (base * 1.08 + dr) * c, z))
+        # Positive depth gives a scoop; a negative depth tapers the opening to a V.
+        front_share = max(0.0, c)
+        opening = abs(neckline) * (front_share ** 2 if neckline >= 0 else max(0.0, front_share - abs(s)) ** 1.3)
+        return Vector((-(base + dr + abs(neckline) * 0.34) * s,
+                       cage_head.NECK_Y - 0.002 + (base * 1.08 + dr) * c + opening * 0.90, z - opening))
 
     prev = rowT
     neck_x = across(blend(("J_Bip_C_UpperChest", 0.6), ("J_Bip_C_Neck", 0.4)))  # the weights of the last step below
@@ -739,7 +743,7 @@ def upper_garment(part, d, zs, hem, cuff, collar, front=None, skirt=0.0, tag_fn=
     for dz, dr, w in collar:
         cur = []
         for k in ks:
-            pos = neck_point(k, dz, dr)
+            pos = neck_point(k, 0.55 * dz, dr)
             pos.x /= across(w)
             cur.append(part.v(pos, w))
         for i in range(len(ks) - 1):
@@ -1200,7 +1204,10 @@ def make_face(arm, spec, atlas_path):
             # The transparent guard faces can extend under the jaw. Keep their
             # samples on the transparent border of the shared lip/blush tile.
             u, v_atlas = m.uv[v]
-            m.uv.append((np.clip(u, .1875 + 1/512, .8125 - 1/512), v_atlas))
+            # Atlas V grows upwards here. The exported tile spans 0.59375..0.875 down.
+            border = 1.0 / 512
+            m.uv.append((np.clip(u, 0.1875 + border, 0.8125 - border),
+                         np.clip(v_atlas, 0.125 + border, 0.40625 - border)))
             m.eye.append(m.eye[v])
         for f in tint_faces:
             m.f.append(tuple(index[v] for v in f))
@@ -1472,6 +1479,7 @@ def far_beard(arm, m, look):
 
 
 NECK_R = 0.0316  # the neck's radius (head_form.neck_radius), set for the person in configure
+NECK_FLARE = 1.58  # lateral radius at the exposed lower neck, in neck radii
 NECK_EASE = 0.004  # how far off the neck a garment's neck hole lies, before the garment's own distance off the body
 
 
@@ -1491,12 +1499,29 @@ def make_neck(arm):
         # A typed head brings the neck's top with it: the tube ends where the head's ring begins.
         stations = stations[:3]
     prev = None
+    lateral = [n * 2.85, n * NECK_FLARE]
     for i, (z, cy, r, w) in enumerate(stations):
-        cur = ring(part, (0, cy, z), (1, 0, 0), (0, 1, 0), r / across(w), r * 1.04, 10, w)
+        # The trapezius widens the lower side contour while the throat keeps its depth.
+        side_radius = lateral[i] if i < len(lateral) else r
+        cur = ring(part, (0, cy, z), (1, 0, 0), (0, 1, 0), side_radius / across(w), r * 1.04, 10, w)
+        if i == 0:
+            # Extend the front of the basal ring under an open neckline. The sides
+            # retain the measured trapezius width; the throat above keeps its depth.
+            for j, vertex in enumerate(cur):
+                front = max(0.0, math.sin(2 * PI * j / len(cur)))
+                part.co[vertex].y += 0.035 * front
+                part.co[vertex].z -= 0.026 * front
         if prev:
             part.band(prev, cur, i - 1, i)
         prev = cur
-    return build(part, arm, MAT["skin"], lambda tag, u, v, co, n: mix(SKIN, SKIN_SHADE, 0.25 * smooth((1.56 - co.z) / 0.08)))
+    def skin_colour(tag, u, v, co, normal):
+        # The soft shadow beneath each clavicle runs up and out from the notch.
+        clavicle_z = 1.456 + 0.22 * abs(co.x)
+        front = smooth((co.y - y) / 0.026)
+        clavicle = front * math.exp(-((co.z - clavicle_z) / 0.006) ** 2)
+        return mix(SKIN, SKIN_SHADE, 0.25 * smooth((1.56 - co.z) / 0.08) + 0.18 * clavicle)
+
+    return build(part, arm, MAT["skin"], skin_colour)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -2412,6 +2437,9 @@ def configure(spec):
         g["NECK_R"] = cage_head.neck_radius_of(face_types.load()["types"][spec["type"]])
     else:
         g["NECK_R"] = head_form.neck_radius(spec["masc"], spec["child"])
+    # Adult male types already have a broader column. Bound their exposed flare
+    # for the narrower heads the identity bones can give them (cut at -0.14H).
+    g["NECK_FLARE"] = 1.22 if typed and t["sex"] == "male" and t["band"] in ("adult", "elder") else 1.58
     # The chin stays where the neck expects it, whatever the face's length.
     g["HEAD"] = Vector((0, -0.004, 1.535 - HF.chin_z * HEAD_SCALE))
 
@@ -2435,6 +2463,8 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
         # Jersey: a roll neck, ribbed cuffs and hem. Under a coat only its front, collar and cuffs
         # are kept; under a smock its collar and cuffs.
         def jtag(kind, k, r):
+            if kind == "collar" and coat == "smock":
+                return Part.HIDE  # the open smock is the visible neckline
             if kind in ("collar", "cuff"):
                 return 2
             if kind == "hem":
@@ -2446,6 +2476,9 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
             return 0
 
         neck = {"J_Bip_C_Neck": 1.0}
+        # The seed already selects the outer piece (including smock length). Its cut
+        # and the separate under-jersey must open together when both are worn.
+        jersey_open = (-0.034 if coat == "coat" else 0.029) if STANCE else (0.012 if coat == "smock" else 0.0)
         p = upper_garment(
             Part("Jersey"), 0.008, [0.975, 1.01, 1.08, 1.16, 1.24, 1.32],
             hem=[(-0.030, 0.003), (-0.034, -0.006)], cuff=(-0.700, [(-0.012, 0.003), (-0.026, 0.003), (-0.028, -0.004)]),
@@ -2453,7 +2486,7 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
             # Tucked into the trousers (their top is at 1.087, 12 mm off the body): below it the
             # jersey lies 3 mm off the body where it lay 8, and its ribbed hem 11, a millimetre
             # inside the waistband, which showed through the back of it as slivers.
-            tuck=(1.10, 0.005),
+            tuck=(1.10, 0.005), neckline=jersey_open,
         ).mirrored()
         obs.append(build(p, arm, MAT["cloth"], jersey_colour(spec["jersey"])))
         chest = blend(("J_Bip_C_UpperChest", 0.75), ("J_Bip_C_Neck", 0.25))
@@ -2472,7 +2505,7 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
             p = upper_garment(
                 Part("Coat"), 0.024, [0.70, 0.79, 0.88, 0.97, 1.06, 1.15, 1.24, 1.32],
                 hem=[], cuff=(-0.640, [(-0.030, 0.006)]), collar=[(0.020, 0.004, chest), (0.042, 0.009, chest)],
-                front=lambda z: lerp(0.058, 0.026, smooth((z - 0.70) / 0.75)), skirt=1.0, tag_fn=ctag, neck_d=0.019,
+                front=lambda z: lerp(0.058, 0.026, smooth((z - 0.70) / 0.75)), skirt=1.0, tag_fn=ctag, neck_d=0.019, neckline=-0.038 if STANCE else -0.012,
             ).mirrored()
             obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"]), solid=0.006))
             if not FAR:
@@ -2497,7 +2530,7 @@ def build_person(arm, spec, atlas_path, body=False, bones=None):
 
             p = upper_garment(
                 Part("Smock"), 0.018, zs, hem=[(-0.004, -0.008)], cuff=(-0.655, [(-0.022, 0.004), (-0.024, -0.004)]),
-                collar=[(0.020, 0.006, chest), (0.022, -0.002, chest)], skirt=1.0, neck_d=0.014, folds=1.0,
+                collar=[(0.020, 0.006, chest), (0.022, -0.002, chest), (-0.082, -0.027, chest)], skirt=1.0, neck_d=0.014, folds=1.0, neckline=(0.028 if hem < 0.7 else 0.018) if STANCE else 0.012,
             ).mirrored()
             obs.append(build(p, arm, MAT["cloth"], coat_colour(spec["coat_colour"], spec["patches"])))
             # The bands round the sleeves, in another cloth: over the smock's own sleeve, a hair's
