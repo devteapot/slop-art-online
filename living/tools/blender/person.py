@@ -479,6 +479,7 @@ def hip_share(z, x):
 # long skirt's chains have a second joint at SKIRT_KNEE. None: no spring bones (trousers, a
 # coat, a far model alone); else the hem's height.
 SKIRT_SPRING = None
+COAT_SPRING = False
 SKIRT_TOP, SKIRT_EASE, SKIRT_KNEE, SKIRT_BEND = 0.86, 0.10, 0.66, 0.08
 SKIRT_CHAINS = (("Front", 2.0), ("Side", 5.0), ("Back", 8.0))  # a chain and the torso's column it stands on (0 front, NT / 4 the side, NT / 2 back)
 
@@ -498,6 +499,8 @@ def skirt_joints(hem):
 
 def skirt_bone(side, chain, joint, hem):
     """`J_Sec_L_SkirtFront`, then `…Front2` (a long skirt's second joint) or `…Front_end`: the reference's names."""
+    if COAT_SPRING:
+        return f"J_Sec_{side}_Coat{chain}" + ("2" if joint else "")
     return f"J_Sec_{side}_Skirt{chain}" + ("" if joint == 0 else ("2" if skirt_long(hem) else "_end"))
 
 
@@ -510,13 +513,16 @@ def skirt_shares(z, k, hem):
     phi = 360.0 * k / NT
     front, back = 1.0 - smooth((phi - 45.0) / 36.0), smooth((phi - 99.0) / 36.0)
     round_leg = {"Front": front, "Side": max(1.0 - front - back, 0.0), "Back": back}
-    low = smooth((SKIRT_KNEE + SKIRT_BEND / 2 - z) / SKIRT_BEND) if skirt_long(hem) else 0.0
+    low = smooth((SKIRT_KNEE + SKIRT_BEND / 2 - z) / SKIRT_BEND) if COAT_SPRING or skirt_long(hem) else 0.0
     out = {}
+    stay = 1.0 - free
+    if COAT_SPRING:
+        stay += free * round_leg.pop("Front")
     for chain, a in round_leg.items():
         for joint, b in ((0, 1.0 - low), (1, low)):
             if a * b > 1e-4:
                 out[skirt_bone("L", chain, joint, hem)] = free * a * b
-    return out, 1.0 - free
+    return out, stay
 
 
 def torso_w(z, x, skirt=False, front=False, col=None, hip=None):
@@ -560,15 +566,19 @@ def torso_w(z, x, skirt=False, front=False, col=None, hip=None):
             # The thighs' shares go to their spring bones. A vertex near the middle has a share
             # of the other thigh too: that goes to the other side's front or back bone alone.
             own, stay = skirt_shares(z, col, SKIRT_SPRING)
-            joint = 1 if skirt_long(SKIRT_SPRING) and z < SKIRT_KNEE else 0
-            other = skirt_bone("R", "Front" if col <= NT / 4 else "Back", joint, SKIRT_SPRING)
+            joint = 1 if (COAT_SPRING or skirt_long(SKIRT_SPRING)) and z < SKIRT_KNEE else 0
+            other = skirt_bone("R", "Front" if not COAT_SPRING and col <= NT / 4 else "Back", joint, SKIRT_SPRING)
             legs = [("J_Bip_L_UpperLeg", left * stay), ("J_Bip_R_UpperLeg", right * stay), (other, right * (1 - stay))] + [(n, left * v) for n, v in own.items()]
             legs = [(n, v) for n, v in legs if v > 1e-4]
             # Four bones a vertex: the smallest shares join the largest of the same thigh's, which
             # at rest changes nothing (they are that thigh's children).
             room = 4 - len([1 for n, v in w if v > 1e-4])
             while len(legs) > room:
-                n0, v0 = min(legs, key=lambda q: q[1])
+                candidates = legs
+                if COAT_SPRING:
+                    # Preserve each thigh's total even when the opposite thigh has one tiny share.
+                    candidates = [q for q in legs if any(r != q and ("_L_" in r[0]) == ("_L_" in q[0]) for r in legs)]
+                n0, v0 = min(candidates, key=lambda q: q[1])
                 legs.remove((n0, v0))
                 mine = [q for q in legs if ("_L_" in q[0]) == ("_L_" in n0)] or legs
                 n1, v1 = max(mine, key=lambda q: q[1])
@@ -1902,17 +1912,18 @@ def add_skirt_bones(arm, hem):
     """The spring bones of a smock's skirt (SKIRT_SPRING): three chains under each upper leg,
     on the skirt's own surface at the front, the side and the back (skirt_joints). Returns the
     chains, each a list of bone names."""
-    zs = skirt_joints(hem)
+    zs = [SKIRT_TOP, SKIRT_KNEE] if COAT_SPRING else skirt_joints(hem)
+    columns = (("Side", NT / 4), ("Back", 8)) if COAT_SPRING else SKIRT_CHAINS
     chains = []
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.mode_set(mode="EDIT")
     frame = Matrix.Rotation(math.radians(90), 4, "X")
     for side, sx in (("L", 1.0), ("R", -1.0)):
-        for chain, k in SKIRT_CHAINS:
+        for chain, k in columns:
             parent = arm.data.edit_bones[f"J_Bip_{side}_UpperLeg"]
             names = []
             for joint, z in enumerate(zs):
-                p = torso_point(z, k, SKIRT_OFF, 1.0, folds=1.0)
+                p = torso_point(z, k, SKIRT_OFF, 1.0, folds=0.0 if COAT_SPRING else 1.0)
                 eb = arm.data.edit_bones.new(skirt_bone(side, chain, joint, hem))
                 eb.head = (0, 0, 0)
                 eb.tail = (0, 0.04, 0)
@@ -2927,9 +2938,9 @@ def skirt_block(nodes, skirts, sphere, block):
             least = min(least, room - r)
             spheres.append(sphere(bone, tuple(c), r))
         block["colliderGroups"].append({"node": nodes[bone], "colliders": spheres})
-    block["boneGroups"].append({"comment": "Skirt", "stiffiness": SKIRT_STIFF, "gravityPower": 0.0, "gravityDir": {"x": 0, "y": -1, "z": 0}, "dragForce": SKIRT_DRAG, "center": -1, "hitRadius": SKIRT_HIT,
+    block["boneGroups"].append({"comment": "Coat" if COAT_SPRING else "Skirt", "stiffiness": SKIRT_STIFF, "gravityPower": 0.0, "gravityDir": {"x": 0, "y": -1, "z": 0}, "dragForce": SKIRT_DRAG, "center": -1, "hitRadius": SKIRT_HIT,
                                 "bones": [nodes[chain[0]] for chain in skirts], "colliderGroups": [first, first + 1]})
-    print(f"SKIRT springs: {len(skirts)} chains, {sum(len(c) for c in skirts)} bones; at rest a joint's tail is at least {least * 1000:.1f} mm clear of the legs' spheres")
+    print(f"{block['boneGroups'][-1]['comment']} springs: {len(skirts)} chains, {sum(len(c) for c in skirts)} bones; at rest a joint's tail is at least {least * 1000:.1f} mm clear of the legs' spheres")
     return block
 
 
@@ -3084,9 +3095,11 @@ def main():
     # A smock's skirt hangs from spring bones where the file holds the skirt: a whole person, or
     # the smock's or the apron's own piece. Not a far model alone, which lists no springs.
     skirted = spec.get("coat") == "smock" and a.lod != "far" and (a.parts == "all" or (a.parts == "keep" and {"Smock", "Apron"} & set(a.keep.split(","))))
-    g["SKIRT_SPRING"] = max(spec["hem"], 0.50) if skirted else None
+    coated = spec.get("coat") == "coat" and (a.parts == "all" or (a.parts == "keep" and "Coat" in a.keep.split(",")))
+    g["COAT_SPRING"] = coated
+    g["SKIRT_SPRING"] = 0.70 if coated else max(spec["hem"], 0.50) if skirted else None
     arm = make_armature(include_fringe=not spec["piece"])
-    if skirted:
+    if skirted or coated:
         spec["skirt_springs"] = add_skirt_bones(arm, g["SKIRT_SPRING"])
     obs, tris = [], {}
     for far in (False, True):
