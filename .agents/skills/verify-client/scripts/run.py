@@ -70,8 +70,11 @@ def main():
         try:
             command('cleanup', [str(HARNESS), 'cleanup', '--run', args.run])
             state = json.loads(state_path.read_text())
+            # The shared cleanup's two confirmations: SQL answering 404, or (a run with a recorded
+            # database identity, `trial_archive.finish`) the name no longer resolving.
+            cleaned = (directory / 'cleanup.log').read_text()
             proof = {'database': database, 'cleanup_confirmed_sql_404':
-                     f'deleted {database} (SQL now 404)' in (directory / 'cleanup.log').read_text(),
+                     f'deleted {database} (SQL now 404)' in cleaned or f'deleted {database} (name no longer resolves)' in cleaned,
                      'published': state.get('published', False), 'player_token_removed': 'token' not in state,
                      'shared_container_running': V.container_up(),
                      'living_token_unchanged': token_digest() == before_token,
