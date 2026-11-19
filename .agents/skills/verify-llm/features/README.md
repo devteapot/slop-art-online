@@ -7,7 +7,7 @@ The sources are `living/mind/src/llm.rs` and the model configuration `living/con
 | Authorized provider access check | Opt-in only | [live.md](live.md) |
 | Basic exchange, accepted replies and journals | `basic` | [exchange.md](exchange.md) |
 | Existing model-client cargo tests | Every invocation | [cargo-tests.md](cargo-tests.md) |
-| JSON repair and bounded deliberation retry | `repair`, `deliberation-retry`, `retry-exhausted` | [repair.md](repair.md) |
+| JSON repair, bounded deliberation retry and one semantic act repair | `repair`, `deliberation-retry`, `retry-exhausted` | [repair.md](repair.md) |
 | Outage gate and recovery; a deliberation keeps its request | `outage` | [outage.md](outage.md) |
 | Pacing, priority lanes, token admission and caching | Cargo and fake contract, `basic` | [pacing.md](pacing.md) |
 | Per-purpose model mixes, stage of attention, effort per purpose, output caps per purpose, effort gaps | `mix`; Cargo `mixes_route_each_purpose_and_stage_with_its_effort`, `a_models_file_naming_what_does_not_exist_is_refused`, `purposes_sent_without_an_effort_entry_are_reported`, `every_profile_caps_each_purpose_near_its_need` | [mixes.md](mixes.md) |

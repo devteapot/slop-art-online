@@ -360,6 +360,9 @@ fn bind_parse(s: &str) -> Option<Bind> {
 #[derive(Resource, Clone, Debug, PartialEq)]
 pub struct Prefs {
     pub camera: crate::camera::Mode,
+    pub camera_tuning: crate::camera::Tuning,
+    pub facing: Option<crate::controls::Facing>,
+    pub cursor_facing: crate::twist::LookWalk,
     pub control: crate::controls::Control,
     /// `unseen`, `limited` or `fade` (`sightedge::Mode`).
     pub sight_edge: Option<String>,
@@ -384,7 +387,16 @@ pub struct Prefs {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Self { camera: crate::camera::Mode::default(), control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None }
+        Self { camera: crate::camera::Mode::default(), camera_tuning: Default::default(), facing: None, cursor_facing: crate::twist::LookWalk::cursor(), control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None }
+    }
+}
+
+impl Prefs {
+    pub fn facing(&self) -> crate::controls::Facing {
+        self.facing.unwrap_or(match self.camera {
+            crate::camera::Mode::TopDown => crate::controls::Facing::Cursor,
+            crate::camera::Mode::Orbit => crate::controls::Facing::Natural,
+        })
     }
 }
 
@@ -419,6 +431,9 @@ pub fn load() -> (Binds, Prefs) {
     let d = Prefs::default();
     let prefs = Prefs {
         camera: if v["camera"].as_str() == Some("orbit") { crate::camera::Mode::Orbit } else { d.camera },
+        camera_tuning: serde_json::from_value(v["camera_tuning"].clone()).unwrap_or_default(),
+        facing: serde_json::from_value(v["facing"].clone()).ok(),
+        cursor_facing: crate::twist::LookWalk::from_cursor_settings(&v["cursor_facing"]),
         control: match v["control"].as_str() {
             Some("cursor") => crate::controls::Control::Cursor,
             Some("travel") => crate::controls::Control::Travel,
@@ -445,6 +460,9 @@ pub fn save(binds: &Binds, prefs: &Prefs) {
         "preset": binds.preset.name(),
         "binds": map,
         "camera": prefs.camera.name(),
+        "camera_tuning": prefs.camera_tuning,
+        "facing": prefs.facing,
+        "cursor_facing": prefs.cursor_facing,
         "control": match prefs.control { crate::controls::Control::Cursor => "cursor", crate::controls::Control::Travel => "travel" },
         "sight_edge": prefs.sight_edge,
         "tips": prefs.tips,
@@ -500,6 +518,18 @@ pub fn double_tap(keys: Res<ButtonInput<KeyCode>>, binds: Res<Binds>, input: Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_camera_supplies_the_facing_default_until_a_player_picks_one() {
+        use crate::{camera::Mode, controls::Facing};
+
+        let mut prefs = Prefs::default();
+        assert_eq!(prefs.facing(), Facing::Cursor);
+        prefs.camera = Mode::Orbit;
+        assert_eq!(prefs.facing(), Facing::Natural);
+        prefs.facing = Some(Facing::Cursor);
+        assert_eq!(prefs.facing(), Facing::Cursor);
+    }
 
     #[test]
     fn a_taken_key_is_swapped_and_the_preset_follows() {

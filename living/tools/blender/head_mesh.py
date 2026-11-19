@@ -595,7 +595,7 @@ class Face:
         k = look["lash_k"]
         rest = self._lid(side, np.array(0.0), {})
         opening = float(rest[0] - rest[1])
-        full = opening * (0.07 + 0.09 * k)
+        full = opening * (0.095 + 0.115 * k)
         n = 22
         ss = [-1.0 + 2.0 * i / (n - 1) for i in range(n)]
         # Thickest past the middle, thinner toward both corners.
@@ -622,7 +622,7 @@ class Face:
             bot.append((side * x, hf.eye_z + z - 0.0004 * (1 - t)))
         self._strip(m, top, bot, mix3(band, look["lash_tip"], 0.30), band, "line", 0.0012, off_top=0.0012 + out)
         # The ink line along the lid's edge, on the band: it is what holds the eye's shape from far off.
-        we = [opening * (0.040 + 0.016 * k) * (0.6 + 0.4 * smooth((s + 1.0) / 1.2)) for s in ss]
+        we = [opening * (0.057 + 0.022 * k) * (0.6 + 0.4 * smooth((s + 1.0) / 1.2)) for s in ss]
         self._strip(m, [at(s, up(s) + w) for s, w in zip(ss, we)], [at(s, up(s) - 0.0006) for s in ss], ink, ink, "line", 0.0016, off_top=[0.0016 + out * w / max(t, 1e-6) for w, t in zip(we, th)])
         rng = random.Random(f"lash/{look.get('seed', 0)}/{side}")
         nl = look["lashes"]
@@ -633,7 +633,7 @@ class Face:
             s = lerp(-0.55, 0.92, f) + rng.uniform(-0.03, 0.03)
             ln = opening * (0.07 + 0.07 * f) * (0.75 + 0.25 * k / 1.9) * rng.uniform(0.85, 1.15) * shut
             a = math.radians(lerp(96, 38, f ** 0.8) + rng.uniform(-6, 6))
-            self._strand(m, side, (ex + ew * s, hf.eye_z + up(s) + 0.80 * th_at(s)), a, ln, opening * 0.030, bend=-0.25, cols=(band, look["lash_tip"]), mat="line", off=0.0013, rise=0.80)
+            self._strand(m, side, (ex + ew * s, hf.eye_z + up(s) + 0.62 * th_at(s)), a, ln, opening * 0.042, bend=-0.25, cols=(band, look["lash_tip"]), mat="line", off=0.0013, rise=0.80)
         # A fan at the outer corner, from the band's end: the longest points out and a little down.
         fan = min(nl, 4) if nl else 0
         for i in range(fan):

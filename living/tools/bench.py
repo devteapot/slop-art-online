@@ -119,6 +119,8 @@ def main():
     durs = []
     slow = []
     spans = {}
+    motion_ms = 0.0
+    over_budget_after_motion = 0
     for m in re.finditer(r'^(\S+Z)\s.*Timing span "([^"]+)": ([\d.]+)(µs|ms|s)\b', logs, re.M):
         # A line logged on the exact second has no fraction.
         stamp = m.group(1)[:26].rstrip("Z")
@@ -127,11 +129,16 @@ def main():
             continue
         d = float(m.group(3)) * {"µs": 1e-3, "ms": 1.0, "s": 1e3}[m.group(4)]
         spans.setdefault(m.group(2), []).append(d)
+        if m.group(2) == "tick.motion":
+            motion_ms += d
         if m.group(2) != "tick":
             continue
         durs.append(d)
         if d > 16.667:
             slow.append((round(at - t0, 1), round(d, 1)))
+            if d - motion_ms <= 16.667:
+                over_budget_after_motion += 1
+        motion_ms = 0.0
     # What behaviour graphs' scenes saw (one line a second while profiling: `common::report_scenes`).
     scene = [0, 0, 0]
     for m in re.finditer(r'^(\S+Z)\s.*scene seen: builds=(\d+) seen=(\d+) max=(\d+)', logs, re.M):
@@ -177,6 +184,7 @@ def main():
             "p99": round(pct(durs, 99), 3),
             "max": round(max(durs, default=0), 3),
             "over_16_7ms": sum(d > 16.667 for d in durs),
+            "over_16_7ms_without_motion_within_budget": over_budget_after_motion,
             "over_budget_at_s": slow[:20],
         },
     }

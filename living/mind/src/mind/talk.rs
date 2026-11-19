@@ -1255,6 +1255,7 @@ impl Minds {
                 }
             }
         }
+        let turn_reference = t.reference.clone();
         let mut result = self.say(me, say.clone(), to, way.clone(), t.clone()).await;
         if matches!(&result, Err(e) if e.to_string().contains("too fast")) {
             tokio::time::sleep(Duration::from_millis(SPEECH_GAP_MS)).await;
@@ -1266,7 +1267,7 @@ impl Minds {
                 c.lines.retain(|l| !(l.turn && l.speaker == me && l.at_ms == now));
             }
         }
-        if let Err(e) = self.act(me, acts, "talk").await {
+        if let Err(e) = self.act(me, acts, "talk", &turn_reference, lane).await {
             log::warn!("{}: acts from a conversation not taken: {e:#}", c.name);
         }
         log::info!(
