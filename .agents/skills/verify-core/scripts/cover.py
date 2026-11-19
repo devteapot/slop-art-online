@@ -52,9 +52,10 @@ def settle():
         call("human_move", [0.0, 0.0, False], player, check=False)
         time.sleep(0.2)
 
-# Cullet ships cover on (2026-11-19); the fixture starts from both laws off and sets them itself.
-call("set_world_law", ["cover_sight_on","false"])
-call("set_world_law", ["cover_brush_on","false"])
+# Cullet ships cover, facing sight and gaze on (2026-11-19). This fixture tests cover alone, all
+# round: it starts from them off and sets the cover laws itself.
+for name in ("cover_sight_on", "cover_brush_on", "fov_on", "gaze_on"):
+    call("set_world_law", [name, "false"])
 r = sql("SELECT * FROM cover_law", player)
 save("public singleton exact fields with the laws off", r == [
     {"id":0, "cover_sight_on": False, "cover_eye_height_m":1.6, "cover_brush_on":False,
