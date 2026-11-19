@@ -3,6 +3,7 @@
   "seed": 3,
   "day_minutes": 48,
   "laws_file": "worlds/cullet/laws.rhai",
+  "rules": {"cover_sight_on": false, "cover_brush_on": false, "gaze_on": false, "fov_on": false},
   "map": {
     "kind": "realm",
     "w": 96,

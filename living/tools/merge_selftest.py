@@ -6,10 +6,13 @@ a dirty worktree (refused), local commits main lacks (refused), a conflict (noth
 a failing check (nothing pushed), a check that dirties the tree (nothing pushed), main moving
 during the check (re-fetch, re-merge, re-check, push), a clean merge (--no-ff, pushed), and the
 bindings check with a fake generator (changed bindings fail and are named, a failing generator
-fails, unchanged bindings pass, a docs-only merge skips it).
+fails, unchanged bindings pass, a docs-only merge skips it). A fake df exercises the disk
+pre-check at its boundary, on a separate target filesystem, and with the overrides.
 Touches nothing outside the temporary directory. Usage: merge_selftest.py
 """
 import os
+from pathlib import Path
+import plistlib
 import subprocess
 import sys
 import tempfile
@@ -32,7 +35,17 @@ def commit(repo, path, text, msg):
 
 
 def merge(cwd, args, check_cmd="true", env_extra=None):
-    env = {**os.environ, "LIVING_MERGE_CHECK": check_cmd, "XDG_STATE_HOME": os.path.join(os.path.dirname(cwd), "state"), **(env_extra or {})}
+    env = dict(os.environ)
+    for key in ("CARGO_BUILD_TARGET_DIR", "SLOP_MERGE_FLOOR_GB", "SLOP_MERGE_CHECK_GB",
+                "SLOP_MERGE_DISK_CHECK", "LIVING_MERGE_SCENES", "LIVING_MERGE_SCENES_CMD",
+                "LIVING_MERGE_BINDINGS", "LIVING_MERGE_BINDINGS_CMD", "FAKE_DF_PRESSURE_FLAG"):
+        env.pop(key, None)
+    base = Path(cwd).parent
+    env.update(HOME=str(base), XDG_CONFIG_HOME=str(base / ".config"), XDG_STATE_HOME=str(base / "state"),
+               PATH=f"{base / 'bin'}{os.pathsep}{env['PATH']}", LIVING_MERGE_CHECK=check_cmd,
+               CARGO_TARGET_DIR=str(base / "target-volume" / "new" / "target"),
+               FAKE_DF_WORKTREE_GB="100", FAKE_DF_TARGET_GB="100")
+    env.update(env_extra or {})
     r = subprocess.run([sys.executable, MERGE, *args], cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
     return r.returncode, r.stdout
 
@@ -42,6 +55,77 @@ def expect(name, cond, output=""):
     if not cond:
         failures.append(name)
         print(output)
+
+
+def disk_selftest(t, coord):
+    fake_df = Path(t) / "bin/df"
+    fake_df.parent.mkdir()
+    (Path(t) / "target-volume").mkdir()
+    fake_df.write_text("""#!/bin/sh
+[ "$1" = -Pk ] || exit 1
+case "$2" in
+  */target-volume) device=target; free=$FAKE_DF_TARGET_GB ;;
+  */coord) device=worktree; free=$FAKE_DF_WORKTREE_GB ;;
+  *) exit 1 ;;
+esac
+[ "$free" != error ] || exit 1
+[ ! -f "$FAKE_DF_PRESSURE_FLAG" ] || free=1
+echo "Filesystem 1024-blocks Used Available Capacity Mounted on"
+echo "$device 104857600 0 $((free * 1048576)) 0% $2"
+""")
+    fake_df.chmod(0o755)
+    fake_docker = fake_df.with_name("docker")
+    fake_docker.write_text("""#!/bin/sh
+[ "$1" = exec ] && [ "$6" = -Pk ] && [ "$7" = /home/spacetime ] || exit 1
+echo "Filesystem 1024-blocks Used Available Capacity Mounted on"
+echo "$FAKE_SCENE_DEVICE 104857600 0 66060288 0% /home/spacetime"
+""")
+    fake_docker.chmod(0o755)
+    head = sh("git rev-parse HEAD", coord)
+
+    def probe(**env):
+        # Stop after reaching the check so every case starts from the same clean HEAD.
+        return merge(coord, ["feature"], check_cmd="echo reached-check; exit 1", env_extra=env)
+
+    code, o = probe(FAKE_DF_WORKTREE_GB="62")
+    expect("disk below default threshold refuses before fetch or check (exit 12)",
+           code == 12 and "62.00 GB free; need 63 GB (45 GB floor + 18 GB check)" in o
+           and "$ git fetch" not in o and "reached-check" not in o and sh("git rev-parse HEAD", coord) == head, o)
+    for free in ("63", "64"):
+        code, o = probe(FAKE_DF_WORKTREE_GB=free, FAKE_DF_TARGET_GB=free)
+        expect(f"disk with {free} GB reaches the check", code == 5 and "reached-check" in o, o)
+    code, o = probe(FAKE_DF_TARGET_GB="62")
+    expect("disk checks the target volume even when the target does not exist",
+           code == 12 and "Cargo target" in o and "62.00 GB free" in o, o)
+    code, o = probe(LIVING_MERGE_SCENES="1", FAKE_SCENE_DEVICE="target", FAKE_DF_TARGET_GB="63")
+    expect("scenes add a reserve on the filesystem shared with the trial volume",
+           code == 12 and "Cargo target" in o and "need 64 GB (45 GB floor + 18 GB check + 1 GB scenes)" in o, o)
+    code, o = probe(LIVING_MERGE_SCENES="1", FAKE_SCENE_DEVICE="separate", FAKE_DF_TARGET_GB="63")
+    expect("a separate trial volume leaves the host threshold unchanged", code == 5 and "reached-check" in o, o)
+    code, o = probe(FAKE_DF_WORKTREE_GB="error")
+    expect("a failed df refuses the merge (exit 12)", code == 12 and "could not determine free space" in o, o)
+
+    if sys.platform == "darwin":
+        config = Path(t) / "Library/LaunchAgents/dev.slop.disk-clean.plist"
+        config.parent.mkdir(parents=True)
+        config.write_bytes(plistlib.dumps({"ProgramArguments": ["disk_clean.py", "--floor-gb", "60"]}))
+    else:
+        config = Path(t) / ".config/systemd/user/slop-disk-clean.service"
+        config.parent.mkdir(parents=True)
+        config.write_text("[Service]\nExecStart=python3 disk_clean.py --apply --floor-gb 60\n")
+    code, o = probe(FAKE_DF_WORKTREE_GB="77")
+    expect("disk uses the installed cleaner floor",
+           code == 12 and "need 78 GB (60 GB floor + 18 GB check)" in o, o)
+    code, o = probe(FAKE_DF_WORKTREE_GB="65", SLOP_MERGE_FLOOR_GB="48")
+    expect("disk floor override takes precedence over installed floor",
+           code == 12 and "need 66 GB (48 GB floor + 18 GB check)" in o, o)
+    code, o = probe(FAKE_DF_TARGET_GB="80", SLOP_MERGE_CHECK_GB="21")
+    expect("disk check cost override changes the threshold",
+           code == 12 and "need 81 GB (60 GB floor + 21 GB check)" in o, o)
+    code, o = probe(SLOP_MERGE_CHECK_GB="NaN")
+    expect("disk rejects an invalid budget", code == 12 and "invalid floor or check cost" in o, o)
+    code, o = probe(FAKE_DF_WORKTREE_GB="error", SLOP_MERGE_CHECK_GB="NaN", SLOP_MERGE_DISK_CHECK="0")
+    expect("disabling disk check warns and reaches the check", code == 5 and "WARNING" in o and "reached-check" in o, o)
 
 
 def main():
@@ -68,6 +152,7 @@ def main():
         coord = os.path.join(t, "coord")
         sh(f"git clone -q {origin} coord", t)
         sh("git switch -qc coord", coord)
+        disk_selftest(t, coord)
 
         # 1. dirty worktree refused
         with open(os.path.join(coord, "stray.txt"), "w") as f:
@@ -107,7 +192,16 @@ def main():
         sh(f"git clone -q {origin} mover", t)
         flag = os.path.join(t, "moved.flag")
         racer = (f"n=$(cat {t}/checks 2>/dev/null || echo 0); echo $((n+1)) > {t}/checks; "
-                 f"if [ ! -e {flag} ]; then touch {flag}; cd {mover} && echo b > b.txt && git add b.txt && git commit -qm 'main moves' && git push -q origin HEAD:main; fi")
+                 f"if [ ! -e {flag} ]; then touch {flag}; cd {mover} && echo b >> b.txt && git add b.txt && git commit -qm 'main moves' && git push -q origin HEAD:main; fi")
+        pressure = os.path.join(t, "pressure.flag")
+        code, o = merge(coord, ["feature"], check_cmd=f"{racer} && touch {pressure}",
+                        env_extra={"FAKE_DF_PRESSURE_FLAG": pressure})
+        expect("disk pressure on a retry restores HEAD and leaves the moved main in place (exit 12)",
+               code == 12 and "merging again" in o and "1.00 GB free" in o
+               and sh("git rev-parse HEAD", coord).strip() == head0
+               and sh(f"git --git-dir={origin} rev-parse main", t) == sh("git rev-parse HEAD", mover), o)
+        os.remove(flag)
+        os.remove(os.path.join(t, "checks"))
         code, o = merge(coord, ["feature", "-m", "Merge feature: the test"], check_cmd=racer)
         checks = int(open(os.path.join(t, "checks")).read())
         expect("moved main: merged after a retry (exit 0)", code == 0 and "merging again" in o and checks == 2, o)

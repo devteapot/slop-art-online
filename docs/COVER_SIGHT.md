@@ -155,7 +155,7 @@ Authored Cullet live results and module logs are in `.local/cover-sight/cover-c-
 
 ## Phase 2 implementation
 
-Cover ships off in every seed and overlay. Cullet also overrides `cover_brush_on` to false. The common DDA in
+Cover ships off in the base law. Cullet's overlay turns it on, with brush, since the 2026-11-19 [switch-on](#switch-on-2026-11-19); every other seed keeps it off. The common DDA in
 [`Map::sight_clear`](../living/rules/src/map.rs) chooses the height-aware path only when it
 has a mask. The authority uses that same map for player, mind and animal sight. Missile
 collision reads the separate solid bit. Existing rocks, walls and gates retain their
@@ -305,3 +305,37 @@ Phase 2's Cullet runs pass this budget (Middle: on 29.0–30.4 against an off me
 +13%; ticks and late ticks unchanged). The battle needs two more runs per arm before a verdict.
 When it passes, `cover_sight_on` and `cover_brush_on` go on in Cullet's overlay (its brush and
 hedge visuals are on main) and in the play-test world.
+
+## Switch-on (2026-11-19)
+
+Branch `sight-on`. The general coordinator let it merge ahead of the wooded battle runs once `living-check` and the two scenes below passed. The battle budget above stays the gate for any battle-scale world and for turning a law on by default.
+
+**Cullet is directional for everyone.** Its `fov_on` goes from false to true on main, for players and minds alike, as the owner approved: "woods hide people, with sight depending on which way you face". With gaze on, Middle is the shipped directional field, so a resident who never sets a gaze sees what `fov_on` alone gave.
+
+What is on where:
+
+| World | `cover_sight_on` | `cover_brush_on` | `gaze_on` | `fov_on` | Where it is set |
+| --- | --- | --- | --- | --- | --- |
+| Cullet (`cullet.json`) | true | true | true | true | `laws()` in [Cullet's overlay](../living/seeds/worlds/cullet/laws.rhai) |
+| `cullet-laws`, `hamlet`, `hamlet-6` (they share Cullet's overlay) | false | false | false | false | their seed `rules`, which keep the values they had before |
+| The play-test world (the island seed with the laptop's scene overlay, `.local` on the laptop) | true | shipped (true; the island has no authored brush, so it hides nothing) | true | true | `laws()` in the scene's overlay, by the laptop (the lines below) |
+| Every other seed | false | shipped | false | false | the base law |
+
+`fov_on` is set explicitly beside gaze: enabling gaze makes Middle directional even where `fov_on` is false ([camera §4](CAMERA.md#gaze-authority-implementation)), so the line states what the world does. The play-test scene's overlay is not in the repository; its `laws()` gains, beside play-test 9's `turn_rate` and `look_walk_deg`:
+
+```rhai
+fn laws() {
+    let policy = base_laws();
+    policy.turn_rate = 30.0;          // play-test 9
+    policy.look_walk_deg = 180.0;     // play-test 9
+    policy.cover_sight_on = true;
+    policy.gaze_on = true;
+    // Enabling gaze makes Middle directional even where fov_on is false (CAMERA.md §4); explicit.
+    policy.fov_on = true;
+    policy
+}
+```
+
+A world needs its genesis cover bands (`cover_ground`) for the switch, so the play-test world is made fresh from a module at or after `7619ad71`. A fresh scratch island world has them: trunks hid people there once the overlay was installed.
+
+**Island creation and an overlay (found 2026-11-19).** A module with the island seed compiled in *and* the play-test scene's overlay as the seed's `laws` ran out of reducer energy in `init`, with or without the switch-on lines; the plain island seed created normally on the same server. The scratch proof therefore made a plain island world and installed the composed overlay with `living/tools/install_script.py <db> --seed <seed>`. A play scene that compiles the overlay into an island module may hit the same limit. Proof: verify-player `sight_on.py` ([cover in a player's projection](../.agents/skills/verify-player/features/cover.md)) on scratch worlds of Cullet and of the island with that overlay, with the laws as shipped and no admin override before the checks. Its validation record is in `.agents/skills/verify-player/references/validation/`.

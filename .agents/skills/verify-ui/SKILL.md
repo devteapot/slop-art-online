@@ -28,6 +28,8 @@ export CARGO_TARGET_DIR=$PWD/.local/target            # a private target dir (ot
 
 `scripts/drive.py` runs one headless client (`LIVING_GAME_LIVE`, `LIVING_GAME_LIVE_PLAN`) and keeps its evidence; `scripts/check.py` runs the scenarios with their checks.
 
+The driver renews the scratch world's inactivity lease while the client runs. Scenarios fail early with `scratch world is paused` or `scratch world tick stationary` if the authority fails the health check at scenario start or before perception results are used.
+
 ```bash
 S=.agents/skills/verify-ui/scripts
 $S/check.py --list                          # every scenario, in the order defined (each registers itself with @scenario); * needs a Cullet world
@@ -79,6 +81,8 @@ Scenes: `--sync NAME='player|REDUCER|ARG|…'` acts as verify.py's player identi
 drive.py's other options (its docstring): `--expect REGEX` (repeatable) must match client.log, else exit 1; `--size WxH` (default `1600x900`); `--token FILE` plays another character (default the run's `ui/player.token`); `--player NAME` (default "Verifier"); `--client PATH` (default `$CARGO_TARGET_DIR/release/living-game`, else `.local/target/release/living-game`); `--admin-link` (above); `--timeout S` (default 600; check.py passes 420). `LIVING_STDB_URL` points it at a worker's own server (default `http://127.0.0.1:3300`).
 
 Pass `camera`, `camera-rotate`, `camera-lod`, `camera-faces`, `camera-tuning`, `camera-lol` or `camera-lol-ridge` explicitly for the dedicated Brackenford fixtures in [camera.md](features/camera.md).
+
+`seat` sits skirted and coated residents on the ground in the crowded street and gets them up, the cloth's ground contact on and off (`LIVING_GAME_SEAT_CONTACT=0`), with `LIVING_GAME_PERF=seat` (each seated character's lowest cloth tail above its ground) and `springwake`: [seat.md](features/seat.md).
 
 Pass `gaze` on a Cullet scratch world to exercise the zoom bands, reconnect and the authored hedge. [Gaze evidence and setup](features/gaze.md).
 

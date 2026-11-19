@@ -89,6 +89,10 @@ def sight_setup(eye, other, facing=(1, 0)):
 
 
 actor = sql("SELECT id FROM my_characters", player)[0]["id"]
+# Cullet ships gaze, facing sight and cover on (2026-11-19); the fixture starts from them off.
+for name in ("gaze_on", "cover_sight_on", "fov_on"):
+    do("set_world_law", [name, "false"])
+time.sleep(0.4)
 status, body = call("human_gaze", [1], player)
 record("disabled gaze refused", status != 200 and "disabled" in body, status)
 record("disabled gaze creates neither row", not attention(actor) and not sql("SELECT * FROM my_senses_v_2", player))
