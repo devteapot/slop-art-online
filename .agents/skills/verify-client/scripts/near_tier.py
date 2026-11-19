@@ -13,9 +13,11 @@ stands 10 m from A (beyond the near tier's 8 m, within day sight). Read through 
 - B waves at A (`human_act`, a visible act aimed at A: B is engaged with A): within 1.5 s B is in
   A's near tier, past the cap at once, and A's next sweep ranks it first: B and the
   `NEAR_MAX` − 1 nearest strangers, `NEAR_MAX` in all;
-- after the wave has ended and two sweeps have passed, B is far again.
+- after the wave has ended and two sweeps have passed, B is far again;
+- with the `near_tier_on` law off (the kill switch's other half), the near tier is empty and the
+  far tier holds everyone; on again, the nearest are near (the law is put back as it was).
 
-Admin calls (`spawn_crowd`, `set_behavior`, `place_at`) set the scene. Writes `RUN/near_tier.json`.
+Admin calls (`spawn_crowd`, `set_behavior`, `place_at`, `set_world_law`) set the scene. Writes `RUN/near_tier.json`.
 Python standard library only.
 """
 
@@ -114,12 +116,22 @@ def main():
     doing = [d for d in sql(rid, f"SELECT id, until_ms FROM doing WHERE id = {b}")]
     time.sleep(3.0)
     near2, far2 = tiers(db, tok["a"])
+    # The tiers' switch: `near_tier_on` off puts every copy in the far tier (the untiered tables).
+    had = [r for r in sql(rid, "SELECT * FROM world_law") if r.get("name") == "near_tier_on"]
+    call(rid, "set_world_law", ["near_tier_on", "false"])
+    time.sleep(1.0)
+    near_off, far_off = tiers(db, tok["a"])
+    call(rid, "set_world_law", ["near_tier_on", had[0]["value"] if had else "true"])
+    time.sleep(1.0)
+    near_back, _ = tiers(db, tok["a"])
     checks = {
         f"placed as planned ({NEAR_MAX + 1} strangers within 7.5 m of A, B 9-11 m)": all(dist[s] <= 7.5 for s in strangers) and 9 <= dist[b] <= 11,
         f"before: the {NEAR_MAX} nearest strangers are near; the farthest stranger and B are far": near0 == set(by_dist[:NEAR_MAX]) and {by_dist[-1], b} <= far0,
         "B waving at A (engaged) joins A's near tier within 1.5 s, beyond 8 m and past the cap": engaged is not None,
         f"while engaged, A's next sweep ranks the tier: B first and the {NEAR_MAX - 1} nearest strangers, {NEAR_MAX} in all": ranked is not None,
         f"after the wave and two sweeps, B is far again and the {NEAR_MAX} nearest are near": b in far2 and near2 == set(by_dist[:NEAR_MAX]),
+        "near_tier_on off: A's near tier is empty and its far tier holds everyone it saw": not near_off and set(strangers) | {b} <= far_off,
+        f"near_tier_on on again: the {NEAR_MAX} nearest are near": near_back == set(by_dist[:NEAR_MAX]),
     }
     result = {"a": a, "b": b, "dist": {str(k): round(v, 2) for k, v in dist.items()}, "before": sorted(near0),
               "engaged": None if engaged is None else {"near": sorted(engaged[0]), "after_s": engaged[2]},

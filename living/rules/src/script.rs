@@ -621,6 +621,11 @@ pub struct Laws {
     /// and the near copies follow at every frame. A switch for the delivery, not for what is
     /// perceived: the rows a client ends on are the same.
     pub cue_transport_on: bool,
+    /// Whether a player's copies are split into a near tier and a far tier (docs/PERCEPTION.md,
+    /// "Cues and tiers"). Off, every copy is in the far tier (the untiered views' tables), so a
+    /// frame re-runs one view as before frame-views; with `cue_transport_on` off too, a player's
+    /// delivery is main's.
+    pub near_tier_on: bool,
     /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
     /// and counted (`alarm:differed`).
     pub alarm_cells_check: bool,
@@ -765,6 +770,7 @@ impl Default for Laws {
             check_ctx_check: false,
             alarm_cells: true,
             cue_transport_on: false,
+            near_tier_on: true,
             alarm_cells_check: false,
             warmth_check: false,
             scene_lazy: true,
@@ -2916,6 +2922,7 @@ impl Scripts {
             check_ctx_check: flag("check_ctx_check", l.check_ctx_check),
             alarm_cells: flag("alarm_cells", l.alarm_cells),
             cue_transport_on: flag("cue_transport_on", l.cue_transport_on),
+            near_tier_on: flag("near_tier_on", l.near_tier_on),
             alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
             warmth_check: flag("warmth_check", l.warmth_check),
             scene_lazy: flag("scene_lazy", l.scene_lazy),
@@ -3942,6 +3949,10 @@ mod tests {
         let on = Scripts::new(&with_world_laws(src, &[("cue_transport_on".into(), serde_json::json!(true))])).unwrap();
         on.validate().unwrap();
         assert!(on.laws().cue_transport_on && !on.laws().cues_on);
+        assert!(shipped.laws().near_tier_on, "the near tier is on by default");
+        let off = Scripts::new(&with_world_laws(src, &[("near_tier_on".into(), serde_json::json!(false)), ("cue_transport_on".into(), serde_json::json!(false))])).unwrap();
+        off.validate().unwrap();
+        assert!(!off.laws().near_tier_on && !off.laws().cue_transport_on);
         let about: std::collections::HashMap<String, String> = on.laws_about().into_iter().collect();
         assert!(about["cue_transport_on"].contains("at once"), "{about:?}");
     }

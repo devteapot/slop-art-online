@@ -87,6 +87,9 @@ pub const ONLOOKER_MS: u64 = 300;
 /// The most scene rows (creatures in the scenes of the viewers served) one step's frames may
 /// cover; the budget ([`budget`]) starts here and never grows past it.
 pub const FRAME_ROWS_PER_TICK: usize = 2_500;
+/// What a frame costs beyond its rows, in rows: its views' fixed cost per refresh (in 2.14.1 about
+/// 40 µs a refresh against about 2 µs a row; docs/TICK_RATE.md, "Post-review series").
+pub const FRAME_FIXED_ROWS: usize = 16;
 /// The least the budget shrinks to; a step still serves its stalest due viewer
 /// whatever the budget (`deliver`).
 pub const FRAME_ROWS_MIN: usize = 250;
@@ -334,6 +337,8 @@ fn changed(map: &'static std::thread::LocalKey<RefCell<HashMap<u32, u64>>>, id: 
 /// by the sweep as they are now. A creature that changes tier has its copies written as it is now,
 /// in its new tier (it leaves one tier's view and enters the other's in this transaction).
 pub fn scene(ctx: &ReducerContext, id: u32, who: Identity, seen: &HashSet<u32>, dist: &HashMap<u32, f32>, now: u64) {
+    // The `near_tier_on` law: off, no creature is near, so every copy is in the far tier.
+    let tiers = common::laws(ctx).near_tier_on;
     let flips: Vec<(u32, bool)> = VIEWERS.with(|v| {
         let mut v = v.borrow_mut();
         let e = v.entry(id).or_insert_with(|| Viewer::new(who));
@@ -362,7 +367,7 @@ pub fn scene(ctx: &ReducerContext, id: u32, who: Identity, seen: &HashSet<u32>, 
             cand.truncate(slots);
             common::diag(|| "cues:near_capped", 1);
         }
-        let near: HashSet<u32> = engaged.iter().copied().chain(cand.into_iter().map(|(_, b)| b)).collect();
+        let near: HashSet<u32> = if tiers { engaged.iter().copied().chain(cand.into_iter().map(|(_, b)| b)).collect() } else { HashSet::new() };
         let mut flips = Vec::new();
         NEAR_OF.with(|n| {
             let mut n = n.borrow_mut();
@@ -468,7 +473,9 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
     NOW.with(|n| *n.borrow_mut() = Some(Sources::default()));
     let humans = crate::combat::humans(ctx);
     // The `cue_transport_on` law: off, no cue is written and near copies follow at every frame.
+    // With `near_tier_on` off too, frames are scheduled as before frame-views.
     let on = common::laws(ctx).cue_transport_on;
+    let tiers = common::laws(ctx).near_tier_on;
     let due: Vec<(u32, Viewer)> = VIEWERS.with(|v| {
         let mut v = v.borrow_mut();
         let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
@@ -491,7 +498,10 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
             let n_all = e.scene.as_ref().map_or(0, |s| s.len());
             let far = n_all.saturating_sub(e.near.len());
             let near_due = e.full || !on || now.saturating_sub(e.near_ms) >= NEAR_COPY_MS;
-            let n = far + if near_due { e.near.len() } else { 0 };
+            // Rows, plus a fixed charge per frame for its views' own cost (a far frame of a few rows
+            // costs mostly that): without it a crowd of small frames all fit one step, and after a
+            // late tick every viewer comes due in the same step from then on.
+            let n = far + if near_due { e.near.len() } else { 0 } + if tiers { FRAME_FIXED_ROWS } else { 0 };
             let every = interval(far);
             if e.last_ms == 0 {
                 // A first frame comes within one interval, staggered by character so a crowd's
@@ -609,6 +619,10 @@ fn engaged_tiers(ctx: &ReducerContext, now: u64, engaged: &HashMap<u32, Vec<u32>
         for &v in viewers {
             by_viewer.entry(v).or_default().insert(body);
         }
+    }
+    if !common::laws(ctx).near_tier_on {
+        ENGAGED.with(|e| *e.borrow_mut() = by_viewer);
+        return;
     }
     let flips: Vec<(u32, Identity, u32)> = VIEWERS.with(|v| {
         let mut v = v.borrow_mut();
@@ -966,9 +980,19 @@ fn show_earshot(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
 /// whether a copy was written.
 fn show_motion(ctx: &ReducerContext, viewer: u32, body: u32, near: bool) -> bool {
     let k = key(viewer, body);
-    let in_near = ctx.db.motion_near().id().find(k);
-    let was_near = in_near.is_some();
-    let Some(mut row) = in_near.map(|r| r.copy).or_else(|| ctx.db.motion_seen().id().find(k)) else { return false };
+    // The expected tier's table first (the other only when the copy is not there).
+    let (was_near, row) = if near {
+        match ctx.db.motion_near().id().find(k) {
+            Some(r) => (true, Some(r.copy)),
+            None => (false, ctx.db.motion_seen().id().find(k)),
+        }
+    } else {
+        match ctx.db.motion_seen().id().find(k) {
+            Some(r) => (false, Some(r)),
+            None => (true, ctx.db.motion_near().id().find(k).map(|r| r.copy)),
+        }
+    };
+    let Some(mut row) = row else { return false };
     let Some(m) = motion_now(ctx, body) else { return false };
     let changed = row.moving() != m;
     if !changed && was_near == near {
@@ -1004,9 +1028,20 @@ fn put_motion(ctx: &ReducerContext, row: MotionSeen, was_near: bool, near: bool)
 /// fighter row has none. Returns whether a copy was written.
 pub fn show_fighter(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, near: bool, hurt: bool, now: u64) -> bool {
     let k = key(viewer, body);
-    let in_near = ctx.db.fighter_near().id().find(k);
-    let was_near = in_near.is_some();
-    let row = in_near.map(|r| r.copy).or_else(|| ctx.db.fighter_seen().id().find(k));
+    let (was_near, row) = if near {
+        match ctx.db.fighter_near().id().find(k) {
+            Some(r) => (true, Some(r.copy)),
+            None => (false, ctx.db.fighter_seen().id().find(k)),
+        }
+    } else {
+        match ctx.db.fighter_seen().id().find(k) {
+            Some(r) => (false, Some(r)),
+            None => {
+                let r = ctx.db.fighter_near().id().find(k).map(|r| r.copy);
+                (r.is_some(), r)
+            }
+        }
+    };
     let Some(f) = fighter_now(ctx, body) else {
         if row.is_some() {
             ctx.db.fighter_seen().id().delete(k);
@@ -1052,9 +1087,20 @@ pub fn show_fighter(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32,
 /// copy was written.
 pub fn show_doing(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, near: bool) -> bool {
     let k = key(viewer, body);
-    let in_near = ctx.db.doing_near().id().find(k);
-    let was_near = in_near.is_some();
-    let row = in_near.map(|r| r.copy).or_else(|| ctx.db.doing_seen().id().find(k));
+    let (was_near, row) = if near {
+        match ctx.db.doing_near().id().find(k) {
+            Some(r) => (true, Some(r.copy)),
+            None => (false, ctx.db.doing_seen().id().find(k)),
+        }
+    } else {
+        match ctx.db.doing_seen().id().find(k) {
+            Some(r) => (false, Some(r)),
+            None => {
+                let r = ctx.db.doing_near().id().find(k).map(|r| r.copy);
+                (r.is_some(), r)
+            }
+        }
+    };
     let Some(d) = doing_now(ctx, body) else {
         if row.is_some() {
             ctx.db.doing_seen().id().delete(k);
