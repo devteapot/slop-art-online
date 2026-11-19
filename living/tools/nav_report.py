@@ -376,16 +376,21 @@ def path_crosses(start, path, tiles):
     return False
 
 
-def reroute_response(track, closed, visible, end, tiles, goal):
-    """Require a complete alternative route to the same goal after closure."""
+def reroute_response(track, closed, visible, end, tiles, centre, alternative, goal):
+    """Find a gate-bypassing leg while still on the approach side of the gate."""
     write, effect, baseline = None, None, None
     for before, row in zip(track.rows, track.rows[1:]):
         stamp = row["t_ms"]
         if not closed <= stamp <= end or not row["path"]:
             continue
+        start = (row["x"], row["y"])
+        if sum((a - c) * (b - c) for a, b, c in zip(start, goal, centre)) >= 0:
+            break
         last = row["path"][-1]
         endpoint = (last["x"], last["y"]) if isinstance(last, dict) else tuple(last)
-        if math.dist(endpoint, goal) > 0.1 or path_crosses((row["x"], row["y"]), row["path"], tiles):
+        if path_crosses(start, row["path"], tiles):
+            continue
+        if math.dist(endpoint, goal) > 0.1 and not path_crosses(start, row["path"], alternative):
             continue
         if write is None:
             write = stamp
@@ -697,7 +702,9 @@ def phase_report(folder, response_only=False):
                     r.update(route_via_gate_before_close=planned, gate_closed_ms=close_ms,
                              gate_first_closed_ms=close_started, gate_memory_ms=memory)
                     if planned and closed.get("all_shut") and close_started is not None:
-                        r.update(reroute_response(tr, close_started, g, t_end, gate_tiles, w["goal"]))
+                        r.update(reroute_response(tr, close_started, g, t_end, gate_tiles,
+                                                  ph["gate_a"]["centre"], {tuple(tile) for tile in ph["gate_b"]["tiles"]},
+                                                  w["goal"]))
                 r["gate_seen_ms_after_order"] = (g - t_order) if g else None
                 stims = [g] if g else []
                 # Leak check: before the gate is seen, does the walk head for gate A?
@@ -739,6 +746,24 @@ def phase_report(folder, response_only=False):
         dispatch = [row["dispatch_response"] for row in rows]
         out["dispatch_first_write"] = response_summary(dispatch, "first_write_ms")
         out["dispatch_physical_effect"] = response_summary(dispatch, "physical_effect_ms")
+        if ph["variant"] == "mid-close":
+            eligible = [r for r in rows if r.get("route_via_gate_before_close")
+                        and stimuli_log.get("gate shut", {}).get("all_shut")]
+            out["mid_close_valid"] = len(eligible)
+            for origin in ("closure", "visibility"):
+                for response in ("reroute", "effect"):
+                    key = f"{origin}_to_{response}_ms"
+                    observations = []
+                    before_stimulus = 0
+                    for row in eligible:
+                        ms = row.get(key)
+                        if ms is not None and ms < 0:
+                            before_stimulus += 1
+                            continue
+                        seen = row.get("gate_seen_ms_after_order") is not None
+                        observations.append({key: ms if ms is not None and ms <= 2000 else None,
+                                             "observed": origin == "closure" or seen})
+                    out[key] = response_summary(observations, key) | {"before_stimulus": before_stimulus}
     if ph["arena"] == "n3":
         out["contacts_under_0_4m"] = sum(r.get("contacts_under_0_4m", 0) for r in rows)
     if ph["arena"] == "n2":
