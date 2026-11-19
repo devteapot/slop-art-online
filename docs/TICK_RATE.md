@@ -511,6 +511,48 @@ The dev-box series of 2026-11-18/19, 23:38–00:32 UTC, under the exclusive buil
 
 Evidence: `.local/views/evidence/20261118-233816-stopped-after-selection/` (the selection pair; the series after it was stopped and restarted to measure every tick) and `.local/views/evidence/20261118-234339/` (`series.log`, `series-report.md`, per-run metrics, profiles and SDK events). A first attempt at 23:36 failed at its first CLI call (the container's mounts were gone with a killed session) and measured nothing (`20261118-233647-failed-podman-exec/`).
 
+### Post-review series (acceptance)
+
+2026-11-19, 09:50–11:56 UTC, under the exclusive build gate, on `views-stdb` (v2.14.1). The candidate is `483c05b42`: the near tier in its own tables, engaged first and capped at `NEAR_MAX` 32, the cue budget, `cue_transport_on` set per arm with `set_world_law`. Main is `cd2afe42e` with the same measurement-only probes. The same crowd as the first series (216 SDK players, 7 clusters of 31 within 3 m, walking circles, 30 s warm-up, 120 s windows, three runs per arm alternating); ticks a second by the server's counter; full profiles from the replicas' module logs. Each run started below load 4 (2.1–4.0). The first Cullet runs of the branch, at a cap of 12, are kept separately (`20261119-095004-s2`): near p90 160 ms, which set the cap at 32; main's first Cullet and plan-test runs and the battle sweep's main arm come from that part of the window, the rest from `20261119-102415-s3` (both combined in `20261119-combined/series-report.md`).
+
+Arms on Cullet: **main**; **tiers** (the tier views, the law off, no cue subscription); **cues off** (the tier views and the cue subscriptions, the law off: row-level security registered, no cue rows); **cues** (the law on).
+
+| World | Arm | Ticks/s, median (range) | SDK near p50/p90/p95 ms | SDK all p90 ms | Scene views ms/s | Subscription eval ms/s | Player rows/s ∕ msgs/s ∕ kB/s | Commitlog MB/s |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Cullet | main | 59.86 (59.82–59.89) | 91/165/185 | 164 | 160 | 27.7 | 110.5 ∕ 10.9 ∕ 7.3 | 3.23 |
+| Cullet | tiers | 59.66 (59.66–59.67) | 172/338/403 | 342 | 117 | 29.5 | 106.7 ∕ 8.1 ∕ 7.1 | 3.40 |
+| Cullet | cues off | 59.63 (59.57–59.73) | 167/334/393 | 337 | 118 | 29.8 | 103.9 ∕ 8.2 ∕ 6.9 | 3.33 |
+| Cullet | cues | 59.56 (59.52–59.62) | 30/38/40 | 288 | 109 | 40.3 | 116.2 ∕ 23.0 ∕ 8.5 | 3.48 |
+| plan-test | main | 60.34 (60.30–60.40) | 36/50/54 | 50 | 106 | 19.8 | 43.2 ∕ 15.2 ∕ 2.8 | 1.54 |
+| plan-test | cues | 60.05 (60.03–60.09) | 27/35/37 | 40 | 45 | 27.5 | 57.9 ∕ 19.6 ∕ 4.4 | 2.10 |
+
+| Crowded duel, Cullet (2 runs per arm, about 20 samples per stream per run) | Main p50/p90/p95 ms | Cues p50/p90/p95 ms |
+|---|---:|---:|
+| Opponent's windup | 113–387/182–870/297–961 | 33–34/37–40/41–45 (all by cue) |
+| Opponent's visible act | 66–184/249–799/287–1226 | 28–34/40–57/44–64 (all by cue) |
+
+| Battle viewers: 200 AI fighters (`spawn_battle`), N players watching, 60 s, ticks/s | 0 | 1 | 4 | 16 |
+|---|---:|---:|---:|---:|
+| main | 59.98 | 59.97 | 59.22 | 53.69 |
+| cues (cap 12) | 59.94 | 59.84 | 58.95 | 52.61 |
+| cues (cap 32) | 59.95 | 59.94 | 59.02 | 52.94 |
+
+| Battle of players: 200 player fighters within 9 m and 16 walkers (216 viewers), 120 s | Ticks/s | Near cues sent ∕ late, wait p99 ∕ max ticks | Engaged cues sent ∕ with an earlier near cue outstanding, max ticks |
+|---|---:|---:|---:|
+| main | 2.77–2.84 | – | – |
+| cues | 1.87–2.17 | 29,200–35,525 ∕ 97%, 256 ∕ 410 | 14,230–15,132 ∕ 33%, 371 |
+
+- **Near and engaged: met.** Near motion p90 38 ms on Cullet against 165 on main (target 100). In the duel the windup reaches the defender in 37–40 ms at p90 and 41–45 at p95, the visible act in 40–57 and 44–64; with 80 ms of round trip (40 each way) that is about 120–145 ms from the attacker's input, inside the networked line (150 ms p95), at its edge for the visible act's p95.
+- **Ticks: 0.3 a second lower on both worlds.** Cullet 59.56 against 59.86, plan-test 60.05 against 60.34 (two-slot gaps 1–5 a window to about 40). Close to the target's "about 59.5" on Cullet; plan-test is not unchanged in tick rate, though it is fresher.
+- **Row-level security's own cost is negligible here:** "cues off" (RLS subscriptions, no rows) against "tiers": subscription evaluation 29.8 against 29.5 ms/s, ticks within the runs' spread. The cue rows cost the rest: +10.5 ms/s of evaluation, 15 more messages a second per player, 0.07 ticks a second.
+- **Tiers alone are worse than main** (near p90 338 against 165, all 342 against 164): with the law off every frame refreshes two views, each with its fixed cost, so frames come less often. The kill switch's off state is therefore a degraded fallback, not main's behaviour; a client on the untiered views in that state sees the same frames.
+- **All in sight with cues: 288 ms at p90** against 164: far creatures' frames are slower (allowed by the target, large).
+- **Commitlog:** +8% on Cullet (3.48 against 3.23 MB/s), +36% on plan-test (2.10 against 1.54).
+- **The dense battle is per-viewer cost, as tick-rate found:** with no players, 200 AI fighters run at 59.98 ticks a second on main; 16 viewers inside, each seeing about 250 bodies, take it to 53.69, and 216 player fighters to 2.8. Tiers and cues do not move it (52.94 at 16, 1.9–2.2 with 216): the far tier still holds the whole crowd per viewer. In the battle of players the tick is overloaded, the cue budget sits at its floor and near cues wait (97% late, p99 256 ticks); an engaged pair's cue is never held by the budget (by construction and `frame::tests`), but a third of engaged cues went to a creature whose near cue had been waiting, up to 371 ticks (minutes, at 2 ticks a second). This is this track's core open problem: per-viewer frame cost at density.
+- **Not covered:** an 80 ms RTT link, the rendered client (the laptop's `frame-views-client` is measured separately), the 30-minute gate, 2,000 characters.
+
+**Disk.** Each run's database was deleted by the harness at its end. After the series (11:57 UTC) the `clog/` and `snapshots/` of all 111 replicas on `views-stdb` (every database deleted) were removed, `module_logs/` kept for the recovered profiles (`.local/views/replicas-before-clean.txt`, `replicas-cleaned.txt`), and the server was stopped with SIGINT and started again to release files it held: the volume went from 30 GB to 1.4 GB, the host from 49 to 79 GB free.
+
 ### Client change
 
 The laptop owns the game client (`living/game`); nothing in it changes in this branch. The change, exactly:

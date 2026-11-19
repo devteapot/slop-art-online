@@ -4,15 +4,15 @@ docs/PERCEPTION.md, "Cues and tiers").
 
     near_tier.py --run client-...      (a run launched with verify.py launch, any seed, by day)
 
-Two players join with fresh identities: A, and B. Thirteen held strangers stand within 4 m of A
-on a quiet open line; B stands 10 m from A (beyond the near tier's 8 m, within day sight). The
-near tier holds at most `frame::NEAR_MAX` (32). Read through A's own SQL (`seen_bodies_near`,
-`seen_bodies_far`):
+Two players join with fresh identities: A, and B. `NEAR_MAX` + 1 held strangers (the cap read
+from `frame.rs`, 32 since frame-views' series) stand within 7.5 m of A on a quiet open line; B
+stands 10 m from A (beyond the near tier's 8 m, within day sight). Read through A's own SQL
+(`seen_bodies_near`, `seen_bodies_far`):
 
-- before: the 12 nearest strangers are near, the farthest one and B are far;
+- before: the `NEAR_MAX` nearest strangers are near, the farthest one and B are far;
 - B waves at A (`human_act`, a visible act aimed at A: B is engaged with A): within 1.5 s B is in
-  A's near tier, past the cap at once, and A's next sweep ranks it first: B and the 11 nearest
-  strangers, 12 in all;
+  A's near tier, past the cap at once, and A's next sweep ranks it first: B and the
+  `NEAR_MAX` − 1 nearest strangers, `NEAR_MAX` in all;
 - after the wave has ended and two sweeps have passed, B is far again.
 
 Admin calls (`spawn_crowd`, `set_behavior`, `place_at`) set the scene. Writes `RUN/near_tier.json`.
