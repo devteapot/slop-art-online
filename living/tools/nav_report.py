@@ -265,7 +265,7 @@ def transaction_acts(path):
         for actor, acts in removed.items():
             activity = inserted.get(actor)
             if (activity and activity["node"] == 65534 and activity["skill"] == "goto"
-                    and len(acts) == 1 and json.loads(acts[0]["node"]).get("do") == "goto"):
+                    and len(acts) == 1 and json.loads(acts[0]["node"]).get("do", {}).get("skill") == "goto"):
                 act = acts[0]
                 if act["id"] in pending:
                     active[actor] = (act["id"], activity["started_ms"])
@@ -355,7 +355,7 @@ def walk_response(walk, track, trace, transactions, next_send):
         candidates = [key for key, act in pending.items()
                       if act["actor"] == actor and act["source"] == source
                       and sent < act["at_ms"] + 1 and act["at_ms"] <= ack
-                      and json.loads(act["node"]).get("target", {}).get("at") == target]
+                      and json.loads(act["node"]).get("do", {}).get("target", {}).get("at") == target]
         # Reuse the track's row objects so the predecessor lookup is unambiguous.
         segments = [(key, max(sent, stamp), next((r for r in track.segments_from(row["t_ms"], row["t_ms"])
                                       if r == row), None) if row is not None else None)
@@ -860,7 +860,7 @@ def selftest():
     assert effect["first_write_ms"] == 100 and effect["physical_effect_ms"] == 200
     assert path_crosses((0.5, 0.5), [{"x": 2.5, "y": 0.5}], {(1, 0)})
     queued = {"id": 7, "actor": 1, "at_ms": 1005, "source": "nav-arena",
-              "node": json.dumps({"do": "goto", "target": {"at": [9, 9]}})}
+              "node": json.dumps({"do": {"skill": "goto", "target": {"at": [9, 9]}}})}
     activity = {"id": 1, "skill": "goto", "node": 65534, "started_ms": 1100}
     updates = [
         {"act_queue": {"inserts": [queued]}, "body": {"inserts": [rows[0]]}},

@@ -603,7 +603,7 @@ def n2(world, out, variant, law, kind, reps):
     warmup = Phase(world, folder / "warmup", [s.id for s in subs] + [keeper], 1800, bench=False)
     box = (centre[0] - radius - 80, centre[1] - radius - 80, centre[0] + radius + 80, centre[1] + radius + 80)
     # Warm-up: start → goal → start (through gate A); lead variant A through the second gate too.
-    alternative = [[b["centre"], b_out], [b["centre"], goal]] if variant in ("a", "mid-close") else []
+    alternative = [[b["centre"], b_out], [b["centre"], goal]] if variant == "a" else []
     warm = [[[goal], [p]] + alternative for p in starts]
     warmup.mark("warmup")
     warmups = walks_to(world, warmup, subs, warm, law, box=box)
