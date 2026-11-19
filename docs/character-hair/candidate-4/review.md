@@ -16,10 +16,12 @@ The first raised-brow run exposed a swept-cut deviation of 3.9 mm from its posit
 
 The renderer switches visibility on the character's descendant Near and Far meshes. The spring scheduler selects character roots by inherited visibility and distance, sorts them by distance, and applies its own budget. Its defaults are 48 characters and a 40 m radius scaled by character height. A character drawing its Far mesh may still simulate its hair. See [mesh visibility](../../../living/game/src/lookdev.rs) and [spring scheduling](../../../living/game/src/characters.rs).
 
-| Joints per front lock | Front joints per long-haired person | Estimated added µs per character-step | Eight long-haired characters, µs/step | 48 long-haired characters, µs/step |
+| Joints per front lock | Front joints per long-haired person | Estimated added µs per character-step | Eight long-haired characters with spring-near (00e545b3), µs/step | 48 long-haired characters, µs/step |
 |---:|---:|---:|---:|---:|
 | 5, exported checkpoint | 20 | 5.46 | 43.7 | 262.3 |
 | 3, proposed | 12 | 3.28 | 26.2 | 157.4 |
 | 2, proposed | 8 | 2.19 | 17.5 | 104.9 |
 
 These estimates cover the extra front joints. Each frame can advance zero to three fixed steps. The 48-character scenario assumes every selected character wears long hair. The eight-character scenario is an example population. Measured stiffness and jitter comparisons await the renderer.
+
+The laptop reports that queued client change `00e545b3`, due after play-test 10, limits springs to eight near-drawn characters and settles newly active chains for 60 steps against the current pose. The 8-cap estimate for three joints per front lock is 26.23 µs per simulation step when all eight characters have long hair. Compare tip motion during steady walk and idle after settling. The far-to-near transition is a separate client behavior.
