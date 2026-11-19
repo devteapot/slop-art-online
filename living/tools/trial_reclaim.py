@@ -226,6 +226,44 @@ def plan(control, snapshots, disk_sizes, index, keep, verified):
     return rows
 
 
+def restrict_to_review(rows, review, evidence, verified):
+    """Apply the GC's per-replica decisions to a fresh authoritative inventory."""
+    if review.get("dry_run") is not True:
+        raise ValueError("review input must be a dry-run inventory")
+    approved = {}
+    for row in review["replicas"]:
+        replica = row["replica"]
+        if replica in approved:
+            raise ValueError(f"duplicate replica {replica} in reviewed inventory")
+        approved[replica] = row
+    for row in rows:
+        prior = approved.get(row["replica"], {})
+        action = prior.get("action")
+        same = bool(row["identity"] and row["identity"] == prior.get("identity")
+                    and set(row["names"]) == set(prior.get("names", [])))
+        protected = row["classification"] == "live" or row["reason"] == "database matches explicit keep-list"
+        if protected:
+            continue
+        if action not in {"delete", "delete-after-archive"} or not same:
+            reason = prior.get("reason") if same and action == "keep" else "outside reviewed removal scope"
+            row.update(action="keep", reason=reason)
+            continue
+        if prior.get("archive"):
+            archive = Path(prior["archive"])
+            if not archive.resolve().is_relative_to(evidence.resolve()):
+                raise ValueError("reviewed archives must be under the evidence directory")
+            if row.get("archive") != str(archive) and not verified(row["replica"], [(archive, None)]):
+                row.update(action="keep", reason="reviewed commitlog archive could not be verified")
+                continue
+            row.update(classification=prior["classification"], action="delete", archive=str(archive),
+                       reason="reviewed removal and exact commitlog archive verified")
+        elif action == "delete-after-archive" and row["action"] == "delete-after-archive":
+            # Only an independently classified current scratch or no-model replica can be auto-archived.
+            continue
+        elif row["action"] != "delete":
+            row.update(action="keep", reason="reviewed removal lacks a verified commitlog archive")
+
+
 def blockers():
     reasons = []
     if (QUEUE / "queue.txt").read_text().strip() and not (QUEUE / "HOLD").exists():
@@ -403,6 +441,7 @@ def main():
     parser.add_argument("--if-over-gb", type=float)
     parser.add_argument("--keep", action="append", default=[], metavar="NAME_OR_GLOB")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--reviewed-inventory", type=Path, help="limit removal to this reviewed dry run")
     args = parser.parse_args()
     now = datetime.datetime.now(datetime.timezone.utc)
     stamp = now.strftime("%Y%m%dT%H%M%SZ")
@@ -430,6 +469,11 @@ def main():
             record["replicas"] = plan(control, snapshots, sizes(running=True), evidence_index(EVIDENCE),
                                       record["keep_list"],
                                       lambda replica, candidates: verify_existing(replica, candidates, running=True))
+            if args.reviewed_inventory:
+                review = json.loads(args.reviewed_inventory.read_text())
+                record["reviewed_inventory"] = str(args.reviewed_inventory)
+                restrict_to_review(record["replicas"], review, EVIDENCE,
+                                   lambda replica, candidates: verify_existing(replica, candidates, running=True))
             latest, _ = collect_metadata(reader, running=True, include_snapshots=False)
             if latest != control:
                 record["blockers"].append("control metadata changed during inventory; rerun before using this plan")

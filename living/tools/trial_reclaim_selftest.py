@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from trial_reclaim import HAMLETS, check_archive, plan
+from trial_reclaim import HAMLETS, check_archive, plan, restrict_to_review
 
 
 class ReclaimTests(unittest.TestCase):
@@ -54,6 +54,22 @@ class ReclaimTests(unittest.TestCase):
             self.assertEqual(rows["6"]["reason"], "database matches explicit keep-list")
             self.assertIsNone(rows["8"]["identity"])
             self.assertEqual(sum(r["bytes"] for r in rows.values()), 45)
+
+    def test_review_holds_paid_and_new_replicas(self):
+        evidence = Path("/evidence")
+        archive = str(evidence / "checked.tar.zst")
+        def replica(number):
+            return dict(replica=str(number), identity=f"{number:064x}", names=[f"verify-core-{number}"],
+                        action="delete", classification="verify", reason="verified")
+        rows = [replica(i) for i in range(1, 6)]
+        rows[4].update(classification="live", action="keep")
+        approved = [dict(rows[0], archive=archive), dict(rows[1], action="keep", reason="paid, archived"),
+                    dict(rows[2], identity="changed"), dict(rows[4])]
+        restrict_to_review(rows, {"dry_run": True, "replicas": approved}, evidence,
+                           lambda replica, candidates: replica == "1")
+        self.assertEqual([row["action"] for row in rows], ["delete", "keep", "keep", "keep", "keep"])
+        self.assertEqual(rows[1]["reason"], "paid, archived")
+        self.assertEqual(rows[4]["classification"], "live")
 
     def test_archive_matches_exact_commitlog(self):
         with tempfile.TemporaryDirectory() as tmp:
