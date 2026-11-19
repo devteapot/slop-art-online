@@ -1029,7 +1029,12 @@ fn mean_color(toon: &Toon, mesh: &Mesh, thumbs: &Thumbs) -> Option<Vec3> {
 pub(crate) fn source_mean(base: &StandardMaterial, meshes: &[&Mesh], thumbs: &Thumbs, images: &Assets<Image>) -> Option<Vec3> {
     let b = base.base_color.to_linear();
     let b = Vec3::new(b.red, b.green, b.blue);
-    let Some(tex) = base.base_color_texture.as_ref() else {
+    // Cloth carries its recipe shading in the vertex colours. The shared garment picture
+    // modulates those colours locally; unused atlas space has no bearing on their mean.
+    let texture = base.base_color_texture.as_ref().filter(|tex| {
+        !tex.path().is_some_and(|path| path.path().file_name().is_some_and(|name| name == "garment.ktx2" || name == "garment.png"))
+    });
+    let Some(tex) = texture else {
         let (mut sum, mut w) = (Vec3::ZERO, 0.0);
         for m in meshes {
             if let Some((s, a)) = vertex_sum(m) {

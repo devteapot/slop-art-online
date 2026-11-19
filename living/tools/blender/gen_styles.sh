@@ -72,6 +72,9 @@ one() {
     [ -f "$shared" ] || cp "$tmp/strands.png" "$shared"
     python3 living/tools/characters/share.py strands --shared "$shared" "$root/$item.glb" > /dev/null
   fi
+  if [ "$kind" = outfit ] || [ "$kind" = hair ]; then
+    python3 living/tools/characters/garment_atlas.py attach "$root/$item.glb" || return 1
+  fi
   if [ "$kind" = overlay ]; then
     case "${n#*/}" in
       lines|freckles)
@@ -88,6 +91,9 @@ one() {
   rm -rf "$log" "$tmp"
   python3 living/tools/characters/share.py list "$root/$item.glb" | head -1
 }
+if printf '%s\n' "${items[@]}" | grep -E '^(outfit|hair)/' > /dev/null; then
+  python3 living/tools/characters/garment_atlas.py paint "$(dirname "$root")/garment.png"
+fi
 export -f one
 printf '%s\n' "${items[@]}" | xargs -P "${JOBS:-6}" -I{} bash -c 'one "$@"' _ {} "$root" "$blender" "$shared"
 # An outfit piece's file says where it is worn and how far out: its slot and layer, in the

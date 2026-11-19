@@ -7,8 +7,9 @@
 //!   triangles, materials, vertex colours, glow and clips, then quit.
 //!   `living/tools/view_assets.sh` wraps this and makes one contact sheet per model.
 //! - `LIVING_GAME_VIEW_SHOTS=<shot>[,<shot>…]` picks the shots (default `views,clips`):
-//!   - a view: `front`, `three-quarter`, `side`, `back`, `above`, `game` (the default game
-//!     camera, 28° down, 22 m) or `YAW:PITCH[:ZOOM[:AIM]]` (degrees; yaw 0 faces the model's
+//!   - a view: `front`, `three-quarter`, `side`, `back`, `above`, `game` (default game camera),
+//!     `near` or `middle` (game stops, optionally followed by `/YAW`), or
+//!     `YAW:PITCH[:ZOOM[:AIM]]` (degrees; yaw 0 faces the model's
 //!     front; zoom 1 frames the model, 0.5 is twice as close; aim is the height looked at as a
 //!     fraction of the model's, 0.92 for a character's face);
 //!   - `views`: the five angles and `game`;
@@ -70,6 +71,8 @@ enum Pose {
     /// `aim`: the height looked at, as a fraction of the model's height (default its middle).
     Orbit { yaw: f32, pitch: f32, zoom: f32, aim: Option<f32> },
     Game,
+    /// The game camera stop at its actual height, pitch and field of view. Optional yaw for turnarounds.
+    Stop { zoom: f32, yaw: f32 },
 }
 
 /// One photograph: a name, a camera pose, and optionally a clip held at a time (seconds).
@@ -81,6 +84,10 @@ struct Shot {
 }
 
 fn parse_view(s: &str) -> Option<(String, Pose)> {
+    let (stop, yaw) = s.split_once('/').unwrap_or((s, "0"));
+    if matches!(stop, "near" | "middle") {
+        return Some((s.replace('/', "_"), Pose::Stop { zoom: if stop == "near" { 1.0 } else { 0.55 }, yaw: yaw.parse().ok()? }));
+    }
     if s == "game" {
         return Some(("game".into(), Pose::Game));
     }
@@ -545,6 +552,16 @@ pub fn batch(
     let name = if let Some(shot) = item.shots.get(step) {
         match shot.pose {
             Pose::Orbit { yaw, pitch, zoom, aim } => place_camera(&mut tf, &mut proj, aim.map_or(c, |a| Vec3::new(c.x, c.y - h.y + 2.0 * h.y * a, c.z)), h, yaw, pitch, zoom),
+            Pose::Stop { zoom, yaw } => {
+                let v = crate::camera::Tuning::default().view(zoom);
+                if let Projection::Perspective(p) = &mut *proj {
+                    p.fov = v.fov.to_radians();
+                }
+                let pitch = v.pitch.to_radians();
+                let target = Vec3::new(c.x, 1.0, c.z);
+                let dir = Vec3::new(yaw.to_radians().sin() * pitch.cos(), pitch.sin(), yaw.to_radians().cos() * pitch.cos());
+                *tf = Transform::from_translation(target + dir * v.distance).looking_at(target, Vec3::Y);
+            }
             Pose::Game => game_camera(&mut tf, &mut proj, Vec3::new(c.x, 0.0, c.z)),
         }
         if let (Some((clip, t)), Some((_, nodes, p))) = (shot.clip, &item.graph) {
