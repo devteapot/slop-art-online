@@ -1,0 +1,159 @@
+{
+  "method": "3 by 3 median RGB in native sRGB pixels. Manual drawing stations exclude nostril ink. In each Bevy nose window choose lightest and darkest 3 by 3 patches by display luma; measure the before frame at those same coordinates. Nose comparisons are descriptive.",
+  "front": {
+    "search_bounds_xyxy": [
+      784,
+      408,
+      812,
+      431
+    ],
+    "highlight": {
+      "drawing": {
+        "xy": [
+          526,
+          341
+        ],
+        "median_rgb": [
+          246,
+          209,
+          184
+        ]
+      },
+      "first_eye_fit": {
+        "xy": [
+          801,
+          414
+        ],
+        "median_rgb": [
+          237,
+          180,
+          143
+        ]
+      },
+      "nose_fit": {
+        "xy": [
+          801,
+          414
+        ],
+        "median_rgb": [
+          229,
+          206,
+          180
+        ]
+      }
+    },
+    "shade": {
+      "drawing": {
+        "xy": [
+          525,
+          364
+        ],
+        "median_rgb": [
+          201,
+          135,
+          104
+        ]
+      },
+      "first_eye_fit": {
+        "xy": [
+          794,
+          423
+        ],
+        "median_rgb": [
+          238,
+          170,
+          134
+        ]
+      },
+      "nose_fit": {
+        "xy": [
+          794,
+          423
+        ],
+        "median_rgb": [
+          203,
+          141,
+          109
+        ]
+      }
+    }
+  },
+  "three_quarter": {
+    "search_bounds_xyxy": [
+      859,
+      405,
+      878,
+      426
+    ],
+    "highlight": {
+      "drawing": {
+        "xy": [
+          1401,
+          336
+        ],
+        "median_rgb": [
+          244,
+          194,
+          161
+        ]
+      },
+      "first_eye_fit": {
+        "xy": [
+          868,
+          412
+        ],
+        "median_rgb": [
+          237,
+          180,
+          144
+        ]
+      },
+      "nose_fit": {
+        "xy": [
+          868,
+          412
+        ],
+        "median_rgb": [
+          230,
+          201,
+          172
+        ]
+      }
+    },
+    "shade": {
+      "drawing": {
+        "xy": [
+          1396,
+          356
+        ],
+        "median_rgb": [
+          207,
+          139,
+          109
+        ]
+      },
+      "first_eye_fit": {
+        "xy": [
+          859,
+          420
+        ],
+        "median_rgb": [
+          237,
+          173,
+          137
+        ]
+      },
+      "nose_fit": {
+        "xy": [
+          859,
+          420
+        ],
+        "median_rgb": [
+          203,
+          140,
+          108
+        ]
+      }
+    }
+  }
+}

@@ -20,7 +20,10 @@ run), then runs the steps one at a time with the admin's `resume_genesis`, readi
 database is deleted after (world_delete.py). Prints one JSON object:
 
     {"seed", "commit", "budget", "init_fuel", "init_runs",
-     "steps": [{"phase", "label", "fuel", "reducer"}], "largest_step_share"}
+     "steps": [{"phase", "label", "fuel", "reducer"}], "finish_fuel", "largest_step_share"}
+
+(`steps` are the making steps; `finish_fuel` is the last `genesis_step` call, which only marks the
+world done and starts its clock.)
 
 on stdout and exits 0 when it measured (the guard judges the report); with `--check`, 1 when
 `init` or a step is above 90% of the budget (the guard's rule).
@@ -80,7 +83,7 @@ def build_stepping(seed):
 
 def wasm_mount():
     """The host directory the server's container serves as /wasm (verify.py's rule)."""
-    r = subprocess.run(["podman", "inspect", lc.CONTAINER, "--format", '{{range .Mounts}}{{if eq .Destination "/wasm"}}{{.Source}}{{end}}{{end}}'],
+    r = subprocess.run(["docker", "inspect", lc.CONTAINER, "--format", '{{range .Mounts}}{{if eq .Destination "/wasm"}}{{.Source}}{{end}}{{end}}'],
                        capture_output=True, text=True)
     src = r.stdout.strip().removeprefix("/host_mnt")
     if not src:
@@ -151,11 +154,13 @@ def main():
                 out["steps"].append({"phase": "trapped", "label": f"after: {label}", "fuel": round(f1 - f0), "reducer": "genesis_step", "trapped": True, "log": trap})
                 out["trapped_at_step"] = before_step + 1
                 break
-            # The row's label names the step just done; the last step's is "done" (a land's last
-            # step is always populate; a seed without a land is made in its one `world` step).
-            after = str((now or {}).get("label", ""))
-            if (now or {}).get("done"):
-                after = label if label.startswith("world") else "populate: people, animals and the settlements' life"
+            # The row's label names the step just done. The call that marks the world done after
+            # the last making step (populate, or a seed without a land's one `world` step) makes
+            # nothing and moves no step: it is reported apart, so `steps` lists the making steps.
+            if now.get("done"):
+                out["finish_fuel"] = round(f1 - f0)
+                break
+            after = str(now.get("label", ""))
             out["steps"].append({"phase": after.split(":", 1)[0], "label": after, "fuel": round(f1 - f0), "reducer": "genesis_step"})
         out["largest_step_share"] = max((s["fuel"] for s in out["steps"]), default=0) / BUDGET
     finally:

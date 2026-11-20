@@ -1,0 +1,74 @@
+{
+  "drawing_front": [
+    {
+      "opening_over_face_height": 0.0702,
+      "outer_lid_above_pupil_axis_over_face_height": 0.0183,
+      "iris_width_over_eye_width": 0.507
+    },
+    {
+      "opening_over_face_height": 0.0702,
+      "outer_lid_above_pupil_axis_over_face_height": 0.0169,
+      "iris_width_over_eye_width": 0.4929
+    }
+  ],
+  "approved_front": [
+    {
+      "opening_over_face_height": 0.0818,
+      "outer_lid_above_pupil_axis_over_face_height": 0.0252,
+      "iris_width_over_eye_width": 0.3605
+    },
+    {
+      "opening_over_face_height": 0.0818,
+      "outer_lid_above_pupil_axis_over_face_height": 0.0248,
+      "iris_width_over_eye_width": 0.37
+    }
+  ],
+  "drawing_three_quarter": [
+    {
+      "opening_over_face_height": 0.0741,
+      "outer_lid_above_pupil_axis_over_face_height": 0.0141,
+      "iris_width_over_eye_width": 0.4452
+    },
+    {
+      "opening_over_face_height": 0.067,
+      "outer_lid_above_pupil_axis_over_face_height": 0.0208,
+      "iris_width_over_eye_width": 0.5435
+    }
+  ],
+  "approved_three_quarter": [
+    {
+      "opening_over_face_height": 0.0818,
+      "outer_lid_above_pupil_axis_over_face_height": 0.0262,
+      "iris_width_over_eye_width": 0.3796
+    },
+    {
+      "opening_over_face_height": 0.0701,
+      "outer_lid_above_pupil_axis_over_face_height": 0.0424,
+      "iris_width_over_eye_width": 0.4773
+    }
+  ],
+  "fit_front": [
+    {
+      "opening_over_face_height": 0.0818,
+      "outer_lid_above_pupil_axis_over_face_height": 0.032,
+      "iris_width_over_eye_width": 0.4651
+    },
+    {
+      "opening_over_face_height": 0.0818,
+      "outer_lid_above_pupil_axis_over_face_height": 0.0293,
+      "iris_width_over_eye_width": 0.49
+    }
+  ],
+  "fit_three_quarter": [
+    {
+      "opening_over_face_height": 0.0794,
+      "outer_lid_above_pupil_axis_over_face_height": 0.0308,
+      "iris_width_over_eye_width": 0.4907
+    },
+    {
+      "opening_over_face_height": 0.0701,
+      "outer_lid_above_pupil_axis_over_face_height": 0.0447,
+      "iris_width_over_eye_width": 0.5455
+    }
+  ]
+}

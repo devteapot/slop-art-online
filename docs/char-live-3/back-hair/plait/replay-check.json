@@ -1,0 +1,41 @@
+{
+  "identical_nonplait_hair_triangles": 20868,
+  "nonhair_meshes_including_morphs_identical": true,
+  "original_materials_identical": true,
+  "clip_and_skin_data_identical": true,
+  "unchanged_sidecar_G_B": true,
+  "plait_R_changed_texels": 66050,
+  "nonplait_changed_texels": 0,
+  "volume": {
+    "spread": 1.8700001239776611,
+    "crown_lift": 0.12436522243664064,
+    "rear_depth": 0.5191808751459246
+  },
+  "embedded_generator_image_hashes": {
+    "cora.atlas": "e94b2e891262960de3b21b7fdc3f2cc0c714277b6702cb76fffcc9a2e6095f2f",
+    "cora.iris": "307a6c5805d361b75f0f3bb03a5fd3cfb77e7ed67fe2af1db2e3801376924808",
+    "cora.tint": "14ecd690b8fda652ba15b7595766a2286700a8f066a995ff90f840c1e8e78ac5"
+  },
+  "replay_sha256": {
+    "own-cora-live.glb": "233979b647218488cadc9ef4f961844b8ee6de02b786923226a718c982faab4e",
+    "own-cora-live.face.png": "f9fff170e2b9d7ef8a3b28a576e5b91b22f29167e2ffaced5d862d59d07143dc",
+    "own-cora-live.hair.png": "8a0d72abaefafc0f0f661b4b19513d38a8ad2b6e93a3f8c781e399b58b29d2fa",
+    "own-cora-live.calibration.json": "471e3655afccb12eea5236f69e057ff98520bc1f8bde8657dbdf3de5b155d37f",
+    "lock-lines.png": "f497b0adb5e4de95ed3b0e2fb9433c62b4c84802d7ad2f32128dd85a193639dc"
+  },
+  "replay_different_pixels": {
+    "portrait": 0,
+    "near": 0,
+    "portrait45": 0,
+    "near_180": 0,
+    "middle_180": 0,
+    "near_135": 0,
+    "middle_135": 0,
+    "middle_0": 0,
+    "90:8:0.36:0.88": 0,
+    "180:8:0.36:0.88": 0,
+    "-35:8:0.36:0.88": 0,
+    "0:5:1.14:0.50": 0,
+    "180:8:0.75:0.68": 0
+  }
+}

@@ -125,7 +125,7 @@ The mind service compiles the `script` row alone and reads only ordinary laws: `
 | Path | Reads | Writes | Index | Recipients | Frequency | Growth |
 | --- | --- | --- | --- | --- | --- | --- |
 | Laws in force, per transaction | `law_revision` (point lookup), and on a new revision every `law_override` row | — | PK | — | once per transaction (the revision); the rows only after a change | — |
-| Value-only `set_world_law` | the law's row, `law_revision`, `cover_ground` (cover on) | `law_override` (1 row), `law_revision`, `law_change`, `chronicle`; cover: `cover_law`; gaze off: `applied_gaze` deletes | PK | every `law_override` subscriber gets one row update; `cover_law` subscribers one row | per admin call | one `law_change` row per call (kept); `law_override` is bounded by the law names |
+| Value-only `set_world_law` | the law's row, `law_revision`, `land` and the `cover_ground` row count (cover on: whether the geometry is complete; a land without it starts `cover_step`, docs/COVER_SIGHT.md "Cover geometry") | `law_override` (1 row), `law_revision`, `law_change`, `chronicle`; cover: `cover_law`; gaze off: `applied_gaze` deletes | PK | every `law_override` subscriber gets one row update; `cover_law` subscribers one row | per admin call | one `law_change` row per call (kept); `law_override` is bounded by the law names |
 | Ordinary `set_world_law`, `install_script` | as before, plus `law_override` | as before, plus `law_override` | PK | as before | per admin call | as before |
 | Migration | `world_law` (once) | `law_override`, `law_revision` | PK | `law_override` subscribers | once per world | — |
 

@@ -1,0 +1,10 @@
+{
+  "drawing": "docs/char-live-1/face.png",
+  "shots": ["0:8:0.16:0.91", "0:8:0.16:0.87"],
+  "inks": {
+    "Cora_LidInk_EYE": {"shot": "0:8:0.16:0.91", "drawing": [620, 266.7], "ref_drawing": [612, 252], "ref_offset": [0, -10]},
+    "Cora_BrowInk_EYE": {"shot": "0:8:0.16:0.91", "drawing": [570, 239.5], "ref_drawing": [590, 215], "ref_offset": [0, -10]},
+    "Cora_JawInk_SKIN": {"shot": "0:8:0.16:0.87", "drawing": [523, 483.5], "ref_drawing": [523, 468], "ref_offset": [0, -10]},
+    "Cora_NoseInk_SKIN": {"shot": "0:8:0.16:0.87", "drawing": [538.1, 355.6], "ref_drawing": [527, 342], "ref_offset": [0, -10]}
+  }
+}

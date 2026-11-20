@@ -1,0 +1,413 @@
+{
+  "tolerance": {
+    "hair": 8,
+    "other": 10
+  },
+  "patches": {
+    "hair shade": {
+      "target": [
+        88,
+        42,
+        27
+      ],
+      "drawing": [
+        553,
+        106
+      ],
+      "swatch": "shade",
+      "portrait45": [
+        917,
+        465
+      ],
+      "portrait": [
+        860,
+        488
+      ]
+    },
+    "hair mid": {
+      "target": [
+        152,
+        72,
+        43
+      ],
+      "drawing": [
+        474,
+        165
+      ],
+      "swatch": "mid",
+      "portrait45": [
+        873,
+        406
+      ],
+      "portrait": [
+        759,
+        341
+      ]
+    },
+    "hair light": {
+      "target": [
+        171,
+        88,
+        56
+      ],
+      "drawing": [
+        409,
+        97
+      ],
+      "swatch": "light",
+      "portrait": [
+        826,
+        271
+      ],
+      "portrait45": [
+        820,
+        275
+      ]
+    },
+    "hair highlight": {
+      "target": [
+        187,
+        99,
+        63
+      ],
+      "drawing": [
+        472,
+        114
+      ],
+      "swatch": "highlight",
+      "portrait45": [
+        874,
+        290
+      ],
+      "portrait": [
+        773,
+        267
+      ]
+    },
+    "hair ink": {
+      "sample": "min5",
+      "target": [
+        65,
+        41,
+        33
+      ],
+      "drawing": [
+        422,
+        148
+      ],
+      "swatch": "ink",
+      "portrait": [
+        751,
+        295
+      ]
+    },
+    "skin base": {
+      "target": [
+        241,
+        183,
+        148
+      ],
+      "drawing": [
+        536,
+        374
+      ],
+      "portrait": [
+        815,
+        432
+      ]
+    },
+    "skin cheek": {
+      "target": [
+        235,
+        164,
+        128
+      ],
+      "drawing": [
+        601,
+        336
+      ],
+      "portrait": [
+        853,
+        411
+      ]
+    },
+    "skin shadow": {
+      "target": [
+        192,
+        121,
+        90
+      ],
+      "drawing": [
+        521,
+        510
+      ],
+      "portrait": [
+        800,
+        506
+      ]
+    },
+    "coat": {
+      "target": [
+        156,
+        126,
+        135
+      ],
+      "drawing": [
+        708,
+        741
+      ],
+      "drawing_file": "face.png",
+      "portrait": [
+        656,
+        696
+      ],
+      "black_floor": [
+        29,
+        27,
+        19
+      ],
+      "tolerance": 10
+    },
+    "jersey": {
+      "target": [
+        118,
+        50,
+        43
+      ],
+      "drawing": [
+        603,
+        781
+      ],
+      "drawing_file": "face.png",
+      "portrait": [
+        800,
+        767
+      ],
+      "black_floor": [
+        21,
+        19,
+        11
+      ],
+      "tolerance": 10
+    },
+    "lapel": {
+      "target": [
+        152,
+        131,
+        140
+      ],
+      "drawing": [
+        224,
+        182
+      ],
+      "drawing_file": "turnaround.png",
+      "0:5:1.14:0.50": [
+        834,
+        253
+      ],
+      "black_floor": [
+        37,
+        37,
+        36
+      ],
+      "tolerance": 10
+    },
+    "apron": {
+      "target": [
+        214,
+        190,
+        167
+      ],
+      "drawing": [
+        181,
+        480
+      ],
+      "drawing_file": "turnaround.png",
+      "0:5:1.14:0.50": [
+        802,
+        498
+      ],
+      "black_floor": [
+        29,
+        29,
+        23
+      ],
+      "tolerance": 10
+    },
+    "cuff": {
+      "target": [
+        193,
+        171,
+        167
+      ],
+      "drawing": [
+        72,
+        344
+      ],
+      "drawing_file": "turnaround.png",
+      "0:5:1.14:0.50": [
+        878,
+        407
+      ],
+      "black_floor": [
+        41,
+        40,
+        33
+      ],
+      "tolerance": 10
+    },
+    "trousers": {
+      "target": [
+        74,
+        59,
+        57
+      ],
+      "drawing": [
+        120,
+        638
+      ],
+      "drawing_file": "turnaround.png",
+      "0:5:1.14:0.50": [
+        721,
+        650
+      ],
+      "black_floor": [
+        36,
+        38,
+        27
+      ],
+      "tolerance": 10
+    },
+    "boots": {
+      "target": [
+        115,
+        74,
+        53
+      ],
+      "drawing": [
+        114,
+        763
+      ],
+      "drawing_file": "turnaround.png",
+      "0:5:1.14:0.50": [
+        702,
+        776
+      ],
+      "black_floor": [
+        38,
+        40,
+        27
+      ],
+      "tolerance": 10
+    },
+    "pocket": {
+      "target": [
+        149,
+        126,
+        135
+      ],
+      "drawing": [
+        249,
+        409
+      ],
+      "drawing_file": "turnaround.png",
+      "0:5:1.14:0.50": [
+        862,
+        461
+      ],
+      "black_floor": [
+        61,
+        54,
+        42
+      ],
+      "tolerance": 10
+    }
+  },
+  "calibration_host": "dev-box AMD Linux",
+  "calibrated_base_srgb": {
+    "shade": [
+      44,
+      8,
+      2
+    ],
+    "mid": [
+      104,
+      37,
+      8
+    ],
+    "light": [
+      119,
+      43,
+      6
+    ],
+    "highlight": [
+      135,
+      47,
+      3
+    ]
+  },
+  "ink_floor_relative": {
+    "shot": "portrait",
+    "sample": "min5",
+    "window_center": [
+      751,
+      295
+    ],
+    "floor": [
+      34,
+      32,
+      29
+    ],
+    "drawing_ink": [
+      59,
+      27,
+      18
+    ],
+    "drawing_mid": [
+      152,
+      72,
+      43
+    ],
+    "rendered_mid": [
+      145,
+      69,
+      43
+    ],
+    "mid_median9_center": [
+      759,
+      341
+    ],
+    "target": [
+      65,
+      41,
+      33
+    ],
+    "method": "sRGB decode, per-channel floor + drawing_ink / drawing_mid * (rendered_mid - floor), sRGB encode and round."
+  },
+  "relative_cheek_minus_base": {
+    "target": [
+      -6,
+      -19,
+      -20
+    ],
+    "green_blue_tolerance": 6
+  },
+  "skin_shadow_floor": {
+    "target": [
+      192,
+      121,
+      90
+    ],
+    "sample": "median9",
+    "center": [
+      800,
+      506
+    ],
+    "floor": [
+      28,
+      28,
+      22
+    ]
+  },
+  "cloth_full_body_shot": "0:5:1.14:0.50"
+}

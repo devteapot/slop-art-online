@@ -16,6 +16,12 @@ are the measure. Writes `RUN/law-time.json`.
 `checks` proves the value-only path's contract on the branch's module:
 - `law_override` is public and read-only: anonymous SQL reads every row; `law_revision` is private;
   `set_world_law` from a player is refused ("admin only") with nothing written;
+- cover geometry after creation (docs/COVER_SIGHT.md, "Cover geometry"): on a land made with
+  its cover law off (the island) there are no `cover_ground` bands; `cover_sight_on` true is
+  accepted, `cover_law` stays false while `cover_step` derives the bands in steps, then every band
+  is kept, the derivation row says done, a further law revision is written and `cover_law` turns
+  true; `cover_derivation` is private. Cover is switched off again, and the world has its geometry
+  for the value-only checks below;
 - a value-only edit (`cue_transport_on`, `near_tier_on`, `gaze_on`, cover laws on a world with
   cover geometry) writes its row and the next law revision, keeps the script revision and the
   script row, records `law_change` (the script revision in force) and a chronicle line
@@ -213,6 +219,36 @@ def rebuilds(r, name, value, t0):
     r.check(f"{name}={value}: the cover mask compiled {want} time(s), the whole map never", got == want and not spans.get("map.rebuild"), f"{spans}")
 
 
+def derive_cover(r, timeout_s=300):
+    """A land without cover geometry derives it when cover goes on, in force once complete."""
+    land = r.rows("SELECT size FROM land")
+    if has_cover(r) or not land:
+        print("cover geometry: the world has it (or is not a land); the derivation scene is skipped", flush=True)
+        return
+    bands = (land[0]["size"] ** 2 + 16383) // 16384
+    lrev = r.law_rev()
+    code, body, _, _ = r.call("set_world_law", ["cover_sight_on", "true"])
+    r.check("cover_sight_on true on a land without cover geometry is accepted (derived after)", code == 200, body[:200])
+    law = r.rows("SELECT cover_sight_on FROM cover_law WHERE id = 0")[0]["cover_sight_on"]
+    r.check("…cover is not in force while the geometry is derived (cover_law false)", law is False, f"{law}")
+    rows, _ = r.sql("SELECT * FROM cover_derivation", token=None)
+    r.check("cover_derivation is private: anonymous SQL is refused", rows is None, f"{rows}")
+    t0, d = time.time(), {}
+    while time.time() - t0 < timeout_s:
+        got = r.rows("SELECT * FROM cover_derivation")
+        d = got[0] if got else {}
+        if d.get("done") or str(d.get("label", "")).startswith("stopped"):
+            break
+        time.sleep(1)
+    n = r.rows("SELECT COUNT(*) AS n FROM cover_ground")[0]["n"]
+    r.check(f"…derived in steps: {bands} bands kept, the derivation done", d.get("done") is True and n == bands, f"{n} bands; {d}")
+    law = r.rows("SELECT cover_sight_on FROM cover_law WHERE id = 0")[0]["cover_sight_on"]
+    r.check("…then in force: cover_law true, and a law revision after the switch's", law is True and r.law_rev() >= lrev + 2, f"{law} {r.law_rev()} {lrev}")
+    r.save("cover-derivation.json", {"seconds": round(time.time() - t0, 1), "derivation": d, "bands": n})
+    code, body, _, _ = r.call("set_world_law", ["cover_sight_on", "false"])
+    r.check("cover_sight_on back to false", code == 200, body[:200])
+
+
 def checks(r, seed):
     anon = None
     code, body = V.http("/v1/identity", {})
@@ -229,6 +265,7 @@ def checks(r, seed):
     code, body, _, _ = r.call("set_world_law", ["cue_transport_on", "false"], token=player)
     r.check("set_world_law from a player is refused (admin only)", code != 200 and "admin only" in body, body[:200])
     r.check("…with nothing written", (r.law_rev(), r.script_rev(), len(r.changes())) == (lrev0, srev0, nchanges0))
+    derive_cover(r)
     # Value-only edits.
     value_only = list(DELIVERY) + ["gaze_on"] + (["cover_brush_min_fill", "cover_sight_on"] if has_cover(r) else [])
     for name in value_only:

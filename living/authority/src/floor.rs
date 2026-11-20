@@ -12,9 +12,10 @@
 //! since 2026-11-20), a scheduled reducer that runs one bounded step per call and schedules the
 //! next back to back: [`living_rules::land::Gen`]'s steps (each under half a budget at 8192 m,
 //! measured with `living/tools/land_fuel`), then hosting, the terrain chunks, lots and
-//! resources, then the people; a seed without a land map is made in one step. `init` keeps the
-//! script, the seed's check and its rules. The public `genesis` row shows how far it is; ticks
-//! start when it is done, and until then the player and mind reducers refuse with
+//! resources, then the people; a seed without a land map is made in one step. A last call that
+//! makes nothing ([`finish`]) marks the world done, so the row's `updated_ms` is when it became
+//! ready. `init` keeps the script, the seed's check and its rules. The public `genesis` row shows
+//! how far it is; ticks start when it is done, and until then the player and mind reducers refuse with
 //! [`PREPARING`] ([`ready`]).
 //!
 //! **The same world as inline.** A land up to [`INLINE_MAX_M`] (every seeded world before staged
@@ -51,7 +52,10 @@ pub const PREPARING: &str = "world_preparing";
 /// made before staged genesis, or done). Otherwise the refusal, `world_preparing: …`.
 pub fn ready(ctx: &ReducerContext) -> Result<(), String> {
     match ctx.db.genesis().id().find(0) {
-        Some(g) if !g.done => Err(format!("{PREPARING}: the world is still being made (step {} of {}: {})", g.step, g.steps.max(g.step + 1), g.label)),
+        Some(g) if !g.done => {
+            let steps = if made(&g) { g.steps } else { g.steps.max(g.step + 1) };
+            Err(format!("{PREPARING}: the world is still being made (step {} of {steps}: {})", g.step, g.label))
+        }
         _ => Ok(()),
     }
 }
@@ -75,10 +79,13 @@ const RESOURCE_ROWS: u32 = 1024;
 pub struct Genesis {
     #[primary_key]
     pub id: u8,
-    /// Steps done, and the steps expected (the count grows once the city's wards are known).
+    /// Making steps done, and the steps expected (the count grows once the city's wards are
+    /// known). They are equal once every making step has run; the finishing call adds none.
     pub step: u32,
     pub steps: u32,
-    /// What the next step does.
+    /// The step just done, phase first (`land: …`, `build: …`, `chunks: …`, `resources: …`,
+    /// `populate: …`, `world: …`); before the first, what it will do; `done` when done, and
+    /// `stopped…` when a step failed or the admin stopped the chain.
     pub label: String,
     /// Steps of generation and hosting done in this instance's memory (see the module notes).
     pub generated: u32,
@@ -88,6 +95,8 @@ pub struct Genesis {
     pub resource_rows: u32,
     /// Times generation started over because the instance's memory was lost.
     pub restarts: u32,
+    /// When `init` began the creation, and the last change (a step's start; on the done row,
+    /// when the world became ready, so `updated_ms - started_ms` is the whole creation).
     pub started_ms: u64,
     pub updated_ms: u64,
     pub done: bool,
@@ -115,6 +124,9 @@ struct Work {
     seed: std::rc::Rc<str>,
     gen: Option<Gen>,
     hosted: Option<Hosted>,
+    /// The generated land, kept after hosting only while a world whose cover law is on still
+    /// needs its cover ground sampled (band steps; `crate::geometry`).
+    land: Option<living_rules::land::Land>,
     chunk_ids: Vec<u32>,
     /// Steps of generation and hosting done here (the row's `generated` must match).
     generated: u32,
@@ -365,6 +377,10 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
     if g.done {
         return Ok(());
     }
+    if made(&g) {
+        finish(ctx, g);
+        return Ok(());
+    }
     seed::load(ctx);
     let text = seed::active();
     let s: Seed = serde_json::from_str(&text).map_err(|e| format!("seed: {e}"))?;
@@ -375,14 +391,14 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
     let Some(m) = s.map.as_ref().filter(|m| m.kind == "land") else {
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("genesis.world");
         seed::seed(ctx, now);
-        log::info!("genesis: the world is made (1 step, {} ms)", wall.saturating_sub(g.started_ms));
         g.step += 1;
         g.steps = g.step;
-        g.label = "done".into();
+        g.label = "world: terrain, resources, people".into();
         g.updated_ms = wall;
-        g.done = true;
         ctx.db.genesis().id().update(g);
-        crate::start_ticking(ctx);
+        if !stepping() {
+            schedule(ctx);
+        }
         return Ok(());
     };
     let (size, params) = crate::island::params_of(m)?;
@@ -394,7 +410,7 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
                 g.restarts += 1;
                 log::warn!("genesis: this instance lost the land at step {} of generation; generating again from the start", g.generated);
             }
-            *cell = Some(Work { seed: text.clone(), gen: Some(Gen::new(s.seed, size, params.clone())), hosted: None, chunk_ids: Vec::new(), generated: 0 });
+            *cell = Some(Work { seed: text.clone(), gen: Some(Gen::new(s.seed, size, params.clone())), hosted: None, land: None, chunk_ids: Vec::new(), generated: 0 });
             g.generated = 0;
         }
         let w = cell.as_mut().expect("work");
@@ -408,8 +424,11 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
             label = "build: hosting the buildings into the tiles, digests".into();
             let _t = spacetimedb::log_stopwatch::LogStopwatch::new("genesis.host");
             let land = w.gen.take().expect("generated land").into_land();
-            let h = crate::island::host(s.seed, m, &land, &params)?;
-            drop(land);
+            // Cover geometry only for a world whose cover law is on (crate::geometry): its
+            // ground is sampled in band steps from the land, kept until then.
+            let cover = common::laws(ctx).cover_sight_on && (ctx.db.cover_ground().count() as usize) < crate::island::cover_bands(size);
+            let h = crate::island::host(s.seed, m, &land, &params, cover)?;
+            w.land = cover.then_some(land);
             w.chunk_ids = h.map.chunks().collect();
             w.hosted = Some(h);
             (w.generated, g.generated) = (w.generated + 1, g.generated + 1);
@@ -424,11 +443,18 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
                     ctx.db.terrain_chunk().insert(TerrainChunk { id, tiles: h.map.chunk_bytes(id) });
                 }
             }
-            // One cover band corresponds to 64 standard terrain chunks.
-            for band in a / 64..b.div_ceil(64) {
-                crate::island::keep_cover_band(ctx, h, band);
-            }
             g.chunks = b as u32;
+        } else if let Some(land) = w.land.as_ref() {
+            let h = w.hosted.as_ref().expect("hosted");
+            // Bands are kept in order, so the next one is the count kept.
+            let total = crate::island::cover_bands(size);
+            let a = ctx.db.cover_ground().count() as usize;
+            let b = (a + crate::geometry::BANDS_PER_STEP).min(total);
+            label = format!("cover: ground bands {a}..{b} of {total}");
+            crate::island::keep_cover_bands_of(ctx, land, &h.cover_candidates, a..b);
+            if b >= total {
+                w.land = None;
+            }
         } else if (g.lots as usize) < w.hosted.as_ref().expect("hosted").lots.len() {
             let h = w.hosted.as_ref().expect("hosted");
             let (a, b) = (g.lots as usize, (g.lots as usize + LOTS_PER_STEP).min(h.lots.len()));
@@ -461,7 +487,6 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
             crate::island::keep_land(ctx, h.info.clone());
             seed::populate(ctx, &s, &h.map, Some(&h), None, Vec::new(), now);
             *cell = None;
-            log::info!("genesis: the world is made ({} steps, {} ms)", g.step + 1, wall.saturating_sub(g.started_ms));
             g.label = label;
             return Ok(true);
         }
@@ -469,20 +494,46 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
         Ok(false)
     })?;
     g.step += 1;
-    g.steps = expected(&g, size);
+    // `steps` equals `step` only once the world is made (`made`): before, it is kept ahead of
+    // the steps done, which a restart's repeated land steps could otherwise reach. A world whose
+    // cover law is on has its cover ground band steps too (`crate::geometry`).
+    let cover_steps = if common::laws(ctx).cover_sight_on { crate::island::cover_bands(size).div_ceil(crate::geometry::BANDS_PER_STEP) as u32 } else { 0 };
+    g.steps = if done { g.step } else { (expected(&g, size) + cover_steps).max(g.step + 1) };
     g.updated_ms = wall;
-    g.done = done;
-    if done {
-        g.steps = g.step;
-        g.label = "done".into();
-    }
     ctx.db.genesis().id().update(g);
-    if done {
-        crate::start_ticking(ctx);
-    } else if !stepping() {
+    if !stepping() {
         schedule(ctx);
     }
     Ok(())
+}
+
+/// Every making step has run (the last one set `steps` to `step`); only `finish` is left.
+fn made(g: &Genesis) -> bool {
+    g.step > 0 && g.step == g.steps
+}
+
+/// The call after the last making step: the world is ready. A module has no clock but its
+/// call's timestamp, which for the last step is when it started; this call is scheduled by that
+/// step, and SpacetimeDB 2.14.1 stamps a scheduled call when its scheduler prepares it
+/// (`scheduler.rs`, `scheduled_call_time`: the later of the scheduled time and now), after the
+/// last step committed. So `updated_ms` on the done row is when the world became ready, and
+/// `updated_ms - started_ms` is the whole creation. It writes nothing else but the cover in
+/// force (`cover_law`, and a cover geometry derivation when the law went on after hosting) and
+/// cannot fail, so a creation never stops between its last step and this one but by
+/// `stop_genesis`.
+fn finish(ctx: &ReducerContext, mut g: Genesis) {
+    let wall = common::now_ms(ctx);
+    log::info!("genesis: the world is made ({} steps, {} ms)", g.step, wall.saturating_sub(g.started_ms));
+    g.label = "done".into();
+    g.updated_ms = wall;
+    g.done = true;
+    ctx.db.genesis().id().update(g);
+    crate::start_ticking(ctx);
+    // The cover in force: on once the land's bands are complete (kept by the band steps when the
+    // law was on at hosting); a law switched on during creation, after hosting, derives them now.
+    let laws = common::laws(ctx);
+    crate::geometry::ensure(ctx, laws.cover_sight_on);
+    common::publish_cover_law(ctx, laws);
 }
 
 /// The steps a creation is expected to take, from what this instance knows so far.

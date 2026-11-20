@@ -34,15 +34,20 @@ W, H = 1600, 900
 SCENARIOS = {}
 CULLET = set()
 EXPLICIT = set()
+# FRESH: scenarios that launch their own world under the run's name (no world may exist yet).
+FRESH = set()
 
 
-def scenario(name, cullet=False, explicit=False):
+def scenario(name, cullet=False, explicit=False, fresh=False):
     def register(function):
         assert name not in SCENARIOS, f"scenario {name} registered twice"
         SCENARIOS[name] = function
         if cullet:
             CULLET.add(name)
         if explicit:
+            EXPLICIT.add(name)
+        if fresh:
+            FRESH.add(name)
             EXPLICIT.add(name)
         return function
     return register
@@ -261,6 +266,116 @@ def windows(run, c):
     c.check(s, "Esc with nothing open opens Menu", d["10"] and d["10"]["menu"])
     c.check(s, "Esc closes the Menu list first", d["11"] and not d["11"]["menu"])
     c.check(s, "Esc again opens Menu (and frees the cursor)", d["12"] and d["12"]["menu"] and "Esc with nothing open: Menu, cursor freed" in log(out))
+
+
+def utc_ms(line):
+    """The client log line's UTC time (ms since the epoch), from its leading ISO stamp."""
+    import datetime
+    m = re.match(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(\.\d+)?Z", line)
+    if not m:
+        return None
+    t = datetime.datetime.strptime(m[1], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=datetime.timezone.utc).timestamp()
+    return int((t + float(m[2] or 0)) * 1000)
+
+
+@scenario("preparing", fresh=True)
+def preparing(run, c):
+    """Staged genesis (docs/STAGED_GENESIS.md §4, living/game/src/genesis.rs): the client joins a
+    world still being made. The scenario launches the run's island world itself (`verify.py
+    launch`, which waits for genesis through genesis_wait.py) and starts the client as soon as the
+    publish is under way, so it connects while the world is made: the cover says "Preparing the
+    world…" with the step, the steps and a bar, nothing is shown as a failure, and the client
+    joins once `genesis.done` turns true. Beside it, a probe `join` as verify.py's player
+    identity records the authority's refusal text while the world is made. Run it on a run name
+    with no world yet (`check.py --run ui-<new> preparing`), then `cleanup`."""
+    sys.path.insert(0, os.path.join(ROOT, "living/tools"))
+    import genesis_wait
+    s = "preparing"
+    st = verify.load(run)
+    if st.get("published") or st.get("publish_attempted"):
+        c.check(s, "a run name with no world yet", False, f"verify-{run} was already launched; use a new run name")
+        return
+    out = os.path.join(ROOT, ".local/living/verify", run, "ui", s)
+    os.makedirs(out, exist_ok=True)
+    seed = os.environ.get("VERIFY_UI_PREPARING_SEED", "island")
+    target = os.environ.get("VERIFY_UI_TARGET_DIR", os.path.join(ROOT, ".local/living/verify", run, "target"))
+    launch_log = open(os.path.join(out, "launch.log"), "w")
+    launch = subprocess.Popen([sys.executable, V, "launch", "--run", run, "--seed", seed, "--target-dir", target], stdout=launch_log, stderr=subprocess.STDOUT, cwd=ROOT)
+    # The client goes as soon as the publish is under way (the module is built): it cannot reach
+    # the world for a moment, tries again every 3 s, and gets in while the world is being made.
+    state = os.path.join(ROOT, ".local/living/verify", run, "state.json")
+    while launch.poll() is None and not (os.path.exists(state) and json.load(open(state)).get("publish_attempted")):
+        time.sleep(0.2)
+    if launch.poll() not in (None, 0):
+        c.check(s, "the world launched", False, open(os.path.join(out, "launch.log")).read()[-600:])
+        return
+    plan = ("preparing:180;wait:0.5;shot:01_preparing;dump:01;wait:3;shot:02_preparing;dump:02;"
+            "ready;wait:1;shot:03_joined;dump:03;quit")
+    cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", s, "--plan", plan, "--timeout", "600", "--preparing"]
+    client = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    # Meanwhile, the authority's side: the `genesis` row as it goes, and one probe `join` while
+    # the world is still being made (verify.py's player identity; refused, so nothing is made).
+    samples, probe, owner = [], None, None
+    while client.poll() is None:
+        st = verify.load(run)
+        if st.get("published"):
+            owner = owner or verify.admin_token()
+            try:
+                row = genesis_wait.genesis_row(verify.URL, st["db"], owner)
+            except genesis_wait.GenesisNotReady:
+                row = None
+            if row is not None and (not samples or (samples[-1]["step"], samples[-1]["done"]) != (row["step"], row["done"])):
+                samples.append({"wall_ms": int(time.time() * 1000), "step": row["step"], "steps": row["steps"], "label": row["label"], "done": row["done"], "updated_ms": row["updated_ms"]})
+            if row is not None and not row["done"] and probe is None:
+                r = subprocess.run([sys.executable, V, "player", "--run", run, "join", "Probe"], capture_output=True, text=True)
+                probe = {"code": r.returncode, "out": (r.stdout + r.stderr).strip()[-400:]}
+        time.sleep(0.25)
+    text_out = client.stdout.read()
+    code = client.wait()
+    launch.wait()
+    launch_log.close()
+    final = None
+    if owner:
+        try:
+            final = genesis_wait.genesis_row(verify.URL, f"verify-{run}", owner)
+        except genesis_wait.GenesisNotReady:
+            pass
+    json.dump({"genesis": samples, "final": final, "probe": probe}, open(os.path.join(out, "genesis.json"), "w"), indent=1)
+    c.check(s, "the world launched and was made", launch.returncode == 0 and final and final.get("done"), open(os.path.join(out, "launch.log")).read()[-400:])
+    c.check(s, "client ran and joined", code == 0, text_out[-300:])
+    c.check(s, "the authority refuses join while the world is made, with world_preparing",
+            probe is not None and re.search(r"world_preparing: the world is still being made \(step \d+ of \d+: [^)]*", probe["out"]), repr(probe))
+    t = log(out)
+    d1, d2, d3 = dump(out, "01"), dump(out, "02"), dump(out, "03")
+    g1, g2, g3 = ((d or {}).get("genesis") or {} for d in (d1, d2, d3))
+    cover = g1.get("cover") or {}
+    progress = g1.get("progress") or {}
+    c.check(s, "the client saw the world being made", g1.get("gate") == "Preparing" and ("genesis: the world is being made" in t or "genesis: preparing step" in t), json.dumps(g1)[:300])
+    c.check(s, "the cover says Preparing the world… with the step, the steps and a bar",
+            cover.get("title") == "Preparing the world…" and progress.get("steps", 0) > 0 and cover.get("bar") is not None
+            and f"step {progress.get('step')} of {progress.get('steps')}" in (cover.get("detail") or ""), json.dumps(cover))
+    p2 = g2.get("progress") or {}
+    c.check(s, "the progress line moves while the world is made", g2.get("gate") != "Preparing" or (p2.get("step", 0), p2.get("label")) != (progress.get("step", 0), progress.get("label")),
+            f"{progress} -> {p2}")
+    c.check(s, "joined after the world was ready", "genesis: the world is ready after" in t and re.search(r"playing character #\d+", t) and g3.get("gate") == "Ready" and not g3.get("cover"), json.dumps(g3)[:300])
+    held = [e for d in (d1, d2, d3) for e in ((d or {}).get("genesis") or {}).get("errors", [])]
+    notes = [n for d in (d1, d2, d3) for n in (d or {}).get("notes", [])]
+    c.check(s, "no error shown: world_preparing never lands in the errors, the notes or a warning",
+            not held and not [n for n in notes if "world_preparing" in n] and not re.search(r"WARN.*(world_preparing|join refused)", t), f"errors {held}; notes {notes}")
+    m = re.search(r"genesis: joined ([\d.]+) s after the world was ready", t)
+    joined_line = next((l for l in t.splitlines() if re.search(r"playing character #\d+", l)), "")
+    # When the authority's world turned ready: the first owner read that saw `done` (polled every
+    # 0.25 s, so up to about 0.3 s late). Not `genesis.updated_ms`: the last step stamps it when
+    # it starts, and populate runs about 4 s on the island after that.
+    done_ms = next((x["wall_ms"] for x in samples if x["done"]), None)
+    joined_ms = utc_ms(joined_line)
+    gap = (joined_ms - done_ms) / 1000 if done_ms and joined_ms else None
+    stamp = (done_ms - final["updated_ms"]) / 1000 if done_ms and final else None
+    detail = (f"client: {m[1] if m else '?'} s from seeing done to playing; authority done (first owner read of done) to the client's 'playing character': "
+              f"{gap if gap is None else round(gap, 2)} s; that read came {stamp if stamp is None else round(stamp, 2)} s after the done row's updated_ms")
+    print(f"      {detail}", flush=True)
+    c.check(s, "joined within 10 s of done", gap is not None and 0 <= gap < 10, detail)
+    json.dump({"client_done_to_join_s": float(m[1]) if m else None, "authority_done_to_join_s": gap, "done_seen_ms": done_ms, "done_updated_ms": final and final.get("updated_ms"), "joined_ms": joined_ms}, open(os.path.join(out, "timing.json"), "w"), indent=1)
 
 
 @scenario("bubble-once")
@@ -1189,7 +1304,8 @@ def camera(run, c):
                 f"clear_{stop}=place_at|{{me}}|{street[0]}|{street[1]}",
                 f"roof_{stop}=place_at|{{me}}|{roof[0]}|{roof[1]}",
             ]
-        with resident_fixture(run, ids):
+        # The scene turns `fov_on` and the clock; the fixture puts the world's own law and daylight back.
+        with sight_fixture(run, {"fov_on": "false"}), resident_fixture(run, ids):
             out, code, text = drive(run, f"{s}-{field}", plan + "quit",
                                     places=[f"{front}:0:-2.5", f"{back}:2.5:4.5", f"{behind_wall}:1.0:-14.0"], syncs=syncs + roof_syncs,
                                     env={"LIVING_GAME_DEV": "1", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
@@ -4249,7 +4365,7 @@ def main():
     ap.add_argument("scenarios", nargs="*")
     a = ap.parse_args()
     if a.list:
-        print("\n".join(n + (" *" if n in CULLET else "") for n in SCENARIOS))
+        print("\n".join(n + (" *" if n in CULLET else "") + (" (launches its own world)" if n in FRESH else "") for n in SCENARIOS))
         return
     if not a.run:
         ap.error("--run is required")
@@ -4262,7 +4378,8 @@ def main():
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
         owner = owner or verify.admin_token()
-        verify.require_running(verify.load(a.run), owner)
+        if name not in FRESH:
+            verify.require_running(verify.load(a.run), owner)
         SCENARIOS[name](a.run, c)
     p = os.path.join(ROOT, ".local/living/verify", a.run, "ui", f"checks{BEARING_SUFFIX}.json")
     os.makedirs(os.path.dirname(p), exist_ok=True)

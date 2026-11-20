@@ -17,4 +17,6 @@ R=player-sighton-$(date +%H%M%S)
 "$V" cleanup --run "$R"
 ```
 
+A land made with cover off whose overlay turns it on after creation (the play-test world: the island, then `install_script`) derives its cover geometry in steps first, about 6 s on the island. `sight_on.py` waits for `cover_law` to read on, up to 300 s, and records how long it waited ("cover in force (its geometry complete) before the checks").
+
 Cullet's two hedges are `mid_row_plot_toft_3_hedge` and `high_row_plot_garden_3_hedge` in land metres (plan origin (510, 784), plan y north). A land without brush (the island) gives `"brush": null` in the fixture; pass `--brush` with the world's `cover_brush_on` and no `--hedges`. The proof is `sight-on-proof.jsonl` in the run directory.

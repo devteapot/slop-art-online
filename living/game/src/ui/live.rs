@@ -84,10 +84,13 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     if net.status == crate::net::Status::Live {
         last.was_live = true;
     }
-    let link = (last.was_live && net.status != crate::net::Status::Live).then(|| match net.status {
+    // A world still being made (a reconnect into one: staged genesis, `genesis.rs`) says how far
+    // it is, never a failure.
+    let preparing = net.genesis.text(now).map(|(title, line)| if line.is_empty() { title } else { format!("{title} {}", line.lines().next().unwrap_or("")) });
+    let link = preparing.filter(|_| last.was_live).or_else(|| (last.was_live && net.status != crate::net::Status::Live).then(|| match net.status {
         crate::net::Status::Offline => "Connection lost · reconnecting…".to_string(),
         _ => "Reconnecting…".to_string(),
-    });
+    }));
     let Some(conn) = net.conn.as_ref() else {
         *model = HudModel { shown: true, now, link, ..default() };
         return;

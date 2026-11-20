@@ -80,6 +80,8 @@ PRIVATE = ['attention', 'copy_state', 'applied_gaze', 'cover_ground', 'fast_ask'
            'world_law',
            # A floor module's staged genesis (floor.rs), private since floors were added.
            'floor_seed', 'genesis_timer',
+           # Cover geometry derived after creation (geometry.rs, cover-genesis).
+           'cover_derivation', 'cover_timer',
            # Frames: what each player was last shown of others (docs/PERCEPTION.md, "Frames").
            'motion_seen', 'fighter_seen', 'doing_seen', 'line_seen',
            # Which character each person plays (perception.rs `current`); a player reads it through my_characters.
@@ -444,7 +446,7 @@ class Run:
             text = path.read_text()
             for match in re.finditer(r'#\[spacetimedb::reducer\]\s*pub fn (\w+)\(', text):
                 reducers[match[1]] = f'{path.relative_to(ROOT)}:{text[:match.start()].count(chr(10)) + 2}'
-        expected = set(ADMIN) | set(MIND) | set(FAST) | set(PLAYER) | {'join', 'join_as', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step'}
+        expected = set(ADMIN) | set(MIND) | set(FAST) | set(PLAYER) | {'join', 'join_as', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step', 'cover_step'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
         procedures = {m[1] for path in (ROOT / 'living/authority/src').glob('*.rs')
