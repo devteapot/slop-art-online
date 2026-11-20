@@ -10,6 +10,7 @@ pub struct CopyState {
     pub viewer: __sdk::Identity,
     pub public: bool,
     pub mirrored: bool,
+    pub fighters: bool,
 }
 
 impl __sdk::InModule for CopyState {
@@ -23,6 +24,7 @@ pub struct CopyStateCols {
     pub viewer: __sdk::__query_builder::Col<CopyState, __sdk::Identity>,
     pub public: __sdk::__query_builder::Col<CopyState, bool>,
     pub mirrored: __sdk::__query_builder::Col<CopyState, bool>,
+    pub fighters: __sdk::__query_builder::Col<CopyState, bool>,
 }
 
 impl __sdk::__query_builder::HasCols for CopyState {
@@ -32,6 +34,7 @@ impl __sdk::__query_builder::HasCols for CopyState {
             viewer: __sdk::__query_builder::Col::new(table_name, "viewer"),
             public: __sdk::__query_builder::Col::new(table_name, "public"),
             mirrored: __sdk::__query_builder::Col::new(table_name, "mirrored"),
+            fighters: __sdk::__query_builder::Col::new(table_name, "fighters"),
         }
     }
 }

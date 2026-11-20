@@ -1,0 +1,73 @@
+{
+ "pages": {
+  "eyes": "lookdev/types/types.eyes.ink.png"
+ },
+ "size": 4096,
+ "cell": 1024,
+ "density_mm": 0.25,
+ "classes": {
+  "child-u": [
+   0,
+   0
+  ],
+  "youth-f": [
+   1,
+   0
+  ],
+  "youth-m": [
+   2,
+   0
+  ],
+  "adult-f": [
+   3,
+   0
+  ],
+  "adult-m": [
+   0,
+   1
+  ],
+  "elder-f": [
+   1,
+   1
+  ],
+  "elder-m": [
+   2,
+   1
+  ]
+ },
+ "types": {},
+ "range": 0.00537109375,
+ "materials": {
+  "M00_000_00_LidInk_00_FACE": {
+   "color": [
+    6,
+    2,
+    2
+   ],
+   "width": "uv",
+   "min_px": 1.0,
+   "fade_px": 3.0,
+   "range": 0.00537109375,
+   "map": "lookdev/types/types.eyes.ink.png",
+   "m_uv": 1.024
+  },
+  "M00_000_00_FaceBrowInk_00_FACE": {
+   "color": [
+    57,
+    32,
+    20
+   ],
+   "ref": [
+    102,
+    46,
+    26
+   ],
+   "width": "uv",
+   "min_px": 1.0,
+   "fade_px": 3.0,
+   "range": 0.00537109375,
+   "map": "lookdev/types/types.eyes.ink.png",
+   "m_uv": 1.024
+  }
+ }
+}

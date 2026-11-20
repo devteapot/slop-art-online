@@ -118,8 +118,8 @@ SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'plac
 # The per-sender views: what a player perceives and its own state.
 # The tables filtered per client by row-level security (`viewer = :sender`): the cue event tables
 # (frame-views), the public motion copies and the mirror of a player's projections (battle-views).
-# Each has its isolation case (`cues.py`, `motion_tables.py`, both copy tables) and is named in docs/TICK_RATE.md's pin list.
-RLS_TABLES = ['seen_body_cue', 'seen_fighter_cue', 'seen_doing_cue', 'seen_body_copy', 'seen_character_copy']
+# Each has its isolation case (`cues.py`, `motion_tables.py`, the copy tables, `combat_feed.py`) and is named in docs/TICK_RATE.md's pin list.
+RLS_TABLES = ['seen_body_cue', 'seen_fighter_cue', 'seen_doing_cue', 'seen_body_copy', 'seen_character_copy', 'seen_fighter_copy', 'combat_feed']
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
          'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex',
@@ -153,7 +153,7 @@ ADMIN = {
     'place_structure': [0, 'shelter'], 'set_behavior': [0, '{"wait":30}'],
     # Scene setup: a resource node beside a character (2026-11-11, goods-1).
     'place_resource': [0, 'tree', 0.0, 0.0, 0.0, 0],
-    'place_near': [0, 0], 'seed_communities': [], 'spawn_battle': [0],
+    'place_near': [0, 0], 'seed_communities': [], 'spawn_battle': [0], 'spawn_battle_sides': [0, 2],
     'place_at': [0, 0.0, 0.0], 'spawn_skirmish': [0, 0.0], 'set_weather': [False, 0],
     'spawn_newcomer': ['probe'],
     # A floor module's runtime seed (floor.rs, admin only).
@@ -463,13 +463,20 @@ class Run:
         sources = [p for d in ('living', '.agents/skills') for p in (ROOT / d).rglob('*')
                    if p.suffix in ('.rs', '.py') and p.is_file() and '/target' not in str(p)
                    and 'bindings/src/generated' not in str(p) and '/.local/' not in str(p)]
+        # These subscribe all as a player, on purpose, to prove it gets only its own rows: drive.py,
+        # cues.py and motion_tables.py as player C; battle_viewers.py --privacy as its spectator
+        # (copy-privacy), through the probe's `all_tables` request.
+        on_purpose = {'.agents/skills/verify-client/scripts/drive.py', '.agents/skills/verify-client/scripts/cues.py',
+                      '.agents/skills/verify-client/scripts/motion_tables.py', '.agents/skills/verify-client/scripts/probe/src/main.rs',
+                      '.agents/skills/verify-client/scripts/combat_feed.py',
+                      'living/tools/battle_viewers.py'}
         everything = [str(p.relative_to(ROOT)) for p in sources
                       if re.search(r'subscribe_to_all_tables\(|SELECT \* FROM \*', p.read_text(errors='replace'))
-                      and p.name not in ('drive.py', 'cues.py', 'motion_tables.py')]  # these subscribe all as player C, on purpose
+                      and str(p.relative_to(ROOT)) not in on_purpose]
         if everything:
             raise RuntimeError(f'a program subscribes every table (cue tables included, RLS bypassed for the owner): {everything}')
         owners = [str(p.relative_to(ROOT)) for d in ('living/mind', 'living/viewer') for p in (ROOT / d).rglob('*.rs')
-                  if '/target' not in str(p) and re.search(r'seen_(body|fighter|doing)_cue|seen_body_copy|seen_character_copy', p.read_text(errors='replace'))]
+                  if '/target' not in str(p) and re.search(r'seen_(body|fighter|doing)_cue|seen_body_copy|seen_character_copy|seen_fighter_copy|combat_feed', p.read_text(errors='replace'))]
         if owners:
             raise RuntimeError(f'an owner program names a row-level-security table: {owners}')
         # Every row-level-security rule, by table (docs/TICK_RATE.md, "Every RLS-filtered table",

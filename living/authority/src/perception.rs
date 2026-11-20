@@ -1082,15 +1082,27 @@ thread_local! {
     /// When each player's character was last swept (module cache; a fresh instance sweeps
     /// everyone once, staggered).
     static LAST: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
+    /// (b) battle law `crowd_sweep_n`: how many each player saw at its last sweep (module memory;
+    /// a fresh instance sweeps at the ordinary period until it knows).
+    static SEEN_N: RefCell<HashMap<u32, usize>> = RefCell::new(HashMap::new());
     /// The knowledge epochs each player's rows were last projected at, and the targets a
     /// reveal held for it then.
     static PROJECTED: RefCell<HashMap<u32, ((u64, u64), HashSet<u32>)>> = RefCell::new(HashMap::new());
 }
 
+/// What a tick's sweeps hand to its frames (`frame::deliver`): the players swept, and every
+/// health reading the sweeps made this tick (`Shared.health`: `common::needs(&v, now).hp` and
+/// `max_hp` at this `now`, or none for a body without `vitals`). A local value of the one tick
+/// call, never kept across calls.
+pub struct Swept {
+    pub ids: Vec<u32>,
+    pub health: HashMap<u32, Option<(f32, f32)>>,
+}
+
 /// Sweep the players whose turn it is (every tick, numbered `tick`; each player every
 /// [`SWEEP_MS`]). Returns the players swept, whose sweeps share the step with frames
-/// (`frame::deliver`).
-pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
+/// (`frame::deliver`), and the sweeps' health readings.
+pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Swept {
     // What the sweep keeps across ticks was worked out from rows as this instance saw them in
     // its last tick. `tick` is the committed clock's tick plus one, so it follows that tick only
     // if that tick committed and no other ran since. A tick rolled back (its number comes again)
@@ -1114,8 +1126,9 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
     }
     let humans = crate::combat::humans(ctx);
     if humans.is_empty() {
-        return Vec::new();
+        return Swept { ids: Vec::new(), health: HashMap::new() };
     }
+    let crowd_n = common::laws(ctx).crowd_sweep_n;
     let due: Vec<(u32, Identity)> = LAST.with(|l| {
         let mut l = l.borrow_mut();
         let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
@@ -1130,11 +1143,19 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
             .filter(|(id, _)| {
                 // A character first seen by this instance starts on its own phase.
                 let last = *l.entry(*id).or_insert_with(|| turn_before(*id, now));
-                if now.saturating_sub(last) >= SWEEP_MS {
+                // (b) `crowd_sweep_n`: in a crowd larger than n, the period grows with it (at most 3x).
+                let period = match crowd_n {
+                    n if n > 0.0 => {
+                        let seen = SEEN_N.with(|s| s.borrow().get(id).copied().unwrap_or(0)) as f32;
+                        (SWEEP_MS as f32 * (seen / n).clamp(1.0, 3.0)) as u64
+                    }
+                    _ => SWEEP_MS,
+                };
+                if now.saturating_sub(last) >= period {
                     // It keeps its own phase: its turn is a whole number of periods after the
                     // last. Taking `now` would put everyone due in a late tick on one phase, and
                     // then their sweeps would land in one tick ever after.
-                    l.insert(*id, last + (now - last) / SWEEP_MS * SWEEP_MS);
+                    l.insert(*id, last + (now - last) / period * period);
                     true
                 } else {
                     false
@@ -1143,7 +1164,7 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
             .collect()
     });
     if due.is_empty() {
-        return Vec::new();
+        return Swept { ids: Vec::new(), health: HashMap::new() };
     }
     let w = common::world(ctx);
     let map = common::map(ctx);
@@ -1159,7 +1180,7 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
         swept.push(id);
     }
     common::diag(|| "sweep:viewers", swept.len() as u64);
-    swept
+    Swept { ids: swept, health: shared.health.into_iter().collect() }
 }
 
 /// The latest moment at or before `now` on character `id`'s phase: each player's turns fall
@@ -1283,6 +1304,23 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         }
     }
     drop(sight_span);
+    // (a) battle law `far_cap` (docs/BATTLE_LAWS.md): at most this many seen, whoever is engaged
+    // with the player first, then the nearest; the rest are neither seen nor heard this sweep.
+    let mut capped: HashSet<u32> = HashSet::new();
+    let cap = common::laws(ctx).far_cap as usize;
+    if cap > 0 && seen.len() > cap {
+        let engaged = crate::frame::engaged_with(id);
+        let keep_engaged = seen.iter().filter(|b| engaged.contains(b)).count();
+        let mut rest: Vec<(f32, u32)> = seen.iter().filter(|b| !engaged.contains(b)).map(|b| (near.get(b).copied().unwrap_or(f32::MAX), *b)).collect();
+        rest.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
+        for (_, b) in rest.into_iter().skip(cap.saturating_sub(keep_engaged)) {
+            seen.remove(&b);
+            near.remove(&b);
+            capped.insert(b);
+        }
+        common::diag(|| "far_cap:dropped", capped.len() as u64);
+    }
+    SEEN_N.with(|s| s.borrow_mut().insert(id, seen.len()));
     common::diag(|| "sweep:candidates", candidates);
     common::diag(|| "sweep:seen", seen.len() as u64);
     if scheduled && senses.gaze.is_some() {
@@ -1294,7 +1332,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         let hear_chunks = (hearing_r < reach).then(|| living_rules::map::chunks_around(here.0, here.1, hearing_r));
         let mut v: Vec<NearCreature> = crowd
             .iter()
-            .filter(|(c, chunk)| c.id != id && c.dist <= hearing_r && !seen.contains(&c.id) && hear_chunks.as_ref().is_none_or(|k| k.contains(chunk)))
+            .filter(|(c, chunk)| c.id != id && c.dist <= hearing_r && !seen.contains(&c.id) && !capped.contains(&c.id) && hear_chunks.as_ref().is_none_or(|k| k.contains(chunk)))
             .map(|(c, _)| c.clone())
             .collect();
         v.sort_by(|a, b| a.dist.total_cmp(&b.dist));
@@ -1405,15 +1443,19 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
             }
         }
     }
+    // Each newcomer's band as the projection just written grants it (`show_fighter` would read
+    // that row and the health back).
+    let mut bands: IdMap<u32, u8> = IdMap::default();
     for body in seen.difference(&have) {
         let Some(t) = ctx.db.character().id().find(*body) else { continue };
         let pr = project_shared(ctx, shared.as_deref_mut(), regard(ctx, &me, &t, now), &t, now);
+        bands.insert(*body, pr.band);
         proj_insert(ctx, pr.into_row(viewer, *body, *body == id, 0));
     }
     // The move of each newcomer that has fought, with the band its projection grants.
     for body in &entered {
         let near = crate::frame::is_near(id, *body);
-        crate::frame::show_fighter(ctx, id, viewer, *body, near, true, now);
+        crate::frame::show_fighter(ctx, id, viewer, *body, near, true, now, bands.get(body).copied());
         crate::frame::show_doing(ctx, id, viewer, *body, near);
     }
 }
@@ -1815,8 +1857,11 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
     }
     drop(as_span);
     let writing = common::detail_span("project.write");
+    // Each body's band as the projection written here grants it, for `show_fighter` below.
+    let mut bands: IdMap<u32, u8> = IdMap::default();
     for (body, pr) in projected {
         let own = body == id;
+        bands.insert(body, pr.band);
         let rows: Vec<Projected> = ctx.db.projected().by_viewer_body().filter((viewer, body)).collect();
         match rows.as_slice() {
             [p] if p.own == own => {
@@ -1841,7 +1886,7 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
     let showing = common::detail_span("project.show");
     for body in s.entered {
         let near = crate::frame::is_near(id, *body);
-        crate::frame::show_fighter(ctx, id, viewer, *body, near, true, now);
+        crate::frame::show_fighter(ctx, id, viewer, *body, near, true, now, bands.get(body).copied());
         crate::frame::show_doing(ctx, id, viewer, *body, near);
     }
     drop(showing);
@@ -2146,6 +2191,9 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
     for p in ctx.db.fighter_near().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.fighter_near().id().delete(p);
     }
+    for p in ctx.db.seen_fighter_copy().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
+        ctx.db.seen_fighter_copy().id().delete(p);
+    }
     for p in ctx.db.doing_near().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.doing_near().id().delete(p);
     }
@@ -2392,6 +2440,11 @@ pub fn seen_characters(ctx: &ViewContext) -> Vec<SeenCharacter> {
 /// `frame.rs`). Mine is `my_fighter`.
 #[spacetimedb::view(accessor = seen_fighters, public, primary_key = id)]
 pub fn seen_fighters(ctx: &ViewContext) -> Vec<Fighter> {
+    // A viewer's fighter copies are all public (`fighter_tables_on`) or all private (`frame.rs`).
+    let public: Vec<Fighter> = ctx.db.seen_fighter_copy().viewer().filter(ctx.sender()).map(|c| c.fighter).collect();
+    if !public.is_empty() {
+        return public;
+    }
     let far = ctx.db.fighter_seen().viewer().filter(ctx.sender()).map(|f| f.fighter);
     far.chain(ctx.db.fighter_near().viewer().filter(ctx.sender()).map(|f| f.copy.fighter)).collect()
 }
@@ -2399,12 +2452,20 @@ pub fn seen_fighters(ctx: &ViewContext) -> Vec<Fighter> {
 /// The near tier of `seen_fighters` (see `seen_bodies_near`).
 #[spacetimedb::view(accessor = seen_fighters_near, public, primary_key = id)]
 pub fn seen_fighters_near(ctx: &ViewContext) -> Vec<Fighter> {
+    let public: Vec<Fighter> = ctx.db.seen_fighter_copy().viewer_near().filter((ctx.sender(), true)).map(|c| c.fighter).collect();
+    if !public.is_empty() {
+        return public;
+    }
     ctx.db.fighter_near().viewer().filter(ctx.sender()).map(|f| f.copy.fighter).collect()
 }
 
 /// The far tier of `seen_fighters`.
 #[spacetimedb::view(accessor = seen_fighters_far, public, primary_key = id)]
 pub fn seen_fighters_far(ctx: &ViewContext) -> Vec<Fighter> {
+    let public: Vec<Fighter> = ctx.db.seen_fighter_copy().viewer_near().filter((ctx.sender(), false)).map(|c| c.fighter).collect();
+    if !public.is_empty() {
+        return public;
+    }
     ctx.db.fighter_seen().viewer().filter(ctx.sender()).map(|f| f.fighter).collect()
 }
 

@@ -1753,6 +1753,39 @@ pub struct CombatSeen {
     pub note: String,
 }
 
+/// A `combat_seen` row as an event for its viewer alone (views step 2, the `combat_feed_on` law;
+/// docs/BATTLE_VIEWERS.md, addendum 4): public, filtered per client by row-level security
+/// (`frame::COMBAT_FEED_FILTER`), delivered at commit and never kept. `id` is the `combat_seen`
+/// row's, so a client that also read `my_combat` (once, at connect) merges the two by it. The
+/// columns are `CombatSeen`'s, in its order.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = combat_feed, public, event)]
+pub struct CombatFeed {
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub expires_ms: u64,
+    pub at_ms: u64,
+    pub kind: u8,
+    pub actor: u32,
+    pub target: u32,
+    pub skill: u8,
+    pub x: f32,
+    pub y: f32,
+    pub dx: f32,
+    pub dy: f32,
+    pub amount: f32,
+    pub ms: u32,
+    pub note: String,
+}
+
+impl CombatFeed {
+    pub fn of(r: &CombatSeen) -> Self {
+        CombatFeed { id: r.id, viewer: r.viewer, expires_ms: r.expires_ms, at_ms: r.at_ms, kind: r.kind, actor: r.actor, target: r.target, skill: r.skill,
+                     x: r.x, y: r.y, dx: r.dx, dy: r.dy, amount: r.amount, ms: r.ms, note: r.note.clone() }
+    }
+}
+
 /// One blow of a fight as its onlookers saw it (private; docs/BATTLE_SCALE.md, fix 4): who
 /// struck whom, how it ended, and everyone who could see it under the sight rule at that instant
 /// (`perceive::witnessed`'s test), the two in it excepted. Each onlooker is told what it saw as
@@ -2319,13 +2352,42 @@ pub struct SeenBodyCopy {
 /// the moves (`frame::to_public`, `all_private`, `perception::fill_mirror`, `drop_mirrors`), so
 /// a step that rolls back takes it back with them: module memory could not say so to a reducer
 /// that runs before the next tick. No row: neither.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[spacetimedb::table(accessor = copy_state)]
 pub struct CopyState {
     #[primary_key]
     pub viewer: Identity,
     pub public: bool,
     pub mirrored: bool,
+    /// Its fighter copies are in `seen_fighter_copy` (views step 3, the `fighter_tables_on` law).
+    #[default(false)]
+    pub fighters: bool,
+}
+
+impl Default for CopyState {
+    fn default() -> Self {
+        CopyState { viewer: Identity::ZERO, public: false, mirrored: false, fighters: false }
+    }
+}
+
+/// A perceived creature's `fighter` row as the viewer's frames last wrote it (public, row-level
+/// security `viewer = :sender`; views step 3, the `fighter_tables_on` law): `id` the private
+/// copy's key (`frame::key`: the viewer's character and the creature), `body` the creature,
+/// `near` the tier, `fighter` the row `seen_fighters` returns for it (its band as this viewer
+/// perceives it). A primary key, unlike `seen_body_copy`: fighter copies change often (a move, a
+/// band), and a change is then one in-place update, not a delete and an insert on every index
+/// (measured: the keyless table cost 24-43 ms/s more tick WASM at 16-216 viewers).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_fighter_copy, public,
+    index(accessor = viewer_near, btree(columns = [viewer, near])))]
+pub struct SeenFighterCopy {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub body: u32,
+    pub near: bool,
+    pub fighter: Fighter,
 }
 
 /// A mirror of a viewer's `projected` row (public, row-level security `viewer = :sender`;

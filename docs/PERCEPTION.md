@@ -86,7 +86,7 @@ Every table, by what it holds. "Open" and "scoped" are the two builds ([Compatib
 | `know_how` | own private state: techniques the character knows | public | private → `my_know_how` | game client (skill bar), mind service (owner) |
 | `activity` | own private state (the activity under way, its words and topic) | private | private | observer (owner); others see `doing` |
 | `practice` | own private state (uses per skill) | private | private | rules only |
-| `combat_seen` | own private state, through `my_combat` | private | private | game client (view) |
+| `combat_seen` | own private state, through `my_combat` (and, with `combat_feed_on`, as event rows of the public `combat_feed`, row-level security) | private | private | game client (view) |
 | `readiness` | own private state, through `my_readiness` | private | private | game client (view) |
 | `skill_use` | own private state, through `my_skill_uses` | private | private | game client (view) |
 | `character_senses` | own private state, through `my_senses` (eighth change: what the character senses now, the `senses` law's answer) | private | private | game client (view) |
@@ -185,6 +185,15 @@ Since battle-views (2026-11-19, dev-box; [Battle viewers](BATTLE_VIEWERS.md#adde
 - **Whole per viewer.** With the law on, a viewer's frame fills its mirror from its projected rows in one transaction (`perception::fill_mirror`); the first tick that sees the law off drops every mirror row (`perception::drop_mirrors`, span `tick.characters_private`). Nothing moves back: `projected` is whole either way. Whether a viewer's mirror is whole is its `copy_state` row, written with the fill and the drop.
 - **The view is unchanged**, so the minds, SQL readers and a client on the view see the same with the law on or off; with it off the additions are the delete of a missing mirror row per projected delete and one empty table walk per instance. Both delivery laws of battle-views are value-only (`law_override`): a switch applies at the next tick with no reinstall.
 - **Privacy.** The mirror row is the view's row and nothing more. `verify-client`'s `motion_tables.py` covers both copy tables (isolation by subscription, SQL and subscribe-all both ways, every probe accepted, the mirror equal to the view, the kill switch through an override row); without the mirror's rule, 7 of its 27 checks fail.
+
+### Fighter copies as a table (views step 3, behind a law)
+
+Since views step 3 (2026-11-20, dev-box; [Battle viewers](BATTLE_VIEWERS.md), addendum 5). With the `fighter_tables_on` law on (off by default until the client reads the table), a player's copies of the fighters it perceives (each a `fighter` row with its band as this viewer perceives it) are rows of the public `seen_fighter_copy` (`viewer`, indexed; `body`; `near`, the tier; `fighter`, the row `seen_fighters` returns), filtered per client by row-level security (`viewer = :sender`), instead of the private `fighter_seen` (far) and `fighter_near` (near). The same mechanism as the motion copies:
+
+- **All or none.** A viewer's fighter copies are all public or all private (`copy_state.fighters`). With the law on, its frame moves them whole (`frame::fighters_to_public`); the first tick that sees the law off moves every public copy back to its tier's private table (`frame::all_private_fighters`, span `tick.fighters_private`).
+- **One writer.** `frame::show_fighter` reads and writes the viewer's copy where it is, a delete and an insert for a public change (no primary key, as `seen_body_copy`). A creature leaving sight or a viewer forgetting its scene drops it there too (`drop_copies`, `perception::forget`).
+- **The views follow the rows.** `seen_fighters`, `seen_fighters_near` and `seen_fighters_far` read the viewer's public rows (by `viewer`, or by `(viewer, near)` for the tiers) when it has any, else the private tables, so they show the same either way.
+- **Privacy.** `verify-client`'s `motion_tables.py` covers the fighter table with the two others (isolation by subscription, SQL and subscribe-all both ways, the table equal to `seen_fighters`, the near flags to the tier views, the kill switch through an override row; without the rule 5 checks fail), and `battle_viewers.py --privacy --fighter-tables` at battle density. `seen_doing_*` stay views (the GC: 0.6 ms/s, not worth an RLS table).
 
 ### The moving-body stream
 
