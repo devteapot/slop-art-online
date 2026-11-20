@@ -208,6 +208,7 @@ fn a_law_a_script_reads_elsewhere_is_not_value_only() {
     assert_eq!(s.value_only("cue_transport_on"), Some(ValueOnly::Delivery));
     assert_eq!(s.value_only("motion_tables_on"), Some(ValueOnly::Delivery));
     assert_eq!(s.value_only("characters_table_on"), Some(ValueOnly::Delivery));
+    assert_eq!(s.value_only("combat_feed_on"), Some(ValueOnly::Delivery));
     assert!(s.apply_overrides(&[("near_tier_on".into(), json!(false))]).unwrap_err().contains("not value-only"));
     // A field of the constants read elsewhere counts too (`laws().gaze_on`).
     let field = crate::floors::compose(BASE, "fn heard_as(kind) { if laws().gaze_on { kind } else { \"creature\" } }").unwrap();

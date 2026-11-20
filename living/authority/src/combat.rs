@@ -115,6 +115,10 @@ pub fn feed_row(ctx: &ReducerContext, viewer: Identity, now: u64, ev: &Seen, amo
         ms: ev.ms,
         note: ev.note.clone(),
     });
+    // Views step 2: the same row as an event for its viewer alone, while the law is on.
+    if common::laws(ctx).combat_feed_on {
+        ctx.db.combat_feed().insert(CombatFeed::of(&row));
+    }
     row.id
 }
 
