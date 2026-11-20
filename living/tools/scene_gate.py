@@ -846,6 +846,7 @@ class Runner:
         self.render_set = None  # the checked render asset set (set.json and its `dir`) on a render host
         self.render_tool = None  # the checkout whose render_set.py links the set (the tree under test's)
         self.stale = []  # drive log lines that say the set is stale (the book lacks a key or generation)
+        self.render_setup = None  # why the set could not be put in place (a setup failure, not a case's)
         self.client_built = set()  # roots whose release client this gate has built
 
     def sh(self, cmd, root, log, timeout, stdout=None, env=None):
@@ -1119,7 +1120,9 @@ class Runner:
             with open(log, "a") as f:
                 f.write(f"render_set.py link: {said}\n")
             if not linked:
-                return {c: (False, f"render setup: render_set.py link failed: {said[-300:]}", time.time() - t0) for c in cases}
+                with LOCK:
+                    self.render_setup = f"render_set.py link failed: {said[-300:]}"
+                return {c: (False, f"render setup: {self.render_setup}", time.time() - t0) for c in cases}
             if self.build_client(root, log):
                 return {c: (False, f"{log} (client build failed)", time.time() - t0) for c in cases}
             env = self.render_env()
@@ -1531,15 +1534,19 @@ def cmd_run(a):
         record["first_seconds"] = round(time.time() - t0)
         failed = [c for c in all_cases if not first[c][0]]
         second = {}
-        if failed and runner.stale:
-            say("not re-running: the asset set is stale (below)")
+        if failed and (runner.stale or runner.render_setup):
+            say("not re-running: the render asset set is stale or could not be linked (below)")
         elif failed:
             say(f"re-running {', '.join(failed)} once, each on a fresh world")
             second = retry_each(runner, repo, failed, "b")
         twice = [c for c in failed if c in second and not second[c][0]]
-        on_main = judge_on_main(a, runner, repo, base, twice, record) if twice and not runner.stale else {}
+        on_main = judge_on_main(a, runner, repo, base, twice, record) if twice and not (runner.stale or runner.render_setup) else {}
     finally:
         runner.sweep()
+    if runner.render_setup:
+        say(f"render: setup failed: {runner.render_setup}")
+        record.update(result=f"render setup failed: {runner.render_setup}", seconds=round(time.time() - t0))
+        return finish(a, record, 2)
     if runner.stale:
         for line in runner.stale[:10]:
             say(f"render: asset set stale: {line[-300:]}")
