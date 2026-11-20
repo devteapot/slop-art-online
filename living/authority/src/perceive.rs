@@ -575,12 +575,9 @@ pub const SLEEP_GAP_MS: u64 = 3_000;
 /// `id` is a character's (its row exists: characters are never deleted). Its row is read only when
 /// it has woken, the one case that tells it anything (docs/COMBAT_PHASE.md step 3: every
 /// evaluation ends here, and most change nothing).
-pub fn slept(ctx: &ReducerContext, id: u32, now: u64) {
-    slept_with(ctx, id, now, ctx.db.activity().id().find(id));
-}
-
-/// `slept`, given the body's activity row as it is now (`act`, read by the caller in this
-/// transaction with nothing written to it since).
+///
+/// `act` is the body's activity row as it is now, read by the caller in this transaction with
+/// nothing written to it since.
 pub fn slept_with(ctx: &ReducerContext, id: u32, now: u64, act: Option<Activity>) {
     let sleep = act.as_ref().filter(|a| a.skill == "sleep");
     let row = ctx.db.slumber().actor().find(id);

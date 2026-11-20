@@ -255,7 +255,7 @@ def run(a):
     db, t0, ticks, replica = meta["db"], meta["start_tick"], meta["ticks"], meta["replica"]
     res = {**meta, "base": a.base, "candidate": a.candidate}
     ports = [int(p) for p in a.ports.split(",")]
-    names = [f"{a.template}-x", f"{a.template}-y"]
+    names = [f"{a.template}-x{a.tag}", f"{a.template}-y{a.tag}"]
     try:
         servers = []
         for name, port in zip(names, ports):
@@ -358,6 +358,7 @@ def main():
     ap.add_argument("--ports", default=None, help="run: the two copies' ports, PX,PY")
     ap.add_argument("--out")
     ap.add_argument("--keep-copies", action="store_true")
+    ap.add_argument("--tag", default="", help="run: a suffix for the copies' names (two runs at once)")
     ap.add_argument("--stop", type=int, default=0, help="run: pause both copies at this tick instead of the template's det_stop")
     ap.add_argument("--cpus", default="0-4,10-14", help="run: the copies' cores (default the Spark's A725 cores, away from pinned measurements)")
     a = ap.parse_args()
