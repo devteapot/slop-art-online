@@ -131,6 +131,11 @@ def main():
             seen = 0
             for i, m in enumerate(mods):
                 stdb("publish", "-s", "local", "-b", f"/wasm/{m}.wasm", db, *(["--delete-data"] if i == 0 else []), "-y")
+                if i == 0:
+                    # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+                    sys.path.insert(0, str(ROOT / "living/tools"))
+                    import genesis_wait
+                    genesis_wait.wait_ready_cli(lambda *x: stdb(*x, check=False), db)
                 time.sleep(a.settle)
                 if a.crowd and i == 0:
                     stdb("call", "-s", "local", db, "spawn_crowd", str(a.crowd), "true")

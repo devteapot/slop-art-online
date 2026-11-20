@@ -11,6 +11,7 @@ Usage: scene_gate_selftest.py
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -57,6 +58,14 @@ def expect(name, cond, out=""):
     if not cond:
         failures.append(name)
         print(out)
+
+
+def check_run_part():
+    """Case and group names become valid verify.py run-name parts (lowercase, digits, single hyphens)."""
+    for name, want in (("motion_tables", "motion-tables"), ("mind-unit", "mind-unit"), ("cues", "cues"),
+                       ("generation-cullet", "generation-cullet"), ("A__b:c", "a-b-c")):
+        got = scene_gate.run_part(name)
+        expect(f"run part: {name} -> {want}", got == want and re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", got), got)
 
 
 def check_genesis():
@@ -385,6 +394,7 @@ def check_staged_genesis():
 
 
 def main():
+    check_run_part()
     check_genesis()
     check_genesis_baselines()
     check_genesis_live()

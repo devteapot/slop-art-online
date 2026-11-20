@@ -176,3 +176,27 @@ The row is the 64 B `Moving` plus the copy key (8 B), the viewer's identity (32 
 - **Fewer rows instead of smaller ones:** the near tier's copies follow every 500 ms behind cues; the far tier's at each frame. Most of the bytes are far-tier updates (each an old and a new row). A far cadence that follows the far tier's size (option D above) would cut bytes in proportion, and the cues keep what matters fresh. That is a separate measured step.
 
 So the honest answer to "cut the 40 B" is: about 8 B can go without a cost; the 32 B identity is what row-level security in 2.14.1 needs on each row to stay per-row cheap. Before the law goes on: build the 97 B row, and report kB per player against main on Cullet 216, as asked.
+
+## Rollout: one change set, one play-test window (decided 2026-11-20)
+
+**Where it stands.** Both copy tables are on main since `a407be01a` (battle-views), behind `motion_tables_on` and `characters_table_on`, both **off** by default; with both off the authority and the client take main's path (`frame::tests::both_delivery_laws_off_take_main_s_path`). The laws are measured on (216 battle with keep-alive, 0 deaths: ticks 9.56 → 14.12/s; Cullet 216: far pairs p90 250–367 → 67 ms, `seen_characters` view 67.7 → 0 ms/s, kB/player +36% and +10%; the kill switch by override row 51 ms against a 2,333 ms reinstall; evidence `~/archive/worktree-evidence-20261120/battle-views-local.tar.gz` on the dev-box). No separate laws-on window is run before the client reads the tables: with no client on them, laws-on only costs bytes.
+
+**One change set, so the next play-test after 11 gets all three at once:**
+
+| Part | What | Who |
+|---|---|---|
+| 1. The client switch | The game client subscribes `seen_body_copy` and `seen_character_copy` while the law is on (read from the `law_override` rows), and main's untiered/tier queries while it is off, switching make-before-break as frame-views' tier switch does. Queued after feed-scope's client half. | laptop (Opus) |
+| 2. The defaults | `motion_tables_on: true` and `characters_table_on: true` in both default sets: the law block of `living/scripts/skills.rhai` (about line 160) and `Laws::default` in `living/rules/src/script.rs` (about line 830). The both-off test keeps covering the off path through overrides. `living-check` and the scene gate (`cues`, `motion_tables`) on the merge. | dev-box |
+| 3. The play-test build | Built from a main that has 1 and 2. A fresh world's genesis has no clients to disconnect, so the RLS rules cost nothing there; an *update* of an existing world disconnects every client once and needs a mind restart (never during an owner session). Island `init` fuel: with staged genesis on main, no concern; without it, check the guard's headroom first (98.6% on 2026-11-20). | laptop stages it |
+
+**The window's checklist** (whoever stages the play-test):
+
+1. The owner is not in a session (on the laptop, `.local/build-slots/session` is absent).
+2. Main contains parts 1 and 2; the gate's `cues` and `motion_tables` cases passed on that merge.
+3. Publish the play-test world from that build. For an existing world: one disconnect, then restart the mind service.
+4. In the world, confirm both laws read on (`law_override` rows, or the defaults), and that clients subscribe the copy tables: `motion_tables.py` against the world's own identity, or a verify-client probe.
+5. verify-ui: camera, talk and far scenarios pass with the laws on.
+6. The kill switch: `set_world_law` `motion_tables_on` `false` (then `characters_table_on`), and within one tick the copies are back or gone, nothing split, the `script` row's revision unchanged; then on again. Record the tick times.
+7. Note kB/s per player and near p90 in the play-test's notes, against play-test 11.
+
+If a check fails, switch the law off by row (step 6) and leave the world running; the client follows the law.

@@ -260,6 +260,11 @@ def launch(a):
         sys.exit(f"refusing to overwrite {st['db']}: use a new run name")
     fresh = ["--delete-data"] if current and not keep else []
     command = [STDB, "publish", "-s", "local", "-b", f"/wasm/{wasm}", st["db"], *fresh, "-y"]
+    # Record the attempt before the guarded publish: a publish the server refuses (a seed's init
+    # error, an init out of energy) raises in `arm` and leaves no database; the module copy goes
+    # with it, and `cleanup` of the run confirms the database does not exist.
+    st["publish_attempted"] = True
+    save(st)
     try:
         published = world_guard.arm(run_dir(a.run), URL, st["db"], owner, driver_pid=driver_pid, command=command,
                                     expected=current, expected_epoch=st.get("world_epoch"),
@@ -274,6 +279,18 @@ def launch(a):
     st["published"] = True
     st["lease_seconds"] = idle_seconds
     save(st)
+    # Staged genesis: the world is made by scheduled steps after the publish returns; nothing
+    # calls it (install_script below, the scenes) before it is ready (genesis_wait.py).
+    import genesis_wait
+    try:
+        made = genesis_wait.wait_ready(URL, st["db"], owner, timeout_s=float(os.environ.get("LIVING_GENESIS_TIMEOUT_S", "900")),
+                                       log=lambda m: log(st, m))
+    except genesis_wait.GenesisNotReady as e:
+        save(st)
+        sys.exit(str(e))
+    if made:
+        st["genesis_steps"] = made.get("step")
+        log(st, f"world made in {made.get('step')} genesis steps")
     # A seed with its own laws (`laws` or `laws_file`, a Rhai overlay) had them composed over the
     # shipped script and installed when its world was created; installing the plain script now
     # would drop them. Every other world gets the working tree's script, as before. `none` (a
@@ -321,6 +338,9 @@ def doctor(a):
     code, _ = http(f"/v1/database/{st['db']}/sql", "SELECT paused FROM world", raw=True)
     checks[f"database {st['db']} exists"] = code == 200
     if code == 200:
+        # Staged genesis: a world still being made is not "not ticking" (docs/STAGED_GENESIS.md).
+        g = next(iter(q("SELECT done, step, steps, label FROM genesis")), None)
+        checks[f"world is made (genesis {'absent' if g is None else ('done' if g[0] else f'step {g[1]} of {g[2]}: {g[3]}')})"] = g is None or bool(g[0])
         paused = q("SELECT paused FROM world")[0][0]
         # Housekeeping writes the single `stats` row a few seconds after publishing and then
         # rewrites it periodically, so wait for it and sample it over a window.
@@ -584,6 +604,18 @@ def cleanup(a):
     st = load(a.run)
     db = st["db"]
     require_scratch_name(a.run, db)
+    if "published" not in st and st.get("publish_attempted") and not st.get("started_container"):
+        # A publish the server refused: nothing to delete, provided the database does not exist.
+        code, body = http(f"/v1/database/{db}/sql", "SELECT * FROM world", admin_token(), raw=True)
+        if code != 404:
+            sys.exit(f"refusing cleanup of {db}: its publish was not recorded, but SQL answers {code}")
+        world_guard.stop(run_dir(a.run))
+        if st.get("wasm", "").startswith("living_authority_verify_"):
+            (wasm_mount() / st["wasm"]).unlink(missing_ok=True)
+            log(st, f"removed module copy {st['wasm']}")
+        log(st, f"no database {db} (its publish was refused; SQL 404)")
+        save(st)
+        return
     if "published" not in st and not st.get("started_container"):
         sys.exit(f"refusing cleanup of {db}: no launch record")
     if st.get("published"):

@@ -387,6 +387,8 @@ The island's digests are unchanged by this work: tiles `c19cc98e8f1471f0`, heigh
 
 ### Staged generation and the largest floor
 
+**Since staged genesis (2026-11-20, docs/STAGED_GENESIS.md), every seeded world is made this way**, not only lands over 2048 m: `init` keeps the script, the seed's check and its rules, then `genesis_step` makes the world back to back (a seed without a land map in one `world` step). A land up to 2048 m keeps the resources it had when it was made inline (one step over the whole map, the inline draws and caps); larger lands keep their row bands. Until `genesis.done` the player and mind reducers refuse with `world_preparing`, and every tool that publishes waits through `living/tools/genesis_wait.py`.
+
 Built on `megacity-1`. Numbers are from the dev-box (AMD Ryzen AI Max+ 395, 32 threads, Radeon 8060S), with other agents keeping the load average at 5 to 15; the fuel numbers are machine-independent.
 
 **SpacetimeDB documentation and source checked (v2.14.1, as above):**

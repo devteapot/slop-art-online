@@ -1130,6 +1130,9 @@ class Instance:
         owner = world_guard.arm(self.dir, URL, self.db, self.shared["token"], os.getpid(), command=command)
         self.database_identity, self.world_epoch = owner["identity"], owner["epoch"]
         self.published = True
+        # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+        import genesis_wait
+        genesis_wait.wait_ready(URL, self.db, self.shared["token"])
         # The replica remains on disk after logical deletion in SpacetimeDB 2.14.1.
         try:
             self.replica = replica_of(self.db, self.shared["token"], newer_than=started)

@@ -434,6 +434,9 @@ def _run(a, procs, token_file):
     }
     r.save("manifest.json", manifest)
     stdb("publish", "-s", "local", "-b", "/wasm/living_authority.wasm", db, "--delete-data", "-y")
+    # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+    import genesis_wait
+    genesis_wait.wait_ready(URL, db, admin_token())
     stdb("call", "-s", "local", db, "install_script", json.dumps((ROOT / "living/scripts/skills.rhai").read_text()))
     token = admin_token()
     ident = json.loads(http(f"/v1/database/{db}")[1])["database_identity"]["__identity__"].removeprefix("0x")

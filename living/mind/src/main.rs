@@ -172,6 +172,8 @@ async fn main() -> Result<()> {
                 .subscribe(queries.into_iter().chain([
                     "SELECT * FROM mind_cursor",
                     "SELECT * FROM world",
+                    // Staged genesis: whether the world is made yet (docs/STAGED_GENESIS.md §4).
+                    "SELECT * FROM genesis",
                     "SELECT * FROM character",
                     "SELECT * FROM brain",
                     "SELECT * FROM persona",
@@ -285,6 +287,20 @@ async fn main() -> Result<()> {
     }
     conn.run_threaded();
     ready_rx.await.map_err(|_| anyhow!("subscription never applied"))?;
+    // Staged genesis: a world still being made has no one to deliberate for, and its mind
+    // reducers refuse (`world_preparing`); wait, quietly, until its `genesis` row is done (or
+    // absent: a world made before staged genesis).
+    let mut waited = false;
+    while let Some(g) = conn.db.genesis().id().find(&0).filter(|g| !g.done) {
+        if !waited {
+            log::info!("world preparing: waiting for its genesis ({})", g.label);
+            waited = true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
+    if waited {
+        log::info!("world made: the minds start");
+    }
     log::info!("world subscribed: {} characters", conn.db.character().count());
     // Calls in flight at most (a quarter kept for interactive ones). A full island of minds
     // (277 people) keeps about 100 in flight; at 64 its deliberations queued for up to a

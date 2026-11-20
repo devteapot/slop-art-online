@@ -1647,6 +1647,14 @@ fn spawn_resources(ctx: &ReducerContext, map: &living_rules::map::Map, now: u64)
     spawn_resources_in(ctx, map, 0..map.h, now);
 }
 
+/// Resources over the whole map, as a world made inline drew them (staged genesis of a land up to
+/// `floor::INLINE_MAX_M`): the same scale, draws and caps as [`seed`].
+pub fn spawn_resources_whole(ctx: &ReducerContext, map: &living_rules::map::Map, s: &Seed, now: u64) {
+    RESOURCE_SCALE.with(|r| *r.borrow_mut() = s.resource_scale.clone());
+    let _draws = Creating::start(s.seed, STEP_RESOURCES);
+    spawn_resources(ctx, map, now);
+}
+
 /// Resources in tile rows `rows` of a staged world: each band gets its share of every kind's
 /// cap, and spacing is kept within the band.
 pub fn spawn_resources_rows(ctx: &ReducerContext, map: &living_rules::map::Map, s: &Seed, rows: std::ops::Range<u32>, now: u64) {
