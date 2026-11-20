@@ -9,5 +9,17 @@
     "reason": "authority unit test, not run by living-check: the island's look data is generation c4-e61b01c0 (living/seeds/worlds/island/looks.json and island.json) while Cullet's looks.json and the laptop's bundles are c4-cbcc40bf; fix: regenerate the island's look data (look_lines.py) and recompile (author_world.py island --compile-only). Found by frame-views on bv-defaults-on, 2026-11-20",
     "skill": "verify-core",
     "times": 0
+  },
+  "seat": {
+    "case": "seat",
+    "first_main": "65bf3740b4853edd44ef9f03fd61c2b64be2541e",
+    "first_seen": "2026-11-20T23:54:01+01:00",
+    "last_evidence": "/home/carlid/.local/state/slop-merge/scene-gate/main/.local/living/verify/gate-1120233042-e69980-main2-seat-render-isl/ui/checks-seat.json [check.py exit 1]",
+    "last_main": "65bf3740b4853edd44ef9f03fd61c2b64be2541e",
+    "last_seen": "2026-11-20T23:54:01+01:00",
+    "owner": null,
+    "reason": null,
+    "skill": "verify-ui",
+    "times": 1
   }
 }
