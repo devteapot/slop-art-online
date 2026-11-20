@@ -1,6 +1,6 @@
 # Cora’s ink batch
 
-This is one combined high attempt at five strokes, drawn by the general ink profile ([HANDMADE_INK.md v1.2](../../HANDMADE_INK.md), merged here from `origin/handmade-ink` at `dea8d2ade`). The five strokes are:
+This is one combined high attempt at five strokes, drawn by the general ink profile ([HANDMADE_INK.md v1.2](../../HANDMADE_INK.md)). The work was done on `origin/handmade-ink` (`dea8d2ade`). That branch landed on main during the batch, so `origin/main` is now merged too, and every render below comes from a client built from that main tree (rustc 1.99.1, the pinned toolchain). The five strokes are:
 
 1. the upper lid, with its wing and two lash flicks;
 2. a short outer lower lid;
@@ -105,7 +105,15 @@ OCIO="$PWD/docs/char-live-1/standard.ocio" CHAR_LIVE_OUTPUT="$PWD/.local/ink-rep
   "$BLENDER" -b --factory-startup --python-exit-code 1 -P docs/char-live-3/replay.py
 ```
 
-**Viewing it.** Copy the GLB, both ink maps (`own-cora-live.eyes.ink.png` and `own-cora-live.skin.ink.png`), the face and hair sidecars and the calibration JSON together to `living/game/assets/view/`. Use a client built with the ink profile: branch `handmade-ink`, or `char-live-3`. Only PNG maps are delivered; the laptop's bundle step makes the KTX2 copies.
+**Main tree.** After `origin/main` was merged (`4a8f8ce0c`), two things were rebuilt.
+
+- **The asset.** A third factory replay on the merged tree rebuilt all six files byte for byte.
+- **The client.** It was rebuilt from that tree with the pinned rustc 1.99.1; the first build used 1.97.1. Its private build tree (2.7 GB) was deleted afterwards. With this client:
+  - all 17 daylight stills are pixel-identical to the packaged ones;
+  - the widths and both shimmer tables are identical;
+  - the morph sheet was rendered by this client from the final asset.
+
+**Viewing it.** Copy the GLB, both ink maps (`own-cora-live.eyes.ink.png` and `own-cora-live.skin.ink.png`), the face and hair sidecars and the calibration JSON together to `living/game/assets/view/`. Use a client built from main at or after the `handmade-ink` merge. Only PNG maps are delivered; the laptop's bundle step makes the KTX2 copies.
 
 ## Known gaps
 
@@ -116,12 +124,12 @@ OCIO="$PWD/docs/char-live-1/standard.ocio" CHAR_LIVE_OUTPUT="$PWD/.local/ink-rep
 
 ## Usage
 
-One combined artistic attempt at high effort, ran from 00:24 to 02:20 UTC on 20 November. That time included:
+One combined artistic attempt at high effort, ran from 00:24 to about 02:45 UTC on 20 November. That time included:
 
-- one release client build (2 min 56 s, warm sccache), with its 2.6 GB build tree deleted straight after;
+- two release client builds (2 min 56 s on rustc 1.97.1; 2 min 21 s from merged main on 1.99.1), each with its build tree deleted straight after;
 - one design iteration that met the 50,000-triangle cap, then fixes to fold-free carriers, the clearance pass, the exporter's vertex split and custom normals;
 - two ink-colour calibration steps and one neck calibration step;
-- about 11 Blender journal runs of about 1 min 10 s each, plus two factory replays;
+- about 11 Blender journal runs of about 1 min 10 s each, plus three factory replays;
 - about 15 Bevy capture sets;
 - about 15 minutes waiting while another worker's merge gate held the Blender lock.
 
