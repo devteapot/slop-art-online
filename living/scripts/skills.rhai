@@ -168,8 +168,8 @@ fn laws() {
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
         witness_wake_ms: 500.0,
-        // Fighters' scheduling (docs/COMBAT_PHASE.md, "Part B"): off and 15 as before.
-        fighter_bystander_wake_cadence: false, combat_eval_hz: 15.0,
+        // Fighters' scheduling (docs/BATTLE_LAWS.md (c), (d)): woken as bystanders and 15 Hz, as before.
+        fighter_bystander_wakes: true, combat_eval_hz: 15.0,
         // A test switch (docs/PERCEPTION.md, "Module memory and rollback"), 0 in play: a step the
         // world fails on purpose, to prove nothing kept in module memory outlives a failed one.
         memory_test: 0.0,
@@ -3187,7 +3187,7 @@ fn law_about(l, name) {
         "memory_test" => "A test switch that makes one step of the world fail on purpose; it is off in play.",
         "det_clock" => "A test switch that makes the world's time and chance follow its steps alone, to compare two builds; it is off in play.",
         "det_stop" => "A test switch that pauses the world at a given step; it is off in play.",
-        "fighter_bystander_wake_cadence" => if l.fighter_bystander_wake_cadence { "one in a fight turns to what others do near it at its own next look, not at once" } else { "one in a fight turns to what others do near it as any bystander does" },
+        "fighter_bystander_wakes" => if l.fighter_bystander_wakes { "one in a fight turns to what others do near it as any bystander does" } else { "one in a fight turns to what others do near it at its own next look, not at once" },
         "combat_eval_hz" => `one in a fight weighs what to do ${short(l.combat_eval_hz)} times a second`,
         "witness_wake_ms" => if l.witness_wake_ms > 0.0 { `a bystander turns to what it sees at most every ${short(l.witness_wake_ms)} ms` } else { "a bystander turns to each thing it sees at once" },
         "regard_cache" => if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },

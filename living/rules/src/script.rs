@@ -612,13 +612,12 @@ pub struct Laws {
     /// once per this many ms (docs/BATTLE_SCALE.md, fix 3); the percept is written at once and in
     /// full. 0: woken by each, as before.
     pub witness_wake_ms: f32,
-    /// A creature in a fight (on the combat cadence, `mind_state.fast_until`) is not woken as a
-    /// bystander: what it sees of others' acts waits for its own next cadence evaluation, at most
-    /// `60 / combat_eval_hz` ticks later (docs/COMBAT_PHASE.md, "Part B"). The percept is written
-    /// at once either way, and a party to an act is still woken at once. Off: woken as any
-    /// bystander (`witness_wake_ms`), as before. AI scheduling only: a player's character is not
-    /// evaluated by a graph.
-    pub fighter_bystander_wake_cadence: bool,
+    /// Whether a creature in a fight (on the combat cadence, `mind_state.fast_until`) is woken as a
+    /// bystander (`witness_wake_ms`), as before (on). Off (docs/BATTLE_LAWS.md (c), COMBAT_PHASE.md
+    /// "Part B"): what it sees of others' acts waits for its own next cadence evaluation, at most
+    /// `60 / combat_eval_hz` ticks later. The percept is written at once either way, and a party to
+    /// an act is still woken at once.
+    pub fighter_bystander_wakes: bool,
     /// How often a creature in a fight is evaluated (docs/COMBAT_PHASE.md, "Part B"): every
     /// `round(60 / combat_eval_hz)` ticks, staggered by id. 15 (every 4th tick) as before.
     pub combat_eval_hz: f32,
@@ -850,7 +849,7 @@ impl Default for Laws {
             think_framing: false,
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
-            fighter_bystander_wake_cadence: false,
+            fighter_bystander_wakes: true,
             combat_eval_hz: 15.0,
             memory_test: 0.0,
             det_clock: false,
@@ -3203,7 +3202,7 @@ impl Scripts {
             think_framing: flag("think_framing", l.think_framing),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
-            fighter_bystander_wake_cadence: flag("fighter_bystander_wake_cadence", l.fighter_bystander_wake_cadence),
+            fighter_bystander_wakes: flag("fighter_bystander_wakes", l.fighter_bystander_wakes),
             combat_eval_hz: g("combat_eval_hz", l.combat_eval_hz).clamp(1.0, 60.0),
             memory_test: g("memory_test", l.memory_test).round().clamp(0.0, 9.0),
             det_clock: flag("det_clock", l.det_clock),
@@ -4303,7 +4302,7 @@ mod tests {
         assert!(l.regard_cache && !l.regard_cache_check, "answers are shared by default, unchecked");
         assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
         assert!(!l.sweep_keep_memory && !l.sweep_keep_check, "sweeps read heard rows and health afresh by default");
-        assert!(!l.fighter_bystander_wake_cadence, "a fighter is woken as any bystander by default (docs/COMBAT_PHASE.md)");
+        assert!(l.fighter_bystander_wakes, "a fighter is woken as any bystander by default (docs/COMBAT_PHASE.md)");
         assert_eq!((l.combat_eval_hz, l.combat_every_ticks()), (15.0, 4), "fighters evaluated every 4th tick by default");
         assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
         assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");
@@ -4326,9 +4325,9 @@ mod tests {
         assert_eq!(t.laws().memory_test, 3.0);
         assert!(about["combat_eval_hz"].contains("15 times a second"), "{about:?}");
         for (hz, every) in [(10.0, 6), (7.5, 8), (60.0, 1), (0.0, 60), (100.0, 1)] {
-            let t = Scripts::new(&with_world_laws(src, &[("combat_eval_hz".into(), serde_json::json!(hz)), ("fighter_bystander_wake_cadence".into(), serde_json::json!(true))])).unwrap();
+            let t = Scripts::new(&with_world_laws(src, &[("combat_eval_hz".into(), serde_json::json!(hz)), ("fighter_bystander_wakes".into(), serde_json::json!(false))])).unwrap();
             assert_eq!(t.laws().combat_every_ticks(), every, "{hz} Hz");
-            assert!(t.laws().fighter_bystander_wake_cadence);
+            assert!(!t.laws().fighter_bystander_wakes);
         }
     }
 

@@ -1816,10 +1816,10 @@ thread_local! {
 #[track_caller]
 pub fn wake_bystander(ctx: &ReducerContext, id: u32, now: u64) {
     let l = laws(ctx);
-    // The `fighter_bystander_wake_cadence` law (off as shipped; docs/COMBAT_PHASE.md, "Part B"):
-    // one on the combat cadence turns to it at its own next cadence evaluation.
-    if l.fighter_bystander_wake_cadence && on_cadence(ctx, id, now) {
-        diag(|| "wake:to_cadence", 1);
+    // The `fighter_bystander_wakes` law (on as shipped; docs/BATTLE_LAWS.md (c), COMBAT_PHASE.md
+    // "Part B"): off, one on the combat cadence turns to it at its own next cadence evaluation.
+    if !l.fighter_bystander_wakes && on_cadence(ctx, id, now) {
+        diag(|| "wake:fighter_left_to_cadence", 1);
         return;
     }
     let ms = l.witness_wake_ms as u64;
@@ -1873,10 +1873,10 @@ pub fn due_bystander_wakes(ctx: &ReducerContext, now: u64, tick: u64) {
         log::info!("det wakes tick={tick} due={due:?} start={start}");
     }
     due.rotate_left(start);
-    let to_cadence = laws(ctx).fighter_bystander_wake_cadence;
+    let to_cadence = !laws(ctx).fighter_bystander_wakes;
     for id in due {
         if to_cadence && on_cadence(ctx, id, now) {
-            diag(|| "wake:to_cadence", 1);
+            diag(|| "wake:fighter_left_to_cadence", 1);
             continue;
         }
         diag(|| "wake:due", 1);
