@@ -242,6 +242,19 @@ pub fn now_ms(ctx: &ReducerContext) -> u64 {
     })
 }
 
+/// The tick's time under the `det_clock` law (crate::det): the last tick's time plus 1/60 s, set
+/// as this transaction's time, so every `now_ms` in it gives the same.
+pub fn det_now_ms(ctx: &ReducerContext) -> u64 {
+    let k = clock(ctx);
+    let now = crate::det::next_ms(k.last_ms, k.tick);
+    let st = stamp(ctx);
+    TX.with(|t| {
+        let (_, _, seq, _) = t.get();
+        t.set((st, now, seq + 1, now));
+    });
+    now
+}
+
 /// The current transaction's time as `now_ms` last gave it (0 before any): for stamps taken
 /// where no context is at hand (`frame`'s change marks, profiling only).
 pub fn tx_now() -> u64 {
@@ -1840,6 +1853,11 @@ pub fn due_bystander_wakes(ctx: &ReducerContext, now: u64) {
         });
         out
     });
+    // By id: the map's own order is the hasher's, which on wasm32 comes from memory addresses and
+    // so differs between builds; the order of these wakes is the order the woken are evaluated in
+    // this tick (docs/COMBAT_PHASE.md, "Step 3 results").
+    let mut due = due;
+    due.sort_unstable();
     for id in due {
         diag(|| "wake:due", 1);
         wake(ctx, id);
@@ -1883,4 +1901,30 @@ pub fn trap_catch(ctx: &ReducerContext, s: &Structure, now: u64) {
     let mut t = s.clone();
     t.built_ms += n * every;
     ctx.db.structure().id().update(t);
+}
+
+/// Every creature within `r` of `at` as [`creatures_near`] gathers them, in the order gathered
+/// (chunk by chunk), not sorted: `creatures_near` is this, sorted by distance with a stable sort.
+/// For a reader that wants only the nearest few (`perception::Sensing`, docs/COMBAT_PHASE.md step 3).
+pub fn creatures_near_gathered(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) -> Vec<NearCreature> {
+    let chunks = chunks_around(at.0, at.1, r);
+    let lists: Vec<Rc<Vec<CachedBody>>> = chunks.iter().map(|c| chunk_bodies(ctx, *c, now)).collect();
+    let mut out = Vec::with_capacity(lists.iter().map(|l| l.len()).sum());
+    for list in &lists {
+        for (id, kind, p, h) in list.iter() {
+            let d = dist(at, *p);
+            if d <= r {
+                out.push(NearCreature { id: *id, kind: kind.clone(), pos: *p, dist: d, facing: *h });
+            }
+        }
+    }
+    out
+}
+
+/// The key that orders a gathered creature as [`creatures_near`]'s stable sort by distance does:
+/// its distance as `f32::total_cmp` orders it, then its place in the gathered order.
+pub fn nearest_key(d: f32, i: usize) -> u64 {
+    let b = d.to_bits() as i32;
+    let t = b ^ ((((b >> 31) as u32) >> 1) as i32);
+    ((((t as u32) ^ 0x8000_0000) as u64) << 32) | i as u64
 }

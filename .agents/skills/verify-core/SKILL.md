@@ -73,6 +73,14 @@ python3 "$C/scenes.py" witness_fold --run "$R" > "$E/witness_fold.txt" 2>&1
 python3 "$C/scenes.py" cheap_check_ctx --run "$R" > "$E/cheap_check_ctx.txt" 2>&1
 python3 "$C/scenes.py" cheap_alarms --run "$R" > "$E/cheap_alarms.txt" 2>&1
 python3 "$C/scenes.py" cheap_warmth --run "$R" > "$E/cheap_warmth.txt" 2>&1
+# Two builds compared tick by tick on one Cullet battle (docs/COMBAT_PHASE.md "Step 3 results",
+# features/battle.md): an exact change passes with every tick's table hashes and every row at the
+# stop identical. Its own private server and a template volume; about 8 minutes a run:
+#   python3 living/tools/det_compare.py prepare --container <own> --url http://127.0.0.1:<port> \
+#     --volume <own volume> --wasm-dir <its /wasm dir> --template <own>-dett --meta <dir>/template.json \
+#     --base base-cullet.wasm --ticks 3600
+#   python3 living/tools/det_compare.py run --wasm-dir <its /wasm dir> --template <own>-dett \
+#     --meta <dir>/template.json --base base-cullet.wasm --candidate new-cullet.wasm --ports P1,P2 --out <dir>
 # The body's statuses by their parts equal the whole law over every status, and off ask it whole
 # (features/battle.md, about 2.5 min). It moves the world to its night: run it on its own world, or last.
 python3 "$C/scenes.py" status_parts --run "$R" > "$E/status_parts.txt" 2>&1

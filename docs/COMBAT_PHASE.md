@@ -780,3 +780,159 @@ Core: `X925` when the container was pinned to the X925 cores for the window, `an
 | v216r26-L2 | 20261120-020507/r1 | any | 216 | 11.47 | 436.5 | 882.6 | 260.1 | 36.1 | 51.5 | 919.3 | 4.1/4.9/7.6 | 57.3→156.5→77.9 | 0 / 99 |
 | v216r26-L2 | 20261120-020507/r2 | X925 | 216 | 11.50 | 444.5 | 888.1 | 257.4 | 37.2 | 37.7 | 921.0 | 3.5/6.3/7.8 | 69.6→149.6→105.8 | 0 / 132 |
 | v216r26-L2 | 20261120-032451/r1 | X925 | 216 | 13.09 | 428.1 | 871.6 | 255.6 | 36.2 | 45.8 | 906.3 | 12.0/14.2/17.5 | 57.9→149.0→118.8 | 0 / 130 |
+
+## Step 3 results: exact AI trims (Spark, branch `ai-trims`)
+
+Status: built and measured, 2026-11-20, branch `ai-trims` from `origin/main` 8031d785, final 1eac83d0. Not merged. This section reports plan steps 8–11 ("The AI tick body: exact trims"): what was built, what was tried and dropped with the data that decided it, how exactness was proven, and the A/B against main.
+
+### In short
+
+- **About 9–13% off the AI-only tick, exactly.** Uninstrumented, 0 viewers, pinned to the X925 cores: main 193.9–213.1 ms/s against ai-trims 180.4–193.6 (and 182.5 for the same code one commit earlier). With the same detail spans on both sides (L2), an evaluation costs 60.4–61.6 µs against the base's 69.5 (−12%), and the tick per engaged fighter-second 1,716–1,767 µs against 1,901 (−8 to −10%). With 16 viewers on the 10 m ring: main 256.7–298.9 against 247.2–251.5 ms/s.
+- **The plan expected 25–30%; the measured data took three of its four levers away:**
+  - A refused begin cannot be cheap and exact by a memo: of "out of breath" refusals, 8% repeat with byte-identical input (and 9% more differ only in the breath level). The check reads breath and other values that move every tick.
+  - Sight answers repeat within a tick for 1.4% of tests: a memo would cost about what it saves.
+  - A folded line labels about 92 people once each, so a memo of labels within a tick has nothing to share.
+  - What remained, the fixed cost per evaluation, gave the 12%. The Rhai check itself (21 µs, 17 ms/s at L2) is unchanged.
+- **Exact, proven tick by tick:** a new comparator runs two builds from one copied world under a deterministic clock and compares a hash of all 113 tables at every tick and every row at the stop. Every batch of trims, and the final build, is identical to the base over 3,600 ticks of the 200-fighter Cullet battle. So is a control build with every hash map's keys moved.
+- **One deliberate change that is not exact with main:** held-back bystander wakes are now delivered in id order. Main delivered them in a `HashMap`'s order, which on wasm32 depends on memory addresses and so differs between builds. That order is the order in which the woken are evaluated in a tick. Two builds of main's code that differed only in profiling spans already diverged at the 76th tick. Without this fix no two builds can be compared exactly; with it, the order no longer depends on the build.
+
+### What was built (each exact)
+
+| Trim | Where | Why it is exact | Measured (L2, base → ai-trims) |
+| --- | --- | --- | --- |
+| A scene's candidates are ordered only as far as a reader goes: a min-heap on `common::nearest_key` (the distance as `f32::total_cmp` orders it, then the gathered place). | `perception::Sensing`, lines of the AI scene only (not the sweep) | It pops exactly the order of `creatures_near`'s stable sort. `perception::sensed` (the `scene_lazy_check` reference) still sorts all at once. | `brain.scene` 11.9 → 7.1 µs; `brain.nearest` 9.2 → 6.8 µs |
+| A move's check before it starts builds only the target fields its plan reads (what the target knows and carries, its body sex, distance, activity and stage), with one read of the actor's body. | `act::target_facts_reading`, `facts_at`, `skill_ctx_with` | A field the check does not read cannot change its answer. `check_ctx_check` compares with the whole context. | `check.ctx` 12.5 → 10.1 µs |
+| A move's start (`perform`) builds only what its check and windup read, plus a paced skill's genes and practice. | `act::Reads::of_start` | The same, compared under `check_ctx_check`. One roll is drawn either way. | `act.skill_ctx` 51.8 → 39.3 µs; `begin.start` 107 → 95 µs |
+| A needs recompute gives the `rates` law the fields it reads (kind, warmth, activity, stage, inventory), and the genes its answer is finished with. | `act::rates_facts` | Its memo key and its per-body finishing (`NeedLaw::rates`: hunger, energy, genes) read nothing else. | `needs.rates` 27.2 → 19.2 µs |
+| A graph leaf reads the body's activity once and hands it to `act::begin_with`. The end of an evaluation reads it once for `town::settle_with` and `perceive::slept_with`. | `brain::Ev::leaf`, `evaluate` | Nothing writes the activity between those reads. A reflex that breaks off a deliberate act reads it again. | `brain.leaf` 19.9 → 18.3 µs; `brain.slept` 1.7 → 0.7 µs |
+| The sleep check reads the character only when the body woke; the nearest pick reads the chosen character once. | `perceive::slept_with`, `Ev::nearest` | Characters are never deleted, and no write intervenes. | included above |
+
+Same rules for players and AI: `use_skill` goes through `act::begin`, so a player's start gets the same trimmed context and the same answer. verify-player `combat` passed 54/54. No table, reducer, view or subscription changed, and no new module memory is kept (one counter and one flag under the diagnostic law below).
+
+### Tried and not kept
+
+- **A memo of refusals.** Measured with a profiling counter over the battle (`check:same_input` / `check:same_but_pools` / `check:new_input`, now removed). Per second of the comparator's run, "out of breath" refusals came 89.0 with new input, 9.9 with the same input but for the pools, and 8.9 with identical input. The check's plan reads breath, hurt and yield times and the target's health, which change between looks.
+- **Sharing the context's nested maps in Rhai** (so a helper call copies pointers, not the maps). Natively it took `attack_check` from 8.2 to 6.8 µs, but it changes value semantics for a script that aliases `a.actor` or `a.target` (`let t = a.target;`). Left alone.
+- **A sight memo per tick** (plan step 10). 109 + 6 repeats against 7,690 + 332 first tests per second of the run: 1.4%.
+- **A label memo per tick** (step 11). A line labels each of its about 92 people once, and an onlooker's lines are 2 s apart. Labels repeat only across ticks, where their inputs (distance band, knowledge, far handles) can change. That is the projection memo's ground (sweep-exact), not a per-tick memo.
+- **A blow's onlookers through the `controller` index** (decode only minded characters, about 25, rather than all about 250 nearby). Exact by the invariant that an `ai` character's controller is the world's admin, but its cost scales with every minded character in the world, a regression for a large town with a small fight.
+
+### The exact comparator
+
+- **Deterministic stepping** (the `det_clock` law, a diagnostic, off in play; `living/authority/src/det.rs`):
+  - a tick's clock is the last tick's plus 1/60 s;
+  - its random draws come from a generator seeded by the tick (`seed::Creating`; the tick path's `ctx.rng()` calls go through `seed::rng`);
+  - housekeeping runs inside every 60th tick.
+  - Each tick logs `det tick N all=… <table>=<hash>/<rows> …` for 113 tables, a multiset hash so storage order does not count.
+  - `det_stop` pauses the world at a given tick.
+- **Ids.** SpacetimeDB 2.14.1 skips an auto-increment sequence ahead to its next block of 4,096 at random, about once in 4,096 values: `should_simulate_sequence_reallocation` in `crates/datastore/src/locking_tx_datastore/mut_tx.rs`, seeded from the operating system each time a database is loaded (`committed_state.rs`). The same rows therefore get other ids on two servers. The docs say only that sequences "do not guarantee sequential ordering" and may skip ([auto-increment](https://spacetimedb.com/docs/tables/auto-increment)).
+  - The hashes name each auto-increment row by its rank, and rename the references the battle writes the same way: far handles in text and in experiences, structures in inventories, rot and familiarity, lines heard, missiles' uses.
+  - Main's experience window is checked when `id % 32 == 0`; under the law it is checked on every 32nd insert instead (`det::window_due`).
+- **`living/tools/det_compare.py`:**
+  - `prepare` makes a paused Cullet battle (`spawn_battle` 200) with `det_clock` on, stops the server cleanly and copies its volume as a template.
+  - `run` copies the template twice (the two copies are treated alike: a server resumes sequences differently after another restart history), publishes one build on each as an update with the data kept, runs both to `det_stop`, and compares every tick's hashes and every table at the stop, renamed the same way.
+  - It found the hash-order dependence (`--stop 84`: residents 25, 27 and 29 evaluated in another order) before the wake-order fix.
+- **The control:** a build with `LIVING_DET_PERTURB=7` (compile time) makes seven extra hashers at its first tick, which moves the keys of every hash map made after them. It compared identical with its unperturbed self after the fix.
+
+| Comparison (Cullet battle, 200 fighters and about 24 residents, ticks 9–3608, no viewers, no minds) | Ticks | Tables | Rows at the stop | Result |
+| --- | ---: | ---: | ---: | --- |
+| The same build on both copies | 3,600 | 113 | 45,234 | identical |
+| Base 491d4b2c against itself with moved hash keys | 3,600 | 113 | 45,234 | identical |
+| Base against 1cb9a71c (scene order, check context, rates facts, character reads) | 3,600 | 113 | 45,234 | identical |
+| Base against the leaf and end-of-evaluation activity reads, then the start context (5e3437fb) | 3,600 each | 113 | 45,234 | identical |
+| Base against the final 1eac83d0 | 3,600 | 113 | 45,234 | identical |
+| Two builds of main's code before the wake-order fix | 3,600 | 113 | – | differed from tick 84 (`experience`, `familiar`, `sex_seen`: the same rows in another order) |
+
+The diagnostic laws were also run on the final code over the same battle, with profiling on to count them: `check_ctx_check` made 142 comparisons and `scene_lazy_check` 357 per second of the 500 s run, with no difference and no error line.
+
+### A/B measurement
+
+- **Fixture:** dev-box's agreed fixture, as in this note's method: `battle_viewers.py`, Cullet compiled in, 200 fighters, 20 s warm-up and a 60 s window. 0 viewers, and 16 viewers on the 10 m ring (`--tiers --cues --paused-placement --keep-alive 0.5 --fresh-every 3`). L0 is profiling off (`--no-profile`); L2 is `profile_detail` with `--full-log`.
+- **Server:** the private `slop-aitrims-20261120` (127.0.0.1:3511), pinned to the X925 cores (`docker update --cpuset-cpus 5-9,15-19`) for each run's window, recorded per run. It went back to the A725 cores between runs.
+- **Discipline:** one series under `~/slop-mq/battle.lock` (07:15–08:10 CET), each run started only with `~/slop-mq/lock` free (the series waited 11 minutes for a merge), at least 40 GB of memory and 45 GB of disk free. Arms were interleaved, the second rep in reverse order.
+- **Builds:** main 8031d785 against ai-trims 1eac83d0 (two runs per arm and level, plus one of 6f2b60fa, the same code with profiling-only counters). For the L2 split, the base fa5d4678 (main with the comparator harness and the same detail spans) against ai-trims.
+- **Host load:** recorded per second (`load.log`). Two windows had load 12–20 from other sessions: `atbasev0l2r4` and `attrimv0l0r3`.
+
+| Run | Build | Viewers | Level | Core | Ticks/s | Tick WASM ms/s | Whole tick call ms/s | Views ms/s | Load min/med/max |
+|---|---|---:|---|---|---:|---:|---:|---:|---|
+| atmainv0l0r1 | main 8031d785 | 0 | L0 | X925 | 60.01 | 213.1 | 220.6 | – | 4.8/5.1/5.7 |
+| attrimv0l0r1 | ai-trims 6f2b60fa | 0 | L0 | X925 | 59.99 | 182.5 | 189.6 | – | 4.1/5.7/6.3 |
+| attrimv0l0r2 | ai-trims 1eac83d0 | 0 | L0 | X925 | 60.01 | 180.4 | 187.5 | – | 5.5/6.2/6.5 |
+| atmainv0l0r2 | main 8031d785 | 0 | L0 | X925 | 60.01 | 202.4 | 209.7 | – | 3.8/4.0/5.0 |
+| attrimv0l0r3 | ai-trims 1eac83d0 | 0 | L0 | X925 | 59.99 | 193.6 | 201.1 | – | 7.4/11.3/15.6 |
+| atmainv0l0r3 | main 8031d785 | 0 | L0 | X925 | 60.00 | 193.9 | 200.9 | – | 3.2/4.4/5.2 |
+| atmainv16l0r1 | main 8031d785 | 16 | L0 | X925 | 58.68 | 271.3 | 425.1 | 112.8 | 3.5/3.9/4.3 |
+| attrimv16l0r1 | ai-trims 6f2b60fa | 16 | L0 | X925 | 58.96 | 247.2 | 400.8 | 112.5 | 2.7/3.0/4.4 |
+| attrimv16l0r2 | ai-trims 1eac83d0 | 16 | L0 | X925 | 58.92 | 251.5 | 412.2 | 118.5 | 8.3/9.6/12.3 |
+| atmainv16l0r2 | main 8031d785 | 16 | L0 | X925 | 58.61 | 298.9 | 462.0 | 119.7 | 6.0/6.4/7.2 |
+| attrimv16l0r3 | ai-trims 1eac83d0 | 16 | L0 | X925 | 59.09 | 249.4 | 404.1 | 113.1 | 2.2/2.4/2.8 |
+| atmainv16l0r3 | main 8031d785 | 16 | L0 | X925 | 59.00 | 256.7 | 398.3 | 102.3 | 2.7/3.0/3.3 |
+| atbasev0l2r3 | base fa5d4678 | 0 | L2 | X925 | 60.00 | 264.4 | 271.6 | – | 3.0/3.9/4.6 |
+| attrimv0l2r3 | ai-trims 1eac83d0 | 0 | L2 | X925 | 59.97 | 242.2 | 249.3 | – | 3.5/4.9/5.1 |
+| attrimv0l2r4 | ai-trims 1eac83d0 | 0 | L2 | X925 | 60.00 | 246.4 | 253.5 | – | 4.2/4.8/6.2 |
+| atbasev0l2r4 | base fa5d4678 | 0 | L2 | X925 | 59.88 | 328.9 | 338.4 | – | 12.8/17.8/19.6 |
+| atmainv0l2r1 | main 8031d785 | 0 | L2 | X925 | 60.00 | 239.7 | 246.2 | – | 1.9/2.4/3.3 |
+| atmainv0l2r2 | main 8031d785 | 0 | L2 | X925 | 60.00 | 246.2 | 253.3 | – | 11.3/11.7/15.9 |
+
+Main's L2 has fewer detail spans than the base and ai-trims, so it is not the L2 reference. The two L2 runs of 6f2b60fa, at 288–296 ms/s, carried two exploratory profiling counters that cost a hash insert per sight test while profiling. Those counters were removed in 1eac83d0 and those runs are left out.
+
+The fight is not sustained, so each run's census differs (engaged fighters 131–146 on the L2 runs). The L2 split below normalizes per evaluation and per engaged fighter-second. It uses the low-load runs, base r3 against ai-trims r3 and r4.
+
+| Span (L2, X925) | Base fa5d4678: calls/s, µs | ai-trims 1eac83d0: calls/s, µs (r3; r4) |
+| --- | --- | --- |
+| `tick` per engaged fighter-second | 1,901 µs (137.2 engaged) | 1,716 (139.1); 1,767 (137.4) |
+| `eval.combat` | 2,016/s, 69.5 | 2,046/s, 60.4; 2,032/s, 61.6 |
+| `brain.load` | 2,376/s, 10.8 | 10.2; 10.4 |
+| `brain.scene` | 2,332/s, 11.9 | 7.1; 7.2 |
+| `brain.nearest` | 2,280/s, 9.2 | 6.7; 6.9 |
+| `brain.leaf` | 2,737/s, 19.9 | 19.0; 17.6 |
+| `brain.begin` | 1,339/s, 37.6 | 35.5; 34.4 |
+| `begin.check` (`check.ctx` + `check.rhai`) | 786/s, 35.4 (12.5 + 21.1) | 831/s, 33.3 (10.2 + 21.3); 747/s, 33.0 (10.0 + 21.1) |
+| `begin.start` / `act.skill_ctx` | 107.1 / 51.8 | 96.1 / 40.4; 93.2 / 38.2 |
+| `needs.rates` | 186/s, 27.2 | 19.3; 19.1 |
+| `brain.after` / `brain.slept` | 10.7 / 1.7 | 10.2 / 0.7; 10.7 / 0.7 |
+| `wake.eval.fight` | 221/s, 125.6 | 111.6; 115.2 |
+| `act.complete` / `fold.blow` / `fold.labels` | 479.9 / 294.2 / 437.0 | 489.8 / 285.9 / 487.7; 462.3 / 301.6 / 406.7 |
+| Refused begins (of them out of breath) | 1,207/s (575) | 1,249/s (615); 1,175/s (533) |
+
+Refused begins cost a `brain.begin` each (34–36 µs on the trimmed build, 37.6 on the base), of which the Rhai check is 21 µs when it runs ("out of breath"; refusals by the timing gate and the facing test stop before it).
+
+**Not established:**
+- A sustained 200-fighter battle (the fight thins; no keeper).
+- The 216-viewer arm (the viewers' cost is sweep-exact's and dev-box's; the AI side is the same code).
+- Minds connected.
+- Acceptance or capacity: one host, one fixture.
+
+### Proofs
+
+- The comparator results above, and the diagnostic laws over the battle (no difference).
+- **Scene gate** (`scene_gate.py run --base 8031d785 --force --no-main-check`, private server `slop-aitrims-gate-20261120` on the A725 cores): passed.
+  - verify-core: `tick` 6/6, `sight` 6/6, `senses` 7/7, `refusal` 4/4, `skirmish` 8/8, `mechanics` 23/23.
+  - verify-player: `combat` 54/54 over 17 scenes.
+  - verify-minds: `roundtrip`, `acts`, `dealings` and `conversation`.
+  - verify-client: `cues` and `motion_tables`.
+  - `mind-unit`, and generation on world, island, Cullet and cullet-laws.
+  - `mechanics`, `cues` and `motion_tables` failed their first launch with "world query HTTP 0" (three launches at once on the slow cores) and passed alone.
+- **Genesis fuel** against the merge queue's gate of main 8031d785 on the same rustc: init island −0.18%, Cullet −0.01%, cullet-laws −0.06%, plan-test −0.11%, world +0.07%. The two checkouts' paths differ in panic strings. Largest steps unchanged within 0.3%.
+- verify-core `cheap_check_ctx` (11,995 move checks and starts compared with the whole context, none differed) and `scene_lazy` (20,709 lazy answers compared with the sorted scene, none differed) on the final tree.
+- `just living-check` passed all nine steps (471 s).
+- Records: `.agents/skills/verify-{core,player,minds,client,generation}/references/validation/2026-11-20-0645-ai-trims.md`.
+
+### Tooling fixed on the way
+
+`span_report.py` and `look_cost.spans` matched only spans printed in µs, ms or s. 2.14.1 prints a span under a microsecond in ns, so short spans were dropped: their calls were undercounted and their means overstated. That is why this note's T2 shows `after.mind` at about 260 calls/s against about 2,400 evaluations. Both now read ns. The ms/s of the larger spans in T2 are unaffected.
+
+### SpacetimeDB documentation and source consulted
+
+Read on 2026-11-20 (docs 2.0.0; the pinned server and crates are 2.14.1):
+- [Auto-increment](https://spacetimedb.com/docs/tables/auto-increment): values are allocated in batches of 4,096. Gaps can appear, ordering is not guaranteed, and no value is ever reused. The versioned source (`mut_tx.rs`, `committed_state.rs`) shows the random skip and its per-load seed, and that values still increase. The comparator relies on that last point, and verified it on these runs.
+- [Reducers](https://spacetimedb.com/docs/functions/reducers/), "Global and Static Variables Are Undefined Behavior". The trims keep nothing new in module memory. The comparator's insert counter and the control's flag live in module memory only under the diagnostic law, on fresh instances on both copies.
+- Host source (`wasm_instance_env.rs`, `instance_env.rs`): every timing span is formatted and written to the module log, with no threshold. That is the detail spans' cost under L2.
+
+### Evidence
+
+- **Archive:** `~/slop-evidence/ai-trims-20261120.tar.zst` and `.sha256`. It holds:
+  - the comparator runs (`det-compare.json` and per-tick hash logs of each), the template's record and the comparator profiles;
+  - the A/B series (each run's `result.json`, `metrics.json`, `threads.json`, `load.log`, `placement.json` and L2 `module.log`; `rollup.md` and `rollup.json`);
+  - the gate's evidence directories and log;
+  - the wasm builds compared and measured.

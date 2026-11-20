@@ -17,10 +17,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-SPAN = re.compile(r'^(\S+Z)\s.*Timing span "([^"]+)": ([\d.]+)(µs|ms|s)\b')
+# A span under a microsecond is printed in ns (2.14.1 prints the `Duration` with `{:?}`).
+SPAN = re.compile(r'^(\S+Z)\s.*Timing span "([^"]+)": ([\d.]+)(ns|µs|ms|s)\b')
 DIAG = re.compile(r'^(\S+Z)\s.*diag: (\{.*\})\s*$')
 SCENE = re.compile(r'^(\S+Z)\s.*scene seen: builds=(\d+) seen=(\d+) max=(\d+)')
-UNIT = {"µs": 1.0, "ms": 1e3, "s": 1e6}
+UNIT = {"ns": 1e-3, "µs": 1.0, "ms": 1e3, "s": 1e6}
 
 
 def stamp(s):

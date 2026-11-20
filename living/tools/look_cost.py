@@ -182,7 +182,8 @@ class Proc:
 
 
 def spans(log, t0, t1):
-    rx = re.compile(r'^(\S+Z)\s.*Timing span "([^"]+)": ([\d.]+)(µs|ms|s)\b')
+    # A span under a microsecond is printed in ns.
+    rx = re.compile(r'^(\S+Z)\s.*Timing span "([^"]+)": ([\d.]+)(ns|µs|ms|s)\b')
     out = {}
     for line in log.splitlines():
         m = rx.match(line)
@@ -191,7 +192,7 @@ def spans(log, t0, t1):
         stamp = m.group(1).rstrip("Z")[:26]
         at = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%S.%f" if "." in stamp else "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
         if t0 <= at < t1:
-            out.setdefault(m.group(2), []).append(float(m.group(3)) * {"µs": 1e-3, "ms": 1.0, "s": 1e3}[m.group(4)])
+            out.setdefault(m.group(2), []).append(float(m.group(3)) * {"ns": 1e-6, "µs": 1e-3, "ms": 1.0, "s": 1e3}[m.group(4)])
     return out
 
 
