@@ -449,7 +449,7 @@ On island scratch worlds (main `75e26fca`), switching cover on stalled the tick 
 - **The stall.** SpacetimeDB runs one reducer at a time per database, in the order calls are queued. The 2.14.1 host runs a WASM module's reducers on "a single executor backed by a single OS thread" (`crates/core/src/host/module_host.rs`, `WasmtimeModuleHost`: "Reducers are not executed concurrently"). Its scheduler hands each due scheduled call to that executor as it comes due (`host/scheduler.rs`, `SchedulerActor`). So the tick waits behind whatever runs. The derivation's steps were the land generation's own steps: up to 24 × 10⁹ instructions on the island (all 2048 tile rows in one step, 0.9 s) and up to 29 × 10⁹ at 4096 m.
   - Procedures are no way out. A WASM procedure takes an instance from the procedure pool but runs on the same executor thread, and yields it only while it awaits (an HTTP request, a sleep). CPU-bound work in a procedure blocks ticks just the same.
   - The docs pages (version 2.0.0) do not say reducers run one at a time. [Reducers](https://spacetimedb.com/docs/functions/reducers/) reserve the right to run reducers "concurrently in separate execution environments", which is why module memory stays a cache here. [Schedule tables](https://spacetimedb.com/docs/tables/schedule-tables/) say one-shot rows are deleted after the reducer runs, and that the dispatch order of rows already expired is not guaranteed. A derivation has one row at a time, so ordering cannot reorder its steps.
-- **The brush-fill delay was not a re-derivation.** `set_world_law cover_brush_min_fill` with the bands kept is value-only: `geometry::ensure` returns at once, and only the `cover_law` row and the mask change. In the laptop's run, the scenario changes the brush 3 s after the switch-on, while the derivation was still running. The game client shows a cover policy only once `cover_law.cover_sight_on` is on (`sightfield.rs`), so the brush edit's effect line came when the derivation ended: 5.45 − 3.0 ≈ 2.45 s. A brush edit after the derivation took 0.5–0.8 ms in the reducer on both branches. The mask compile on the next tick, though, read all 256 bands back (8 MB of rows) and took 50–73 ms on the island (now 4–7 ms, below).
+- **The brush-fill delay was not a re-derivation.** `set_world_law cover_brush_min_fill` with the bands kept is value-only: `geometry::ensure` returns at once, and only the `cover_law` row and the mask change. In the laptop's run, the scenario changes the brush 3 s after the switch-on, while the derivation was still running. The game client shows a cover policy only once `cover_law.cover_sight_on` is on (`sightfield.rs`), so the brush edit's effect line came when the derivation ended: 5.45 − 3.0 ≈ 2.45 s. A brush edit after the derivation took under 0.6 ms in the reducer on main and on the branch (below). The mask compile on the next tick, though, read all 256 bands back (8 MB of rows) and took 50–73 ms on the island (now 4–7 ms, below).
 
 ### The design
 
@@ -480,3 +480,59 @@ On island scratch worlds (main `75e26fca`), switching cover on stalled the tick 
 | Mask compile after a policy change | the cover cache (memory); the `cover_ground` rows once per instance when it is empty | — | — | per policy change |
 
 Retained data grows by the source: about 3.8 MB per island-sized land, about 9 MB at 4096 m, kept whether or not cover is ever switched on (half the bands' 8 MB and 32 MB). The decoded source lives in module memory during a derivation, about 30 MB at 4096 m, against the regenerated land's 60–210 MB.
+
+### Measurements
+
+Setup:
+- **Server.** The private container `slop-coverstall-20261120`, pinned to the X925 cores (CPUs 5–9, 15–19) under `~/slop-mq/battle.lock`. Load average 1.8–5.7 over the 8-minute series. No players, minds or observer.
+- **Driver.** `law_override.py switch` (verify-core) on fresh worlds:
+  1. `set_profile` on;
+  2. `set_world_law cover_sight_on true`, with `cover_law` polled every ~10 ms until on;
+  3. every `tick` span and every `cover_step` span from the call until a second after (on main, which has no `cover_step` span, its `cover.generate`, `cover.host` and `cover.ground_bands` spans);
+  4. a `cover_brush_min_fill` edit with cover in force.
+- **Builds.** Main is `f9b36cef`. The branch is `cover-stall` merged with it (`3e7ff54f`). The fallback row is an island made by main's module, then updated in place to the branch's.
+
+| World | `cover_law` on after | Steps | Longest step | Step p99 | Longest tick | Tick interval p50 / p99 / max | First mask compile |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| island, main | 5.91 s | 40 | 894.7 ms | 894.7 ms | 53.6 ms | 16.8 / 274.1 / **922.8 ms** | 50.1 ms |
+| island, branch | **1.93 s** | 537 | **3.2 ms** | 2.3 ms | 5.6 ms | 16.6 / 19.5 / **20.0 ms** | 4.3 ms |
+| island made by main, branch (regeneration) | 6.85 s | 675 | 501.1 ms | 67.7 ms | 8.3 ms | 16.8 / 114.6 / 517.8 ms | 4.1 ms |
+| 4096 m megacity floor, main | 30.37 s | 147 | 990.4 ms | 987.8 ms | 191.0 ms | 17.0 / 742.8 / **996.9 ms** | 188.8 ms |
+| 4096 m megacity floor, branch | **11.16 s** | 2,115 | **6.5 ms** | 6.3 ms | 3.5 ms | 16.7 / 22.0 / **23.3 ms** | 2.6 ms |
+
+The brush edit (`cover_brush_min_fill` 0.6 → 0.44, cover in force, with the bands kept):
+
+| World | Reducer | `cover_law` carries it after | Mask compile (next tick) | Longest tick in the 1.5 s after | Longest tick interval |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| island, main | 0.48 ms | 67.1 ms | 50.3 ms | 52.1 ms | 68.7 ms |
+| island, branch | 0.44 ms | 25.6 ms | 4.2 ms | 5.8 ms | 22.1 ms |
+| 4096 m, main | 0.47 ms | 206.7 ms | 188.3 ms | 189.2 ms | 206.6 ms |
+| 4096 m, branch | 0.44 ms | 33.1 ms | 2.5 ms | 3.4 ms | 19.6 ms |
+
+What the figures show:
+- **Main stalls the tick for about a second** at switch-on: 923 ms on the island, the laptop's 829–936 ms, and 997 ms at 4096 m. On the branch, the longest standstill is 20–23 ms, one step plus a tick. Every step is at most 3.2 ms on the island and 6.5 ms at 4096 m, against the target of about 10 ms.
+- **The derivation is also faster end to end:** 1.9 s against 5.9 s on the island, and 11.2 s against 30.4 s at 4096 m. Main waited 100 ms between steps; the branch's steps follow one another at once.
+- **A brush edit never derives.** On both branches the reducer takes under half a millisecond. Main then compiled the mask on the next tick from every band read back: 50 ms on the island, 188 ms at 4096 m. The branch compiles it from the cache: 4.2 ms and 2.5 ms.
+- **The regeneration fallback** still stalls a tick for up to 0.5 s on the island (the planner's lot step), about half of main's worst. Worlds made since this branch never take it.
+- **Genesis fuel** (`genesis_fuel.py`, a stepping build; main `f9b36cef` against the branch at `79cb4a42`): `init` is unchanged, island 11.69 × 10⁹ on both. The hosting step rises by the ground source kept: island 1.43 → 1.79 × 10⁹, 4096 m 14.96 → 16.19 × 10⁹. Steps: 40 and 142 on both. The largest step is unchanged (island 25.3 × 10⁹, populate; 4096 m 28.8 × 10⁹, tile rows), and no step is near the 50 × 10⁹ rule.
+
+### Proofs
+
+- Bands are byte-identical: see the design above.
+- The scenes, on the branch:
+  - `law_override.py checks` 61/61, the switch-on derivation scene included (537 steps, done in 1.75 s);
+  - `cover.py` on Cullet 23/23;
+  - verify-player `sight_on.py` 16/16 on Cullet;
+  - the play-test flow (a plain island, then the overlay installed with `install_script.py --seed`): 11/11, after waiting 2.0 s for cover against cover-genesis's 6.0 s.
+- verify-generation `--seeds island,floor-megacity-2k,floor-megacity-4k`: 995, 82 and 97 checks, all passed.
+- verify-client `run.py`: 45/45, with cues 23, near tier 7 and motion tables 34. `cover_source` is in the private-table inventory and refused to players.
+- `living-check` passed.
+
+### Limits
+
+- A land made before this branch has no ground source. It generates again, with stalls of up to about 0.5 s on the island (the planner's steps are not split). Making the world again gives it a source.
+- The ground source is kept for every land made with cover off, whether or not cover is ever switched on: 3.8 MB on the island, 9.0 MB at 4096 m.
+- The mask compile on the tick after a policy change (2.5–4.3 ms here) runs inside that tick; it is not split.
+- Not measured: a switch-on under player or mind load, and the game client's own mask build (`sightfield.rs`, which samples the land it generated itself).
+
+Evidence: `~/slop-evidence/cover-stall-20261120.tar.zst` (with its `.sha256`). It holds the timing JSONs, the band digests, the genesis fuel reports, the scene runs and the mechanics loop.
