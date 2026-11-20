@@ -19,8 +19,10 @@ tables). Meanwhile B steps (`human_move`), waves at A (`human_act`) and strikes 
   Each probe streams from its connection on (the initial subscription's callbacks included), and
   each negative probe must show its subscription accepted (applied, never rejected): an empty
   stream from a refused subscription would prove nothing;
-- A is cued B's motion and B's strikes: each windup reaches A first by `seen_fighter_cue`, before
-  any tier row of it, and the cue was written at most `MAX_TICKS` ticks after the windup's
+- A is cued B's motion and B's strikes: B strikes until the authority has accepted 5 (at most
+  10 tries; its `skill_use` rows, owner SQL), and each accepted strike's windup (at least 3; a
+  loaded host can refuse or delay one, so the count is the authority's, not a fixed one) reaches
+  A first by `seen_fighter_cue`, before any tier row of it, and the cue was written at most `MAX_TICKS` ticks after the windup's
   `act_ms` (the cue's own `at_ms`, in ticks of the spacing the authority's `clock` row shows over
   the scene); A receives B's wave and is never cued F (not near, not engaged);
 - the tiers: B is in A's near tier (`seen_*_near`) and F in its far tier; no creature is in both,
@@ -29,7 +31,7 @@ tables). Meanwhile B steps (`human_move`), waves at A (`human_act`) and strikes 
   stands for that creature until its next tier row) ends on exactly the rows of A's views.
 
 - the kill switch: with the `cue_transport_on` law off, no cue reaches anyone (A, B, an anonymous
-  connection) and each of B's windups reaches A by its near tier.
+  connection) and each of B's accepted strikes' windups (at least 3) reaches A by its near tier.
   The law is turned on for the first phase and put back as the world had it at the end.
 
 The checks are about ticks and order, so a loaded host does not fail them. How long a windup took
@@ -72,12 +74,36 @@ STREAMS = ("seen_bodies", "seen_fighters", "seen_doing")
 # A windup's cue is written by the tick that follows it (frame.rs `cues`; engaged pairs are never
 # held over the cue budget). The bound leaves a tick for a call that lands just after a tick began.
 MAX_TICKS = 2
+# The windups checked are B's strikes the authority accepted (its `skill_use` rows), not a fixed
+# count: under load a strike can be refused or late (gate, load 19: only 4 of 6 fell in the window).
+# B strikes until this many are accepted (at most STRIKE_TRIES), and each accepted one must arrive
+# by cue first within MAX_TICKS; fewer than MIN_STRIKES accepted fails (a run without strikes proves nothing).
+WANT_STRIKES, STRIKE_TRIES, MIN_STRIKES = 5, 10, 3
 
 
 def clock(rid):
     """The authority's tick count and its last tick's time (the private `clock` row, owner SQL)."""
     row = sql(rid, "SELECT tick, last_ms FROM clock")[0]
     return int(row["tick"]), int(row["last_ms"])
+
+
+def accepted_strikes(rid, b, since_ms):
+    """B's strikes the authority accepted since `since_ms` (the private `skill_use` rows, owner SQL),
+    by their `accepted_ms`: the same transaction's `now` the windup's `fighter.act_ms` carries."""
+    return sorted({int(r["accepted_ms"]) for r in sql(rid, f"SELECT skill, accepted_ms FROM skill_use WHERE actor = {b}")
+                   if r["skill"] == "strike" and int(r["accepted_ms"]) >= since_ms})
+
+
+def strike_until(rid, db, token, b, a, at, want, tries, since_ms):
+    """B strikes A until the authority has accepted `want` strikes since `since_ms` (a loaded host
+    can refuse or delay one), at most `tries` times; returns the accepted ones."""
+    for _ in range(tries):
+        if len(accepted_strikes(rid, b, since_ms)) >= want:
+            break
+        hcall(db, token, "use_skill", ["strike", a, at[0], at[1]])
+        time.sleep(1.6)
+    time.sleep(0.5)
+    return accepted_strikes(rid, b, since_ms)
 
 
 def stats(xs):
@@ -241,13 +267,12 @@ def main():
         time.sleep(0.6)
     hcall(db, tok["b"], "human_act", [json.dumps({"do": {"skill": "wave", "target": {"id": a}}})])
     time.sleep(2.5)
-    # Back beside A (its steps took it out of reach), then six strikes.
+    # Back beside A (its steps took it out of reach), then the strikes (until 5 are accepted).
     call(rid, "place_at", [b, *line[11]])
     time.sleep(0.5)
     pa = {x["id"]: (x["x"], x["y"]) for x in sql(rid, f"SELECT id, x, y FROM body WHERE id = {a}")}[a]
-    for _ in range(6):
-        hcall(db, tok["b"], "use_skill", ["strike", a, pa[0], pa[1]])
-        time.sleep(1.6)
+    since_ms = int(time.time() * 1000)
+    struck = strike_until(rid, db, tok["b"], b, a, pa, WANT_STRIKES, STRIKE_TRIES, since_ms)
     act_window = (t0, time.time())
     clock1 = clock(rid)
     # The tick spacing the authority kept over the scene (ms per tick).
@@ -303,9 +328,10 @@ def main():
         "C subscribing SELECT * FROM *, accepted, receives no cue at all (event tables left out)": accepted(star_ev) and not [e for e in star_ev if e.get("table") in CUE_OF],
         "A is cued B's motion": len(of(b, "seen_body_cue")) >= 3,
         "A receives B's wave (by a cue or its view)": bool(waves),
-        "A receives each of B's strike windups first by a cue, before any tier row of it (B is near)": len(first) >= 5 and all(v[1] == "cue" for v in first.values()),
-        f"each windup's cue was written within {MAX_TICKS} ticks of act_ms (its at_ms, authority time)": len(first) >= 5
-        and all(v[2] is not None and 0 <= v[2] <= MAX_TICKS for v in first.values()),
+        f"A receives each of B's accepted strikes' windups (at least {MIN_STRIKES}) first by a cue, before any tier row of it (B is near)":
+        len(struck) >= MIN_STRIKES and all(ms in first and first[ms][1] == "cue" for ms in struck) and all(v[1] == "cue" for v in first.values()),
+        f"each accepted strike's cue was written within {MAX_TICKS} ticks of act_ms (its at_ms, authority time)": len(struck) >= MIN_STRIKES
+        and all(ms in first and first[ms][2] is not None and 0 <= first[ms][2] <= MAX_TICKS for ms in struck),
         "A is never cued F (not near, not engaged)": not [e for e in a_cues if body_of(e) == f],
         "B is in A's near tier and F in its far tier": b in tiers["near"] and f in tiers["far"],
         "the tiers partition each view: no creature in both, their union is the untiered view's rows": not any(overlap.values()) and not any(split.values()) and bool(union["seen_bodies"]),
@@ -316,14 +342,12 @@ def main():
     call(rid, "place_at", [b, *line[11]])
     time.sleep(1.5)
     off_paths = {w: out / f"cues-off-{w}.jsonl" for w in ("a", "b", "anon")}
-    off_threads = [stream(db, tok["a"], TIERS + CUES, 12, off_paths["a"]), stream(db, tok["b"], CUES, 12, off_paths["b"]),
-                   stream(db, None, CUES, 12, off_paths["anon"])]
+    off_threads = [stream(db, tok["a"], TIERS + CUES, 20, off_paths["a"]), stream(db, tok["b"], CUES, 20, off_paths["b"]),
+                   stream(db, None, CUES, 20, off_paths["anon"])]
     time.sleep(3.0)
     # Only the moves struck from here on: the streams' initial rows hold the last one of the first phase.
     off_t0 = int(time.time() * 1000)
-    for _ in range(4):
-        hcall(db, tok["b"], "use_skill", ["strike", a, pa[0], pa[1]])
-        time.sleep(1.6)
+    off_struck = strike_until(rid, db, tok["b"], b, a, pa, 4, 8, off_t0)
     for t in off_threads:
         t.join()
     off = {w: lines(p) for w, p in off_paths.items()}
@@ -340,8 +364,8 @@ def main():
         "law off: every probe ran to its end": all(e[-1].get("code") == 0 for e in off.values()),
         "law off: every probe's subscription was accepted": all(accepted(e) for e in off.values()),
         "law off: no cue reaches anyone": off_cues == 0,
-        "law off: each of B's windups reaches A by its near tier": len(off_first) >= 3
-        and all(v[1] == "seen_fighters_near" for v in off_first.values()),
+        f"law off: each of B's accepted strikes' windups (at least {MIN_STRIKES}) reaches A by its near tier": len(off_struck) >= MIN_STRIKES
+        and all(ms in off_first and off_first[ms][1] == "seen_fighters_near" for ms in off_struck) and all(v[1] == "seen_fighters_near" for v in off_first.values()),
     })
     # Wall-clock delivery, for a series (not checked): A's receipt against act_ms.
     measure = {"tick_ms": round(tick_ms, 3), "ticks": clock1[0] - clock0[0],
@@ -351,7 +375,7 @@ def main():
                "load1": round(os.getloadavg()[0], 2)}
     result = {"a": a, "b": b, "c": c, "f": f, "dist": {k: round(math.dist(pos[a], pos[k]), 2) for k in (b, c, f)},
               "cues": {w: len(r) for w, r in cue_rows.items()}, "cue_tables_a": {t: sum(e["table"] == t for e in a_cues) for t in CUE_OF},
-              "windups": {str(k): v for k, v in first.items()}, "differ": differ, "overlap": overlap, "split": split, "tiers": tiers, "act_window": act_window,
+              "windups": {str(k): v for k, v in first.items()}, "struck": struck, "off_struck": off_struck, "differ": differ, "overlap": overlap, "split": split, "tiers": tiers, "act_window": act_window,
               "off": {"cues": off_cues, "windups": {str(k): v for k, v in off_first.items()}}, "measure": measure, "checks": checks}
     (out / "cues.json").write_text(json.dumps(result, indent=1) + "\n")
     for k, v in checks.items():
