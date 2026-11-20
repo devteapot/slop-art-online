@@ -962,6 +962,21 @@ def far_jaw_line(m, hf, look):
 # char-port-2 features on in this process (`SLOP_PORT=jaw_shell,…`, face_types.port_features).
 PORT = {f.strip() for f in os.environ.get("SLOP_PORT", "").split(",") if f.strip()}
 JAW_SHELL = "jaw_shell" in PORT
+# `neck` (S2): the shade under the jaw as Cora's (char-live-3 ink-batch/fit.py neck_shade): full
+# right under the jaw, fading down the neck, a multiply of the skin. The skin under the jaw takes
+# it whole; person.make_neck the fade.
+NECK_SHADE = dict(strength=(0.601, 0.724, 0.728), full_below_chin=0.008, clear_below_chin=0.045, side_rise=0.025, side_fade=0.30, side_m=0.050) if "neck" in PORT else None
+
+
+def neck_shaded(srgb, depth):
+    """An sRGB colour under the port's neck shade at `depth` (0..1): Cora's multiply, in linear
+    light, of (1 - depth * strength)."""
+    out = []
+    for c, k in zip(srgb, NECK_SHADE["strength"]):
+        lin = c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+        lin *= 1 - depth * k
+        out.append(lin * 12.92 if lin <= 0.0031308 else 1.055 * lin ** (1 / 2.4) - 0.055)
+    return tuple(out)
 
 
 def _smooth(a, b, x):
@@ -1085,6 +1100,8 @@ class CageFace(head_mesh.Face):
         index = {v: i for i, v in enumerate(used)}
         look = self.look
         shade = tuple(a + (b - a) * 0.25 for a, b in zip(look["skin"], look["skin_shade"]))
+        if NECK_SHADE:
+            shade = neck_shaded(look["skin"], 1.0)
         base = m.add(skin[used], shade, None, [tuple(index[v] for v in f) for f in self.under_faces], "under")
         self.under_neck = [base + index[v] for v in used if v in self.neck_ring]
         if self.LINES:
