@@ -31,9 +31,20 @@ Status: prototypes, measured once each, 2026-11-20. Branch `battle-laws` (dev-bo
 
 **What changes for a player.** In a crowd larger than N, the farther ones are not drawn at all. A player in a 200-fighter battle sees the 40 nearest (and anyone attacking it), and the far edge of the battle is empty ground. Its own fight, and those near it, are unchanged and fresher than before (below). The AI is untouched: a mind's scene, its sight and its memories are unchanged. That asymmetry is a rules question: the same rules for players and AI. The aggregated alternative below would keep a far crowd visible.
 
-**Stills.** Not taken yet; they are the laptop's (verify-ui, the Bevy client).
-- Two views of a far crowd at Middle and at Far (docs/CAMERA.md bands), law off and on (N = 40), from a player 26 m from the 200-fighter battle.
-- Taken with `verify-ui`'s camera scenario on a world staged by `battle_viewers.py` (`--viewers 1 --ring 26,32 --law far_cap=40`), the game client joined as that viewer.
+**Stills: the spec for the laptop** (verify-ui and the Bevy client; the GC's brief, 2026-11-20). They let the owner judge (a) by eye. One shot per cell of this grid:
+
+| | `far_cap` off | `far_cap` 40 | `far_cap` 30 | `far_cap` 20 | aggregated crowd (mock, if cheap) |
+|---|---|---|---|---|---|
+| Middle band | 1 | 2 | 3 | 4 | 5 |
+| Far band | 6 | 7 | 8 | 9 | 10 |
+
+- **World:** Cullet (`LIVING_SEED=cullet`), a fresh world from the build under test (all battle laws off but `far_cap`), by day (the world's own day: the shots between 10:00 and 15:00 world time).
+- **Staging:** `living/tools/battle_viewers.py --viewers 1 --fighters 200 --ring 26,26 --paused-placement --battle-after-placing --keep-alive 0.5 --law far_cap=N` (the law left out for "off"), with `--seconds 600` so the world stays up. The one viewer is the game client's own player, joined with its own identity in place of `gate-load`'s: join it, then `place_at` it at the battle's centre plus 26 m due south of it (centre: the arrival less 20 m, as `spawn_battle` takes it), facing north.
+- **Camera:** north-up (the default bearing), the play camera's own Middle and Far zoom bands (docs/CAMERA.md), no free camera. The fight in frame: the battle's centre on the screen's vertical middle.
+- **Timing:** 20 s after `spawn_battle` (the fight under way; about 180 fighters alive), the world paused for the shot (`set_paused true`), so the five arms show the same moment of their own run.
+- **Output:** 1920×1080 PNG, UI hidden but the nameplates, named `battle-laws-<band>-cap<N|off|crowd>.png`, beside a JSON per shot with the world time, the fighters alive, the creatures the viewer sees (`seen_bodies` count) and the law's value.
+- **The aggregated crowd (5, 10), only if cheap:** the cap-30 view plus, for the capped creatures, one translucent disc per 4 m cell where they stand, its size by their count (a client-side mock from an owner SQL read of `body` positions; no table yet).
+- **What the owner should be able to see:** at Middle, whether the nearer fighters are all there and the far edge's absence is noticeable; at Far, how much of the battle is gone at 40, 30 and 20, and whether the crowd discs read as "a big fight over there".
 
 **Measured.**
 
