@@ -276,21 +276,50 @@ fn body(p: &mut Probe) -> Result<(), String> {
         return Ok(());
     }
     let parts = s.status_part_names();
-    let whole = super::StatusWay { parts: false, check: false };
+    // The whole law's answer by the values of what it reads: samples the law cannot tell apart
+    // (an infant and a grown person, for a law that does not read the stage) are run once.
+    let (join, mut ran) = (s.status_of_is_join(), false);
+    let reads = s.status_reads();
+    let mut answered: std::collections::HashMap<Vec<u8>, Vec<super::Status>> = Default::default();
     for b in s.sample_bodies(&super::body::SHIPPED_VITALS) {
         let about = || format!("for a {} {}{} with {}", b.stage, b.kind, if b.night { " at night" } else { "" }, b.fields.iter().map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", "));
-        // Each part gives a list of statuses (counting its operations for the fuel report).
-        for f in &parts {
-            let d = p.raw(f, (b.map_for_check(),), &about)?;
-            super::body::read_status(d).map_err(|e| format!("install refused: {} ({})", e.replacen("status_of", f, 1), about()))?;
+        if parts.is_empty() {
+            let _ = p.raw("status_of", (b.map_for_check(),), &about)?; // counts its operations for the fuel report
+            s.status_of(&b).map_err(|e| format!("install refused: {e} ({})", about()))?;
+            continue;
         }
-        let _ = p.raw("status_of", (b.map_for_check(),), &about)?; // counts its operations for the fuel report
-        // Each part's answer is a list of statuses (an error names the part)...
+        // By the parts first, so a part's bad answer is refused in its name. Each part is kept on
+        // what it reads, so across the samples most parts are answered from their memo: the check
+        // costs at most one run of the whole law a sample, not the parts again (an install runs in a
+        // world's `init`, near its energy budget on the island).
         let joined = s.status_of(&b).map_err(|e| format!("install refused: {e} ({})", about()))?;
-        let law = s.status_of_profiled(&b, whole, |_| ()).map_err(|e| format!("install refused: {e} ({})", about()))?;
-        // ...and the parts joined are `status_of` (docs/STATUS_PARTS.md): a world that changes one
-        // changes the other.
-        if !parts.is_empty() && joined != law {
+        // `status_of` written as the parts joined in their order (as shipped, and in every floor
+        // that keeps it): equal by construction, so the law is run once, for the fuel report, not
+        // on every sample. The install runs in a world's `init`, which on the island is within
+        // 1% of SpacetimeDB 2.14.1's energy budget for a call.
+        if join {
+            if !ran {
+                let _ = p.raw("status_of", (b.map_for_check(),), &about)?;
+                ran = true;
+            }
+            continue;
+        }
+        // The reference, run on the whole body (also counting its operations for the fuel report)
+        // once for each state the law can tell apart: the parts joined are `status_of`
+        // (docs/STATUS_PARTS.md), so a world that changes one changes the other.
+        let key = reads.as_ref().map(|r| b.key_of_reads(r));
+        let law = match key.as_ref().and_then(|k| answered.get(k)) {
+            Some(law) => law.clone(),
+            None => {
+                let d = p.raw("status_of", (b.map_for_check(),), &about)?;
+                let law = super::body::read_status(d).map_err(|e| format!("install refused: {e} ({})", about()))?;
+                if let Some(k) = key {
+                    answered.insert(k, law.clone());
+                }
+                law
+            },
+        };
+        if *joined != law {
             let names = |v: &[super::Status]| v.iter().map(|x| x.name.as_str()).collect::<Vec<_>>().join(", ");
             return Err(format!(
                 "install refused: status_of and status_parts disagree: override both or neither (the parts joined give [{}], status_of gives [{}], {})",

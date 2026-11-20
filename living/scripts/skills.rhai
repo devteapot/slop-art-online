@@ -133,8 +133,7 @@ fn laws() {
         // levels. The `_check` laws (diagnostics) also work each out the whole way and count any
         // difference; `warmth_check` likewise for warmth.
         check_ctx_plan: true, check_ctx_check: false, alarm_cells: true, alarm_cells_check: false, warmth_check: false,
-        // The body's statuses asked by their parts (`status_parts()`), each kept on what it reads;
-        // `status_parts_check` (a diagnostic) also asks the whole `status_of` and counts any difference.
+        // The body's statuses by their parts; the check asks the whole law too (a diagnostic).
         status_parts: true, status_parts_check: false,
         // A body's scene worked out as far as each reader asks; `scene_lazy_check` (a diagnostic)
         // also works each answer out from the whole scene and counts any difference.
@@ -2908,12 +2907,8 @@ fn health_status(f) {
     else if f < 0.9 { #{ name: "a_little_hurt", tone: "plain", text: "A little hurt", meter: "health", felt: "a little hurt" } }
     else { #{ name: "unhurt", tone: "plain", text: "Unhurt", meter: "health", felt: "unhurt" } }
 }
-// The parts of how a body is, in the order their statuses are listed (docs/STATUS_PARTS.md). Each
-// takes the same body `a` as `status_of` and gives a list of its statuses (none, one or more); the
-// engine keeps each part's answer on what that part reads, so a change of breath alone asks only
-// `breath_part` again. `status_of` is the parts joined in this order and stays the law: the
-// engine's check law compares the two, and an install refuses a world whose parts joined differ
-// from its `status_of`. A floor that replaces `status_of` alone is asked it whole.
+// The parts of how a body is, in order; each kept on what it reads, `status_of` their join
+// (docs/STATUS_PARTS.md).
 fn status_parts() { ["hunger_part", "energy_part", "health_part", "cold_part", "combat_part", "breath_part", "slowed_part", "mending_part"] }
 fn hunger_part(a) { if a.hunger != () { [hunger_status(a.hunger)] } else { [] } }
 fn energy_part(a) { if a.energy != () { [energy_status(a.energy)] } else { [] } }
