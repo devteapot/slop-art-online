@@ -1845,13 +1845,14 @@ thread_local! {
 /// party to the event is woken by `wake`, at once.
 #[track_caller]
 pub fn wake_bystander(ctx: &ReducerContext, id: u32, now: u64) {
-    // (c) battle law `fighter_bystander_wakes` (docs/BATTLE_LAWS.md): off, a fighter on the combat
-    // cadence (`mind_state.fast_until` ahead) is left to its next cadence evaluation (within 4 ticks).
-    if !laws(ctx).fighter_bystander_wakes && ctx.db.mind_state().id().find(id).is_some_and(|m| m.fast_until > now) {
+    let l = laws(ctx);
+    // The `fighter_bystander_wakes` law (on as shipped; docs/BATTLE_LAWS.md (c), COMBAT_PHASE.md
+    // "Part B"): off, one on the combat cadence turns to it at its own next cadence evaluation.
+    if !l.fighter_bystander_wakes && on_cadence(ctx, id, now) {
         diag(|| "wake:fighter_left_to_cadence", 1);
         return;
     }
-    let ms = laws(ctx).witness_wake_ms as u64;
+    let ms = l.witness_wake_ms as u64;
     if ms == 0 {
         wake(ctx, id);
         return;
@@ -1902,10 +1903,23 @@ pub fn due_bystander_wakes(ctx: &ReducerContext, now: u64, tick: u64) {
         log::info!("det wakes tick={tick} due={due:?} start={start}");
     }
     due.rotate_left(start);
+    let to_cadence = !laws(ctx).fighter_bystander_wakes;
     for id in due {
+        if to_cadence && on_cadence(ctx, id, now) {
+            diag(|| "wake:fighter_left_to_cadence", 1);
+            continue;
+        }
         diag(|| "wake:due", 1);
         wake(ctx, id);
     }
+}
+
+/// Whether `id` is on the combat cadence through at least the next cadence evaluation: in a fight
+/// (`fast_until`) for another `combat_every_ticks` ticks' worth of time, so the cadence will
+/// evaluate it (`tick`'s `tick.combat`).
+fn on_cadence(ctx: &ReducerContext, id: u32, now: u64) -> bool {
+    let ahead = laws(ctx).combat_every_ticks() * 1000 / 60 + 1;
+    ctx.db.mind_state().id().find(id).is_some_and(|m| m.fast_until >= now + ahead)
 }
 
 /// Where tick `tick`'s delivery of `n` due wakes starts in their id order: `tick` mod `n`. A
