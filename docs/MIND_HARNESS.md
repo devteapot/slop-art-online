@@ -510,7 +510,7 @@ Since 2026-11-19, whichever waiter runs the pass decides for everyone (`Queue::d
 
 **Not changed.** A grant still waits for the next 50 ms poll when the profile's pacer (10 ms at 6,000/min) is the only thing holding it, so the pool grants at most about 20 calls per second after a backlog. The CPU-heavy work that holds tasks up is not addressed here: experience scans per deliberation and the nightly reorganizations.
 
-#### A/B on pinned main `48550720` (2026-11-19, in progress)
+#### A/B on pinned main `48550720` (2026-11-19)
 
 A is main plus timing only (`urgent-merge-ab-control` `fe1cde4f`): the fixed-site driver, the fake timing log, a timing header carrying the deliberation's start, and the passive grant-stall watch. B is this branch. The protocol matches the series above: 200 fixed-site fighters, 16 walkers, island seed, five minutes, under `battle.lock`, with a preflight load under 6 and no compilers. The run used a private SpacetimeDB 2.14.1 container. Host load was sampled every 10 s. A run is **loaded** when more than a few of its samples had load over 6 or another checkout's compiler running. Those were builds outside the lock, so the run's ticks/s and waits cannot be compared. The orphan guard paused none of the runs: no `PAUSING ORPHAN` line, and every profiling window ticked. Every run ended with 200 fighters at the site.
 
@@ -528,8 +528,35 @@ A is main plus timing only (`urgent-merge-ab-control` `fe1cde4f`): the fixed-sit
 
 - **Grant stalls.** Every A run has 9–25 grant stalls of a second or more, the longest 8.4–13.4 s, with up to 193 ready calls and free slots. Every B run, on loaded hosts too, has none. A delayed owner now shows as its own slot hold: B's urgent hold p90 is 20–650 ms, against A's 0.15–0.22 ms.
 - **Merging.** B carries 1.56–1.71 reason lines per urgent prompt, against 1.01–1.09 on A, with 362–537 lines merged per run.
-- **Not settled.** No B run of the final runtime (`1a770e94`) has had a clean host yet. The one-sided verdict on queue p50/p90 and ticks/s against the spread of A's three clean runs is still open.
+- **Not settled.** No B run of the final runtime (`1a770e94`) has had a clean host yet. The one-sided verdict on queue p50/p90 and ticks/s against the spread of A's three clean runs is still open. It was settled on current main, below.
 - **The span before the queue.** The deliberation's start to its entry in the queue is a few seconds at p90 on clean A, where it includes building the prompt. It reaches 50–75 s on loaded runs of both arms (A uo2a2: 22.6 s at p90). That span is CPU and lock contention in the mind (the per-deliberation scan of every cached experience, the SDK cache), not the scheduler. The release benchmark `pass_cost_with_a_battle_queue` puts one scheduler pass at 1.5 µs with 200 waiting.
+
+#### A/B on main `ca2cee6a`, quiet host (2026-11-20): the branch is slower
+
+A is main `ca2cee6a` plus the same measurement harness only (`urgent-merge-ab2-control` `ef07d864`: the fixed-site driver, the fake timing log and header, the passive grant-stall watch). B is this branch with main merged (`1767c824`). Both run the merged `battle_diag.py --fixed-site 412.5 237.5`: main's seed-defined formation gathered round that point, 200 fighters striking their two nearest rivals in place with zero damage, 16 walkers, no refills, five minutes, fake model, fast lane on with `keep` replies.
+
+Protocol. Runs were interleaved A, B, A, B, A, B, each under `battle.lock`, started only with the 1-minute load under 4, no compiler running and the merge lock free. Each run had a fresh private SpacetimeDB 2.14.1 container, pinned with `--cpuset-cpus 5-9,15-19` (the X925 cores; every sampled busy server thread was on them). Load was sampled every 10 s, and a run whose load passed 8 in its 300 s window was discarded and redone. B2 was discarded at 8.01, when another worker's rules tests started in its last seconds. Every run ticked every window, and 200 fighters were still at the site at the end.
+
+| Run | Load start / end (max) | Urgent queue p50 / p90 (s) | Routine queue p50 / p90 (s) | Urgent start→grant p50 / p90 (s) | Ticks/s | Grant stalls ≥1 s (longest s) | Routine thinks | Reasons per urgent prompt |
+| --- | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
+| A1 | 1.3 / 3.0 (3.8) | 8.78 / 17.60 | 6.20 / 12.47 | 11.35 / 15.09 | 45.98 | 4 (14.6) | 149 | 1.012 |
+| B1 | 1.2 / 3.6 (4.4) | 9.24 / 22.80 | 4.81 / 11.08 | 14.46 / 33.79 | 46.12 | 0 | 74 | 1.410 |
+| A2 | 3.6 / 3.0 (3.2) | 8.57 / 18.63 | 7.56 / 25.29 | 11.76 / 16.93 | 45.94 | 3 (5.5) | 145 | 1.008 |
+| B2r1 | 2.2 / 6.2 (6.3) | 9.80 / 21.67 | 7.74 / 46.95 | 15.99 / 34.99 | 45.54 | 0 | 187 | 1.439 |
+| A3 | 3.5 / 2.8 (4.9) | 9.30 / 18.85 | 8.59 / 28.43 | 11.79 / 17.92 | 46.52 | 9 (15.1) | 151 | 1.007 |
+| B3 | 2.8 / 2.4 (3.7) | 9.74 / 24.80 | 12.24 / 67.22 | 16.03 / 37.18 | 46.64 | 0 | 178 | 1.470 |
+| B2 (discarded) | 3.0 / 10.2 (8.0) | 9.08 / 17.50 | 6.51 / 33.77 | 12.47 / 27.27 | 46.52 | 0 | 160 | 1.320 |
+
+The queue columns are `queue_wait_ms` over think and deliberate calls, as in the series above. They do not measure the same span in both arms. On main the prompt is built first and the wait starts at `admit`. On the branch the turn is queued before preparation, so the wait includes it: 0.12–0.16 s at the median and 2.0–2.9 s at p90 for urgent thinks. Start→grant runs from the scheduler starting the actor's deliberation to its slot grant, and is the same span in both arms.
+
+- **Verdict: the one-sided check fails.** Urgent queue p90 is worse in every B run (21.7–24.8 s against A's 17.6–18.9). Urgent p50 is above A's range in two of three runs. Routine p90 is worse in two of three (47.0 and 67.2 s against at most 28.4). On the arm-neutral span the branch is worse in every run: urgent start→grant p50 is 14.5–16.0 s against 11.3–11.8, and p90 is 33.8–37.2 s against 15.1–17.9. Routine start→grant p50 is 47 and 64 s in B2r1 and B3, against 8.5–12.6 on A.
+- **Ticks/s are the same:** 45.54–46.64 on B against 45.94–46.52 on A.
+- **The grant-stall fix holds.** A has 3–9 stalls of a second or more per run (longest 5.5–15.1 s, 12–41 s in total). B has none.
+- **Merging holds.** B carries 1.41–1.47 reasons per urgent prompt against 1.01, with 226–264 lines merged per run.
+- **Routine share is mixed.** Routine thinks are 10.7 %, 21.4 % and 21.9 % of B's thinks, against 17.8–18.4 % on A. In the two B runs with more routine thinks, those thinks waited 47–64 s at the median from start to grant.
+- **Where B loses time.** Most of it is before the turn is queued. B's deliberation start to enqueue is 2.4–2.5 s at the median, but 21.7–22.1 s at p90 for urgent and 46.6–55.9 s for routine in B2r1 and B3. On A the same span is 5.1–6.0 s urgent and 6.6–9.6 s routine at p90, and it includes building the prompt. Nothing in the scheduler runs in that span. A likely cause is contention in the mind from preparing many prompts at once (the experience scan, the SDK cache), but it has not been profiled.
+
+Evidence: `.local/ab2/` in the urgent-merge worktree (per-run preflight, host samples, placement, `tables.json`, `breakdown.txt`) and the run directories under `.local/living/verify/minds-ab2-*` of both checkouts, archived in `~/slop-evidence/urgent-merge-ab2-20261120.tar.zst`.
 
 ## Fixes from the rules2-r2 review (2026-11-10)
 
