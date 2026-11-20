@@ -98,7 +98,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     model.link = link;
     // Who I perceive, as I perceive them (name or label, health as I can tell it), and my own
     // characters (the dead one stays for the death screen).
-    let chars: HashMap<u32, SeenCharacter> = conn.db.seen_characters().iter().map(|c| (c.id, c)).collect();
+    let chars: HashMap<u32, SeenCharacter> = crate::net::characters(conn).into_iter().map(|c| (c.id, c)).collect();
     let mine: HashMap<u32, Character> = conn.db.my_characters().iter().map(|c| (c.id, c)).collect();
     if last.labels.len() > 4096 {
         last.labels.clear();

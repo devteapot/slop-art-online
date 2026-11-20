@@ -161,14 +161,18 @@ fn gaze_on_changes_the_fields_and_cover_and_delivery_change_only_their_laws() {
     let delivery = s.apply_overrides(&[("gaze_on".into(), json!(true)), ("cover_sight_on".into(), json!(true)), ("cover_brush_min_fill".into(), json!(0.4)), ("cue_transport_on".into(), json!(false))]).unwrap();
     assert!(delivery.delivery && !delivery.cover && !delivery.gaze);
     assert!(!s.laws().cue_transport_on && s.laws().near_tier_on);
-    // battle-views' kill switch is a delivery law too: on and off in place, words following.
-    let tables = s.apply_overrides(&[("gaze_on".into(), json!(true)), ("cover_sight_on".into(), json!(true)), ("cover_brush_min_fill".into(), json!(0.4)), ("cue_transport_on".into(), json!(false)), ("motion_tables_on".into(), json!(true))]).unwrap();
+    // battle-views' kill switch is a delivery law too (on by default since bv-defaults-on): off
+    // and back on in place, words following.
+    assert!(s.laws().motion_tables_on, "on by default");
+    let tables = s.apply_overrides(&[("gaze_on".into(), json!(true)), ("cover_sight_on".into(), json!(true)), ("cover_brush_min_fill".into(), json!(0.4)), ("cue_transport_on".into(), json!(false)), ("motion_tables_on".into(), json!(false))]).unwrap();
     assert!(tables.delivery && !tables.cover && !tables.gaze && tables.changed == vec!["motion_tables_on".to_string()], "{tables:?}");
-    assert!(s.laws().motion_tables_on);
+    assert!(!s.laws().motion_tables_on);
+    let about: std::collections::HashMap<String, String> = s.laws_about().into_iter().collect();
+    assert!(about["motion_tables_on"].contains("what it may look at"), "{about:?}");
+    let back = s.apply_overrides(&[("gaze_on".into(), json!(true)), ("cover_sight_on".into(), json!(true)), ("cover_brush_min_fill".into(), json!(0.4)), ("cue_transport_on".into(), json!(false))]).unwrap();
+    assert!(back.delivery && s.laws().motion_tables_on, "{back:?}");
     let about: std::collections::HashMap<String, String> = s.laws_about().into_iter().collect();
     assert!(about["motion_tables_on"].contains("meant for that player alone"), "{about:?}");
-    let off = s.apply_overrides(&[("gaze_on".into(), json!(true)), ("cover_sight_on".into(), json!(true)), ("cover_brush_min_fill".into(), json!(0.4)), ("cue_transport_on".into(), json!(false))]).unwrap();
-    assert!(off.delivery && !s.laws().motion_tables_on, "{off:?}");
     let about: std::collections::HashMap<String, String> = s.laws_about().into_iter().collect();
     assert!(about["cue_transport_on"].contains("with the rest of what it sees"), "the words follow the value: {about:?}");
 }

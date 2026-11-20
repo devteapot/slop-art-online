@@ -75,7 +75,7 @@ impl Looks {
 /// remembered dead), everyone I perceive by name, and my own characters.
 pub fn known_names(net: &Net) -> Vec<String> {
     let Some(c) = net.conn.as_ref() else { return Vec::new() };
-    c.db.my_known_names().iter().map(|x| x.name).chain(c.db.seen_characters().iter().map(|x| x.name)).chain(c.db.my_characters().iter().map(|x| x.name)).filter(|n| !n.trim().is_empty()).collect()
+    c.db.my_known_names().iter().map(|x| x.name).chain(crate::net::characters(c).into_iter().map(|x| x.name)).chain(c.db.my_characters().iter().map(|x| x.name)).filter(|n| !n.trim().is_empty()).collect()
 }
 
 /// A structure as my character may call it (owner-known, docs/PERCEPTION.md "Whose a thing is,
@@ -102,7 +102,7 @@ pub fn structure_name(conn: &DbConnection, me: u32, kind: &str, owner: u32) -> S
 /// Whom I perceive now (`seen_characters` ids), for the UI dump.
 pub fn perceived_ids(net: &Net) -> Vec<u32> {
     let Some(c) = net.conn.as_ref() else { return Vec::new() };
-    let mut v: Vec<u32> = c.db.seen_characters().iter().map(|x| x.id).collect();
+    let mut v: Vec<u32> = crate::net::characters(c).into_iter().map(|x| x.id).collect();
     v.sort_unstable();
     v
 }
@@ -245,7 +245,7 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
     *next = now + 0.25;
     let me = net.my_id;
     let seed = island.as_ref().map(|i| i.land.seed);
-    let seen: Vec<SeenCharacter> = conn.db.seen_characters().iter().filter(|c| Some(c.id) != me).collect();
+    let seen: Vec<SeenCharacter> = crate::net::characters(conn).into_iter().filter(|c| Some(c.id) != me).collect();
     let mut base: Vec<(u32, String, Option<String>, Option<String>)> = Vec::with_capacity(seen.len());
     let mut phrased: HashMap<u32, (String, String)> = HashMap::new();
     for c in &seen {

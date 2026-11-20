@@ -845,8 +845,8 @@ fn workplace(rules: &Scripts, t: &mut TargetFacts, lit_until_ms: u64, now: u64, 
 }
 
 /// A creature as I perceive it, for the rules' checks.
-fn creature_facts(conn: &DbConnection, rules: &Scripts, id: u32, dist: f32) -> Option<TargetFacts> {
-    let c = conn.db.seen_characters().id().find(&id)?;
+fn creature_facts(conn: &crate::net::PlayerConnection, rules: &Scripts, id: u32, dist: f32) -> Option<TargetFacts> {
+    let c = crate::net::find_character(conn, id)?;
     let max = if c.max_hp > 0.0 { c.max_hp } else { rules.num_of("max_hp", &c.kind, 100.0) as f32 };
     let hp = if c.hp >= 0.0 {
         c.hp
@@ -911,7 +911,7 @@ struct Toward {
 /// owner by name (`my_known_names`, the authority's `owner_shown` law), else the kind alone
 /// (`looks::structure_name`). Never from `land.params` (no names since owner-known) or the seed,
 /// which name owners and buildings the player's character may not know.
-fn toward(conn: &DbConnection, rules: &Scripts, me: &Me, my_at: Vec2, aim: &Aim) -> Toward {
+fn toward(conn: &crate::net::PlayerConnection, rules: &Scripts, me: &Me, my_at: Vec2, aim: &Aim) -> Toward {
     match aim {
         Aim::Me => Toward { title: "Yourself".into(), target: None, open: true, requests: false },
         Aim::Thing { class, kind, at, id, amount, .. } => {
@@ -927,7 +927,7 @@ fn toward(conn: &DbConnection, rules: &Scripts, me: &Me, my_at: Vec2, aim: &Aim)
 }
 
 /// The choices toward an aim, with its title.
-fn options(conn: &DbConnection, rules: &Scripts, skills: &[Skill], me: &Me, my_at: Vec2, aim: &Aim) -> (String, Vec<Choice>) {
+fn options(conn: &crate::net::PlayerConnection, rules: &Scripts, skills: &[Skill], me: &Me, my_at: Vec2, aim: &Aim) -> (String, Vec<Choice>) {
     let t = toward(conn, rules, me, my_at, aim);
     if !t.open {
         return (t.title, Vec::new());
@@ -940,10 +940,10 @@ fn options(conn: &DbConnection, rules: &Scripts, skills: &[Skill], me: &Me, my_a
 }
 
 /// Where a target's list opens, for `menus()`: the place and the target's kind.
-fn place_of(conn: &DbConnection, aim: &Aim) -> (living_rules::ui::On, String) {
+fn place_of(conn: &crate::net::PlayerConnection, aim: &Aim) -> (living_rules::ui::On, String) {
     use living_rules::ui::On;
     match aim {
-        Aim::Creature { id } => (On::Person, conn.db.seen_characters().id().find(id).map_or_else(String::new, |c| c.kind)),
+        Aim::Creature { id } => (On::Person, crate::net::find_character(conn, *id).map_or_else(String::new, |c| c.kind)),
         Aim::Thing { kind, .. } => (On::Thing, kind.clone()),
         Aim::Me => (On::Me, String::new()),
     }
@@ -952,7 +952,7 @@ fn place_of(conn: &DbConnection, aim: &Aim) -> (living_rules::ui::On, String) {
 /// A way of making's recipe grid toward a target (`ui/grid.rs`), where its `_ui()` says
 /// `choose: "grid"` from `products`: a cell per product, live or greyed by the rules' check with
 /// that cell's item (`making_item`), its rows from `recipe_parts`. None keeps the list.
-fn grid_toward(conn: &DbConnection, sc: &Scripts, skills: &[Skill], me: &Me, my_at: Vec2, aim: &Aim, skill: &str, title: String) -> Option<crate::ui::grid::GridOpen> {
+fn grid_toward(conn: &crate::net::PlayerConnection, sc: &Scripts, skills: &[Skill], me: &Me, my_at: Vec2, aim: &Aim, skill: &str, title: String) -> Option<crate::ui::grid::GridOpen> {
     use living_rules::ui::{Choose, ItemSource};
     let u = sc.ui(skill).filter(|u| u.choose == Choose::Grid && u.source == Some(ItemSource::Products))?;
     let spec = skills.iter().find(|s| s.name == skill)?;
@@ -1025,7 +1025,7 @@ fn refusal(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill) ->
 /// The wheel toward a target, where the world's `menus()` gives its place one
 /// (`living_rules::ui::wheel_of` over the list's own choices): None keeps the list.
 #[allow(clippy::too_many_arguments)]
-fn wheel_toward(conn: &DbConnection, sc: &Scripts, skills: &[Skill], me: &Me, my_at: Vec2, aim: &Aim, person: bool, title: String, at: Vec2) -> Option<crate::ui::wheel::WheelOpen> {
+fn wheel_toward(conn: &crate::net::PlayerConnection, sc: &Scripts, skills: &[Skill], me: &Me, my_at: Vec2, aim: &Aim, person: bool, title: String, at: Vec2) -> Option<crate::ui::wheel::WheelOpen> {
     use living_rules::ui::{wheel_of, Candidate, Choose, Pin, Section};
     let (on, kind) = place_of(conn, aim);
     let spec = sc.menu_for(on, &kind).filter(|m| m.choose == Choose::Wheel)?.clone();
@@ -1165,7 +1165,7 @@ fn aim(
         if toward.requests {
             out.extend(requests(&job.me));
         }
-        let key = a.key(|id| conn.db.seen_characters().id().find(&id).map_or_else(String::new, |c| c.kind));
+        let key = a.key(|id| crate::net::find_character(conn, id).map_or_else(String::new, |c| c.kind));
         v.likely = likely(sc, &a, &out, v.last.get(&key)).cloned();
         v.has_options = !out.is_empty();
         v.aim_name = match &a {
@@ -1217,7 +1217,7 @@ fn aim(
 }
 
 /// Send a choice: an act through `human_act`, a request through `human_say`.
-fn send(net: &Net, conn: &DbConnection, rules: &Scripts, aim: &Aim, c: &Choice, text: Option<&str>, now_ms: f64, v: &mut Verbs, input: &mut crate::controls::Input) {
+fn send(net: &Net, conn: &crate::net::PlayerConnection, rules: &Scripts, aim: &Aim, c: &Choice, text: Option<&str>, now_ms: f64, v: &mut Verbs, input: &mut crate::controls::Input) {
     if let Some(line) = &c.say {
         let to = match aim {
             Aim::Creature { id } => *id,
@@ -1235,14 +1235,14 @@ fn send(net: &Net, conn: &DbConnection, rules: &Scripts, aim: &Aim, c: &Choice, 
 
 /// Send an act's node through `human_act` and await its outcome.
 #[allow(clippy::too_many_arguments)]
-fn dispatch(net: &Net, conn: &DbConnection, rules: &Scripts, aim: &Aim, c: &Choice, node: serde_json::Value, now_ms: f64, v: &mut Verbs) {
+fn dispatch(net: &Net, conn: &crate::net::PlayerConnection, rules: &Scripts, aim: &Aim, c: &Choice, node: serde_json::Value, now_ms: f64, v: &mut Verbs) {
     // An act (a one-off the authority reports on) or behavior (ongoing: the body shows it).
     let act = node.get("do").is_some() && living_rules::acts::not_an_act(&c.skill, rules.shapes()).is_none();
     info!("verbs: {} → {}", c.label, node);
     let node_s = node.to_string();
     let r = conn.reducers.human_act_then(node_s.clone(), net.on_reply("act", "human_act", || serde_json::json!({"node": node_s})));
     net.report("act", r);
-    let key = aim.key(|id| conn.db.seen_characters().id().find(&id).map_or_else(String::new, |c| c.kind));
+    let key = aim.key(|id| crate::net::find_character(conn, id).map_or_else(String::new, |c| c.kind));
     v.pending.push(Pending { sent_ms: now_ms, act, key, choice: c.clone() });
     if !act {
         v.toasts.push(Toast { text: c.label.clone(), ok: None, at: now_ms / 1000.0 });
@@ -1282,7 +1282,7 @@ pub fn input(
     let all = || things(conn, now_ms);
     let here = here_of(sc, &clock, &live, my_at);
     let facts = |_: &Aim| me_facts(conn, me, now_ms, sc, weather.authority.map(|(r, _)| r), &all(), my_at, &here);
-    let is_person = |aim: &Aim| matches!(aim, Aim::Creature { id } if conn.db.seen_characters().id().find(id).is_some_and(|c| c.kind == "person"));
+    let is_person = |aim: &Aim| matches!(aim, Aim::Creature { id } if crate::net::find_character(conn, *id).is_some_and(|c| c.kind == "person"));
     let open = |v: &mut Verbs, aim: Aim, item: Option<String>| {
         let (_, choices) = options(conn, sc, &rules.skills, &facts(&aim), my_at, &aim);
         let title = label_of_aim(&looks, conn, me, &aim);
@@ -1344,7 +1344,7 @@ pub fn input(
         // Digits belong to the wheel (1–3 are also the skill keys' twins).
         let fled = chosen.is_none() && bar.iter().any(|a| binds.just_pressed(*a, &keys));
         // Its target left sight (or died): it closes, saying so.
-        let gone = matches!(&w.aim, Aim::Creature { id } if conn.db.seen_characters().id().find(id).is_none());
+        let gone = matches!(&w.aim, Aim::Creature { id } if crate::net::find_character(conn, *id).is_none());
         let note = gone.then(|| format!("{} is out of sight", w.title));
         if gone || fled {
             info!("ui: wheel closed ({})", if gone { "its target left sight" } else { "another key" });
@@ -1584,7 +1584,7 @@ pub fn input(
         Some(("nearest", kind)) => {
             let a = all();
             a.iter().filter(|t| t.1 == kind).min_by(|x, y| x.2.distance(my_at).total_cmp(&y.2.distance(my_at))).map(|t| Aim::Thing { class: t.0, kind: t.1.clone(), at: t.2, id: t.3, amount: t.4, nearest: true }).or_else(|| {
-                scene.shown.iter().filter(|(id, _)| **id != me && conn.db.seen_characters().id().find(id).is_some_and(|c| c.kind == kind)).min_by(|x, y| x.1 .0.distance(my_at).total_cmp(&y.1 .0.distance(my_at))).map(|(id, _)| Aim::Creature { id: *id })
+                scene.shown.iter().filter(|(id, _)| **id != me && crate::net::find_character(conn, **id).is_some_and(|c| c.kind == kind)).min_by(|x, y| x.1 .0.distance(my_at).total_cmp(&y.1 .0.distance(my_at))).map(|(id, _)| Aim::Creature { id: *id })
             })
         }
         _ if at == "self" => Some(Aim::Me),
@@ -1671,7 +1671,7 @@ pub fn input(
                 v.menu = None;
             }
             Some(Row::Pick(c)) => {
-                let key = m.aim.key(|id| conn.db.seen_characters().id().find(&id).map_or_else(String::new, |c| c.kind));
+                let key = m.aim.key(|id| crate::net::find_character(conn, id).map_or_else(String::new, |c| c.kind));
                 v.last.insert(key, c.clone());
                 v.menu = None;
                 if c.words {

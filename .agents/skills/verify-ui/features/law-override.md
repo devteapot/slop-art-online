@@ -1,6 +1,6 @@
 # Law overrides on a connected client
 
-Since `law-override-client` (2026-11-19, [docs/LAW_OVERRIDE.md](../../../../docs/LAW_OVERRIDE.md)). A world's own law values live in the public `law_override` table. A value-only law (`cue_transport_on`, `near_tier_on`, `gaze_on` and the five `cover_*` laws) changes there alone, with the `script` row and its revision untouched. Every other law still installs a new script revision.
+Since `law-override-client` (2026-11-19, [docs/LAW_OVERRIDE.md](../../../../docs/LAW_OVERRIDE.md)). A world's own law values live in the public `law_override` table. A value-only law (`cue_transport_on`, `near_tier_on`, since battle-views `motion_tables_on` and `characters_table_on`, `gaze_on` and the five `cover_*` laws) changes there alone, with the `script` row and its revision untouched. Every other law still installs a new script revision.
 
 ## How the client takes them
 
@@ -10,13 +10,13 @@ Since `law-override-client` (2026-11-19, [docs/LAW_OVERRIDE.md](../../../../docs
   - a new script revision, a script that did not compile, or an in-place refusal: `Scripts::with_overrides(source, day_ms, overrides)`. The log says `rules: skill script revision N compiled (M skills, K law overrides)`;
   - the same revision with the rows changed: `Scripts::apply_overrides` in place. The log says `rules: law overrides laid over in place in X ms (changed [...]; delivery D cover C gaze G; script revision N unchanged)`.
 - **`Rules::laws_key`** moves on each compile and on each in-place change of a law's value in force. Caches of law reads key on it, not on `revision`:
-  - `perception_law`, the delivery laws that choose the set;
+  - `perception_law`, the delivery laws that choose the set (`net::Feed`);
   - `heardmark`'s band distances;
   - `sightedge`'s `keep_seen_m`;
   - `live`'s walk/run split;
   - `facing`'s `walk_base`.
 - **Per class:**
-  - **delivery:** `perception_law` reads the two laws again and runs its make-before-break switch;
+  - **delivery:** `perception_law` reads the four delivery laws again (the two frame laws and, since battle-views-client, the two table laws: [battle-views.md](battle-views.md)) and runs its make-before-break switch;
   - **gaze:** `gaze_enabled()` and `senses()` are read live from the refreshed script, so `sightedge` follows within a frame;
   - **cover:** the sight field follows the authority's `cover_law` row. It logs `sight field: cover policy … (the cover_law row)`.
 

@@ -15,7 +15,6 @@ use bevy_mod_outline::PropagateOutline;
 use crate::world::{hash, rgb, scale, MeshBuf, Scene};
 use bevy::prelude::*;
 use living_bindings::*;
-use spacetimedb_sdk::Table;
 use std::collections::HashMap;
 
 /// My character's size (1 = an ordinary adult): try larger and smaller characters.
@@ -359,7 +358,7 @@ pub fn update(
     let mine_at = now + scene.clock.lead();
     scene.mine_ms = mine_at;
     let bodies: HashMap<u32, Body> = crate::net::bodies(conn).map(|b| (b.id, b)).collect();
-    let chars: HashMap<u32, SeenCharacter> = conn.db.seen_characters().iter().filter(|c| bodies.contains_key(&c.id)).map(|c| (c.id, c)).collect();
+    let chars: HashMap<u32, SeenCharacter> = crate::net::characters(conn).into_iter().filter(|c| bodies.contains_key(&c.id)).map(|c| (c.id, c)).collect();
     let scene = &mut *scene;
     scene.mine_seg = net.my_id.and_then(|id| bodies.get(&id)).map_or((0, 0, 0.0), |b| (b.t_ms, b.next_ms, b.vx.hypot(b.vy)));
     let dt = time.delta_secs().max(1e-4);

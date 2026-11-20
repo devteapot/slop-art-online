@@ -463,9 +463,15 @@ class Run:
         sources = [p for d in ('living', '.agents/skills') for p in (ROOT / d).rglob('*')
                    if p.suffix in ('.rs', '.py') and p.is_file() and '/target' not in str(p)
                    and 'bindings/src/generated' not in str(p) and '/.local/' not in str(p)]
+        # These subscribe all as a player, on purpose, to prove it gets only its own rows: drive.py,
+        # cues.py and motion_tables.py as player C; battle_viewers.py --privacy as its spectator
+        # (copy-privacy), through the probe's `all_tables` request.
+        on_purpose = {'.agents/skills/verify-client/scripts/drive.py', '.agents/skills/verify-client/scripts/cues.py',
+                      '.agents/skills/verify-client/scripts/motion_tables.py', '.agents/skills/verify-client/scripts/probe/src/main.rs',
+                      'living/tools/battle_viewers.py'}
         everything = [str(p.relative_to(ROOT)) for p in sources
                       if re.search(r'subscribe_to_all_tables\(|SELECT \* FROM \*', p.read_text(errors='replace'))
-                      and p.name not in ('drive.py', 'cues.py', 'motion_tables.py')]  # these subscribe all as player C, on purpose
+                      and str(p.relative_to(ROOT)) not in on_purpose]
         if everything:
             raise RuntimeError(f'a program subscribes every table (cue tables included, RLS bypassed for the owner): {everything}')
         owners = [str(p.relative_to(ROOT)) for d in ('living/mind', 'living/viewer') for p in (ROOT / d).rglob('*.rs')
