@@ -30,6 +30,8 @@ set.json:
   main_commit         the commit the set was built from (provenance only)
   generator_trees     {blender, characters, textures}: `git rev-parse <commit>:living/tools/<dir>`
   generator_tree      one hash of the three (sha256 of "blender=…\\ncharacters=…\\ntextures=…\\n")
+  book_drift          null, or {file, sha256, differences}: the reviewed list of known book
+                      differences the bundle was allowed (bundle.py --allow-book-drift)
   looks               {book, generations: [...], worlds: {name: generation}}
   clips               {own_clips: the shared bake's clip count, bases: {file: clip count}}
   files, bytes        under assets/
@@ -150,6 +152,12 @@ def build(a):
         head = (bdir / "MANIFEST.txt").read_text().split("\n\n", 1)[0]
         hv = lambda k: next((ln.split(":", 1)[1].strip() for ln in head.splitlines() if ln.startswith(k + ":")), None)
         bcommit = next((ln.split()[1] for ln in head.splitlines() if ln.startswith("commit ")), None)
+        # A reviewed list of known book differences the bundle was allowed (bundle.py --allow-book-drift).
+        dl = hv("book drift")
+        drift = None
+        if dl:
+            w = dl.split()
+            drift = {"file": w[2], "sha256": w[4], "differences": int(w[5].lstrip("("))}
         if bcommit != commit:
             sys.exit(f"render_set: the bundle is of {bcommit}, --repo is at {commit}: build both from one commit")
         if "generator trees: " + " ".join(f"{d}={gtrees[d]}" for d in GEN_DIRS) not in head:
@@ -168,9 +176,11 @@ def build(a):
             if not (src / d).is_dir():
                 sys.exit(f"render_set: {ASSETS}/{d} is not built (docs/TOOLING.md, 'Render asset set')")
             shutil.copytree(src / d, assets / d)
-        for e in sorted((src / "envs").iterdir()):
-            if e.is_dir():
-                shutil.copytree(e, assets / "envs" / e.name)
+        envs = [e for e in sorted((src / "envs").iterdir()) if e.is_dir()] if (src / "envs").is_dir() else []
+        if not envs:
+            sys.exit(f"render_set: {ASSETS}/envs has no generated environments (gen_nature/buildings/city/cullet.sh)")
+        for e in envs:
+            shutil.copytree(e, assets / "envs" / e.name)
         bases = sorted((assets / "lookdev/anim").glob("vroid-*.glb"))
         if not bases or not (assets / "lookdev/anim/own-clips.glb").exists():
             sys.exit("render_set: the animated bases or own-clips.glb are missing (gen_anim.sh; bundle.py --with-clips)")
@@ -190,6 +200,7 @@ def build(a):
             "schema": 1, "id": sid,
             "bundle": {"file": Path(a.bundle).name, "sha256": bsha, "commit": bcommit, "port": hv("port"), "pictures": hv("pictures")},
             "main_commit": commit, "generator_trees": gtrees, "generator_tree": gtree,
+            "book_drift": drift,
             "looks": {"book": book["generation"], "generations": book.get("generations") or [book["generation"]], "worlds": worlds},
             "clips": {"own_clips": clip_count(assets / "lookdev/anim/own-clips.glb"),
                       "bases": {p.name: clip_count(p) for p in bases}},
@@ -267,7 +278,10 @@ def link(a):
     s = resolve(a.set, a.root)
     dst = Path(a.repo).resolve() / ASSETS
     pairs = [(s / "assets" / n, dst / n) for n in ("lookdev", "view", "textures", "characters/looks.json")]
-    pairs += [(e, dst / "envs" / e.name) for e in sorted((s / "assets/envs").iterdir()) if e.is_dir()]
+    if (s / "assets/envs").is_dir():
+        pairs += [(e, dst / "envs" / e.name) for e in sorted((s / "assets/envs").iterdir()) if e.is_dir()]
+    else:
+        print(f"render_set: warning: {s} has no assets/envs; no environments linked", file=sys.stderr)
     for src, d in pairs:
         if d.is_symlink():
             d.unlink()

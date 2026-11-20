@@ -5,7 +5,7 @@ one bundle per commit, published twice (PNG and KTX2), with the checks it must f
 "Render asset set").
 
     python3 living/tools/characters/bundle.py OUT_DIR [--book LOOKS.json] [--name char-composed]
-        [--port hair,ink] [--with-clips] [--note TEXT] [--skip-checks] [--keep-raw]
+        [--port hair,ink] [--with-clips] [--allow-book-drift FILE] [--note TEXT] [--skip-checks] [--keep-raw]
 
 What it packs, at the files' repository paths:
 - `living/game/assets/lookdev/types/<type>.glb` and `<type>.face.png` (the 21 types);
@@ -37,7 +37,9 @@ into the manifest):
 - eye_colours.py --check, shade_mean.py --check, look_lines.py wear --check, skeleton_check.py,
   brow_check.py --book, fringe_check.py;
 - cloth_check.py on every tenth resident (nothing comes through anything);
-- book_drift.py;
+- book_drift.py (with `--allow-book-drift FILE`, the reviewed list of known differences it may
+  find and no others: book_drift.py --allow; the file must be tracked, and its path and sha256 go
+  into the manifest's header as `book drift: allowed by FILE sha256 … (n differences)`);
 - one generation: every world's `looks.generation` is one of the book's `generations` (or its
   own), and every key a world's people and pool name is a line of the book;
 - the clip bake, when packed, shares the types' skeleton (skeleton_check.py reads it).
@@ -204,6 +206,7 @@ def main():
     ap.add_argument("--name", default="char-composed")
     ap.add_argument("--port", default=os.environ.get("SLOP_PORT", ""), help="what SLOP_PORT the build used: '', 'hair', 'ink' or 'hair,ink'")
     ap.add_argument("--with-clips", action="store_true", help="pack lookdev/anim/own-clips.glb (the gate's render set)")
+    ap.add_argument("--allow-book-drift", type=Path, help="a reviewed, tracked list of known book differences (book_drift.py --allow; living/tools/characters/book-drift-<generation>.json)")
     ap.add_argument("--note", default="", help="a line for the manifest's header")
     ap.add_argument("--skip-checks", action="store_true", help="a dry run: no checks (written into the manifest)")
     ap.add_argument("--keep-raw", action="store_true", help="keep the raw tarball beside the two bundles")
@@ -238,7 +241,7 @@ def main():
         run(["python3", f"{TOOLS}/shade_mean.py", "--check", f"{L}/styles"], "shade_mean")
         run(["python3", f"{TOOLS}/look_lines.py", "wear", "--check", f"{L}/styles"], "look_lines wear")
         run(["python3", f"{TOOLS}/skeleton_check.py", L], "skeleton_check")
-        run(["python3", f"{TOOLS}/book_drift.py"], "book_drift")
+        run(["python3", f"{TOOLS}/book_drift.py", *(["--allow", str(a.allow_book_drift)] if a.allow_book_drift else [])], "book_drift")
         run(["python3", f"{TOOLS}/brow_check.py", f"{L}/types", "--book", BOOK], "brow_check")
         run(["python3", f"{TOOLS}/fringe_check.py", L], "fringe_check")
     people = residents()
@@ -268,6 +271,12 @@ def main():
             f"port: {','.join(port) or 'none'}",
             clips,
         ]
+        if a.allow_book_drift:
+            rel = Path(a.allow_book_drift).resolve().relative_to(REPO)
+            if git("status", "--porcelain", "--", str(rel)) or not git("ls-files", str(rel)):
+                sys.exit(f"bundle: {rel} must be tracked and committed (a reviewed list)")
+            n = len(json.load(open(REPO / rel))["differences"])
+            head_lines.append(f"book drift: allowed by {rel} sha256 {sha256(REPO / rel)} ({n} differences)")
         if a.skip_checks:
             head_lines.append("checks: SKIPPED (a dry run; not for delivery)")
         if a.note:
