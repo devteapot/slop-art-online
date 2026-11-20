@@ -360,6 +360,15 @@ def privacy_final(pr, done, out, n):
     (out / f"privacy-v{n}.json").write_text(json.dumps(pr, indent=1) + "\n")
 
 
+def spawn(db, token, a):
+    """The battle: `spawn_battle`, or with `--sides N` the fixture `spawn_battle_sides` (fighters in
+    N sides that fight each other and leave bystanders be; docs/BATTLE_LAWS.md)."""
+    if a.sides:
+        lc.call(db, "spawn_battle_sides", [a.fighters, a.sides], token)
+    else:
+        lc.call(db, "spawn_battle", [a.fighters], token)
+
+
 def one(a, n, out):
     stamp = time.strftime("%Y%m%d-%H%M%S")
     db = f"verify-lookcost-{a.label}-v{n}-{stamp}"
@@ -382,7 +391,7 @@ def one(a, n, out):
         # battle here too: the 0-viewer arm is the same battle, the subtraction baseline (before
         # 2026-11-20 it had none).
         if not a.battle_after_placing or not n:
-            lc.call(db, "spawn_battle", [a.fighters], token)
+            spawn(db, token, a)
         land = lc.sql(db, "SELECT * FROM land", token)[0]
         site = tuple(float(x) for x in a.site.split(",")) if a.site else (land["arrive_x"], land["arrive_y"] - 20.0)
         res["site"], res["arrival"] = list(site), [land["arrive_x"], land["arrive_y"]]
@@ -412,7 +421,7 @@ def one(a, n, out):
             if a.battle_after_placing:
                 # The viewers stand on their ring before the fighters appear (none is killed at the
                 # arrival point, 20 m from the battle, while it waits to be placed).
-                lc.call(db, "spawn_battle", [a.fighters], token)
+                spawn(db, token, a)
             load.send("placed")
             ready = load.expect("ready", 900)
             res["held_at_ready"] = ready.get("held")
@@ -638,6 +647,7 @@ def main():
     ap.add_argument("--flip-off", action="store_true", help="after the window, turn motion_tables_on off and time the kill switch's tick")
     ap.add_argument("--fighter-tables", action="store_true", help="the viewers subscribe seen_fighter_copy in place of the fighter views (views step 3; set fighter_tables_on=true)")
     ap.add_argument("--combat-feed", action="store_true", help="the viewers subscribe combat_feed in place of my_combat (views step 2; set combat_feed_on=true)")
+    ap.add_argument("--sides", type=int, default=0, help="the fighters in this many sides (2-4) that fight each other, not bystanders (spawn_battle_sides)")
     ap.add_argument("--privacy", action="store_true", help="copy-privacy: prove each viewer receives only its own copy rows (needs --motion-tables --character-tables and both laws on); <out>/privacy-v<count>.json, exit 1 on a failed check")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()

@@ -175,6 +175,17 @@ fn laws() {
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
         witness_wake_ms: 500.0,
+        // Battle laws (docs/BATTLE_LAWS.md, prototypes; 0 or the value here is off in play):
+        // at most this many creatures a player sees at once (the nearest, engaged first)...
+        far_cap: 0.0,
+        // ...a player's sweep less often above this many in sight (at most 3x the period)...
+        crowd_sweep_n: 0.0,
+        // ...the longest interval between its frames in a crowd (ms; 0: the built-in 100)...
+        crowd_frame_max_ms: 0.0,
+        // ...whether a fighter on the combat cadence is woken by what it sees as a bystander...
+        fighter_bystander_wakes: true,
+        // ...and the metres a far creature's motion copy may drift before it is rewritten.
+        far_motion_tol_m: 0.0,
         // A test switch (docs/PERCEPTION.md, "Module memory and rollback"), 0 in play: a step the
         // world fails on purpose, to prove nothing kept in module memory outlives a failed one.
         memory_test: 0.0,
@@ -3192,6 +3203,11 @@ fn law_about(l, name) {
         "memory_test" => "A test switch that makes one step of the world fail on purpose; it is off in play.",
         "det_clock" => "A test switch that makes the world's time and chance follow its steps alone, to compare two builds; it is off in play.",
         "det_stop" => "A test switch that pauses the world at a given step; it is off in play.",
+        "far_cap" => if l.far_cap > 0.0 { `a player sees at most ${short(l.far_cap)} others at once, the nearest` } else { "a player sees everyone in sight" },
+        "crowd_sweep_n" => if l.crowd_sweep_n > 0.0 { `what a player sees is looked at again less often in a crowd of more than ${short(l.crowd_sweep_n)}` } else { "what a player sees is looked at again at the same pace in any crowd" },
+        "crowd_frame_max_ms" => if l.crowd_frame_max_ms > 0.0 { `in a crowd, a player's view of others follows at least every ${short(l.crowd_frame_max_ms)} ms` } else { "in a crowd, a player's view of others follows at least every 100 ms" },
+        "fighter_bystander_wakes" => if l.fighter_bystander_wakes { "a fighter turns to what it sees around it at once" } else { "a fighter turns to what it sees around it at its next beat in the fight" },
+        "far_motion_tol_m" => if l.far_motion_tol_m > 0.0 { `how a far creature moves follows when it would be ${short(l.far_motion_tol_m)} m off` } else { "how a far creature moves follows every change" },
         "witness_wake_ms" => if l.witness_wake_ms > 0.0 { `a bystander turns to what it sees at most every ${short(l.witness_wake_ms)} ms` } else { "a bystander turns to each thing it sees at once" },
         "regard_cache" => if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
         // How the work is done, not what anyone perceives: plain words (no condition), so the

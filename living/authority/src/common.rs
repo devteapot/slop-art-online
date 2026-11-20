@@ -1815,6 +1815,12 @@ thread_local! {
 /// party to the event is woken by `wake`, at once.
 #[track_caller]
 pub fn wake_bystander(ctx: &ReducerContext, id: u32, now: u64) {
+    // (c) battle law `fighter_bystander_wakes` (docs/BATTLE_LAWS.md): off, a fighter on the combat
+    // cadence (`mind_state.fast_until` ahead) is left to its next cadence evaluation (within 4 ticks).
+    if !laws(ctx).fighter_bystander_wakes && ctx.db.mind_state().id().find(id).is_some_and(|m| m.fast_until > now) {
+        diag(|| "wake:fighter_left_to_cadence", 1);
+        return;
+    }
     let ms = laws(ctx).witness_wake_ms as u64;
     if ms == 0 {
         wake(ctx, id);
