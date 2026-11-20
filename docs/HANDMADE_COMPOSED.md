@@ -1,4 +1,10 @@
-# Composed characters: hair profiles, ink and heroes (contract v1.3)
+# Composed characters: hair profiles, ink and heroes (contract v1.3, amended v1.3.1)
+
+**v1.3.1 (2026-11-20, char-port-2 S5, agreed by the laptop and the GC):** two amendments.
+1. **Up to 4 anchors** (was 3): see [the palette](#the-palette-relative-to-the-hair-tag).
+2. **The strands:** a hair profile's `strands` flag makes the hair-mask page's B a low-contrast modulation of the bands. See [the hair-mask page](#the-hair-mask-page).
+
+Both are optional fields. A v1.3 file is a v1.3.1 file, and with `strands` off a page draws exactly as before.
 
 **Status (2026-11-20): v1.3, agreed by dev-box and the GC (6b6a48ac3, with the shared pages added after); built on branch `char-port-2-s3` (not merged): the client, the tools and the proof ([built](#built-char-port-2-s3)).** This is step S3 of the char-port-2 plan (`docs/char-port-2/PLAN.md` on branch `char-port-2`, §0.3, §2.6, §2.8, §2.10, §3.5, §4). It extends [the hair and face contract](HANDMADE_HAIR.md) (v1, v1.1) and [the ink contract](HANDMADE_INK.md) (v1.2) from hand-made whole files to **composed people**: residents that the client builds from a type file, shared style files and a look line (`characters/compose.rs`; [CHARACTERS.md § The client since compose-1](CHARACTERS.md#the-client-since-compose-1-2026-11-12)). Files keep `"contract": 1`: v1.3 only adds optional fields, file names and line fields.
 
@@ -131,7 +137,8 @@ v1's palette *replaces* the hair's colour (HANDMADE_HAIR, "The palette replaces 
 | `palette` | `"fixed"` or `"tag"` | `"fixed"` | `"fixed"`: v1's absolute swatches. `"tag"`: the swatches follow the mesh's tag colour, as below. |
 | `ref` | `[r, g, b]` integers, sRGB 0–255 | **required** with `"tag"` | The hair tag colour the swatches were tuned on, as it appears in a line's `colors.hair` (for example auburn `[102, 46, 26]`). Its OKLab lightness must be at least 0.05. |
 | `shade`, `mid`, `light`, `highlight`, `ink`, thresholds | as v1 and v1.1 | as v1 and v1.1 | Unchanged. They are the palette **at `ref`**. A person whose tag equals `ref` draws exactly these values. |
-| `anchors` | array of up to 3 objects | none | More tuned palettes: each object has `ref` and the four swatches (`ink` optional), tuned on another hair colour, for example from S5's dark, light and grey calibration bins. See [several anchors](#several-anchors). |
+| `anchors` | array of up to 4 objects | none | More tuned palettes: each object has `ref` and the four swatches (`ink` optional), tuned on another hair colour, for example S5's black, brown, blond and grey bins. See [several anchors](#several-anchors). **v1.3.1:** up to 4, was 3. One dark anchor moves brown by black's lightness ratio, past auburn, so brown takes its own. **A v1.3 client drops the 4th** (it reads 3 and warns once); the audit reports a 5th as an error, never dropping it silently. |
+| `strands` | boolean | `false` | **v1.3.1.** The hair-mask page's B is the strands under the bands ([the hair-mask page](#the-hair-mask-page)). Page-wide: every cut on a page carries the identical `slop.hair`, this flag with it. |
 
 `slop.ink` gains `ref` with the same meaning: when it is set and the mesh has a tag colour, `color` is moved by the same rule. For example, a brow carrier's ink follows the hair, and a lid carrier, whose name takes no colour, keeps `color`.
 
@@ -260,7 +267,8 @@ With `anchors`, each anchor `i` (the profile's own swatches are anchor 0) gives 
 | | |
 |---|---|
 | **File** | `lookdev/styles/hair/hair-masks.png` and its `.ktx2` copy; further pages `hair-masks-1.png`, … |
-| **Content** | HANDMADE_HAIR's mask texture: **R** the highlight (v1), **G** the lock-ink distance field (v1.1), B 0, A 255. RGB, linear, with mips in KTX2 (class `hairmask`). |
+| **Content** | HANDMADE_HAIR's mask texture: **R** the highlight (v1; generated cuts also draw the parting there, a pale strip), **G** the lock-ink distance field (v1.1), **B** the strands when the profile's `strands` is on (v1.3.1, below), else 0, A 255. RGB, linear, with mips in KTX2 (class `hairmask`). |
+| **The strands (B, v1.3.1)** | **With `slop.hair.strands` true:** the client multiplies the three bands (not the highlight, not the ink) by `2 · B`, so **0.5 (128) is neutral**. The generator writes 128 in every texel of B that has no strands, cell padding included, so filtering and mips never read an island's edge as dark. Recommended range: about **0.35–0.65**, a low contrast of the bands × 0.7–1.3. The generator bakes main's strand picture, times main's per-vertex shading, at 0.9 of its contrast, clamped to that range. **With it false, or absent:** B is ignored, so v1.1 and v1.2 `.hair.png` files and v1.3 pages draw exactly as before. There is no threshold on B. Shader: `level *= select(1.0, 2.0 * tex.b, strands)`, the flag packed in `hand[0].w`. The audit reports a non-boolean `strands`, and a strand page with any B texel at 0, as errors. |
 | **Size** | 4096 × 4096 texels. |
 | **Cells** | A grid of 512 × 512-texel cells, 8 × 8, numbered `[col, row]` from the top-left (glTF's UV origin). |
 | **What a file takes** | A rectangle of whole cells, `[col, row, w, h]`. A short cut takes 1 × 1; a long cut or a plait may take 2 × 1, 1 × 2 or 2 × 2. |
@@ -413,7 +421,7 @@ dev-box's composed bundles (`char-4-composed-<sha>.tar.gz` and its `-ktx2` twin,
 
 - **The scene:** `contract` is 1 and there is no `character`. Material slots: a slot whose kind differs from the name rule's (for example `tint` on a `…_FACE` name) is a warning, since the name rule decides.
 - **`palette`:**
-  - **Errors:** the value; `ref` (three integers, OKLab L ≥ 0.05); anchors (at most 3, each complete).
+  - **Errors:** the value; `ref` (three integers, OKLab L ≥ 0.05); anchors (at most 4, each complete; a 5th is an error); `strands` not a boolean.
   - **Warnings:** a clamp hit on `kL` or `kC`; |dh| > 30°.
   - **Facts:** the [entries](#the-maths) for the nine `HAIR_COLOURS`, two silvers and the anchors' refs, with any gamut-reduced swatch marked.
 - **Ink:** v1.2's ink audit, plus:

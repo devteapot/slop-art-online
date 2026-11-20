@@ -325,6 +325,22 @@ The GC approved a minimal hero mechanism (2026-11-20). This is the proposed shap
    This is client and contract work. *Unsure* whether a single set of multipliers holds across black, blond and grey hair. The calibration frame must check dark, auburn and light hair, and multipliers may need to vary with lightness.
 6. **The floor-relative ink calibration** runs once per hair-colour bin on the four bodies. Its targets come from the drawing's ratio, as accepted for Cora; it doesn't run per resident.
 
+**As built in S5** ([s5/README.md](s5/README.md)), to the laptop's final contract (HANDMADE_COMPOSED v1.3), behind `SLOP_PORT=hair`:
+- **UV:** every piece of a style is its own island at 1 mm a texel (`hair.page_layout`), on the shared hair-mask page (4096², cells of 512). The far mesh takes the near pieces' places.
+- **Highlight:** `_HIGHLIGHT` per vertex and the page's R, a scalloped band on the upper hair.
+- **Lock ink:** grouped into locks: a curving line of its own length up each notch, and shorter companions inside the lock (`hair.LOCK_LINES`). They are rasterised into G by `hair_page.py`, not `ink_field.py --seams-as-lines`, and island borders aren't drawn as lines. `ink_range` is 6 texels, so the lines fade before Near: close-up only, as the GC decided.
+- **Parting:** a pale strip in R where the hair parts (over-sheet styles, curtain fringes, braids): the structure that holds in play, with the bands.
+- **The strands (B2, the GC's choice over B1's lock-wise band breaks):** main's strand picture under the bands at low contrast, in the page's B, behind the profile's `strands` flag (HANDMADE_COMPOSED v1.3.1).
+- **Lock-line colour:** a darker shade of each anchor's own mid swatch (0.65 × its lightness, at least 0.12 below it), never near-black on hair that isn't.
+- **Palette:** the contract's `palette: "tag"` with `ref` and anchors replaces the per-channel multipliers in step 5 above. There are four anchors (black, brown, blond, grey); v1.3.1 allows 4.
+- **Calibration:** run once per bin on a composed woman, not on the four bodies.
+  - **Cora's profile:** channel by channel.
+  - **The anchors:** lightness and chroma size only. Their hue is the palette's own, so no anchor carries a correction for the calibration frame's light; grey's had turned its shadow side blue.
+  - **Light hair's highlight:** a small step over its light band, in its chroma.
+  - **Black and brown:** floored to what play distance needs. At Middle black is within 4 of main's luma, and brown is 14 above it.
+  - **Result:** chromatic bins within ±5. Auburn's shade is held 15–17 light by the sky fill. Black and grey are neutral, showing the scene's warm light per channel.
+- **Capacity:** the generator's 86 style files need three pages, at 1 mm (the GC's decision).
+
 ## 4. The client step this needs (summary of §0.3, §2.6, §3)
 
 - **`compose.rs` reads material `slop`** from type and style files, and turns it into the same `InkProfile`/`HairProfile` that `handmade.rs` builds. Reuse `handmade::material_of`; don't copy it.
@@ -408,7 +424,7 @@ Each step is mergeable on its own, behind `look.ink` and the profile flags, so m
 | **S4 · Ink carriers from the generator** | `ink_carriers.py` in `living/tools/blender`; cage-relative stroke definitions; built per expression; lid core; class maps via `ink_field.py`; `slop.ink` on the type files; old lines kept when ink is off. | The audit 0/0 on 21 types; `ink_shimmer.py --slot eyes` passing at portrait and close-up and faded at the play stops; morph stills (blink, joy, talk, angry brow) on 4 bodies; `lidweight` within ±1 px of the class target; triangles within §6. | 8–12 h · Opus high |
 | **S5 · Hair profile output** | Per-lock UV islands; `.hair.png` (R highlight, G seams and creases) by `ink_field.py`; `slop.hair` relative palette; calibration per colour bin (dark, auburn, light, grey). | The audit 0/0; `hair_shimmer.py` passing at fade 2.0; hair patches within ±8 per bin; existing styles unchanged when the profile is off. | 6–8 h · Opus high (Astra after 11-25) |
 | **S6 · Hair masters** | The `swept_braid` grammar in `hair.py` with seeded variation; ≤ 12k triangles. | Spread, lift and depth within Cora's tolerances on the woman; front and three-quarter tip counts in Cora's range (10 ± 2, 9 ± 2); plait visible at Near and Middle (width within 0.5 px of the drawn rear); char-port-1's braid scalp gap and collar checks; springs. | 10–14 h · Opus high (Astra after 11-25) |
-| **S7 · Four-body proof and cost** | §5 and §6 on all arms; the Cora comparison. | §5's criteria; §6's budget; the GC's verdict. | 5–6 h · Opus high (Sol for the runs after 11-25) |
+| **S7 · Four-body proof and cost** | §5 and §6 on all arms; the Cora comparison; the eye-joy fix (below). | §5's criteria; §6's budget. **Must-fix (GC, 2026-11-20):** no eye white or iris showing above a closed lid in any expression: blink, eye-joy, and every key that closes the eye. On main a sliver of the eyeball shows above the eye-joy arc, an eye-geometry defect that S4 found ([s4/README.md](s4/README.md)). The GC's verdict. | 5–6 h · Opus high (Sol for the runs after 11-25) |
 | **S8 · Town and bundle** | `town.py` for Cullet; look book generation bump (append-only); the bundle per commit, PNG and KTX2, with checks for the laptop. | The bundle checks of the char-4 practice (`eye_colours`, `shade_mean`, `look_lines wear --check`, `skeleton_check`, `brow_check`, `cloth_check`, book drift) plus `calibrate.py --no-run` on every file; the 64-crowd frame time. | 3–4 h · Opus (Sol after 11-25) |
 
 **Order:**

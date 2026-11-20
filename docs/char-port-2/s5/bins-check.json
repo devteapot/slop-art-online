@@ -1,0 +1,847 @@
+{
+ "targets": {
+  "auburn": {
+   "shade": [
+    88,
+    42,
+    27
+   ],
+   "mid": [
+    152,
+    72,
+    43
+   ],
+   "light": [
+    171,
+    88,
+    56
+   ],
+   "highlight": [
+    187,
+    99,
+    63
+   ]
+  },
+  "dark": {
+   "shade": [
+    61,
+    56,
+    45
+   ],
+   "mid": [
+    51,
+    47,
+    47
+   ],
+   "light": [
+    59,
+    56,
+    56
+   ],
+   "highlight": [
+    85,
+    82,
+    82
+   ]
+  },
+  "brown": {
+   "shade": [
+    62,
+    56,
+    45
+   ],
+   "mid": [
+    87,
+    63,
+    47
+   ],
+   "light": [
+    99,
+    74,
+    56
+   ],
+   "highlight": [
+    112,
+    84,
+    66
+   ]
+  },
+  "light": {
+   "shade": [
+    135,
+    109,
+    67
+   ],
+   "mid": [
+    198,
+    157,
+    91
+   ],
+   "light": [
+    214,
+    181,
+    128
+   ],
+   "highlight": [
+    229,
+    194,
+    138
+   ]
+  },
+  "grey": {
+   "shade": [
+    113,
+    113,
+    113
+   ],
+   "mid": [
+    164,
+    164,
+    164
+   ],
+   "light": [
+    186,
+    186,
+    186
+   ],
+   "highlight": [
+    199,
+    199,
+    199
+   ]
+  },
+  "white": {
+   "shade": [
+    114,
+    114,
+    111
+   ],
+   "mid": [
+    164,
+    164,
+    164
+   ],
+   "light": [
+    186,
+    186,
+    186
+   ],
+   "highlight": [
+    199,
+    199,
+    199
+   ]
+  }
+ },
+ "rounds": [
+  {
+   "profile": {
+    "shade": [
+     35,
+     1,
+     0
+    ],
+    "mid": [
+     92,
+     30,
+     5
+    ],
+    "light": [
+     108,
+     39,
+     4
+    ],
+    "highlight": [
+     138,
+     53,
+     3
+    ]
+   },
+   "anchors": [
+    {
+     "ref": [
+      19,
+      17,
+      17
+     ],
+     "shade": [
+      0,
+      0,
+      0
+     ],
+     "mid": [
+      6,
+      5,
+      5
+     ],
+     "light": [
+      20,
+      18,
+      17
+     ],
+     "highlight": [
+      51,
+      46,
+      46
+     ]
+    },
+    {
+     "ref": [
+      51,
+      34,
+      23
+     ],
+     "shade": [
+      6,
+      2,
+      1
+     ],
+     "mid": [
+      39,
+      25,
+      15
+     ],
+     "light": [
+      51,
+      34,
+      24
+     ],
+     "highlight": [
+      67,
+      49,
+      36
+     ]
+    },
+    {
+     "ref": [
+      158,
+      125,
+      71
+     ],
+     "shade": [
+      79,
+      58,
+      29
+     ],
+     "mid": [
+      151,
+      116,
+      52
+     ],
+     "light": [
+      181,
+      151,
+      96
+     ],
+     "highlight": [
+      238,
+      198,
+      121
+     ]
+    },
+    {
+     "ref": [
+      133,
+      133,
+      133
+     ],
+     "shade": [
+      61,
+      61,
+      61
+     ],
+     "mid": [
+      118,
+      118,
+      118
+     ],
+     "light": [
+      150,
+      150,
+      150
+     ],
+     "highlight": [
+      193,
+      193,
+      193
+     ]
+    }
+   ],
+   "measured": {
+    "auburn": {
+     "shade": {
+      "n": 1263,
+      "rgb": [
+       89,
+       57,
+       44
+      ]
+     },
+     "mid": {
+      "n": 2214,
+      "rgb": [
+       152,
+       72,
+       45
+      ]
+     },
+     "light": {
+      "n": 7188,
+      "rgb": [
+       171,
+       88,
+       58
+      ]
+     },
+     "highlight": {
+      "n": 4048,
+      "rgb": [
+       187,
+       99,
+       66
+      ]
+     }
+    },
+    "dark": {
+     "shade": {
+      "n": 1261,
+      "rgb": [
+       62,
+       57,
+       45
+      ]
+     },
+     "mid": {
+      "n": 2214,
+      "rgb": [
+       56,
+       49,
+       40
+      ]
+     },
+     "light": {
+      "n": 7188,
+      "rgb": [
+       61,
+       57,
+       50
+      ]
+     },
+     "highlight": {
+      "n": 4049,
+      "rgb": [
+       90,
+       81,
+       73
+      ]
+     }
+    },
+    "brown": {
+     "shade": {
+      "n": 1259,
+      "rgb": [
+       66,
+       58,
+       45
+      ]
+     },
+     "mid": {
+      "n": 2211,
+      "rgb": [
+       86,
+       64,
+       45
+      ]
+     },
+     "light": {
+      "n": 7188,
+      "rgb": [
+       99,
+       74,
+       56
+      ]
+     },
+     "highlight": {
+      "n": 4048,
+      "rgb": [
+       111,
+       85,
+       64
+      ]
+     }
+    },
+    "light": {
+     "shade": {
+      "n": 1261,
+      "rgb": [
+       139,
+       109,
+       69
+      ]
+     },
+     "mid": {
+      "n": 2215,
+      "rgb": [
+       199,
+       157,
+       92
+      ]
+     },
+     "light": {
+      "n": 7188,
+      "rgb": [
+       214,
+       182,
+       127
+      ]
+     },
+     "highlight": {
+      "n": 4049,
+      "rgb": [
+       227,
+       196,
+       138
+      ]
+     }
+    },
+    "grey": {
+     "shade": {
+      "n": 1258,
+      "rgb": [
+       119,
+       113,
+       100
+      ]
+     },
+     "mid": {
+      "n": 2207,
+      "rgb": [
+       170,
+       163,
+       151
+      ]
+     },
+     "light": {
+      "n": 7188,
+      "rgb": [
+       192,
+       186,
+       174
+      ]
+     },
+     "highlight": {
+      "n": 4045,
+      "rgb": [
+       205,
+       199,
+       187
+      ]
+     }
+    },
+    "white": {
+     "shade": {
+      "n": 1259,
+      "rgb": [
+       144,
+       137,
+       123
+      ]
+     },
+     "mid": {
+      "n": 2194,
+      "rgb": [
+       204,
+       198,
+       184
+      ]
+     },
+     "light": {
+      "n": 7188,
+      "rgb": [
+       223,
+       218,
+       206
+      ]
+     },
+     "highlight": {
+      "n": 4033,
+      "rgb": [
+       225,
+       221,
+       210
+      ]
+     }
+    }
+   },
+   "delta": {
+    "auburn": {
+     "shade": [
+      1,
+      15,
+      17
+     ],
+     "mid": [
+      0,
+      0,
+      2
+     ],
+     "light": [
+      0,
+      0,
+      2
+     ],
+     "highlight": [
+      0,
+      0,
+      3
+     ]
+    },
+    "dark": {
+     "shade": [
+      1,
+      1,
+      0
+     ],
+     "mid": [
+      5,
+      2,
+      -7
+     ],
+     "light": [
+      2,
+      1,
+      -6
+     ],
+     "highlight": [
+      5,
+      -1,
+      -9
+     ]
+    },
+    "brown": {
+     "shade": [
+      4,
+      2,
+      0
+     ],
+     "mid": [
+      -1,
+      1,
+      -2
+     ],
+     "light": [
+      0,
+      0,
+      0
+     ],
+     "highlight": [
+      -1,
+      1,
+      -2
+     ]
+    },
+    "light": {
+     "shade": [
+      4,
+      0,
+      2
+     ],
+     "mid": [
+      1,
+      0,
+      1
+     ],
+     "light": [
+      0,
+      1,
+      -1
+     ],
+     "highlight": [
+      -2,
+      2,
+      0
+     ]
+    },
+    "grey": {
+     "shade": [
+      6,
+      0,
+      -13
+     ],
+     "mid": [
+      6,
+      -1,
+      -13
+     ],
+     "light": [
+      6,
+      0,
+      -12
+     ],
+     "highlight": [
+      6,
+      0,
+      -12
+     ]
+    },
+    "white": {
+     "shade": [
+      30,
+      23,
+      12
+     ],
+     "mid": [
+      40,
+      34,
+      20
+     ],
+     "light": [
+      37,
+      32,
+      20
+     ],
+     "highlight": [
+      26,
+      22,
+      11
+     ]
+    }
+   },
+   "checks": {
+    "auburn": {
+     "shade": {
+      "passed": true,
+      "rule": "per channel",
+      "delta": [
+       1,
+       1,
+       -1
+      ],
+      "luma_delta": 0.9
+     },
+     "mid": {
+      "passed": true,
+      "rule": "per channel",
+      "delta": [
+       0,
+       0,
+       2
+      ],
+      "luma_delta": 0.1
+     },
+     "light": {
+      "passed": true,
+      "rule": "per channel",
+      "delta": [
+       0,
+       0,
+       2
+      ],
+      "luma_delta": 0.1
+     },
+     "highlight": {
+      "passed": true,
+      "rule": "per channel",
+      "delta": [
+       0,
+       0,
+       3
+      ],
+      "luma_delta": 0.2
+     }
+    },
+    "dark": {
+     "shade": {
+      "passed": true,
+      "rule": "neutral: luma and a neutral swatch",
+      "delta": [
+       1,
+       1,
+       0
+      ],
+      "luma_delta": 0.9
+     },
+     "mid": {
+      "passed": true,
+      "rule": "neutral: luma and a neutral swatch",
+      "delta": [
+       5,
+       2,
+       -7
+      ],
+      "luma_delta": 2.0
+     },
+     "light": {
+      "passed": true,
+      "rule": "neutral: luma and a neutral swatch",
+      "delta": [
+       2,
+       1,
+       -6
+      ],
+      "luma_delta": 0.7
+     },
+     "highlight": {
+      "passed": true,
+      "rule": "neutral: luma and a neutral swatch",
+      "delta": [
+       5,
+       -1,
+       -9
+      ],
+      "luma_delta": -0.3
+     }
+    },
+    "brown": {
+     "shade": {
+      "passed": true,
+      "rule": "neutral: luma and a neutral swatch",
+      "delta": [
+       4,
+       2,
+       0
+      ],
+      "luma_delta": 2.3
+     },
+     "mid": {
+      "passed": true,
+      "rule": "per channel",
+      "delta": [
+       -1,
+       1,
+       -2
+      ],
+      "luma_delta": 0.4
+     },
+     "light": {
+      "passed": true,
+      "rule": "per channel",
+      "delta": [
+       0,
+       0,
+       0
+      ],
+      "luma_delta": 0.0
+     },
+     "highlight": {
+      "passed": true,
+      "rule": "per channel",
+      "delta": [
+       -1,
+       1,
+       -2
+      ],
+      "luma_delta": 0.4
+     }
+    },
+    "light": {
+     "shade": {
+      "passed": true,
+      "rule": "per channel",
+      "delta": [
+       4,
+       0,
+       2
+      ],
+      "luma_delta": 1.0
+     },
+     "mid": {
+      "passed": true,
+      "rule": "per channel",
+      "delta": [
+       1,
+       0,
+       1
+      ],
+      "luma_delta": 0.3
+     },
+     "light": {
+      "passed": true,
+      "rule": "per channel",
+      "delta": [
+       0,
+       1,
+       -1
+      ],
+      "luma_delta": 0.6
+     },
+     "highlight": {
+      "passed": true,
+      "rule": "per channel",
+      "delta": [
+       -2,
+       2,
+       0
+      ],
+      "luma_delta": 1.0
+     }
+    },
+    "grey": {
+     "shade": {
+      "passed": true,
+      "rule": "neutral: luma and a neutral swatch",
+      "delta": [
+       6,
+       0,
+       -13
+      ],
+      "luma_delta": 0.3
+     },
+     "mid": {
+      "passed": true,
+      "rule": "neutral: luma and a neutral swatch",
+      "delta": [
+       6,
+       -1,
+       -13
+      ],
+      "luma_delta": -0.4
+     },
+     "light": {
+      "passed": true,
+      "rule": "neutral: luma and a neutral swatch",
+      "delta": [
+       6,
+       0,
+       -12
+      ],
+      "luma_delta": 0.4
+     },
+     "highlight": {
+      "passed": true,
+      "rule": "neutral: luma and a neutral swatch",
+      "delta": [
+       6,
+       0,
+       -12
+      ],
+      "luma_delta": 0.4
+     }
+    },
+    "white": {
+     "shade": {
+      "passed": true,
+      "rule": "neutral swatch, luma 5+ above grey",
+      "luma_above": 24.1
+     },
+     "mid": {
+      "passed": true,
+      "rule": "neutral swatch, luma 5+ above grey",
+      "luma_above": 34.6
+     },
+     "light": {
+      "passed": true,
+      "rule": "neutral swatch, luma 5+ above grey",
+      "luma_above": 31.8
+     },
+     "highlight": {
+      "passed": true,
+      "rule": "neutral swatch, luma 5+ above grey",
+      "luma_above": 21.6
+     }
+    }
+   },
+   "passed": true
+  }
+ ]
+}

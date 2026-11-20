@@ -793,6 +793,13 @@ Pass 3's fifth step (2026-11-12). A figure's outline today is its silhouette: th
   - **The flag's other feature:** `SLOP_PORT=jaw` sets per-class jaw and chin tapers from `living/tools/characters/port.json`.
   - **S2's features:** `SLOP_PORT=paint` paints Cora's blush, mouth, nose band, glint and nostrils on the generator's landmarks (`face_paint.PAINT`). `SLOP_PORT=neck` shades the skin under the jaw and the neck below it as hers was (`cage_head.NECK_SHADE`). [S2](char-port-2/s2/README.md)
   - **S4's feature:** `SLOP_PORT=ink` draws the lid, wing, flicks, fringe, outer lower lid and brow as ink on carriers (`ink_carriers.py`), on the types' shared ink page, in place of the lid band, lash cards, lower line and brow strip. `type_ink.py` opts the file in and writes the page. [S4](char-port-2/s4/README.md)
+  - **S5's feature:** `SLOP_PORT=hair` lays every hair style out for the handmade-hair profile on the shared hair-mask pages (`hair.page_layout`, each piece its own island at 1 mm a texel). It gives the hair:
+    - a highlight (`_HIGHLIGHT`) and a pale parting;
+    - lock lines grouped into locks from the notches between a sheet's points;
+    - lock lines in a darker shade of the hair's own colour;
+    - main's strands under the bands at low contrast (the page's B, behind the profile's `strands` flag, HANDMADE_COMPOSED v1.3.1; `SLOP_HAIR_LOOK=b1` builds lock-wise band breaks instead).
+
+    `hair_page.py` then puts the files on the pages (three for the 86 files) with one tag-relative profile, anchored for black, brown, blond and grey. [S5](char-port-2/s5/README.md)
   - **All off by default.** With `SLOP_PORT` unset, every file builds as before.
 - **The colour** is the skin's own line colour taken halfway to a dark brown (`cage_head.line_colour`), so it reads on every skin tone.
 - **Widths are metres, not pixels.** That is the limit of a line made of geometry: 1.9 mm is a few pixels in a close-up and a tenth of a pixel at the game camera, where a face is a dozen pixels across.

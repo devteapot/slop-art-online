@@ -1,0 +1,42 @@
+{
+ "now": {
+  "pixels": 238,
+  "black": 70.0,
+  "brown": 84.5,
+  "auburn": 104.2,
+  "chestnut": 98.3,
+  "blond": 182.0,
+  "grey": 183.4,
+  "white": 213.0
+ },
+ "before": {
+  "pixels": 239,
+  "black": 70.6,
+  "brown": 84.5,
+  "auburn": 104.6,
+  "chestnut": 98.7,
+  "blond": 184.4,
+  "grey": 185.7,
+  "white": 213.2
+ },
+ "main-new": {
+  "pixels": 234,
+  "black": 66.9,
+  "brown": 80.0,
+  "auburn": 100.2,
+  "chestnut": 91.0,
+  "blond": 157.0,
+  "grey": 162.5,
+  "white": 196.6
+ },
+ "main-old": {
+  "pixels": 234,
+  "black": 66.9,
+  "brown": 80.0,
+  "auburn": 100.2,
+  "chestnut": 91.0,
+  "blond": 157.0,
+  "grey": 162.5,
+  "white": 196.6
+ }
+}
