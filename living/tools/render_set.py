@@ -14,7 +14,8 @@ generated part, built once from a main commit on dev-box, at `ROOT/<id>/`:
   assets/                 laid out as living/game/assets: lookdev/ (the VRoid and KayKit bases, the
                           animated bases with their clips, the wolf and the deer, and the composed
                           characters from the bundle: types, pages, styles, strands, own-clips.glb),
-                          view/, textures/, envs/<name>/, characters/looks.json
+                          textures/, envs/<name>/, characters/looks.json, and view/ when the
+                          checkout has one (the asset view's copies; not generated)
   bundle/                 the composed bundle (KTX2) as built, its MANIFEST.txt and cullet-people.json,
                           and the world look data it was checked against (seeds/...)
   SET-MANIFEST.txt        every file under assets/ with its sha256
@@ -44,8 +45,9 @@ checkout's generator tree differs from the set's, or a world's look generation (
 prints one JSON object with the verdict and its reasons.
 
 `build` takes the generated files from `--repo` (default this checkout), which must be clean
-(tracked files as HEAD) and built from main as docs/TOOLING.md says, and the composed files from
-the KTX2 bundle, never from the checkout's own lookdev/types, pages or styles. The set is made
+(tracked files as HEAD), built from main as docs/TOOLING.md says, and at the bundle's generator
+trees (the commits may differ outside them), and the composed files from the KTX2 bundle, never
+from the checkout's own lookdev/types, pages or styles. The set is made
 read-only (files 0444, folders 0555).
 """
 
@@ -71,7 +73,9 @@ ASSETS = "living/game/assets"
 # the bundle; residents' own files, far and lod copies and outfits are the generator's
 # intermediates and stay out.
 FROM_REPO_LOOKDEV = ("vroid-*.glb", "kaykit-*.glb", "KAYKIT-LICENSE.txt", "anim/vroid-*", "anim/wolf.*", "anim/deer.*")
-FROM_REPO_DIRS = ("view", "textures")
+FROM_REPO_DIRS = ("textures",)
+# The asset view's copies of files from outside the folder (view.rs): taken when present, never required.
+OPTIONAL_DIRS = ("view",)
 
 
 def sh(*a, cwd=None):
@@ -158,10 +162,10 @@ def build(a):
         if dl:
             w = dl.split()
             drift = {"file": w[2], "sha256": w[4], "differences": int(w[5].lstrip("("))}
-        if bcommit != commit:
-            sys.exit(f"render_set: the bundle is of {bcommit}, --repo is at {commit}: build both from one commit")
+        # One generator: the bundle's trees are --repo's (the staleness rule's own test); the
+        # commits may differ by changes outside living/tools/{blender,characters,textures}.
         if "generator trees: " + " ".join(f"{d}={gtrees[d]}" for d in GEN_DIRS) not in head:
-            sys.exit("render_set: the bundle's generator trees are not --repo's")
+            sys.exit(f"render_set: the bundle's generator trees (commit {bcommit}) are not --repo's (at {commit})")
         # The checkout's generated files.
         src = repo / ASSETS
         n = 0
@@ -176,6 +180,9 @@ def build(a):
             if not (src / d).is_dir():
                 sys.exit(f"render_set: {ASSETS}/{d} is not built (docs/TOOLING.md, 'Render asset set')")
             shutil.copytree(src / d, assets / d)
+        for d in OPTIONAL_DIRS:
+            if (src / d).is_dir():
+                shutil.copytree(src / d, assets / d)
         envs = [e for e in sorted((src / "envs").iterdir()) if e.is_dir()] if (src / "envs").is_dir() else []
         if not envs:
             sys.exit(f"render_set: {ASSETS}/envs has no generated environments (gen_nature/buildings/city/cullet.sh)")
