@@ -131,6 +131,11 @@ Ranges below are proposals, set so Cora's values sit inside them. Each must be c
 - **Seed:** sd 0.08 each; family share .7.
 - **Carry weights:** they move from Cora's replay into `cage_head` as module constants: `jaw_taper` .395, `chin_taper` .675, and the existing per-row carries above. They are fixed style, not drawn.
 - **Unsure:** whether the carries generalise across lines a/b/c. Check with `cage_accept.py` across all 21 types.
+- **As built in S1** ([s1/README.md](s1/README.md)):
+  - **The means:** class means of `jaw_taper` −0.05 and `chin_taper` −0.18 for adult women, and lighter values elsewhere, in `living/tools/characters/port.json`.
+  - **No new seed streams:** the identity bones `J_Id_Jaw` and `J_Id_Chin` already carry each person's spread.
+  - **No carry weights:** they were Cora's own fit (`fit_cora_rows`), not the generator's.
+- **Decision (GC, 2026-11-20): the three lines stay distinct.** a stays round, b even, and c long with the V. Tapers alone reach the drawing's chin-over-jaw (0.507) only on line c. Bringing lines a and b there would mean moving the types' jaw line itself, at the cost of the variety the lines exist for. Cora's V is one face in a town.
 
 ### 2.2 Depth stations
 
