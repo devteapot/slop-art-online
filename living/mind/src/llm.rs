@@ -562,6 +562,12 @@ struct Queue {
     concurrency: usize,
     global_rpm: f64,
     global_next: Instant,
+    /// Grants decided for tickets whose owners have not collected them yet, and when
+    /// ([`Queue::dispatch`]).
+    decided: HashMap<u64, (Lane, Option<String>, Instant)>,
+    /// Grant-stall watch: since when a ready call has had a free slot with no grant, and the
+    /// most ready calls seen meanwhile ([`Queue::watch`]).
+    stall: Option<(Instant, usize)>,
 }
 
 impl Queue {
@@ -606,6 +612,52 @@ impl Queue {
         self.ready_in(lane, now)
     }
 
+    /// Grant every call that may take a slot now, whichever tickets they belong to; the owners
+    /// collect their grants when they next run ([`Scheduler::admit`]). Before 2026-11-20 only
+    /// the owner of the one ticket `candidate` named could take its slot; when that task was
+    /// held up (behind CPU-heavy work on its worker thread), every grant waited for it, and
+    /// battles showed seconds with many ready calls, free slots and no grant. Now a held-up
+    /// task costs only its own slot, and its delay shows as slot hold. Returns whether
+    /// anything was granted.
+    fn dispatch(&mut self, now: Instant) -> bool {
+        let mut any = false;
+        while let Some(id) = self.candidate(now) {
+            let (lane, probe) = self.start(id, now);
+            self.decided.insert(id, (lane, probe, now));
+            any = true;
+        }
+        self.watch(now);
+        any
+    }
+
+    /// The grant-stall watch: a shared-pool call whose profile's pacing has passed, a free
+    /// slot for its lane, and no grant. A stall of a second or more is logged when it ends.
+    fn watch(&mut self, now: Instant) {
+        let lower_limit = self.concurrency.saturating_sub((self.concurrency / 4).max(1)).max(1);
+        let free_lower = self.in_flight < self.concurrency && self.lower_in_flight < lower_limit;
+        let free_interactive = self.in_flight < self.concurrency;
+        let rates = &mut self.rates;
+        let ready = self
+            .waiting
+            .iter()
+            .filter(|w| w.lane != Lane::Fast)
+            .filter(|w| if w.lane == Lane::Interactive { free_interactive } else { free_lower })
+            .filter(|w| rates.get_mut(&w.profile).unwrap().ready_at(w.cost, now) <= now)
+            .count();
+        match (&mut self.stall, ready) {
+            (None, 0) => {}
+            (None, n) => self.stall = Some((now, n)),
+            (Some((_, most)), n) if n > 0 => *most = (*most).max(n),
+            (Some((since, most)), _) => {
+                let ms = now.saturating_duration_since(*since).as_millis();
+                if ms >= 1000 {
+                    log::warn!("grant stall: {ms} ms with up to {most} ready calls and free slots");
+                }
+                self.stall = None;
+            }
+        }
+    }
+
     fn start(&mut self, id: u64, now: Instant) -> (Lane, Option<String>) {
         let pos = self.waiting.iter().position(|w| w.id == id).unwrap();
         let w = self.waiting.remove(pos).unwrap();
@@ -625,6 +677,12 @@ impl Queue {
         if w.lane != Lane::Interactive {
             let offset = (0..NON_INTERACTIVE_ADMISSIONS.len()).find(|offset| NON_INTERACTIVE_ADMISSIONS[(self.next_lane + offset) % NON_INTERACTIVE_ADMISSIONS.len()] == w.lane).unwrap();
             self.next_lane = (self.next_lane + offset + 1) % NON_INTERACTIVE_ADMISSIONS.len();
+        }
+        if let Some((since, most)) = self.stall.take() {
+            let ms = now.saturating_duration_since(since).as_millis();
+            if ms >= 1000 {
+                log::warn!("grant stall: {ms} ms with up to {most} ready calls and free slots");
+            }
         }
         self.rates.get_mut(&w.profile).unwrap().sent(id, w.cost, now);
         self.in_flight += 1;
@@ -654,6 +712,8 @@ struct Admission<'a> {
     id: u64,
     lane: Option<Lane>,
     probe: Option<String>,
+    /// When the slot was granted: by this ticket's own pass or by another waiter's.
+    granted: Option<Instant>,
 }
 
 impl Drop for Admission<'_> {
@@ -666,6 +726,15 @@ impl Drop for Admission<'_> {
                 q.in_flight -= 1;
                 q.lower_in_flight -= usize::from(lane != Lane::Interactive);
             }
+        } else if let Some((lane, probe, _)) = q.decided.remove(&self.id) {
+            // Granted on its behalf, never collected: give the slot back.
+            if lane == Lane::Fast {
+                q.fast_in_flight -= 1;
+            } else {
+                q.in_flight -= 1;
+                q.lower_in_flight -= usize::from(lane != Lane::Interactive);
+            }
+            self.probe = probe;
         } else {
             q.waiting.retain(|w| w.id != self.id);
         }
@@ -697,6 +766,8 @@ impl Scheduler {
                 concurrency,
                 global_rpm,
                 global_next: now,
+                decided: HashMap::new(),
+                stall: None,
             }),
             changed: tokio::sync::Notify::new(),
         }
@@ -714,7 +785,7 @@ impl Scheduler {
             q.waiting.push_back(Waiting { id, profile: profile.into(), lane, cost });
             id
         };
-        let mut admission = Admission { scheduler: self, id, lane: None, probe: None };
+        let mut admission = Admission { scheduler: self, id, lane: None, probe: None, granted: None };
         loop {
             let changed = self.changed.notified();
             tokio::pin!(changed);
@@ -724,12 +795,14 @@ impl Scheduler {
                 if q.rates[profile].tpm.is_some_and(|limit| cost > limit) {
                     return Err(anyhow!("estimated request tokens {cost} exceed {profile} tokens_per_minute"));
                 }
-                let now = Instant::now();
-                if q.candidate(now) == Some(id) {
-                    let (lane, probe) = q.start(id, now);
+                // Any waiter's pass grants for every ticket ([`Queue::dispatch`]).
+                if q.dispatch(Instant::now()) {
+                    self.changed.notify_waiters();
+                }
+                if let Some((lane, probe, at)) = q.decided.remove(&id) {
                     admission.lane = Some(lane);
                     admission.probe = probe;
-                    self.changed.notify_waiters();
+                    admission.granted = Some(at);
                     return Ok(admission);
                 }
             }
@@ -986,7 +1059,10 @@ impl Llm {
         let host = p.base_url.clone();
         let queued = Instant::now();
         let permit = self.scheduler.admit(profile, lane, cost).await?;
-        let queue_wait_ms = queued.elapsed().as_millis() as u64;
+        // Enqueue to grant; a grant made on this call's behalf while its task was held up is
+        // the grant's time, and the delay until here is slot hold.
+        let granted = permit.granted.unwrap_or_else(Instant::now);
+        let queue_wait_ms = granted.saturating_duration_since(queued).as_millis() as u64;
         let started = Instant::now();
         let url = format!("{}/chat/completions", p.base_url.trim_end_matches('/'));
         let mut unreachable = false;
@@ -1846,6 +1922,38 @@ mod tests {
         let q = scheduler.queue.lock().unwrap();
         assert_eq!(q.in_flight, 0);
         assert!(q.waiting.is_empty());
+    }
+
+    /// The battles' grant stall (docs/MIND_HARNESS.md, "The grant stall"): many ready calls,
+    /// free slots and no grant for seconds, because only the call the scheduler picked could
+    /// take its slot, and its task was not running (held up behind other work on its worker
+    /// thread). A ticket whose owner does not poll must cost its own slot only, never the
+    /// others' grants.
+    #[tokio::test]
+    async fn a_held_up_ticket_does_not_stop_the_grants() {
+        let models: ModelsFile = serde_json::from_value(json!({"default": "p", "profiles": {
+            "p": {"base_url": "x", "model": "m", "key_env": "unused", "requests_per_minute": 60000}
+        }}))
+        .unwrap();
+        let scheduler = Scheduler::new(&models, 16, 0.0);
+        // First in its lane, and its owner never polls.
+        let held = {
+            let mut q = scheduler.queue.lock().unwrap();
+            let id = enqueue(&mut q, Lane::Urgent, 10);
+            Admission { scheduler: &scheduler, id, lane: None, probe: None, granted: None }
+        };
+        let call = || scheduler.admit("p", Lane::Urgent, 10);
+        let admitted = tokio::time::timeout(Duration::from_secs(2), async { tokio::join!(call(), call(), call(), call(), call(), call()) })
+            .await
+            .expect("six ready calls with free slots got no grant in 2 s behind a held-up ticket");
+        let permits = [admitted.0.unwrap(), admitted.1.unwrap(), admitted.2.unwrap(), admitted.3.unwrap(), admitted.4.unwrap(), admitted.5.unwrap()];
+        assert_eq!(scheduler.queue.lock().unwrap().in_flight, 7, "the six and the held-up ticket, granted on its behalf");
+        drop(permits);
+        // The held-up owner gives up without ever polling: its slot is released.
+        drop(held);
+        let q = scheduler.queue.lock().unwrap();
+        assert_eq!((q.in_flight, q.lower_in_flight), (0, 0));
+        assert!(q.waiting.is_empty() && q.decided.is_empty());
     }
 
     #[tokio::test]
