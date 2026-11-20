@@ -477,6 +477,23 @@ impl Reads {
         self.all || living_rules::script::context::ACTOR.iter().position(|t| *t == f).is_some_and(|i| self.actor & (1u64 << i) != 0)
     }
 
+    /// What either reads.
+    fn or(self, o: Reads) -> Reads {
+        Reads { all: self.all || o.all, actor: self.actor | o.actor, target: self.target | o.target }
+    }
+
+    /// The fields a move's start reads (`perform`): its check's and its windup's (`<skill>_check`,
+    /// `<skill>_duration`; a function the script lacks reads nothing), and for a paced skill the
+    /// genes and practice its duration is divided by (`Scripts::duration_ms`).
+    fn of_start(sc: &living_rules::script::Scripts, skill: &str) -> Reads {
+        let plan = |f: String| if sc.has(&f) { Reads::of(&sc.law_plan(&f)) } else { Reads { all: false, actor: 0, target: 0 } };
+        let mut r = plan(format!("{skill}_check")).or(plan(format!("{skill}_duration")));
+        if living_rules::genes::is_skilled(skill) && !sc.shapes().timed(skill) {
+            r.actor |= 1u64 << living_rules::script::context::ACTOR.iter().position(|f| *f == "factor").expect("the factor field");
+        }
+        r
+    }
+
     fn target(&self, f: &str) -> bool {
         self.all || living_rules::script::context::TARGET.iter().position(|t| *t == f).is_some_and(|i| self.target & (1 << i) != 0)
     }
@@ -853,6 +870,14 @@ pub fn refusal() -> &'static str {
 /// `spacing` is a movement intent's distances (`living_rules::steer::INTENTS`).
 #[allow(clippy::too_many_arguments)]
 pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), run: Option<bool>, spacing: Spacing, now: u64) -> Result<(), String> {
+    let cur = ctx.db.activity().id().find(id);
+    begin_with(ctx, id, node, revision, skill, target, item, qty, text, topic, want, answers, run, spacing, now, cur)
+}
+
+/// `begin`, given the body's activity row as it is now (`cur`, read by the caller in this
+/// transaction with nothing written since: a graph leaf's; docs/COMBAT_PHASE.md step 3).
+#[allow(clippy::too_many_arguments)]
+pub fn begin_with(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), run: Option<bool>, spacing: Spacing, now: u64, cur: Option<Activity>) -> Result<(), String> {
     refuse(living_rules::outcome::act::REFUSED);
     let sc = common::scripts(ctx);
     let shape = shape_of(&sc, skill);
@@ -861,7 +886,6 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     // A blow has no mode: a "hurt" or "kill" left on a skill that takes no item (a graph
     // stored before normalization dropped the word) means nothing and is not carried.
     let item = if sc.skills().get(skill).is_some_and(|k| !k.needs_item) && living_rules::normalize::force_word(item) { "" } else { item };
-    let cur = ctx.db.activity().id().find(id);
     if cur.is_none() {
         // What it was seen doing, held since a continuous activity ended (`town::hold`), gives
         // way to what begins now: the same one renewed takes the row up again in place.
@@ -1225,7 +1249,29 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
 fn perform(ctx: &ReducerContext, mut act: Activity, now: u64) -> Result<(), String> {
     let sc = common::scripts(ctx);
     act.phase = 1;
-    let sctx = skill_ctx(ctx, act.id, &act, now);
+    // Its check and windup are given the fields they read alone, as a check before the start is
+    // (`check_ctx_plan`; docs/COMBAT_PHASE.md step 3); one roll is drawn either way.
+    let laws = common::laws(ctx);
+    let reads = if laws.check_ctx_plan { Reads::of_start(&sc, &act.skill) } else { Reads::all() };
+    let sctx = {
+        let _detail = common::detail_span("act.skill_ctx");
+        let roll: f32 = crate::seed::rng(ctx).gen_range(0.0..1.0);
+        let sctx = skill_ctx_with(ctx, act.id, &act, now, roll, &reads);
+        if laws.check_ctx_plan && laws.check_ctx_check {
+            let whole = skill_ctx_with(ctx, act.id, &act, now, roll, &Reads::all());
+            let (a, b) = ((sc.check(&act.skill, &sctx), sc.duration_ms(&act.skill, &sctx)), (sc.check(&act.skill, &whole), sc.duration_ms(&act.skill, &whole)));
+            common::diag(|| "check_ctx:checked", 1);
+            if a != b {
+                common::diag(|| "check_ctx:differed", 1);
+                log::error!("start of {} for {}: check and windup on their plans' fields {a:?} differ from the whole context's {b:?}", act.skill, act.id);
+                whole
+            } else {
+                sctx
+            }
+        } else {
+            sctx
+        }
+    };
     sc.check(&act.skill, &sctx).inspect_err(|_| refuse(living_rules::outcome::act::CHECK))?;
     let dur = sc.duration_ms(&act.skill, &sctx)?;
     if rooted(&act.skill) {

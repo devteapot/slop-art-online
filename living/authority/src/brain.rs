@@ -230,11 +230,14 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     ev.after(result, &root.root);
     drop(_span);
     let part = common::detail_span("brain.settle");
-    crate::town::settle(ctx, id, read_end.as_deref());
+    // The activity as the after-step left it, read once for both (`settle` writes only the
+    // `doing` row).
+    let act_now = ctx.db.activity().id().find(id);
+    crate::town::settle_with(ctx, id, read_end.as_deref(), act_now.is_some());
     drop(part);
     let _span = common::detail_span("brain.slept");
     // Fell asleep, or woke (and thinks on what waited): perceive::slept.
-    perceive::slept(ctx, id, now);
+    perceive::slept_with(ctx, id, now, act_now);
     if played && result != St::Run {
         crate::command_done(ctx, id, now);
     }
@@ -878,10 +881,16 @@ impl<'a> Ev<'a> {
     /// The outcome of leaf `id`'s activity that has ended since it was last visited (read once),
     /// unless that activity is still under way.
     fn finished(&mut self, id: u16, skill: &str) -> Option<St> {
+        let (ctx, me) = (self.ctx, self.me.id);
+        self.finished_with(id, skill, || ctx.db.activity().id().find(me))
+    }
+
+    /// `finished`, given how to have the body's activity row (read only when it is needed).
+    fn finished_with(&mut self, id: u16, skill: &str, activity: impl FnOnce() -> Option<Activity>) -> Option<St> {
         let _span = common::detail_span("brain.finished");
         let rev = self.st.revision;
         let l = self.st.last.clone().filter(|l| l.node == id && l.revision == rev)?;
-        if self.ctx.db.activity().id().find(self.me.id).is_some_and(|a| a.node == id && a.revision == rev) {
+        if activity().is_some_and(|a| a.node == id && a.revision == rev) {
             return None;
         }
         self.st.last = None;
@@ -896,36 +905,42 @@ impl<'a> Ev<'a> {
     #[allow(clippy::too_many_arguments)]
     fn leaf(&mut self, id: u16, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, desc: String) -> St {
         let _span = common::detail_span("brain.leaf");
+        // The body's activity, read once for this leaf (docs/COMBAT_PHASE.md step 3): nothing
+        // below writes it before `begin`, except a reflex taking the body back from a deliberate
+        // act, after which it is read again.
+        let mut cur = self.ctx.db.activity().id().find(self.me.id);
         // A committed move under way holds the body until it has run its course (a dash may cut
         // in on a windup): the graph waits on it, as a player's keys do (`combat::held_by`).
-        if let Some(a) = self.ctx.db.activity().id().find(self.me.id) {
+        if let Some(a) = &cur {
             let own = a.node == id && a.revision == self.st.revision;
-            if !own && crate::combat::held_by(&common::scripts(self.ctx), &a, skill).is_err() {
-                self.status = a.label;
+            if !own && crate::combat::held_by(&common::scripts(self.ctx), a, skill).is_err() {
+                self.status = a.label.clone();
                 return St::Run;
             }
         }
         if self.acting {
             // A deliberate act holds the body: the graph's work waits for it, but a reflex
             // (flee, dodge, block, attack, throw) takes the body back at once.
-            match self.ctx.db.activity().id().find(self.me.id).filter(|a| act::held(a.node)) {
+            match cur.clone().filter(|a| act::held(a.node)) {
                 Some(a) if common::scripts(self.ctx).shapes().reflex(skill) => {
                     crate::acts::interrupt(self.ctx, a, skill, self.now);
                     self.acting = false;
+                    cur = self.ctx.db.activity().id().find(self.me.id);
                 }
                 Some(_) => return St::Run,
                 None => self.acting = false,
             }
         }
         let rev = self.st.revision;
-        if let Some(a) = self.ctx.db.activity().id().find(self.me.id) {
+        if let Some(a) = &cur {
             if a.node == id && a.revision == rev {
                 self.running = Some(id);
-                self.status = a.label;
+                self.status = a.label.clone();
                 return St::Run;
             }
         }
-        if let Some(done) = self.finished(id, skill) {
+        let seen = cur.clone();
+        if let Some(done) = self.finished_with(id, skill, move || seen) {
             return done;
         }
         let want = std::mem::take(&mut self.want);
@@ -933,7 +948,7 @@ impl<'a> Ev<'a> {
         let run = self.run.take();
         let spacing = std::mem::take(&mut self.spacing);
         let _span = common::detail_span("brain.begin");
-        match act::begin(self.ctx, self.me.id, id, rev, skill, target, item, qty, text, topic, (&want.0, want.1), answers, run, spacing, self.now) {
+        match act::begin_with(self.ctx, self.me.id, id, rev, skill, target, item, qty, text, topic, (&want.0, want.1), answers, run, spacing, self.now, cur) {
             Ok(()) => {
                 common::diag(|| format!("begin:ok:{skill}"), 1);
                 self.running = Some(id);
