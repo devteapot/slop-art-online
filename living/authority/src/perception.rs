@@ -1048,12 +1048,12 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
     }
     let w = common::world(ctx);
     let map = common::map(ctx);
-    let mut health = HashMap::new();
+    let mut shared = Shared { check: common::laws(ctx).regard_cache_check, ..Shared::default() };
     let mut swept = Vec::with_capacity(due.len());
     for (id, viewer) in due {
         // While profiling with detail: each viewer's sweep whole (docs/COMBAT_PHASE.md).
         let _detail = common::detail_span("sweep.one");
-        sweep_one(ctx, id, viewer, &w, &map, now, Some(&mut health));
+        sweep_one(ctx, id, viewer, &w, &map, now, Some(&mut shared));
         swept.push(id);
     }
     common::diag(|| "sweep:viewers", swept.len() as u64);
@@ -1080,9 +1080,43 @@ pub fn sweep_now(ctx: &ReducerContext, id: u32, viewer: Identity, now: u64) {
     sweep_one(ctx, id, viewer, &common::world(ctx), &common::map(ctx), now, None);
 }
 
-/// One player's sweep. `health` is the tick's shared reading of health by creature, when the
-/// sweep may keep what it worked out (`KEPT`, in the tick); `None` outside the tick.
-fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &Map, now: u64, health: Option<&mut HashMap<u32, Option<(f32, f32)>>>) {
+/// What one tick's sweeps share (docs/COMBAT_PHASE.md, step 2): each creature's health, read
+/// once, and each projection, worked out once per target and answer of the law. A projection is
+/// a function of the target's record, its health, its look and the law's answer alone
+/// (`project_as`), and no sweep writes any of those, so every viewer gets from it what working
+/// it out afresh gives. Lives for one tick's sweeps, in the tick's own call.
+#[derive(Default)]
+struct Shared {
+    health: HashMap<u32, Option<(f32, f32)>>,
+    projections: HashMap<(u32, Regard), Projection>,
+    /// `regard_cache_check`: each projection given from the memo is compared with a fresh one.
+    check: bool,
+}
+
+/// `target`'s projection under the law's answer `r` now: from the tick's memo when there is one
+/// (`Shared`), else worked out.
+fn project_shared(ctx: &ReducerContext, shared: Option<&mut Shared>, r: Regard, target: &Character, now: u64) -> Projection {
+    let Some(sh) = shared else { return project_as(ctx, r, target, now) };
+    if let Some(p) = sh.projections.get(&(target.id, r)) {
+        exact_count(3, 1);
+        if sh.check {
+            exact_count(4, 1);
+            let fresh = project_as(ctx, r, target, now);
+            if fresh != *p {
+                exact_count(5, 1);
+                log::error!("sweep exact: #{}'s projection under {r:?} from the memo {p:?} differs from a fresh one {fresh:?}", target.id);
+            }
+        }
+        return p.clone();
+    }
+    let p = project_as(ctx, r, target, now);
+    sh.projections.insert((target.id, r), p.clone());
+    p
+}
+
+/// One player's sweep. `shared` is what the tick's sweeps share, when the sweep may keep what it
+/// worked out (`KEPT`, in the tick); `None` outside the tick.
+fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &Map, now: u64, mut shared: Option<&mut Shared>) {
     let setup = common::detail_span("sweep.setup");
     let Some(b) = ctx.db.body().id().find(id) else { return };
     let Some(me) = ctx.db.character().id().find(id) else { return };
@@ -1093,7 +1127,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let rows: Vec<Perceived> = ctx.db.perceived().viewer().filter(viewer).collect();
     let had: HashSet<u32> = rows.iter().map(|p| p.body).collect();
     let mut seen: HashSet<u32> = HashSet::new();
-    let scheduled = health.is_some();
+    let scheduled = shared.is_some();
     // How far each one seen is, from the chunk cache (`kept_sweep` checks it is current).
     let mut near: HashMap<u32, f32> = HashMap::new();
     let keep = common::laws(ctx).keep_seen_m;
@@ -1105,11 +1139,18 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     drop(setup);
     let sight_span = common::detail_span("sight.player_candidates");
     let mut candidates = 0u64;
+    // One gather serves sight and hearing (docs/COMBAT_PHASE.md, step 2), within the larger of
+    // the two reaches. Each keeps exactly what a gather of its own would have given: within its
+    // reach and filed under a chunk its own reach covers (`creatures_near_filed`). What is heard
+    // is told only while the senses have a field (`heard`).
+    let hearing_r = if senses.field.is_some() && senses.hearing > 0.0 { senses.hearing } else { 0.0 };
+    let reach = gather.max(hearing_r);
     let gathering = common::detail_span("sight.gather");
-    let crowd = common::creatures_near(ctx, here, gather, now);
+    let crowd = common::creatures_near_filed(ctx, here, reach, now);
+    let sight_chunks = (gather < reach).then(|| living_rules::map::chunks_around(here.0, here.1, gather));
     drop(gathering);
-    for c in crowd {
-        if c.id == id {
+    for (c, chunk) in &crowd {
+        if c.id == id || c.dist > gather || sight_chunks.as_ref().is_some_and(|k| !k.contains(chunk)) {
             continue;
         }
         candidates += 1;
@@ -1128,7 +1169,22 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         crate::attention::project(ctx, id, &senses, now);
     }
     let hearing = common::detail_span("sweep.hear");
-    hear(ctx, id, viewer, here, &seen, now);
+    let now_heard: Vec<NearCreature> = if hearing_r > 0.0 {
+        let hear_chunks = (hearing_r < reach).then(|| living_rules::map::chunks_around(here.0, here.1, hearing_r));
+        let mut v: Vec<NearCreature> = crowd
+            .iter()
+            .filter(|(c, chunk)| c.id != id && c.dist <= hearing_r && !seen.contains(&c.id) && hear_chunks.as_ref().is_none_or(|k| k.contains(chunk)))
+            .map(|(c, _)| c.clone())
+            .collect();
+        v.sort_by(|a, b| a.dist.total_cmp(&b.dist));
+        v
+    } else {
+        Vec::new()
+    };
+    if common::laws(ctx).regard_cache_check {
+        check_gather(ctx, id, here, gather, &crowd, sight_chunks.as_deref(), &seen, &now_heard, now);
+    }
+    hear(ctx, id, viewer, here, &seen, now_heard, now);
     drop(hearing);
     // What it remembers of resources here (talk-places): the look a mind takes at its noticing.
     crate::stock::look(ctx, &me, here, || sight, now);
@@ -1146,7 +1202,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     common::diag(|| "visible:add", entered.len() as u64);
     common::diag(|| "visible:drop", gone_from_sight.len() as u64);
     let left = !gone_from_sight.is_empty();
-    let _rows_in = common::detail_span("rows.in");
+    let rows_in = common::detail_span("rows.in");
     for body in &entered {
         ctx.db.perceived().insert(Perceived { id: 0, viewer, body: *body, since_ms: now });
         // How it moves, as it is now; frames keep it current (`frame.rs`).
@@ -1154,6 +1210,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
             crate::frame::new_motion(ctx, id, viewer, &b);
         }
     }
+    drop(rows_in);
     drop(sight_rows);
     let scene = common::detail_span("sweep.scene");
     crate::frame::scene(ctx, id, viewer, &seen, &near, now);
@@ -1181,9 +1238,9 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     // every row is projected again, and written only if it changed.
     let dist_law = common::scripts(ctx).regard_reads_dist();
     if dist_law && common::laws(ctx).regard_cache {
-        if let Some(health) = health {
+        if let Some(shared) = shared.as_deref_mut() {
             let sight = Sight { here, near: &near, seen: &seen, entered: &entered, gone: &gone_from_sight, revealing: &revealing, touched: &touched };
-            kept_sweep(ctx, &me, viewer, w, &sight, health, now);
+            kept_sweep(ctx, &me, viewer, w, &sight, shared, now);
             return;
         }
     }
@@ -1197,7 +1254,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     if !all && again.is_empty() && entered.is_empty() && !left {
         if own_due {
             if let Some(p) = ctx.db.projected().body().filter(id).find(|p| p.own && p.viewer == viewer) {
-                let pr = project(ctx, &me, &me, now);
+                let pr = project_shared(ctx, shared, regard(ctx, &me, &me, now), &me, now);
                 if !pr.same_as(&p) {
                     proj_update(ctx, pr.into_row(viewer, id, true, p.id));
                 }
@@ -1219,7 +1276,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         }
         if all || again.contains(&p.body) {
             let Some(t) = ctx.db.character().id().find(p.body) else { continue };
-            let pr = project(ctx, &me, &t, now);
+            let pr = project_shared(ctx, shared.as_deref_mut(), regard(ctx, &me, &t, now), &t, now);
             if !pr.same_as(&p) {
                 proj_update(ctx, pr.into_row(viewer, p.body, p.own, p.id));
             }
@@ -1227,7 +1284,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     }
     for body in seen.difference(&have) {
         let Some(t) = ctx.db.character().id().find(*body) else { continue };
-        let pr = project(ctx, &me, &t, now);
+        let pr = project_shared(ctx, shared.as_deref_mut(), regard(ctx, &me, &t, now), &t, now);
         proj_insert(ctx, pr.into_row(viewer, *body, *body == id, 0));
     }
     // The move of each newcomer that has fought, with the band its projection grants.
@@ -1391,6 +1448,7 @@ fn count(i: usize, n: u64) {
 /// One log line a second while profiling or checking: what the kept sweeps did.
 pub fn report_kept(ctx: &ReducerContext) {
     let [kept, again, full, compared, differed] = KEPT_COUNTS.with(|c| c.replace([0; 5]));
+    let [checked, sight_differed, heard_differed, memo, memo_compared, memo_differed] = EXACT_COUNTS.with(|c| c.replace([0; 6]));
     if !common::laws(ctx).regard_cache_check && !common::profiling() {
         return;
     }
@@ -1399,6 +1457,9 @@ pub fn report_kept(ctx: &ReducerContext) {
     let born = INSTANCE_BORN.with(|b| *b.get_or_init(|| common::stamp(ctx)));
     if kept + again > 0 {
         log::info!("sweep kept: kept={kept} projected={again} full={full} compared={compared} differed={differed} instance={born}");
+    }
+    if checked + memo > 0 {
+        log::info!("sweep exact: gathers_checked={checked} sight_differed={sight_differed} heard_differed={heard_differed} memo={memo} memo_compared={memo_compared} memo_differed={memo_differed}");
     }
 }
 
@@ -1413,12 +1474,23 @@ fn law_band_of(sc: &Rc<Scripts>, input: &RegardIn, d: u16) -> (Regard, u16, u16)
         if b.as_ref().map_or(true, |(s, _)| !Rc::ptr_eq(s, sc)) {
             *b = Some((sc.clone(), HashMap::new()));
         }
-        let key = RegardIn { dist: 0, ..input.clone() };
-        let answers = b.as_mut().unwrap().1.entry(key).or_default();
+        let map = &mut b.as_mut().unwrap().1;
+        // Its key is the input at distance 0, cloned only the first time it is asked.
+        let zeroed;
+        let key = if input.dist == 0 {
+            input
+        } else {
+            zeroed = RegardIn { dist: 0, ..input.clone() };
+            &zeroed
+        };
+        if !map.contains_key(key) {
+            map.insert(key.clone(), Vec::new());
+        }
+        let answers = map.get_mut(key).unwrap();
         let want = ((d as usize / 16 + 2) * 16).min(u16::MAX as usize + 1);
         while answers.len() < want {
             let m = answers.len() as u16;
-            answers.push(regard_of(sc, RegardIn { dist: m, ..input.clone() }));
+            answers.push(regard_of(sc, RegardIn { dist: m, ..key.clone() }));
         }
         let (lo, hi) = living_rules::sight::law_band(answers, d as usize);
         (answers[d as usize], lo as u16, hi as u16)
@@ -1454,27 +1526,8 @@ fn health_from(precision: Precision, hp: Option<(f32, f32)>) -> (u8, f32, f32) {
     })
 }
 
-/// The law's answer for `me` looking at `target` now at `d` metres: the answer, its band round
-/// `d` and whether `me` knows the target's name.
-#[allow(clippy::too_many_arguments)]
-fn regard_kept(ctx: &ReducerContext, sc: &Rc<Scripts>, me: &Character, knows: &[String], night: bool, target: &Character, d: u16, now: u64) -> (Regard, u16, u16, bool) {
-    let known = knows_name(ctx, me, target);
-    let input = RegardIn {
-        observer_kind: me.kind.clone(),
-        knows: knows.to_vec(),
-        target_kind: target.kind.clone(),
-        known,
-        revealed: revealed(ctx, me.id, target.id, now),
-        own: me.id == target.id,
-        night,
-        dist: 0,
-    };
-    let (r, lo, hi) = law_band_of(sc, &input, d);
-    (r, lo, hi, known)
-}
-
 /// The sweep of one player's projections under a law that reads distance (see above).
-fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World, s: &Sight, health: &mut HashMap<u32, Option<(f32, f32)>>, now: u64) {
+fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World, s: &Sight, shared: &mut Shared, now: u64) {
     let id = me.id;
     let sc = common::scripts(ctx);
     let night = common::night(ctx, w, now);
@@ -1538,7 +1591,7 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
                         || CHANGED.with(|c| c.borrow().get(&body).is_some_and(|m| *m > k.mark))
                         || !(k.lo..=k.hi).contains(&dist(body))
                         || (ask_known && ctx.db.character().id().find(body).map_or(true, |t| knows_name(ctx, me, &t) != k.known))
-                        || health_from(k.precision, health_now(ctx, health, body, now)) != k.health
+                        || health_from(k.precision, health_now(ctx, &mut shared.health, body, now)) != k.health
                 }
             };
             if changed {
@@ -1556,13 +1609,35 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
     // Projected first, then written: a projection reads none of the rows the writes touch
     // (`projected`, its mirror), so the order of writes and their ids are as before.
     let law = common::detail_span("project.regard");
+    // The law's input for each target (`RegardIn`, its distance apart) is the viewer's own kind,
+    // know-how and night, the target's kind, whether the viewer knows its name, whether it is
+    // the viewer, and what a reveal shows of it. A target no reveal holds for (`revealing`, read
+    // this sweep) has nothing revealed, so its input is one of a few this sweep, built once each;
+    // the law's answer and band at each whole metre are then asked once per input.
+    let mut inputs: Vec<RegardIn> = Vec::new();
+    let mut answers: HashMap<(usize, u16), (Regard, u16, u16)> = HashMap::new();
     let mut regards: Vec<(Character, Regard, u16, u16, bool)> = Vec::with_capacity(again.len());
     for body in again {
         let Some(t) = ctx.db.character().id().find(body) else {
             v.rows.remove(&body);
             continue;
         };
-        let (r, lo, hi, known) = regard_kept(ctx, &sc, me, &knows, night, &t, dist(body), now);
+        let known = knows_name(ctx, me, &t);
+        let own = t.id == id;
+        let d = dist(body);
+        let (r, lo, hi) = if s.revealing.contains(&t.id) {
+            let input = RegardIn { observer_kind: me.kind.clone(), knows: knows.to_vec(), target_kind: t.kind.clone(), known, revealed: revealed(ctx, id, t.id, now), own, night, dist: 0 };
+            law_band_of(&sc, &input, d)
+        } else {
+            let i = match inputs.iter().position(|x| x.target_kind == t.kind && x.known == known && x.own == own) {
+                Some(i) => i,
+                None => {
+                    inputs.push(RegardIn { observer_kind: me.kind.clone(), knows: knows.to_vec(), target_kind: t.kind.clone(), known, revealed: Vec::new(), own, night, dist: 0 });
+                    inputs.len() - 1
+                }
+            };
+            *answers.entry((i, d)).or_insert_with(|| law_band_of(&sc, &inputs[i], d))
+        };
         regards.push((t, r, lo, hi, known));
     }
     drop(law);
@@ -1570,7 +1645,7 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
     let mark = MARKS.with(|m| m.get());
     let mut projected: Vec<(u32, Projection)> = Vec::with_capacity(regards.len());
     for (t, r, lo, hi, known) in regards {
-        let pr = project_as(ctx, r, &t, now);
+        let pr = project_shared(ctx, Some(shared), r, &t, now);
         v.rows.insert(t.id, Kept { lo, hi, known, precision: r.health, health: (pr.band, pr.hp, pr.max_hp), mark });
         projected.push((t.id, pr));
     }
@@ -1630,6 +1705,47 @@ fn check_rows(ctx: &ReducerContext, me: &Character, viewer: Identity, seen: &Has
     count(4, differed);
 }
 
+thread_local! {
+    /// While `regard_cache_check` holds, since the last report: sweeps whose one gather was
+    /// compared with the two it replaces, and those that differed for sight or for hearing;
+    /// projections given from the tick's memo, those compared with a fresh one and those that
+    /// differed.
+    static EXACT_COUNTS: std::cell::Cell<[u64; 6]> = const { std::cell::Cell::new([0; 6]) };
+}
+
+fn exact_count(i: usize, n: u64) {
+    EXACT_COUNTS.with(|c| {
+        let mut v = c.get();
+        v[i] += n;
+        c.set(v);
+    });
+}
+
+/// The sweep's one gather against the two it replaces (`creatures_near` within the sight
+/// gather, and `heard`): the same creatures, at the same places and distances, for each.
+#[allow(clippy::too_many_arguments)]
+fn check_gather(ctx: &ReducerContext, id: u32, here: (f32, f32), gather: f32, crowd: &[(NearCreature, u32)], sight_chunks: Option<&[u32]>, seen: &HashSet<u32>, now_heard: &[NearCreature], now: u64) {
+    let key = |c: &NearCreature| (c.id, c.pos.0.to_bits(), c.pos.1.to_bits(), c.dist.to_bits(), c.kind.to_string());
+    let sorted = |mut v: Vec<(u32, u32, u32, u32, String)>| {
+        v.sort();
+        v
+    };
+    let old_sight = sorted(common::creatures_near(ctx, here, gather, now).iter().filter(|c| c.id != id).map(key).collect());
+    let new_sight = sorted(crowd.iter().filter(|(c, chunk)| c.id != id && c.dist <= gather && sight_chunks.is_none_or(|k| k.contains(chunk))).map(|(c, _)| key(c)).collect());
+    let old_heard: Vec<_> = heard(ctx, id, here, seen, now).iter().map(key).collect();
+    let new_heard: Vec<_> = now_heard.iter().map(key).collect();
+    exact_count(0, 1);
+    if old_sight != new_sight {
+        exact_count(1, 1);
+        log::error!("sweep exact: #{id}'s sight gather differs: {} against {} creatures", new_sight.len(), old_sight.len());
+    }
+    // Nearest first in both; creatures at exactly the same distance may come in either order.
+    if sorted(old_heard.clone()) != sorted(new_heard.clone()) {
+        exact_count(2, 1);
+        log::error!("sweep exact: #{id}'s heard differs: {new_heard:?} against {old_heard:?}");
+    }
+}
+
 // ---- heard, not seen -----------------------------------------------------------------------
 
 /// How long a heard key's salt epoch lasts: a sound that starts in another epoch gets a key
@@ -1664,10 +1780,9 @@ fn heard_key(salt: u64, listener: u32, target: u32, now: u64) -> u64 {
 /// What a player hears but does not see, kept in its `heard` rows (the `heard_sounds` view):
 /// written when a sound starts or its bearing or band changes; gone when the creature comes into
 /// sight, or `heard_linger_s` after it was last heard. Nothing while its senses have no field.
-fn hear(ctx: &ReducerContext, id: u32, viewer: Identity, here: (f32, f32), seen: &HashSet<u32>, now: u64) {
-    let gathering = common::detail_span("hear.gather");
-    let now_heard = heard(ctx, id, here, seen, now);
-    drop(gathering);
+/// `now_heard`: what it hears and does not see now, nearest first (`heard`, from the sweep's
+/// gather).
+fn hear(ctx: &ReducerContext, id: u32, viewer: Identity, here: (f32, f32), seen: &HashSet<u32>, now_heard: Vec<NearCreature>, now: u64) {
     let rows: Vec<Heard> = ctx.db.heard().viewer().filter(viewer).collect();
     if now_heard.is_empty() && rows.is_empty() {
         return;
@@ -1676,12 +1791,17 @@ fn hear(ctx: &ReducerContext, id: u32, viewer: Identity, here: (f32, f32), seen:
     let linger = (laws.heard_linger_s * 1000.0) as u64;
     let mut current: HashSet<u32> = HashSet::new();
     let mut salt = None;
+    // Its rows by target: the first of its rows for each (as a search of `rows` in order finds).
+    let mut by_target: HashMap<u32, &Heard> = HashMap::with_capacity(rows.len());
+    for r in rows.iter().filter(|r| r.listener == id) {
+        by_target.entry(r.target).or_insert(r);
+    }
     for c in &now_heard {
         current.insert(c.id);
         HEARD_LAST.with(|h| h.borrow_mut().insert((id, c.id), now));
         let bearing = living_rules::sight::compass8(here, c.pos);
         let band = living_rules::sight::heard_band(c.dist, laws.heard_near_m, laws.heard_close_m);
-        match rows.iter().find(|r| r.target == c.id && r.listener == id) {
+        match by_target.get(&c.id).copied() {
             Some(r) if r.bearing == bearing && r.band == band => {}
             Some(r) => {
                 ctx.db.heard().key().update(Heard { bearing, band, ..r.clone() });
