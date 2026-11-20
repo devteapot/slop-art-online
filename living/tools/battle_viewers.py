@@ -168,9 +168,11 @@ class Privacy:
     every public table by name, `SELECT * FROM *`, and the SDK's `subscribe_to_all_tables`; (c) one
     viewer asking for another's rows by identity, by subscription and by SQL."""
 
-    def __init__(self, db, token, out, n, players, seconds):
+    def __init__(self, db, token, out, n, players, seconds, fighter_tables=False):
         cues, _ = _vc()
         self.db, self.out, self.n, self.players = db, out, n, players
+        # With `--fighter-tables`, the public fighter copies too (views step 3).
+        self.tables = COPY + (("seen_fighter_copy",) if fighter_tables else ())
         ids = {}
         for l in open(out / f"events-v{n}.jsonl"):
             e = json.loads(l)
@@ -185,10 +187,10 @@ class Privacy:
         public = sorted(set(__import__("re").findall(r"#\[spacetimedb::table\(accessor = (\w+), public", src)))
         self.k, self.j = 0, 1
         tk = players[self.k]["token"]
-        peek = [f"SELECT * FROM {t} WHERE viewer = 0x{ids[self.j]}" for t in COPY]
+        peek = [f"SELECT * FROM {t} WHERE viewer = 0x{ids[self.j]}" for t in self.tables]
         self.paths = {w: out / f"privacy-v{n}-{w}.jsonl" for w in ("anon", "names", "star", "helper", "peek")}
         self.threads = [
-            probe_stream(db, None, [f"SELECT * FROM {t}" for t in COPY], seconds, self.paths["anon"]),
+            probe_stream(db, None, [f"SELECT * FROM {t}" for t in self.tables], seconds, self.paths["anon"]),
             probe_stream(db, self.spect, [f"SELECT * FROM {t}" for t in public], seconds, self.paths["names"]),
             probe_stream(db, self.spect, ["SELECT * FROM *"], seconds, self.paths["star"]),
             probe_stream(db, self.spect, [], seconds, self.paths["helper"], all_tables=True),
@@ -203,15 +205,15 @@ class Privacy:
         self.sql_read = []
         for i, p in enumerate(self.players):
             other = self.ident[(i + 1) % len(self.players)]
-            own = {t: mt.player_sql(self.db, p["token"], f"SELECT * FROM {t}") for t in COPY}
-            peek = {t: mt.player_sql(self.db, p["token"], f"SELECT * FROM {t} WHERE viewer = 0x{other}") for t in COPY}
+            own = {t: mt.player_sql(self.db, p["token"], f"SELECT * FROM {t}") for t in self.tables}
+            peek = {t: mt.player_sql(self.db, p["token"], f"SELECT * FROM {t} WHERE viewer = 0x{other}") for t in self.tables}
             self.sql_read.append((i, own, peek))
             if own["seen_body_copy"]:
                 break
         for t in self.threads:
             t.join()
         ev = {w: cues.lines(p) for w, p in self.paths.items()}
-        rows = lambda evs: [r for t in COPY for r in mt.copies(evs, t)]
+        rows = lambda evs: [r for t in self.tables for r in mt.copies(evs, t)]
         foreign = lambda evs, own: [r for r in rows(evs) if cues.norm(r["viewer"]) != own]
         helper_refusal = rejected(ev["helper"])
         res = {
@@ -223,7 +225,7 @@ class Privacy:
             "spectator: the SDK's subscribe_to_all_tables is refused (it names a private table), or delivers no one else's copy row": (helper_refusal is not None and "marked private" in helper_refusal and not rows(ev["helper"])) or (cues.accepted(ev["helper"]) and not foreign(ev["helper"], self.spect_ident)),
             "a viewer subscribing another viewer's rows by identity, accepted, receives none": cues.accepted(ev["peek"]) and not rows(ev["peek"]),
             "viewers' SQL reads only their own rows (one sees bodies now), none of another's by identity": bool(self.sql_read[-1][1]["seen_body_copy"])
-            and all(cues.norm(r["viewer"]) == self.ident[i] for i, own, _ in self.sql_read for t in COPY for r in own[t]) and not any(v for _, _, peek in self.sql_read for v in peek.values()),
+            and all(cues.norm(r["viewer"]) == self.ident[i] for i, own, _ in self.sql_read for t in self.tables for r in own[t]) and not any(v for _, _, peek in self.sql_read for v in peek.values()),
             "every side probe ran to its end": all(e and e[-1].get("code") == 0 for e in ev.values()),
         }
         info = {"spectator": self.spect_ident, "helper": {"refused": helper_refusal, "rows": len(rows(ev["helper"]))},
@@ -234,7 +236,8 @@ class Privacy:
     def snapshot(self, sample, tag="window"):
         """Paused: each sampled viewer's copy tables against its views, through its own connection."""
         cues, mt = _vc()
-        qs = [f"SELECT * FROM {t}" for t in (*COPY, "seen_bodies", "seen_bodies_near", "seen_bodies_far", "seen_characters")]
+        qs = [f"SELECT * FROM {t}" for t in (*self.tables, "seen_bodies", "seen_bodies_near", "seen_bodies_far", "seen_characters",
+                                             *(("seen_fighters", "seen_fighters_near", "seen_fighters_far") if "seen_fighter_copy" in self.tables else ()))]
         paths = {i: self.out / f"privacy-v{self.n}-snap-{tag}-p{i}.jsonl" for i in sample}
         ts = [probe_stream(self.db, self.players[i]["token"], qs, 4, paths[i]) for i in sample]
         for t in ts:
@@ -254,6 +257,14 @@ class Privacy:
                       "near_split_equal": {k for k, r in mine.items() if r["near"]} == set(near) and {k for k, r in mine.items() if not r["near"]} == set(far),
                       "mirror_equal": mirror == chars, "mirror_foreign": sum(1 for r in mt.final(ev, "seen_character_copy").values() if cues.norm(r["viewer"]) != own),
                       "bodies": len(view), "characters": len(chars)}
+            if "seen_fighter_copy" in self.tables:
+                ftable = mt.final(ev, "seen_fighter_copy")
+                fmine = {b: r for (v, b), r in ftable.items() if v == own}
+                fview = mt.final(ev, "seen_fighters")
+                fnear, ffar = mt.final(ev, "seen_fighters_near"), mt.final(ev, "seen_fighters_far")
+                per[i].update({"fighters_foreign": len(ftable) - len(fmine), "fighters": len(fview),
+                               "fighters_equal": {k: r["fighter"] for k, r in fmine.items()} == fview,
+                               "fighters_near_split_equal": {k for k, r in fmine.items() if r["near"]} == set(fnear) and {k for k, r in fmine.items() if not r["near"]} == set(ffar)})
         return per
 
 
@@ -285,24 +296,29 @@ def privacy_after_window(a, db, token, priv, load, out, n):
         "paused, sampled viewers: seen_body_copy equals seen_bodies, near flags equal the tier split": len(live) >= max(1, len(sample) // 2) and all(v["bodies_equal"] and v["near_split_equal"] for v in snap.values()),
         "paused, sampled viewers: seen_character_copy equals seen_characters": all(v["mirror_equal"] for v in snap.values()) and any(v["characters"] for v in snap.values()),
     })
+    fighters = "seen_fighter_copy" in priv.tables
+    fok = lambda snapv: all(v.get("fighters_foreign", 0) == 0 and v.get("fighters_equal", True) and v.get("fighters_near_split_equal", True) for v in snapv.values())
+    if fighters:
+        checks["paused, sampled viewers: seen_fighter_copy equals seen_fighters, near flags equal the fighter tier split, no foreign row"] = fok(snap) and any(v.get("fighters") for v in snap.values())
     count = lambda t: lc.sql(db, f"SELECT COUNT(*) AS n FROM {t}", token)[0]["n"]
-    before = {t: count(t) for t in COPY}
-    for law in ("motion_tables_on", "characters_table_on"):
+    laws = ("motion_tables_on", "characters_table_on") + (("fighter_tables_on",) if "seen_fighter_copy" in priv.tables else ())
+    before = {t: count(t) for t in priv.tables}
+    for law in laws:
         lc.call(db, "set_world_law", [law, "false"], token)
     time.sleep(3)
-    off = {t: count(t) for t in COPY}
+    off = {t: count(t) for t in priv.tables}
     load.send("held")
     held_off = load.expect("held", 120)["players"]
     t_on = time.time()
-    for law in ("motion_tables_on", "characters_table_on"):
+    for law in laws:
         lc.call(db, "set_world_law", [law, "true"], token)
     # The rows come back at each viewer's next frame (`to_public`, `fill_mirror`): the owner's
     # counts every half second for 10 s, then, paused, the sampled viewers' tables against their views.
     series = []
     while time.time() < t_on + 10:
         time.sleep(0.5)
-        series.append([round(time.time() - t_on, 1), *(count(t) for t in COPY)])
-    on = {t: count(t) for t in COPY}
+        series.append([round(time.time() - t_on, 1), *(count(t) for t in priv.tables)])
+    on = {t: count(t) for t in priv.tables}
     load.send("held")
     held_on = load.expect("held", 120)["players"]
     alive_on = [p for p in held_on if p["alive"]]
@@ -316,7 +332,10 @@ def privacy_after_window(a, db, token, priv, load, out, n):
         "kill switch: both laws on again, the rows return: paused, each sampled viewer's tables equal its views, no foreign row": all(v > 0 for v in on.values())
         and len(live_on) >= max(1, len(sample) // 2) and all(v["accepted"] and v["foreign"] == 0 and v["mirror_foreign"] == 0 and v["bodies_equal"] and v["near_split_equal"] and v["mirror_equal"] for v in snap_on.values()),
     })
-    return {"checks": checks, "info": info, "sample": {str(k): v for k, v in snap.items()}, "sample_on": {str(k): v for k, v in snap_on.items()},
+    if fighters:
+        checks["fighter table, law off: empty to the owner and in every viewer's cache; on again: paused, equal to the views"] = off["seen_fighter_copy"] == 0 \
+            and all(p["held"].get("fighter", 0) == 0 for p in held_off) and fok(snap_on)
+    return {"checks": checks, "info": info, "fighters": fighters, "sample": {str(k): v for k, v in snap.items()}, "sample_on": {str(k): v for k, v in snap_on.items()},
             "owner_rows": {"before": before, "off": off, "on": on, "on_series": series},
             "held_on_alive": len(alive_on), "held_on_with_bodies": sum(1 for p in alive_on if p["held"]["body"] > 0)}
 
@@ -324,7 +343,7 @@ def privacy_after_window(a, db, token, priv, load, out, n):
 def privacy_final(pr, done, out, n):
     """From gate-load's `done`: every copy row each viewer received, over the whole run, was its own."""
     ps = [p for p in done.get("players", []) if p.get("privacy")]
-    tot = {k: sum(p["privacy"][k] for p in ps) for k in ("body_rows", "character_rows", "foreign_rows")}
+    tot = {k: sum(p["privacy"].get(k, 0) for p in ps) for k in ("body_rows", "character_rows", "fighter_rows", "foreign_rows")}
     pr["viewer_rows"] = {**tot, "players": len(ps), "without_body_rows": sum(1 for p in ps if not p["privacy"]["body_rows"]),
                          "without_character_rows": sum(1 for p in ps if not p["privacy"]["character_rows"]),
                          "foreign_viewers": sorted({v for p in ps for v in p["privacy"]["foreign_viewers"]})[:8]}
@@ -332,6 +351,8 @@ def privacy_final(pr, done, out, n):
         "every viewer's copy rows over the run (initial, inserts, updates) name it as the viewer": len(ps) == n and tot["foreign_rows"] == 0,
         "every viewer received copy rows of both tables (the check is not vacuous)": len(ps) == n and pr["viewer_rows"]["without_body_rows"] == 0 and pr["viewer_rows"]["without_character_rows"] == 0,
     })
+    if pr.get("fighters"):
+        pr["checks"]["the viewers received seen_fighter_copy rows, all their own (counted with the copies above)"] = tot["fighter_rows"] > 0 and tot["foreign_rows"] == 0
     (out / f"privacy-v{n}.json").write_text(json.dumps(pr, indent=1) + "\n")
 
 
@@ -366,7 +387,7 @@ def one(a, n, out):
             load = lc.Proc([a.load, "players"], out / f"players-v{n}.stderr")
             load.send(json.dumps({"uri": lc.URL, "db": db, "events": str(out / f"events-v{n}.jsonl"), "battle": list(site),
                                   "behaviour": {"walk_period_ms": 1500, "rejoin_s": 3}, "players": players, "client": "gate",
-                                  "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables, "character_tables": a.character_tables, "fresh_every": a.fresh_every}))
+                                  "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables, "character_tables": a.character_tables, "fighter_tables": a.fighter_tables, "fresh_every": a.fresh_every}))
             joined = load.expect("joined", 900)
             lo, hi = (float(x) for x in a.ring.split(",")) if a.ring else (0.0, 6.0)
             for i, p in enumerate(sorted(joined["players"], key=lambda p: p["p"])):
@@ -406,7 +427,7 @@ def one(a, n, out):
             loadlog.start()
             m0, th0, p0 = tc.scrape(ident), tc.thread_cpu(pid), tc.proc_cpu(pid)
         if a.privacy and n:
-            priv = Privacy(db, token, out, n, players, a.seconds)
+            priv = Privacy(db, token, out, n, players, a.seconds, a.fighter_tables)
         c0, t0 = tick_count(ident), time.time()
         k0 = (keep.calls, keep.restored) if keep else None
         if load:
@@ -607,6 +628,7 @@ def main():
     ap.add_argument("--no-profile", action="store_true", help="with --detail: server metrics and thread CPU only, profiling left off (no spans)")
     ap.add_argument("--full-log", action="store_true", help="with --detail: read the replica's whole module log from the server's data directory")
     ap.add_argument("--flip-off", action="store_true", help="after the window, turn motion_tables_on off and time the kill switch's tick")
+    ap.add_argument("--fighter-tables", action="store_true", help="the viewers subscribe seen_fighter_copy in place of the fighter views (views step 3; set fighter_tables_on=true)")
     ap.add_argument("--privacy", action="store_true", help="copy-privacy: prove each viewer receives only its own copy rows (needs --motion-tables --character-tables and both laws on); <out>/privacy-v<count>.json, exit 1 on a failed check")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()

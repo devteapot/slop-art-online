@@ -1939,6 +1939,9 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
     for p in ctx.db.fighter_near().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.fighter_near().id().delete(p);
     }
+    for p in ctx.db.seen_fighter_copy().viewer().filter(viewer).collect::<Vec<_>>() {
+        ctx.db.seen_fighter_copy().delete(p);
+    }
     for p in ctx.db.doing_near().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.doing_near().id().delete(p);
     }
@@ -2184,6 +2187,11 @@ pub fn seen_characters(ctx: &ViewContext) -> Vec<SeenCharacter> {
 /// `frame.rs`). Mine is `my_fighter`.
 #[spacetimedb::view(accessor = seen_fighters, public, primary_key = id)]
 pub fn seen_fighters(ctx: &ViewContext) -> Vec<Fighter> {
+    // A viewer's fighter copies are all public (`fighter_tables_on`) or all private (`frame.rs`).
+    let public: Vec<Fighter> = ctx.db.seen_fighter_copy().viewer().filter(ctx.sender()).map(|c| c.fighter).collect();
+    if !public.is_empty() {
+        return public;
+    }
     let far = ctx.db.fighter_seen().viewer().filter(ctx.sender()).map(|f| f.fighter);
     far.chain(ctx.db.fighter_near().viewer().filter(ctx.sender()).map(|f| f.copy.fighter)).collect()
 }
@@ -2191,12 +2199,20 @@ pub fn seen_fighters(ctx: &ViewContext) -> Vec<Fighter> {
 /// The near tier of `seen_fighters` (see `seen_bodies_near`).
 #[spacetimedb::view(accessor = seen_fighters_near, public, primary_key = id)]
 pub fn seen_fighters_near(ctx: &ViewContext) -> Vec<Fighter> {
+    let public: Vec<Fighter> = ctx.db.seen_fighter_copy().viewer_near().filter((ctx.sender(), true)).map(|c| c.fighter).collect();
+    if !public.is_empty() {
+        return public;
+    }
     ctx.db.fighter_near().viewer().filter(ctx.sender()).map(|f| f.copy.fighter).collect()
 }
 
 /// The far tier of `seen_fighters`.
 #[spacetimedb::view(accessor = seen_fighters_far, public, primary_key = id)]
 pub fn seen_fighters_far(ctx: &ViewContext) -> Vec<Fighter> {
+    let public: Vec<Fighter> = ctx.db.seen_fighter_copy().viewer_near().filter((ctx.sender(), false)).map(|c| c.fighter).collect();
+    if !public.is_empty() {
+        return public;
+    }
     ctx.db.fighter_seen().viewer().filter(ctx.sender()).map(|f| f.fighter).collect()
 }
 

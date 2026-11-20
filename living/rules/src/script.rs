@@ -666,6 +666,13 @@ pub struct Laws {
     /// viewer. Off (the kill switch), every mirror row goes in one tick. Delivery only: the view
     /// shows the same either way.
     pub characters_table_on: bool,
+    /// Whether a player's copies of the fighters it perceives (`seen_fighters` and its tiers) live
+    /// in the public `seen_fighter_copy` table, filtered per client by row-level security (views
+    /// step 3, docs/BATTLE_VIEWERS.md, addendum 5), instead of the private `fighter_seen` and
+    /// `fighter_near`. Moved at each viewer's frame; off (the kill switch, and the default until the
+    /// client reads it), every public copy goes back to the private tables in one tick. Delivery
+    /// only: the views show the same either way.
+    pub fighter_tables_on: bool,
     /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
     /// and counted (`alarm:differed`).
     pub alarm_cells_check: bool,
@@ -829,6 +836,7 @@ impl Default for Laws {
             near_tier_on: true,
             motion_tables_on: true,
             characters_table_on: true,
+            fighter_tables_on: false,
             alarm_cells_check: false,
             status_parts: true,
             status_parts_check: false,
@@ -3176,6 +3184,7 @@ impl Scripts {
             near_tier_on: flag("near_tier_on", l.near_tier_on),
             motion_tables_on: flag("motion_tables_on", l.motion_tables_on),
             characters_table_on: flag("characters_table_on", l.characters_table_on),
+            fighter_tables_on: flag("fighter_tables_on", l.fighter_tables_on),
             alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
             status_parts: flag("status_parts", l.status_parts),
             status_parts_check: flag("status_parts_check", l.status_parts_check),
@@ -3426,13 +3435,15 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 10] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 11] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
     ("motion_tables_on", ValueOnly::Delivery),
     // battle-views: the mirror of a player's projections (`perception.rs`, `seen_character_copy`).
     ("characters_table_on", ValueOnly::Delivery),
+    // views step 3: where a player's fighter copies live (`frame.rs`, `seen_fighter_copy`).
+    ("fighter_tables_on", ValueOnly::Delivery),
     ("cover_sight_on", ValueOnly::Cover),
     ("cover_eye_height_m", ValueOnly::Cover),
     ("cover_brush_on", ValueOnly::Cover),

@@ -95,7 +95,7 @@ fn stream_callbacks(c: &DbConnection, signals: Arc<Mutex<Signals>>) {
     primary_tables!(insert_delete, c, signals);
     primary_tables!(updates, c, signals);
     // `seen_body_copy` (battle-views) has no primary key: a change is a delete and an insert.
-    insert_delete!(c, signals; my_deliberations, my_combat, my_readiness, my_skill_uses, seen_body_copy);
+    insert_delete!(c, signals; my_deliberations, my_combat, my_readiness, my_skill_uses, seen_body_copy, seen_fighter_copy);
     // The cue event tables (docs/PERCEPTION.md, "Cues"): inserts only, never cached.
     macro_rules! events {
         ($c:expr, $signals:expr; $($table:ident),*) => { $(
@@ -118,7 +118,7 @@ fn stream_initial(c: &DbConnection, r: &Request, identity: &str) {
         )* };
     }
     primary_tables!(rows, c, tables);
-    rows!(c, tables; my_deliberations, my_combat, my_readiness, my_skill_uses, seen_body_copy);
+    rows!(c, tables; my_deliberations, my_combat, my_readiness, my_skill_uses, seen_body_copy, seen_fighter_copy);
     emit(&json!({"event":"initial","identity":identity,"db":r.db,
         "queries":r.queries,"seconds":r.seconds,"tables":tables}));
 }

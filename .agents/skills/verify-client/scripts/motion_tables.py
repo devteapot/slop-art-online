@@ -47,8 +47,10 @@ from earshot import call, open_line, sql  # noqa: E402
 
 TABLE = "SELECT * FROM seen_body_copy"
 CHARS = "SELECT * FROM seen_character_copy"
-VIEWS = ["SELECT * FROM seen_bodies", "SELECT * FROM seen_bodies_near", "SELECT * FROM seen_bodies_far", "SELECT * FROM my_body", "SELECT * FROM seen_characters"]
-LAWS = ("motion_tables_on", "characters_table_on")
+FIGHT = "SELECT * FROM seen_fighter_copy"
+VIEWS = ["SELECT * FROM seen_bodies", "SELECT * FROM seen_bodies_near", "SELECT * FROM seen_bodies_far", "SELECT * FROM my_body", "SELECT * FROM seen_characters",
+         "SELECT * FROM seen_fighters", "SELECT * FROM seen_fighters_near", "SELECT * FROM seen_fighters_far"]
+LAWS = ("motion_tables_on", "characters_table_on", "fighter_tables_on")
 
 
 def player_sql(db, token, query):
@@ -64,7 +66,7 @@ def final(events, table):
     """A table's rows at the end of a probe's stream (its initial rows, then each change), by `id`;
     `seen_body_copy` (no primary key: a change is a delete and an insert, in either order) by its
     `body`, as the set of rows the stream leaves."""
-    if table == "seen_body_copy":
+    if table in ("seen_body_copy", "seen_fighter_copy"):
         # A set of rows: the probe streams from the connection on, so the initial rows arrive both
         # as inserts and in the `initial` snapshot; a change's delete and insert carry different rows.
         rows = set()
@@ -140,13 +142,16 @@ def main():
     pos = {x["id"]: (x["x"], x["y"]) for x in sql(rid, "SELECT id, x, y FROM body")}
     seconds = 16
     paths = {w: out / f"motion-tables-{w}.jsonl" for w in ("a", "b", "c", "anon")}
-    threads = [stream(db, tok["a"], [TABLE, CHARS] + VIEWS, seconds, paths["a"]),
-               stream(db, tok["b"], [TABLE, CHARS], seconds, paths["b"]),
-               stream(db, tok["c"], [TABLE, CHARS], seconds, paths["c"]),
-               stream(db, None, [TABLE, CHARS], seconds, paths["anon"])]
+    threads = [stream(db, tok["a"], [TABLE, CHARS, FIGHT] + VIEWS, seconds, paths["a"]),
+               stream(db, tok["b"], [TABLE, CHARS, FIGHT], seconds, paths["b"]),
+               stream(db, tok["c"], [TABLE, CHARS, FIGHT], seconds, paths["c"]),
+               stream(db, None, [TABLE, CHARS, FIGHT], seconds, paths["anon"])]
     time.sleep(2.0)
+    # A fight, so the fighter copies have rows (views step 3): B strikes A once.
+    hcall(db, tok["b"], "use_skill", ["strike", a, pos[a][0], pos[a][1]])
     peek = stream(db, tok["b"], [f"SELECT * FROM seen_body_copy WHERE viewer = 0x{ident['a']}",
-                                 f"SELECT * FROM seen_character_copy WHERE viewer = 0x{ident['a']}"], 10, out / "motion-tables-b-peek.jsonl")
+                                 f"SELECT * FROM seen_character_copy WHERE viewer = 0x{ident['a']}",
+                                 f"SELECT * FROM seen_fighter_copy WHERE viewer = 0x{ident['a']}"], 10, out / "motion-tables-b-peek.jsonl")
     public = sorted(set(re.findall(r"#\[spacetimedb::table\(accessor = (\w+), public", "\n".join(
         p.read_text() for p in (ROOT / "living/authority/src").glob("*.rs")))))
     all_c = stream(db, tok["c"], [f"SELECT * FROM {t}" for t in public], 10, out / "motion-tables-c-all-names.jsonl")
@@ -156,6 +161,9 @@ def main():
     b_peek_sql = player_sql(db, tok["b"], f"SELECT * FROM seen_body_copy WHERE viewer = 0x{ident['a']}")
     b_chars_sql = player_sql(db, tok["b"], "SELECT * FROM seen_character_copy")
     b_peek_chars = player_sql(db, tok["b"], f"SELECT * FROM seen_character_copy WHERE viewer = 0x{ident['a']}")
+    time.sleep(1.0)
+    b_fight_sql = player_sql(db, tok["b"], FIGHT)
+    b_peek_fight = player_sql(db, tok["b"], f"SELECT * FROM seen_fighter_copy WHERE viewer = 0x{ident['a']}")
     for dx in (1, -1, 1):
         hcall(db, tok["b"], "human_move", [dx, 0, False])
         time.sleep(0.4)
@@ -175,7 +183,14 @@ def main():
     by_body = {b: r for (v, b), r in a_table.items() if v == ident["a"]}
     private_a = sql(rid, f"SELECT COUNT(*) AS n FROM motion_seen WHERE viewer = 0x{ident['a']}")[0]["n"] + \
         sql(rid, f"SELECT COUNT(*) AS n FROM motion_near WHERE viewer = 0x{ident['a']}")[0]["n"]
-    foreign_c = lambda evs: [r for t in ("seen_body_copy", "seen_character_copy") for r in copies(evs, t) if norm(r["viewer"]) != ident["c"]]
+    foreign_c = lambda evs: [r for t in ("seen_body_copy", "seen_character_copy", "seen_fighter_copy") for r in copies(evs, t) if norm(r["viewer"]) != ident["c"]]
+    gotf = {w: copies(e, "seen_fighter_copy") for w, e in ev.items()}
+    a_ftable = final(ev["a"], "seen_fighter_copy")
+    f_by_body = {bd: r for (v, bd), r in a_ftable.items() if v == ident["a"]}
+    a_fview = final(ev["a"], "seen_fighters")
+    a_fnear, a_ffar = final(ev["a"], "seen_fighters_near"), final(ev["a"], "seen_fighters_far")
+    private_fa = sql(rid, f"SELECT COUNT(*) AS n FROM fighter_seen WHERE viewer = 0x{ident['a']}")[0]["n"] + \
+        sql(rid, f"SELECT COUNT(*) AS n FROM fighter_near WHERE viewer = 0x{ident['a']}")[0]["n"]
     gotc = {w: copies(e, "seen_character_copy") for w, e in ev.items()}
     a_mirror = {r["row"]["id"]: r["row"] for r in final(ev["a"], "seen_character_copy").values()}
     a_chars = final(ev["a"], "seen_characters")
@@ -200,6 +215,12 @@ def main():
         "mirror: C receives only its own rows; the anonymous connection none": all(norm(r["viewer"]) == ident["c"] for r in gotc["c"]) and not gotc["anon"],
         "mirror: B subscribing A's rows by identity, and asking by SQL, gets none; its own SQL only its own": not copies(peek_ev, "seen_character_copy") and not b_peek_chars and bool(b_chars_sql) and all(norm(r["viewer"]) == ident["b"] for r in b_chars_sql),
         "mirror: A's table ends on exactly its seen_characters view's rows": bool(a_chars) and a_mirror == a_chars,
+        "fighters: every row A receives names A, every row B receives names B, C only its own; the anonymous connection none": bool(gotf["a"]) and all(norm(r["viewer"]) == ident["a"] for r in gotf["a"])
+        and all(norm(r["viewer"]) == ident["b"] for r in gotf["b"]) and all(norm(r["viewer"]) == ident["c"] for r in gotf["c"]) and not gotf["anon"],
+        "fighters: B subscribing A's rows by identity, and asking by SQL, gets none; its own SQL only its own": not copies(peek_ev, "seen_fighter_copy") and not b_peek_fight and all(norm(r["viewer"]) == ident["b"] for r in b_fight_sql),
+        "fighters: A's table holds B (it fought) and ends on exactly its seen_fighters view's rows": b in f_by_body and {k: r["fighter"] for k, r in f_by_body.items()} == a_fview,
+        "fighters: A's near flags split exactly as its fighter tier views": {k for k, r in f_by_body.items() if r["near"]} == set(a_fnear) and {k for k, r in f_by_body.items() if not r["near"]} == set(a_ffar),
+        "fighters: the private fighter tables hold none of A's copies while the law is on": private_fa == 0,
     }
     # The kill switch: off, every public copy goes back at once; the views still show the scene.
     seen_on = {r["id"] for r in player_sql(db, tok["a"], "SELECT id FROM seen_bodies")}
@@ -207,6 +228,7 @@ def main():
     script_rev = sorted((r["name"], r["revision"]) for r in sql(rid, "SELECT name, revision FROM script"))
     off_path = out / "motion-tables-off-a.jsonl"
     chars_on = {r["id"] for r in player_sql(db, tok["a"], "SELECT id FROM seen_characters")}
+    fight_on = {r["id"] for r in player_sql(db, tok["a"], "SELECT id FROM seen_fighters")}
     off_stream = stream(db, tok["a"], [TABLE], 6, off_path)
     time.sleep(2.0)
     for law in LAWS:
@@ -214,6 +236,10 @@ def main():
     time.sleep(1.0)
     owner_after = sql(rid, "SELECT COUNT(*) AS n FROM seen_body_copy")[0]["n"]
     owner_chars = sql(rid, "SELECT COUNT(*) AS n FROM seen_character_copy")[0]["n"]
+    owner_fight = sql(rid, "SELECT COUNT(*) AS n FROM seen_fighter_copy")[0]["n"]
+    fight_off = {r["id"] for r in player_sql(db, tok["a"], "SELECT id FROM seen_fighters")}
+    private_foff = sql(rid, f"SELECT COUNT(*) AS n FROM fighter_seen WHERE viewer = 0x{ident['a']}")[0]["n"] + \
+        sql(rid, f"SELECT COUNT(*) AS n FROM fighter_near WHERE viewer = 0x{ident['a']}")[0]["n"]
     chars_off = {r["id"] for r in player_sql(db, tok["a"], "SELECT id FROM seen_characters")}
     seen_off = {r["id"] for r in player_sql(db, tok["a"], "SELECT id FROM seen_bodies")}
     private_off = sql(rid, f"SELECT COUNT(*) AS n FROM motion_seen WHERE viewer = 0x{ident['a']}")[0]["n"] + \
@@ -226,10 +252,13 @@ def main():
     back = player_sql(db, tok["a"], "SELECT * FROM seen_body_copy")
     back_chars = {r["row"][0] if isinstance(r["row"], list) else r["row"]["id"] for r in player_sql(db, tok["a"], "SELECT * FROM seen_character_copy")}
     chars_back = {r["id"] for r in player_sql(db, tok["a"], "SELECT id FROM seen_characters")}
+    fight_back = {r["body"] for r in player_sql(db, tok["a"], "SELECT * FROM seen_fighter_copy")}
+    fight_view_back = {r["id"] for r in player_sql(db, tok["a"], "SELECT id FROM seen_fighters")}
     script_rev_after = sorted((r["name"], r["revision"]) for r in sql(rid, "SELECT name, revision FROM script"))
     override = [r for r in sql(rid, "SELECT * FROM law_override") if r.get("name") in LAWS]
     for law in LAWS:
-        restore = had.get(law, "true")  # the shipped default since bv-defaults-on
+        # The shipped defaults: the copy tables on since bv-defaults-on, the fighter table off (views step 3).
+        restore = had.get(law, "false" if law == "fighter_tables_on" else "true")
         call(rid, "set_world_law", [law, restore if isinstance(restore, str) else json.dumps(restore)])
     checks.update({
         "law off: the table is empty to the owner within a second": owner_after == 0,
@@ -238,12 +267,14 @@ def main():
         "law on again: A's rows return within a second": {r["body"] for r in back} == seen_on,
         "law off: the mirror is empty to the owner within a second, and A's seen_characters view is unchanged": owner_chars == 0 and bool(chars_on) and chars_off == chars_on,
         "law on again: A's mirror returns within a second, on its view's rows": back_chars == chars_back and bool(back_chars),
-        "both switches went through law_override rows, with no reinstall (the script rows' revisions unchanged)": len(override) == 2 and script_rev == script_rev_after,
+        "fighters, law off: the table is empty to the owner within a second, A's seen_fighters view unchanged, from the private tables": owner_fight == 0 and bool(fight_on) and fight_off == fight_on and private_foff == len(fight_on),
+        "fighters, law on again: A's rows return within a second, on its view's rows": bool(fight_back) and fight_back == fight_view_back,
+        "every switch went through law_override rows, with no reinstall (the script rows' revisions unchanged)": len(override) == len(LAWS) and script_rev == script_rev_after,
     })
     result = {"a": a, "b": b, "c": c, "f": f, "dist": {k: round(math.dist(pos[a], pos[k]), 2) for k in (b, c, f)},
               "rows": {w: len(r) for w, r in got.items()}, "a_table": sorted(by_body), "a_view": sorted(a_view),
               "near": sorted(a_near), "far": sorted(a_far), "off": {"owner_rows": owner_after, "seen": sorted(seen_off), "private": private_off},
-              "back": len(back), "mirror": {"a": sorted(a_mirror), "view": sorted(a_chars), "owner_after_off": owner_chars, "back": sorted(back_chars)}, "checks": checks}
+              "back": len(back), "fighters": {"a": sorted(f_by_body), "view": sorted(a_fview), "near": sorted(a_fnear), "far": sorted(a_ffar), "owner_after_off": owner_fight, "back": sorted(fight_back)}, "mirror": {"a": sorted(a_mirror), "view": sorted(a_chars), "owner_after_off": owner_chars, "back": sorted(back_chars)}, "checks": checks}
     (out / "motion_tables.json").write_text(json.dumps(result, indent=1) + "\n")
     for k, v in checks.items():
         print(("PASS " if v else "FAIL ") + k)
