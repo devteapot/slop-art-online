@@ -1304,7 +1304,8 @@ def camera(run, c):
                 f"clear_{stop}=place_at|{{me}}|{street[0]}|{street[1]}",
                 f"roof_{stop}=place_at|{{me}}|{roof[0]}|{roof[1]}",
             ]
-        with resident_fixture(run, ids):
+        # The scene turns `fov_on` and the clock; the fixture puts the world's own law and daylight back.
+        with sight_fixture(run, {"fov_on": "false"}), resident_fixture(run, ids):
             out, code, text = drive(run, f"{s}-{field}", plan + "quit",
                                     places=[f"{front}:0:-2.5", f"{back}:2.5:4.5", f"{behind_wall}:1.0:-14.0"], syncs=syncs + roof_syncs,
                                     env={"LIVING_GAME_DEV": "1", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})

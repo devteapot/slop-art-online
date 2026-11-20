@@ -108,9 +108,12 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     // staggered across ticks so a battle does not land in one tick.
     let phase = common::span("tick.combat");
     let fighting: Vec<u32> = ctx.db.mind_state().fast_until().filter(now..).map(|m| m.id).filter(|id| (*id as u64 + k_tick) % 4 == 0).collect();
+    common::diag(|| "eval:combat_due", fighting.len() as u64);
     for id in fighting {
         if done.insert(id) {
             common::diag(|| "eval:combat", 1);
+            // While profiling with detail: each cadence evaluation (docs/COMBAT_PHASE.md).
+            let _detail = common::detail_span("eval.combat");
             brain::evaluate(ctx, id, now);
         }
     }
@@ -134,6 +137,13 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     for id in slot_ids {
         if done.insert(id) {
             common::diag(|| "eval:slot", 1);
+            // While profiling with detail: each slot evaluation, fighters' apart (docs/COMBAT_PHASE.md).
+            let _detail = if common::profiling() {
+                let fighting = ctx.db.mind_state().id().find(id).is_some_and(|m| m.fast_until >= now);
+                common::detail_span(if fighting { "eval.slot.fight" } else { "eval.slot.calm" })
+            } else {
+                None
+            };
             brain::evaluate(ctx, id, now);
         }
     }

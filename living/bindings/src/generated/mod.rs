@@ -56,10 +56,15 @@ pub mod connection_table;
 pub mod connection_type;
 pub mod copy_state_table;
 pub mod copy_state_type;
+pub mod cover_derivation_table;
+pub mod cover_derivation_type;
 pub mod cover_ground_table;
 pub mod cover_ground_type;
 pub mod cover_law_table;
 pub mod cover_law_type;
+pub mod cover_step_reducer;
+pub mod cover_timer_table;
+pub mod cover_timer_type;
 pub mod create_floor_reducer;
 pub mod cry_prompt_type;
 pub mod cue_fire_type;
@@ -432,10 +437,15 @@ pub use connection_table::*;
 pub use connection_type::Connection;
 pub use copy_state_table::*;
 pub use copy_state_type::CopyState;
+pub use cover_derivation_table::*;
+pub use cover_derivation_type::CoverDerivation;
 pub use cover_ground_table::*;
 pub use cover_ground_type::CoverGround;
 pub use cover_law_table::*;
 pub use cover_law_type::CoverLaw;
+pub use cover_step_reducer::cover_step;
+pub use cover_timer_table::*;
+pub use cover_timer_type::CoverTimer;
 pub use create_floor_reducer::create_floor;
 pub use cry_prompt_type::CryPrompt;
 pub use cue_fire_type::CueFire;
@@ -773,6 +783,9 @@ pub enum Reducer {
     BackfillSex,
     ClientConnected,
     ClientDisconnected,
+    CoverStep {
+        t: CoverTimer,
+    },
     CreateFloor {
         seed_json: String,
     },
@@ -988,6 +1001,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::BackfillSex => "backfill_sex",
             Reducer::ClientConnected => "client_connected",
             Reducer::ClientDisconnected => "client_disconnected",
+            Reducer::CoverStep { .. } => "cover_step",
             Reducer::CreateFloor { .. } => "create_floor",
             Reducer::GenesisStep { .. } => "genesis_step",
             Reducer::GrantItems { .. } => "grant_items",
@@ -1059,6 +1073,9 @@ impl __sdk::Reducer for Reducer {
             }
             Reducer::ClientDisconnected => {
                 __sats::bsatn::to_vec(&client_disconnected_reducer::ClientDisconnectedArgs {})
+            }
+            Reducer::CoverStep { t } => {
+                __sats::bsatn::to_vec(&cover_step_reducer::CoverStepArgs { t: t.clone() })
             }
             Reducer::CreateFloor { seed_json } => {
                 __sats::bsatn::to_vec(&create_floor_reducer::CreateFloorArgs {
@@ -1404,8 +1421,10 @@ pub struct DbUpdate {
     community: __sdk::TableUpdate<Community>,
     connection: __sdk::TableUpdate<Connection>,
     copy_state: __sdk::TableUpdate<CopyState>,
+    cover_derivation: __sdk::TableUpdate<CoverDerivation>,
     cover_ground: __sdk::TableUpdate<CoverGround>,
     cover_law: __sdk::TableUpdate<CoverLaw>,
+    cover_timer: __sdk::TableUpdate<CoverTimer>,
     cue: __sdk::TableUpdate<Cue>,
     deliberation: __sdk::TableUpdate<Deliberation>,
     doing: __sdk::TableUpdate<Doing>,
@@ -1617,12 +1636,18 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "copy_state" => db_update
                     .copy_state
                     .append(copy_state_table::parse_table_update(table_update)?),
+                "cover_derivation" => db_update
+                    .cover_derivation
+                    .append(cover_derivation_table::parse_table_update(table_update)?),
                 "cover_ground" => db_update
                     .cover_ground
                     .append(cover_ground_table::parse_table_update(table_update)?),
                 "cover_law" => db_update
                     .cover_law
                     .append(cover_law_table::parse_table_update(table_update)?),
+                "cover_timer" => db_update
+                    .cover_timer
+                    .append(cover_timer_table::parse_table_update(table_update)?),
                 "cue" => db_update
                     .cue
                     .append(cue_table::parse_table_update(table_update)?),
@@ -2120,12 +2145,18 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.copy_state = cache
             .apply_diff_to_table::<CopyState>("copy_state", &self.copy_state)
             .with_updates_by_pk(|row| &row.viewer);
+        diff.cover_derivation = cache
+            .apply_diff_to_table::<CoverDerivation>("cover_derivation", &self.cover_derivation)
+            .with_updates_by_pk(|row| &row.id);
         diff.cover_ground = cache
             .apply_diff_to_table::<CoverGround>("cover_ground", &self.cover_ground)
             .with_updates_by_pk(|row| &row.id);
         diff.cover_law = cache
             .apply_diff_to_table::<CoverLaw>("cover_law", &self.cover_law)
             .with_updates_by_pk(|row| &row.id);
+        diff.cover_timer = cache
+            .apply_diff_to_table::<CoverTimer>("cover_timer", &self.cover_timer)
+            .with_updates_by_pk(|row| &row.scheduled_id);
         diff.cue = cache
             .apply_diff_to_table::<Cue>("cue", &self.cue)
             .with_updates_by_pk(|row| &row.id);
@@ -2593,11 +2624,17 @@ impl __sdk::DbUpdate for DbUpdate {
                 "copy_state" => db_update
                     .copy_state
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "cover_derivation" => db_update
+                    .cover_derivation
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "cover_ground" => db_update
                     .cover_ground
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "cover_law" => db_update
                     .cover_law
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "cover_timer" => db_update
+                    .cover_timer
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "cue" => db_update
                     .cue
@@ -3083,11 +3120,17 @@ impl __sdk::DbUpdate for DbUpdate {
                 "copy_state" => db_update
                     .copy_state
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "cover_derivation" => db_update
+                    .cover_derivation
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "cover_ground" => db_update
                     .cover_ground
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "cover_law" => db_update
                     .cover_law
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "cover_timer" => db_update
+                    .cover_timer
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "cue" => db_update
                     .cue
@@ -3529,8 +3572,10 @@ pub struct AppliedDiff<'r> {
     community: __sdk::TableAppliedDiff<'r, Community>,
     connection: __sdk::TableAppliedDiff<'r, Connection>,
     copy_state: __sdk::TableAppliedDiff<'r, CopyState>,
+    cover_derivation: __sdk::TableAppliedDiff<'r, CoverDerivation>,
     cover_ground: __sdk::TableAppliedDiff<'r, CoverGround>,
     cover_law: __sdk::TableAppliedDiff<'r, CoverLaw>,
+    cover_timer: __sdk::TableAppliedDiff<'r, CoverTimer>,
     cue: __sdk::TableAppliedDiff<'r, Cue>,
     deliberation: __sdk::TableAppliedDiff<'r, Deliberation>,
     doing: __sdk::TableAppliedDiff<'r, Doing>,
@@ -3717,12 +3762,18 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Community>("community", &self.community, event);
         callbacks.invoke_table_row_callbacks::<Connection>("connection", &self.connection, event);
         callbacks.invoke_table_row_callbacks::<CopyState>("copy_state", &self.copy_state, event);
+        callbacks.invoke_table_row_callbacks::<CoverDerivation>(
+            "cover_derivation",
+            &self.cover_derivation,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<CoverGround>(
             "cover_ground",
             &self.cover_ground,
             event,
         );
         callbacks.invoke_table_row_callbacks::<CoverLaw>("cover_law", &self.cover_law, event);
+        callbacks.invoke_table_row_callbacks::<CoverTimer>("cover_timer", &self.cover_timer, event);
         callbacks.invoke_table_row_callbacks::<Cue>("cue", &self.cue, event);
         callbacks.invoke_table_row_callbacks::<Deliberation>(
             "deliberation",
@@ -4704,8 +4755,10 @@ impl __sdk::SpacetimeModule for RemoteModule {
         community_table::register_table(client_cache);
         connection_table::register_table(client_cache);
         copy_state_table::register_table(client_cache);
+        cover_derivation_table::register_table(client_cache);
         cover_ground_table::register_table(client_cache);
         cover_law_table::register_table(client_cache);
+        cover_timer_table::register_table(client_cache);
         cue_table::register_table(client_cache);
         deliberation_table::register_table(client_cache);
         doing_table::register_table(client_cache);
@@ -4865,8 +4918,10 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "community",
         "connection",
         "copy_state",
+        "cover_derivation",
         "cover_ground",
         "cover_law",
+        "cover_timer",
         "cue",
         "deliberation",
         "doing",

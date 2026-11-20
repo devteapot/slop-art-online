@@ -128,6 +128,8 @@ and the [independent clock implementation](INDEPENDENT_PHYSICAL_CLOCK.md).
 
 **The 200-character battle (2026-11-12, diagnosis only):** [battle scale](BATTLE_SCALE.md) measures a battle of 100 and 200 minded fighters on the island. It collapses within minutes, from 42 to under 2 steps a second. The cause is in waking and noticing, not in writing what was seen: every fight start wakes every onlooker, every evaluation re-checks everything in sight for novelty, and a per-character familiarity cap of 256 forgets what is still in view, so remains are noticed again and again. It proposes a fix within the no-attention-cap rule; nothing is built yet.
 
+**Combat phase with viewers (2026-11-20, diagnosis and plan):** [combat phase](COMBAT_PHASE.md) breaks down the 200-fighter Cullet battle by span on the Spark. Without viewers it holds 60 ticks/s on a fast core: about 210 ms/s of tick, with fighters' evaluations costing per fighter, not per pair. 216 SDK viewers on a 10 m ring saturate the database thread at 1.7–1.9 ticks/s. The viewer side costs about 130 µs a second per (viewer, creature in sight) pair: view rebuilds, perception sweeps, frames and the commit's remainder. The note orders the fixes and marks which need the owner's approval as laws.
+
 Future performance work should name the failing requirement, hypothesized cause,
 measured result and remaining gap. Average world updates/s is a diagnostic, not
 the completion criterion. Preserve original failed outcomes and historical targets.

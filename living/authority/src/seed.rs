@@ -1000,7 +1000,9 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
             (r.to_map(), Some(r))
         }
         Some(m) if m.kind == "land" => {
-            let h = crate::island::generate(s.seed, m).expect("land seed");
+            // Cover geometry only for a world whose cover law is on (docs/COVER_SIGHT.md,
+            // "Cover geometry"): the seed's laws are installed before this (`floor::begin`).
+            let h = crate::island::generate(s.seed, m, common::laws(ctx).cover_sight_on).expect("land seed");
             let map = h.map.clone();
             hosted = Some(h);
             (map, None)
@@ -2474,7 +2476,7 @@ mod tests {
     fn the_cullet_seed_is_hosted() {
         let s: Seed = serde_json::from_str(include_str!("../../seeds/cullet.json")).expect("cullet seed");
         let m = s.map.as_ref().unwrap();
-        if let Err(e) = crate::island::generate(s.seed, m) {
+        if let Err(e) = crate::island::generate(s.seed, m, true) {
             panic!("cullet: {e}");
         }
     }

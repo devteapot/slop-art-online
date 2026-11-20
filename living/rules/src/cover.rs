@@ -88,11 +88,22 @@ fn dm(metres: f32) -> i16 {
     (metres * 10.0).round() as i16
 }
 
-/// Sample the already generated land at tile centres. The authority persists this at genesis.
+/// Sample the already generated land at tile centres. The authority persists this, in bands of
+/// [`ground_range`], when the world's cover law is on (docs/COVER_SIGHT.md, "Cover geometry").
 pub fn ground(land: &Land) -> Arc<[i16]> {
-    (0..land.size).flat_map(|y| (0..land.size).map(move |x|
+    ground_range(land, 0..(land.size as usize).pow(2)).into()
+}
+
+/// [`ground`]'s samples for row-major tile indices `range` (clipped to the land): the same
+/// values, so a land sampled band by band keeps exactly the rows it would keep sampled whole.
+/// The sampling is the cost of cover geometry: about 4 × 10³ (the island) to 10⁴ (a dense city)
+/// WASM instructions a tile.
+pub fn ground_range(land: &Land, range: std::ops::Range<usize>) -> Vec<i16> {
+    let n = land.size as usize;
+    (range.start.min(n * n)..range.end.min(n * n)).map(|i| {
+        let (x, y) = (i % n, i / n);
         dm(land.height(x as f32 + 0.5, y as f32 + 0.5))
-    )).collect()
+    }).collect()
 }
 
 impl Mask {
@@ -320,6 +331,21 @@ mod tests {
 
     fn blank() -> Map {
         Map::from_chunks(16, 16, std::iter::empty())
+    }
+
+    /// Bands sampled one by one (staged genesis, a derivation after a switch-on) are exactly
+    /// the whole land's samples, so their `cover_ground` rows are the same.
+    #[test]
+    fn ground_in_bands_is_ground() {
+        let land = crate::land::generate_default(7, 256);
+        let whole = ground(&land);
+        let band = 5_000;
+        let mut parts = Vec::new();
+        for i in 0..(256usize * 256).div_ceil(band) {
+            parts.extend(ground_range(&land, i * band..(i + 1) * band));
+        }
+        assert_eq!(&parts[..], &whole[..]);
+        assert!(ground_range(&land, 70_000..80_000).is_empty());
     }
 
     #[test]
