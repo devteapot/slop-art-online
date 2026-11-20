@@ -208,3 +208,73 @@ For N1, measure an accepted command's first authoritative body write and its dis
 For N2, close the gate after dispatch on a known route and time a demonstrated route change against actual gate observation. That fixture would separate geometric eligibility, knowledge, collision and response. An indexed, route-local wake for a newly observed obstruction could shorten time before the next steering decision if it depends on that observation. A 100 ms local cadence would reduce the nominal two-second segment wait ceiling by about 1.9 s for affected walkers. Shortening global sweeps cannot remove the observed post-memory delay in the law-off fixture.
 
 Evidence is in `~/slop-evidence/input-latency-2026-11-19.tar.zst` with its SHA-256 sidecar. It includes the run scripts, pause probes, traces, full authority marker exports and scored reports. The separate battle commitlog archive was created by the verified scratch-world cleanup. No paid provider or rendered game client was exercised.
+
+## Mind dispatch profile (fast-dispatch, 2026-11-20)
+
+Branch `fast-dispatch`. The question was where the mind service spends the time between a request reaching it (the SDK callback) and the model request, and what changes about 140 s into a 200-fighter battle, when grants fall away on main and on `grant-stall` alike.
+
+### Instrumentation
+
+`LIVING_INPUT_LATENCY=1` (set by `battle_diag.py --input-latency`) turns on `living/mind/src/prof.rs`; off, each entry point is one cached flag test.
+
+- **Series**, logged every 5 s as `input_latency_prof <ms> {json}` in `mind.log` (n, sum, p50/p90/p95/p99, max): event-queue age (`event.<kind>.wait`) and handling time (`.handle`) per event kind; the 2 s checks (`tick.*`); SDK callback time (`sdk.cb.*`); waits for and holds of the mind's own mutexes (`lock.<name>.wait/.hold`, and holds of 2 ms or more by caller line; `prof::Mx` is `std::sync::Mutex` with a name); a probe that reads the SDK client cache every 2 ms (`sdk.cache_lock_probe`: how long a read waits for the cache's one lock); tokio worker busy share, global queue and live tasks each second, and a 10 ms heartbeat's lateness on the workers (`rt.*`).
+- **Per item**: each deliberation journals its steps to `outcomes/input_latency_deliberation.jsonl` (SDK callback, dispatch, spawn, the 400 ms gather, request found, gate, start, lane, character, recall, experiences, context, prompt, queue entry, grant, reply; the authority's `requested_ms`/`updated_ms`); fast asks add their grant time to `outcomes/input_latency_fast.jsonl`.
+- `living/tools/dispatch_profile.py RUN_DIR` reports both for the measured window; lanes come from the fake provider's timing header (`battle_diag.py --fixed-site`, from `urgent-merge-ab2-control`).
+- The CPU profile used a local build only (pprof-rs at 250 Hz, SIGPROF, libc frames dropped, so memcpy and malloc inside clones are undercounted); its patch and output are in the evidence archive, not in the tree.
+
+### What the profile found (main + timing only, `7e00f3e7`; one profiled run `minds-fd-prof1`, then four A runs below)
+
+The fixture: 200 fixed-site fighters striking in place with zero damage, 16 walkers, 310 ambient people, fake model (think 5 s, compile 4 s, consolidate 4 s, fast 1 s), fast lane on with `keep` replies, 64 shared slots, one mind connection, a fresh private SpacetimeDB 2.14.1 container pinned to CPUs 5–9,15–19.
+
+1. **The SDK client cache's one lock, held by whole-table clones.** Every read of the Rust SDK's client cache takes one `std::sync::Mutex`, and `TableHandle::iter` clones every row of the table while holding it ([client_cache.rs `with_table_cache`/`iter`](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/sdks/rust/src/client_cache.rs)); the SDK also takes it to apply each update ([db_connection.rs `apply_update`](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/sdks/rust/src/db_connection.rs)). The generated cache offers only the experience table's primary key, so the mind found "a character's experiences" by cloning the whole subscribed table: `Minds::experiences` (every prompt, consolidation, the fast lane, `only_far` once per person a consolidation batch names), the lane test and the consolidation inbox. The table grows about 360 rows a second in this battle (78k rows at 3 min, 88k at 4 min), so each clone grows with it: 43.6 ms per `experiences()` call at the median of 5 s windows, 6,313 calls in the 300 s window (265 s of clone under the lock), plus 195 s of lane-test scans.
+2. **What changes at about 140 s.** Once those clones ask for more lock time than there is, a convoy forms. In the profiled run the cache probe's p95 per 5 s window was 30–70 ms before 140 s, then 200 ms, then 0.4–1.7 s; the worker heartbeat stopped for up to 37.7 s at a time; the event loop waited up to 120 s (6,451 events queued); think and compile sends fell from about 45 per 5 s to 0–13. Across the four A runs the same collapse comes at 180–210 s: model sends per 30 s were 228–288 for the first 150–180 s and then 1–87. The SDK thread waits on the same lock, so receipt to callback grows too (fast issue→callback p95 334–411 ms on A against 98–116 ms on B).
+3. **Consolidation's name lookup.** 62% of the sampled (non-libc) CPU was consolidation, 40% of it `named_people`: for each experience of a batch it cloned every character and lowercased every name. Consolidations begin to come due about 90–140 s in (the 90 s minimum gap), which is why the slowdown starts then and not at once.
+4. **The event loop ran the 2 s checks inline.** `check_consolidation` cloned the whole experience table on the loop's own thread: up to 43.8 s for one pass in the profiled run, and every event (fast asks included) waited behind it. Fast callback→dispatch p95 was 0.6–1.1 s on the A runs, up to 58 s in the profiled run.
+5. **A 2 s wait for a persona that never comes.** A person with nothing to start an identity from (no sheet, background, parents or seed entry: the battle's spawned bodies, or a body the minds take over) wrote no persona, and each of its deliberations then polled 20 × 100 ms for one. That was 2.4–3.7 s of the 3.1–3.2 s median pre-queue time on A.
+6. **Not the scheduler queue lock, not the mind's own mutexes.** `llm_queue` waits were 21.9 s summed over 655,760 locks; `actors` holds of 2 ms or more were one call site (the consolidation check) at 58 ms median. The 50 ms poll added up to 40 ms a grant behind a pacing deadline.
+
+### What changed
+
+- **Keyed reads instead of clones.** `mind.rs` `Index` keeps experience ids by observer and each character's pending request, from the SDK's insert, update and delete callbacks (initial subscription rows arrive as inserts, [db_connection.rs `SubscribeApplied`](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/sdks/rust/src/db_connection.rs)). Rows are read from the cache by primary key, so the cache stays the one source of truth and what a mind reads is unchanged. Experience callbacks run before `fast_ask`'s in a message (the generated `invoke_row_callbacks` order), so a fast ask finds its message's experiences. `named_people_among` reads names and whom one knows once per batch.
+- **Own channels and workers.** Fast asks: their own channel, runtime (`LIVING_FAST_WORKERS`, default 2) and HTTP client. Deliberation requests: their own channel and runtime (`LIVING_DELIBERATION_WORKERS`, default 4), where they are prepared and sent through their own HTTP client. The 2 s checks: their own thread, first pass at once. Speech, player memory and percepts stay on the event loop.
+- **No 2 s persona wait** when the origin writes no persona (`writes_identity`).
+- **Pacing-deadline wake.** The head of an eligible lane held only by pacing wakes at its deadline (`Queue::spacing_deadline`), not at the next 50 ms poll.
+- **One saying rule.** `talk.rs` uses `living_rules::saying::saying_ms` (no copy).
+
+No table, reducer, view or subscription changed; what a mind perceives and may do, and the rules both controllers run, are unchanged. The grant pass of `grant-stall` (`254c250a`) is not in this branch: with the slowdown gone, B had no grant stall in any run.
+
+### A/B (main + timing vs fast-dispatch)
+
+A is `7e00f3e7` (main `bd29fb7f` + the `input-latency` instrumentation + the `urgent-merge-ab2-control` timing harness + the profile); B is `006c1e6d`. Both: `battle_diag.py --battle 200 --walkers 16 --minutes 5 --keep-plans --fast-lane --fixed-site 412.5 237.5 --input-latency`, interleaved under one `battle.lock` hold (`.local/fd/fd_chain.sh`), each run in a fresh private container pinned to CPUs 5–9,15–19, started with the 1-minute load under 4, no compiler and the merge lock free. A run whose load passed 8 in its 300 s window was redone: a1 (21.6, my own suite's build), a1r2 (25.2), a2 (9.9) and a2r1 (36.7). a1r1 (6.9) counts; it was first marked invalid by a stricter rule (compilers at any sample) that the protocol does not ask for. Every run kept 200 fighters at the site, ticked every window, and the orphan guard paused none.
+
+| | A1r1 | A1r3 | A2r2 | A3 | B1 | B2 | B3 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Load at start / window max | 3.0 / 6.9 | 2.9 / 6.9 | 3.3 / 6.6 | 3.1 / 4.1 | 3.7 / 4.4 | 3.9 / 6.0 | 3.1 / 3.3 |
+| Fast asks served | 310 | 289 | 296 | 293 | 600 | 599 | 600 |
+| **Fast callback→dispatch p50 / p95 (ms)** | 0 / 1,141 | 0 / 976 | 0 / 593 | 0 / 945 | 0 / 1 | 0 / 1 | 0 / 1 |
+| Fast callback→model queue p50 / p95 (ms) | 46 / 1,224 | 42 / 1,329 | 43 / 1,055 | 40 / 1,145 | 6 / 9 | 6 / 9 | 6 / 8 |
+| Fast issue→callback p95 (ms) | 411 | 334 | 382 | 365 | 116 | 99 | 98 |
+| **Urgent pre-queue (start→enqueue) p50 / p90 (ms)** | 3,230 / 5,441 | 3,130 / 6,170 | 3,072 / 5,084 | 3,058 / 5,584 | 22 / 31 | 20 / 30 | 20 / 29 |
+| **Routine pre-queue p50 / p90 (ms)** | 4,542 / 7,940 | 4,927 / 7,518 | 3,995 / 7,694 | 4,642 / 9,095 | 22 / 32 | 23 / 30 | 22 / 30 |
+| Urgent start→grant p50 / p90 (s) | 12.3 / 17.3 | 11.4 / 17.6 | 11.8 / 17.4 | 11.5 / 17.2 | 9.2 / 12.3 | 9.1 / 13.1 | 8.9 / 12.5 |
+| Routine start→grant p50 / p90 (s) | 10.8 / 20.3 | 10.7 / 21.3 | 10.0 / 19.3 | 11.0 / 23.5 | 9.3 / 22.1 | 6.7 / 13.6 | 6.4 / 12.2 |
+| Urgent request update→grant p50 / p90 (s) | 13.1 / 19.4 | 12.1 / 19.7 | 12.6 / 20.8 | 12.5 / 19.1 | 9.8 / 13.0 | 9.8 / 13.9 | 9.6 / 13.2 |
+| Routine request update→grant p50 / p90 (s) | 10.7 / 21.5 | 11.4 / 23.2 | 11.0 / 20.7 | 11.4 / 27.7 | 9.9 / 22.8 | 7.4 / 13.9 | 7.0 / 12.8 |
+| Urgent queue (enqueue→grant) p50 / p90 (s) | 9.4 / 17.5 | 8.9 / 19.1 | 9.1 / 19.1 | 8.6 / 18.1 | 9.4 / 14.1 | 9.4 / 14.4 | 9.3 / 14.1 |
+| Routine queue p50 / p90 (s) | 9.3 / 13.7 | 9.3 / 19.1 | 8.4 / 21.0 | 7.9 / 20.9 | 12.1 / 24.2 | 9.6 / 15.6 | 9.9 / 13.4 |
+| Background queue p50 / p90 (s) | 18.1 / 30.5 | 17.3 / 28.7 | 17.5 / 26.6 | 17.1 / 27.7 | 22.8 / 26.1 | 23.3 / 26.0 | 23.6 / 25.8 |
+| Urgent / routine thinks sent | 662 / 152 | 665 / 151 | 682 / 152 | 683 / 152 | 1,133 / 332 | 1,114 / 347 | 1,117 / 343 |
+| Model sends per 30 s, last 120 s | 49, 1, 6, 9 | 87, 2, 7, 17 | 68, 29, 31, 4 | 46, 14, 22, 31 | 290, 283, 293, 286 | 291, 285, 292, 292 | 291, 283, 291, 290 |
+| Ticks/s (mean of 5 windows) | 45.96 | 46.02 | 45.68 | 45.58 | 46.80 | 46.52 | 46.50 |
+| Grant stalls ≥ 1 s (longest ms) | 2 (2,443) | 3 (8,081) | 7 (13,546) | 6 (6,807) | 0 | 0 | 0 |
+| Cache probe p95 (window median) / max (ms) | 110 / 2,781 | 132 / 1,919 | 87 / 2,056 | 80 / 2,297 | 0.001 / 90 | 0.001 / 43 | 0.001 / 42 |
+| Longest event-queue wait (ms) | 88,672 | 119,810 | 99,527 | 124,639 | 73 | 26 | 23 |
+| Reason lines per urgent prompt | 1.018 | 1.014 | 1.012 | 1.035 | 1.000 | 1.000 | 1.000 |
+
+- **Targets.** SDK callback→dispatch p95 is 1 ms for fast asks on every B run (target < 100 ms; A 593–1,141 ms), and 0–6 ms p90 for deliberation requests (A 29–139 ms; these A medians are low because the stamp is the first callback since the character's last deliberation began, and most callbacks arrive while it is still deliberating). Deliberation pre-queue p90 is 29–32 ms on B against 5.1–9.1 s on A.
+- **Better.** Urgent start→grant p90 12.3–13.1 s against 17.2–17.6; urgent update→grant p90 13.0–13.9 against 19.1–20.8; ticks/s 46.5–46.8 against 45.6–46.0; no grant stalls against 2–7 a run; the pool kept sending at about 290 calls per 30 s to the end, where every A run fell to 1–87.
+- **Worse where the pool is now full.** B sends about 1.7× the urgent and 2.2× the routine thinks into the same 64 slots, so the wait *inside* the queue rose for the lower lanes: routine queue p50 9.6–12.1 s against 7.9–9.3 (p90 above A's range in B1 only, 24.2 against 13.7–21.0), background queue p50 22.8–23.6 s against 17.1–18.1 (p90 better, 25.8–26.1 against 26.6–30.5). The arm-neutral spans that include preparation are no worse: routine start→grant p90 12.2–22.1 against 19.3–23.5, routine update→grant p90 12.8–22.8 against 20.7–27.7. A's queue percentiles are also survivor-biased: they count only calls that reached the provider in the window, and A sent almost nothing in its last 90–120 s. Consolidations have no start stamp, so background has no arm-neutral span here.
+- **Merging.** With requests read 20–30 ms after their start, urgent prompts carry 1.000 reason lines against 1.012–1.035: fewer lines arrive while a request waits to be prepared.
+- **Resident stimulus → first body write.** The N1 arena drives the authority alone (`mind_act` with no mind process), and the authority is the same in both arms. N1 variant a, law off, 5 subjects × 3 walks, fresh islands, pinned private container, quiet host: a body's queued act waited for the act in progress p50 360 / 343 ms and p95 1.30 / 1.01 s (A / B, n = 10 each; `act_queued`→`act_started` markers), a player's started in 0.3 ms in both. The scripted body's first write is the queue behind the previous `goto`, which runs until steering arrives; a player's `human_act` replaces the act in progress. Reaching 150–300 ms for queued mind acts needs an authority decision (a mind act that may replace, or a next-tick start for an act whose predecessor has physically finished), not a mind change; this branch does not make it.
+
+Evidence: `~/slop-evidence/fast-dispatch-20261120.tar.zst` (`.local/fd/`: driver scripts, preflight, host samples, placement, replica module logs, `ab.json`, the profiled run's `cpu.folded`, the pprof patch; and both checkouts' `.local/living/verify/minds-fd-*` and `core-nav-fd*` run directories).

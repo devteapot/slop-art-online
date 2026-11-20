@@ -89,7 +89,7 @@ def main():
         lane = lane_of(m["start"]) if "enqueue" in m else "no_call"
         b = by_lane.setdefault(lane, {})
         for s, e in DELIB + [("start", "enqueue"), ("start", "grant"), ("callback", "start"), ("callback", "enqueue"),
-                             ("updated", "start"), ("requested", "enqueue")]:
+                             ("updated", "start"), ("requested", "enqueue"), ("updated", "grant"), ("requested", "grant")]:
             if m.get(s) is not None and m.get(e) is not None:
                 b.setdefault(f"{s}->{e}", []).append(m[e] - m[s])
     out["deliberation"] = {lane: {k: dist(v) for k, v in b.items()} for lane, b in sorted(by_lane.items())}
