@@ -43,6 +43,38 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+/// A multiplicative hash for the sweep's own maps of ids (docs/COMBAT_PHASE.md, step 2): the
+/// default SipHash costs several times more per lookup, and the keys are not chosen by anyone.
+/// Only for maps whose order of iteration reaches no write (lookups, and loops whose effects do
+/// not depend on order).
+#[derive(Default)]
+pub(crate) struct IdHasher(u64);
+
+impl std::hash::Hasher for IdHasher {
+    fn finish(&self) -> u64 {
+        // The product's high half folded into the low: the table picks buckets by the low bits.
+        self.0 ^ (self.0 >> 32)
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for b in bytes {
+            self.0 = (self.0.rotate_left(5) ^ *b as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        }
+    }
+    fn write_u32(&mut self, v: u32) {
+        self.0 = (self.0.rotate_left(5) ^ v as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    }
+    fn write_u64(&mut self, v: u64) {
+        self.0 = (self.0.rotate_left(5) ^ v).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    }
+    fn write_usize(&mut self, v: usize) {
+        self.write_u64(v as u64);
+    }
+}
+
+type IdBuild = std::hash::BuildHasherDefault<IdHasher>;
+type IdMap<K, V> = HashMap<K, V, IdBuild>;
+type IdSet<K> = HashSet<K, IdBuild>;
+
 /// How often each player's perceived set is worked out again (ms), staggered by character.
 pub const SWEEP_MS: u64 = 200;
 
@@ -1087,8 +1119,10 @@ pub fn sweep_now(ctx: &ReducerContext, id: u32, viewer: Identity, now: u64) {
 /// it out afresh gives. Lives for one tick's sweeps, in the tick's own call.
 #[derive(Default)]
 struct Shared {
-    health: HashMap<u32, Option<(f32, f32)>>,
-    projections: HashMap<(u32, Regard), Projection>,
+    health: IdMap<u32, Option<(f32, f32)>>,
+    projections: IdMap<(u32, Regard), Projection>,
+    /// Characters' records, read once (no sweep writes one).
+    characters: IdMap<u32, Option<Rc<Character>>>,
     /// `regard_cache_check`: each projection given from the memo is compared with a fresh one.
     check: bool,
 }
@@ -1114,6 +1148,12 @@ fn project_shared(ctx: &ReducerContext, shared: Option<&mut Shared>, r: Regard, 
     p
 }
 
+impl Shared {
+    fn character(&mut self, ctx: &ReducerContext, id: u32) -> Option<Rc<Character>> {
+        self.characters.entry(id).or_insert_with(|| ctx.db.character().id().find(id).map(Rc::new)).clone()
+    }
+}
+
 /// One player's sweep. `shared` is what the tick's sweeps share, when the sweep may keep what it
 /// worked out (`KEPT`, in the tick); `None` outside the tick.
 fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &Map, now: u64, mut shared: Option<&mut Shared>) {
@@ -1125,7 +1165,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let senses = common::senses_of(ctx, id, w, now);
     let sight = senses.sight;
     let rows: Vec<Perceived> = ctx.db.perceived().viewer().filter(viewer).collect();
-    let had: HashSet<u32> = rows.iter().map(|p| p.body).collect();
+    let had: IdSet<u32> = rows.iter().map(|p| p.body).collect();
     let mut seen: HashSet<u32> = HashSet::new();
     let scheduled = shared.is_some();
     // How far each one seen is, from the chunk cache (`kept_sweep` checks it is current).
@@ -1197,8 +1237,9 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         }
     }
     drop(rows_out);
-    let entered: Vec<u32> = seen.difference(&had).copied().collect();
-    let gone_from_sight: Vec<u32> = had.difference(&seen).copied().collect();
+    let entered: Vec<u32> = seen.iter().filter(|b| !had.contains(b)).copied().collect();
+    // (In any order: each goes, whatever the order.)
+    let gone_from_sight: Vec<u32> = had.iter().filter(|b| !seen.contains(b)).copied().collect();
     common::diag(|| "visible:add", entered.len() as u64);
     common::diag(|| "visible:drop", gone_from_sight.len() as u64);
     let left = !gone_from_sight.is_empty();
@@ -1379,7 +1420,7 @@ struct Viewing {
     epoch: (u64, u64),
     knows: Rc<Vec<String>>,
     revealing: HashSet<u32>,
-    rows: HashMap<u32, Kept>,
+    rows: IdMap<u32, Kept>,
     /// Sweeps since every row was projected afresh: at [`KEPT_REFRESH_SWEEPS`] it is again.
     sweeps: u32,
 }
@@ -1502,7 +1543,10 @@ fn law_band_of(sc: &Rc<Scripts>, input: &RegardIn, d: u16) -> (Regard, u16, u16)
 fn dist_for_law(ctx: &ReducerContext, here: (f32, f32), body: u32, near: Option<f32>, now: u64) -> u16 {
     let d = match near {
         Some(d) if common::cached_body_current(body, now) => d,
-        _ => match ctx.db.body().id().find(body) {
+        _ => match {
+            common::diag(|| "sweep:dist_read", 1);
+            ctx.db.body().id().find(body)
+        } {
             Some(b) => common::dist(here, pos(&b, now)),
             None => return 0,
         },
@@ -1511,8 +1555,11 @@ fn dist_for_law(ctx: &ReducerContext, here: (f32, f32), body: u32, near: Option<
 }
 
 /// A creature's health now, once per tick for every viewer.
-fn health_now(ctx: &ReducerContext, shared: &mut HashMap<u32, Option<(f32, f32)>>, id: u32, now: u64) -> Option<(f32, f32)> {
-    *shared.entry(id).or_insert_with(|| ctx.db.vitals().id().find(id).map(|v| (common::needs(&v, now).hp, v.max_hp)))
+fn health_now(ctx: &ReducerContext, shared: &mut IdMap<u32, Option<(f32, f32)>>, id: u32, now: u64) -> Option<(f32, f32)> {
+    *shared.entry(id).or_insert_with(|| {
+        common::diag(|| "sweep:health_read", 1);
+        ctx.db.vitals().id().find(id).map(|v| (common::needs(&v, now).hp, v.max_hp))
+    })
 }
 
 /// `health_as` from a health reading.
@@ -1553,7 +1600,7 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
     }
     let full = kept.is_none();
     let start = if refresh { 0 } else { id % KEPT_REFRESH_SWEEPS };
-    let mut v = kept.unwrap_or_else(|| Viewing { who: viewer, script: sc.clone(), night, epoch, knows: known_techniques(ctx, id), revealing: HashSet::new(), rows: HashMap::new(), sweeps: start });
+    let mut v = kept.unwrap_or_else(|| Viewing { who: viewer, script: sc.clone(), night, epoch, knows: known_techniques(ctx, id), revealing: HashSet::new(), rows: IdMap::default(), sweeps: start });
     v.sweeps += 1;
     v.epoch = epoch;
     let dist = |body: u32| if body == id { 0 } else { dist_for_law(ctx, s.here, body, s.near.get(&body).copied(), now) };
@@ -1578,7 +1625,7 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
                 proj_delete(ctx, p);
             }
         }
-        let fresh: HashSet<u32> = s.entered.iter().copied().collect();
+        let fresh: IdSet<u32> = s.entered.iter().copied().collect();
         let mut held = 0;
         for body in s.seen.iter().copied().chain(std::iter::once(id)) {
             let changed = match v.rows.get(&body) {
@@ -1590,8 +1637,10 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
                         || s.touched.contains(&body)
                         || CHANGED.with(|c| c.borrow().get(&body).is_some_and(|m| *m > k.mark))
                         || !(k.lo..=k.hi).contains(&dist(body))
-                        || (ask_known && ctx.db.character().id().find(body).map_or(true, |t| knows_name(ctx, me, &t) != k.known))
-                        || health_from(k.precision, health_now(ctx, &mut shared.health, body, now)) != k.health
+                        || (ask_known && shared.character(ctx, body).map_or(true, |t| knows_name(ctx, me, &t) != k.known))
+                        // Where the law hides health its fields are the same whatever it is:
+                        // no need to read it.
+                        || (k.precision != Precision::None && health_from(k.precision, health_now(ctx, &mut shared.health, body, now)) != k.health)
                 }
             };
             if changed {
@@ -1615,10 +1664,10 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
     // this sweep) has nothing revealed, so its input is one of a few this sweep, built once each;
     // the law's answer and band at each whole metre are then asked once per input.
     let mut inputs: Vec<RegardIn> = Vec::new();
-    let mut answers: HashMap<(usize, u16), (Regard, u16, u16)> = HashMap::new();
-    let mut regards: Vec<(Character, Regard, u16, u16, bool)> = Vec::with_capacity(again.len());
+    let mut answers: IdMap<(usize, u16), (Regard, u16, u16)> = IdMap::default();
+    let mut regards: Vec<(Rc<Character>, Regard, u16, u16, bool)> = Vec::with_capacity(again.len());
     for body in again {
-        let Some(t) = ctx.db.character().id().find(body) else {
+        let Some(t) = shared.character(ctx, body) else {
             v.rows.remove(&body);
             continue;
         };
@@ -1657,13 +1706,17 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
         match rows.as_slice() {
             [p] if p.own == own => {
                 if !pr.same_as(p) {
+                    common::diag(|| "project:update", 1);
                     proj_update(ctx, pr.into_row(viewer, body, own, p.id));
+                } else {
+                    common::diag(|| "project:same", 1);
                 }
             }
             _ => {
                 for p in &rows {
                     proj_delete(ctx, p.id);
                 }
+                common::diag(|| "project:insert", 1);
                 proj_insert(ctx, pr.into_row(viewer, body, own, 0));
             }
         }
@@ -1755,7 +1808,7 @@ const HEAR_EPOCH_MS: u64 = 240_000;
 thread_local! {
     /// When each (listener, target) was last heard (module memory; a fresh instance starts each
     /// row's linger at its first sweep).
-    static HEARD_LAST: RefCell<HashMap<(u32, u32), u64>> = RefCell::new(HashMap::new());
+    static HEARD_LAST: RefCell<IdMap<(u32, u32), u64>> = RefCell::new(IdMap::default());
 }
 
 fn hear_salt(ctx: &ReducerContext) -> u64 {
@@ -1783,16 +1836,20 @@ fn heard_key(salt: u64, listener: u32, target: u32, now: u64) -> u64 {
 /// `now_heard`: what it hears and does not see now, nearest first (`heard`, from the sweep's
 /// gather).
 fn hear(ctx: &ReducerContext, id: u32, viewer: Identity, here: (f32, f32), seen: &HashSet<u32>, now_heard: Vec<NearCreature>, now: u64) {
+    let reading = common::detail_span("hear.read");
     let rows: Vec<Heard> = ctx.db.heard().viewer().filter(viewer).collect();
+    drop(reading);
+    common::diag(|| "hear:now", now_heard.len() as u64);
+    common::diag(|| "hear:rows", rows.len() as u64);
     if now_heard.is_empty() && rows.is_empty() {
         return;
     }
     let laws = common::laws(ctx);
     let linger = (laws.heard_linger_s * 1000.0) as u64;
-    let mut current: HashSet<u32> = HashSet::new();
+    let mut current: IdSet<u32> = IdSet::default();
     let mut salt = None;
     // Its rows by target: the first of its rows for each (as a search of `rows` in order finds).
-    let mut by_target: HashMap<u32, &Heard> = HashMap::with_capacity(rows.len());
+    let mut by_target: IdMap<u32, &Heard> = IdMap::with_capacity_and_hasher(rows.len(), IdBuild::default());
     for r in rows.iter().filter(|r| r.listener == id) {
         by_target.entry(r.target).or_insert(r);
     }
@@ -1804,12 +1861,14 @@ fn hear(ctx: &ReducerContext, id: u32, viewer: Identity, here: (f32, f32), seen:
         match by_target.get(&c.id).copied() {
             Some(r) if r.bearing == bearing && r.band == band => {}
             Some(r) => {
+                common::diag(|| "hear:update", 1);
                 ctx.db.heard().key().update(Heard { bearing, band, ..r.clone() });
             }
             None => {
                 let salt = *salt.get_or_insert_with(|| hear_salt(ctx));
                 let key = heard_key(salt, id, c.id, now);
                 if ctx.db.heard().key().find(key).is_none() {
+                    common::diag(|| "hear:insert", 1);
                     ctx.db.heard().insert(Heard { key, viewer, listener: id, target: c.id, kind: heard_kind(ctx, &c.kind), bearing, band, since_ms: now });
                 }
             }
@@ -1818,6 +1877,7 @@ fn hear(ctx: &ReducerContext, id: u32, viewer: Identity, here: (f32, f32), seen:
     for r in rows.iter().filter(|r| !current.contains(&r.target)) {
         let last = HEARD_LAST.with(|h| *h.borrow_mut().entry((id, r.target)).or_insert(now));
         if r.listener != id || seen.contains(&r.target) || now.saturating_sub(last) >= linger {
+            common::diag(|| "hear:delete", 1);
             ctx.db.heard().key().delete(r.key);
             HEARD_LAST.with(|h| h.borrow_mut().remove(&(id, r.target)));
         }
