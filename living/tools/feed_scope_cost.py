@@ -51,6 +51,9 @@ POPIN_MISSED = re.compile(r"^feed scope pop-in missed: in sight (\d+) ms at ([\d
 FAST_CPUS = "5-9,15-19"
 COMMON = ["cover_law", "feed_scope", "my_offers", "my_known_names", "my_earshot", "speech_card", "my_records", "heard_sounds", "my_senses", "my_act_outcomes"]
 FEEDS = {"off": ["gate"], "on": ["my_things", "my_remembered_things", "my_owners", "my_stock", "my_fuel_seen", "my_contents_seen"]}
+# The probe arm: on, with `feed_scope_popin_probe` (it tests more than on does; its cost is not the
+# arm's, only its pop-in delays are read).
+FEEDS["probe"] = FEEDS["on"]
 
 
 def host():
@@ -178,6 +181,11 @@ def one(name, workload, arm, seconds, woods_seed, max_load):
     client = None
     attempted = False
     try:
+        while merge_running():
+            if not in_window():
+                raise SystemExit("a merge held ~/slop-mq/lock until the window closed: stopping the series")
+            time.sleep(15)
+        placement = pin(load.CONTAINER)
         waited = wait_load(max_load, 6 * 3600)
         (evidence / "host-before-launch.json").write_text(json.dumps({**check_host(), "load_wait": waited}))
         attempted = True
@@ -197,6 +205,8 @@ def one(name, workload, arm, seconds, woods_seed, max_load):
         if arm in ("on", "probe"):
             call("set_world_law", "feed_scope_grace_s", "1")
             call("set_world_law", "feed_scope_on", "true")
+            if arm == "probe":
+                call("set_world_law", "feed_scope_popin_probe", "true")
             t0 = time.time()
             while (sql("SELECT stage FROM feed_scope") or [{"stage": 0}])[0]["stage"] != 2:
                 if time.time() - t0 > 30:
@@ -257,7 +267,9 @@ def one(name, workload, arm, seconds, woods_seed, max_load):
             "players": [{"token": token, "name": f"Feed{i}", "role": "walk"} for i, token in enumerate(tokens)],
             # The game client's perception set as shipped (cue_transport_on and near_tier_on on by
             # default: the tiers and the cue tables), in both arms.
-            "client": "game", "feed": "scoped" if arm == "on" else "legacy", "tiers": True, "cues": True,
+            # and the copy tables (motion_tables_on, characters_table_on, on since bv-defaults-on).
+            "client": "game", "feed": "legacy" if arm == "off" else "scoped", "tiers": True, "cues": True,
+            "motion_tables": True, "character_tables": True,
         }))
         joined = client.expect("joined", 300)
         for player, (x, y) in zip(joined["players"], spots):
@@ -268,6 +280,7 @@ def one(name, workload, arm, seconds, woods_seed, max_load):
         noon = time.time_ns() // 1_000_000 - day_ms * 5 // 24
         harness("sql", f"UPDATE world SET epoch_ms = {noon} WHERE id = 0")
         client.send("go")
+        go_at = time.time()
         time.sleep(5)
         harness("doctor")
         host_before = check_host()
@@ -304,6 +317,11 @@ def one(name, workload, arm, seconds, woods_seed, max_load):
             ticks = spans.pop("tick", [])
             if abs(len(ticks) - ticks_s * elapsed) <= ticks_s * elapsed * 0.03:
                 break
+        popin = {"delays_ms": [], "dist_m": [], "missed_in_sight_ms": []}
+        if arm == "probe":
+            parse_log(evidence / "module-full.jsonl", go_at, end, popin)
+        if merge_running():
+            raise RuntimeError("a merge took ~/slop-mq/lock during the window")
         if not ticks or last_stats["ticks"] <= first_stats["ticks"] or client.p.poll() is not None:
             raise RuntimeError("missing tick samples or live SDK workload")
         if abs(len(ticks) - ticks_s * elapsed) > ticks_s * elapsed * 0.03:
@@ -331,7 +349,11 @@ def one(name, workload, arm, seconds, woods_seed, max_load):
                       scope_tests_s=diags.get("scope:tests", 0) / per, diagnostic_seconds=periods,
                       total_kb_s_per_client=(m1[bytes_key] - m0[bytes_key]) / (1000 * elapsed * count),
                       reconnect=json.loads(reconnect.stdout), wasm_memory_bytes=[m0[memory_key], m1[memory_key]],
-                      profile_source="full server module log", metrics_before=m0, metrics_after=m1)
+                      profile_source="full server module log", cpus=placement,
+                      popin=dict(quantiles(popin["delays_ms"]), missed=len(popin["missed_in_sight_ms"]),
+                                 missed_in_sight=quantiles(popin["missed_in_sight_ms"]), dist=quantiles([round(d) for d in popin["dist_m"]]),
+                                 since_go_s=round(end - go_at, 1)) if arm == "probe" else None,
+                      metrics_before=m0, metrics_after=m1)
         (evidence / "result.json").write_text(json.dumps(result, indent=2) + "\n")
         if fighters and result["fighters"] != [96, 96]:
             raise RuntimeError("fighter census fell below 96")
@@ -352,6 +374,8 @@ def main():
     p.add_argument("--woods-seed", type=lambda x: Path(x).resolve())
     p.add_argument("--seconds", type=int, default=30)
     p.add_argument("--max-load", type=float, default=6.0)
+    p.add_argument("--probe-runs", type=int, default=1, help="probe arms per workload (pop-in delays; not a cost arm)")
+    p.add_argument("--stop-after", default="middle", help="stop when this workload, once done, misses the budget")
     p.add_argument("--reclaim-closed", action="store_true", help="the coordinator closed tonight's reclaim window before 02:00")
     a = p.parse_args()
     global RECLAIM_CLOSED
@@ -370,7 +394,8 @@ def main():
         print("holding the battle lock", flush=True)
         for workload, repeats in plan:
             for index in range(1, repeats + 1):
-                for arm in ("off", "on"):
+                arms = ["off", "on"] + (["probe"] if index <= a.probe_runs else [])
+                for arm in arms:
                     for attempt in (1, 2):
                         if not in_window():
                             print("outside the measurement window: stopping", flush=True)
@@ -387,7 +412,30 @@ def main():
                             with out.open("a") as f:
                                 f.write(json.dumps({"run": name, **{k: v for k, v in r.items() if not k.startswith("metrics_")}}) + "\n")
                             break
+            if workload == a.stop_after:
+                verdict = budget(out, workload)
+                print(f"BUDGET {workload}: {json.dumps(verdict)}", flush=True)
+                if not verdict.get("pass"):
+                    print(f"{workload} misses the budget: stopping the series to report", flush=True)
+                    return 2
     return 0
+
+
+def budget(out, workload):
+    """The standing rule (docs/COVER_SIGHT.md) for one workload of this series: worst on sight at
+    most +15% over the off mean, ticks/s no lower than the lowest off, late share no higher than
+    the highest off."""
+    rows = [json.loads(l) for l in out.read_text().splitlines() if l.strip()] if out.exists() else []
+    rows = [r for r in rows if "failed" not in r and r.get("workload") == workload]
+    off = [r for r in rows if r["arm"] == "off"]
+    on = [r for r in rows if r["arm"] == "on"]
+    if len(off) < 2 or len(on) < 2:
+        return {"pass": False, "why": f"{len(off)} off and {len(on)} on runs"}
+    m = statistics.mean(r["sight_ms_s"] for r in off)
+    worst = max(r["sight_ms_s"] for r in on) / m - 1
+    ticks = min(r["ticks_s"] for r in on) >= min(r["ticks_s"] for r in off)
+    late = max(r["late_share"] for r in on) <= max(r["late_share"] for r in off)
+    return {"pass": worst <= 0.15 and ticks and late, "sight_vs_off_mean": round(worst, 4), "off_mean": round(m, 2), "ticks_ok": ticks, "late_ok": late}
 
 
 if __name__ == "__main__":
