@@ -223,6 +223,26 @@ pub fn trace(ctx: &ReducerContext, tick: u64) {
     log::info!("det tick {tick} all={all:016x} {}", tables.join(" "));
 }
 
+thread_local! {
+    static PERTURBED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// A control for the comparison, compiled in only when `LIVING_DET_PERTURB` is set at build time
+/// (a number): that many extra hashers are made at the first tick under the law, which moves the
+/// keys of every hash map made after them (std's `RandomState` counts up from per-instance keys).
+/// A build so perturbed must still compare identical with its unperturbed self: nothing the world
+/// does may depend on a hash map's order.
+pub fn perturb() {
+    if let Some(n) = option_env!("LIVING_DET_PERTURB").and_then(|v| v.parse::<u32>().ok()) {
+        if !PERTURBED.with(|p| p.replace(true)) {
+            for _ in 0..n {
+                std::hint::black_box(std::collections::hash_map::RandomState::new());
+            }
+            log::info!("det: {n} hashers made at the first tick (LIVING_DET_PERTURB)");
+        }
+    }
+}
+
 /// Pause the world at the end of tick `tick` when the `det_stop` law names it (or an earlier one).
 pub fn stop_at(ctx: &ReducerContext, tick: u64, stop: f32) {
     if stop > 0.0 && tick >= stop as u64 {

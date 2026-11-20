@@ -25,6 +25,9 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     // follow the tick count alone.
     let det = common::laws(ctx).det_clock;
     let now = if det { common::det_now_ms(ctx) } else { common::now_ms(ctx) };
+    if det {
+        crate::det::perturb();
+    }
     let _draws = det.then(|| crate::seed::Creating::start(crate::det::SEED, common::clock(ctx).tick + 1));
     if det && (common::clock(ctx).tick + 1) % 60 == 0 {
         housekeeping_body(ctx)?;

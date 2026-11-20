@@ -270,6 +270,12 @@ def run(a):
         Y.cli("publish", "-s", "local", "-b", f"/wasm/{a.candidate}", db, "-y")
         for s in servers:
             assert s.sql(db, "SELECT tick FROM clock")[0]["tick"] == t0, "both copies at the start tick"
+        if a.stop:
+            # An earlier stop (a tick number): both copies pause there, for a full read of that tick.
+            ticks = a.stop - t0
+            res["stop_tick"], res["ticks"] = a.stop, ticks
+            for s in servers:
+                s.call(db, "set_world_law", ["det_stop", str(float(a.stop))])
         for s in servers:
             s.call(db, "set_paused", [False])
         t_run = time.time()
@@ -303,7 +309,7 @@ def run(a):
             ka, kb = sorted(map(key, na[t])), sorted(map(key, nb[t]))
             if ka != kb:
                 sa, sb = set(ka), set(kb)
-                tables_differ[t] = {"base_rows": len(ka), "candidate_rows": len(kb), "only_base": [x[:600] for x in ka if x not in sb][:3], "only_candidate": [x[:600] for x in kb if x not in sa][:3]}
+                tables_differ[t] = {"base_rows": len(ka), "candidate_rows": len(kb), "only_base": [x[:1500] for x in ka if x not in sb][:20], "only_candidate": [x[:1500] for x in kb if x not in sa][:20]}
         res["tables_compared"] = len(TABLES)
         res["rows_compared"] = sum(len(v) for k, v in rows_a.items() if k != "clock")
         res["tables_differ"] = tables_differ
@@ -352,6 +358,7 @@ def main():
     ap.add_argument("--ports", default=None, help="run: the two copies' ports, PX,PY")
     ap.add_argument("--out")
     ap.add_argument("--keep-copies", action="store_true")
+    ap.add_argument("--stop", type=int, default=0, help="run: pause both copies at this tick instead of the template's det_stop")
     ap.add_argument("--cpus", default="0-4,10-14", help="run: the copies' cores (default the Spark's A725 cores, away from pinned measurements)")
     a = ap.parse_args()
     sys.path.insert(0, str(Path(__file__).resolve().parent))

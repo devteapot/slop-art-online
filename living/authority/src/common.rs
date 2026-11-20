@@ -1817,6 +1817,11 @@ pub fn due_bystander_wakes(ctx: &ReducerContext, now: u64) {
         });
         out
     });
+    // By id: the map's own order is the hasher's, which on wasm32 comes from memory addresses and
+    // so differs between builds; the order of these wakes is the order the woken are evaluated in
+    // this tick (docs/COMBAT_PHASE.md, "Step 3 results").
+    let mut due = due;
+    due.sort_unstable();
     for id in due {
         diag(|| "wake:due", 1);
         wake(ctx, id);
