@@ -90,6 +90,109 @@ pub fn scene_of(j: &serde_json::Value, file: &str) -> Option<Handmade> {
     Some(Handmade { plus_z, tops })
 }
 
+/// What composed files' `slop` draws (`LIVING_GAME_COMPOSED_SLOP`, measurement and tools only):
+/// all of it (the default), none (`off`: files are drawn as before v1.3), or everything but ink
+/// (`noink`), or everything but one slot's ink (`noink:<slot>`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ComposedSlop {
+    On,
+    Off,
+    NoInk(Option<Slot>),
+}
+
+impl ComposedSlop {
+    pub fn parse(v: Option<&str>) -> Self {
+        match v.map(str::trim) {
+            None | Some("") | Some("on") => Self::On,
+            Some("off") | Some("0") => Self::Off,
+            Some("noink") => Self::NoInk(None),
+            Some(x) => match x.strip_prefix("noink:").map(|s| serde_json::from_value::<Slot>(serde_json::Value::String(s.to_string()))) {
+                Some(Ok(slot)) => Self::NoInk(Some(slot)),
+                _ => {
+                    warn_once(format!("handmade: LIVING_GAME_COMPOSED_SLOP={x:?} is not on, off, noink or noink:<slot>; on"));
+                    Self::On
+                }
+            },
+        }
+    }
+
+    /// Whether a material of `slot` keeps its ink.
+    pub fn keeps_ink(self, slot: Option<Slot>) -> bool {
+        match self {
+            Self::On => true,
+            Self::Off => false,
+            Self::NoInk(None) => false,
+            Self::NoInk(Some(s)) => slot != Some(s),
+        }
+    }
+}
+
+/// The switch, read once.
+pub fn composed_slop() -> ComposedSlop {
+    static MODE: OnceLock<ComposedSlop> = OnceLock::new();
+    *MODE.get_or_init(|| {
+        let m = ComposedSlop::parse(std::env::var("LIVING_GAME_COMPOSED_SLOP").ok().as_deref());
+        if m != ComposedSlop::On {
+            info!("handmade: composed files' slop: {m:?} (LIVING_GAME_COMPOSED_SLOP)");
+        }
+        m
+    })
+}
+
+/// Whether a composed file (a type or style file) opts in to `slop` (contract v1.3,
+/// docs/HANDMADE_COMPOSED.md): its scene's `slop` has a `contract` this client reads and no
+/// `character`. A higher contract warns once; the switch `off` turns every file out.
+pub fn composed_of(file: &str) -> bool {
+    static CACHE: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
+    if composed_slop() == ComposedSlop::Off {
+        return false;
+    }
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(v) = cache.lock().unwrap().get(file) {
+        return *v;
+    }
+    let v = crate::lookdev::glb_json(file).is_some_and(|j| composed_scene(&j, file));
+    cache.lock().unwrap().insert(file.to_string(), v);
+    v
+}
+
+/// [`composed_of`] on a file's JSON.
+pub fn composed_scene(j: &serde_json::Value, file: &str) -> bool {
+    let scene = j["scene"].as_u64().unwrap_or(0) as usize;
+    let Some(slop) = j["scenes"].get(scene).and_then(|s| s["extras"].get("slop")) else { return false };
+    if slop.get("character").is_some() {
+        return false;
+    }
+    match slop["contract"].as_u64() {
+        Some(c) if c <= CONTRACT => true,
+        _ => {
+            warn_once(format!("handmade: {file}: contract {:?} is not one this client reads ({CONTRACT}); its slop is ignored", slop["contract"]));
+            false
+        }
+    }
+}
+
+/// A composed file's material `slop` by the material's name (from its glTF JSON), with the
+/// switch applied: ink dropped where `noink` says. Default (nothing) for a file that doesn't opt
+/// in or a material without `slop`.
+pub fn composed_material(file: &str, name: &str) -> MaterialSlop {
+    if !composed_of(file) {
+        return MaterialSlop::default();
+    }
+    let Some(j) = crate::lookdev::glb_json(file) else { return MaterialSlop::default() };
+    let Some(m) = j["materials"].as_array().and_then(|ms| ms.iter().find(|m| m["name"].as_str() == Some(name))) else { return MaterialSlop::default() };
+    let extras = m.get("extras").map(|e| e.to_string());
+    let mut slop = material_of(extras.as_deref(), &format!("{file} material {name:?}"));
+    if !composed_slop().keeps_ink(slop.slot) {
+        // Every ink of the slot: its `slop.ink` and a hair profile's own (v1.1) lock lines.
+        slop.ink = None;
+        if let Some(h) = slop.hair.as_mut() {
+            h.inked = false;
+        }
+    }
+    slop
+}
+
 /// A material's slot (`slop.slot`), read by its lowercase variant name (`"hair"`, `"tint"`, ...):
 /// serde spells them, so the client's skill-name guard doesn't read the `face` slot as the skill.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
@@ -125,6 +228,12 @@ pub struct HairProfile {
     pub ink_px: f32,
     pub ink_range: f32,
     pub ink_fade_px: f32,
+    /// `ink_m_uv` (v1.3): the declared texel density for the lock ink, in metres per UV unit,
+    /// used instead of measuring the mesh.
+    pub ink_m_uv: Option<f32>,
+    /// `palette: "tag"` (v1.3, docs/HANDMADE_COMPOSED.md): the swatches follow the mesh's tag
+    /// colour from `ref` (the first anchor) and the `anchors`; None is v1's fixed palette.
+    pub relative: Option<Vec<crate::characters::palette::Anchor>>,
 }
 
 pub const INK_PX: f32 = 1.25;
@@ -166,6 +275,11 @@ pub struct InkProfile {
     pub map: Option<String>,
     /// In "px" mode: the map's R is the local width fraction.
     pub taper: bool,
+    /// `ref` (v1.3): the tag colour `color` was tuned on; with a tag on the mesh, the colour is
+    /// moved to it as a palette swatch is.
+    pub reference: Option<[u8; 3]>,
+    /// `m_uv` (v1.3): the declared texel density, metres per UV unit, instead of measuring.
+    pub m_uv: Option<f32>,
 }
 
 pub const INK_MIN_PX: f32 = 1.0;
@@ -231,6 +345,54 @@ pub fn material_of(extras: Option<&str>, what: &str) -> MaterialSlop {
     MaterialSlop { slot, hair, ink }
 }
 
+/// Three integers 0-255.
+fn rgb(v: &serde_json::Value) -> Option<[u8; 3]> {
+    let a = v.as_array()?;
+    let c: Vec<u8> = a.iter().filter_map(|x| x.as_u64().filter(|v| *v <= 255).map(|v| v as u8)).collect();
+    (a.len() == 3 && c.len() == 3).then(|| [c[0], c[1], c[2]])
+}
+
+/// The relative palette of a hair profile (v1.3): None for `"fixed"` (or no `palette`), the
+/// anchors (the profile's own first) for `"tag"`, or what is wrong.
+fn relative_of(h: &serde_json::Value, own: [[u8; 3]; 4], ink: Option<[u8; 3]>) -> Result<Option<Vec<crate::characters::palette::Anchor>>, String> {
+    use crate::characters::palette::{oklab, Anchor};
+    match h.get("palette").and_then(|p| p.as_str()) {
+        None if h.get("palette").is_none() => return Ok(None),
+        Some("fixed") => return Ok(None),
+        Some("tag") => {}
+        _ => return Err(format!("palette {} is not \"fixed\" or \"tag\"", h["palette"])),
+    }
+    let anchor = |v: &serde_json::Value, own: Option<([[u8; 3]; 4], Option<[u8; 3]>)>| -> Result<Anchor, String> {
+        let r = rgb(&v["ref"]).ok_or(format!("ref {} is not three integers 0-255", v["ref"]))?;
+        if oklab(r)[0] < 0.05 {
+            return Err(format!("ref {r:?} is too dark (OKLab L under 0.05)"));
+        }
+        let (swatches, ink) = match own {
+            Some(o) => o,
+            None => {
+                let mut s = [[0u8; 3]; 4];
+                for (i, k) in ["shade", "mid", "light", "highlight"].iter().enumerate() {
+                    s[i] = rgb(&v[*k]).ok_or(format!("anchor {k} is not three integers 0-255"))?;
+                }
+                (s, v.get("ink").and_then(rgb))
+            }
+        };
+        Ok(Anchor { reference: r, swatches, ink })
+    };
+    let mut out = vec![anchor(h, Some((own, ink)))?];
+    for a in h["anchors"].as_array().into_iter().flatten() {
+        if out.len() >= 4 {
+            warn_once("handmade: hair profile: more than 3 anchors; the rest are dropped".into());
+            break;
+        }
+        match anchor(a, None) {
+            Ok(a) => out.push(a),
+            Err(e) => warn_once(format!("handmade: hair profile: an anchor is dropped ({e})")),
+        }
+    }
+    Ok(Some(out))
+}
+
 /// An ink profile from its JSON, or what is wrong with it.
 pub fn ink_of(v: &serde_json::Value) -> Result<InkProfile, String> {
     if !v.is_object() {
@@ -259,7 +421,17 @@ pub fn ink_of(v: &serde_json::Value) -> Result<InkProfile, String> {
         None => INK_RANGE,
         Some(x) => x.as_f64().map(|x| x as f32).filter(|x| x.is_finite() && *x > 0.0).ok_or(format!("range {x} is not a number above 0"))?,
     };
+    let reference = match v.get("ref") {
+        None => None,
+        Some(r) => Some(rgb(r).ok_or(format!("ref {r} is not three integers 0-255"))?),
+    };
+    let m_uv = match v.get("m_uv") {
+        None => None,
+        Some(x) => Some(x.as_f64().map(|x| x as f32).filter(|x| x.is_finite() && *x > 0.0).ok_or(format!("m_uv {x} is not a number above 0"))?),
+    };
     Ok(InkProfile {
+        reference,
+        m_uv,
         color: [c[0], c[1], c[2]],
         width,
         px: num("px", INK_PX)?,
@@ -352,7 +524,15 @@ pub fn hair_of(h: &serde_json::Value) -> Result<HairProfile, String> {
         ink_px: num("ink_px", INK_PX)?.max(0.0),
         ink_range: num("ink_range", INK_RANGE)?,
         ink_fade_px: num("ink_fade_px", INK_FADE_PX)?.max(0.0),
+        ink_m_uv: h.get("ink_m_uv").and_then(|x| x.as_f64()).map(|x| x as f32).filter(|x| x.is_finite() && *x > 0.0),
+        relative: None,
     };
+    let mut p = p;
+    let own = [p.shade, p.mid, p.light, p.highlight];
+    match relative_of(h, own, p.ink) {
+        Ok(r) => p.relative = r,
+        Err(e) => warn_once(format!("handmade: hair profile: {e}; the palette is fixed")),
+    }
     if p.inked && p.ink_range <= 0.0 {
         return Err(format!("ink_range {} is not above 0", p.ink_range));
     }
@@ -565,7 +745,7 @@ mod tests {
     #[test]
     fn ink_takes_its_defaults_and_its_width_mode() {
         let p = ink_of(&json!({"color": [34, 18, 16]})).unwrap();
-        assert_eq!(p, InkProfile { color: [34, 18, 16], width: InkWidth::Px, px: INK_PX, min_px: INK_MIN_PX, range: INK_RANGE, fade_px: INK_FADE_PX, map: None, taper: false });
+        assert_eq!(p, InkProfile { color: [34, 18, 16], width: InkWidth::Px, px: INK_PX, min_px: INK_MIN_PX, range: INK_RANGE, fade_px: INK_FADE_PX, map: None, taper: false, reference: None, m_uv: None });
         let p = ink_of(&json!({"color": [0, 0, 0], "width": "uv", "min_px": 0.5, "range": 0.02, "fade_px": 0, "map": "view/x.ink.png", "taper": true})).unwrap();
         assert_eq!((p.width, p.min_px, p.range, p.fade_px, p.map.as_deref(), p.taper), (InkWidth::Uv, 0.5, 0.02, 0.0, Some("view/x.ink.png"), true));
     }
@@ -681,6 +861,74 @@ mod tests {
         assert!(!pack_highlight(&mut bare));
         let Some(bevy::mesh::VertexAttributeValues::Float32x2(uv)) = bare.attribute(Mesh::ATTRIBUTE_UV_1) else { panic!() };
         assert_eq!(uv, &vec![[0.0, 0.0]; 2]);
+    }
+
+    /// v1.3: `palette: "tag"` with its `ref` and anchors; bad values fall back to the fixed
+    /// palette without losing the profile.
+    #[test]
+    fn a_relative_palette_reads_its_anchors() {
+        let p = hair_of(&profile()).unwrap();
+        assert_eq!(p.relative, None, "a v1 profile is fixed");
+        let mut tag = profile();
+        tag["palette"] = json!("tag");
+        tag["ref"] = json!([102, 46, 26]);
+        tag["ink"] = json!([4, 0, 0]);
+        tag["ink_m_uv"] = json!(4.096);
+        tag["anchors"] = json!([{"ref": [19, 17, 17], "shade": [12, 10, 11], "mid": [30, 26, 27], "light": [38, 33, 34], "highlight": [52, 46, 47]}, {"ref": [1, 2]}]);
+        let p = hair_of(&tag).unwrap();
+        let a = p.relative.as_ref().unwrap();
+        assert_eq!(a.len(), 2, "the malformed anchor is dropped");
+        assert_eq!(a[0].reference, [102, 46, 26]);
+        assert_eq!(a[0].swatches, [[88, 42, 27], [152, 72, 43], [184, 98, 60], [214, 140, 96]]);
+        assert_eq!(a[0].ink, Some([4, 0, 0]));
+        assert_eq!((a[1].reference, a[1].ink), ([19, 17, 17], None));
+        assert_eq!(p.ink_m_uv, Some(4.096));
+        for bad in [json!({"palette": "tag"}), json!({"palette": "tag", "ref": [0, 0, 0]}), json!({"palette": "warm", "ref": [102, 46, 26]})] {
+            let mut h = profile();
+            for (k, v) in bad.as_object().unwrap() {
+                h[k] = v.clone();
+            }
+            let p = hair_of(&h).unwrap();
+            assert_eq!(p.relative, None, "{bad}: drawn fixed");
+        }
+        let mut fixed = profile();
+        fixed["palette"] = json!("fixed");
+        assert_eq!(hair_of(&fixed).unwrap().relative, None);
+    }
+
+    #[test]
+    fn ink_reads_its_reference_and_density() {
+        let p = ink_of(&json!({"color": [57, 32, 20], "ref": [102, 46, 26], "m_uv": 1.024})).unwrap();
+        assert_eq!((p.reference, p.m_uv), (Some([102, 46, 26]), Some(1.024)));
+        assert!(ink_of(&json!({"color": [57, 32, 20], "ref": "auburn"})).is_err());
+        assert!(ink_of(&json!({"color": [57, 32, 20], "m_uv": 0})).is_err());
+        assert_eq!(ink_of(&json!({"color": [1, 2, 3]})).unwrap().reference, None);
+    }
+
+    /// A composed file opts in through its scene: `slop` with a contract and no `character`.
+    #[test]
+    fn composed_files_opt_in_through_their_scene() {
+        let scene = |slop: serde_json::Value| json!({"scenes": [{"extras": {"slop": slop}}]});
+        assert!(composed_scene(&scene(json!({"contract": 1})), "t"));
+        assert!(!composed_scene(&scene(json!({"contract": 2})), "t"));
+        assert!(!composed_scene(&scene(json!({"contract": 1, "character": "handmade"})), "t"), "a hand-made file is not composed");
+        assert!(!composed_scene(&json!({"scenes": [{"extras": {"hair_fit": {}}}]}), "t"), "today's files");
+        assert!(!composed_scene(&json!({"scenes": [{}]}), "t"));
+    }
+
+    /// The measurement switch, with the slot read through serde.
+    #[test]
+    fn the_composed_switch_parses() {
+        let eyes = serde_json::from_value::<Slot>(json!("eyes")).unwrap();
+        assert_eq!(ComposedSlop::parse(None), ComposedSlop::On);
+        assert_eq!(ComposedSlop::parse(Some("off")), ComposedSlop::Off);
+        assert_eq!(ComposedSlop::parse(Some("noink")), ComposedSlop::NoInk(None));
+        assert_eq!(ComposedSlop::parse(Some(&format!("noink:{}", eyes.name()))), ComposedSlop::NoInk(Some(eyes)));
+        assert_eq!(ComposedSlop::parse(Some("sideways")), ComposedSlop::On);
+        assert!(ComposedSlop::NoInk(Some(eyes)).keeps_ink(Some(Slot::Hair)));
+        assert!(!ComposedSlop::NoInk(Some(eyes)).keeps_ink(Some(eyes)));
+        assert!(!ComposedSlop::NoInk(None).keeps_ink(Some(Slot::Hair)));
+        assert!(ComposedSlop::On.keeps_ink(None));
     }
 
     #[test]

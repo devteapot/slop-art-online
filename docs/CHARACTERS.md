@@ -2531,6 +2531,19 @@ For composed people on char-4's bundle `9207d6a8` (main `42ca0b67`: the shared i
   - **Hair:** a whole file's hair is drawn from the person's own numbers, a composed person's is the shared cut (by design, [what a shared style gives up](#hair-as-shared-style-files)).
 
 
+### Composed files' `slop` (contract v1.3, 2026-11-20)
+
+**What changed:** composed type and style files can opt in to the hand-made contract's profiles and ink, through their scene's `{"slop": {"contract": 1}}` ([the composed contract](HANDMADE_COMPOSED.md)). The files that opt in can carry:
+
+- a hair palette relative to each person's hair tag (OKLCh ratios from a `ref`, with anchors per colour bin);
+- ink carriers on one shared ink page, every class a cell;
+- every hair cut's mask on one shared hair-mask page;
+- hero lines' `hero_file`.
+
+**Who writes the files:** S4 and S5 of char-port-2 write them. Until then `living/tools/characters/composed_fixture.py` makes a stand-in copy of a lookdev tree.
+
+**What stays the same:** files without the scene key draw as before, pixel for pixel. Profile hair is one material for every cut on a page, the lid and brow carriers are two, and a person's colours reach the palette through their mesh tag.
+
 ## Pictures as KTX2
 
 looks-tex-1 (2026-11-12, from the laptop's proposal `~/archive/looks-tex-1-proposal.md` as the general coordinator agreed it). A composed person's pictures go into a character bundle as KTX2: BC7, a full mip chain and zstd supercompression, converted at bundle time from the generator's PNGs. The generator is unchanged. Its PNGs stay its intermediates (`shade_mean.py`, `eye_colours.py` and the boards read them), and the conversion is a separate step on the bundle's copies, which char-4's bundle builder calls.

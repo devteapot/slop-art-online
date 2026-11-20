@@ -29,6 +29,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import statistics
 import subprocess
 import sys
@@ -84,13 +85,17 @@ def one(a, arm, binary, env, k, out, run=None):
     run = run or a.run
     d = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
     os.makedirs(d, exist_ok=True)
+    if a.settings:
+        # The run's own settings file (drive.py's LIVING_GAME_SETTINGS), seeded: a camera's stops.
+        shutil.copyfile(a.settings, os.path.join(d, "settings.json"))
     frames = os.path.join(d, "frames.csv")
     perf = ",".join(x for x in ["frames", "diag", "hitch=50", a.perf, env.pop("PERF", "")] if x)
     # Uncapped (the headless loop's default is 60 Hz): the frame interval is the frame's cost.
     e = dict(os.environ, LIVING_GAME_FRAMES=frames, LIVING_GAME_PERF=perf, LIVING_GAME_FPS_CAP=a.fps_cap, **env)
     if a.far:
         e["LIVING_GAME_FAR"] = "1000"
-    plan = f"ready;wait:3;dump:t0;wait:{a.still};dump:t1;walk:90:8;walk:180:8;walk:270:8;dump:t2;quit"
+    pre = f"{a.pre};" if a.pre else ""
+    plan = f"ready;{pre}wait:3;dump:t0;wait:{a.still};dump:t1;walk:90:8;walk:180:8;walk:270:8;dump:t2;quit"
     load0 = load()
     stop, rss = threading.Event(), [0.0]
     cmd = [sys.executable, DRIVE, "--run", run, "--name", name, "--plan", plan, "--client", binary, "--timeout", "600"]
@@ -162,6 +167,8 @@ def main():
     ap.add_argument("--still", type=float, default=30.0)
     ap.add_argument("--far", action="store_true", help="everyone on the full model (LIVING_GAME_FAR=1000)")
     ap.add_argument("--perf", default="", help="more LIVING_GAME_PERF flags for every arm")
+    ap.add_argument("--settings", help="a settings file to start each drive from (e.g. camera_tuning whose Middle stop is Near's, for a window without focus, which takes no zoom)")
+    ap.add_argument("--pre", default="", help="live-script steps after `ready`, before the still frames (e.g. `notches:9;wait:2` for the Near stop)")
     ap.add_argument("--fps-cap", default="0", help="LIVING_GAME_FPS_CAP for every run (default 0: uncapped)")
     a = ap.parse_args()
     arms = []

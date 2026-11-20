@@ -48,3 +48,24 @@ Run on a local hand-made export in `living/game/assets/view/` with its calibrati
 
 - Opening Settings closes the other windows: compare shines in one view with `shine:`, not with Settings.
 - Live residents with a person line use composed models by default. The client can fall back to a VRoid base. For the live lookbook and fallback routes, see [looks.md](looks.md).
+
+## Composed characters (contract v1.3)
+
+Composed type and style files opt in to `slop` through their scene: `{"slop": {"contract": 1}}` with no `character` ([the composed contract](../../../../docs/HANDMADE_COMPOSED.md)). The material-name rules still decide kinds; a valid `slop.hair` on name-rule hair makes it a profile (it packs `_HIGHLIGHT`, drops `_RING`), and `slop.ink` draws as on a hand-made file. Code: `handmade.rs` (`composed_of`, `composed_material`), `characters/compose.rs` (`Composer::toon`), `lookdev.rs` `convert` (type files), `characters/palette.rs`, `characters.rs` `recolor` (palette tags, bit 27), `toon.wesl` (`hand_colours`, `palette_row`).
+
+Sub-features:
+
+- `opt-in`: files without the scene key draw exactly as on main (no material `slop` read, today's content keys).
+- `palette`: `slop.hair.palette: "tag"` with `ref` (and up to 3 `anchors`) moves the swatches and the ink to each mesh's tag colour in OKLCh (lightness and chroma by ratio, hue by offset, gamut by chroma); entries per material in a 256×5 image at binding 105, the mesh's tag names its columns; greying hair mixes the natural and silver entries by `_GREY`. `slop.ink.ref` moves an ink colour the same way (a carrier named `…FaceBrow…` takes the hair tag).
+- `pages`: every cut's mask on `lookdev/styles/hair/hair-masks.png`, every class's carriers on `lookdev/types/types.eyes.ink.png`, their UV0 already in page space, manifests beside them (`hair-masks.json`, `types.ink.json`); `ink.m_uv` and `hair.ink_m_uv` declare the density, so files on one page share one material.
+- `noshine`: a profile ignores the hair-shine presets (Crown, Soft, Today) by design: `check.py hair`'s "differs from Crown" checks on people who all wear profile hair pass on their idle motion, not on the shine (run them on files without `slop` for the shine itself).
+- `switch`: `LIVING_GAME_COMPOSED_SLOP=on|off|noink|noink:<slot>` (measurement and tools: `off` draws composed files as before v1.3; `noink` drops `slop.ink` and a profile's lock ink).
+
+Driving it, with no world (the asset view and the tools):
+
+- The files: S4 and S5's generator writes them; until then `living/tools/characters/composed_fixture.py SRC/lookdev OUT/lookdev` (`uv run --with numpy --with pillow --with scipy`) makes an opted-in copy of a lookdev tree (carriers on every type's eyeline and brow, every hair cut on the mask page, Cora's palette relative to auburn with a dark anchor). Point the worktree's `living/game/assets/lookdev` link at OUT (never write into the main checkout's).
+- `LIVING_GAME_LOOK_BOOK=<book> LIVING_GAME_VIEW=look:<key>,…` with portrait (`idle@0/0:8:0.36:0.88`), Near and close shots: the palette on two or more hair colours, the dark anchor (a black-haired line with and without `anchors`), a greying elder.
+- `python3 living/tools/characters/calibrate.py lookdev/types/<type>.glb --no-run` (and a hair style): the composed audit, with the palette's entries for the nine hair colours; `calibrate.py --pages lookdev`: both pages against their manifests (a class's types must share their carriers' UV0: today's types don't, so the fixture fails that check by design).
+- `python3 living/tools/characters/palette.py --self-test`: the maths against the contract's worked example; `palette.py PROFILE.json [#rrggbb …]` prints a profile's entries.
+- `LIVING_GAME_LOOK_BOOK=<book> python3 living/tools/characters/ink_shimmer.py look:<key> --slot eyes|hair [--also portrait]`: the reference is the same person under `LIVING_GAME_COMPOSED_SLOP=noink:<slot>`.
+- Pixel identity: build main's client from its own worktree (the asset root is compiled in) and compare stills of unflagged files (a composed person at three-quarter and Near, a VRoid base, scenery, a hand-made file) pixel by pixel.
