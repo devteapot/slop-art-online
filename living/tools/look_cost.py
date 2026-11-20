@@ -240,6 +240,9 @@ def main():
     load = None
     try:
         stdb("publish", "-s", "local", "-b", str(Path("/wasm") / a.wasm), db, "--delete-data", "-y")
+        # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+        import genesis_wait
+        genesis_wait.wait_ready(URL, db, admin_token())
         replica = newest_replica()
         token = admin_token()
         ident = json.loads(http(f"/v1/database/{db}")[1])["database_identity"]["__identity__"].removeprefix("0x")

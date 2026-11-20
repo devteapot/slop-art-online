@@ -68,6 +68,9 @@ def main():
     a = ap.parse_args()
     db, run = a.db, f"duel-{int(time.time())}"
     stdb("publish", "-s", "local", "-b", "/wasm/living_authority.wasm", db, "--delete-data", "-y")
+    # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+    import genesis_wait
+    genesis_wait.wait_ready_cli(stdb, db)
     time.sleep(3)
     n = max(1, a.per_side)
     stdb("call", "-s", "local", db, "spawn_crowd", str(2 * n), "true")

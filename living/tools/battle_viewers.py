@@ -130,6 +130,9 @@ def one(a, n, out):
     try:
         lc.stdb("publish", "-s", "local", "-b", str(Path("/wasm") / a.wasm), db, "--delete-data", "-y")
         res["replica"] = lc.newest_replica()
+        # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+        import genesis_wait
+        genesis_wait.wait_ready(lc.URL, db, lc.admin_token())
         token = lc.admin_token()
         ident = json.loads(lc.http(f"/v1/database/{db}")[1])["database_identity"]["__identity__"].removeprefix("0x")
         time.sleep(3)
