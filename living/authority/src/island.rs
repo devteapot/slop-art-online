@@ -373,7 +373,7 @@ pub fn cover_bands(size: u32) -> usize {
 }
 
 /// Band `i`'s row: its ground samples and the candidates (sorted tile indices) inside it.
-fn cover_row(i: usize, candidates: &[u32], heights: Vec<i16>) -> CoverGround {
+pub(crate) fn cover_row(i: usize, candidates: &[u32], heights: Vec<i16>) -> CoverGround {
     let band = |v: &u32| ((v & !(1 << 31)) as usize) / COVER_BAND;
     let a = candidates.partition_point(|v| band(v) < i);
     let b = candidates.partition_point(|v| band(v) <= i);

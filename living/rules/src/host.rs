@@ -346,6 +346,28 @@ pub struct Digests {
 
 pub const HEIGHT_STEP_M: u32 = 8;
 
+/// Lattice rows (`y = row × HEIGHT_STEP_M`) a land's heights digest runs over.
+pub fn height_rows(land: &Land) -> u32 {
+    land.size.div_ceil(HEIGHT_STEP_M)
+}
+
+/// The heights digest of [`digests`] taken a few lattice rows at a time: start from
+/// `FNV_OFFSET`, carry the value through every row of `0..height_rows(land)` in order, and the
+/// result is `digests(..).heights` (Cargo `heights_digest_in_rows_is_the_digest`).
+pub fn heights_digest_rows(land: &Land, mut heights: u64, rows: std::ops::Range<u32>) -> u64 {
+    for row in rows.start..rows.end.min(height_rows(land)) {
+        let y = row * HEIGHT_STEP_M;
+        let mut x = 0;
+        while x < land.size {
+            let (fx, fy) = (x as f32 + 0.37, y as f32 + 0.61);
+            heights = fnv1a(heights, &land.height(fx, fy).to_bits().to_le_bytes());
+            heights = fnv1a(heights, &land.water_level(fx, fy).to_bits().to_le_bytes());
+            x += HEIGHT_STEP_M;
+        }
+    }
+    heights
+}
+
 pub fn digests(land: &Land, hosted: &Map) -> Digests {
     let tiles = fnv1a(FNV_OFFSET, &hosted.tiles);
     let mut heights = FNV_OFFSET;

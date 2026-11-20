@@ -168,13 +168,15 @@ fn laws() {
         characters_table_on: true,
         // Whether a player's copies of the fighters it sees (their moves and health bands) reach its
         // client as rows of a table only that player can read (`seen_fighter_copy`, row-level
-        // security; on) or only through the fighter views (off, until the client reads the table:
-        // docs/BATTLE_VIEWERS.md). The views show the same either way.
-        fighter_tables_on: false,
+        // security; on, since combat-defaults: the client reads it, combat-switches) or only
+        // through the fighter views (off: the kill switch). The views show the same either way
+        // (docs/BATTLE_VIEWERS.md).
+        fighter_tables_on: true,
         // What a player's character perceived of fights reaching its client as event rows only
         // that player can read (`combat_feed`, row-level security; on) or only through the
-        // `my_combat` view (off, until the client reads the table: docs/BATTLE_VIEWERS.md).
-        combat_feed_on: false,
+        // `my_combat` view (off: the kill switch). On since combat-defaults, after the client
+        // reads it (combat-switches) and the commitlog measurement (docs/BATTLE_VIEWERS.md).
+        combat_feed_on: true,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.

@@ -337,7 +337,7 @@ fn laws() {
 }
 ```
 
-A world needs its cover bands (`cover_ground`) for the switch. Since `cover-genesis` (2026-11-20), a land made with its cover law off (the island) has none. When the overlay is installed, it derives them in steps, for about 6 s on the island, and cover is in force once they are complete ([cover geometry](#cover-geometry-only-where-cover-is-on-2026-11-20)). Before that, the play-test world had to be made fresh from a module at or after `7619ad71`.
+A world needs its cover bands (`cover_ground`) for the switch. Since `cover-genesis` (2026-11-20), a land made with its cover law off (the island) has none. When the overlay is installed, it derives them in steps (about 6 s on the island before `cover-stall`, about 2 s since, [the cover-stall fix](#the-cover-stall-fix-2026-11-20)), and cover is in force once they are complete ([cover geometry](#cover-geometry-only-where-cover-is-on-2026-11-20)). Before that, the play-test world had to be made fresh from a module at or after `7619ad71`.
 
 **Island creation and an overlay (found 2026-11-19).** A module with the island seed compiled in *and* the play-test scene's overlay as the seed's `laws` ran out of reducer energy in `init`, with or without the switch-on lines; the plain island seed created normally on the same server. The scratch proof therefore made a plain island world and installed the composed overlay with `living/tools/install_script.py <db> --seed <seed>`. A play scene that compiles the overlay into an island module may hit the same limit. Proof: verify-player `sight_on.py` ([cover in a player's projection](../.agents/skills/verify-player/features/cover.md)) on scratch worlds of Cullet and of the island with that overlay, with the laws as shipped and no admin override before the checks. Its validation record is in `.agents/skills/verify-player/references/validation/`.
 
@@ -402,7 +402,7 @@ The retained data is the same bands as before, and only in worlds that use cover
 | island, live | 40 | 72.9 × 10⁹ | under 29 × 10⁹ (land generation, about 1.2 s) | 6.8 s |
 | megacity 4096 m, live | 147 | 450.8 × 10⁹ | 28.8 × 10⁹ (land tile rows, 1.0 s) | 31.4 s |
 
-Each step blocks the module while it runs, so ticks stop for up to about a second during the large land steps. Switching cover on is a rare admin act. Pause the world first if those stalls matter.
+Each step blocks the module while it runs, so ticks stopped for up to about a second during the large land steps. Superseded by [the cover-stall fix](#the-cover-stall-fix-2026-11-20): a land made since samples its kept ground source in steps of a few ms; a land made before still generates again, with shorter tile steps.
 
 ### Staged creation with cover on (4096 m megacity, seed rule `cover_sight_on: true`)
 
@@ -435,3 +435,104 @@ Evidence: `~/slop-evidence/cover-genesis-20261120.tar.zst`, with `results.jsonl`
 
 - The dead inline path (`seed::seed` for a land, used now only by a test) still samples the whole ground in its one call when cover is on.
 - A derivation generates the land again. Its cost is the land's generation plus sampling: island about 73 × 10⁹, 4096 m about 450 × 10⁹. Up to a second at a time, it runs on a world that may be ticking.
+
+## The cover-stall fix (2026-11-20)
+
+Branch `cover-stall` (Spark), on main `f9b36cef` and before it `79cb4a42`, rustc 1.99.1, SpacetimeDB 2.14.1 on a private server.
+
+### What the laptop saw
+
+On island scratch worlds (main `75e26fca`), switching cover on stalled the tick for 829–936 ms. The `cover_law` row reached the client 5.45 s after `set_world_law cover_sight_on true`, and 2.44 s after a later `set_world_law cover_brush_min_fill …`. verify-ui `law-override` passed 68 of 72, and all four failures were cover laws (timing).
+
+### Why
+
+- **The stall.** SpacetimeDB runs one reducer at a time per database, in the order calls are queued. The 2.14.1 host runs a WASM module's reducers on "a single executor backed by a single OS thread" (`crates/core/src/host/module_host.rs`, `WasmtimeModuleHost`: "Reducers are not executed concurrently"). Its scheduler hands each due scheduled call to that executor as it comes due (`host/scheduler.rs`, `SchedulerActor`). So the tick waits behind whatever runs. The derivation's steps were the land generation's own steps: up to 24 × 10⁹ instructions on the island (all 2048 tile rows in one step, 0.9 s) and up to 29 × 10⁹ at 4096 m.
+  - Procedures are no way out. A WASM procedure takes an instance from the procedure pool but runs on the same executor thread, and yields it only while it awaits (an HTTP request, a sleep). CPU-bound work in a procedure blocks ticks just the same.
+  - The docs pages (version 2.0.0) do not say reducers run one at a time. [Reducers](https://spacetimedb.com/docs/functions/reducers/) reserve the right to run reducers "concurrently in separate execution environments", which is why module memory stays a cache here. [Schedule tables](https://spacetimedb.com/docs/tables/schedule-tables/) say one-shot rows are deleted after the reducer runs, and that the dispatch order of rows already expired is not guaranteed. A derivation has one row at a time, so ordering cannot reorder its steps.
+- **The brush-fill delay was not a re-derivation.** `set_world_law cover_brush_min_fill` with the bands kept is value-only: `geometry::ensure` returns at once, and only the `cover_law` row and the mask change. In the laptop's run, the scenario changes the brush 3 s after the switch-on, while the derivation was still running. The game client shows a cover policy only once `cover_law.cover_sight_on` is on (`sightfield.rs`), so the brush edit's effect line came when the derivation ended: 5.45 − 3.0 ≈ 2.45 s. A brush edit after the derivation took under 0.6 ms in the reducer on main and on the branch (below). The mask compile on the next tick, though, read all 256 bands back (8 MB of rows) and took 50–73 ms on the island (now 4–7 ms, below).
+
+### The design
+
+- **A ground source, kept at creation.** A land made with cover off now keeps, in its hosting step, what its ground heights are computed from: `Land::ground_source`. That is the macro grids, the sites' levelling, the shore distances (run-length coded) and the roads' and lots' shaping, encoded exactly, floats by their bits. It also keeps the tree and cliff candidates of the hosted tiles. They go in the new private table `cover_source` (256 KiB rows, never written again). Sizes: island 3.8 MB in 15 rows; the 4096 m megacity 9.0 MB in 35 rows. `Land::from_ground_source` gives a land whose `height` and `water_level` are bit for bit the generated land's (Cargo `ground_source_samples_the_land`: a default land and plan-test, every tile, plus the heights digest).
+- **A switch-on samples it in short steps.** No generation is involved. Each `cover_step` does one of these:
+  - reads two source rows;
+  - decodes one part (`living_rules::land::GroundDecode`: grids and sites, shore distances, segments, pads and plans' ground, the shaping index built again);
+  - checks 6,144 lattice points of the land row's heights digest (`host::heights_digest_rows`; a module whose ground differs stops with that reason);
+  - samples half a band (8,192 tiles), writing the band's `cover_ground` row once its second half is sampled.
+
+  Steps follow one another at once (`ScheduleAt::Time` at the step's own start, so due immediately). A tick queued meanwhile waits for one step at most.
+- **No mask compile reads the bands back.** The last step hands what it sampled to the map's cover cache (`common::keep_cover_geometry`). Without it, the first compile reads the bands once into that cache. A later value-only cover edit (eye height, brush, cliff step) then compiles the mask from memory; it never derives anything.
+- **Lands made before this branch** have no ground source. They still generate the land again, now with the tile rows in steps of 32,768 tiles instead of one, and the same half-band sampling. Their other generation steps are not split (the island's longest, the planner's lots, is about 0.5 s; up to 12 × 10⁹ at 4096 m), so a switch-on there still stalls the tick up to about half a second on the island. Pause such a world first if that matters, or make it again.
+- **The same rules for players and minds.** Cover is in force for everyone at once, when the last band is kept, as before.
+- **Bands are byte-identical.** sha256 over every `cover_ground` row (cover-genesis's `bands.py`):
+  - island, from the source: `e36c6426…` (256 rows);
+  - island made by main and then updated to this branch (the regeneration path): `e36c6426…`;
+  - 4096 m megacity floor, from the source: `24ebfd97…` (1,024 rows).
+
+  These are the digests cover-genesis recorded for creation with cover on and for its switch-on.
+
+### Data paths
+
+| Path | Reads | Writes | Recipients | Frequency |
+| --- | --- | --- | --- | --- |
+| Creation, cover off (hosting step) | the land in memory | `cover_source` (15 rows on the island, 35 at 4096 m) | none (private) | once per land |
+| Switch-on step from the source | `cover_derivation`, `land`, `land_plan`, `cover_source` (2 rows, then none), `cover_ground` count | one `cover_derivation` update and one `cover_timer` row per step; one `cover_ground` row every second sampling step | none until the last step's `cover_law` update | about 540 steps on the island, 2,110 at 4096 m, back to back |
+| Mask compile after a policy change | the cover cache (memory); the `cover_ground` rows once per instance when it is empty | — | — | per policy change |
+
+Retained data grows by the source: about 3.8 MB per island-sized land, about 9 MB at 4096 m, kept whether or not cover is ever switched on (half the bands' 8 MB and 32 MB). The decoded source lives in module memory during a derivation, about 30 MB at 4096 m, against the regenerated land's 60–210 MB.
+
+### Measurements
+
+Setup:
+- **Server.** The private container `slop-coverstall-20261120`, pinned to the X925 cores (CPUs 5–9, 15–19) under `~/slop-mq/battle.lock`. Load average 1.8–5.7 over the 8-minute series. No players, minds or observer.
+- **Driver.** `law_override.py switch` (verify-core) on fresh worlds:
+  1. `set_profile` on;
+  2. `set_world_law cover_sight_on true`, with `cover_law` polled every ~10 ms until on;
+  3. every `tick` span and every `cover_step` span from the call until a second after (on main, which has no `cover_step` span, its `cover.generate`, `cover.host` and `cover.ground_bands` spans);
+  4. a `cover_brush_min_fill` edit with cover in force.
+- **Builds.** Main is `f9b36cef`. The branch is `cover-stall` merged with it (`3e7ff54f`). The fallback row is an island made by main's module, then updated in place to the branch's.
+
+| World | `cover_law` on after | Steps | Longest step | Step p99 | Longest tick | Tick interval p50 / p99 / max | First mask compile |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| island, main | 5.91 s | 40 | 894.7 ms | 894.7 ms | 53.6 ms | 16.8 / 274.1 / **922.8 ms** | 50.1 ms |
+| island, branch | **1.93 s** | 537 | **3.2 ms** | 2.3 ms | 5.6 ms | 16.6 / 19.5 / **20.0 ms** | 4.3 ms |
+| island made by main, branch (regeneration) | 6.85 s | 675 | 501.1 ms | 67.7 ms | 8.3 ms | 16.8 / 114.6 / 517.8 ms | 4.1 ms |
+| 4096 m megacity floor, main | 30.37 s | 147 | 990.4 ms | 987.8 ms | 191.0 ms | 17.0 / 742.8 / **996.9 ms** | 188.8 ms |
+| 4096 m megacity floor, branch | **11.16 s** | 2,115 | **6.5 ms** | 6.3 ms | 3.5 ms | 16.7 / 22.0 / **23.3 ms** | 2.6 ms |
+
+The brush edit (`cover_brush_min_fill` 0.6 → 0.44, cover in force, with the bands kept):
+
+| World | Reducer | `cover_law` carries it after | Mask compile (next tick) | Longest tick in the 1.5 s after | Longest tick interval |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| island, main | 0.48 ms | 67.1 ms | 50.3 ms | 52.1 ms | 68.7 ms |
+| island, branch | 0.44 ms | 25.6 ms | 4.2 ms | 5.8 ms | 22.1 ms |
+| 4096 m, main | 0.47 ms | 206.7 ms | 188.3 ms | 189.2 ms | 206.6 ms |
+| 4096 m, branch | 0.44 ms | 33.1 ms | 2.5 ms | 3.4 ms | 19.6 ms |
+
+What the figures show:
+- **Main stalls the tick for about a second** at switch-on: 923 ms on the island, the laptop's 829–936 ms, and 997 ms at 4096 m. On the branch, the longest standstill is 20–23 ms, one step plus a tick. Every step is at most 3.2 ms on the island and 6.5 ms at 4096 m, against the target of about 10 ms.
+- **The derivation is also faster end to end:** 1.9 s against 5.9 s on the island, and 11.2 s against 30.4 s at 4096 m. Main waited 100 ms between steps; the branch's steps follow one another at once.
+- **A brush edit never derives.** On both branches the reducer takes under half a millisecond. Main then compiled the mask on the next tick from every band read back: 50 ms on the island, 188 ms at 4096 m. The branch compiles it from the cache: 4.2 ms and 2.5 ms.
+- **The regeneration fallback** still stalls a tick for up to 0.5 s on the island (the planner's lot step), about half of main's worst. Worlds made since this branch never take it.
+- **Genesis fuel** (`genesis_fuel.py`, a stepping build; main `f9b36cef` against the branch at `79cb4a42`): `init` is unchanged, island 11.69 × 10⁹ on both. The hosting step rises by the ground source kept: island 1.43 → 1.79 × 10⁹, 4096 m 14.96 → 16.19 × 10⁹. Steps: 40 and 142 on both. The largest step is unchanged (island 25.3 × 10⁹, populate; 4096 m 28.8 × 10⁹, tile rows), and no step is near the 50 × 10⁹ rule.
+
+### Proofs
+
+- Bands are byte-identical: see the design above.
+- The scenes, on the branch:
+  - `law_override.py checks` 61/61, the switch-on derivation scene included (537 steps, done in 1.75 s);
+  - `cover.py` on Cullet 23/23;
+  - verify-player `sight_on.py` 16/16 on Cullet;
+  - the play-test flow (a plain island, then the overlay installed with `install_script.py --seed`): 11/11, after waiting 2.0 s for cover against cover-genesis's 6.0 s.
+- verify-generation `--seeds island,floor-megacity-2k,floor-megacity-4k`: 995, 82 and 97 checks, all passed.
+- verify-client `run.py`: 45/45, with cues 23, near tier 7 and motion tables 34. `cover_source` is in the private-table inventory and refused to players.
+- `living-check` passed.
+
+### Limits
+
+- A land made before this branch has no ground source. It generates again, with stalls of up to about 0.5 s on the island (the planner's steps are not split). Making the world again gives it a source.
+- The ground source is kept for every land made with cover off, whether or not cover is ever switched on: 3.8 MB on the island, 9.0 MB at 4096 m.
+- The mask compile on the tick after a policy change (2.5–4.3 ms here) runs inside that tick; it is not split.
+- Not measured: a switch-on under player or mind load, and the game client's own mask build (`sightfield.rs`, which samples the land it generated itself).
+
+Evidence: `~/slop-evidence/cover-stall-20261120.tar.zst` (with its `.sha256`). It holds the timing JSONs, the band digests, the genesis fuel reports, the scene runs and the mechanics loop.

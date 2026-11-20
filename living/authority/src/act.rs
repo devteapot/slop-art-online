@@ -840,6 +840,8 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
 #[allow(clippy::too_many_arguments)]
 pub fn begin_with(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), run: Option<bool>, spacing: Spacing, now: u64, cur: Option<Activity>) -> Result<(), String> {
     crate::latency::nav(ctx, id, "act_attempt", u64::from(revision), format_args!("{node} {skill}"));
+    // A movement that can no longer end holds nothing (`unstick`).
+    let cur = cur.filter(|a| !unstick(ctx, a, now));
     refuse(living_rules::outcome::act::REFUSED);
     let sc = common::scripts(ctx);
     let shape = shape_of(&sc, skill);
@@ -1297,6 +1299,49 @@ pub fn refresh_rates(ctx: &ReducerContext, id: u32) {
 }
 
 /// Cancel an activity; `why` reports an interruption to the owning node.
+/// Why a movement under way ends when its body is put elsewhere (admin `place_near`,
+/// `place_at`: `motion::place`).
+const RELOCATED: &str = "you were put somewhere else before it was done";
+/// Why a movement ends that can no longer end by itself ([`stalled`]).
+const STALLED: &str = "it came to a stop before it was done";
+
+/// A body put somewhere else (`motion::place`): a movement under way (phase 0: a walk, an
+/// approach, a dash or a jump, which end only by their steering's arrival or loss) is broken
+/// off before the body moves, since the steering that would end it stops. The same for players
+/// and minds: the use's outcome ("broken off"), the move's end (`fighter.until_ms`), a player's
+/// movement held meanwhile (`combat::resume_move`) and the node's report all follow, as for any
+/// movement broken off. Work in place (phase 1) runs on by its own timer.
+pub fn relocated(ctx: &ReducerContext, id: u32, now: u64) {
+    if let Some(a) = ctx.db.activity().id().find(id).filter(|a| a.phase == 0) {
+        log::info!("activity {id}: {} broken off: put somewhere else", a.skill);
+        cancel_as(ctx, a, now, Some(RELOCATED), living_rules::outcome::act::BROKEN_OFF);
+    }
+}
+
+/// A movement that can no longer end: in its first phase with no timer (it ends only by its
+/// steering's arrival or loss), while the body's steering has no goal and the body has no
+/// motion due. Before relocation broke movements off, a teleport left one so for good: a
+/// player's dash then held every move (`combat::rooted_now`), and a committed one refused a
+/// mind's every new move.
+pub fn stalled(ctx: &ReducerContext, a: &Activity) -> bool {
+    a.phase == 0
+        && a.ends_ms == IDLE
+        && ctx.db.steer().id().find(a.id).is_none_or(|s| s.goal == motion::GOAL_NONE)
+        && ctx.db.body().id().find(a.id).is_none_or(|b| b.next_ms == IDLE)
+}
+
+/// End `a` if it is [`stalled`] (broken off, told truthfully); true when it did. Called where an
+/// activity would hold the body: a player's move (`combat::rooted_now`) and any new start
+/// (`begin_with`), so no activity defers a body for ever.
+pub fn unstick(ctx: &ReducerContext, a: &Activity, now: u64) -> bool {
+    if !stalled(ctx, a) {
+        return false;
+    }
+    log::warn!("activity {}: {} (node {}) could no longer end; broken off", a.id, a.skill, a.node);
+    cancel_as(ctx, a.clone(), now, Some(STALLED), living_rules::outcome::act::BROKEN_OFF);
+    true
+}
+
 pub fn cancel(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>) {
     cancel_as(ctx, a, now, why, living_rules::outcome::act::BROKEN_OFF);
 }

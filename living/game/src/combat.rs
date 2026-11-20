@@ -2,7 +2,8 @@
 //! every move, hit and death; this module
 //!
 //! - reads what my character perceived (`my_combat`, transient rows the authority writes only
-//!   for what my character could see) and what others look like in a fight (`fighter`, through
+//!   for what my character could see, or the same rows from the `combat_feed` event table while
+//!   `combat_feed_on` is on: `net::take_combat`) and what others look like in a fight (`fighter`, through
 //!   the body window), and my own timing (`my_readiness`);
 //! - maps the skill bar's keys to `use_skill` / `release_skill`, aiming skillshots at the
 //!   cursor's ground point and targeted skills at the creature under or nearest the cursor;
@@ -39,6 +40,9 @@ const PREDICT_MS: f64 = 600.0;
 pub const CORPSE_S: f64 = 7.0;
 /// How long a hit reaction plays (ms).
 const HIT_MS: f64 = 450.0;
+/// How long past its expiry a taken row's id is kept (ms): the authority drops expired rows at
+/// the viewer's frame or, at the latest, a second or so after (`combat::expire`).
+const SEEN_KEEP_MS: f64 = 60_000.0;
 
 /// What a drawn character plays for a move.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -93,7 +97,14 @@ pub enum NumberKind {
 
 #[derive(Resource, Default)]
 pub struct Combat {
-    seen_ids: HashSet<u64>,
+    /// Every feed row taken, by id, with when the authority lets it go (`expires_ms`): both
+    /// sources (`my_combat` and `combat_feed`) carry `combat_seen`'s ids, so a row read from both
+    /// is taken once. An id is forgotten only well after its row expired ([`SEEN_KEEP_MS`]), when
+    /// neither source can send it again (a switch back to `my_combat` brings every row still
+    /// kept, a death's for two minutes).
+    seen_ids: HashMap<u64, u64>,
+    /// The ids taken since the seen log last wrote them (`net::seen_log`), only while it is on.
+    pub logged: Vec<u64>,
     /// Events that arrived this frame (effects spawn from these).
     pub fresh: Vec<Event>,
     /// The last few seconds of events (hit reactions, death screen).
@@ -397,11 +408,23 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c
     let now = now_ms(&scene);
     c.fresh.clear();
     let Some(conn) = net.conn.as_ref() else { return };
-    let me = net.my_id;
-    let mut rows: Vec<CombatSeen> = conn.db.my_combat().iter().filter(|r| !c.seen_ids.contains(&r.id)).collect();
+    let mine = |id: u32| conn.db.my_characters().id().find(&id).is_some();
+    take_rows(&mut c, crate::net::take_combat(conn), net.my_id, mine, &cards, now, crate::net::seen_logging());
+}
+
+/// Take my combat feed's rows (`net::take_combat`: `my_combat`'s and `combat_feed`'s, merged by
+/// id): each row once, in id order, whichever source it came from, so the death screen, the
+/// numbers and the reactions are the same with either. `mine` says whether a creature is a
+/// character I play (or played: the dead one stays in `my_characters`).
+fn take_rows(c: &mut Combat, rows: Vec<CombatSeen>, me: Option<u32>, mine: impl Fn(u32) -> bool, cards: &Cards, now: f64, logging: bool) {
+    let mut rows: Vec<CombatSeen> = rows.into_iter().filter(|r| !c.seen_ids.contains_key(&r.id)).collect();
     rows.sort_by_key(|r| r.id);
+    rows.dedup_by_key(|r| r.id);
     for r in rows {
-        c.seen_ids.insert(r.id);
+        c.seen_ids.insert(r.id, r.expires_ms);
+        if logging {
+            c.logged.push(r.id);
+        }
         let ev = Event { row: r.clone(), seen_ms: now };
         let at = Vec2::new(r.x, r.y);
         match r.kind {
@@ -419,7 +442,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c
             seen::DEATH => {
                 c.deaths.insert(r.actor, now);
                 // My own death: who killed me; the witnesses arrive beside it.
-                if conn.db.my_characters().id().find(&r.actor).is_some() {
+                if mine(r.actor) {
                     c.killer = (r.target != 0).then_some(r.target);
                     c.witnesses.clear();
                 }
@@ -445,10 +468,10 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c
     c.recent.retain(|e| now - e.seen_ms < 8_000.0);
     c.numbers.retain(|n| now - n.born_ms < 1_400.0);
     c.deaths.retain(|_, t| now - *t < CORPSE_S * 1000.0);
-    // Rows the authority dropped are gone from the cache; keep the id set bounded.
+    // Keep the id set bounded by time, not by the cache: with the feed from `combat_feed` the
+    // cache holds no rows, yet a switch back to `my_combat` sends again every row still kept.
     if c.seen_ids.len() > 4096 {
-        let live: HashSet<u64> = conn.db.my_combat().iter().map(|r| r.id).collect();
-        c.seen_ids.retain(|id| live.contains(id));
+        c.seen_ids.retain(|_, expires| *expires as f64 + SEEN_KEEP_MS > now);
     }
 }
 
@@ -921,5 +944,84 @@ mod committed_tests {
         assert!(held(Some(&windup), false) && !held(Some(&windup), true));
         // Over a dash: nothing starts, a guard or another dash alike.
         assert!(held(Some(&dodge), false) && held(Some(&dodge), true));
+    }
+}
+
+#[cfg(test)]
+mod feed_tests {
+    use super::*;
+    use spacetimedb_sdk::Identity;
+
+    fn row(id: u64, kind: u8, actor: u32, target: u32, amount: f32, expires_ms: u64) -> CombatSeen {
+        CombatSeen { id, viewer: Identity::ZERO, expires_ms, at_ms: 1_000 + id, kind, actor, target, skill: 1, x: 1.0, y: 2.0, dx: 0.0, dy: 1.0, amount, ms: 0, note: String::new() }
+    }
+
+    /// What the death screen and the effects are made from, after the rows are taken.
+    fn screen(c: &Combat) -> (Option<u32>, Vec<u32>, Vec<u32>, Vec<u64>, usize) {
+        let mut deaths: Vec<u32> = c.deaths.keys().copied().collect();
+        deaths.sort_unstable();
+        (c.killer, c.witnesses.clone(), deaths, c.recent.iter().map(|e| e.row.id).collect(), c.numbers.len())
+    }
+
+    /// My death (I am #7, killed by #9, seen by #9 and #11), a blow before it, a refusal.
+    fn death_rows() -> Vec<CombatSeen> {
+        vec![
+            row(40, seen::HIT, 9, 7, 30.0, 5_000),
+            row(41, seen::DEATH, 7, 9, 0.0, 121_000),
+            row(42, seen::WITNESS, 9, 7, 0.0, 121_000),
+            row(43, seen::WITNESS, 11, 7, 0.0, 121_000),
+            row(44, seen::WITNESS, 0, 7, 0.0, 121_000),
+        ]
+    }
+
+    #[test]
+    fn the_death_screen_is_the_same_from_my_combat_from_the_feed_and_from_both() {
+        let cards = Cards::default();
+        let mine = |id: u32| id == 7;
+        // The view's rows alone (combat_feed_on off).
+        let mut view = Combat::default();
+        take_rows(&mut view, death_rows(), None, mine, &cards, 1_500.0, false);
+        // The event rows alone, as `net::combat_of` maps them, over three frames (one
+        // transaction's rows arrive together and in id order; frames split only between them).
+        let mut feed = Combat::default();
+        let mut r = death_rows().into_iter();
+        for n in [1, 2, 2] {
+            take_rows(&mut feed, r.by_ref().take(n).collect(), None, mine, &cards, 1_500.0, false);
+        }
+        // Both sources at once (a switch, or the connect's one read beside the feed): each row once.
+        let mut both = Combat::default();
+        let mut rows = death_rows();
+        rows.extend(death_rows());
+        take_rows(&mut both, rows, None, mine, &cards, 1_500.0, true);
+        assert_eq!(both.logged, vec![40, 41, 42, 43, 44], "each id taken once, in order");
+        assert_eq!(screen(&view).0, Some(9));
+        assert_eq!(screen(&view).1, vec![9, 11], "id 0 is no one");
+        assert_eq!(screen(&view), screen(&feed));
+        assert_eq!(screen(&view), screen(&both));
+        // The view's rows again, after the feed took them (a switch back to `my_combat` brings
+        // every row still kept): nothing taken twice, the screen unchanged.
+        feed.fresh.clear();
+        take_rows(&mut feed, death_rows(), None, mine, &cards, 1_600.0, false);
+        assert_eq!(screen(&feed), screen(&view));
+        assert!(feed.fresh.is_empty());
+    }
+
+    #[test]
+    fn taken_ids_are_forgotten_by_time_not_by_the_cache() {
+        let cards = Cards::default();
+        let mut c = Combat::default();
+        // More than the bound, all still kept by the authority: none forgotten, even though no
+        // source holds them now (the feed's rows are never in the cache).
+        let rows: Vec<CombatSeen> = (0..5_000u64).map(|i| row(i, seen::RELEASE, 3, 0, 0.0, 10_000)).collect();
+        take_rows(&mut c, rows, None, |_| false, &cards, 9_000.0, false);
+        assert_eq!(c.seen_ids.len(), 5_000);
+        // A death row kept two minutes still blocks a second take after the bound is passed.
+        take_rows(&mut c, vec![row(9_999, seen::DEATH, 7, 9, 0.0, 130_000)], None, |id| id == 7, &cards, 9_100.0, false);
+        // Long past their expiry, the short rows go; the death's id stays.
+        take_rows(&mut c, vec![], None, |_| false, &cards, 10_000.0 + SEEN_KEEP_MS + 1.0, false);
+        assert!(c.seen_ids.contains_key(&9_999) && c.seen_ids.len() == 1, "{}", c.seen_ids.len());
+        c.fresh.clear();
+        take_rows(&mut c, vec![row(9_999, seen::DEATH, 7, 9, 0.0, 130_000)], None, |id| id == 7, &cards, 80_000.0, false);
+        assert!(c.fresh.is_empty(), "the death is not taken again");
     }
 }

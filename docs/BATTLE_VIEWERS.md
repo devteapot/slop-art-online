@@ -219,7 +219,7 @@ Players read it through the per-sender view `my_combat`. In 2.14.1 a view is re-
 - **Its rule:** one row-level-security rule, `SELECT * FROM combat_feed WHERE viewer = :sender` (`frame::COMBAT_FEED_FILTER`).
 - **Its rows:** with the `combat_feed_on` law on, `combat::feed_row`, the one place every feed row is written, also inserts the event row (`CombatFeed::of`).
 - **`combat_seen` stays private and unchanged.** It is still the source of truth for the death screen, reconnect and the frame's expiry, and the view stays for the observer, tools and verify-player.
-- **The law:** `combat_feed_on` is a value-only delivery law (`VALUE_ONLY`), **off by default**, switched per world by its `law_override` row with no reinstall. Off writes no event rows: main's path exactly.
+- **The law:** `combat_feed_on` is a value-only delivery law (`VALUE_ONLY`), off by default until `combat-defaults` (2026-11-20), **on since**, switched per world by its `law_override` row with no reinstall. Off writes no event rows: main's path exactly.
 
 **The client contract** (the laptop's half, a later change set):
 - with the law on, subscribe to `combat_feed` instead of `my_combat`;
@@ -275,7 +275,7 @@ The third step of the views track. The GC's decisions: fighters only (`seen_doin
 - **A primary key, unlike `seen_body_copy`.** `id` is the private copy's key (the viewer's character and the creature). Fighter copies change often (a move, a band). The first, keyless build made every change a delete and an insert on three indexes: it cost 24–43 ms/s more tick WASM, and nothing net at 16 viewers. With the key a change is one in-place update, the `(viewer, body)` index is gone, and the law's moves need no player lookup.
 - **One writer:** `frame::show_fighter` writes the copy where it is. A creature leaving sight, or a viewer forgetting its scene, drops it there too.
 - **The views:** `seen_fighters`, `_near` and `_far` read the public rows first (by `viewer`, or `(viewer, near)` for the tiers) and show the same either way.
-- **The law:** `fighter_tables_on`, value-only (Delivery), **off by default**, its `law_override` row the kill switch. On, each viewer's frame moves its copies whole (`frame::fighters_to_public`). Off, the first tick moves every public copy back (`frame::all_private_fighters`, span `tick.fighters_private`). `all_full` forgets the law's last value, as for the other two.
+- **The law:** `fighter_tables_on`, value-only (Delivery), off by default until `combat-defaults` (2026-11-20), **on since**, its `law_override` row the kill switch. On, each viewer's frame moves its copies whole (`frame::fighters_to_public`). Off, the first tick moves every public copy back (`frame::all_private_fighters`, span `tick.fighters_private`). `all_full` forgets the law's last value, as for the other two.
 
 **Data paths.** The same rows as the private copies, written where the viewer's copies are: one update per change, an insert per newcomer, a delete per departure. No new reads: `show_fighter` finds the copy by its key in either table. The only extra row a viewer holds is its `copy_state` row, already there for the other copy tables. The table is delivered by RLS to each row's viewer.
 
@@ -301,6 +301,12 @@ The third step of the views track. The GC's decisions: fighters only (`seen_doin
 - **Per viewer by subtraction:** the 0-viewer arm (`battle_viewers.py` gave it no battle under `--battle-after-placing` before this branch; fixed) puts a viewer at about 13.2 ms/s on base and 12.1 with the fighter table at 16 viewers. That includes the AI's extra work fighting the viewers on the 10 m ring, as the Spark's 12.1–13.1 do.
 
 **Rollout:** as step 1. The authority merges with the law off. The laptop's client reads `seen_fighter_copy` while the law is on, make-before-break both ways, merging the copy's `fighter` rows as the view's. The default flips with it in one change set, which also runs `cargo test -p living-game`.
+
+**The client half (both steps), built 2026-11-20 (`combat-switches`, laptop).** The defaults flip on top of it in one change set, `combat-defaults` (dev-box, 2026-11-20): `fighter_tables_on` and `combat_feed_on` both `true` in `skills.rhai`'s law block and `Laws::default`, the commitlog measurement (checklist item 0) having cleared `combat_feed_on`. `net::Feed` gains two flags, `fighter_table` and `combat_feed`, chosen by `fighter_tables_on` and `combat_feed_on` through `perception_law` as the copy tables are, so 32 sets.
+- **The fighters.** `seen_fighter_copy` replaces the fighter views (`seen_fighters`, or its tiers). The reads (`net::find_fighter`, `fighters`) move once the table holds my scene. Leaving, the rows are kept and its deletes ignored until the views are in. The fighter cue table stays with the tiers.
+- **The combat feed.** `combat_feed` replaces `my_combat`, which moved from the base set into the perception set. Nothing waits on the event table: `net::take_combat` hands `combat::ingest` the view's cached rows and every event row, merged by `combat_seen`'s id. Ids are forgotten by time (60 s past expiry), so a switch back cannot replay a death. A connection whose first set takes the feed reads `my_combat` once (subscribe, copy the rows when applied, unsubscribe).
+- **Nothing in the client depends on the defaults.** The tests read the shipped values: `SHIPPED_TIERED`/`SHIPPED_UNTIERED`, with the two new laws taken from the shipped script by `shipped()`.
+- **Proofs:** verify-ui `combat-switches`, `combat-switches-death` (dev-box's death-screen equality, on the client), `combat-switches-ui` and `combat-switches-cost`; see `.agents/skills/verify-ui/features/combat-switches.md` and its validation record. Documentation read: [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/) (subscribe the new set before unsubscribing the old; unsubscribing is asynchronous) and [access permissions](https://spacetimedb.com/docs/tables/access-permissions) (it covers table visibility and views, not row-level security, which is on the [RLS page](https://spacetimedb.com/docs/how-to/rls) cited above). Both pages show version 2.0.0; the pins are 2.14.1.
 
 ## Rollout: one change set, one play-test window (decided 2026-11-20; merged, defaults on)
 
@@ -385,25 +391,23 @@ The checklist's item 0, for the GC. **The feed adds about 96 bytes of commitlog 
 
 **What 2.14.1 does with it, from the versioned source** (`v2.14.1`, `a0bf6be`):
 - **Event inserts are logged.** `committed_state.rs` merges an event table's inserts into the transaction data "for subscriptions and the commitlog" without keeping them. Only view (ephemeral) tables are left out of the log (`traits.rs`).
-- **When compression happens.** Segments rotate at 1 GiB (`DEFAULT_MAX_SEGMENT_SIZE`). A snapshot is taken every 1,000,000 logged transactions (`SNAPSHOT_FREQUENCY`). After each snapshot, the standalone server (`LocalPersistenceProvider`) compresses the sealed segments older than it with zstd at the default level (`snapshot_watching_commitlog_compressor`, `fs-utils/compression.rs`). Nothing is ever deleted.
-- **How long that takes here.**
-  - 216 viewers: at 362–372 transactions a second, a snapshot comes at most every 45 minutes or so, so about 23 GB of raw log builds up before the first compression.
-  - 16 viewers: at about 180 a second, about every 93 minutes, about 12 GB.
-  - The segment holding the snapshot stays raw.
-  - These 60 s windows did not reach a snapshot or a rotation, so the compression was read from source, not seen on disk.
+- **When compression happens** (corrected by the hour-long run, [BATTLE_DISK.md](BATTLE_DISK.md)). Segments rotate at 1 GiB (`DEFAULT_MAX_SEGMENT_SIZE`).
+  - A snapshot is taken at every rotation (`on_new_segment`), besides every 1,000,000 transactions (`SNAPSHOT_FREQUENCY`).
+  - After each snapshot, the standalone server compresses the sealed segments older than it in place (`snapshot_watching_commitlog_compressor`). It uses zstd seekable frames of at most 4 KiB, which keep about 0.34 of the raw bytes, not the 0.09 of one zstd stream. Nothing is ever deleted.
+  - The first reading here (a snapshot only every 1,000,000 transactions, so about 23 GB of raw log at 216 viewers before the first compression) was wrong. At 216 viewers a segment rotates every 2–4 minutes, and the raw part of the log stays within about one segment.
 
 **Does trial retention cover it?**
 - **For trial and verification worlds, yes.**
   - `trials.py run` and `battle_diag.py` pause the world, stream its `clog/` to a `.tar.zst` under `~/slop-evidence/`, test it, and delete only after the archive succeeds ([TRIAL_DISK.md](TRIAL_DISK.md#retention-on-the-trial-server)).
-  - The feed changes the archive by nothing measurable: about 2.5 GB per hour of a 216-viewer battle at zstd -6 either way.
+  - The feed changes the archive by nothing measurable: about 2.5 GB per hour of a 216-viewer battle at zstd -6 either way, if the raw log is compressed as one stream. A tar of segments the server has already compressed stays at about 0.30 of raw ([BATTLE_DISK.md](BATTLE_DISK.md)).
 - **What is missing, none of it new with the feed:**
-  1. **A running world.** SpacetimeDB 2.14.1 has no online commitlog retention or size cap. A world that holds a 216-viewer battle grows by about 31 GB an hour raw, then about 3 GB an hour once its snapshots compress the sealed segments. Nothing removes old segments except the manual offline procedure ([TRIAL_DISK.md](TRIAL_DISK.md#offline-snapshot-and-commitlog-pruning)): stop the server, take a cold backup, keep the latest snapshot and its covering segment onward, and test recovery on a copy. A play-test or a long-running world needs a disk budget per battle hour, or a scheduled maintenance window, before it runs battles of this size for hours.
-  2. **The hourly volume check.** `trial_volume_size.sh` samples hourly. A 216-viewer battle can add about 31 GB between two readings before its first snapshot, so the alarm's budget needs that much headroom, or a shorter interval while a battle runs.
+  1. **A running world.** SpacetimeDB 2.14.1 has no online commitlog retention or size cap. A world that holds a 216-viewer battle writes about 32 GB an hour raw and keeps about 12 GB an hour on disk after the server's own compression and snapshots (measured over an hour: [BATTLE_DISK.md](BATTLE_DISK.md)). Nothing removes old segments except the manual offline procedure ([TRIAL_DISK.md](TRIAL_DISK.md#offline-snapshot-and-commitlog-pruning)): stop the server, take a cold backup, keep the latest snapshot and its covering segment onward, and test recovery on a copy. A play-test or a long-running world needs a disk budget per battle hour, or a scheduled maintenance window, before it runs battles of this size for hours.
+  2. **The hourly volume check.** `trial_volume_size.sh` samples hourly. A 216-viewer battle adds about 12 GB on disk between two readings, so the alarm's budget needs that much headroom.
   3. **Deleted scratch worlds.** `battle_viewers.py` and plain verification cleanup (without `--archive-commitlog`) delete the database but leave its replica directory. Only recycling the scratch volume frees it. This series left 8 replicas with 4.1 GB of commitlog on `sg-stdb`.
 - **For the flip:** the feed's own share (+5% raw, about 0% compressed) needs nothing beyond what base already needs. Item 0 is met. The running-world gap stands with the law on or off.
 
 **Not covered.**
-- A run long enough to see the snapshot and compression on disk: at least 1,000,000 transactions, about 46 minutes at 216.
+- A run long enough to see the snapshot and compression on disk: done since, [BATTLE_DISK.md](BATTLE_DISK.md).
 - Snapshots' own size.
 - A world with long `note` strings: refusals carry text, so the row grows with it.
 - Pinned cores.

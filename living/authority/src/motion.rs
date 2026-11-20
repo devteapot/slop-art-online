@@ -1496,6 +1496,9 @@ pub fn place(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> Result<
     common::body_written(b.id);
     ctx.db.body().id().update(b);
     common::invalidate_bodies();
+    // A movement under way ends here: its steering stopped above and could not end it after
+    // (`act::relocated`; a player's movement held meanwhile resumes from here).
+    crate::act::relocated(ctx, id, now);
     Ok(())
 }
 

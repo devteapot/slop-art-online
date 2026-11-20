@@ -64,6 +64,8 @@ pub mod cover_ground_table;
 pub mod cover_ground_type;
 pub mod cover_law_table;
 pub mod cover_law_type;
+pub mod cover_source_table;
+pub mod cover_source_type;
 pub mod cover_step_reducer;
 pub mod cover_timer_table;
 pub mod cover_timer_type;
@@ -450,6 +452,8 @@ pub use cover_ground_table::*;
 pub use cover_ground_type::CoverGround;
 pub use cover_law_table::*;
 pub use cover_law_type::CoverLaw;
+pub use cover_source_table::*;
+pub use cover_source_type::CoverSource;
 pub use cover_step_reducer::cover_step;
 pub use cover_timer_table::*;
 pub use cover_timer_type::CoverTimer;
@@ -1446,6 +1450,7 @@ pub struct DbUpdate {
     cover_derivation: __sdk::TableUpdate<CoverDerivation>,
     cover_ground: __sdk::TableUpdate<CoverGround>,
     cover_law: __sdk::TableUpdate<CoverLaw>,
+    cover_source: __sdk::TableUpdate<CoverSource>,
     cover_timer: __sdk::TableUpdate<CoverTimer>,
     cue: __sdk::TableUpdate<Cue>,
     deliberation: __sdk::TableUpdate<Deliberation>,
@@ -1671,6 +1676,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "cover_law" => db_update
                     .cover_law
                     .append(cover_law_table::parse_table_update(table_update)?),
+                "cover_source" => db_update
+                    .cover_source
+                    .append(cover_source_table::parse_table_update(table_update)?),
                 "cover_timer" => db_update
                     .cover_timer
                     .append(cover_timer_table::parse_table_update(table_update)?),
@@ -2184,6 +2192,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.cover_law = cache
             .apply_diff_to_table::<CoverLaw>("cover_law", &self.cover_law)
             .with_updates_by_pk(|row| &row.id);
+        diff.cover_source = cache
+            .apply_diff_to_table::<CoverSource>("cover_source", &self.cover_source)
+            .with_updates_by_pk(|row| &row.id);
         diff.cover_timer = cache
             .apply_diff_to_table::<CoverTimer>("cover_timer", &self.cover_timer)
             .with_updates_by_pk(|row| &row.scheduled_id);
@@ -2668,6 +2679,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "cover_law" => db_update
                     .cover_law
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "cover_source" => db_update
+                    .cover_source
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "cover_timer" => db_update
                     .cover_timer
@@ -3171,6 +3185,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "cover_law" => db_update
                     .cover_law
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "cover_source" => db_update
+                    .cover_source
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "cover_timer" => db_update
                     .cover_timer
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3621,6 +3638,7 @@ pub struct AppliedDiff<'r> {
     cover_derivation: __sdk::TableAppliedDiff<'r, CoverDerivation>,
     cover_ground: __sdk::TableAppliedDiff<'r, CoverGround>,
     cover_law: __sdk::TableAppliedDiff<'r, CoverLaw>,
+    cover_source: __sdk::TableAppliedDiff<'r, CoverSource>,
     cover_timer: __sdk::TableAppliedDiff<'r, CoverTimer>,
     cue: __sdk::TableAppliedDiff<'r, Cue>,
     deliberation: __sdk::TableAppliedDiff<'r, Deliberation>,
@@ -3821,6 +3839,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<CoverLaw>("cover_law", &self.cover_law, event);
+        callbacks.invoke_table_row_callbacks::<CoverSource>(
+            "cover_source",
+            &self.cover_source,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<CoverTimer>("cover_timer", &self.cover_timer, event);
         callbacks.invoke_table_row_callbacks::<Cue>("cue", &self.cue, event);
         callbacks.invoke_table_row_callbacks::<Deliberation>(
@@ -4812,6 +4835,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         cover_derivation_table::register_table(client_cache);
         cover_ground_table::register_table(client_cache);
         cover_law_table::register_table(client_cache);
+        cover_source_table::register_table(client_cache);
         cover_timer_table::register_table(client_cache);
         cue_table::register_table(client_cache);
         deliberation_table::register_table(client_cache);
@@ -4977,6 +5001,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "cover_derivation",
         "cover_ground",
         "cover_law",
+        "cover_source",
         "cover_timer",
         "cue",
         "deliberation",
