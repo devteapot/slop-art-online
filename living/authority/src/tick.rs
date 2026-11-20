@@ -140,7 +140,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     }
     // What each player is shown of the others in its scene, at its frame (frame.rs).
     let phase = common::span("tick.frames");
-    crate::frame::deliver(ctx, now, &swept);
+    crate::frame::deliver(ctx, now, swept);
     drop(phase);
     let phase = common::span("tick.slots");
     let slot_ids: Vec<u32> = ctx.db.mind_state().slot().filter(slot).map(|m| m.id).collect();

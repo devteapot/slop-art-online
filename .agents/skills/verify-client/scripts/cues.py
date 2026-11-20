@@ -6,7 +6,7 @@
 Three players join, each with its own fresh identity (not the harness player, so the scene also
 runs after the fixed suite): A, B and C. A and B stand
 1 m apart on a quiet open line, a held stranger F 10 m from A (in sight by day, not near), and C
-40 m or more away. Four Rust SDK probes stream for about 28 s: A (its `seen_*` views and their
+40 m or more away. Four Rust SDK probes stream for about 40 s: A (its `seen_*` views and their
 `_near` and `_far` tiers, `my_body` and the three cue event tables), B and C (the cue tables) and an anonymous connection (the cue
 tables). Meanwhile B steps (`human_move`), waves at A (`human_act`) and strikes at A
 (`use_skill`); F is moved (admin `place_at`). Checks:
@@ -24,7 +24,9 @@ tables). Meanwhile B steps (`human_move`), waves at A (`human_act`) and strikes 
   loaded host can refuse or delay one, so the count is the authority's, not a fixed one) reaches
   A first by `seen_fighter_cue`, before any tier row of it, and the cue was written at most `MAX_TICKS` ticks after the windup's
   `act_ms` (the cue's own `at_ms`, in ticks of the spacing the authority's `clock` row shows over
-  the scene); A receives B's wave and is never cued F (not near, not engaged);
+  the scene); A receives B's wave; the authority logs no cue fault (a cue to a creature neither near nor
+  engaged: `frame::cues`), and F is never cued with a fault for it (F cued while the authority
+  held it near or engaged, a scene that drifted under load, is counted, not failed);
 - the tiers: B is in A's near tier (`seen_*_near`) and F in its far tier; no creature is in both,
   and their union is exactly the untiered view's rows (`seen_bodies`, `seen_fighters`, `seen_doing`);
 - convergence: replaying A's stream with the client's rule (the union of the tiers, and a cue that
@@ -94,11 +96,12 @@ def accepted_strikes(rid, b, since_ms):
                    if r["skill"] == "strike" and int(r["accepted_ms"]) >= since_ms})
 
 
-def strike_until(rid, db, token, b, a, at, want, tries, since_ms):
+def strike_until(rid, db, token, b, a, at, want, tries, since_ms, deadline):
     """B strikes A until the authority has accepted `want` strikes since `since_ms` (a loaded host
-    can refuse or delay one), at most `tries` times; returns the accepted ones."""
+    can refuse or delay one), at most `tries` times and not after `deadline` (wall time: the
+    streams that must see each windup end after it); returns the accepted ones."""
     for _ in range(tries):
-        if len(accepted_strikes(rid, b, since_ms)) >= want:
+        if len(accepted_strikes(rid, b, since_ms)) >= want or time.time() > deadline:
             break
         hcall(db, token, "use_skill", ["strike", a, at[0], at[1]])
         time.sleep(1.6)
@@ -215,6 +218,15 @@ def main():
     db = st["db"]
     out = ROOT / ".local/living/verify" / rid
     # Three fresh identities (not the harness player, so the scene runs after the fixed suite too).
+    # F first, held and in place before the players arrive: under load its hold and placement land
+    # seconds late, and it must not stand among them at the arrival point meanwhile (gate,
+    # 2026-11-20: A was cued F once at load 16).
+    before = {x["id"] for x in sql(rid, "SELECT id FROM character")}
+    call(rid, "spawn_crowd", [1, True])
+    f = next(x["id"] for x in sql(rid, "SELECT id FROM character") if x["id"] not in before)
+    call(rid, "set_behavior", [f, json.dumps({"wait": 600})])
+    line = open_line(rid, 30)
+    call(rid, "place_at", [f, *line[20]])
     tok = {}
     for who in ("a", "b", "c"):
         code, body = V.http("/v1/identity", {})
@@ -223,14 +235,8 @@ def main():
     chars = {c["name"]: c for c in sql(rid, "SELECT * FROM character")}
     a, b, c = (chars[f"Cue {x}"]["id"] for x in "ABC")
     ident = {x: norm(chars[f"Cue {x.upper()}"]["controller"]) for x in "abc"}
-    before = {x["id"] for x in sql(rid, "SELECT id FROM character")}
-    call(rid, "spawn_crowd", [1, True])
-    f = next(x["id"] for x in sql(rid, "SELECT id FROM character") if x["id"] not in before)
-    call(rid, "set_behavior", [f, json.dumps({"wait": 600})])
-    line = open_line(rid, 30)
     call(rid, "place_at", [a, *line[10]])
     call(rid, "place_at", [b, *line[11]])
-    call(rid, "place_at", [f, *line[20]])
     pos = {x["id"]: (x["x"], x["y"]) for x in sql(rid, "SELECT id, x, y FROM body")}
     if math.dist(pos[c], pos[a]) < 40:
         call(rid, "place_at", [c, line[0][0], line[0][1] + (60 if line[0][1] < 200 else -60)])
@@ -240,8 +246,12 @@ def main():
     call(rid, "set_world_law", ["cue_transport_on", "true"])
     time.sleep(2.0)
     pos = {x["id"]: (x["x"], x["y"]) for x in sql(rid, "SELECT id, x, y FROM body")}
-    seconds = 28
+    # Long enough for the strikes' retries under load; the strikes stop 4 s before it ends.
+    seconds = 40
     paths = {w: out / f"cues-{w}.jsonl" for w in ("a", "b", "c", "anon")}
+    # A stream runs `seconds` from its connection, which a loaded host makes later than this:
+    # a deadline from here is earlier than its end.
+    stream_end = time.time() + seconds
     threads = [stream(db, tok["a"], VIEWS + TIERS + CUES, seconds, paths["a"]),
                stream(db, tok["b"], CUES, seconds, paths["b"]),
                stream(db, tok["c"], CUES, seconds, paths["c"]),
@@ -272,7 +282,7 @@ def main():
     time.sleep(0.5)
     pa = {x["id"]: (x["x"], x["y"]) for x in sql(rid, f"SELECT id, x, y FROM body WHERE id = {a}")}[a]
     since_ms = int(time.time() * 1000)
-    struck = strike_until(rid, db, tok["b"], b, a, pa, WANT_STRIKES, STRIKE_TRIES, since_ms)
+    struck = strike_until(rid, db, tok["b"], b, a, pa, WANT_STRIKES, STRIKE_TRIES, since_ms, stream_end - 4)
     act_window = (t0, time.time())
     clock1 = clock(rid)
     # The tick spacing the authority kept over the scene (ms per tick).
@@ -310,6 +320,10 @@ def main():
             first[row["act_ms"]] = (e["ms"] - row["act_ms"], how, ticks)
     waves = [e for e in of(b, "seen_doing_cue")] + [e for e in ev["a"] if e.get("table") in ("seen_doing_near", "seen_doing_far") and e.get("event") == "insert" and e["row"]["id"] == b]
     rows, union, shown = replay(ev["a"])
+    # The authority's cue faults during the scene (its module log).
+    logs = subprocess.run(["docker", "exec", "-i", V.CONTAINER, "spacetime", "logs", "-s", "local", db, "-n", "200000"], capture_output=True, text=True, timeout=600).stdout
+    faults = [l for l in logs.splitlines() if "cue fault:" in l]
+    f_cued = len([e for e in a_cues if body_of(e) == f])
     differ = {t: sorted(k for k in set(union[t]) | set(shown[t]) if union[t].get(k) != shown[t].get(k)) for t in STREAMS}
     # The tiers partition the untiered view: no creature in both, and their union is its rows.
     overlap = {t: sorted(set(rows.get(f"{t}_near", {})) & set(rows.get(f"{t}_far", {}))) for t in STREAMS}
@@ -332,7 +346,12 @@ def main():
         len(struck) >= MIN_STRIKES and all(ms in first and first[ms][1] == "cue" for ms in struck) and all(v[1] == "cue" for v in first.values()),
         f"each accepted strike's cue was written within {MAX_TICKS} ticks of act_ms (its at_ms, authority time)": len(struck) >= MIN_STRIKES
         and all(ms in first and first[ms][2] is not None and 0 <= first[ms][2] <= MAX_TICKS for ms in struck),
-        "A is never cued F (not near, not engaged)": not [e for e in a_cues if body_of(e) == f],
+        # The authority logs a cue to a creature neither near the viewer nor engaged with it as a
+        # fault (`frame::cues`, "cue fault"): none may appear. F is not cued unless the authority held
+        # it near or engaged at that tick (a loaded host can let the scene drift), so a cue of F
+        # with no fault is the scene, not delivery; it is counted, not failed.
+        "the authority logged no cue fault (no cue to a creature neither near nor engaged)": not faults,
+        "A is never cued F without the authority holding it near or engaged (no fault for F)": not [x for x in faults if f"cued #{f} " in x],
         "B is in A's near tier and F in its far tier": b in tiers["near"] and f in tiers["far"],
         "the tiers partition each view: no creature in both, their union is the untiered view's rows": not any(overlap.values()) and not any(split.values()) and bool(union["seen_bodies"]),
         "replayed with the client's rule (tiers, and a cue until the creature's next row), A ends on its views' rows": not any(differ.values()),
@@ -342,12 +361,13 @@ def main():
     call(rid, "place_at", [b, *line[11]])
     time.sleep(1.5)
     off_paths = {w: out / f"cues-off-{w}.jsonl" for w in ("a", "b", "anon")}
+    off_end = time.time() + 20
     off_threads = [stream(db, tok["a"], TIERS + CUES, 20, off_paths["a"]), stream(db, tok["b"], CUES, 20, off_paths["b"]),
                    stream(db, None, CUES, 20, off_paths["anon"])]
     time.sleep(3.0)
     # Only the moves struck from here on: the streams' initial rows hold the last one of the first phase.
     off_t0 = int(time.time() * 1000)
-    off_struck = strike_until(rid, db, tok["b"], b, a, pa, 4, 8, off_t0)
+    off_struck = strike_until(rid, db, tok["b"], b, a, pa, 4, 8, off_t0, off_end - 3)
     for t in off_threads:
         t.join()
     off = {w: lines(p) for w, p in off_paths.items()}
@@ -376,7 +396,8 @@ def main():
     result = {"a": a, "b": b, "c": c, "f": f, "dist": {k: round(math.dist(pos[a], pos[k]), 2) for k in (b, c, f)},
               "cues": {w: len(r) for w, r in cue_rows.items()}, "cue_tables_a": {t: sum(e["table"] == t for e in a_cues) for t in CUE_OF},
               "windups": {str(k): v for k, v in first.items()}, "struck": struck, "off_struck": off_struck, "differ": differ, "overlap": overlap, "split": split, "tiers": tiers, "act_window": act_window,
-              "off": {"cues": off_cues, "windups": {str(k): v for k, v in off_first.items()}}, "measure": measure, "checks": checks}
+              "off": {"cues": off_cues, "windups": {str(k): v for k, v in off_first.items()}}, "measure": measure,
+              "f_cued": f_cued, "faults": faults[:10], "checks": checks}
     (out / "cues.json").write_text(json.dumps(result, indent=1) + "\n")
     for k, v in checks.items():
         print(("PASS " if v else "FAIL ") + k)

@@ -227,6 +227,8 @@ thread_local! {
     static MOTION_TABLES: Cell<Option<bool>> = const { Cell::new(None) };
     /// The `characters_table_on` law at the last tick (as `MOTION_TABLES`).
     static CHAR_TABLES: Cell<Option<bool>> = const { Cell::new(None) };
+    /// The `fighter_tables_on` law at the last tick (as `MOTION_TABLES`).
+    static FIGHTER_TABLES: Cell<Option<bool>> = const { Cell::new(None) };
     /// Whether `copy_state` may hold a row (`None`: not looked at in this instance). Never set
     /// back to false, so a step that rolls back can only leave it true: a lookup, never a miss.
     static ANY_STATE: Cell<Option<bool>> = const { Cell::new(None) };
@@ -267,6 +269,9 @@ struct Sources {
     fighter: HashMap<u32, Option<Fighter>>,
     health: HashMap<u32, Option<(f32, f32)>>,
     doing: HashMap<u32, Option<Doing>>,
+    /// The ids whose `health` came from the tick's sweeps (`perception::Swept`) and is not yet
+    /// used: the first use of each is counted (`frames:health_seeded`).
+    seeded: HashSet<u32>,
 }
 
 fn cached<V: Clone>(pick: impl FnOnce(&mut Sources) -> &mut HashMap<u32, V>, id: u32, read: impl FnOnce() -> V) -> V {
@@ -285,6 +290,11 @@ fn fighter_now(ctx: &ReducerContext, id: u32) -> Option<Fighter> {
 }
 
 fn health_now(ctx: &ReducerContext, id: u32, now: u64) -> Option<(f32, f32)> {
+    NOW.with(|n| {
+        if n.borrow_mut().as_mut().is_some_and(|s| s.seeded.remove(&id)) {
+            common::diag(|| "frames:health_seeded", 1);
+        }
+    });
     cached(|s| &mut s.health, id, || ctx.db.vitals().id().find(id).map(|v| (common::needs(&v, now).hp, v.max_hp)))
 }
 
@@ -396,7 +406,7 @@ pub fn scene(ctx: &ReducerContext, id: u32, who: Identity, seen: &HashSet<u32>, 
     let public = if flips.is_empty() { false } else { public_of(ctx, who) };
     for (body, near) in flips {
         show_motion(ctx, id, who, body, near, public);
-        show_fighter(ctx, id, who, body, near, true, now);
+        show_fighter(ctx, id, who, body, near, true, now, None);
         show_doing(ctx, id, who, body, near);
     }
 }
@@ -513,6 +523,7 @@ pub fn all_full() {
     });
     MOTION_TABLES.with(|m| m.set(None));
     CHAR_TABLES.with(|m| m.set(None));
+    FIGHTER_TABLES.with(|m| m.set(None));
 
     TARGETS.with(|t| TARGET_DIRTY.with(|d| d.borrow_mut().extend(t.borrow().keys().copied())));
 }
@@ -531,9 +542,31 @@ pub fn interval(n: usize) -> u64 {
 
 /// The players whose frame is due get it (every tick, after the perception sweep), stalest
 /// first, within the step's budget of scene rows less those of the players `swept` in it.
-pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
+pub fn deliver(ctx: &ReducerContext, now: u64, swept: crate::perception::Swept) {
     let budget = budget(ctx.timestamp.to_micros_since_unix_epoch());
-    NOW.with(|n| *n.borrow_mut() = Some(Sources::default()));
+    // The sweeps' health readings seed this step's (exact items, docs/COMBAT_PHASE.md): the same
+    // formula (`common::needs(&v, now).hp`, `max_hp`) at the same `now`, and nothing writes
+    // `vitals` between them. In `tick::tick` the perception sweep runs right before this, after
+    // every phase that damages or heals (activity completions, missiles, the combat cadence's
+    // begins); between the two only the `memory_test` diagnostic runs, which writes no `vitals`;
+    // the sweeps themselves write `projected`, `perceived`, `heard` and copies, never `vitals`.
+    // Another reducer (`admin_set_vitals`, a player's move) is its own transaction, before or
+    // after this whole tick. Under `regard_cache_check` each seeded reading is compared with a
+    // fresh read (`frames:health_seed_differed`, which must stay 0). Like the rest of `Sources`,
+    // the seed lives only in this call (set here, dropped at the end).
+    let crate::perception::Swept { ids: swept, health } = swept;
+    if common::laws(ctx).regard_cache_check {
+        for (id, h) in &health {
+            let fresh = ctx.db.vitals().id().find(*id).map(|v| (common::needs(&v, now).hp, v.max_hp));
+            if fresh != *h {
+                common::diag(|| "frames:health_seed_differed", 1);
+                log::error!("exact items: #{id}'s seeded health {h:?} differs from a fresh read {fresh:?}");
+            }
+        }
+    }
+    let seeded: HashSet<u32> = health.keys().copied().collect();
+    NOW.with(|n| *n.borrow_mut() = Some(Sources { health, seeded, ..Sources::default() }));
+    let swept = swept.as_slice();
     let humans = crate::combat::humans(ctx);
     // The `cue_transport_on` law: off, no cue is written and near copies follow at every frame.
     // With `near_tier_on` off too, frames are scheduled as before frame-views.
@@ -553,6 +586,17 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
         if n > 0 {
             common::diag(|| "characters_table:dropped", n as u64);
             log::info!("characters table off: {n} mirror rows dropped");
+        }
+    }
+    // The `fighter_tables_on` law (views step 3): as the motion tables, for the fighter copies.
+    let fighters = common::laws(ctx).fighter_tables_on;
+    if all_back(FIGHTER_TABLES.with(|m| m.replace(Some(fighters))), fighters) {
+        let phase = common::span("tick.fighters_private");
+        let n = all_private_fighters(ctx);
+        drop(phase);
+        if n > 0 {
+            common::diag(|| "fighter_tables:moved_out", n as u64);
+            log::info!("fighter tables off: {n} copies moved back to the private tables");
         }
     }
     if all_back(MOTION_TABLES.with(|m| m.replace(Some(tables))), tables) {
@@ -758,7 +802,7 @@ fn engaged_tiers(ctx: &ReducerContext, now: u64, engaged: &HashMap<u32, Vec<u32>
     for (vid, who, b) in flips {
         let public = public_of(ctx, who);
         show_motion(ctx, vid, who, b, true, public);
-        show_fighter(ctx, vid, who, b, true, true, now);
+        show_fighter(ctx, vid, who, b, true, true, now, None);
         show_doing(ctx, vid, who, b, true);
     }
     ENGAGED.with(|e| *e.borrow_mut() = by_viewer);
@@ -867,6 +911,12 @@ fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, engaged: &HashMap
                 if !scene.contains(&body) {
                     continue;
                 }
+                // A cue goes to a creature near the viewer (its tier as its last sweep left it) or
+                // engaged with it; anything else is a delivery fault, logged with how it came.
+                if !e.near.contains(&body) && !urgent {
+                    common::diag(|| "cues:not_near", 1);
+                    log::warn!("cue fault: viewer #{viewer} cued #{body} (bits {bits}) neither near nor engaged (far path {far})");
+                }
                 let sent = cue(ctx, e.who, body, bits, now);
                 if sent == 0 {
                     continue;
@@ -951,6 +1001,10 @@ fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, on: bool, mut 
         common::diag(|| "motion_tables:moved_in", n as u64);
         public = true;
     }
+    if FIGHTER_TABLES.with(|m| m.get()) == Some(true) && !fighters_public(ctx, v.who) {
+        let n = fighters_to_public(ctx, v.who);
+        common::diag(|| "fighter_tables:moved_in", n as u64);
+    }
     if CHAR_TABLES.with(|m| m.get()) == Some(true) && !crate::perception::mirrored(ctx, v.who) {
         let n = crate::perception::fill_mirror(ctx, v.who);
         common::diag(|| "characters_table:filled", n as u64);
@@ -978,7 +1032,7 @@ fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, on: bool, mut 
                 wrote |= MOTION;
             }
             let hurt = full || changed(&HURT, body, since);
-            if (hurt || changed(&FOUGHT, body, since)) && show_fighter(ctx, id, v.who, body, near, hurt, now) {
+            if (hurt || changed(&FOUGHT, body, since)) && show_fighter(ctx, id, v.who, body, near, hurt, now, None) {
                 wrote |= FIGHTER;
             }
             if (full || changed(&DID, body, since)) && show_doing(ctx, id, v.who, body, near) {
@@ -1166,9 +1220,16 @@ fn put_motion(ctx: &ReducerContext, row: MotionSeen, was_near: bool, near: bool)
 /// when `near`, else `fighter_seen`): its move as it is now; its band as the viewer perceives it
 /// (255 while its projection hides health) when `hurt`, else as last shown. A creature with no
 /// fighter row has none. Returns whether a copy was written.
-pub fn show_fighter(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, near: bool, hurt: bool, now: u64) -> bool {
+pub fn show_fighter(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, near: bool, hurt: bool, now: u64, known_band: Option<u8>) -> bool {
     let k = key(viewer, body);
-    let (was_near, row) = if near {
+    // Views step 3: a viewer's fighter copies are all public (`seen_fighter_copy`) or all private.
+    let public = fighters_public(ctx, who);
+    let (was_near, row) = if public {
+        match ctx.db.seen_fighter_copy().id().find(k) {
+            Some(r) => (r.near, Some(FighterSeen { id: k, viewer: who, fighter: r.fighter })),
+            None => (false, None),
+        }
+    } else if near {
         match ctx.db.fighter_near().id().find(k) {
             Some(r) => (true, Some(r.copy)),
             None => (false, ctx.db.fighter_seen().id().find(k)),
@@ -1184,19 +1245,44 @@ pub fn show_fighter(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32,
     };
     let Some(f) = fighter_now(ctx, body) else {
         if row.is_some() {
-            ctx.db.fighter_seen().id().delete(k);
-            ctx.db.fighter_near().id().delete(k);
+            if public {
+                ctx.db.seen_fighter_copy().id().delete(k);
+            } else {
+                ctx.db.fighter_seen().id().delete(k);
+                ctx.db.fighter_near().id().delete(k);
+            }
             return true;
         }
         return false;
     };
     let band = match row.as_ref() {
         Some(r) if !hurt => r.fighter.band,
-        _ => perceived_band(ctx, who, body, now).0,
+        // The sweep passes the band of the projection it has just written for this newcomer, from
+        // the same health reading in the same transaction: what `perceived_band` would read back.
+        _ => match known_band {
+            Some(b) => {
+                common::diag(|| "frames:band_passed", 1);
+                if common::laws(ctx).regard_cache_check && perceived_band(ctx, who, body, now).0 != b {
+                    common::diag(|| "frames:band_passed_differed", 1);
+                    log::error!("exact items: #{body}'s passed band {b} for {who} differs from perceived_band");
+                }
+                b
+            }
+            None => perceived_band(ctx, who, body, now).0,
+        },
     };
     let new = FighterSeen { id: k, viewer: who, fighter: Fighter { band, ..f } };
     if row.as_ref() == Some(&new) && was_near == near {
         return false;
+    }
+    if public {
+        let copy = SeenFighterCopy { id: k, viewer: who, body, near, fighter: new.fighter };
+        if row.is_some() {
+            ctx.db.seen_fighter_copy().id().update(copy);
+        } else {
+            ctx.db.seen_fighter_copy().insert(copy);
+        }
+        return true;
     }
     match (row.is_some() && was_near, row.is_some() && !was_near, near) {
         (true, _, true) => {
@@ -1286,10 +1372,63 @@ pub fn drop_copies(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32) 
         ctx.db.motion_seen().id().delete(k);
         ctx.db.motion_near().id().delete(k);
     }
-    ctx.db.fighter_seen().id().delete(k);
+    if fighters_public(ctx, who) {
+        ctx.db.seen_fighter_copy().id().delete(k);
+    } else {
+        ctx.db.fighter_seen().id().delete(k);
+        ctx.db.fighter_near().id().delete(k);
+    }
     ctx.db.doing_seen().id().delete(k);
-    ctx.db.fighter_near().id().delete(k);
     ctx.db.doing_near().id().delete(k);
+}
+
+/// Whether viewer `who`'s fighter copies are in `seen_fighter_copy` (views step 3).
+fn fighters_public(ctx: &ReducerContext, who: Identity) -> bool {
+    copy_state(ctx, who).fighters
+}
+
+/// Move a viewer's fighter copies from the private tables to `seen_fighter_copy`, tiers kept, in
+/// this transaction (as `to_public` for the motion copies).
+fn fighters_to_public(ctx: &ReducerContext, who: Identity) -> usize {
+    let far: Vec<FighterSeen> = ctx.db.fighter_seen().viewer().filter(who).collect();
+    let near: Vec<FighterNear> = ctx.db.fighter_near().viewer().filter(who).collect();
+    let n = far.len() + near.len();
+    // A row already there (module memory that missed a rollback) is replaced, not a duplicate key.
+    for r in far {
+        ctx.db.fighter_seen().id().delete(r.id);
+        ctx.db.seen_fighter_copy().id().delete(r.id);
+        ctx.db.seen_fighter_copy().insert(SeenFighterCopy { id: r.id, viewer: who, body: r.fighter.id, near: false, fighter: r.fighter });
+    }
+    for r in near {
+        ctx.db.fighter_near().id().delete(r.id);
+        ctx.db.seen_fighter_copy().id().delete(r.id);
+        ctx.db.seen_fighter_copy().insert(SeenFighterCopy { id: r.id, viewer: who, body: r.copy.fighter.id, near: true, fighter: r.copy.fighter });
+    }
+    set_copy_state(ctx, CopyState { fighters: true, ..copy_state(ctx, who) });
+    n
+}
+
+/// The kill switch of the `fighter_tables_on` law: every public fighter copy goes back to the
+/// private tables of its tier, in this transaction (as `all_private` for the motion copies).
+fn all_private_fighters(ctx: &ReducerContext) -> usize {
+    let rows: Vec<SeenFighterCopy> = ctx.db.seen_fighter_copy().iter().collect();
+    for r in &rows {
+        ctx.db.seen_fighter_copy().id().delete(r.id);
+        // The public row's key is the private copy's (the viewer's character and the creature).
+        let k = r.id;
+        ctx.db.fighter_seen().id().delete(k);
+        ctx.db.fighter_near().id().delete(k);
+        let copy = FighterSeen { id: k, viewer: r.viewer, fighter: r.fighter.clone() };
+        if r.near {
+            ctx.db.fighter_near().insert(FighterNear { id: k, viewer: r.viewer, copy });
+        } else {
+            ctx.db.fighter_seen().insert(copy);
+        }
+    }
+    for s in ctx.db.copy_state().iter().filter(|s| s.fighters).collect::<Vec<_>>() {
+        set_copy_state(ctx, CopyState { fighters: false, ..s });
+    }
+    rows.len()
 }
 
 /// Delete viewer `who`'s public copy of `body`, if there is one.
@@ -1317,7 +1456,7 @@ pub fn copy_state(ctx: &ReducerContext, who: Identity) -> CopyState {
 pub fn set_copy_state(ctx: &ReducerContext, s: CopyState) {
     ANY_STATE.with(|a| a.set(Some(true)));
     let had = ctx.db.copy_state().viewer().find(s.viewer).is_some();
-    match (had, s.public || s.mirrored) {
+    match (had, s.public || s.mirrored || s.fighters) {
         (true, true) => {
             ctx.db.copy_state().viewer().update(s);
         }
@@ -1434,6 +1573,9 @@ const SEEN_BODY_COPY_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SEL
 // Row-level security for the mirror of a player's projections (battle-views addendum 2).
 #[spacetimedb::client_visibility_filter]
 const SEEN_CHARACTER_COPY_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT * FROM seen_character_copy WHERE viewer = :sender");
+// Row-level security for the public fighter copies (views step 3, `fighter_tables_on`).
+#[spacetimedb::client_visibility_filter]
+const SEEN_FIGHTER_COPY_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT * FROM seen_fighter_copy WHERE viewer = :sender");
 // Row-level security for a player's combat feed as events (views step 2, `combat_feed_on`).
 #[spacetimedb::client_visibility_filter]
 const COMBAT_FEED_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT * FROM combat_feed WHERE viewer = :sender");
@@ -1556,9 +1698,11 @@ mod tests {
         // copies stand is not module memory but `copy_state` rows, rolled back with their moves.
         MOTION_TABLES.with(|m| m.set(Some(false)));
         CHAR_TABLES.with(|m| m.set(Some(false)));
+        FIGHTER_TABLES.with(|m| m.set(Some(false)));
         all_full();
         assert_eq!(MOTION_TABLES.with(|m| m.get()), None);
         assert_eq!(CHAR_TABLES.with(|m| m.get()), None);
+        assert_eq!(FIGHTER_TABLES.with(|m| m.get()), None);
         // A copy moved either way holds the same row the motion views return.
         let m = Moving { id: 5, x: 1.5, y: -2.0, t_ms: 77, vx: 0.5, vy: 0.25, heading: 1.0, turn: 0.1, turn_s: 0.3, next_ms: 99, speed: 1.2, face_off: 0.2, face_turn: -0.1, face_turn_s: 0.4, running: true };
         let private = MotionSeen::with(key(3, 5), Identity::ZERO, &m);

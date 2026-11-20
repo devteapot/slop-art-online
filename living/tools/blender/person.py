@@ -143,6 +143,9 @@ TYPED = False  # the head is a face type's cage, with the identity bones in it
 MAT = dict(
     face="M00_000_00_Face_00_SKIN", skin="M00_000_00_Body_00_SKIN", eye="M00_000_00_Eye_00_EYE", iris="M00_000_00_EyeIris_00_EYE", overlay_hair="M00_000_00_Overlay_00_HAIR", far_overlay="M00_000_00_FarOverlay_00_HAIR", overlay_skin="M00_000_00_FaceOverlay_00_SKIN", overlay_face="M00_000_00_FaceOverlay_00_FACE", line="M00_000_00_FaceEyeline_00_FACE", brow="M00_000_00_FaceBrow_00_FACE", tint="M00_000_00_FaceTint_00_FACE",
     hair="M00_000_Hair_00_HAIR", cloth="M00_001_01_Cloth_01_CLOTH", far="M00_000_00_Body_01_SKIN",
+    # The ink carriers (SLOP_PORT=ink, ink_carriers.py): the lid's (absolute colour) and the
+    # brow's (its name takes the hair's tag).
+    lidink="M00_000_00_LidInk_00_FACE", browink="M00_000_00_FaceBrowInk_00_FACE",
 )
 FAR = False  # building the far model (--lod): coarse cages, a head without openings, thin locks
 
@@ -1235,8 +1238,8 @@ def make_face(arm, spec, atlas_path):
     # The brows are a material of their own too (VRoid's `FaceBrow`): plain colour as the lines
     # are, and the one the client gives the person's hair colour.
     # The iris's lights ride in the lips' and blush's layer: a fixed colour the client leaves be.
-    fm = [dict(iris="iris", face="face", eye="eye", under="skin", tint="tint", lights="tint", brow="brow").get(k, "line") for k in m.fm]
-    order = [k for k in ("face", "eye", "iris", "line", "brow", "skin", "tint") if k in set(fm)]
+    fm = [dict(iris="iris", face="face", eye="eye", under="skin", tint="tint", lights="tint", brow="brow", lidink="lidink", browink="browink").get(k, "line") for k in m.fm]
+    order = [k for k in ("face", "eye", "iris", "line", "brow", "skin", "tint", "lidink", "browink") if k in set(fm)]
     A, C0, PXI = head_mesh.ATLAS, head_mesh.IRIS_COL0, head_mesh.IRIS_PX
     iris_verts = {v for f, k in zip(m.f, m.fm) if k == "iris" for v in f}
     m.uv = [((u * A - C0) / PXI, 1.0 - (1.0 - v) * A / PXI) if i in iris_verts else (u, v) for i, (u, v) in enumerate(m.uv)]
@@ -1269,7 +1272,7 @@ def make_face(arm, spec, atlas_path):
         lo, hi = np.minimum(np.minimum(A, B), C), np.maximum(np.maximum(A, B), C)
         den = (B[:, 2] - C[:, 2]) * (A[:, 0] - C[:, 0]) + (C[:, 0] - B[:, 0]) * (A[:, 2] - C[:, 2])
         for i, k in enumerate(v_kind):
-            if k != "brow":
+            if k not in ("brow", "browink"):
                 continue
             q = V[i]
             near = np.where((lo[:, 0] <= q[0]) & (hi[:, 0] >= q[0]) & (lo[:, 2] <= q[2]) & (hi[:, 2] >= q[2]) & (np.abs(den) > 1e-14) & (hi[:, 1] > 0))[0]
@@ -1277,6 +1280,8 @@ def make_face(arm, spec, atlas_path):
             v = ((C[near, 2] - A[near, 2]) * (q[0] - C[near, 0]) + (A[near, 0] - C[near, 0]) * (q[2] - C[near, 2])) / den[near]
             w = 1 - u - v
             inside = (u >= -1e-6) & (v >= -1e-6) & (w >= -1e-6)
+            if not inside.any() and k == "browink":
+                continue  # a brow carrier's margin past the skin keeps the weights of where it lies
             if not inside.any():
                 raise SystemExit(f"person: no skin under a brow's vertex at {tuple(round(float(x), 4) for x in q)}")
             fwd = u * A[near, 1] + v * B[near, 1] + w * C[near, 1]
@@ -1345,6 +1350,14 @@ def make_face(arm, spec, atlas_path):
         bsdf = next(x for x in mat.node_tree.nodes if x.type == "BSDF_PRINCIPLED")
         mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
         mat.node_tree.links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
+    for k in ("lidink", "browink"):
+        if k in order:
+            # A carrier draws only its ink (HANDMADE_INK v1.2): BLEND, base alpha 0, no picture.
+            # type_ink.py writes its `slop` after export.
+            mat = material(MAT[k])
+            mat.blend_method = "BLEND"
+            bsdf = next(x for x in mat.node_tree.nodes if x.type == "BSDF_PRINCIPLED")
+            bsdf.inputs["Alpha"].default_value = 0.0
     if OVERLAY:
         layer = make_overlay(arm, spec, face, m, world, weights, atlas_path)
         bpy.data.objects.remove(ob, do_unlink=True)  # the file holds the layer alone

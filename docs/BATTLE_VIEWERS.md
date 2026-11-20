@@ -266,6 +266,42 @@ Players read it through the per-sender view `my_combat`. In 2.14.1 a view is re-
 - **Not measured:** the commitlog. Event inserts are recorded there (the event-tables docs), so the feed roughly doubles the combat feed's share of written WAL at 216 (5,208 more inserts a second); `battle_viewers.py` does not measure WAL.
 - **Privacy at density with the feed:** `--privacy --combat-feed` (16 viewers, 10 m ring) passed 15 of 15. The viewers checked 97,354 `combat_feed` rows besides 172,076 body and 60,410 character copies, 0 foreign.
 
+## Addendum 5: `seen_fighters_*` as a copy table, `seen_fighter_copy` (views step 3, built 2026-11-20)
+
+The third step of the views track. The GC's decisions: fighters only (`seen_doing_*` cost 0.6 ms/s and stay views), and the Spark's two exact items in the same step. The second, the frames taking the sweep's health readings, waits for the Spark's review of the call shape and is not in this build.
+
+**As built.** Step 1's mechanism, for the fighter copies.
+- **The table:** `seen_fighter_copy` (public; `id`, `viewer` indexed, `body`, `near`, `fighter`), with the row-level-security rule `SELECT * FROM seen_fighter_copy WHERE viewer = :sender` (`frame::SEEN_FIGHTER_COPY_FILTER`). It replaces the private `fighter_seen` (far) and `fighter_near` (near) for a viewer whose copies are public (`copy_state.fighters`, a new column with a default).
+- **A primary key, unlike `seen_body_copy`.** `id` is the private copy's key (the viewer's character and the creature). Fighter copies change often (a move, a band). The first, keyless build made every change a delete and an insert on three indexes: it cost 24–43 ms/s more tick WASM, and nothing net at 16 viewers. With the key a change is one in-place update, the `(viewer, body)` index is gone, and the law's moves need no player lookup.
+- **One writer:** `frame::show_fighter` writes the copy where it is. A creature leaving sight, or a viewer forgetting its scene, drops it there too.
+- **The views:** `seen_fighters`, `_near` and `_far` read the public rows first (by `viewer`, or `(viewer, near)` for the tiers) and show the same either way.
+- **The law:** `fighter_tables_on`, value-only (Delivery), **off by default**, its `law_override` row the kill switch. On, each viewer's frame moves its copies whole (`frame::fighters_to_public`). Off, the first tick moves every public copy back (`frame::all_private_fighters`, span `tick.fighters_private`). `all_full` forgets the law's last value, as for the other two.
+
+**Data paths.** The same rows as the private copies, written where the viewer's copies are: one update per change, an insert per newcomer, a delete per departure. No new reads: `show_fighter` finds the copy by its key in either table. The only extra row a viewer holds is its `copy_state` row, already there for the other copy tables. The table is delivered by RLS to each row's viewer.
+
+**Safeguards.**
+- **`motion_tables.py`** covers the fighter table with the other two (34 checks): B strikes A once so both have fighter rows; isolation by subscription, SQL and subscribe-all both ways; A's table equal to `seen_fighters` and its near flags to the fighter tier views; the private fighter tables empty of A's while on; the switch off and on through an override row with no reinstall.
+- **The negative:** built without the rule, 5 of the 34 fail. They are the fighter isolation checks, both of C's subscribe-alls, and the "on again" comparison (one-off, recorded in the validation record).
+- **At battle density:** `battle_viewers.py --privacy --fighter-tables` (16 viewers, 10 m ring, 200 fighters) passed 17 of 17. The viewers checked 195,243 fighter rows besides 154,365 body and 55,719 character copies, 0 foreign. The paused snapshots compared each sampled viewer's fighter table with its views, before and after the switch.
+- **The inventory:** `RLS_TABLES` and the owner guard name it, and the pin list (docs/TICK_RATE.md).
+
+**Measurement** (dev-box, `sg-stdb` v2.14.1, no core pinning; Cullet module from this branch; 200 fighters, keep-alive every 0.5 s, paused placement, the battle after placing, tiers and cues, both copy tables on with the viewers on them; L0, 20 s warm-up, 60 s window; two runs per arm, interleaved; the 1-minute load below 4 at each start; no viewer died in any window):
+
+| Arm | Ticks/s | Views ms/s (fighter views) | Tick WASM ms/s | Whole tick call ms/s | DB thread CPU ms/s |
+|---|---|---|---|---|---|
+| base, 16 viewers, 10 m ring | 58.9 / 58.4 | 84.2 / 79.2 (29.7 / 28.4) | 357 / 363 | 484 / 486 | 492 / 494 |
+| fighter table, 16 viewers, 10 m ring | 58.8 / 59.0 | 58.7 / 58.4 (0) | 364 / 375 | 462 / 472 | 470 / 481 |
+| base, 216 viewers, 26–32 m ring | 21.2 / 20.1 | 77.2 / 81.3 (50.2 / 53.6) | 544 / 548 | 775 / 788 | 810 / 823 |
+| fighter table, 216 viewers, 26–32 m ring | 23.8 / 24.3 | 30.8 / 31.6 (0) | 576 / 583 | 738 / 749 | 774 / 785 |
+| 0 viewers (the battle alone) | 60.0 | 0 | 272 | 282 | 282 |
+
+- **16 viewers:** the database thread does about 17.5 ms/s less, about 1.1 ms/s per viewer, which is about 12 µs/s a pair at the 90 creatures each sees (the addendum's expected 11–14).
+- **216 viewers:** about 37 ms/s less (−4.5%), which is about 2.9 µs/s a pair at 59 seen each and about 22 ticks/s, and **16% more ticks a second**.
+- **The keyless build, for the record:** 0 and −22 ms/s.
+- **Per viewer by subtraction:** the 0-viewer arm (`battle_viewers.py` gave it no battle under `--battle-after-placing` before this branch; fixed) puts a viewer at about 13.2 ms/s on base and 12.1 with the fighter table at 16 viewers. That includes the AI's extra work fighting the viewers on the 10 m ring, as the Spark's 12.1–13.1 do.
+
+**Rollout:** as step 1. The authority merges with the law off. The laptop's client reads `seen_fighter_copy` while the law is on, make-before-break both ways, merging the copy's `fighter` rows as the view's. The default flips with it in one change set, which also runs `cargo test -p living-game`.
+
 ## Rollout: one change set, one play-test window (decided 2026-11-20; merged, defaults on)
 
 **Where it stands.** Merged, defaults on: `bv-defaults-on` (dev-box) on the laptop's client switch (`battle-views-client`), gated as one change set after the copy tables' privacy proofs passed at battle density (Addendum 3, the GC's condition). `motion_tables_on` and `characters_table_on` are **on** in both default sets (`living/scripts/skills.rhai`'s law block and `Laws::default`); a world turns either off by its `law_override` row (the kill switch), and with both off the authority and the client take main's old path (`frame::tests::both_delivery_laws_off_take_main_s_path`, through overrides; `law_override_check` turns `motion_tables_on` off and back). Both copy tables were on main since `a407be01a` (battle-views), behind the two laws, off by default until this change. The laws are measured on (216 battle with keep-alive, 0 deaths: ticks 9.56 → 14.12/s; Cullet 216: far pairs p90 250–367 → 67 ms, `seen_characters` view 67.7 → 0 ms/s, kB/player +36% and +10%; the kill switch by override row 51 ms against a 2,333 ms reinstall; evidence `~/archive/worktree-evidence-20261120/battle-views-local.tar.gz` on the dev-box). No separate laws-on window is run before the client reads the tables: with no client on them, laws-on only costs bytes.
