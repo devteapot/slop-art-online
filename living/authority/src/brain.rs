@@ -234,9 +234,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     drop(part);
     let _span = common::detail_span("brain.slept");
     // Fell asleep, or woke (and thinks on what waited): perceive::slept.
-    if let Some(me) = ctx.db.character().id().find(id) {
-        perceive::slept(ctx, &me, now);
-    }
+    perceive::slept(ctx, id, now);
     if played && result != St::Run {
         crate::command_done(ctx, id, now);
     }
@@ -307,8 +305,8 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     }
     // Profiled: what a recompute costs (the facts and the law), and how many there are.
     let _timer = common::span("needs.rates");
-    let facts = act::facts(ctx, me.id, now);
     let sc = common::scripts(ctx);
+    let facts = act::rates_facts(ctx, me.id, now, &sc.law_plan("rates"));
     let hour = common::hour(w, now);
     let sctx = living_rules::script::SkillCtx { actor: facts, night, dark, hour, season: season.into(), raining: crate::town::raining(ctx), ..Default::default() };
     let _ = at;
@@ -1111,9 +1109,22 @@ impl<'a> Ev<'a> {
                 let (ctx, me) = (self.ctx, self.me.id);
                 let kind = f.kind.clone();
                 let matches = |k: &str| kind == "creature" || k == kind;
-                let ok = |id: u32| f.relation.as_deref().map_or(true, |rel| relation_ok(ctx, me, id, rel)) && ctx.db.character().id().find(id).is_some();
+                // The character row `ok` found last, kept for the answer's name (nothing is written
+                // between the two reads; docs/COMBAT_PHASE.md step 3).
+                let found: std::cell::RefCell<Option<Character>> = std::cell::RefCell::new(None);
+                let ok = |id: u32| {
+                    f.relation.as_deref().map_or(true, |rel| relation_ok(ctx, me, id, rel)) && {
+                        let ch = ctx.db.character().id().find(id);
+                        let some = ch.is_some();
+                        *found.borrow_mut() = ch;
+                        some
+                    }
+                };
                 if let Some(c) = self.first_seen(|c| matches(&c.kind) && ok(c.id)) {
-                    let ch = ctx.db.character().id().find(c.id)?;
+                    let ch = match found.take().filter(|ch| ch.id == c.id) {
+                        Some(ch) => ch,
+                        None => ctx.db.character().id().find(c.id)?,
+                    };
                     return Some(Resolved { class: 3, id: c.id as u64, at: c.pos, kind: c.kind.to_string(), name: ch.name });
                 }
                 let scent = if self.smell { common::scent_of(&self.me.kind) } else { None };

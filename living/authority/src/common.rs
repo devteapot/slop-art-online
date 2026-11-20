@@ -1866,3 +1866,29 @@ pub fn trap_catch(ctx: &ReducerContext, s: &Structure, now: u64) {
     t.built_ms += n * every;
     ctx.db.structure().id().update(t);
 }
+
+/// Every creature within `r` of `at` as [`creatures_near`] gathers them, in the order gathered
+/// (chunk by chunk), not sorted: `creatures_near` is this, sorted by distance with a stable sort.
+/// For a reader that wants only the nearest few (`perception::Sensing`, docs/COMBAT_PHASE.md step 3).
+pub fn creatures_near_gathered(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) -> Vec<NearCreature> {
+    let chunks = chunks_around(at.0, at.1, r);
+    let lists: Vec<Rc<Vec<CachedBody>>> = chunks.iter().map(|c| chunk_bodies(ctx, *c, now)).collect();
+    let mut out = Vec::with_capacity(lists.iter().map(|l| l.len()).sum());
+    for list in &lists {
+        for (id, kind, p, h) in list.iter() {
+            let d = dist(at, *p);
+            if d <= r {
+                out.push(NearCreature { id: *id, kind: kind.clone(), pos: *p, dist: d, facing: *h });
+            }
+        }
+    }
+    out
+}
+
+/// The key that orders a gathered creature as [`creatures_near`]'s stable sort by distance does:
+/// its distance as `f32::total_cmp` orders it, then its place in the gathered order.
+pub fn nearest_key(d: f32, i: usize) -> u64 {
+    let b = d.to_bits() as i32;
+    let t = b ^ ((((b >> 31) as u32) >> 1) as i32);
+    ((((t as u32) ^ 0x8000_0000) as u64) << 32) | i as u64
+}

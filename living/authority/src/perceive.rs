@@ -571,13 +571,17 @@ pub const SLEEP_GAP_MS: u64 = 3_000;
 /// that began to sleep is asleep; one asleep that no longer sleeps has woken (its sleep broken
 /// off, something else begun, or no next sleep within `SLEEP_GAP_MS` of the last one ending), is
 /// told so and, with a mind, is asked to think on the reasons that waited.
-pub fn slept(ctx: &ReducerContext, c: &Character, now: u64) {
-    let act = ctx.db.activity().id().find(c.id);
+///
+/// `id` is a character's (its row exists: characters are never deleted). Its row is read only when
+/// it has woken, the one case that tells it anything (docs/COMBAT_PHASE.md step 3: every
+/// evaluation ends here, and most change nothing).
+pub fn slept(ctx: &ReducerContext, id: u32, now: u64) {
+    let act = ctx.db.activity().id().find(id);
     let sleep = act.as_ref().filter(|a| a.skill == "sleep");
-    let row = ctx.db.slumber().actor().find(c.id);
+    let row = ctx.db.slumber().actor().find(id);
     match (sleep, row) {
         (Some(a), None) => {
-            ctx.db.slumber().insert(Slumber { actor: c.id, since_ms: now, until_ms: a.ends_ms, reason: String::new(), arrived: String::new() });
+            ctx.db.slumber().insert(Slumber { actor: id, since_ms: now, until_ms: a.ends_ms, reason: String::new(), arrived: String::new() });
         }
         (Some(a), Some(mut r)) => {
             if r.until_ms != a.ends_ms {
@@ -590,7 +594,9 @@ pub fn slept(ctx: &ReducerContext, c: &Character, now: u64) {
             if !woke {
                 return;
             }
-            ctx.db.slumber().actor().delete(c.id);
+            ctx.db.slumber().actor().delete(id);
+            let Some(c) = ctx.db.character().id().find(id) else { return };
+            let c = &c;
             let at = ctx.db.body().id().find(c.id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
             percept(ctx, c, now, "body", c.id, 0, at, "You woke up.".into(), 0.2);
             heard_on_waking(ctx, c, now);
