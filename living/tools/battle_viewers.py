@@ -364,10 +364,12 @@ CLOG = "/home/spacetime/.local/share/spacetime/data/replicas/{}/clog"
 
 
 def clog_state(replica):
-    """A replica's commitlog on disk: its bytes (du -sb) and its segment files (`*.stdb.log`)."""
-    r = subprocess.run(["docker", "exec", lc.CONTAINER, "sh", "-c", f"du -sb {CLOG.format(replica)}; ls {CLOG.format(replica)}"], capture_output=True, text=True)
+    """A replica's commitlog on disk: its bytes (du -sb), its segments' bytes as read (`log_bytes`,
+    the cumulative log position clog_read.py --byte-range takes; raw segments only) and its segment
+    files (`*.stdb.log`)."""
+    r = subprocess.run(["docker", "exec", lc.CONTAINER, "sh", "-c", f"du -sb {CLOG.format(replica)}; cat {CLOG.format(replica)}/*.stdb.log | wc -c; ls {CLOG.format(replica)}"], capture_output=True, text=True)
     lines = r.stdout.split("\n")
-    return {"bytes": int(lines[0].split()[0]), "segments": sum(1 for x in lines[1:] if x.endswith(".stdb.log")), "files": sum(1 for x in lines[1:] if x.strip())}
+    return {"bytes": int(lines[0].split()[0]), "log_bytes": int(lines[1].split()[0]), "segments": sum(1 for x in lines[2:] if x.endswith(".stdb.log")), "files": sum(1 for x in lines[2:] if x.strip())}
 
 
 def clog_zstd(replica):
@@ -653,8 +655,17 @@ def one(a, n, out):
     finally:
         if load and load.p.poll() is None:
             load.p.terminate()
-        lc.delete_world(db)
-        if a.clog and "clog" in res:
+        if a.keep_world:
+            # Left paused for what follows (clog_read.py, an offline prune trial); deleted later
+            # with world_delete.py.
+            import world_delete
+            tok = lc.admin_token()
+            res["kept"] = world_delete.pause_confirmed(
+                pause=lambda: lc.http(f"/v1/database/{db}/call/set_paused", [True], tok)[0],
+                read=lambda: lc.http(f"/v1/database/{db}/sql", "SELECT paused FROM world", tok, raw=True))
+        else:
+            lc.delete_world(db)
+        if a.clog and "clog" in res and not a.keep_world:
             # The whole commitlog compressed, as the server keeps sealed segments behind a snapshot
             # (zstd -3) and as an archive keeps it (zstd -6).
             z = clog_zstd(res["replica"])
@@ -691,6 +702,7 @@ def main():
     ap.add_argument("--flip-off", action="store_true", help="after the window, turn motion_tables_on off and time the kill switch's tick")
     ap.add_argument("--fighter-tables", action="store_true", help="the viewers subscribe seen_fighter_copy in place of the fighter views (views step 3; set fighter_tables_on=true)")
     ap.add_argument("--combat-feed", action="store_true", help="the viewers subscribe combat_feed in place of my_combat (views step 2; set combat_feed_on=true)")
+    ap.add_argument("--keep-world", action="store_true", help="leave the world paused at the end instead of deleting it (read back as paused)")
     ap.add_argument("--clog", action="store_true", help="record the replica's commitlog growth on disk over the window, and its compressed size after the world is deleted, zstd -3 and -6 (result clog)")
     ap.add_argument("--sides", type=int, default=0, help="the fighters in this many sides (2-4) that fight each other, not bystanders (spawn_battle_sides)")
     ap.add_argument("--privacy", action="store_true", help="copy-privacy: prove each viewer receives only its own copy rows (needs --motion-tables --character-tables and both laws on); <out>/privacy-v<count>.json, exit 1 on a failed check")
