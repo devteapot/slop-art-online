@@ -111,13 +111,13 @@ The laptop saw what it means: at its spot, cap 40 gave 39 fighters (one resident
 
 **What changes for a player.** Nothing directly. AI fighters react to things around them (not aimed at them) up to about 67 ms later.
 
-**Measured.** No change measurable at one run: 465 → 481 ms/s at 16 viewers and 789 → 808 at 216, both within the runs' spread. Ticks/s at 216: 23.2 → 23.1. The Spark's diagnosis estimated about −23 ms/s at a sustained 200 fighters (`wake.eval.fight`). This fixture's fight thins over the window, and its bystander wakes are few. The repeat runs, with the Spark's spans, will tell.
+**Measured.** No change measurable at one run: 465 → 481 ms/s at 16 viewers and 789 → 808 at 216, both within the runs' spread. Ticks/s at 216: 23.2 → 23.1. The Spark's diagnosis estimated about −23 ms/s at a sustained 200 fighters (`wake.eval.fight`). This fixture's fight thins over the window, and its bystander wakes are few. The repeat runs, with the Spark's spans, will tell. Measured by the Spark at a sustained 200: §4.1, −11 ms/s at 0 viewers.
 
 **Risk.** Low. AI fighters' reactions to bystander events are a little later.
 
 ### (d) The combat cadence itself (the Spark's)
 
-The Spark's part (docs/COMBAT_PHASE.md): the 15 Hz cadence at 10 Hz is about −45 ms/s and changes fighters' reaction timing. To be added by the Spark with its measurement.
+The Spark's part (docs/COMBAT_PHASE.md): the 15 Hz cadence at 10 Hz is about −45 ms/s and changes fighters' reaction timing. To be added by the Spark with its measurement. Measured: §4.2, `combat_eval_hz`.
 
 ### (e) Other candidates
 
@@ -142,10 +142,101 @@ From docs/BATTLE_VIEWERS.md (addenda 3–5) and docs/COMBAT_PHASE.md, per pair a
 
 ## 4. The tick body and module memory across transactions (the Spark's part)
 
-*To be added by the Spark:*
-- the AI-trims results and what remains of the tick body at a sustained 200 fighters;
-- module memory across transactions (each viewer's `heard` rows and health readings kept between ticks, the `KEPT` pattern) with its bounded imprecision and expected gain;
-- the combat cadence (d).
+Measured on the Spark (docs/COMBAT_PHASE.md, "battle-laws", is the detailed source: every run, its load and placement). The fixture differs from §1's in four ways. First, the Spark's own server is pinned to its fast cores (X925; unpinned Spark ticks swing 40–50%). Second, L1: profiling on, so the tick's phases and the creatures in sight are counted, which costs a few percent. Third, two runs per arm, interleaved. Fourth, for (c) and (d), **a sustained battle**: `battle_viewers.py --keep-fighters 1` counts the fighters alive every second and replaces the dead one for one with `spawn_battle`, the same profile within the site's 7 m. That is about 2.0–2.6 refills a second, and 191–200 fighters alive at every count (§1's battle thins from about 180 to about 90 engaged over its window). This is a respawn the game does not have, as `battle_diag.py`'s refills are; it keeps deaths and their witnessed events, which reduced damage would not. The rings are §1's: 16 viewers on the 10 m ring, 216 on the 26–32 m ring, copy tables on. Per pair is as in §1, against the same law state's 0-viewer arm. At 216 it is per pair per tick, since the thread is saturated. Compare per-pair figures within one host only: the Spark's L1 runs and §1's dev-box L0 runs measure the same thing at different scales.
+
+**Where the tick body stands.** After the exact AI trims (docs/COMBAT_PHASE.md, step 3: −9..−13% of the AI-only tick, an evaluation 69.5 → 61 µs, exact by tick-by-tick comparison), a sustained 200-fighter battle with no viewer costs **321 ms/s** of the database thread's 1,000 (L1, two runs, 321.0 both). The parts:
+- the fighters' 15 Hz cadence evaluations, 161 ms/s (about 3,100 a second at about 52 µs);
+- wakes, 49 ms/s (about 340 woken evaluations of fighters a second, most of them as a party: the target of a windup);
+- the rest (blows, deaths, folded onlooker lines, residents' slots, motion) about 110 ms/s.
+
+So at 60 Hz the battle alone leaves about 280–380 ms/s for every viewer cost, before the headroom for spikes. The options below take from the battle's share; none of them changes a viewer's own cost (per pair), which is what §2's (a) and (b) do.
+
+### 4.1 (c) at a sustained 200: fighters' bystander wakes (`fighter_bystander_wakes`, on as shipped)
+
+**What it does.** Off, a creature on the combat cadence is not woken as a bystander, neither at once nor when a held-back wake (`witness_wake_ms`) falls due. Its next cadence evaluation sees what happened. That evaluation comes within 4 ticks at 15 Hz; the law only applies while the fight's cadence is sure to reach it (`mind_state.fast_until` at least one cadence ahead). A party (the one a blow is aimed at, the one striking) is woken at once either way, and the percept is written at once in full either way. The Spark's build is the rule of this branch's prototype under the same name, plus the held-back wakes and the cadence guarantee (branch `battle-laws`, Spark). One of the two goes in at merge.
+
+**What changes for a player.** Nothing a player does. AI bystanders in a fight turn to what others do near them (an ally struck, a death seen) at their next beat, up to about 67 ms later. A player's own character in a fight runs only its command or waiting graph on the cadence, and its skills start when the player asks.
+
+**Measured** (sustained 200):
+
+| | 0 viewers | 16 viewers, 10 m ring | 216 viewers, 26–32 m ring |
+|---|---|---|---|
+| Database thread, ms/s (on → off) | 338 → 326 (**−11**) | 544 → 547 (within the spread) | 859 → 887 (within the spread) |
+| Tick WASM, ms/s | 321 → 310 (−3.5%) | 410 → 409 | 580 → 598 |
+| Per pair | – | 101 (89–112) → 118 (114–122) µs/s, within the spread | 3.25 → 3.24 µs per pair-tick |
+| Ticks/s | 60 → 60 | 57.6 → 57.8 | 15.1 → 15.2 |
+| Bystander wakes left to the cadence | 283–309 a second | 553–644 | 630–697 |
+
+**Correcting the diagnosis.** The diagnosis's −23 ms/s counted every woken evaluation of a fighter (`wake.eval.fight`), and most of those are wakes as a party, which this law keeps. At a sustained 200 the gain is −11 ms/s: `tick.wakes` −5.8 ms/s, and the fighters' woken evaluations 341 → 310 a second.
+
+**Behaviour** (three matched battles, stepped deterministically, AI only). Reaction to an attack aimed at a fighter is unchanged: p50 17 ms; 64.0% of attacks are met by a block or dodge before they resolve, against 63.6%. Blows landed, blocked and dodged, hits taken, deaths and engagement length are within the spread between battles.
+
+**Exactness.** On as shipped is identical to main tick by tick (`det_compare`, with 16 players and without). Off changes AI timing by design.
+
+**Risk.** Low: one value, live-tunable (value-only). In this fight graph its effect could not be seen; a graph that reacts to others' acts would react later.
+
+### 4.2 (d) at a sustained 200: the combat cadence (`combat_eval_hz`, 15 as shipped)
+
+**What it does.** Creatures in a fight are evaluated every `round(60 / combat_eval_hz)` ticks, staggered by id: 15 Hz is every 4th tick (as today), 10 Hz every 6th, 7.5 Hz every 8th. Wakes are untouched, so a threat still wakes its target at once.
+
+**What changes for a player and for fighters.** A fighter's reaction to an attack aimed at it does not change: the attack's windup wakes its target, which decides in the next tick (p50 17 ms at every value). What slows is everything a fighter does between threats: choosing and closing on a target, turning to face it, the next attack once recovered. A player fighting AI meets opponents that re-plan every 100 ms (10 Hz) or 133 ms (7.5 Hz) instead of every 67. A player's own command graph in a fight (approach and strike) re-plans at the same pace. A player's skills are not affected.
+
+**Measured** (sustained 200; 10 Hz / 7.5 Hz against 15):
+
+| | 0 viewers | 16 viewers, 10 m ring | 216 viewers, 26–32 m ring |
+|---|---|---|---|
+| Database thread, ms/s | 338 → 283 / 272 (**−55 / −66**) | 544 → 526 / 483 (−18 / −60) | 859 → 877 / 879 (saturated) |
+| Tick WASM, ms/s | 321 → 266 / 256 (**−17% / −20%**) | 410 → 378 / 340 | 580 → 590 / 588 |
+| Cadence evaluations' cost (`tick.combat`), ms/s | 161 → 119 / 100 | 162 → 123 / 97 | 56 → 49 / 39 |
+| Per pair | – | 101 → 118 / 108 µs/s (within the spread) | 3.25 → 3.17 / 3.01 µs per pair-tick |
+| Ticks/s | 60 | 57.6 → 58.4 / 58.6 | 15.1 → 16.1 / 16.2 (+7%) |
+
+**Behaviour** (three matched battles, AI only; 15 → 10 / 7.5 Hz):
+- attacks met by a block or dodge: 63.6% → 64.0 / 63.3%;
+- blows that miss: 4.8% → 5.7 / 5.1%;
+- blocked: 32.0% → 31.2 / 30.6%;
+- the slow tail between a fighter's moves, p90 from a move's end to its next decision: 1,300–1,450 ms → 1,350–1,433 / 1,517–1,566 (7.5 Hz about +11%);
+- deaths, hits taken and engagement length: within the spread between battles.
+
+**Exactness.** 15 is identical to main tick by tick. Other values change AI timing by design.
+
+**Risk.** Low to implement (one value, value-only). It is the largest AI-side lever measured, but it makes AI fighters a little slower to follow a fight, which a player who fights them might feel. The diagnosis's advice stands: use it only if the budget still fails after the rest. If so, 10 Hz costs the least behaviour for about −55 ms/s at a sustained 200.
+
+### 4.3 (f) Module memory across transactions: each viewer's heard rows and the health readings kept between ticks (`sweep_keep_memory`, a diagnostic, off)
+
+**What it does.** A player's sweep keeps its `heard` rows (what it hears and does not see) and the creatures' `vitals` rows in the module's memory from one tick to the next, instead of reading them each sweep. This is `KEPT`'s pattern: memory that only stands in for a read. It is cleared whenever this instance skipped or repeated a tick (another instance ran one, or one rolled back), dropped for a player outside the tick (a join, a death), and read afresh every 150 sweeps (heard) or 60 ticks (health). A blow, a heal or a band change (`health_moved`) drops a creature's kept health. `sweep_keep_check` compares each kept value with the table.
+
+**Why it is not exact.** SpacetimeDB does not keep module memory across reducer calls: "Relying on global variables, static variables, or module-level state to persist across reducer calls is undefined behavior", and a rolled-back transaction's changes to it "may remain" (docs: reducers, 2.0.0; the server is 2.14.1). The heard keep is exact in practice, because only the sweep and a death write those rows. The health keep is not: most writes to `vitals` (needs settled at each evaluation, breath, eating) do not mark it.
+
+**What changes for a player.** Nothing measured. A revealed exact health (one's own is written at once anyway) could lag by up to a second between blows.
+
+**Measured** (the thinning fixture of COMBAT_PHASE.md; L2 for the sweep's parts, L1 for the totals; two runs each):
+
+| | 16 viewers, 10 m ring | 216 viewers, 26–32 m ring | 216 viewers, 10 m ring |
+|---|---|---|---|
+| A sweep, µs (off → on) | 339–378 → 346–353; its heard read 17 → 1, its health test 63–73 → 54 | 239–247 → 226–232; heard read 7 → 0.6, health test 26–28 → 22–24 | 654–666 → 680–701 (nothing measurable) |
+| Database thread | about −2..−3 ms/s | about −6..−22 ms/s | – |
+| Per pair | about −1.5..−2 of about 130 µs/s | about −1..−3% per pair-tick | – |
+| Kept against the table (`sweep_keep_check`, one run each) | heard: 0 of 6,862 lists differed; health: raw value 13% of 348,503, band 0 | – | heard: 0 of 24,451; health: raw 14% of 43,652, band 0 |
+
+**Risk.** Medium for little: memory that a missed mark makes stale, against a few percent of a sweep. The heard half could be made a permanent exact path at low risk (its only writers are known). The health half needs a mark at every `vitals` write before it could be.
+
+**Recommendation.** Not for play as it stands. What remains of a viewer's cost is row writes, views and each transaction's commit, which this does not touch.
+
+### 4.4 Other items in the tick body (exact; docs/COMBAT_PHASE.md "Next", rows 3, 4, 5, 10)
+
+| Item | Expected gain | Exactness | Risk |
+|---|---|---|---|
+| The viewer's own `perceived` rows kept as heard rows are (each sweep reads all of them) | about −10..−16 ms/s at 216 on the 10 m ring, −1.5 at 16 (estimated) | exact while every writer marks it | medium: joins, deaths and `sweep_now` write them too |
+| Frames take the sweep's band and health instead of reading them again (dev-box's `frame.rs`) | part of 25–34 ms/s of frames at 16 viewers | exact | low |
+| The skill script's breath test run natively before the script, for the about 570 "out of breath" refusals a second | up to about −12 ms/s at 200 fighters | exact only checked against the script (a `_check` law) | medium: the script is the world's |
+| Each transaction's commit and subscription work (§2 (e2)) | unknown until a host profile splits it | – | – |
+
+Together the exact items might take 30–50 ms/s at 216 viewers and 15–20 at 16, a third of it the breath test, which does not grow with viewers. None of them closes the per-pair gap.
+
+### 4.5 What §4 adds to §5
+
+At a sustained 200 fighters the battle itself takes about 320 ms/s. (d) at 10 Hz frees about 55 of it, (c) about 11, the exact items perhaps 30–50 at 216 viewers. That raises the tick rate at 216 by a few percent (+7% measured for (d)), but the per-pair cost, about 100–130 µs/s at 16 viewers against a budget of 7–10, is untouched. The per-pair gap is (a)'s and (b)'s.
 
 ## 5. A recommended combination (preliminary, one run each)
 
