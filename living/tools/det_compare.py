@@ -233,10 +233,32 @@ def prepare(a):
             time.sleep(5)
     A.call(db, "set_paused", [True])
     A.call(db, "spawn_battle", [a.fighters])
+    if a.players:
+        # Players watching (exact items): `a.players` fresh identities joined over HTTP (no
+        # connection: their characters are human by controller, so the sweeps and frames run for
+        # them) and placed over the ring `--ring LO,HI` m round the battle's centre (the arrival
+        # less 20 m, as spawn_battle and battle_viewers.py take it). Without a connection a
+        # character is taken over by a mind after `takeover_s` (30 s): keep `--ticks` under it.
+        import math
+        land = A.sql(db, "SELECT * FROM land")
+        site = (land[0]["arrive_x"], land[0]["arrive_y"] - 20.0) if land else (55.0, 60.0)
+        lo, hi = (float(x) for x in a.ring.split(","))
+        before = {r["id"] for r in A.sql(db, "SELECT id FROM character")}
+        for i in range(a.players):
+            token = json.loads(urllib.request.urlopen(urllib.request.Request(f"{A.url}/v1/identity", data=b"", method="POST"), timeout=60).read())["token"]
+            req = urllib.request.Request(f"{A.url}/v1/database/{db}/call/join", data=json.dumps([f"Watch{i}"]).encode(), method="POST",
+                                         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=60).read()
+        joined = sorted(r["id"] for r in A.sql(db, "SELECT id FROM character") if r["id"] not in before and r["id"])
+        n = len(joined)
+        for i, cid in enumerate(joined):
+            ang, rr = i * 2.399963, (lo * lo + (hi * hi - lo * lo) * ((i + 0.5) / max(1, n))) ** 0.5
+            A.call(db, "place_at", [cid, site[0] + rr * math.cos(ang), site[1] + rr * math.sin(ang)])
+        print(f"det_compare: {n} players joined and placed on the {lo:g}-{hi:g} m ring", flush=True)
     t0 = A.sql(db, "SELECT tick FROM clock")[0]["tick"]
     A.call(db, "set_world_law", ["det_clock", "true"])
     A.call(db, "set_world_law", ["det_stop", str(float(t0 + a.ticks))])
-    meta = {"db": db, "start_tick": t0, "stop_tick": t0 + a.ticks, "fighters": a.fighters, "ticks": a.ticks, "replica": A.newest_replica(), "made_with": a.base}
+    meta = {"db": db, "start_tick": t0, "stop_tick": t0 + a.ticks, "fighters": a.fighters, "players": a.players, "ring": a.ring, "ticks": a.ticks, "replica": A.newest_replica(), "made_with": a.base}
     print(f"det_compare: {db} paused at tick {t0}, battle of {a.fighters}, stop at {t0 + a.ticks}", flush=True)
     subprocess.run(["docker", "kill", "-s", "INT", a.container], check=True, capture_output=True)
     subprocess.run(["docker", "wait", a.container], check=True, capture_output=True, timeout=300)
@@ -260,7 +282,10 @@ def run(a):
         servers = []
         for name, port in zip(names, ports):
             copy_volume(a.template, name)
-            subprocess.run(["docker", "run", "-d", "--name", name, "--cpuset-cpus", a.cpus, "--ulimit", "nofile=65536:524288", "-p", f"127.0.0.1:{port}:3000",
+            # `--cpus ""` leaves the copies unpinned (a host whose rootless cgroups have no cpuset
+            # controller delegated, as the dev-box's podman).
+            pin = ["--cpuset-cpus", a.cpus] if a.cpus else []
+            subprocess.run(["docker", "run", "-d", "--name", name, *pin, "--ulimit", "nofile=65536:524288", "-p", f"127.0.0.1:{port}:3000",
                             "-v", f"{a.wasm_dir}:/wasm", "-v", f"{name}:/home/spacetime", IMAGE, "start", "--listen-addr", "0.0.0.0:3000"], check=True, capture_output=True)
             servers.append(Server(name, f"http://127.0.0.1:{port}"))
         for s in servers:
@@ -355,6 +380,8 @@ def main():
     ap.add_argument("--candidate")
     ap.add_argument("--fighters", type=int, default=200)
     ap.add_argument("--ticks", type=int, default=3600)
+    ap.add_argument("--players", type=int, default=0, help="prepare: players joined (no connection) and placed on --ring round the battle (exact items)")
+    ap.add_argument("--ring", default="10,10", help="prepare: the players' ring LO,HI m from the battle's centre")
     ap.add_argument("--ports", default=None, help="run: the two copies' ports, PX,PY")
     ap.add_argument("--out")
     ap.add_argument("--keep-copies", action="store_true")
