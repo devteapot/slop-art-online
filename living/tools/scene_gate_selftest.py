@@ -654,6 +654,49 @@ def check_smoke_links():
         expect("smoke links: a real folder is never replaced", refused and (a / "lookdev").is_dir() and not (a / "lookdev").is_symlink())
 
 
+def check_render_load():
+    """The load around render and render-smoke runs: warned over LOAD_WARN (8), at the start or end;
+    kept on the runner for the record."""
+    w = scene_gate.load_warnings
+    expect("load: 8 is the default threshold", scene_gate.LOAD_WARN == 8)
+    expect("load: under 8 at both ends warns nothing", w([{"group": "render", "tag": "a", "start": 3.2, "end": 7.9}]) == [])
+    expect("load: over 8 at the start warns, naming the group, the host and the value",
+           w([{"group": "render", "tag": "a", "start": 22.4, "end": 2}], "dev-box")
+           == ["WARNING render (a): dev-box's 1-minute load was over 8 (start 22.4); its cases are timing-sensitive, so a failure here may be load-made"])
+    expect("load: over 8 at the end warns", len(w([{"group": "render-smoke", "tag": "b", "start": 1, "end": 8.5}])) == 1)
+    expect("load: a missing reading warns nothing", w([{"group": "render", "tag": "a", "start": None, "end": None}]) == [] and w(None) == [])
+    expect("load: the reading is a number", isinstance(scene_gate.load1(), float))
+    t = tempfile.mkdtemp(prefix="gate-load-")
+    try:
+        runner = Runner("s", {}, Path(t), os.path.join(t, "reds.json"))
+        real = scene_gate.load1
+        scene_gate.load1 = lambda: 12.0
+        try:
+            runner.note_load("render-smoke", "a", 3.0)
+        finally:
+            scene_gate.load1 = real
+        expect("load: a run's start and end go on the runner", runner.loads == [{"group": "render-smoke", "tag": "a", "start": 3.0, "end": 12.0}],
+               str(runner.loads))
+    finally:
+        shutil.rmtree(t, ignore_errors=True)
+
+
+def check_recorded_verdicts():
+    """How a recorded pass's cases are read: passed, red on main (only while listed), or uncovered."""
+    entry = {"cases": {"looks": "pass", "hair": "flaky-pass", "seat": "red-on-main", "far": "fail"}}
+    reds = {"seat": {"skill": "verify-ui", "owner": "dev-box", "first_seen": "2026-11-20", "last_evidence": "x"}}
+    v = scene_gate.recorded_verdicts(entry, ["looks", "hair", "seat", "far", "camera-lod"], reds)
+    expect("recorded: pass and flaky-pass are recorded-pass", v["looks"][0] == v["hair"][0] == "recorded-pass")
+    expect("recorded: red on main while listed is recorded-red-on-main with its owner, not a pass",
+           v["seat"][0] == "recorded-red-on-main" and "owner dev-box" in v["seat"][1], str(v["seat"]))
+    expect("recorded: failed or missing is uncovered", v["far"] == ("uncovered", "recorded fail") and v["camera-lod"] == ("uncovered", "not recorded"))
+    v = scene_gate.recorded_verdicts(entry, ["seat"], {})
+    expect("recorded: red on main no longer listed is uncovered", v["seat"][0] == "uncovered" and "no longer holds" in v["seat"][1])
+    v = scene_gate.recorded_verdicts(entry, ["seat"], {"seat": {"skill": "verify-ui", "owner": None}})
+    expect("recorded: a listed case without an owner names its skill as owner, as the list does", "owner verify-ui" in v["seat"][1], str(v))
+    expect("recorded: no entry covers nothing", scene_gate.recorded_verdicts(None, ["looks"], reds) == {"looks": ("uncovered", "not recorded")})
+
+
 def check_render_passes(t):
     """Recorded render passes: shared through their own branch like the red-on-main list; a pass
     covers the cases it names and the halves all of whose cases it names; a merge's content key
@@ -720,20 +763,23 @@ def check_render_passes(t):
     check_render_passes_cli(t, tools)
 
 
-def record_pass(t, tools, key, cases, legacy=False):
+def record_pass(t, tools, key, cases, legacy=False, extra=None):
     """dev-box's side, written from the devbox clone to the shared branch: the gate's own
     record_render_pass for `cases` of content `key`, or with `legacy` a raw entry as recorded before
-    the split (all its cases, no `halves`)."""
+    the split (its cases, a list of passes or {case: status}, no `halves`; `extra` fields added)."""
     code = ("import json,sys,scene_gate as g\n"
-            "key, cases = sys.argv[2], json.loads(sys.argv[3])\n"
+            "key, cases, extra = sys.argv[2], json.loads(sys.argv[3]), json.loads(sys.argv[5])\n"
             "class A:\n    passes = sys.argv[1]\n"
             "if sys.argv[4] == '1':\n"
-            "    def ch(p):\n        p[key] = {'cases': dict.fromkeys(cases, 'pass'), 'host': 'dev-box', 'head': 'h', 'at': 'then', 'set': 's'}\n        return True\n"
+            "    def ch(p):\n        p[key] = {'cases': cases if isinstance(cases, dict) else dict.fromkeys(cases, 'pass'), "
+            "'host': 'dev-box', 'head': 'h', 'at': 'then', 'set': 's', **extra}\n        return True\n"
             "    g.update_reds(A.passes, ch, 'render pass', branch='render-passes', file='render-passes.json')\n"
             "else:\n"
-            "    g.record_render_pass(A, key, 'h' * 40, cases, {'base': 'b', 'evidence': 'e', 'cases': {c: {'status': 'pass'} for c in cases}}, {'id': 's'})\n")
+            "    g.record_render_pass(A, key, 'h' * 40, cases, {'base': 'b', 'evidence': 'e', 'cases': {c: {'status': 'pass'} for c in cases}, "
+            "'load': [{'group': 'render', 'tag': 'a', 'start': 1.5, 'end': 2.0}, {'group': 'render-smoke', 'tag': 'a', 'start': 1, 'end': 1}]}, {'id': 's'})\n")
     env = {**os.environ, "LIVING_GATE_REDS_REPO": os.path.join(t, "devbox"), "PYTHONPATH": tools}
-    r = subprocess.run([sys.executable, "-c", code, os.path.join(t, "devbox-passes.json"), key, json.dumps(list(cases)), "1" if legacy else "0"],
+    r = subprocess.run([sys.executable, "-c", code, os.path.join(t, "devbox-passes.json"), key,
+                        json.dumps(cases if isinstance(cases, dict) else list(cases)), "1" if legacy else "0", json.dumps(extra or {})],
                        env=env, capture_output=True, text=True, cwd=tools)
     if r.returncode or "pass recorded" not in r.stdout + r.stderr and not legacy:
         raise RuntimeError(r.stdout + r.stderr)
@@ -788,6 +834,38 @@ def check_render_passes_cli(t, tools):
     expect("cli: the shared entries are keyed by content alone, each naming the halves it covers",
            set(passes) >= {key, key2} and passes[key].get("halves") == ["character", "camera"]
            and set(passes[key]["cases"]) == set(scene_gate.RENDER_CASES) and "halves" not in passes[key2], json.dumps(passes)[:800])
+    expect("cli: a recorded pass keeps the render group's load (not render-smoke's)",
+           passes[key].get("load") == [{"group": "render", "tag": "a", "start": 1.5, "end": 2.0}], json.dumps(passes[key])[:500])
+
+    # a half with one case red on main (dev-box's seat, 2026-11-20): covered while the shared
+    # red-on-main list holds it, reported loudly and never as passed; load over 8 there is warned
+    (g / "handmade.rs").write_text("// three\n")
+    sh("git commit -q -am 'character change, seat red on main'", spark)
+    gate(spark, cache, "reds", "--add", "seat", "--skill", "verify-ui", "--who", "dev-box", "--reason", "cloth under the ground")
+    (g / "camera.rs").write_text("// one\n")  # back to the base: the diff is the character half alone
+    sh("git commit -q -am 'camera back'", spark)
+    key3 = scene_gate.render_key("HEAD", cwd=spark)
+    record_pass(t, tools, key3, {"looks": "pass", "hair": "flaky-pass", "seat": "red-on-main"}, legacy=True,
+                extra={"load": [{"group": "render", "tag": "a", "start": 22.4, "end": 15.1}]})
+    code, out, rec = run()
+    gj = sorted(Path(spark, ".local/living/verify").glob("gate-*/gate.json"), key=os.path.getmtime)[-1]
+    cases = json.loads(gj.read_text()).get("cases", {})
+    expect("cli: a half with one case red on main (listed, with its owner) is covered, says loudly the case did not pass, "
+           "and records it recorded-red-on-main, the others recorded-pass",
+           "needs a pinned asset set" not in out and "passed looks, hair; red on main, NOT passed: seat" in out
+           and "WARNING render: seat did not pass in dev-box's recorded pass" in out and "owner dev-box" in out
+           and {c: v.get("status") for c, v in cases.items()} == {"looks": "recorded-pass", "hair": "recorded-pass", "seat": "recorded-red-on-main"}
+           and rec.get("recorded_halves") == ["character"], out)
+    expect("cli: the recorded pass's load over 8 is shown and warned about",
+           "dev-box's 1-minute load around its render (a): start 22.4, end 15.1" in out
+           and "WARNING render (a): dev-box's 1-minute load was over 8 (start 22.4, end 15.1)" in out
+           and rec.get("recorded_load") == [{"group": "render", "tag": "a", "start": 22.4, "end": 15.1}], out)
+    gate(spark, cache, "reds", "--drop", "seat")
+    code, out, rec = run()
+    expect("cli: once main is green for it (dropped from the list), the recorded red-on-main case no longer covers its half",
+           "needs a pinned asset set (dev-box)" in out and "this content's character half" in out
+           and "seat not covered by the recorded pass: recorded red on main, but the red-on-main list no longer holds it" in out
+           and "--cases seat" in out, out)
 
 
 def main():
@@ -799,6 +877,8 @@ def main():
     check_generation_group()
     check_staged_genesis()
     check_render_selection()
+    check_render_load()
+    check_recorded_verdicts()
     check_render_logs()
     check_render_set()
     check_smoke_links()
