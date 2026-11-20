@@ -1,0 +1,4 @@
+{"stage": "face3", "materials": 14, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "face3-checkpoint", "materials": 14, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage3-xhigh", "materials": 14, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage3-expressions", "materials": 14, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}

@@ -120,9 +120,29 @@ pub fn report_diag() {
     // window's first report holds only that second's calls.
     let calls = living_rules::script::calls::take();
     if PROFILE.with(|p| p.get()) {
-        for (k, n) in [("eval:script_calls", calls[0]), ("eval:status_calls", calls[1]), ("eval:status_memo", calls[2]), ("eval:status_run", calls[3])] {
+        use living_rules::script::calls as c;
+        let named = [
+            ("eval:script_calls", c::SKILL),
+            ("eval:status_calls", c::STATUS_ASKED),
+            ("eval:status_memo", c::STATUS_MEMO),
+            ("eval:status_run", c::STATUS_RUN),
+            ("eval:status_parts_asked", c::PARTS_ASKED),
+            ("eval:status_parts_joined", c::PARTS_JOINED),
+            ("eval:status_part_memo", c::PART_MEMO),
+            ("eval:status_part_run", c::PART_RUN),
+            ("status_parts:checked", c::STATUS_CHECKED),
+            ("status_parts:differed", c::STATUS_DIFFERED),
+        ];
+        for (k, i) in named {
+            if calls[i] > 0 {
+                diag(|| k, calls[i]);
+            }
+        }
+        // Runs of each part by its place in `status_parts()`.
+        for i in 0..living_rules::script::body::MAX_PARTS {
+            let n = calls[c::PART_RUN_BY + i];
             if n > 0 {
-                diag(|| k, n);
+                diag(|| format!("eval:status_part_run:{i}"), n);
             }
         }
         let m = DIAG.with(|d| std::mem::take(&mut *d.borrow_mut()));

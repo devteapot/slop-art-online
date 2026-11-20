@@ -1,0 +1,48 @@
+{
+  "file": "view/own-cora-live.glb",
+  "ink": {
+    "M00_000_Hair_00_HAIR": {
+      "ink": [
+        4,
+        0,
+        0
+      ],
+      "ink_px": 1.05,
+      "ink_range": 0.009,
+      "ink_fade_px": 3.0
+    }
+  },
+  "sequences": [
+    {
+      "sequence": "near pan",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "near zoom",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "middle pan",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "middle zoom",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "far pan",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "far zoom",
+      "ink_px": 0.0,
+      "result": "faded"
+    }
+  ],
+  "passed": true
+}

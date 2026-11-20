@@ -74,6 +74,7 @@ Work is routed by kind (owner's choice, 2026-11-19; it replaces the 2026-11-18 r
 - **Exploration and execution:** GPT-6.2 Sol (`gpt-6.2-sol`, Codex provider, via `delegate_task`) at low reasoning effort. This covers research and design surveys, diagnoses, measurement series and trial runs, reviews, documentation, tooling chores and verification runs. When a Sol task turns into implementing game logic, hand the implementation to Opus.
 - **Asset generation:** GPT-6.2 Astra (`gpt-6.2-astra`, Codex provider) at low reasoning effort for 3D models, skeletons, textures and the asset generators.
 - **Escalation:** a task a Sol or Astra worker has attempted and could not solve goes to Claude Opus 5.5 at high effort. Say in the report when a task was moved and why.
+- **When Astra is unavailable** (usage limit reached, provider down), asset work continues on Claude Opus 5.5 at high effort. Do not use Fable (owner, 2026-11-20). Say in the report which tasks ran on Opus for this reason.
 - **Ultracode:** off for coordinators and subagents. Turn it on only when the owner asks for it for a named piece of work, and only for that work.
 - A model or provider the owner asks for by name overrides these defaults for that task.
 - A model named inside a skill does not override this section. This section does not switch the model of a thread the owner started.

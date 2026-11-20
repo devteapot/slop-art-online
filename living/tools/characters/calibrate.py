@@ -25,6 +25,16 @@
    swatch it tunes (`"swatch": "mid"`); the report then suggests that swatch's next value
    (each linear channel scaled by target / measured, averaged over the shots).
 
+**Ink (contract v1.2, docs/HANDMADE_INK.md):** the audit checks every material's `slop.ink` (its
+fields, its map, its primitives' UV0, the range against the width, a carrier's alpha mode and
+morph targets). An ink patch may say which ink it tunes (`"slot"`, and `"material"` when a slot
+has several inked materials; `"swatch": "ink"` then suggests that material's `ink.color`, and
+without `"slot"` the hair profile's v1.1 `ink`) and take a floor-relative target: `"relative":
+"<reference patch>"` gives, per shot and per linear channel, floor + (drawing ink / drawing
+reference) x (measured reference - floor), encoded and rounded once. The floor is `"floor": [r,
+g, b]`, or (`"control"`, the default) the patch's min5 in a control render of a temporary copy
+whose slot is black (base colours, a hair profile's swatches and every ink).
+
 Writes OUT (default `.local/living/calibrate/<stem>/<time>/`): `stills/<stem>/NN-<shot>.png`,
 `client.log`, `colours.csv`, `report.json`. Plain Python, no dependencies.
 """
@@ -48,6 +58,8 @@ INK_KEYS = ("ink", "ink_px", "ink_range", "ink_fade_px")
 HAIR_KEYS = set(SWATCHES) | {"t1", "t2", "edge", "highlight_feather", "highlight_map"} | set(INK_KEYS)
 SHOTS = ("portrait", "near", "portrait45")
 FLOAT, SCALAR = 5126, "SCALAR"
+INK_FIELDS = {"color", "width", "px", "min_px", "range", "fade_px", "map", "taper"}
+NEAR_M_PX = 0.00805  # a pixel's metres at the Near stop (toon.wesl INK_NEAR_M_PX)
 
 
 # ---- glTF ------------------------------------------------------------------------------------
@@ -335,6 +347,7 @@ def audit(glb):
                 vs.append(u[1])
         if not us or (max(us) - min(us)) * (max(vs) - min(vs)) < 1e-6:
             warns.append("the hair's TEXCOORD_0 spans no area (no UV unwrap): its mask texture and ink read one texel everywhere")
+    ink_audit(j, binary, stem, mats, slots, profiles, errors, warns, facts)
     # The face.
     if face_prims:
         for p in face_prims:
@@ -381,6 +394,197 @@ def audit(glb):
     return errors, warns, notes, facts
 
 
+def read_indices(j, binary, i):
+    a = j["accessors"][i]
+    bv = j["bufferViews"][a["bufferView"]]
+    fmt = {5121: "B", 5123: "H", 5125: "I"}[a["componentType"]]
+    return list(struct.unpack_from(f"<{a['count']}{fmt}", binary, bv.get("byteOffset", 0) + a.get("byteOffset", 0)))
+
+
+def ink_maps(stem, slot, ink):
+    """The ink map's candidates in the client's order (docs/HANDMADE_INK.md, "The map")."""
+    cands = ([ink["map"]] if isinstance(ink.get("map"), str) else []) + ([f"{stem}.{slot}.ink.png"] if slot else [])
+    return [f for c in cands for f in (c[: -len(".png")] + ".ktx2" if c.endswith(".png") else c, c)]
+
+
+def uv_facts(j, binary, prims):
+    """(per primitive: zero-area share, total UV area), and the triangles' metres per UV unit."""
+    out, dens = [], []
+    for p in prims:
+        a = p["attributes"]
+        if "TEXCOORD_0" not in a:
+            out.append(None)
+            continue
+        pos, _ = accessor(j, binary, a["POSITION"])
+        uv, _ = accessor(j, binary, a["TEXCOORD_0"])
+        idx = read_indices(j, binary, p["indices"]) if "indices" in p else list(range(len(pos)))
+        zero, total, n = 0, 0.0, 0
+        for k in range(0, len(idx) - 2, 3):
+            ia, ib, ic = idx[k : k + 3]
+            ua = abs((uv[ib][0] - uv[ia][0]) * (uv[ic][1] - uv[ia][1]) - (uv[ic][0] - uv[ia][0]) * (uv[ib][1] - uv[ia][1]))
+            e1 = [pos[ib][c] - pos[ia][c] for c in range(3)]
+            e2 = [pos[ic][c] - pos[ia][c] for c in range(3)]
+            cr = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]
+            area = sum(c * c for c in cr) ** 0.5
+            n += 1
+            total += ua
+            if ua <= 1e-12:
+                zero += 1
+            elif area > 0:
+                dens.append((area / ua) ** 0.5)
+        out.append((zero / max(n, 1), total))
+    dens.sort()
+    return out, dens
+
+
+def ink_audit(j, binary, stem, mats, slots, profiles, errors, warns, facts):
+    """The v1.2 ink checks (docs/HANDMADE_INK.md, "The audit"): errors and warnings appended."""
+    by_mat = {}
+    for mi, mesh in enumerate(j.get("meshes", [])):
+        for p in mesh.get("primitives", []):
+            by_mat.setdefault(p.get("material"), []).append((mi, p))
+    face_names = None
+    for mi, mesh in enumerate(j.get("meshes", [])):
+        if any(slots.get(p.get("material")) == "face" for p in mesh.get("primitives", [])):
+            face_names = (mesh.get("extras") or {}).get("targetNames") or face_names
+    for i, m in enumerate(mats):
+        ms = m.get("extras", {}).get("slop") or {}
+        if "ink" not in ms:
+            continue
+        name, ink, slot = m.get("name", f"material {i}"), ms["ink"], ms.get("slot")
+        pre = f"material {name!r}: ink"
+        if not isinstance(ink, dict):
+            errors.append(f"{pre} is not an object (ignored)")
+            continue
+        c = ink.get("color")
+        if not (isinstance(c, list) and len(c) == 3 and all(isinstance(x, int) and 0 <= x <= 255 for x in c)):
+            errors.append(f"{pre}.color is {c!r}, not three integers 0-255 (the ink is ignored)")
+        r = ink.get("range", 0.004)
+        if not isinstance(r, (int, float)) or isinstance(r, bool) or r <= 0:
+            errors.append(f"{pre}.range is {r!r}, not a number above 0 (the ink is ignored)")
+            r = None
+        for k in ("px", "min_px", "fade_px"):
+            if k in ink and (not isinstance(ink[k], (int, float)) or isinstance(ink[k], bool) or ink[k] < 0):
+                errors.append(f"{pre}.{k} is {ink[k]!r}, not a number 0 or above (the ink is ignored)")
+        if "taper" in ink and not isinstance(ink["taper"], bool):
+            errors.append(f"{pre}.taper is {ink['taper']!r}, not true or false (the ink is ignored)")
+        mode = ink.get("width", "px")
+        if mode not in ("px", "uv"):
+            errors.append(f"{pre}.width is {mode!r}, not \"px\" or \"uv\" (the ink is ignored)")
+        for k in sorted(set(ink) - INK_FIELDS):
+            warns.append(f"{pre}.{k} is not a contract key (ignored)")
+        if slot == "tint":
+            errors.append(f"{pre} on a tint, which is multiplied over the skin (ignored): put the line on a carrier or the skin")
+            continue
+        if slot is None and not isinstance(ink.get("map"), str):
+            errors.append(f"{pre} on a material without a slot needs a map (ignored)")
+            continue
+        if slot == "hair" and name in profiles and any(k in profiles[name] for k in INK_KEYS):
+            warns.append(f"{pre} and the hair profile's v1.1 ink fields: slop.ink wins")
+        cands = ink_maps(stem, slot, ink)
+        found = next((f for f in cands if (ASSETS / f).exists()), None)
+        fact = {"width": mode}
+        if found is None:
+            errors.append(f"{pre}: no ink map (tried {', '.join(cands)}): no ink is drawn")
+        else:
+            fact["map"] = found
+            png = found[: -len(".ktx2")] + ".png" if found.endswith(".ktx2") else found
+            if (ASSETS / png).exists():
+                try:
+                    w, hh, ch, rows = read_png(ASSETS / png)
+                except ValueError as e:
+                    errors.append(f"{pre}: map {png}: {e}")
+                    w = None
+                if w:
+                    fact["map_size"] = f"{w}x{hh}, {ch} channel(s)"
+                    gi = 1 if ch >= 3 else 0
+                    on = [(x, y) for y in range(hh) for x in range(w) if rows[y][x * ch + gi] == 0]
+                    rs = [rows[y][x * ch] for y in range(hh) for x in range(w) if rows[y][x * ch + gi] < 255]
+                    fact["line_texels"] = len(on)
+                    if not rs:
+                        warns.append(f"{pre}: the map's G is 255 everywhere: no line")
+                    elif ch < 3:
+                        if mode == "uv" or ink.get("taper"):
+                            warns.append(f"{pre}: {'width \"uv\"' if mode == 'uv' else 'taper'} on a greyscale map (no R): " + ("no ink is drawn" if mode == "uv" else "full width"))
+                    else:
+                        fact["R"] = [min(rs), max(rs)]
+                        if max(rs) == 0 and (mode == "uv" or ink.get("taper")):
+                            warns.append(f"{pre}: R is 0 wherever there is ink: no line is drawn")
+                        if mode == "px" and not ink.get("taper") and min(rs) != max(rs):
+                            warns.append(f"{pre}: R varies but \"px\" mode has taper off: the widths are ignored")
+                    fact["_on"], fact["_wh"] = on, (w, hh)
+            elif not found.endswith(".ktx2"):
+                errors.append(f"{pre}: map {found} is not a PNG or KTX2 the audit can read")
+        prims = [p for _, p in by_mat.get(i, [])]
+        if not prims:
+            warns.append(f"{pre}: no primitive uses this material")
+        uvs, dens = uv_facts(j, binary, prims)
+        for k, u in enumerate(uvs):
+            if u is None:
+                errors.append(f"{pre}: primitive {k} has no TEXCOORD_0: no ink can be drawn on it")
+            elif u[1] <= 1e-12:
+                errors.append(f"{pre}: primitive {k}'s TEXCOORD_0 is collapsed (it spans no area): give the strokes a UV island")
+            elif u[0] > 0.05:
+                warns.append(f"{pre}: {100 * u[0]:.0f}% of primitive {k}'s triangles have no UV area")
+        m_uv = dens[len(dens) // 2] if dens else None
+        if m_uv:
+            fact["m_uv"] = round(m_uv, 5)
+            within = sum(1 for d in dens if abs(d - m_uv) <= 0.25 * m_uv) / len(dens)
+            fact["density_within_25pct"] = round(within, 3)
+            if mode == "uv" and within < 0.9:
+                warns.append(f"{pre}: width \"uv\" but only {100 * within:.0f}% of the triangles' texel densities lie within 25% of the median {m_uv:.4f} m/UV: strokes on stretched or scaled islands draw at the wrong width")
+            fade = ink.get("fade_px", 3.0) if isinstance(ink.get("fade_px", 3.0), (int, float)) else 3.0
+            if r and mode == "px":
+                px = ink.get("px", 1.25) if isinstance(ink.get("px", 1.25), (int, float)) else 1.25
+                if r * m_uv < px * NEAR_M_PX / 2:
+                    warns.append(f"{pre}: range x m_uv is {1000 * r * m_uv:.2f} mm, under px x 4.03 mm = {1000 * px * NEAR_M_PX / 2:.2f} mm: the line is cut flat at its widest")
+            if r and mode == "uv" and "R" in fact:
+                maxr = fact["R"][1] / 255
+                if fade > 0 and maxr > 1 - 1 / fade:
+                    warns.append(f"{pre}: the widest stroke's R is {maxr:.2f}, above 1 - 1/fade_px = {1 - 1 / fade:.2f}: its edge is cut flat by the range where the fade lets it show")
+                if fade == 0:
+                    warns.append(f"{pre}: width \"uv\" with fade_px 0: at a distance the stroke's min_px floor outgrows the range and its edge is cut")
+        if "_on" in fact:
+            on, (w, hh) = fact.pop("_on"), fact.pop("_wh")
+            border = set()
+            for p in prims:
+                a = p["attributes"]
+                if "TEXCOORD_0" not in a or "indices" not in p:
+                    continue
+                uv, _ = accessor(j, binary, a["TEXCOORD_0"])
+                idx = read_indices(j, binary, p["indices"])
+                cnt = {}
+                for k in range(0, len(idx) - 2, 3):
+                    for e in ((idx[k], idx[k + 1]), (idx[k + 1], idx[k + 2]), (idx[k + 2], idx[k])):
+                        q = (min(e), max(e))
+                        cnt[q] = cnt.get(q, 0) + 1
+                for (ea, eb), cc in cnt.items():
+                    if cc == 1:
+                        steps = int(max(abs(uv[eb][0] - uv[ea][0]) * w, abs(uv[eb][1] - uv[ea][1]) * hh)) + 1
+                        for t in range(steps + 1):
+                            f = t / steps
+                            border.add((int((uv[ea][0] + (uv[eb][0] - uv[ea][0]) * f) * w), int((uv[ea][1] + (uv[eb][1] - uv[ea][1]) * f) * hh)))
+            if r and border and on:
+                rx, ry = r * w, r * hh
+                close = sum(1 for (x, y) in on[:: max(1, len(on) // 400)] if any(((x - bx) / rx) ** 2 + ((y - by) / ry) ** 2 < 1 for bx, by in border))
+                if close:
+                    warns.append(f"{pre}: centreline texels within range of their UV island's border (about {close} of {min(len(on), 400)} sampled): the line may bleed across it at mips")
+        base = m.get("pbrMetallicRoughness", {})
+        carrier = base.get("baseColorFactor", [1, 1, 1, 1])[3] == 0 and "baseColorTexture" not in base
+        if carrier:
+            fact["carrier"] = True
+            if m.get("alphaMode") != "BLEND":
+                errors.append(f"{pre}: a carrier (alpha 0, no texture) must be BLEND, else it is discarded everywhere ({m.get('alphaMode', 'OPAQUE')})")
+            for mi, p in by_mat.get(i, []):
+                mesh = j["meshes"][mi]
+                names = (mesh.get("extras") or {}).get("targetNames")
+                if face_names and not p.get("targets"):
+                    warns.append(f"{pre}: a carrier with no morph targets while the face has them: it won't blink with the lid")
+                elif face_names and names != face_names and not any(slots.get(q.get("material")) == "face" for q in mesh["primitives"]):
+                    warns.append(f"{pre}: a carrier in a separate mesh whose targets are not named as the face's: it won't move with the lid")
+        facts.setdefault("ink", {})[name] = fact
+
+
 # ---- the frame -------------------------------------------------------------------------------
 
 def clips_of(glb):
@@ -389,6 +593,7 @@ def clips_of(glb):
 
 
 def run_frame(glb, binary, out, also):
+    out.mkdir(parents=True, exist_ok=True)
     clips = clips_of(glb)
     clip = "idle" if "idle" in clips else (clips[0] if clips else None)
     views = ["0:8:0.36:0.88", "near@0", "45:8:0.36:0.88"] + list(also)
@@ -416,7 +621,44 @@ def run_frame(glb, binary, out, also):
     return {names[i]: p for i, p in enumerate(stills) if i < len(names)}
 
 
-def measure(targets_path, shots, profiles):
+def black_copy(glb, slots_wanted):
+    """A temporary copy of the file beside it whose `slots_wanted` are black (base colour RGB 0
+    with alpha and texture kept, a hair profile's swatches 0, every ink 0), with its sidecars;
+    returns its path under the assets (the floor control, docs/HANDMADE_INK.md)."""
+    sys.path.insert(0, str(REPO / "living" / "tools"))
+    from merge_primitives import write_glb
+
+    j, binary = read_glb(ASSETS / glb)
+    for m in j.get("materials", []):
+        ms = m.get("extras", {}).get("slop") or {}
+        if ms.get("slot") not in slots_wanted:
+            continue
+        pbr = m.setdefault("pbrMetallicRoughness", {})
+        f = pbr.get("baseColorFactor", [1, 1, 1, 1])
+        pbr["baseColorFactor"] = [0, 0, 0, f[3]]
+        if isinstance(ms.get("hair"), dict):
+            for k in SWATCHES:
+                ms["hair"][k] = [0, 0, 0]
+            if any(k in ms["hair"] for k in INK_KEYS):
+                ms["hair"]["ink"] = [0, 0, 0]
+        if isinstance(ms.get("ink"), dict):
+            ms["ink"]["color"] = [0, 0, 0]
+    stem = glb[: -len(".glb")]
+    out = stem + "-floor.glb"
+    write_glb(ASSETS / out, j, bytearray(binary))
+    for f in Path(ASSETS / stem).parent.glob(Path(stem).name + ".*"):
+        side = f.name[len(Path(stem).name):]
+        if side.endswith((".png", ".ktx2")):
+            (ASSETS / (stem + "-floor" + side)).write_bytes(f.read_bytes())
+    return out
+
+
+def floor_slots(t):
+    """The slots whose floor a control render must measure (relative patches without a floor)."""
+    return {p.get("slot", "hair") for p in t.get("patches", {}).values() if p.get("relative") and not isinstance(p.get("floor"), list)}
+
+
+def measure(targets_path, shots, profiles, inks=None, floor_shots=None):
     t = json.loads(Path(targets_path).read_text())
     drawing = None
     if t.get("drawing"):
@@ -428,14 +670,26 @@ def measure(targets_path, shots, profiles):
             print(f"  WARN: no drawing {dp}: patches without a \"target\" are skipped")
     tol = {"hair": 8, "other": 10, **t.get("tolerance", {})}
     imgs = {k: read_png(p) for k, p in shots.items()}
-    rows, suggest = [], {}
-    for name, p in t.get("patches", {}).items():
+    floors = {k: read_png(p) for k, p in (floor_shots or {}).items()}
+    patches = t.get("patches", {})
+
+    def drawn(p):
         sample = patch_min if p.get("sample") == "min5" else patch_median
         if p.get("target"):
-            target = list(p["target"])
-        elif p.get("drawing") and drawing and any(p["drawing"]):
-            target = sample(drawing, *p["drawing"])
-        else:
+            return list(p["target"])
+        if p.get("drawing") and drawing and any(p["drawing"]):
+            return sample(drawing, *p["drawing"])
+        return None
+
+    rows, suggest = [], {}
+    for name, p in patches.items():
+        sample = patch_min if p.get("sample") == "min5" else patch_median
+        drawing_target = drawn(p)
+        if drawing_target is None:
+            continue
+        ref = patches.get(p["relative"]) if p.get("relative") else None
+        if p.get("relative") and (ref is None or drawn(ref) is None):
+            print(f"  WARN: patch {name!r}: its reference {p['relative']!r} is missing or has no target; skipped")
             continue
         limit = p.get("tolerance", tol["hair"] if name.lower().startswith("hair") else tol["other"])
         for shot in SHOTS:
@@ -443,17 +697,44 @@ def measure(targets_path, shots, profiles):
             if not at or not any(at) or shot not in imgs:
                 continue
             got = sample(imgs[shot], *at)
+            extra = {}
+            target = drawing_target
+            if ref is not None:
+                # Floor-relative (docs/HANDMADE_INK.md, "Calibration, per slot").
+                rat = ref.get(shot)
+                if not rat or not any(rat):
+                    continue
+                rsample = patch_min if ref.get("sample") == "min5" else patch_median
+                mref = rsample(imgs[shot], *rat)
+                if isinstance(p.get("floor"), list):
+                    floor = list(p["floor"])
+                elif shot in floors:
+                    floor = sample(floors[shot], *at)
+                else:
+                    continue
+                dref = drawn(ref)
+                target = [to_srgb(to_linear(f) + to_linear(di) / max(to_linear(dr), 1e-4) * (to_linear(mr) - to_linear(f))) for f, di, dr, mr in zip(floor, drawing_target, dref, mref)]
+                extra = dict(floor=floor, reference=p["relative"], reference_measured=mref, drawing_target=drawing_target)
             d = [g - tg for g, tg in zip(got, target)]
             ok = all(abs(x) <= limit for x in d)
             rows.append(dict(patch=name, shot=shot, x=at[0], y=at[1], target=target, measured=got, delta=d, tolerance=limit, passed=ok,
                              luminance=round(luminance(got), 4), target_luminance=round(luminance(target), 4),
-                             saturation=round(saturation(got), 4), target_saturation=round(saturation(target), 4)))
+                             saturation=round(saturation(got), 4), target_saturation=round(saturation(target), 4), **extra))
             sw = p.get("swatch")
-            if sw in SWATCHES and profiles:
+            cur, key = None, sw
+            if sw == "ink" and p.get("slot"):
+                cands = {n: v for n, v in (inks or {}).items() if v["slot"] == p["slot"] and (not p.get("material") or n == p["material"])}
+                if len(cands) == 1:
+                    n, v = next(iter(cands.items()))
+                    cur, key = v["color"], f"{n}: ink.color"
+                elif len(cands) > 1:
+                    print(f"  WARN: patch {name!r}: slot {p['slot']!r} has {len(cands)} inked materials; give \"material\"")
+            elif sw in SWATCHES + ("ink",) and profiles:
                 cur = next(iter(profiles.values())).get(sw)
-                if cur:
-                    ratio = [to_linear(tg) / max(to_linear(g), 1e-4) for tg, g in zip(target, got)]
-                    suggest.setdefault(sw, []).append([to_linear(c) * r for c, r in zip(cur, ratio)])
+                key = f"hair.{sw}"
+            if cur:
+                ratio = [to_linear(tg) / max(to_linear(g), 1e-4) for tg, g in zip(target, got)]
+                suggest.setdefault(key, []).append([to_linear(c) * r for c, r in zip(cur, ratio)])
     suggested = {k: [to_srgb(sum(v[i] for v in vs) / len(vs)) for i in range(3)] for k, vs in suggest.items()}
     return rows, suggested
 
@@ -495,7 +776,23 @@ def main():
     targets = Path(a.targets) if a.targets else ASSETS / (str(glb)[:-4] + ".calibration.json")
     rows, suggested = ([], {})
     if targets.exists():
-        rows, suggested = measure(targets, shots, facts.get("profiles", {}))
+        need = floor_slots(json.loads(targets.read_text()))
+        floor_shots = None
+        if need:
+            control = black_copy(glb, need)
+            try:
+                floor_shots = run_frame(control, binary, out / "floor", a.also)
+            finally:
+                for f in Path(ASSETS / control[: -len(".glb")]).parent.glob(Path(control).stem + ".*"):
+                    f.unlink()
+            print(f"  floor control ({', '.join(sorted(need))} black): {out / 'floor'}")
+        inks = {}
+        j, _ = read_glb(ASSETS / glb)
+        for m in j.get("materials", []):
+            ms = m.get("extras", {}).get("slop") or {}
+            if isinstance(ms.get("ink"), dict) and isinstance(ms["ink"].get("color"), list):
+                inks[m.get("name")] = dict(slot=ms.get("slot"), color=ms["ink"]["color"])
+        rows, suggested = measure(targets, shots, facts.get("profiles", {}), inks, floor_shots)
     else:
         print(f"  no targets file {targets}: stills only")
     with (out / "colours.csv").open("w", newline="") as f:
@@ -508,7 +805,7 @@ def main():
         for r in rows:
             print(f"  {r['patch']:<16} {r['shot']:<11} {str(tuple(r['target'])):<15} {str(tuple(r['measured'])):<15} {str(tuple(r['delta'])):<16} {'pass' if r['passed'] else 'FAIL'} (±{r['tolerance']})")
     for k, v in suggested.items():
-        print(f"  suggest hair.{k}: {v}")
+        print(f"  suggest {k}: {v}")
     passed = not errors and all(r["passed"] for r in rows)
     report = dict(file=glb, out=str(out), audit=dict(errors=errors, warnings=warns, notes=notes, facts=facts), shots={k: str(p) for k, p in shots.items()}, patches=rows, suggested=suggested, passed=passed)
     (out / "report.json").write_text(json.dumps(report, indent=2, default=str))

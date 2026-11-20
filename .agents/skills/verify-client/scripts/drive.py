@@ -57,7 +57,7 @@ BASE_QUERIES = [
 ]
 # Private in every build: the authority's bookkeeping and developer audit truth
 # (docs/PERCEPTION.md). The observer and the mind service read them as the database owner.
-PRIVATE = ['attention', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'last_look', 'deliberation', 'rearing',
+PRIVATE = ['attention', 'copy_state', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'last_look', 'deliberation', 'rearing',
            'known_ground', 'remembered', 'ground_edit', 'seen_structures',
            'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry',
            'combat_seen', 'fight_seen', 'missile', 'skill_use', 'readiness', 'skill_code',
@@ -124,6 +124,10 @@ PRIVATE = ['attention', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle'
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place', 'audience',
           'inventory', 'know_how']
 # The per-sender views: what a player perceives and its own state.
+# The tables filtered per client by row-level security (`viewer = :sender`): the cue event tables
+# (frame-views), the public motion copies and the mirror of a player's projections (battle-views).
+# Each has its isolation case (`cues.py`, `motion_tables.py`, both copy tables) and is named in docs/TICK_RATE.md's pin list.
+RLS_TABLES = ['seen_body_cue', 'seen_fighter_cue', 'seen_doing_cue', 'seen_body_copy', 'seen_character_copy']
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
          'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex',
@@ -458,7 +462,8 @@ class Run:
                       for m in re.finditer(r'#\[spacetimedb::procedure\]\s*pub fn (\w+)\(', path.read_text())}
         if procedures != set(PROCEDURES) | {'mind_act_checked'}:
             raise RuntimeError(f'procedure inventory changed: {procedures ^ (set(PROCEDURES) | {"mind_act_checked"})}')
-        # The cue event tables (frame-views) are filtered per client by row-level security, which the
+        # The cue event tables (frame-views) and the public motion copies (`seen_body_copy`,
+        # battle-views) are filtered per client by row-level security, which the
         # owner bypasses; the SDK's subscribe-all helper expands the generated ALL_TABLE_NAMES,
         # cue tables included. So no program here may subscribe all (but `cues.py`, which does so as a
         # player to prove it gets only its own cues), and the owner's programs (the
@@ -469,13 +474,18 @@ class Run:
                    and 'bindings/src/generated' not in str(p) and '/.local/' not in str(p)]
         everything = [str(p.relative_to(ROOT)) for p in sources
                       if re.search(r'subscribe_to_all_tables\(|SELECT \* FROM \*', p.read_text(errors='replace'))
-                      and p.name not in ('drive.py', 'cues.py')]  # cues.py subscribes all as player C, on purpose
+                      and p.name not in ('drive.py', 'cues.py', 'motion_tables.py')]  # these subscribe all as player C, on purpose
         if everything:
             raise RuntimeError(f'a program subscribes every table (cue tables included, RLS bypassed for the owner): {everything}')
         owners = [str(p.relative_to(ROOT)) for d in ('living/mind', 'living/viewer') for p in (ROOT / d).rglob('*.rs')
-                  if '/target' not in str(p) and re.search(r'seen_(body|fighter|doing)_cue', p.read_text(errors='replace'))]
+                  if '/target' not in str(p) and re.search(r'seen_(body|fighter|doing)_cue|seen_body_copy|seen_character_copy', p.read_text(errors='replace'))]
         if owners:
-            raise RuntimeError(f'an owner program names a cue table: {owners}')
+            raise RuntimeError(f'an owner program names a row-level-security table: {owners}')
+        # Every row-level-security rule, by table (docs/TICK_RATE.md, "Every RLS-filtered table",
+        # the version-pin list): a new one needs its isolation case and a line there.
+        rls = sorted(re.findall(r'client_visibility_filter\]\s*const \w+: spacetimedb::Filter = spacetimedb::Filter::Sql\("SELECT \* FROM (\w+) WHERE viewer = :sender"\)', tables))
+        if rls != sorted(RLS_TABLES) or tables.count('client_visibility_filter]') != len(RLS_TABLES):
+            raise RuntimeError(f'row-level-security inventory changed; update RLS_TABLES and the pin list: {rls}')
         # The mind service connects as the world's admin, so `require_admin` cannot refuse it an
         # admin reducer by identity: the guard is that it never calls these (its sources name none).
         never_by_minds = ['admin_set_vitals', 'kill', 'relook', 'set_world_law', 'install_script', 'backfill_sex']

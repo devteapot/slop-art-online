@@ -10,9 +10,11 @@ fails, unchanged bindings pass, a docs-only merge skips it). A fake df exercises
 pre-check at its boundary, on a separate target filesystem, with cold and warm targets, on retry, and with the overrides.
 Touches nothing outside the temporary directory. Usage: merge_selftest.py
 """
+import json
 import os
 from pathlib import Path
 import plistlib
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -290,6 +292,18 @@ def main():
         code, o = merge(coord, ["fifth", "--scenes"], env_extra={"LIVING_MERGE_SCENES_CMD": "echo scene-gate: FAILED dealings; exit 1"})
         expect("failing scene gate stops (exit 10), nothing pushed", code == 10 and "scene gate failed" in o
                and sh(f"git --git-dir={origin} rev-parse main", t).strip() == before, o)
+        # a stale compiled seed stops the merge before the check (exit 13), nothing pushed
+        code, o = merge(coord, ["fifth", "--scenes"], env_extra={"LIVING_MERGE_SEEDS_CMD": "echo 'scene-gate: seeds: stale cullet looks: …'; exit 1"})
+        expect("a stale seed stops before the check (exit 13), nothing pushed", code == 13 and "compiled seeds STALE" in o
+               and "check passed" not in o and sh(f"git --git-dir={origin} rev-parse main", t).strip() == before, o)
+        # the gate's genesis fuel per seed is in the summary on a failure and on a pass
+        record = json.dumps({"result": "failed genesis: island", "genesis": [
+            {"seed": "island", "budget": 120000000000, "init_fuel": 118522397261.0, "passed": False},
+            {"seed": "world", "budget": 120000000000, "init_fuel": 17300085371.0, "passed": True}]})
+        code, o = merge(coord, ["fifth", "--scenes"], env_extra={"LIVING_MERGE_SCENES_CMD":
+                        f"echo {shlex.quote(record)} > \"$LIVING_MERGE_GATE_JSON\"; echo scene-gate: FAILED genesis; exit 1"})
+        expect("a failed genesis gate's fuel per seed is in the summary", code == 10
+               and "genesis init fuel per run: island 118.522e9, 98.77% FAIL; world 17.300e9, 14.42% pass" in o, o)
         code, o = merge(coord, ["fifth", "--scenes"], env_extra={"LIVING_MERGE_SCENES_CMD": "echo scene-gate: passed"})
         expect("passing scene gate pushes (exit 0)", code == 0 and "scene gate passed" in o
                and sh(f"git --git-dir={origin} rev-parse main", t).strip() != before, o)

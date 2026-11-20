@@ -3994,10 +3994,11 @@ def seat(run, c):
         # Seated: from the seated dump to the `up` request.
         seated_log = L.split("live script: dump:seated", 1)[-1].split("live script: sync:up (", 1)[0]
         wakes = [(e, float(a), float(b)) for e, a, b in re.findall(r"springwake: \S+ (\S+) \(\d+ joints, settle \d+\): largest turn ([\d.]+)° at waking, ([\d.]+)° a frame after", seated_log) if e in seated_e]
-        # The authority's rest rows while they sat: a renewal is a new `since_ms`.
+        # The authority's rest rows while they sat: a renewal extends the row in place (doing-renew:
+        # the same `since_ms`, a later `until_ms`), or, on older modules, writes a new `since_ms`.
         sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
-        held = [{r["id"]: r["since_ms"] for r in ((sc.get("snaps") or {}).get(k) or [{}])[0].get("rows", [])} for k in ("held0", "held1")]
-        renewed = sorted(i for i in sat if i in held[0] and i in held[1] and held[0][i] != held[1][i])
+        held = [{r["id"]: (r["since_ms"], r["until_ms"]) for r in ((sc.get("snaps") or {}).get(k) or [{}])[0].get("rows", [])} for k in ("held0", "held1")]
+        renewed = sorted(i for i in sat if i in held[0] and i in held[1] and (held[0][i][0] != held[1][i][0] or held[1][i][1] > held[0][i][1]))
         # Getting up after `sit` (residents resting already when the scene places them get up then).
         sit_at = L.find("live script: sync:sit (")
         gets_up = [(int(i), m.start()) for m in re.finditer(r"seat: #(\d+) gets up", L) for i in [m.group(1)] if int(i) in ids and m.start() > sit_at >= 0]
@@ -4027,7 +4028,7 @@ def seat(run, c):
         if arm == "on":
             cloth = [x for x in lows if x[1] > 0]
             c.check(s, "on: seated cloth tails stay on the ground's side (at most 5 mm under it)", cloth and min(v for _, _, v in cloth) >= -5.0, f"{len(cloth)} reports; lowest {min((v for _, _, v in cloth), default=None)} mm")
-        c.check(s, f"{arm}: the authority renewed the sitters' rest while they sat (a new doing row between held0 and held1)", renewed, f"held0 {held[0]}, held1 {held[1]}")
+        c.check(s, f"{arm}: the authority renewed the sitters' rest while they sat (its doing row extended or new between held0 and held1)", renewed, f"held0 {held[0]}, held1 {held[1]}")
         if watch is not None and arm == "on":
             n, off = seated_frames(feet, watch, t_seated, t_up)
             arms[arm]["seated_off_loop"] = off[:40]

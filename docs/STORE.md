@@ -585,3 +585,17 @@ The tests cover the gate:
 - **Speed.** About 0.4 s per MB (`l9`: 45 s for the dry run, 39 s for the pack). Packing all 5.7 GB of batches would take about 35 minutes.
 - **Media.** Images and video are not checked for drawn text; that is why `session_media` is a decision.
 - **Owner lines.** Lines a model paraphrased, and lines no resident heard (no prompt quotes them), are not found.
+
+
+### Credential check before upload
+
+The store scans the final payload before any backend write, including existing packs,
+bulk batches, motion assets and dataset cards. It checks archive members recursively
+in tar, ZIP (including NPZ), gzip, bzip2, xz and Zstandard. The `zstd` executable
+is required to check Zstandard files and to run the credential self-test.
+
+An upload is refused if the scan finds a credential or cannot read a payload.
+The report identifies the file or archive member, byte offset and credential kind.
+The checks cover JWTs, authorization and Bearer values, token arguments and fields,
+SpacetimeDB CLI and player credentials, password and API key fields, Neo4j
+credentials and the project's provider key assignments. Reports omit matched values.

@@ -186,6 +186,9 @@ struct St {
 #[derive(Default)]
 struct Fresh {
     last_t: HashMap<u32, u64>,
+    /// `seen_body_copy` rows held per creature (no primary key: a change is an insert of the new
+    /// row, then the delete of the old one, in one transaction; the SDK fires inserts first).
+    held: HashMap<u32, u32>,
     near: BTreeMap<u64, u32>,
     all: BTreeMap<u64, u32>,
     by_cue: u32,
@@ -225,10 +228,24 @@ fn fresh_sample(ctx: &EventContext, st: &Mutex<St>, m: &Moving, cue: bool, first
 /// (`seen_bodies_near`, `seen_bodies_far`; frame-views) the connection subscribed.
 fn seen_body(db: &RemoteTables, id: u32) -> Option<Moving> {
     db.seen_bodies().id().find(&id).or_else(|| db.seen_bodies_near().id().find(&id)).or_else(|| db.seen_bodies_far().id().find(&id))
+        // The public copy table (battle-views): a client holds only its own rows, one per creature.
+        .or_else(|| db.seen_body_copy().iter().find(|c| c.body == id).map(|c| copy_moving(&c)))
+}
+
+/// The `Moving` a `seen_body_copy` row stands for (battle-views' slim row: `body` and its segment).
+fn copy_moving(c: &SeenBodyCopy) -> Moving {
+    let s = &c.seg;
+    Moving { id: c.body, x: s.x, y: s.y, t_ms: s.t_ms, vx: s.vx, vy: s.vy, heading: s.heading, turn: s.turn, turn_s: s.turn_s, next_ms: s.next_ms, speed: s.speed,
+             face_off: s.face_off, face_turn: s.face_turn, face_turn_s: s.face_turn_s, running: s.running }
+}
+
+/// The characters I perceive, from the `seen_characters` view or its mirror table (battle-views).
+fn seen_characters_of(db: &RemoteTables) -> Vec<SeenCharacter> {
+    db.seen_characters().iter().chain(db.seen_character_copy().iter().map(|c| c.row)).collect()
 }
 
 fn seen_body_count(db: &RemoteTables) -> u64 {
-    db.seen_bodies().count() + db.seen_bodies_near().count() + db.seen_bodies_far().count()
+    db.seen_bodies().count() + db.seen_bodies_near().count() + db.seen_bodies_far().count() + db.seen_body_copy().count()
 }
 
 fn fresh_json(f: &Fresh) -> Value {
@@ -411,6 +428,8 @@ fn hook(p: &Player, log: &Log) {
     count!(conn, p.counts, seen_doing);
     count!(conn, p.counts, seen_bodies_near);
     count!(conn, p.counts, seen_bodies_far);
+    count_plain!(conn, p.counts, seen_body_copy);
+    count!(conn, p.counts, seen_character_copy);
     count!(conn, p.counts, seen_fighters_near);
     count!(conn, p.counts, seen_fighters_far);
     count!(conn, p.counts, seen_doing_near);
@@ -482,6 +501,30 @@ fn hook(p: &Player, log: &Log) {
         sample_view!(seen_bodies);
         sample_view!(seen_bodies_near);
         sample_view!(seen_bodies_far);
+        let st = p.st.clone();
+        // No primary key: a copy's change arrives as a delete and an insert in one update, so an
+        // insert of a creature already shown is a new segment (`fresh_sample` keeps the newest).
+        conn.db.seen_body_copy().on_insert(move |ctx, c| {
+            // A change if the creature's old row is still held (its delete follows); an entry or a
+            // re-entry into sight otherwise, which is not a fresh segment.
+            let first = {
+                let mut s = st.lock().unwrap();
+                let held = s.fresh.held.entry(c.body).or_default();
+                *held += 1;
+                *held == 1
+            };
+            fresh_sample(ctx, &st, &copy_moving(c), false, first);
+        });
+        let st = p.st.clone();
+        conn.db.seen_body_copy().on_delete(move |_, c| {
+            let mut s = st.lock().unwrap();
+            if let Some(h) = s.fresh.held.get_mut(&c.body) {
+                *h = h.saturating_sub(1);
+                if *h == 0 {
+                    s.fresh.held.remove(&c.body);
+                }
+            }
+        });
         let st = p.st.clone();
         EventTable::on_insert(&conn.db.seen_body_cue(), move |ctx, c| {
             // A cue of a body not yet in my view is not a new segment of one I see.
@@ -712,7 +755,7 @@ fn fight(p: &Player, log: &Log, cards: &HashMap<String, Card>, center: (f32, f32
     let here = pos(&mb, now);
     let current = p.st.lock().unwrap().target;
     let mut best: Option<(u32, (f32, f32), f32)> = None;
-    for c in db.seen_characters().iter() {
+    for c in seen_characters_of(db) {
         if c.own || c.id == me || c.kind != "person" {
             continue;
         }
@@ -825,6 +868,12 @@ fn players_mode() {
     // freshness (0: none).
     let cues = req["cues"].as_bool().unwrap_or(false);
     let tiers = req["tiers"].as_bool().unwrap_or(false);
+    // The public motion copies (battle-views, the `motion_tables_on` law): `seen_body_copy` in
+    // place of the motion views, as a client on the tables subscribes.
+    let motion_tables = req["motion_tables"].as_bool().unwrap_or(false);
+    // The mirror of a player's projections (battle-views addendum 2, `characters_table_on`):
+    // `seen_character_copy` in place of the `seen_characters` view.
+    let character_tables = req["character_tables"].as_bool().unwrap_or(false);
     let fresh_every = req["fresh_every"].as_u64().unwrap_or(0) as usize;
     let feed = Feed::from(&req["feed"]);
     let started = Instant::now();
@@ -853,6 +902,14 @@ fn players_mode() {
         if cues {
             queries.extend(["seen_body_cue", "seen_fighter_cue", "seen_doing_cue"].map(|t| format!("SELECT * FROM {t}")));
         }
+        if motion_tables {
+            queries.retain(|q| !["SELECT * FROM seen_bodies", "SELECT * FROM seen_bodies_near", "SELECT * FROM seen_bodies_far"].contains(&q.as_str()));
+            queries.push("SELECT * FROM seen_body_copy".to_string());
+        }
+        if character_tables {
+            queries.retain(|q| q.as_str() != "SELECT * FROM seen_characters");
+            queries.push("SELECT * FROM seen_character_copy".to_string());
+        }
         queries.extend(feed.extra());
         subscribe(&pl, queries);
         players.push(pl);
@@ -878,10 +935,22 @@ fn players_mode() {
     let size = players[0].conn.db.land().iter().next().map_or(2048, |l| l.size);
     let t = Instant::now();
     for p in &players {
-        let me = p.st.lock().unwrap().me.unwrap();
+        let mut asked: Option<Instant> = None;
         let at = loop {
-            if let Some(b) = p.conn.db.my_body().id().find(&me) {
-                break (b.x, b.y);
+            // A viewer killed before the window (a battle round it) joins again, as walkers do.
+            let me = p.st.lock().unwrap().me;
+            match me {
+                None => {
+                    if asked.is_none_or(|a| a.elapsed() > Duration::from_secs(3)) {
+                        send_join(p, &log, p.name.clone());
+                        asked = Some(Instant::now());
+                    }
+                }
+                Some(me) => {
+                    if let Some(b) = p.conn.db.my_body().id().find(&me) {
+                        break (b.x, b.y);
+                    }
+                }
             }
             assert!(t.elapsed() < Duration::from_secs(60), "no body for player {}", p.idx);
             std::thread::sleep(Duration::from_millis(10));
@@ -890,7 +959,7 @@ fn players_mode() {
     }
     wait_applied(&players, 2, "windows", Duration::from_secs(180));
     let cards: HashMap<String, Card> = players[0].conn.db.skill_card().iter().map(|c| (c.skill.clone(), Card { cost: c.cost, reach: c.reach, hold_ms: (c.windup_ms + c.recover_ms) as u64 })).collect();
-    let held: Vec<Value> = players.iter().map(|p| json!({"bodies": seen_body_count(&p.conn.db), "characters": p.conn.db.seen_characters().count()})).collect();
+    let held: Vec<Value> = players.iter().map(|p| json!({"bodies": seen_body_count(&p.conn.db), "characters": seen_characters_of(&p.conn.db).len()})).collect();
     println!("{}", json!({"event": "ready", "after_s": started.elapsed().as_secs_f32(), "cards": cards.keys().collect::<Vec<_>>(), "held": held}));
     let _ = std::io::stdout().flush();
     wait_for(&lines, "go");
@@ -986,7 +1055,7 @@ fn players_mode() {
         .map(|p| {
             let s = p.st.lock().unwrap();
             json!({"p": p.idx, "role": format!("{:?}", p.role), "lives": s.lives, "alive": s.me.is_some(), "calls": s.seq, "unanswered": s.pending,
-                   "events": counts_json(&p.counts), "fresh": p.fresh.then(|| fresh_json(&s.fresh)), "held": {"bodies": seen_body_count(&p.conn.db), "characters": p.conn.db.seen_characters().count()},
+                   "events": counts_json(&p.counts), "fresh": p.fresh.then(|| fresh_json(&s.fresh)), "held": {"bodies": seen_body_count(&p.conn.db), "characters": seen_characters_of(&p.conn.db).len()},
                    "errors": *p.errors.lock().unwrap()})
         })
         .collect();

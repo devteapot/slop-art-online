@@ -41,6 +41,11 @@ var detail_sampler: sampler;
 // row 0 the natural colours, row 1 the silvers, as sRGB values; a fallback elsewhere.
 @group(constants::MATERIAL_BIND_GROUP) @binding(105)
 var hair_tints: texture_2d<f32>;
+// A hand-made material's ink map (contract v1.2, docs/HANDMADE_INK.md; style.rs `ToonExt::ink`):
+// G the distance to the nearest stroke over `range`, R its width. Sampled through `face_sampler`;
+// a fallback, never read, on materials without ink.
+@group(constants::MATERIAL_BIND_GROUP) @binding(106)
+var ink_map: texture_2d<f32>;
 
 // The surface that a vertex colour's alpha names (living/tools/textures/surfaces.py: surface k
 // is (k + 0.5) / 32), or -1 for none (alpha 1).
@@ -312,6 +317,46 @@ struct HandHair {
 // `ink_px` is the line's width there.
 const INK_NEAR_M_PX: f32 = 0.00805;
 
+// How much of the pixel an ink line covers (docs/HANDMADE_INK.md, "What the client computes";
+// the hair's v1.1 lines and every v1.2 ink). `g` is the distance field (G, the distance over
+// `range`), `r` the stroke's width (R); `mode` 1 "px" (full width), 2 "px" with taper (R the
+// width fraction), 3 "uv" (R the half-width over `range`); `w` px ("px") or min_px ("uv");
+// `m_uv` the texel density (metres per UV, 0 unknown); `duv` the UV's screen derivatives.
+fn ink_cover(g: f32, r: f32, range: f32, mode: f32, w: f32, fade: f32, m_uv: f32, duv: vec4<f32>, view_z: f32) -> f32 {
+    if (g >= 1.0) {
+        return 0.0;
+    }
+    // The UV a pixel spans (its longer side): the distance in pixels.
+    let fw_uv = max(max(length(duv.xy), length(duv.zw)), 1e-7);
+    let d_px = g * range / fw_uv;
+    // The width and the fade follow the pixel's size at its depth and the texel density, which
+    // are smooth on screen: screen derivatives step between pixel quads, and a width or fade
+    // driven by them flickered as the camera moved.
+    let m_px = max(metres_per_pixel(view_z), 1e-6);
+    var width = w * min(INK_NEAR_M_PX / m_px, 4.0);
+    if (mode > 1.5 && mode < 2.5) {
+        width = width * r;
+    }
+    if (mode > 2.5) {
+        // "uv": the stroke's own half-width (R x range) in the world, in pixels, with a floor;
+        // nothing at a tip.
+        // (Mode 4, `LIVING_GAME_PERF=inkfw`: through the screen derivatives, as the distance.)
+        let hw = select(r * range / fw_uv, r * range * m_uv / m_px, m_uv > 0.0 && mode < 3.5);
+        width = select(0.0, max(2.0 * hw, w), r > 0.0);
+    }
+    // How much of the pixel (a 1-pixel box across the line) a line `width` wide covers: it sums
+    // to the width across the line whatever its place in the pixels, so a thin line moving by a
+    // fraction of a pixel neither flickers nor crawls.
+    var cov = clamp(min(d_px + 0.5, width * 0.5) - max(d_px - 0.5, -width * 0.5), 0.0, 1.0);
+    // Neighbouring lines' spacing on screen, estimated as 2 · range (the field's range is half
+    // the narrowest spacing): fade before they would merge. 0 never fades.
+    let space = select(2.0 * range / fw_uv, 2.0 * range * m_uv / m_px, m_uv > 0.0);
+    if (fade > 0.0) {
+        cov = cov * smoothstep(fade, 2.0 * fade, space);
+    }
+    return cov;
+}
+
 fn hand_hair(N: vec3<f32>, L: vec3<f32>, vis: f32, in: VertexOutput, duv: vec4<f32>, view_z: f32) -> HandHair {
     let ndl = dot(N, L);
     let fw = fwidth(ndl);
@@ -329,27 +374,9 @@ fn hand_hair(N: vec3<f32>, L: vec3<f32>, vis: f32, in: VertexOutput, duv: vec4<f
         // One tap for both: R the highlight, G the ink field.
         let tex = textureSampleGrad(face_map, face_sampler, in.uv, duv.xy, duv.zw);
         mask = max(mask, tex.r);
-        if (toon.hand_ink_range.z > 0.5 && tex.g < 1.0) {
-            let range = toon.hand_ink_range.x;
-            // The UV a pixel spans (its longer side): the distance in pixels.
-            let fw_uv = max(max(length(duv.xy), length(duv.zw)), 1e-7);
-            let d_px = tex.g * range / fw_uv;
-            // The width and the fade follow the pixel's size at its depth and the hair's texel
-            // density (metres per UV, measured from the mesh: `hand_ink_range.w`), which are
-            // smooth on screen: screen derivatives step between pixel quads, and a fade driven
-            // by them flickered as the camera moved.
-            let m_px = max(metres_per_pixel(view_z), 1e-6);
-            let w = toon.hand_ink.w * min(INK_NEAR_M_PX / m_px, 4.0);
-            // How much of the pixel (a 1-pixel box across the line) a line `w` wide covers: it
-            // sums to w across the line whatever its place in the pixels, so a thin line moving by
-            // a fraction of a pixel neither flickers nor crawls.
-            cov = clamp(min(d_px + 0.5, w * 0.5) - max(d_px - 0.5, -w * 0.5), 0.0, 1.0);
-            // Neighbouring lines' spacing on screen, estimated as 2 · ink_range (the field's
-            // range is half the narrowest spacing): fade before they would merge.
-            let m_uv = toon.hand_ink_range.w;
-            let space = select(2.0 * range / fw_uv, 2.0 * range * m_uv / m_px, m_uv > 0.0);
-            let fade = toon.hand_ink_range.y;
-            cov = cov * smoothstep(fade, 2.0 * fade, space);
+        if (toon.hand_ink_range.z > 0.5) {
+            // The v1.1 lock lines: full width, the texel density measured from the mesh.
+            cov = ink_cover(tex.g, 1.0, toon.hand_ink_range.x, 1.0, toon.hand_ink.w, toon.hand_ink_range.y, toon.hand_ink_range.w, duv, view_z);
         }
     }
 }
@@ -444,7 +471,8 @@ fn fragment(
         var depth = select(toon.shadow.a, toon.shadow.a * 0.45, skin);
         depth = select(depth, depth * toon.face.y, face);
         depth = select(depth, toon.shadow.a * toon.face.z, part);
-        var color = banded(albedo.rgb, sun, lit, (1.0 - depth) * select(away, 1.0, skin || part), sc);
+        let value = (1.0 - depth) * select(away, 1.0, skin || part);
+        var color = banded(albedo.rgb, sun, lit, value, sc);
         // A hand-made hair profile replaces the hair's colour and its banding.
         let hand = is_kind(5.0);
         var lit_albedo = albedo.rgb;
@@ -456,6 +484,26 @@ fn fragment(
             color = mix(color, ink * sun + ink * sc.fill, hh.ink);
             lit_albedo = mix(hh.base, ink, hh.ink);
         }
+        // A material's general ink (contract v1.2, docs/HANDMADE_INK.md): an albedo lit exactly
+        // as the material lights its own (the same band, cast shadow and depth; a profile hair's
+        // shade-band light), laid over the material's own colour (Porter-Duff over: a carrier,
+        // whose own alpha is 0, draws only its line). It takes no rim (below).
+        var ink_cov = 0.0;
+        var out_a = albedo.a;
+@if(VERTEX_UVS_A) {
+        if (toon.ink_shape.z > 0.5) {
+            let t = textureSampleGrad(ink_map, face_sampler, in.uv, duv.xy, duv.zw);
+            ink_cov = ink_cover(t.g, t.r, toon.ink_shape.x, toon.ink_shape.z, toon.ink.w, toon.ink_shape.y, toon.ink_shape.w, duv, view_z);
+        }
+}
+        if (ink_cov > 0.0) {
+            let ink = toon.ink.rgb;
+            let ink_lit = select(banded(ink, sun, lit, value, sc), ink * sun + ink * sc.fill, hand);
+            let a = albedo.a;
+            out_a = ink_cov + a * (1.0 - ink_cov);
+            color = (ink_lit * ink_cov + color * a * (1.0 - ink_cov)) / max(out_a, 1e-4);
+            lit_albedo = (ink * ink_cov + lit_albedo * a * (1.0 - ink_cov)) / max(out_a, 1e-4);
+        }
         if (toon.atmo.y > 0.05 && N.y > 0.97 && (tag & (1u << 24u)) == 0u) {
             color = puddles(color, p.xyz, 0.0);
         }
@@ -466,13 +514,13 @@ fn fragment(
         // Hair takes no general rim: its pale cream, added, is several times dark hair's own
         // colour and washes it out. Its one rim is `hair_light`'s, in its own hue (toon.hair.w).
         let rim_strength = select(select(toon.rim.a, toon.face.w, face), 0.0, part || is_kind(4.0) || hand);
-        color = color + rim_light(fr, lit, rim_strength) * sun;
+        color = color + rim_light(fr, lit, rim_strength) * sun * (1.0 - ink_cov);
         if (is_kind(4.0)) {
-            color = color + hair_light(albedo.rgb, N, V, L, lit, fr, strand_light(in, duv), facing(in), in) * sun;
+            color = color + hair_light(albedo.rgb, N, V, L, lit, fr, strand_light(in, duv), facing(in), in) * sun * (1.0 - ink_cov);
         }
         color = color + point_lights(lit_albedo, p.xyz, N, view_z, pbr_input.frag_coord.xy, pbr_input.is_orthographic);
         color = color + emission(pbr_input.material.emissive.rgb, sc);
-        out.color = vec4<f32>(color, albedo.a);
+        out.color = vec4<f32>(color, out_a);
     } else {
         out.color = vec4<f32>(select(albedo.rgb, toon.hand[0].rgb, is_kind(5.0)) * toon.extra.y, albedo.a);
     }

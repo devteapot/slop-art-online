@@ -26,6 +26,10 @@ What lets a dense battle of minded characters keep its tick (docs/BATTLE_SCALE.m
   - **The body's alarms** are kept per character until a fact `status_of` reads can change (`alarm_cells`; `brain::alarm_statuses`, `BodyFacts::next_change_ms`). The law's shared memo is keyed by those facts alone (`Scripts::status_reads`).
   - **Warmth** visits only what warms or shelters, in place (`common::chunk_warming`).
   - Each has a diagnostic `_check` law that also works the answer out the old way and counts differences.
+- **The body's statuses by their parts** (status-parts; the `status_parts` law, on; `status_parts_check` a diagnostic; docs/STATUS_PARTS.md):
+  - The shipped `status_of` is the join of eight parts (`status_parts()`: hunger, energy, health, cold, combat, breath, slowed, mending). `Scripts::status_of` keeps each part's answer on what that part reads and runs a part only when its inputs are new (`living_rules::script::body`, `Part`, `Parts`), giving the same joined `Rc` for the same answers.
+  - An alarm cell holds the way it was asked (`AlarmCell::way`), and expires on the active way's reads (`Scripts::status_reads_as`).
+  - `status_parts_check` asks the whole law with the whole body at every ask by the parts and counts `status_parts:checked`, `status_parts:differed` and, while profiling, `status_parts:has:<status>` (the statuses the compared asks gave). Off, `status_parts` asks the law whole (`eval:status_run`, `eval:status_memo`); on, `eval:status_parts_asked`, `eval:status_parts_joined`, `eval:status_part_memo`, `eval:status_part_run` and `eval:status_part_run:<i>` by the part's place.
 - **The lazy scene** (scene-lazy; the `scene_lazy` law, on; `scene_lazy_check` a diagnostic):
   - A graph's scene is what the body senses (`perception::Sensing`): every creature within gathering range, nearest first, each tested for sight only when a reader comes to it.
   - The nearest pick (`Ev::first_seen`) and a creature looked up by id (`Ev::seen_by_id`: `visible_creature`, the `threatened` condition by facing) test only as far as their answer needs. Readers of the whole list (`Ev::creatures`: desires, `count`, `doing`, cues, noticing, the stranger filter) test every one.
@@ -65,6 +69,11 @@ On a launched default-seed run (`scenes.py <case> --run "$R"`):
   - 12 fighters on an open line, a campfire, a shelter and three dead among them, for 60 s, with the diagnostic laws `check_ctx_check`, `alarm_cells_check` and `warmth_check` on.
   - Each case asserts its own path from the `diag:` counts of its own window: many comparisons, none different. For the alarms, more answers kept than asked.
   - The counts are read from the server log's lines stamped after the case began.
+- **`status_parts`** (about 2.5 minutes; run it last on its world: it moves the world's clock to its night and leaves the fixtures' bodies):
+  - 8 minded fighters on an open line (strike, dodge or block, heal) and 8 bodies beside them set by admin fixtures (`admin_set_vitals` for health, owner SQL `UPDATE vitals` for hunger and energy): starving, very hungry and exhausted, hungry and spent, peckish and tired, fed and hurt, well rested and badly hurt, barely alive, hungry and tired. The world's clock is moved to its night (`verify.py sql`, which records the epoch) and rain set (`set_weather`), so those out in it are freezing and wasting.
+  - 75 s with `status_parts_check` on, then 25 s with `status_parts` off.
+  - Checks: at least 500 asks compared, none differed, no `status_parts of` error line; every one of the law's 23 statuses among the compared answers; part memo hits above part runs; with the law off, no ask by the parts and every ask answered whole.
+  - Evidence: `status_parts-status-parts.json` (both windows' counts, the statuses met, the window stamps), `status_parts-fixtures.json`, `status_parts-after.json`.
 - **`scene_lazy`** (about 2.5 minutes):
   - 12 fighters on an open line with `scene_lazy_check` on: 40 s with sight all round, 40 s by facing (`fov_on`), then 20 s with `scene_lazy` off.
   - Checks:

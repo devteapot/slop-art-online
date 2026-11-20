@@ -1,0 +1,21 @@
+{
+  "uv_vertices": 13846,
+  "uv_extent": [
+    [
+      0.005859375,
+      0.005859375
+    ],
+    [
+      0.990234375,
+      0.990234375
+    ]
+  ],
+  "exported_point_attribute": false,
+  "painted_mask_coverage_pixels": 116205,
+  "source_vertices_inside": 384,
+  "texture_vertices_inside": 380,
+  "intersection_over_union": 0.9792746113989638,
+  "mean_absolute_error": 0.0016770171552226232,
+  "G_min": 255,
+  "B_max": 0
+}

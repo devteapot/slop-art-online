@@ -24,11 +24,25 @@ use std::rc::Rc;
 pub mod calls {
     use std::cell::Cell;
     pub const SKILL: usize = 0;
+    /// `status_of` asked (either way).
     pub const STATUS_ASKED: usize = 1;
+    /// Asked whole: answered from the whole law's memo, or run.
     pub const STATUS_MEMO: usize = 2;
     pub const STATUS_RUN: usize = 3;
+    /// Asked by its parts (`status_parts`): asks, and the joined answer found kept.
+    pub const PARTS_ASKED: usize = 4;
+    pub const PARTS_JOINED: usize = 5;
+    /// Parts answered from their memo, and run.
+    pub const PART_MEMO: usize = 6;
+    pub const PART_RUN: usize = 7;
+    /// `status_parts_check`: asks also asked of the whole law, and those that differed.
+    pub const STATUS_CHECKED: usize = 8;
+    pub const STATUS_DIFFERED: usize = 9;
+    /// Runs of each part by its place in `status_parts()` (the last slot counts the rest).
+    pub const PART_RUN_BY: usize = 10;
+    pub const COUNTS: usize = PART_RUN_BY + super::body::MAX_PARTS;
     thread_local! {
-        static CALLS: Cell<[u64; 4]> = const { Cell::new([0; 4]) };
+        static CALLS: Cell<[u64; COUNTS]> = const { Cell::new([0; COUNTS]) };
     }
     pub fn note(i: usize) {
         CALLS.with(|c| {
@@ -38,8 +52,8 @@ pub mod calls {
         });
     }
     /// The counts since the last take, cleared.
-    pub fn take() -> [u64; 4] {
-        CALLS.with(|c| c.replace([0; 4]))
+    pub fn take() -> [u64; COUNTS] {
+        CALLS.with(|c| c.replace([0; COUNTS]))
     }
 }
 
@@ -55,7 +69,7 @@ pub mod speech;
 mod ui;
 pub use ui::UiWork;
 pub use check::Report;
-pub use body::{Alarm, BodyFacts, Meter, MeterMax, Status, Think};
+pub use body::{Alarm, BodyFacts, Meter, MeterMax, Status, StatusWay, Think};
 
 #[derive(Clone, Debug, Default)]
 pub struct ActorFacts {
@@ -651,9 +665,29 @@ pub struct Laws {
     /// frame re-runs one view as before frame-views; with `cue_transport_on` off too, a player's
     /// delivery is main's.
     pub near_tier_on: bool,
+    /// Whether a player's motion copies reach its client as rows of the public `seen_body_copy`
+    /// table, filtered per client by row-level security (battle-views, docs/BATTLE_VIEWERS.md), in
+    /// place of the private copy tables behind the motion views. The views read whichever holds
+    /// a player's copies, so they show the same either way. Off (the kill switch), every public
+    /// copy goes back to the private tables in one tick. A switch for the delivery, not for what is
+    /// perceived.
+    pub motion_tables_on: bool,
+    /// Whether a player's `seen_characters` rows also reach its client as rows of the public
+    /// `seen_character_copy` table, filtered per client by row-level security (battle-views,
+    /// docs/BATTLE_VIEWERS.md, addendum 2): a mirror of its `projected` rows, kept whole per
+    /// viewer. Off (the kill switch), every mirror row goes in one tick. Delivery only: the view
+    /// shows the same either way.
+    pub characters_table_on: bool,
     /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
     /// and counted (`alarm:differed`).
     pub alarm_cells_check: bool,
+    /// The body's statuses are asked by the parts the script declares (`status_parts()`; docs/
+    /// STATUS_PARTS.md), each kept on what it reads, so a change of breath alone asks only the
+    /// part that reads breath. Off: `status_of` asked whole (the rollback).
+    pub status_parts: bool,
+    /// Diagnostic: every ask by the parts is also asked of the whole `status_of` with the whole
+    /// body, and a difference logged and counted (`status_parts:differed`).
+    pub status_parts_check: bool,
     /// Diagnostic: warmth (battle-cheap path 3: only what warms or shelters, visited in place)
     /// is also worked out from a full copy, and a difference logged and counted
     /// (`warmth:differed`).
@@ -807,7 +841,11 @@ impl Default for Laws {
             alarm_cells: true,
             cue_transport_on: true,
             near_tier_on: true,
+            motion_tables_on: false,
+            characters_table_on: false,
             alarm_cells_check: false,
+            status_parts: true,
+            status_parts_check: false,
             warmth_check: false,
             scene_lazy: true,
             scene_lazy_check: false,
@@ -1531,6 +1569,10 @@ impl Scripts {
         // A script from before a required law existed runs on the shipped script's functions,
         // with its own on top, until it is installed again.
         let borrowed: Vec<String> = REQUIRED_LAWS.iter().filter(|f| !ast.iter_functions().any(|d| d.name == **f)).map(|f| f.to_string()).collect();
+        // The script's own `status_of` without its own `status_parts`: asked whole, so the shipped
+        // parts merged under it below never stand in for it.
+        let defines = |name: &str| ast.iter_functions().any(|d| d.name == name);
+        let status_whole_only = !borrowed.is_empty() && defines("status_of") && !defines("status_parts");
         // What each function reads, from its own source: the field analysis places statements by
         // line and column, which two sources share, so a merged script is analysed source by
         // source, the script's own functions over the shipped ones.
@@ -1591,7 +1633,7 @@ impl Scripts {
         // compile (`ui_errors`).
         s.ui = s.read_ui();
         // The body's meters: never fail the compile either (`meter_errors`, refused at install).
-        s.body = s.read_body();
+        s.body = s.read_body(status_whole_only);
         // The world constants' words: read once, with what is read once (they list every
         // constant, and grow with a world's laws).
         *s.about.borrow_mut() = Some(s.read_laws_about(&s.engine));
@@ -3148,7 +3190,11 @@ impl Scripts {
             alarm_cells: flag("alarm_cells", l.alarm_cells),
             cue_transport_on: flag("cue_transport_on", l.cue_transport_on),
             near_tier_on: flag("near_tier_on", l.near_tier_on),
+            motion_tables_on: flag("motion_tables_on", l.motion_tables_on),
+            characters_table_on: flag("characters_table_on", l.characters_table_on),
             alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
+            status_parts: flag("status_parts", l.status_parts),
+            status_parts_check: flag("status_parts_check", l.status_parts_check),
             warmth_check: flag("warmth_check", l.warmth_check),
             scene_lazy: flag("scene_lazy", l.scene_lazy),
             scene_lazy_check: flag("scene_lazy_check", l.scene_lazy_check),
@@ -3396,9 +3442,13 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 8] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 10] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
+    // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
+    ("motion_tables_on", ValueOnly::Delivery),
+    // battle-views: the mirror of a player's projections (`perception.rs`, `seen_character_copy`).
+    ("characters_table_on", ValueOnly::Delivery),
     ("cover_sight_on", ValueOnly::Cover),
     ("cover_eye_height_m", ValueOnly::Cover),
     ("cover_brush_on", ValueOnly::Cover),
@@ -4307,6 +4357,12 @@ mod tests {
         on.validate().unwrap();
         assert!(on.laws().cue_transport_on && !on.laws().cues_on);
         assert!(shipped.laws().near_tier_on, "the near tier is on by default");
+        assert!(!shipped.laws().motion_tables_on, "the motion tables are off until battle-views' acceptance");
+        assert!(!shipped.laws().characters_table_on, "the characters table is off until battle-views' acceptance");
+        assert!(about["characters_table_on"].contains("what it may look at"), "{about:?}");
+        assert!(about["motion_tables_on"].contains("what it may look at"), "{about:?}");
+        let tables = Scripts::new(&with_world_laws(src, &[("motion_tables_on".into(), serde_json::json!(true))])).unwrap();
+        assert!(tables.laws().motion_tables_on && tables.laws().near_tier_on && tables.laws().cue_transport_on);
         let off = Scripts::new(&with_world_laws(src, &[("near_tier_on".into(), serde_json::json!(false)), ("cue_transport_on".into(), serde_json::json!(false))])).unwrap();
         off.validate().unwrap();
         assert!(!off.laws().near_tier_on && !off.laws().cue_transport_on);

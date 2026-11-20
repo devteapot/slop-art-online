@@ -1,0 +1,41 @@
+{
+  "export": {
+    "stage": "stage2-final",
+    "materials": 26,
+    "images": [
+      "cora.atlas.png",
+      "cora.iris.png",
+      "cora.tint.png"
+    ],
+    "failures": []
+  },
+  "after_expression_renders": {
+    "stage": "stage2-expressions",
+    "materials": 26,
+    "images": [
+      "cora.atlas.png",
+      "cora.iris.png",
+      "cora.tint.png"
+    ],
+    "failures": []
+  },
+  "prior_failed_check": {
+    "stage": "stage2-expressions",
+    "materials": 26,
+    "images": [
+      "cora.atlas.png",
+      "cora.iris.png",
+      "cora.tint.png",
+      "Render Result"
+    ],
+    "failures": [
+      "unapproved image: Render Result"
+    ]
+  },
+  "glb_sha256": "789f58ca648bab2be7c9c3e465cbbe5c54882834649820edd664108ce89d9bf7",
+  "embedded_images_sha256": {
+    "cora.atlas": "436f4525b2bdaaab02816dcfbd865070d52d50c5bb476c1da94d6d19687cb4a9",
+    "cora.iris": "307a6c5805d361b75f0f3bb03a5fd3cfb77e7ed67fe2af1db2e3801376924808",
+    "cora.tint": "5e71699d09e3d6be436d5746704bb26fff8e1cc736c51b0ed7a5c89fec0f253c"
+  }
+}

@@ -31,6 +31,14 @@ For a focused rerun:
 .agents/skills/verify-generation/scripts/generation.py --run generation-guards-$(date +%Y%m%d-%H%M%S) --feature guards
 ```
 
+The scene gate runs a light smoke of this skill on every behavioural merge (`living/tools/scene_gate.py`, cases `generation-default`, `generation-island` and `generation-cullet`; docs/TOOLING.md, "Generation smoke"). It runs `check_seed` and the secrets check on a world already launched through the shared harness, without native digests, repeatability, floors or a build, and leaves cleanup to the caller:
+
+```bash
+.agents/skills/verify-generation/scripts/generation.py --run <launched-run> --smoke
+```
+
+It writes `checks.json` and `smoke.json` (`seed`, `pass`, `checks`, `failed`) in the run's folder, keeps the table snapshots only when a check fails, prints `FAIL <seed>: <check>` per failure and exits 1 on any. The gate's first pass reads its genesis fuel worlds (world, island, cullet, cullet-laws). The compiled seeds' freshness against `living/seeds/worlds/` is a files-only check, `living/tools/seed_fresh.py` (docs/TOOLING.md, "Seed freshness").
+
 `--seeds a,b` limits the worlds to those seeds, for example `--feature worlds --seeds island,plan-test,cullet,floor-megacity-2k,floor-megacity-4k` after a land, city or plan change, or after the model table (`living/rules/data/buildings.json`, written by `gen_buildings.sh` and `gen_city.sh`, and for Cullet's lots by `gen_cullet.sh`, which replaces only the `cullet` style's entries) is regenerated: its footprints and eye-height cells decide the hosted tiles. Run `cargo test -p living-rules pinned_digests_hold` then too. It may also name any other tracked seed in `living/seeds/` (a trial world such as `hamlet`), which gets the same generic checks: dimensions, chunks, settlements and their authored residents, sheets, parents, promised resources, animal counts.
 
 Since `sex-1` every world's checks include body sex (`check_sex`: a row per person, the seed's sex for its residents, the world's pick recomputed for the rest) and looks by sex (pool picks among the entries of the person's sex, every look showing its wearer's sex); see [features/sex.md](features/sex.md).
