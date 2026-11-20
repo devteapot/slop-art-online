@@ -17,7 +17,7 @@
     "last_evidence": "/home/carlid/.local/state/slop-merge/scene-gate/main/.local/living/verify/gate-1120233042-e69980-main2-seat-render-isl/ui/checks-seat.json [check.py exit 1]",
     "last_main": "65bf3740b4853edd44ef9f03fd61c2b64be2541e",
     "last_seen": "2026-11-20T23:54:01+01:00",
-    "owner": null,
+    "owner": "dev-box (load-made failure 2026-11-20 23:54, quiet recheck pending: devbox-recheck-1)",
     "reason": null,
     "skill": "verify-ui",
     "times": 1
