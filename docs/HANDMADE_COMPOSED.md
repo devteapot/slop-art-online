@@ -1,6 +1,6 @@
 # Composed characters: hair profiles, ink and heroes (contract v1.3)
 
-**Status (2026-11-20): v1.3, a draft for agreement; nothing in it is built.** This is step S3 of the char-port-2 plan (`docs/char-port-2/PLAN.md` on branch `char-port-2`, §0.3, §2.6, §2.8, §2.10, §3.5, §4). It extends [the hair and face contract](HANDMADE_HAIR.md) (v1, v1.1) and [the ink contract](HANDMADE_INK.md) (v1.2) from hand-made whole files to **composed people**: residents that the client builds from a type file, shared style files and a look line (`characters/compose.rs`; [CHARACTERS.md § The client since compose-1](CHARACTERS.md#the-client-since-compose-1-2026-11-12)). Files keep `"contract": 1`: v1.3 only adds optional fields, file names and line fields.
+**Status (2026-11-20): v1.3, agreed by dev-box and the GC (6b6a48ac3, with the shared pages added after); the client is being built on `char-port-2-s3`.** This is step S3 of the char-port-2 plan (`docs/char-port-2/PLAN.md` on branch `char-port-2`, §0.3, §2.6, §2.8, §2.10, §3.5, §4). It extends [the hair and face contract](HANDMADE_HAIR.md) (v1, v1.1) and [the ink contract](HANDMADE_INK.md) (v1.2) from hand-made whole files to **composed people**: residents that the client builds from a type file, shared style files and a look line (`characters/compose.rs`; [CHARACTERS.md § The client since compose-1](CHARACTERS.md#the-client-since-compose-1-2026-11-12)). Files keep `"contract": 1`: v1.3 only adds optional fields, file names and line fields.
 
 **Why a document of its own:** v1.3 touches four things that `HANDMADE_HAIR.md` doesn't own:
 
@@ -15,7 +15,7 @@ Its one hair-specific part, the palette relative to the hair tag, is also usable
 
 1. **[Composed files read `slop`](#composed-files-and-slop).** A type file or style file opts in through its scene, and its materials carry `slop.hair` and `slop.ink` as hand-made files do.
 2. **[A palette relative to the hair tag](#the-palette-relative-to-the-hair-tag).** One authored profile is recoloured for each person's hair colour.
-3. **[Shared ink maps for each age-sex class](#ink-maps-shared-by-a-class).** Lids, lashes, brows and other strokes are authored once per class.
+3. **[Two shared pages](#the-shared-pages).** Every cut's hair mask is a cell of one hair-mask page, and every class's ink carriers are a cell of one ink page. Profile hair stays one material, and the lid and brow carriers are two.
 4. **[Heroes](#heroes).** A look line may name a hand-made whole file. Everything else about a hero is resolved at build time into files of their own. This adopts dev-box's §2.10 with four amendments.
 5. **[Bundles](#bundles), [compatibility](#compatibility), [the audit and tools](#the-audit-and-tools) and [the cost plan](#cost-plan).**
 
@@ -101,8 +101,8 @@ So a town has at most 9 natural colours, plus one silver per distinct `grey`, ro
 
 | Sidecar | Order |
 |---|---|
-| Hair mask | `hair.highlight_map`; then `<file stem>.hair.png` beside the style file (`lookdev/styles/hair/long.hair.png`, `…/bob.2.hair.png`) |
-| Ink map | `ink.map`; then `<file stem>.<slot>.ink.png` beside the file; then, **for type files only**, the [class map](#ink-maps-shared-by-a-class) |
+| Hair mask | `hair.highlight_map`; then `<file stem>.hair.png` beside the style file. Generated cuts name the [hair-mask page](#the-hair-mask-page) with `highlight_map`. |
+| Ink map | `ink.map`; then `<file stem>.<slot>.ink.png` beside the file (v1.2's order, unchanged). Generated type files name the [ink page](#the-ink-page) with `ink.map`. |
 
 ### Declared texel density (new, optional)
 
@@ -116,7 +116,7 @@ The ink's width and fade read a material's texel density `m_uv` (HANDMADE_INK, "
 
 **What they mean:** a number above 0, in metres per UV unit. When set, the client uses it instead of measuring. It is part of the material's content, so files that agree on it can share one material.
 
-**What the generator writes:** for a class's carriers, the median over the class's types. For a hair-mask page shared by several cuts, the median over those cuts.
+**What the generator writes:** the shared pages' fixed densities: 1.024 on ink carriers and 4.096 on profile hair ([the shared pages](#the-shared-pages)).
 
 **The audit:** it warns when a file's measured `m_uv` is more than 10% off the declared value.
 
@@ -245,42 +245,68 @@ With `anchors`, each anchor `i` (the profile's own swatches are anchor 0) gives 
   - **The base colour:** `recolor` leaves the albedo as it is under a palette tag, since profile hair ignores the albedo's RGB.
   - **A relative `slop.ink`** reads row 4 of its entry in the same way.
 
-## Ink maps shared by a class
+## The shared pages
 
-**A class** is an age-sex group of types: a type id without its line letter.
+**Decision (2026-11-20, the GC and dev-box):** composed people's hair masks are on **one shared hair-mask page**, and their ink carriers' maps are on **one shared ink page**. That keeps profile hair one material and gives two carrier materials (lid and brow) for everyone, which the crowd's cost limit needs ([cost plan](#cost-plan)). Both pages follow one rule.
 
-| Type ids | Class |
+**The rule: a file's UV0 is already in page coordinates.** The generator lays each file's islands into the cells assigned to it and writes the file's TEXCOORD_0 there. Every file of a page then names the same page with the same profile, so:
+
+- **The client addresses no cell.** A mesh samples the page with its own UV0. There is no UV transform, no per-mesh tag for it, no new lookup and no material split.
+- **The assignment is recorded for the tools, not the client:** a JSON manifest beside the page, which the audit and the bundle check read.
+- **One page is one material.** Files whose profiles differ can't share a page: a second page (`…-1`) is a second material.
+
+### The hair-mask page
+
+| | |
 |---|---|
-| `child-u-a`, `child-u-b`, `child-u-c` | `child-u` |
-| `youth-f-*` | `youth-f` |
-| `youth-m-*` | `youth-m` |
-| `adult-f-*` | `adult-f` |
-| `adult-m-*` | `adult-m` |
-| `elder-f-*` | `elder-f` |
-| `elder-m-*` | `elder-m` |
+| **File** | `lookdev/styles/hair/hair-masks.png` and its `.ktx2` copy; further pages `hair-masks-1.png`, … |
+| **Content** | HANDMADE_HAIR's mask texture: **R** the highlight (v1), **G** the lock-ink distance field (v1.1), B 0, A 255. RGB, linear, with mips in KTX2 (class `hairmask`). |
+| **Size** | 4096 × 4096 texels. |
+| **Cells** | A grid of 512 × 512-texel cells, 8 × 8, numbered `[col, row]` from the top-left (glTF's UV origin). |
+| **What a file takes** | A rectangle of whole cells, `[col, row, w, h]`. A short cut takes 1 × 1; a long cut or a plait may take 2 × 1, 1 × 2 or 2 × 2. |
+| **Packing** | Files in sorted path order, each placed at the first free position scanning rows top to bottom, then columns left to right, where its rectangle fits. The result depends only on the file list and the sizes, so a rebuild with the same cuts gives the same page. |
+| **Islands in a cell** | Each lock (or lock group) is its own island (plan §3.1). Islands keep at least `2 · ink_range · 4096 + 8` texels apart, and at least 8 texels from the rectangle's edge. Line texels (G = 0) keep at least `ink_range` from their island's border (v1.2's padding). |
+| **Texel density** | **1.0 mm a texel** at rest, on the cut's own figure, so **`ink_m_uv` = 4.096** (m per UV unit) on every cut. Islands are scaled to it, never up for resolution. The audit warns when fewer than 90% of a cut's triangles lie within 25% of it, as for `"uv"` ink. |
+| **Far meshes** | A file's `FarHair` takes UVs inside the same rectangle. It may overlap the near mesh's islands, since the two never show together. |
+| **The profile** | Every cut on a page carries the **same `slop.hair`** object: palette, `ref`, anchors, swatches, thresholds, ink fields, `ink_m_uv` 4.096 and `highlight_map` = the page's path. |
+| **The material** | Profile hair on a page has **no `baseColorTexture`**: the strand picture would be read through page UVs, and a profile ignores the base colour's RGB anyway. Alpha comes from `baseColorFactor`. |
+| **Manifest** | `lookdev/styles/hair/hair-masks.json`: `{"page": "lookdev/styles/hair/hair-masks.png", "size": 4096, "cell": 512, "density_mm": 1.0, "files": {"bob.glb": [0, 0, 1, 1], "long.glb": [1, 0, 2, 2], …}}`. Written by the generator (S5); read by `calibrate.py` and `pictures.py check`. |
 
-So there are 7 classes today (plan §2.6 counted the two elders as one). The rule is the type id up to its last `-`. A type whose id has no class (`hero-…`) has no class map.
+**Capacity:** 64 cells. Main's hair folder has about 45 cut files, most 1 × 1, so one page holds them. A cut whose islands don't fit 2 × 2 cells at 1 mm a texel is over the hair budget (plan §3: 12,000 triangles) and goes back to the generator, not onto a bigger rectangle.
 
-**The files:** `lookdev/types/<class>.<slot>.ink.png` (and its `.ktx2` copy), beside the type files. For example `lookdev/types/adult-f.eyes.ink.png`. The format is v1.2's ink map: G the distance, R the width, B 0; RGB, never greyscale; linear; with mips in KTX2. `ink_field.py` makes it from the class's stroke file.
+### The ink page
 
-**How a type's material binds to it:**
+| | |
+|---|---|
+| **Files** | `lookdev/types/types.<slot>.ink.png` and its `.ktx2` copy, one page per slot that carries ink. Today that is `types.eyes.ink.png`, for the lid and brow carriers. |
+| **Content** | HANDMADE_INK's ink map: **G** the distance, **R** the width, B 0. RGB, linear, with mips in KTX2 (class `ink`). |
+| **Size** | 4096 × 4096 texels. |
+| **Cells** | A grid of 1024 × 1024-texel cells, 4 × 4, numbered `[col, row]` from the top-left. **One cell a class**, in this fixed order: `child-u` [0, 0], `youth-f` [1, 0], `youth-m` [2, 0], `adult-f` [3, 0], `adult-m` [0, 1], `elder-f` [1, 1], `elder-m` [2, 1]. Cells from [3, 1] onward are free for hero types and new classes, assigned in the manifest. |
+| **A class** | An age-sex group of types: the type id up to its last `-` (`adult-f-b` → `adult-f`). All three lines of a class draw from their class's cell. |
+| **Islands in a cell** | The class's carriers (lid, lash flicks, lower lid, brow, left and right) as islands, laid out by their own lengths (v1.2: near-isometric). Padding as v1.2: strokes at least `range` from an island's border, and islands at least `2 · range · 4096 + 8` texels apart. |
+| **Texel density** | **0.25 mm a texel** at rest, so **`m_uv` = 1.024** on every carrier. A class whose faces are smaller (a child) keeps the same density; its islands are just smaller. |
+| **The profiles** | Each carrier kind carries the **same `ink`** object on every type: the lid carrier one, the brow carrier another (`map` = the page's path, `m_uv` 1.024, one `range`, `width`, `min_px`, `fade_px` and `color`, plus `ref` on the brow). The lid and brow are therefore **two materials** for every person in the town. |
+| **Manifest** | `lookdev/types/types.ink.json`: `{"pages": {"eyes": "lookdev/types/types.eyes.ink.png"}, "size": 4096, "cell": 1024, "density_mm": 0.25, "classes": {"child-u": [0, 0], …}, "types": {"hero-3f9a0c21": [3, 1]}}`. Written by the generator (S4); read by `calibrate.py` and `pictures.py check`. |
 
-1. An inked material on a type file (a carrier, `slot` `eyes`) resolves its map in this order: `ink.map`, then `lookdev/types/<type>.<slot>.ink.png`, then `lookdev/types/<class>.<slot>.ink.png`.
-   - **Generated types** carry no per-type map and no `map`, so they take the class map.
-   - **A hero type** can bring its own map (`hero-<id>.eyes.ink.png`), or name its class map with `ink.map`.
-2. `lookdev::convert` (type files are the character's scene) loads the map into binding 106 and applies the profile with the declared `m_uv`, as HANDMADE_INK describes.
-3. **Content key:** it already includes the profile and the resolved map. The types of a class have identical carrier materials: no texture, alpha 0, the same `ink` and the same map. So **a class's carriers are one toon material per carrier**, shared by every person of the class's three lines.
-4. **Morphs, draw order and blending:** as v1.2 (carriers are primitives of the face mesh, morph with it, take `CARRIER_SORT_BIAS` and no outline volume).
+**The class maps become cells of the page.** There are no `<class>.<slot>.ink.png` files and no class lookup:
 
-**The UV requirement:** every type of a class carries its inked primitives in **one UV layout**.
+- **Map resolution** stays v1.2's: `ink.map`, then `<file stem>.<slot>.ink.png` beside the file.
+- **Generated type files** always name the page with `ink.map`.
+- **A hero type** either names the page (its cell assigned under `types` in the manifest) or brings its own `<stem>.<slot>.ink.png`, which costs it its own material.
 
-- **Identity within a type:** the people of one type already share it: they share the type's mesh, identity bones move vertices, and Bevy doesn't morph UVs.
-- **Across a class's types:** the same primitives must have the same TEXCOORD_0. That means the same vertex count and order, and UVs within half a texel of the class map.
+**If S4 finds 0.25 mm too coarse** (plan §2.6 left 1024² against 2048² per class open): the cell becomes 2048 at 0.125 mm on two 4096 pages (4 classes each). That gives two lid and two brow materials, which is still a fixed count, and the manifest records it.
+
+**The UV requirement:**
+
+- **Within a type:** the people of one type already share one layout. They share the type's mesh, identity bones move only vertices, and Bevy doesn't morph UVs.
+- **Across a class's types:** the inked primitives must have the same TEXCOORD_0: the same vertex count and order, and UVs within half a texel of the page.
 - **How the generator gets it:** carriers are built from cage-relative strokes on a shared topology and pinned by island (plan §2.6).
-- **Texel density:** each type's measured `m_uv` must be within 10% of the class's declared `m_uv`, or strokes draw at different widths on different lines.
-- **Materials `share.py types` pages** (the far head's picture and the lip layer's) have their UVs moved per type, so they must not carry ink. Ink on a type goes on carriers.
+- **Texel density:** each type's measured `m_uv` must be within 10% of the declared 1.024.
+- **Only carriers.** An inked material on a type file must be a carrier (BLEND, base alpha 0, no texture), since its UV0 lives on the page and not in the face atlas. The materials `share.py types` pages (the far head's picture and the lip layer's) must not carry ink, because their UVs are moved per type.
 
-**Fallback:** a class map that isn't found leaves its carriers without ink, with one warning, as v1.2. With ink on, S4 removes the old lid band and brow strip, so a missing map would leave a person without lids. **The bundle check refuses that case** ([bundles](#bundles)).
+**Binding and drawing:** `lookdev::convert` (a type file is the character's scene) loads the page into binding 106 and applies the ink with the declared `m_uv`. Morphs, draw order and blending are v1.2's: carriers are primitives of the face mesh, they morph with it, they take `CARRIER_SORT_BIAS` and they get no outline volume.
+
+**Fallback:** a page that isn't found leaves its carriers without ink, with one warning, as v1.2. With ink on, S4 removes the old lid band and brow strip, so a missing page would leave everyone without lids. **The bundle check refuses that case** ([bundles](#bundles)).
 
 ## Heroes
 
@@ -348,8 +374,8 @@ dev-box's composed bundles (`char-4-composed-<sha>.tar.gz` and its `-ktx2` twin,
 
 | File | Where | KTX2 class |
 |---|---|---|
-| Class ink maps | `lookdev/types/<class>.<slot>.ink.png` | New class `ink`: **linear**, full mips (`"colour": "linear", "mips": "box"`), RGB kept |
-| Hair masks | `lookdev/styles/hair/<style>[.N].hair.png`, or a shared mask page named by `highlight_map` | New class `hairmask`: linear, full mips |
+| The ink page and its manifest | `lookdev/types/types.<slot>.ink.png`, `lookdev/types/types.ink.json` | New class `ink`: **linear**, full mips (`"colour": "linear", "mips": "box"`), RGB kept |
+| The hair-mask page and its manifest | `lookdev/styles/hair/hair-masks.png` (and `-1`, …), `lookdev/styles/hair/hair-masks.json` | New class `hairmask`: linear, full mips |
 | Hero files | `lookdev/heroes/<id>.glb`, with its sidecars | Its own files, under the existing classes (`face`, and the two above) |
 | The book | `characters/looks.json`, its lines carrying `hero_file` | (not a picture) |
 
@@ -359,7 +385,7 @@ dev-box's composed bundles (`char-4-composed-<sha>.tar.gz` and its `-ktx2` twin,
 - For every composed file whose scene opts in, each inked material resolves an ink map **inside the bundle**, by the order above. Each profile hair that names a mask finds it.
 - `ink` and `hairmask` pictures are KTX2 linear with a full chain, and no converted PNG is left behind. `handmade::has_green` treats a KTX2 without its PNG as a colour map, so maps are never encoded from greyscale.
 - Every line's `hero_file` exists in the bundle, and its scene declares a hand-made character.
-- Every opted-in type file's class has its map. This is the "no lids" case above, which fails the bundle.
+- Every file a page manifest lists exists and opts in, and its UV0 lies inside its rectangle or cell (within half a texel). Every opted-in file that names a page is in its manifest. A missing page is the "no lids" case above, which fails the bundle.
 
 **`share.py`:**
 - `types` and `pages` must keep a material's `slop` extras when they rewrite `extras` (`face_map` is merged into the object, never replacing it).
@@ -391,15 +417,16 @@ dev-box's composed bundles (`char-4-composed-<sha>.tar.gz` and its `-ktx2` twin,
   - **Warnings:** a clamp hit on `kL` or `kC`; |dh| > 30°.
   - **Facts:** the [entries](#the-maths) for the nine `HAIR_COLOURS`, two silvers and the anchors' refs, with any gamut-reduced swatch marked.
 - **Ink:** v1.2's ink audit, plus:
-  - the map's resolution, saying whether it was the material's own map, the per-type sidecar or the class map;
+  - the map's resolution, saying whether it was `ink.map` (a page) or the file's own sidecar;
   - the declared `m_uv` against the measured value (a warning beyond 10%);
   - `ref` on a material whose name takes no tag (a warning: `ref` does nothing there).
 - **Hair:** the mask's resolution, `_RING` on profile hair (a warning: it's ignored), and a `FarHair` whose material lacks the near hair's `slop` (a warning).
-- **`--class <class> lookdev/types`:** across every type file of the class:
-  - the same inked material names with the same `ink` (an error);
-  - the same TEXCOORD_0 on the inked primitives, by count and within half a texel of the class map (an error);
-  - the `m_uv` spread (a warning beyond 10%);
-  - the class map's line texels kept within the carriers' islands (v1.2's border check).
+- **`--pages lookdev`:** both pages against their manifests:
+  - each listed file's inked or profile primitives lie in its cell or rectangle (an error), and no two files' rectangles overlap (an error);
+  - every file on a page carries the same `ink` object per carrier name, or the same `slop.hair` (an error: it would split the material);
+  - for each class: the same TEXCOORD_0 on the inked primitives across its types, by count and within half a texel (an error);
+  - the density: each file's measured `m_uv` against the page's (a warning beyond 10%);
+  - the page's line texels kept within the islands (v1.2's border check).
 - **`--line LINE.json` or `--book looks.json`:** every `hero_file` is checked for its path rule, then audited as a hand-made file.
 
 **The calibration frame on a composed person:**
@@ -419,7 +446,7 @@ calibrate.py --line LINE.json [--targets T.json]
   - `off`: composed files' `slop` is ignored, which is today's drawing;
   - `noink`: profiles stay and ink goes;
   - `noink:<slot>`: only that slot's ink goes.
-- **Why a switch, not a temporary copy:** the hand-made path copies the file. A composed person is several shared files plus a class map, so a switch is simpler.
+- **Why a switch, not a temporary copy:** the hand-made path copies the file. A composed person is several shared files plus two shared pages, so a switch is simpler.
 - **The rest is unchanged:** the stops, sequences, metric (pass at F_ink ≤ 1.5 × F_edge, `faded` rule) and folders are as they are.
 - **Cost A/B:** the same switch serves it.
 
@@ -438,11 +465,11 @@ calibrate.py --line LINE.json [--targets T.json]
 
 | Source | Today | With v1.3 | How it is held |
 |---|---|---|---|
-| **Hair materials** | All composed hair cuts are **one** toon (one strand picture, one source mean; `SAME_SOURCE`) | One toon per distinct hair mask (each style's `.hair.png` is part of the content), so up to about 15 cuts, but only those in view. The 64 crowd's game camera shows 26 materials and 17 batch sets today (CHARACTERS.md, compose-client-2). | **Lever:** the generator puts every cut's mask on one shared page, named by `highlight_map`, with the same declared `ink_m_uv`, `ink_range` and profile. Then profile hair is **one material again**. S5 decides; the content key below makes it automatic when the values agree. |
+| **Hair materials** | All composed hair cuts are **one** toon (one strand picture, one source mean; `SAME_SOURCE`). The 64 crowd's game camera shows 26 materials and 17 batch sets today (CHARACTERS.md, compose-client-2). | **One** profile hair toon a page: every cut names the same page with the same profile ([the hair-mask page](#the-hair-mask-page)). | Decided: one page. A second page would be a second material. |
 | **Palette per person** | A recolour per fragment from the tag (hsv maths) | 4 `textureLoad`s (8 when greying, +1 or 2 for ink) per profile-hair fragment; entries made on the CPU once per (material, colour), in microseconds | It replaces `hair_light`'s ring maths and up to 8 strand samples (HANDMADE_HAIR § Cost: no measurable difference). No material is split per colour, since the colour rides in the tag. |
-| **Carriers** | The lid band, lash cards and brow strip are primitives of the type's face, in shared materials (the brows are one material for every type) | Carriers replace them (S4): net draws about 0 per person. Materials: one per carrier per class, so at most 2 × 7 = 14, and only the classes in view. | **Lever** (plan §8.11): all classes' strokes on **one** ink page, in disjoint islands, named by `ink.map`. That gives 2 carrier materials in total, or 1 if the lid and brow share a material and colour. |
+| **Carriers** | The lid band, lash cards and brow strip are primitives of the type's face, in shared materials (the brows are one material for every type) | Carriers replace them (S4): net draws about 0 per person. **Two** materials for everyone, the lid and the brow ([the ink page](#the-ink-page)). | Decided: one page. Lever left (plan §8.11): one material if the lid and brow share a colour. |
 | **Ink sampling** | 0 | One read (binding 106) per carrier fragment. At Near the lines are faded but still read, as measured on hand-made files (+0.02 ms at most for 8) | — |
-| **Texture memory** | — | 7 class maps × about 1.4 MB (1024², BC7 with mips) + 1 hair mask page + a palette image of 5 KB per palette material: about 12 MB | — |
+| **Texture memory** | — | Two 4096² pages, BC7 with mips: about 22 MB each, so about 45 MB, plus a 5 KB palette image per palette material. That is about a fifth of the people's 202 MiB of textures today (CHARACTERS.md). | KTX2 only in bundles. A page's empty cells cost memory, not reads. |
 
 **How the composed material keys change:**
 
@@ -457,15 +484,14 @@ calibrate.py --line LINE.json [--targets T.json]
 - **The palette image** is per material, made once with the material. Entries are added as people arrive. The bind group is refreshed when the image grows, as `HairTints.grown` does today.
 
 **If a limit is missed:**
-1. Take the two levers above: one hair-mask page, and one ink page.
-2. Then merge the lid and brow materials.
-3. Report the remainder with `diag` counts rather than trimming ink.
+1. Merge the lid and brow materials.
+2. Report the remainder with `diag` counts rather than trimming ink.
 
 ## Sources in the code (for phase 2)
 
 | What | Where |
 |---|---|
-| The reader | `handmade.rs`: `material_of`, `hair_of` and `ink_of` gain `palette`, `ref`, `anchors` and `m_uv`. A new `composed_of(file)` reads the scene, and `ink_map` gains the class fallback. |
+| The reader | `handmade.rs`: `material_of`, `hair_of` and `ink_of` gain `palette`, `ref`, `anchors` and `m_uv`. A new `composed_of(file)` reads the scene. `ink_map` is unchanged: the pages are named by `ink.map` and `highlight_map`. |
 | The palette maths, entries and images | a new module `characters/palette.rs` (OKLab, bisection, anchors; unit tests against the worked example) |
 | Style materials | `compose.rs` `toon` (reads `slop` through `glb_json` by material name) and the `_HIGHLIGHT` packing |
 | Type materials | `lookdev.rs` `convert` (composed files' `slop`) |
