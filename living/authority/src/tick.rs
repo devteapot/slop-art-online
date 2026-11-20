@@ -87,7 +87,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     let phase = common::span("tick.wakes");
     // Bystanders' wakes held back by `witness_wake_ms` whose window has ended.
     let due_wakes = common::detail_span("wake.bystanders_due");
-    common::due_bystander_wakes(ctx, now);
+    common::due_bystander_wakes(ctx, now, k_tick);
     drop(due_wakes);
     let mut done = HashSet::new();
     for _ in 0..3 {

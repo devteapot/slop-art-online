@@ -137,6 +137,47 @@ def det_ticks(log):
     return out
 
 
+def det_wakes(log):
+    """Each `det wakes tick=N due=[…] start=k` line (common::due_bystander_wakes, docs/COMBAT_PHASE.md
+    "Wake order"): {N: (the due ids in id order, the start of the delivery)}."""
+    out = {}
+    for line in log.splitlines():
+        try:
+            msg = json.loads(line).get("message", "")
+        except ValueError:
+            continue
+        m = re.match(r"det wakes tick=(\d+) due=\[([0-9, ]*)\] start=(\d+)$", msg)
+        if m:
+            out[int(m.group(1))] = (tuple(int(x) for x in m.group(2).split(",") if x.strip()), int(m.group(3)))
+    return out
+
+
+def wakes_compared(wa, wb, first_differ, rng):
+    """The due bystander wakes of both builds, tick by tick, up to the first tick whose hashes differ
+    (after it the worlds differ, and so may what is due): the ticks with wakes due, those whose due
+    sets are the same, those delivered in the same order, and those the candidate reordered."""
+    upto = [t for t in rng if first_differ is None or t <= first_differ]
+    both = [t for t in upto if t in wa or t in wb]
+    def order(w):
+        due, k = w
+        return due[k:] + due[:k]
+    same_set = [t for t in both if t in wa and t in wb and wa[t][0] == wb[t][0]]
+    same_order = [t for t in same_set if order(wa[t]) == order(wb[t])]
+    rotated = [t for t in rng if t in wb and len(wb[t][0]) > 1 and wb[t][1] != 0]
+    due_n = [len(w[0]) for w in wb.values()]
+    return {
+        "upto_tick": first_differ,
+        "ticks_with_wakes": len(both),
+        "same_set": len(same_set),
+        "same_order": len(same_order),
+        "set_differs": [t for t in both if t not in same_set][:20],
+        "candidate_ticks_reordered": len(rotated),
+        "first_reordered": rotated[:5],
+        "candidate_due_per_tick": {"ticks": len(due_n), "mean": round(sum(due_n) / len(due_n), 2) if due_n else 0, "max": max(due_n, default=0)},
+        "at_first_differ": {"base": wa.get(first_differ), "candidate": wb.get(first_differ)} if first_differ else None,
+    }
+
+
 # Auto-increment tables: SpacetimeDB 2.14.1 skips a sequence ahead to its next block of 4,096 at
 # random (seeded from the operating system at each database load), so the same rows get other ids
 # on two servers. Rows are compared with each such id by its rank among its table's ids, and the
@@ -163,7 +204,9 @@ def normalized(rows):
         return FAR_BASE + (rank("far_handle", n - FAR_BASE) & 0x0FFFFFFF) if isinstance(n, int) and FAR_BASE <= n < 2**32 else n
 
     def text(x):
-        return re.sub(r"#(\d{10})(?!\d)", lambda m: "#%010d" % far(int(m.group(1))) if FAR_BASE <= int(m.group(1)) < 2**32 else m.group(0), x)
+        x = re.sub(r"#(\d{10})(?!\d)", lambda m: "#%010d" % far(int(m.group(1))) if FAR_BASE <= int(m.group(1)) < 2**32 else m.group(0), x)
+        # A far handle in a scene's JSON (a deliberation's `"id":1000008249`), renamed alike.
+        return re.sub(r'"id":(\d{10})(?!\d)', lambda m: '"id":%010d' % far(int(m.group(1))) if FAR_BASE <= int(m.group(1)) < 2**32 else m.group(0), x)
 
     def skey(k, bit):
         return bit | (rank("structure", k & (STRUCTURE_BIT - 1)) & (STRUCTURE_BIT - 1)) if k & KIND_MASK == bit else k
@@ -288,7 +331,8 @@ def run(a):
         if replica is None:
             raise RuntimeError('no replica log says it paused at det_stop')
         res["replica"] = replica
-        la, lb = det_ticks(X.replica_log(replica)), det_ticks(Y.replica_log(replica))
+        log_a, log_b = X.replica_log(replica), Y.replica_log(replica)
+        la, lb = det_ticks(log_a), det_ticks(log_b)
         rng = range(t0 + 1, t0 + ticks + 1)
         missing = {"base": [t for t in rng if t not in la], "candidate": [t for t in rng if t not in lb]}
         differ = []
@@ -300,6 +344,7 @@ def run(a):
         res["ticks_missing"] = {k: len(v) for k, v in missing.items()}
         res["ticks_differ"] = len(differ)
         res["first_differences"] = differ[:20]
+        res["wakes"] = wakes_compared(det_wakes(log_a), det_wakes(log_b), differ[0]["tick"] if differ else None, rng)
         rows_a = {t: X.sql(db, f"SELECT * FROM {t}") for t in TABLES + ["clock"]}
         rows_b = {t: Y.sql(db, f"SELECT * FROM {t}") for t in TABLES + ["clock"]}
         key = lambda r: json.dumps(r, sort_keys=True)
