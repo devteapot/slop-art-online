@@ -4247,9 +4247,11 @@ def doing_seen(s):
         got = s.wait(lambda: [x for x in uses(t0, "far") if x["actor"] == w and x["skill"] == "dodge"] or None, seconds=15)
         s.expect("far: F's guard 5 m off (seen) triggers W's routine", got, got[:1])
         seen = s.wait(lambda: scene_since(t0, "far"), seconds=10)
-        fe = seen.get(f, {})
+        # The mind's scene uses W's sighting handle for F while F is too far to make out.
+        handles = s.rows(f"SELECT id FROM far_handle WHERE observer = {w} AND target = {f}", "far-handles")
+        fe = next((seen[1_000_000_000 + h["id"]] for h in handles if 1_000_000_000 + h["id"] in seen), {})
         s.expect("far: W's scene shows F as someone too far away to make out, visibly holding a block",
-                 fe.get("who") == FAR and "name" not in fe and {k: v for k, v in (fe.get("visibly") or {}).items() if k != "at"} == {"is": "block", "phase": "holding"}
+                 f not in seen and fe.get("who") == FAR and "name" not in fe and {k: v for k, v in (fe.get("visibly") or {}).items() if k != "at"} == {"is": "block", "phase": "holding"}
                  and (fe.get("visibly") or {}).get("at", "you") == "you", fe)
         s.graph(f, {"wait": 60 + next(rounds)})
         time.sleep(1.5)

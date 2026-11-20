@@ -403,6 +403,34 @@ impl BodyFacts {
         k
     }
 
+    /// The values of the facts `reads` names alone, `kind`, `stage` and `night` only when named:
+    /// two bodies with the same key get the same answer from a law that reads only those.
+    pub(super) fn key_of_reads(&self, reads: &BTreeSet<String>) -> Vec<u8> {
+        let mut k = Vec::with_capacity(16 + reads.len() * 9);
+        if reads.contains("kind") {
+            k.extend(self.kind.as_bytes());
+        }
+        k.push(0);
+        if reads.contains("stage") {
+            k.extend(self.stage.as_bytes());
+        }
+        k.push(0);
+        k.push(if reads.contains("night") { self.night as u8 } else { 2 });
+        for (n, v) in self.fields.iter().filter(|(n, _)| reads.contains(n)) {
+            k.extend(n.as_bytes());
+            k.push(0);
+            k.extend(v.to_le_bytes());
+        }
+        for (n, v) in &self.share {
+            if reads.contains(&format!("share.{n}")) {
+                k.extend(n.as_bytes());
+                k.push(1);
+                k.extend(v.to_le_bytes());
+            }
+        }
+        k
+    }
+
     fn key(&self) -> Vec<u8> {
         let mut k = Vec::with_capacity(16 + self.fields.len() * 8);
         k.extend(self.kind.as_bytes());
@@ -818,6 +846,14 @@ impl Scripts {
     /// none.
     pub fn status_part_names(&self) -> Vec<String> {
         self.body.parts.as_ref().map(|p| p.list.iter().map(|x| x.name.clone()).collect()).unwrap_or_default()
+    }
+
+    /// Whether `status_of` is written as its declared parts joined in order (`hunger_part(a) +
+    /// energy_part(a) + …`, as shipped): then the parts joined are the law by construction, and
+    /// the install need not run the law on every sample to compare (`check.rs` `body`).
+    pub fn status_of_is_join(&self) -> bool {
+        let names = self.status_part_names();
+        !names.is_empty() && super::fields::is_join(&self.ast, "status_of", &names)
     }
 
     /// What is wrong with `status_parts()` (an install refuses it; the whole law answers).
@@ -1261,6 +1297,18 @@ fn status_of(a) {
         let slowed = reads("slowed_part");
         assert!(slowed.contains(&"energy".to_string()) && slowed.iter().all(|r| r == "energy" || r == "kind"), "{slowed:?}");
         assert_eq!(reads("mending_part"), ["hp_rate", "share.health"]);
+        // Written as its parts joined in order: equal by construction, so the install does not
+        // run the law on every sample to compare (check.rs `body`).
+        assert!(sc.status_of_is_join());
+        let cullet = Scripts::new(&crate::floors::compose(SHIPPED, include_str!("../../../seeds/worlds/cullet/laws.rhai")).unwrap()).unwrap();
+        assert!(cullet.status_of_is_join());
+        let not_join = |overlay: &str| !Scripts::new(&crate::floors::compose(SHIPPED, overlay).unwrap()).unwrap().status_of_is_join();
+        assert!(not_join(BEFORE_PARTS), "a law written whole");
+        assert!(not_join(r#"fn status_parts() { ["hunger_part", "breath_part"] } fn status_of(a) { breath_part(a) + hunger_part(a) }"#), "out of order");
+        assert!(not_join(r#"fn status_parts() { ["hunger_part", "breath_part"] } fn status_of(a) { hunger_part(a) }"#), "a part left out");
+        assert!(not_join(r#"fn status_parts() { ["hunger_part", "breath_part"] } fn status_of(a) { let x = hunger_part(a); x + breath_part(a) }"#), "more than the join");
+        assert!(not_join(r#"fn status_parts() { ["hunger_part", "breath_part"] } fn status_of(a) { hunger_part(a) + breath_part(#{}) }"#), "a part on another body");
+        assert!(not_join(r#"fn status_parts() { ["hunger_part"] }"#), "the parts replaced, the shipped join of eight kept");
         // A kept answer lasts until a fact a part reads can change: the same facts as the whole law's.
         assert_eq!(sc.status_reads_as(StatusWay::default()), sc.status_reads());
         assert_eq!(sc.status_reads_as(WHOLE), sc.status_reads());

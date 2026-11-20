@@ -2286,6 +2286,62 @@ pub struct DoingNear {
     pub copy: DoingSeen,
 }
 
+// ---- battle-views: a player's motion copies as rows only it can read -------------------
+//
+// With the `motion_tables_on` law on (docs/BATTLE_VIEWERS.md, "Addendum"), a player's motion
+// copies live here instead of `motion_seen`/`motion_near`: one public table, filtered per client
+// by row-level security (`frame.rs`, `SEEN_BODY_COPY_FILTER`, `viewer = :sender`), so a client
+// subscribes it as a table and a written copy is matched to its one viewer without re-running a
+// view. A viewer's copies are all here or all in the private tables, never split (they move in
+// one transaction); the motion views read whichever holds them. `moving` is exactly the row
+// `seen_bodies` returns, so nothing a view hides is in it.
+
+/// A perceived creature's motion, as the viewer's frames last wrote it (public, row-level
+/// security): `body` the creature, `near` the tier, `seg` its `Moving` without the id (the row
+/// `seen_bodies` returns is `seg.moving(body)`). 98 B (the viewer's identity 32, `body` 4, `near`
+/// 1, `seg` 61). No primary key and no copy key: a viewer's row of a creature is found by
+/// `(viewer, body)`, so a client keys it by `body` (each client holds only its own rows) and sees
+/// a change as a delete and an insert, as an update's old and new rows are sent anyway.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_body_copy, public,
+    index(accessor = viewer_near, btree(columns = [viewer, near])),
+    index(accessor = viewer_body, btree(columns = [viewer, body])))]
+pub struct SeenBodyCopy {
+    #[index(btree)]
+    pub viewer: Identity,
+    pub body: u32,
+    pub near: bool,
+    pub seg: crate::perception::Segment,
+}
+
+/// Where a viewer's battle-views copies stand (private): its motion copies in `seen_body_copy`
+/// (`public`) and its mirror of projections whole (`mirrored`). Written in the same transaction as
+/// the moves (`frame::to_public`, `all_private`, `perception::fill_mirror`, `drop_mirrors`), so
+/// a step that rolls back takes it back with them: module memory could not say so to a reducer
+/// that runs before the next tick. No row: neither.
+#[derive(Clone, Debug, Default, PartialEq)]
+#[spacetimedb::table(accessor = copy_state)]
+pub struct CopyState {
+    #[primary_key]
+    pub viewer: Identity,
+    pub public: bool,
+    pub mirrored: bool,
+}
+
+/// A mirror of a viewer's `projected` row (public, row-level security `viewer = :sender`;
+/// battle-views addendum 2, the `characters_table_on` law): `id` the projected row's, `row`
+/// exactly what `seen_characters` returns for it. Written by `perception::proj_*`, the only
+/// writers of `projected`, for a viewer whose mirror is whole (`perception::mirrored`).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_character_copy, public)]
+pub struct SeenCharacterCopy {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub row: crate::perception::SeenCharacter,
+}
+
 // ---- cues: what a player is shown at once of those near it or engaged with it ----------
 //
 // Event tables (docs/PERCEPTION.md, "Cues"; `frame.rs`): a row exists only in the transaction

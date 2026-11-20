@@ -138,6 +138,19 @@ pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String
 /// Install a skill script: compiled and validated on the world's day, then written with a new
 /// revision. `install_script` (the admin) and a seed's laws overlay (`floor::begin`) go through it.
 pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(), String> {
+    install(ctx, source, false)
+}
+
+/// Install a seed's laws overlay that `floor::check` has just compiled and validated (on this
+/// world's day, which `floor::begin` set first): validated again only when the world already has
+/// values of its own (`law_override`), which make the installed source differ from the checked
+/// one. At genesis it has none, so the overlay is validated once (about 26 × 10⁹ fuel on Cullet;
+/// docs/STAGED_GENESIS.md §1).
+pub(crate) fn install_checked_source(ctx: &ReducerContext, source: String) -> Result<(), String> {
+    install(ctx, source, true)
+}
+
+fn install(ctx: &ReducerContext, source: String, checked: bool) -> Result<(), String> {
     // The world's own law values (`law_override`: a seed's `rules`, `set_world_law`) are written
     // at the end of the installed source, so a client that compiles the `script` row alone reads
     // the values of an install (`living_rules::script::with_world_laws`), and laid over the
@@ -152,12 +165,16 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
         && ctx.db.cover_ground().id().find(0).is_none() {
         return Err("cover sight requires a land created with quantized cover geometry".into());
     }
-    // Installs are rare: always timed.
-    let checked = {
-        let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.validate");
-        sc.validate()?
-    };
-    log::info!("install_script: {}", checked.summary());
+    if checked && values.is_empty() {
+        log::info!("install_script: validated by the seed check");
+    } else {
+        // Installs are rare: always timed.
+        let checked = {
+            let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.validate");
+            sc.validate()?
+        };
+        log::info!("install_script: {}", checked.summary());
+    }
     // A world made before owner-known: its public land row loses its names, once.
     crate::island::scrub_land(ctx);
     // The body's meters name fields of this world's vitals row.

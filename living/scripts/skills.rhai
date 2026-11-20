@@ -133,8 +133,7 @@ fn laws() {
         // levels. The `_check` laws (diagnostics) also work each out the whole way and count any
         // difference; `warmth_check` likewise for warmth.
         check_ctx_plan: true, check_ctx_check: false, alarm_cells: true, alarm_cells_check: false, warmth_check: false,
-        // The body's statuses asked by their parts (`status_parts()`), each kept on what it reads;
-        // `status_parts_check` (a diagnostic) also asks the whole `status_of` and counts any difference.
+        // The body's statuses by their parts; the check asks the whole law too (a diagnostic).
         status_parts: true, status_parts_check: false,
         // A body's scene worked out as far as each reader asks; `scene_lazy_check` (a diagnostic)
         // also works each answer out from the whole scene and counts any difference.
@@ -155,6 +154,13 @@ fn laws() {
         // Whether what a player sees is split into what is near it and the rest, each delivered
         // apart (on), or delivered together (off; with cue_transport_on off too, as before).
         near_tier_on: true,
+        // Whether a player's motion copies reach its client as rows of a table only that player
+        // can read (row-level security; on) or only through the motion views (off, until the
+        // battle-views acceptance). The views show the same either way (docs/BATTLE_VIEWERS.md).
+        motion_tables_on: false,
+        // The same for what a player perceives of the creatures it sees (its `seen_characters`
+        // rows mirrored into a table only that player can read; off until acceptance).
+        characters_table_on: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
@@ -2901,12 +2907,8 @@ fn health_status(f) {
     else if f < 0.9 { #{ name: "a_little_hurt", tone: "plain", text: "A little hurt", meter: "health", felt: "a little hurt" } }
     else { #{ name: "unhurt", tone: "plain", text: "Unhurt", meter: "health", felt: "unhurt" } }
 }
-// The parts of how a body is, in the order their statuses are listed (docs/STATUS_PARTS.md). Each
-// takes the same body `a` as `status_of` and gives a list of its statuses (none, one or more); the
-// engine keeps each part's answer on what that part reads, so a change of breath alone asks only
-// `breath_part` again. `status_of` is the parts joined in this order and stays the law: the
-// engine's check law compares the two, and an install refuses a world whose parts joined differ
-// from its `status_of`. A floor that replaces `status_of` alone is asked it whole.
+// The parts of how a body is, in order; each kept on what it reads, `status_of` their join
+// (docs/STATUS_PARTS.md).
 fn status_parts() { ["hunger_part", "energy_part", "health_part", "cold_part", "combat_part", "breath_part", "slowed_part", "mending_part"] }
 fn hunger_part(a) { if a.hunger != () { [hunger_status(a.hunger)] } else { [] } }
 fn energy_part(a) { if a.energy != () { [energy_status(a.energy)] } else { [] } }
@@ -3184,6 +3186,8 @@ fn law_about(l, name) {
         "status_parts" => "how a body is, is worked out part by part, each part again only when something it reads has changed",
         "status_parts_check" => "a diagnostic: how a body is, is also worked out whole and compared",
         "near_tier_on" => if l.near_tier_on { "what is near a player is kept apart from the rest of what it sees, and follows on its own" } else { "what a player sees is kept together" },
+        "characters_table_on" => if l.characters_table_on { "what each player perceives of others reaches it as rows meant for that player alone" } else { "what each player perceives of others reaches it through what it may look at" },
+        "motion_tables_on" => if l.motion_tables_on { "how others move reaches each player as rows meant for that player alone" } else { "how others move reaches each player through what it may look at" },
         "cue_transport_on" => if l.cue_transport_on { "what is near a player, or fighting it, reaches the player's screen at once" } else { "what is near a player reaches the player's screen with the rest of what it sees" },
         "warmth_check" => "a diagnostic: warmth is worked out both ways and compared",
         "scene_lazy" => "what is in sight is worked out as far as what one looks for needs",

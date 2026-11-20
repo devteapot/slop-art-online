@@ -3108,6 +3108,7 @@ def main():
     ap.add_argument("--morphs", default="all", choices=("all", "client"), help=f"`client`: keep only the expressions the game drives ({', '.join(CLIENT_MORPHS)}); every expression costs each vertex of the face again")
     ap.add_argument("--own-iris", action="store_true", help="with --parts head: the iris painted in this figure's own eye colour, as a whole person's is, in place of the one every type shares (to compare the two: eye_colours.py)")
     ap.add_argument("--overlay", default="", help="with --parts overlay: beard_<style>, stubble, lines or freckles")
+    ap.add_argument("--clip-source", action="store_true", help="keep the shared animation reference coat on its body weights before spring skinning")
     ap.add_argument("--keep", default="", help="with --parts keep: the parts to keep, by name, comma-separated (Jersey, Coat, Buttons, Smock, Trousers, Boots, Cap, CapPeak, Kerchief, KerchiefKnot)")
     ap.add_argument("--no-lines", action="store_true", help="leave out the shell lines at the jaw, ears and mouth (cage_head.CageFace._shell_lines), to compare")
     ap.add_argument("--blend")
@@ -3169,7 +3170,7 @@ def main():
     # A smock's skirt hangs from spring bones where the file holds the skirt: a whole person, or
     # the smock's or the apron's own piece. Not a far model alone, which lists no springs.
     skirted = spec.get("coat") == "smock" and a.lod != "far" and (a.parts == "all" or (a.parts == "keep" and {"Smock", "Apron"} & set(a.keep.split(","))))
-    coated = spec.get("coat") == "coat" and (a.parts == "all" or (a.parts == "keep" and "Coat" in a.keep.split(",")))
+    coated = not a.clip_source and spec.get("coat") == "coat" and (a.parts == "all" or (a.parts == "keep" and "Coat" in a.keep.split(",")))
     coat_hem = coat_cut_dimensions(spec["coat_cut"])[0] if coated else None
     g["COAT_SPRING"] = coated
     g["SKIRT_SPRING"] = max(spec["hem"], 0.50) if skirted else None

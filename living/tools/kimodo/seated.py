@@ -14,7 +14,9 @@ def contact_vertices(sk, meshes, hips, legs):
         for v in mesh.data.vertices:
             weights = [(groups[g.group], g.weight) for g in v.groups
                        if groups[g.group] in sk.rest and g.weight > 0]
-            if not weights:
+            # A simulated hem can share a thigh or hip with the body even when
+            # that body joint has the largest weight. It cannot support the pelvis.
+            if not weights or any(b.startswith("J_Sec_") for b, _ in weights):
                 continue
             region = regions.get(max(weights, key=lambda pair: pair[1])[0])
             if region:
