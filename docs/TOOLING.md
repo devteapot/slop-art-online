@@ -155,15 +155,15 @@ scene-gate: genesis island: init 118.735e9 fuel per run (2 init runs), 98.95% of
 
 **Staged genesis.** When `living/tools/genesis_fuel.py` exists in the tree under test, the gate runs `genesis_fuel.py --seed SEED` with the gate's server environment and reads one JSON object in that format from its stdout (stderr goes to the log). `--genesis-fuel-report FILE`, once per seed, reads reports already made for the commit under test. The gate checks the report's seed, commit, budget, two init runs and `largest_step_share`, then applies the rules to `init` and to **every step**, each against its own full budget (each scheduled step is its own reducer call). The interim baseline applies to `init` only.
 
-Measured on the Spark (rustc 1.99.1, aarch64) on 2026-11-20, main `3ed22a74` (its module is battle-views' `a407be01`, with status-parts), private `clockworklabs/spacetime:v2.14.1` server, three `--genesis-only` rounds of 193–205 s each, five publishes in a row:
+Measured on the Spark (rustc 1.99.1, aarch64) on 2026-11-20, private `clockworklabs/spacetime:v2.14.1` server. Main `3ed22a74` (its module is battle-views' `a407be01`, with status-parts): three `--genesis-only` rounds of 193–210 s, five publishes in a row. Main `bfbbc079` (overlay-validate-once on top: a seed's laws overlay is validated once, about 24.8 × 10⁹ less on both Cullet seeds): one gate run with the generation cases, 182 s.
 
-| Seed | `init_fuel` per run | Share of budget | Headroom | Result |
+| Seed | `init_fuel` per run, `3ed22a74` | `bfbbc079` | Share of budget (`bfbbc079`) | Result under the default rules |
 | --- | --- | --- | --- | --- |
-| island | 118,734,992,179 | 98.95% | 1.05% | fails: over 90%, no baseline |
-| cullet | 91,829,020,112 | 76.52% | 23.48% | passes, warns |
-| cullet-laws | 62,997,679,071–109 | 52.50% | 47.50% | passes, warns |
-| plan-test | 26,997,746,345 | 22.50% | 77.50% | passes |
-| world | 17,614,179,252 | 14.68% | 85.32% | passes |
+| island | 118,734,992,179 | 118,734,992,179 | 98.95% (1.05% headroom) | fails: over 90%, no baseline |
+| cullet | 91,829,020,112 | 66,994,189,556 | 55.83% | passes, warns |
+| cullet-laws | 62,997,679,071–147 | 38,169,278,708 | 31.81% | passes |
+| plan-test | 26,997,746,345 | 26,997,746,345 | 22.50% | passes |
+| world | 17,614,179,252 | 17,614,179,252 | 14.68% | passes |
 
 TODO (Spark): record the island's baseline for rustc 1.99.1 from a `--genesis-only` run on main once the status-parts revert is on main. Until then, every gated merge on the Spark fails on the island. Dev-box records its own for its rustc.
 
