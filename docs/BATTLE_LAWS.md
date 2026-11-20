@@ -7,6 +7,10 @@ Status: prototypes, measured once each, 2026-11-20. Branch `battle-laws` (dev-bo
 ## 1. How the options were measured
 
 **Fixture.**
+- Battle: `spawn_battle`'s fighters attack the nearest person, residents included (the laptop's stills lost 36 residents in one run). For stills and any run where bystanders should live, `battle_viewers.py --sides N` uses the new fixture reducer `spawn_battle_sides(n, sides)`: the fighters are in N sides (communities `Side A`, `Side B`, …, names `A12`, `B7`) with an "enemy" stance record each way between sides, and target the nearest person of an enemy side.
+  - Proved on a Cullet world, 200 fighters in 2 sides for 60 s: 671 skill uses, none at a resident or at the fighter's own side, and none of the 64 residents died.
+  - The side is the fighter's membership, so a client can tint by side.
+  - The measurements below used `spawn_battle` (bystanders could be attacked).
 - Host and server: dev-box, its own server `sg-stdb` (SpacetimeDB 2.14.1), one core type, no pinning.
 - Module: Cullet, built from this branch (`bl-cullet`).
 - `living/tools/battle_viewers.py`: 200 AI fighters, the viewers placed while paused with the battle spawned after placing, and a keep-alive every 0.5 s so no viewer dies.
@@ -16,6 +20,15 @@ Status: prototypes, measured once each, 2026-11-20. Branch `battle-laws` (dev-bo
   - **216 viewers on the 26–32 m ring**: about 59 each, about 12,700 pairs.
 - 20 s warm-up, 60 s window, server metrics only (L0, no spans).
 - The 1-minute load was below 4 at every start. No viewer died in any window.
+
+**Sight is play's.** The fixture's module has the Cullet seed compiled in, and Cullet's own laws turn on everything play uses (`living/seeds/worlds/cullet/laws.rhai`): facing sight (`fov_on`), cover (`cover_sight_on`) and gaze (`gaze_on`). A viewer that sends no gaze is at Middle (no `applied_gaze` row), as `gate-load`'s viewers are. So the counts below are play's sight.
+
+They differ from a still by placement:
+- **The 16 viewers on the 10 m ring** stand inside the battle's edge on open ground, with fighters all round. About 90 creatures are in sight each.
+- **The 216 viewers on the 26–32 m ring** see about 59 each.
+- **The laptop's stills** (`battle-stills` `718ebcf4b`): a still player at the battle's edge, facing it, perceived about 50 of 200 with the cap off. A terrace wall and its facing cut the rest.
+
+So the 216 ring is the "player at the edge" case, and the 10 m ring a player in the battle. Per-pair figures below are over each ring's own pairs.
 
 **One run per arm.** Two base runs of the same fixture varied by ±15–20 ms/s at 16 viewers, so a difference smaller than that is not a result. The repeats (two more runs per arm, at both densities, interleaved) are for Sol after the 25th.
 
@@ -27,7 +40,14 @@ Status: prototypes, measured once each, 2026-11-20. Branch `battle-laws` (dev-bo
 
 ### (a) A bounded far tier: at most N creatures seen at once (`far_cap`)
 
-**What it does.** A player's sweep keeps at most N of the creatures in sight: first whoever is engaged with it (fighting it, aimed at it), then the nearest. The rest are neither seen nor heard by that player until they come within the N nearest. Prototype value: N = 40.
+**What it does.** A player's sweep keeps at most N of the creatures in sight: first whoever is engaged with it (fighting it, aimed at it), then the nearest. The rest are neither seen nor heard by that player until they come within the N nearest. Prototype value: N = 40. The cap is exact: a player never perceives more than N (the laptop's stills: 40 of about 50 at cap 40, 25 at cap 25).
+
+**What it counts: every creature in sight,** fighters and bystanders alike (residents, animals). That is the decision here, not "fighters first":
+- the cost follows every perceived pair, whoever they are;
+- a crowd of onlookers costs what a crowd of fighters does;
+- fighters first would need a ranking rule (who is a fighter now) in the sweep.
+
+The laptop saw what it means: at its spot, cap 40 gave 39 fighters (one resident in sight took a place), and cap 25 gave 24. If the owner wants fighters ranked first after the nearest engaged ones, that is a small change to the sweep's order, not to the cap.
 
 **What changes for a player.** In a crowd larger than N, the farther ones are not drawn at all. A player in a 200-fighter battle sees the 40 nearest (and anyone attacking it), and the far edge of the battle is empty ground. Its own fight, and those near it, are unchanged and fresher than before (below). The AI is untouched: a mind's scene, its sight and its memories are unchanged. That asymmetry is a rules question: the same rules for players and AI. The aggregated alternative below would keep a far crowd visible.
 
@@ -54,6 +74,8 @@ Status: prototypes, measured once each, 2026-11-20. Branch `battle-laws` (dev-bo
 | Per pair (µs/s, over the base's pairs) | about −16 | about −5 (at 23–28 ticks/s) |
 | Ticks/s | 58.9 → 58.9 | 23.2 → 28.4 (+22%) |
 | Freshness p50/p90/p95 (ms) | 35/100/149 → 25/44/52 | 72/440/801 → 53/110/351 |
+
+**Live-tunable.** Every prototype law is value-only (`law_override`, docs/LAW_OVERRIDE.md), like the delivery laws: `set_world_law far_cap 30` takes effect at the next tick with no install (the stills' first runs took a full install, about 5 s, each). Tested in `law_override_check::the_battle_laws_are_value_only`.
 
 **Risk.**
 - The far edge of a battle disappears for players. A player can no longer judge a big fight's size from afar, and a newcomer walking in sees the crowd fill in as it nears.

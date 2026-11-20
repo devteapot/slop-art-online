@@ -153,7 +153,7 @@ ADMIN = {
     'place_structure': [0, 'shelter'], 'set_behavior': [0, '{"wait":30}'],
     # Scene setup: a resource node beside a character (2026-11-11, goods-1).
     'place_resource': [0, 'tree', 0.0, 0.0, 0.0, 0],
-    'place_near': [0, 0], 'seed_communities': [], 'spawn_battle': [0],
+    'place_near': [0, 0], 'seed_communities': [], 'spawn_battle': [0], 'spawn_battle_sides': [0, 2],
     'place_at': [0, 0.0, 0.0], 'spawn_skirmish': [0, 0.0], 'set_weather': [False, 0],
     'spawn_newcomer': ['probe'],
     # A floor module's runtime seed (floor.rs, admin only).

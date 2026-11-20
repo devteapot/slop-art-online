@@ -3456,7 +3456,8 @@ fn decode_senses(d: Dynamic, reach: &Reach, dark: f32, band: Option<(crate::sigh
 /// What a value-only law's value reaches beyond the laws in force (see [`VALUE_ONLY`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ValueOnly {
-    /// Read by the authority's frames alone (`frame.rs`): nothing derived, the next tick reads it.
+    /// Read live by the authority each tick (its frames, sweeps and wakes): nothing derived, the
+    /// next tick reads it. The delivery laws, and the battle laws' prototypes (docs/BATTLE_LAWS.md).
     Delivery,
     /// The cover policy: the authority's `cover_law` row and its cover mask (`living_rules::cover`).
     Cover,
@@ -3471,7 +3472,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 11] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 16] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3480,6 +3481,14 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 11] = [
     ("characters_table_on", ValueOnly::Delivery),
     // views step 2: a player's combat feed as event rows (`combat.rs`, `combat_feed`).
     ("combat_feed_on", ValueOnly::Delivery),
+    // The battle laws' prototypes (docs/BATTLE_LAWS.md), live-tunable: the sweeps read `far_cap`
+    // and `crowd_sweep_n`, the frames `crowd_frame_max_ms` and `far_motion_tol_m`, the wakes
+    // `fighter_bystander_wakes`, each at its next tick.
+    ("far_cap", ValueOnly::Delivery),
+    ("crowd_sweep_n", ValueOnly::Delivery),
+    ("crowd_frame_max_ms", ValueOnly::Delivery),
+    ("fighter_bystander_wakes", ValueOnly::Delivery),
+    ("far_motion_tol_m", ValueOnly::Delivery),
     ("cover_sight_on", ValueOnly::Cover),
     ("cover_eye_height_m", ValueOnly::Cover),
     ("cover_brush_on", ValueOnly::Cover),

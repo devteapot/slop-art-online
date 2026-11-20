@@ -340,6 +340,15 @@ def privacy_final(pr, done, out, n):
     (out / f"privacy-v{n}.json").write_text(json.dumps(pr, indent=1) + "\n")
 
 
+def spawn(db, token, a):
+    """The battle: `spawn_battle`, or with `--sides N` the fixture `spawn_battle_sides` (fighters in
+    N sides that fight each other and leave bystanders be; docs/BATTLE_LAWS.md)."""
+    if a.sides:
+        lc.call(db, "spawn_battle_sides", [a.fighters, a.sides], token)
+    else:
+        lc.call(db, "spawn_battle", [a.fighters], token)
+
+
 def one(a, n, out):
     stamp = time.strftime("%Y%m%d-%H%M%S")
     db = f"verify-lookcost-{a.label}-v{n}-{stamp}"
@@ -359,7 +368,7 @@ def one(a, n, out):
             name, value = law.split("=", 1)
             lc.call(db, "set_world_law", [name, value], token)
         if not a.battle_after_placing:
-            lc.call(db, "spawn_battle", [a.fighters], token)
+            spawn(db, token, a)
         land = lc.sql(db, "SELECT * FROM land", token)[0]
         site = tuple(float(x) for x in a.site.split(",")) if a.site else (land["arrive_x"], land["arrive_y"] - 20.0)
         res["site"], res["arrival"] = list(site), [land["arrive_x"], land["arrive_y"]]
@@ -389,7 +398,7 @@ def one(a, n, out):
             if a.battle_after_placing:
                 # The viewers stand on their ring before the fighters appear (none is killed at the
                 # arrival point, 20 m from the battle, while it waits to be placed).
-                lc.call(db, "spawn_battle", [a.fighters], token)
+                spawn(db, token, a)
             load.send("placed")
             ready = load.expect("ready", 900)
             res["held_at_ready"] = ready.get("held")

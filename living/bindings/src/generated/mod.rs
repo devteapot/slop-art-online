@@ -349,6 +349,7 @@ pub mod slow_timer_type;
 pub mod slumber_table;
 pub mod slumber_type;
 pub mod spawn_battle_reducer;
+pub mod spawn_battle_sides_reducer;
 pub mod spawn_crowd_reducer;
 pub mod spawn_newcomer_reducer;
 pub mod spawn_skirmish_reducer;
@@ -732,6 +733,7 @@ pub use slow_timer_type::SlowTimer;
 pub use slumber_table::*;
 pub use slumber_type::Slumber;
 pub use spawn_battle_reducer::spawn_battle;
+pub use spawn_battle_sides_reducer::spawn_battle_sides;
 pub use spawn_crowd_reducer::spawn_crowd;
 pub use spawn_newcomer_reducer::spawn_newcomer;
 pub use spawn_skirmish_reducer::spawn_skirmish;
@@ -971,6 +973,10 @@ pub enum Reducer {
     SpawnBattle {
         n: u32,
     },
+    SpawnBattleSides {
+        n: u32,
+        sides: u32,
+    },
     SpawnCrowd {
         n: u32,
         minded: bool,
@@ -1051,6 +1057,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SetWeather { .. } => "set_weather",
             Reducer::SetWorldLaw { .. } => "set_world_law",
             Reducer::SpawnBattle { .. } => "spawn_battle",
+            Reducer::SpawnBattleSides { .. } => "spawn_battle_sides",
             Reducer::SpawnCrowd { .. } => "spawn_crowd",
             Reducer::SpawnNewcomer { .. } => "spawn_newcomer",
             Reducer::SpawnSkirmish { .. } => "spawn_skirmish",
@@ -1360,6 +1367,12 @@ impl __sdk::Reducer for Reducer {
             }
             Reducer::SpawnBattle { n } => {
                 __sats::bsatn::to_vec(&spawn_battle_reducer::SpawnBattleArgs { n: n.clone() })
+            }
+            Reducer::SpawnBattleSides { n, sides } => {
+                __sats::bsatn::to_vec(&spawn_battle_sides_reducer::SpawnBattleSidesArgs {
+                    n: n.clone(),
+                    sides: sides.clone(),
+                })
             }
             Reducer::SpawnCrowd { n, minded } => {
                 __sats::bsatn::to_vec(&spawn_crowd_reducer::SpawnCrowdArgs {
