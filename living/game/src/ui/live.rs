@@ -84,10 +84,13 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     if net.status == crate::net::Status::Live {
         last.was_live = true;
     }
-    let link = (last.was_live && net.status != crate::net::Status::Live).then(|| match net.status {
+    // A world still being made (a reconnect into one: staged genesis, `genesis.rs`) says how far
+    // it is, never a failure.
+    let preparing = net.genesis.text(now).map(|(title, line)| if line.is_empty() { title } else { format!("{title} {}", line.lines().next().unwrap_or("")) });
+    let link = preparing.filter(|_| last.was_live).or_else(|| (last.was_live && net.status != crate::net::Status::Live).then(|| match net.status {
         crate::net::Status::Offline => "Connection lost · reconnecting…".to_string(),
         _ => "Reconnecting…".to_string(),
-    });
+    }));
     let Some(conn) = net.conn.as_ref() else {
         *model = HudModel { shown: true, now, link, ..default() };
         return;
@@ -95,7 +98,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     model.link = link;
     // Who I perceive, as I perceive them (name or label, health as I can tell it), and my own
     // characters (the dead one stays for the death screen).
-    let chars: HashMap<u32, SeenCharacter> = conn.db.seen_characters().iter().map(|c| (c.id, c)).collect();
+    let chars: HashMap<u32, SeenCharacter> = crate::net::characters(conn).into_iter().map(|c| (c.id, c)).collect();
     let mine: HashMap<u32, Character> = conn.db.my_characters().iter().map(|c| (c.id, c)).collect();
     if last.labels.len() > 4096 {
         last.labels.clear();

@@ -12,7 +12,6 @@ use crate::net::Net;
 use crate::world::Scene;
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
-use living_bindings::*;
 use living_rules::combat::seen;
 use std::collections::HashMap;
 
@@ -162,7 +161,7 @@ fn put(commands: &mut Commands, mesh: &Handle<Mesh>, mat: &Handle<StandardMateri
 #[allow(clippy::too_many_arguments)]
 fn spawn(mut commands: Commands, a: Res<Assets3>, c: Res<Combat>, cards: Res<Cards>, net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<crate::island::Island>>, mut flights: ResMut<Flights>, time: Res<Time>) {
     let now = time.elapsed_secs();
-    let kinds: HashMap<u32, String> = net.conn.as_ref().map(|conn| c.fresh.iter().flat_map(|e| [e.row.actor, e.row.target]).filter_map(|id| conn.db.seen_characters().id().find(&id).map(|c| (id, c.kind))).collect()).unwrap_or_default();
+    let kinds: HashMap<u32, String> = net.conn.as_ref().map(|conn| c.fresh.iter().flat_map(|e| [e.row.actor, e.row.target]).filter_map(|id| crate::net::find_character(conn, id).map(|c| (id, c.kind))).collect()).unwrap_or_default();
     for e in &c.fresh {
         let r = &e.row;
         let at2 = Vec2::new(r.x, r.y);

@@ -1,0 +1,26 @@
+{
+ "woman": {
+  "total": 29748,
+  "total_no_lines": 29404,
+  "shells": 344,
+  "eyeline_primitive": 864
+ },
+ "man": {
+  "total": 30862,
+  "total_no_lines": 30518,
+  "shells": 344,
+  "eyeline_primitive": 750
+ },
+ "elder": {
+  "total": 27722,
+  "total_no_lines": 27378,
+  "shells": 344,
+  "eyeline_primitive": 750
+ },
+ "girl": {
+  "total": 26104,
+  "total_no_lines": 25760,
+  "shells": 344,
+  "eyeline_primitive": 816
+ }
+}

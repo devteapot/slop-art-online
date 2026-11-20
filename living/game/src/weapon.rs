@@ -130,7 +130,7 @@ pub fn update(
         let live: HashSet<u64> = conn.db.my_experience().iter().map(|e| e.id).collect();
         w.told.retain(|id| live.contains(id));
     }
-    let now: HashSet<u32> = conn.db.seen_characters().iter().filter(|c| c.id != me && crate::combat::hostile_to_me(conn, c.id, me, now_ms)).map(|c| c.id).collect();
+    let now: HashSet<u32> = crate::net::characters(conn).into_iter().filter(|c| c.id != me && crate::combat::hostile_to_me(conn, c.id, me, now_ms)).map(|c| c.id).collect();
     let fresh = now.iter().copied().find(|id| !w.hostile.contains(id));
     w.hostile = now;
     let said = |e: &Experience| format!("{}. Your weapon is drawn.", crate::ui::label(e.text.trim().trim_end_matches('.')));

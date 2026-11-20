@@ -15,7 +15,9 @@ touches behaviour, these cases with the fake model only:
                  security, on and with the `cue_transport_on` law off; near_tier.py: whoever is
                  engaged with a player is first in its near tier), motion_tables (motion_tables.py: the
                  public copy tables, motion and projections, reach only their viewer under row-level
-                 security, and each law off empties its table at once); one default-seed world, the SDK probe
+                 security, and each law off empties its table at once); one default-seed world, the SDK probe;
+                 copy_privacy (battle_viewers.py --privacy: the same at battle density, 16 viewers;
+                 only when a merge touches COPY_PRIVACY_PATHS)
   living-mind    mind-unit: its cargo tests (`just living-check` builds the mind, tests only the rules)
   verify-generation  generation-default, generation-island, generation-cullet (generation.py --smoke:
                  its per-world checks, the seed's laws composed over the shipped script among them,
@@ -109,7 +111,15 @@ BEHAVIOUR = ("living/authority/", "living/rules/", "living/scripts/", "living/mi
              "living/tools/install_script.py", "living/tools/stdb", "living/tools/verify_mechanics.py",
              ".agents/skills/verify/scripts/", ".agents/skills/verify-core/scripts/",
              ".agents/skills/verify-minds/scripts/", ".agents/skills/verify-player/scripts/",
-             ".agents/skills/verify-llm/scripts/", ".agents/skills/verify-client/scripts/")
+             ".agents/skills/verify-llm/scripts/", ".agents/skills/verify-client/scripts/",
+             "living/tools/battle_viewers.py", "living/tools/gate_load/")
+
+# copy_privacy runs only when a merge touches what decides who receives a copy row: the copies and
+# frames (frame.rs, where the row-level-security filters are), perception, the table definitions,
+# and the drivers that prove it (GC, 2026-11-20).
+COPY_PRIVACY_PATHS = ("living/authority/src/frame.rs", "living/authority/src/perception.rs", "living/authority/src/tables.rs",
+                      "living/tools/battle_viewers.py", "living/tools/gate_load/", ".agents/skills/verify-client/scripts/probe/",
+                      ".agents/skills/verify-client/scripts/motion_tables.py", ".agents/skills/verify-client/scripts/cues.py")
 
 # Each case: its surface skill and the world group it runs in. Known flakes are from the skills'
 # validation records (each skill's references/validation/); they get the same one retry, never a pass.
@@ -135,6 +145,10 @@ CASES = {
     "cues":         {"skill": "verify-client", "group": "client"},
     # The same for the public motion copies (battle-views, `seen_body_copy`).
     "motion_tables": {"skill": "verify-client", "group": "client"},
+    # The same at battle density (copy-privacy): 16 viewers round a 60-fighter battle, each
+    # viewer's every copy row its own, the side probes, the paused table-equals-view comparison
+    # and the kill switch (battle_viewers.py --privacy). Only for merges touching `paths`.
+    "copy_privacy": {"skill": "verify-client", "group": "privacy", "paths": COPY_PRIVACY_PATHS},
     # verify-generation's light smoke (generation.py --smoke): its per-world checks, the seed's laws
     # composed over the shipped script among them, one case per seed family. The first pass reads
     # the genesis fuel worlds before they are deleted; a retry or main's run launches its own.
@@ -740,6 +754,8 @@ class Runner:
                     code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/motion_tables.py", "--run", run], root, ev / "motion_tables.txt", 300)
                     res["motion_tables"] = (code == 0, str(ev / "motion_tables.json"), time.time() - t0)
                 return res
+            if group == "privacy":
+                return {"copy_privacy": self.copy_privacy(root, run, ev, log, t0)}
             if group == "player":
                 if self.sh([sys.executable, V, "player", "--run", run, "join", "GateTester"], root, log, 120):
                     return {"combat": (False, f"{log} (join failed)", time.time() - t0)}
@@ -760,6 +776,27 @@ class Runner:
             return res
         finally:
             self.cleanup(root, run, log)
+
+    def copy_privacy(self, root, run, ev, log, t0):
+        """battle_viewers.py --privacy at 16 viewers on this group's island module (its own fresh
+        database, from the launched run's module copy): (ok, evidence, seconds)."""
+        probe = ".agents/skills/verify-client/scripts/probe/Cargo.toml"
+        env_dir = str(Path(root) / ".local/living/verify/target-client")
+        if self.sh(["env", f"CARGO_TARGET_DIR={env_dir}", "cargo", "build", "--locked", "--manifest-path", probe], root, log, 1500):
+            return (False, f"{log} (probe build failed)", time.time() - t0)
+        if self.sh(["cargo", "build", "--release", "--manifest-path", "living/tools/gate_load/Cargo.toml",
+                    "--target-dir", self.env["CARGO_TARGET_DIR"]], root, log, 1500):
+            return (False, f"{log} (gate-load build failed)", time.time() - t0)
+        wasm = load_json(Path(root) / ".local/living/verify" / run / "state.json", {}).get("wasm")
+        if not wasm:
+            return (False, f"{log} (no module copy)", time.time() - t0)
+        code = self.sh([sys.executable, "living/tools/battle_viewers.py", "--label", f"gate-{run_part(run)[-20:]}", "--wasm", wasm,
+                        "--load", str(Path(self.env["CARGO_TARGET_DIR"]) / "release/gate-load"), "--viewers", "16", "--fighters", "60",
+                        "--seconds", "30", "--warmup", "10", "--tiers", "--cues", "--motion-tables", "--character-tables",
+                        "--law", "motion_tables_on=true", "--law", "characters_table_on=true", "--keep-alive", "0.5",
+                        "--paused-placement", "--battle-after-placing", "--ring", "26,32", "--privacy", "--out", str(ev / "privacy")],
+                       root, ev / "copy_privacy.txt", 1200)
+        return (code == 0, str(ev / "privacy" / "privacy-v16.json"), time.time() - t0)
 
     def sweep(self):
         """Delete any database of this gate run still live (a driver that died before its cleanup)."""
@@ -910,6 +947,12 @@ def cmd_run(a):
     bad = [c for c in cases if c not in CASES]
     if bad:
         raise SystemExit(f"scene-gate: unknown case {bad}; cases: {ORDER}")
+    if not a.cases:
+        # A case with `paths` runs only when the merge touches one of them (named with --cases, always).
+        unneeded = [c for c in cases if CASES[c].get("paths") and not any(p.startswith(CASES[c]["paths"]) for p in paths)]
+        if unneeded:
+            say(f"not needed for {base[:10]}..{head[:10]} (none of their paths touched): {', '.join(unneeded)}")
+            cases = [c for c in cases if c not in unneeded]
     dirty = git("status", "--porcelain", "--untracked-files=no")
     if dirty:
         say(f"note: the tree has uncommitted changes; they are what is tested:\n{dirty}")

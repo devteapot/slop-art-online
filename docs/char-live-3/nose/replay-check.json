@@ -1,0 +1,127 @@
+{
+  "only_changed_glb_buffer_view": 41,
+  "nose_atlas_changed_texels": 10568,
+  "atlas_changed_bounds_xy": [
+    444,
+    685,
+    582,
+    789
+  ],
+  "approved_eye_pixel_deltas": {
+    "portrait": [
+      {
+        "box_xyxy": [
+          738,
+          356,
+          792,
+          393
+        ],
+        "changed_pixels": 13,
+        "maximum_channel_delta": 1
+      },
+      {
+        "box_xyxy": [
+          822,
+          364,
+          887,
+          400
+        ],
+        "changed_pixels": 119,
+        "maximum_channel_delta": 1
+      }
+    ],
+    "-35:8:0.36:0.88": [
+      {
+        "box_xyxy": [
+          770,
+          356,
+          837,
+          391
+        ],
+        "changed_pixels": 5,
+        "maximum_channel_delta": 1
+      },
+      {
+        "box_xyxy": [
+          865,
+          365,
+          897,
+          395
+        ],
+        "changed_pixels": 19,
+        "maximum_channel_delta": 1
+      }
+    ]
+  },
+  "approved_rear_changed_pixels": {
+    "near_180": 0,
+    "middle_180": 0,
+    "180:8:0.36:0.88": 0,
+    "180:8:0.75:0.68": 0
+  },
+  "volume": {
+    "spread": 1.8700001239776611,
+    "crown_lift": 0.12436522243664064,
+    "rear_depth": 0.5191808751459246
+  },
+  "colour_checks": 20,
+  "expression_changed_pixels": {
+    "Fcl_EYE_Close": 4316,
+    "Fcl_EYE_Close_L": 2339,
+    "Fcl_EYE_Close_R": 1980,
+    "Fcl_EYE_Joy": 6450,
+    "Fcl_MTH_A": 6077,
+    "Fcl_MTH_I": 5360,
+    "Fcl_MTH_U": 5590,
+    "Fcl_MTH_E": 5733,
+    "Fcl_MTH_O": 7011,
+    "Fcl_MTH_Fun": 1753,
+    "Fcl_MTH_Sorrow": 895,
+    "Fcl_BRW_Angry": 947,
+    "Fcl_BRW_Sorrow": 958,
+    "Fcl_BRW_Surprised": 1286,
+    "Fcl_BRW_Fun": 981
+  },
+  "neutral_return_changed_pixels": 0,
+  "factory_artifacts_sha256": {
+    "own-cora-live.glb": "5e40cf5b742cd0aa5636b6c67746d4415fa895f6feb9052192409e8cc3160bf6",
+    "own-cora-live.hair.png": "8a0d72abaefafc0f0f661b4b19513d38a8ad2b6e93a3f8c781e399b58b29d2fa",
+    "own-cora-live.face.png": "f9fff170e2b9d7ef8a3b28a576e5b91b22f29167e2ffaced5d862d59d07143dc",
+    "own-cora-live.calibration.json": "471e3655afccb12eea5236f69e057ff98520bc1f8bde8657dbdf3de5b155d37f"
+  },
+  "factory_expression_changed_pixels": {
+    "eye-neutral": 0,
+    "eye-Fcl_EYE_Close": 0,
+    "eye-Fcl_EYE_Close_L": 0,
+    "eye-Fcl_EYE_Close_R": 0,
+    "eye-Fcl_EYE_Joy": 0,
+    "eye-Fcl_MTH_A": 0,
+    "eye-Fcl_MTH_I": 0,
+    "eye-Fcl_MTH_U": 0,
+    "eye-Fcl_MTH_E": 0,
+    "eye-Fcl_MTH_O": 0,
+    "eye-Fcl_MTH_Fun": 0,
+    "eye-Fcl_MTH_Sorrow": 0,
+    "eye-Fcl_BRW_Angry": 0,
+    "eye-Fcl_BRW_Sorrow": 0,
+    "eye-Fcl_BRW_Surprised": 0,
+    "eye-Fcl_BRW_Fun": 0,
+    "eye-returned": 0,
+    "eye-three-quarter": 0
+  },
+  "factory_daylight_changed_pixels": {
+    "portrait": 0,
+    "near": 0,
+    "portrait45": 0,
+    "near_180": 0,
+    "middle_180": 0,
+    "near_135": 0,
+    "middle_135": 0,
+    "middle_0": 0,
+    "90:8:0.36:0.88": 0,
+    "180:8:0.36:0.88": 0,
+    "-35:8:0.36:0.88": 0,
+    "0:5:1.14:0.50": 0,
+    "180:8:0.75:0.68": 0
+  }
+}

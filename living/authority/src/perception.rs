@@ -1063,9 +1063,12 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
     let mut health = HashMap::new();
     let mut swept = Vec::with_capacity(due.len());
     for (id, viewer) in due {
+        // While profiling with detail: each viewer's sweep whole (docs/COMBAT_PHASE.md).
+        let _detail = common::detail_span("sweep.one");
         sweep_one(ctx, id, viewer, &w, &map, now, Some(&mut health));
         swept.push(id);
     }
+    common::diag(|| "sweep:viewers", swept.len() as u64);
     swept
 }
 
@@ -1093,6 +1096,7 @@ pub fn sweep_now(ctx: &ReducerContext, id: u32, viewer: Identity, now: u64) {
 /// One player's sweep. `health` is the tick's shared reading of health by creature, when the
 /// sweep may keep what it worked out (`KEPT`, in the tick); `None` outside the tick.
 fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &Map, now: u64, health: Option<&mut HashMap<u32, Option<(f32, f32)>>>) {
+    let setup = common::detail_span("sweep.setup");
     let Some(b) = ctx.db.body().id().find(id) else { return };
     let Some(me) = ctx.db.character().id().find(id) else { return };
     let here = pos(&b, now);
@@ -1111,11 +1115,14 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     // in that direction (the field, when the world's law gives one), the light on it, and a
     // clear line. A creature already seen keeps the margins (`keep_seen_m`, the field's angle).
     let (gather, lit) = common::gather_radius(ctx, &senses, keep);
+    drop(setup);
     let sight_span = common::detail_span("sight.player_candidates");
+    let mut candidates = 0u64;
     for c in common::creatures_near(ctx, here, gather, now) {
         if c.id == id {
             continue;
         }
+        candidates += 1;
         let glow = if lit { common::glow_of(ctx, c.id, w, now) } else { 0.0 };
         let kept = had.contains(&c.id).then_some(keep);
         if living_rules::sight::sees(map, here, heading, c.pos, c.dist, &senses, glow, kept) {
@@ -1124,6 +1131,8 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         }
     }
     drop(sight_span);
+    common::diag(|| "sweep:candidates", candidates);
+    common::diag(|| "sweep:seen", seen.len() as u64);
     // Sight-scoped things, in the same pass, with the same senses, facing and map (scoped
     // worlds, docs/FEED_SCOPING.md).
     if crate::store::sighted(ctx) {
@@ -1131,11 +1140,15 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         crate::scope::sweep(ctx, &me, viewer, &look, scheduled, now);
     }
     if scheduled && senses.gaze.is_some() {
+        let _detail = common::detail_span("sweep.attention");
         crate::attention::project(ctx, id, &senses, now);
     }
+    let hearing = common::detail_span("sweep.hear");
     hear(ctx, id, viewer, here, &seen, now);
+    drop(hearing);
     // What it remembers of resources here (talk-places): the look a mind takes at its noticing.
     crate::stock::look(ctx, &me, here, || sight, now);
+    let sight_rows = common::detail_span("sweep.rows");
     for p in &rows {
         if !seen.contains(&p.body) {
             ctx.db.perceived().id().delete(p.id);
@@ -1154,7 +1167,12 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
             crate::frame::new_motion(ctx, id, viewer, &b);
         }
     }
+    drop(sight_rows);
+    let scene = common::detail_span("sweep.scene");
     crate::frame::scene(ctx, id, viewer, &seen, &near, now);
+    drop(scene);
+    // The projections, kept or afresh, to the end of the sweep.
+    let _projecting = common::detail_span("sweep.project");
     // The projections follow: a row per creature in the scene (itself included), projected
     // when it comes into sight, and again only when an input of the law changed: whom the
     // viewer knows (its knowledge epoch, or this instance has not projected it yet), a reveal

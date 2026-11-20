@@ -55,10 +55,11 @@ ASSETS = REPO / "living" / "game" / "assets"
 SLOTS = {"hair", "skin", "face", "eyes", "tint", "cloth"}
 SWATCHES = ("shade", "mid", "light", "highlight")
 INK_KEYS = ("ink", "ink_px", "ink_range", "ink_fade_px")
-HAIR_KEYS = set(SWATCHES) | {"t1", "t2", "edge", "highlight_feather", "highlight_map"} | set(INK_KEYS)
+# v1.3 (docs/HANDMADE_COMPOSED.md): the relative palette and the declared lock-ink density.
+HAIR_KEYS = set(SWATCHES) | {"t1", "t2", "edge", "highlight_feather", "highlight_map"} | set(INK_KEYS) | {"palette", "ref", "anchors", "ink_m_uv"}
 SHOTS = ("portrait", "near", "portrait45")
 FLOAT, SCALAR = 5126, "SCALAR"
-INK_FIELDS = {"color", "width", "px", "min_px", "range", "fade_px", "map", "taper"}
+INK_FIELDS = {"color", "width", "px", "min_px", "range", "fade_px", "map", "taper", "ref", "m_uv"}
 NEAR_M_PX = 0.00805  # a pixel's metres at the Near stop (toon.wesl INK_NEAR_M_PX)
 
 
@@ -200,6 +201,10 @@ def audit(glb):
     if slop is None:
         notes.append("no slop extras on the scene: the client draws this file as before (not a hand-made character)")
         return errors, warns, notes, facts
+    import composed_audit  # contract v1.3: a composed type or style file
+
+    if composed_audit.is_composed(slop):
+        return composed_audit.composed_audit(sys.modules[__name__], glb, j, binary, stem, slop)
     if slop.get("contract") != 1:
         errors.append(f"scene: slop.contract is {slop.get('contract')!r}, not 1")
     if slop.get("character") != "handmade":
@@ -741,13 +746,29 @@ def measure(targets_path, shots, profiles, inks=None, floor_shots=None):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("glb", help="the file, as a path under living/game/assets (view/<file>.glb)")
+    ap.add_argument("glb", nargs="?", help="the file, as a path under living/game/assets (view/<file>.glb, or a composed type or style file under lookdev/)")
+    ap.add_argument("--pages", metavar="LOOKDEV", help="audit the shared hair-mask and ink pages (contract v1.3) of LOOKDEV (a folder under the assets, e.g. lookdev) against their manifests, and exit")
     ap.add_argument("--targets", help="patch targets (default <stem>.calibration.json beside the file)")
     ap.add_argument("--out")
     ap.add_argument("--binary", help="the game client (default $CARGO_TARGET_DIR or living/target, release)")
     ap.add_argument("--no-run", action="store_true", help="audit only")
     ap.add_argument("--also", action="append", default=[], help="another view shot, e.g. middle@0")
     a = ap.parse_args()
+    if a.pages:
+        import composed_audit
+
+        errors, warns, facts = composed_audit.pages(sys.modules[__name__], a.pages)
+        print(f"calibrate: pages of {a.pages}")
+        for k, v in facts.items():
+            print(f"  {k}: {v}")
+        for w in warns:
+            print(f"  WARN: {w}")
+        for e in errors:
+            print(f"  ERROR: {e}")
+        print(f"  pages audit: {len(errors)} error(s), {len(warns)} warning(s)")
+        sys.exit(1 if errors else 0)
+    if not a.glb:
+        ap.error("a file, or --pages")
     glb = a.glb
     if os.path.isabs(glb):
         glb = os.path.relpath(glb, ASSETS)

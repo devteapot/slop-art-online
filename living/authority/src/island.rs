@@ -26,6 +26,10 @@ use spacetimedb::{ReducerContext, Table};
 pub struct Hosted {
     pub map: Map,
     pub info: LandInfo,
+    /// Cover geometry (docs/COVER_SIGHT.md, "Cover geometry"), only for a world whose cover law
+    /// is on at creation: the ground sampled at every tile centre (by `generate`, for a world
+    /// created in one call; a staged one samples it band by band from the land it keeps), and
+    /// the tree and cliff candidates of the hosted tiles. Both empty when cover is off.
     pub cover_ground: std::sync::Arc<[i16]>,
     pub cover_candidates: Vec<u32>,
     pub settlements: Vec<Planned>,
@@ -121,20 +125,29 @@ pub fn params_of(m: &SeedMap) -> Result<(u32, LandParams), String> {
     Ok((size, params))
 }
 
-/// Generate the land in this call and plan what the world keeps of it.
-pub fn generate(seed: u64, m: &SeedMap) -> Result<Hosted, String> {
+/// Generate the land in this call and plan what the world keeps of it; with its cover geometry
+/// when `cover` (the world's cover law is on): the ground is sampled here, while the land exists.
+pub fn generate(seed: u64, m: &SeedMap, cover: bool) -> Result<Hosted, String> {
     let (size, params) = params_of(m)?;
     let land = {
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("init.land.generate");
         landgen::generate(seed, size, &params)
     };
-    let _t = spacetimedb::log_stopwatch::LogStopwatch::new("init.land.host");
-    host(seed, m, &land, &params)
+    let mut h = {
+        let _t = spacetimedb::log_stopwatch::LogStopwatch::new("init.land.host");
+        host(seed, m, &land, &params, cover)?
+    };
+    if cover {
+        let _cover = spacetimedb::log_stopwatch::LogStopwatch::new("genesis.cover_ground");
+        h.cover_ground = living_rules::cover::ground(&land);
+    }
+    Ok(h)
 }
 
 /// Plan what the world keeps of a generated land: the hosted tiles, digests, settlements and
-/// lots. Refused when a planned settlement has a building whose door no one can reach.
-pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -> Result<Hosted, String> {
+/// lots. Refused when a planned settlement has a building whose door no one can reach. With
+/// `cover`, the hosted tiles' cover candidates too (the ground is the caller's: it needs the land).
+pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams, cover: bool) -> Result<Hosted, String> {
     let size = land.size;
     let (map, hosted) = host::hosted_map(land, params);
     let stranded = living_rules::settle::stranded_doors(land, &map, &hosted.reachable);
@@ -267,9 +280,8 @@ pub fn host(seed: u64, m: &SeedMap, land: &landgen::Land, params: &LandParams) -
     let resources = land.plans.iter().flat_map(|p| p.resources.iter().cloned()).collect();
     // A household's own structures stand inside its lot, within reach of where one can stand.
     let structures = living_rules::settle::placed_structures(land, &map, &hosted.reachable).map_err(|e| format!("map.params.plans: {e}"))?;
-    let _cover = spacetimedb::log_stopwatch::LogStopwatch::new("genesis.cover_ground");
-    let cover_ground = living_rules::cover::ground(land);
-    let cover_candidates = living_rules::cover::candidates(&map);
+    let cover_ground: std::sync::Arc<[i16]> = std::sync::Arc::from(Vec::new());
+    let cover_candidates = if cover { living_rules::cover::candidates(&map) } else { Vec::new() };
     Ok(Hosted { map, info, cover_ground, cover_candidates, settlements, lots, ways, resources, structures })
 }
 
@@ -352,19 +364,45 @@ pub fn scrub_land(ctx: &ReducerContext) {
     }
 }
 
-/// The `land` row, lot rows and the structures at their doors (owners are set as households
-/// move in).
+/// Tiles per `cover_ground` row (row-major tile indices `id × COVER_BAND ..`).
 pub const COVER_BAND: usize = 16_384;
+
+/// The `cover_ground` rows a land of side `size` has when its geometry is complete.
+pub fn cover_bands(size: u32) -> usize {
+    (size as usize * size as usize).div_ceil(COVER_BAND)
+}
+
+/// Band `i`'s row: its ground samples and the candidates (sorted tile indices) inside it.
+fn cover_row(i: usize, candidates: &[u32], heights: Vec<i16>) -> CoverGround {
+    let band = |v: &u32| ((v & !(1 << 31)) as usize) / COVER_BAND;
+    let a = candidates.partition_point(|v| band(v) < i);
+    let b = candidates.partition_point(|v| band(v) <= i);
+    CoverGround { id: i as u32, candidates: candidates[a..b].to_vec(), heights }
+}
+
+/// Keep band `i` of a world created in one call (`Hosted::cover_ground` sampled whole); none when
+/// the world's cover was off at creation.
 pub fn keep_cover_band(ctx: &ReducerContext, h: &Hosted, i: usize) {
     let from = i * COVER_BAND;
     if from >= h.cover_ground.len() || ctx.db.cover_ground().id().find(i as u32).is_some() { return; }
-    let band = |v: &u32| ((v & !(1 << 31)) as usize) / COVER_BAND;
-    let a = h.cover_candidates.partition_point(|v| band(v) < i);
-    let b = h.cover_candidates.partition_point(|v| band(v) <= i);
-    ctx.db.cover_ground().insert(CoverGround { id: i as u32, candidates: h.cover_candidates[a..b].to_vec(),
-        heights: h.cover_ground[from..(from + COVER_BAND).min(h.cover_ground.len())].to_vec() });
+    ctx.db.cover_ground().insert(cover_row(i, &h.cover_candidates,
+        h.cover_ground[from..(from + COVER_BAND).min(h.cover_ground.len())].to_vec()));
 }
 
+/// Keep bands `bands` sampled from `land` now (a staged creation, a derivation after cover is
+/// switched on: `geometry`): the same rows as [`keep_cover_band`] keeps from the whole sample.
+/// A band already kept (a restart after a lost instance) is kept as it is.
+pub fn keep_cover_bands_of(ctx: &ReducerContext, land: &landgen::Land, candidates: &[u32], bands: std::ops::Range<usize>) {
+    let _t = spacetimedb::log_stopwatch::LogStopwatch::new("cover.ground_bands");
+    for i in bands.start..bands.end.min(cover_bands(land.size)) {
+        if ctx.db.cover_ground().id().find(i as u32).is_some() { continue; }
+        let heights = living_rules::cover::ground_range(land, i * COVER_BAND..(i + 1) * COVER_BAND);
+        ctx.db.cover_ground().insert(cover_row(i, candidates, heights));
+    }
+}
+
+/// The `land` row, lot rows and the structures at their doors (owners are set as households
+/// move in), and the cover bands of a world created with its cover law on.
 pub fn build(ctx: &ReducerContext, h: &Hosted, now: u64) {
     for i in 0..h.cover_ground.len().div_ceil(COVER_BAND) {
         keep_cover_band(ctx, h, i);

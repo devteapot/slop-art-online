@@ -152,7 +152,7 @@ pub fn earshot_row(conn: &DbConnection, me: u32) -> Option<Told> {
 
 /// The people within earshot of me, nearest first.
 #[allow(clippy::too_many_arguments)]
-fn earshot(conn: &DbConnection, scene: &Scene, rules: &crate::verbs::Rules, me: u32, at: Vec2, hour: f32, town: &crate::town::Town, combat: &crate::combat::Combat, way: Option<&SpeechCard>) -> Vec<u32> {
+fn earshot(conn: &crate::net::PlayerConnection, scene: &Scene, rules: &crate::verbs::Rules, me: u32, at: Vec2, hour: f32, town: &crate::town::Town, combat: &crate::combat::Combat, way: Option<&SpeechCard>) -> Vec<u32> {
     let Some(sc) = rules.scripts.as_ref() else { return Vec::new() };
     // A way's words carry by the rules (`WaySpec::carry_for` the hearer's hearing); one that names
     // someone within a reach (a whisper) reaches no further than that.
@@ -163,7 +163,7 @@ fn earshot(conn: &DbConnection, scene: &Scene, rules: &crate::verbs::Rules, me: 
         .iter()
         .filter(|(id, _)| **id != me && !town.hidden(**id) && !combat.deaths.contains_key(id))
         .filter_map(|(id, (p, _))| {
-            let c = conn.db.seen_characters().id().find(id).filter(|c| c.kind == "person")?;
+            let c = crate::net::find_character(conn, *id).filter(|c| c.kind == "person")?;
             let d = p.distance(at);
             let h = hearing(sc, &c, hour)?;
             let carry = spec.map_or(h, |w| w.carry_for(h));
@@ -266,7 +266,7 @@ fn address(
             talk.told = told;
         }
     }
-    let perceived = |id: u32| conn.db.seen_characters().id().find(&id).is_some_and(|c| c.kind == "person");
+    let perceived = |id: u32| crate::net::find_character(conn, id).is_some_and(|c| c.kind == "person");
     let prefer = talk.prefer.take();
     if let Some(id) = tapped.filter(|id| perceived(*id)) {
         talk.to = Some(id);

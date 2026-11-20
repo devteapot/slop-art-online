@@ -6,6 +6,8 @@
 
 **v1.2 (2026-11-19, draft): a general ink profile,** for any hand-made material (eyes, brows, face lines, skin, hair): its own `slop.ink` object, an ink map per slot (`<stem>.<slot>.ink.png`, G the distance, R the width) in a binding of its own, lit by the material's own light. See [the ink contract](HANDMADE_INK.md). The v1.1 fields below keep their meaning and drawing; `HANDMADE_INK.md` maps them onto the general profile.
 
+**v1.3 (2026-11-20, draft): composed characters.** It covers composed type and style files that opt in to `slop.hair` and `slop.ink`, a palette relative to each person's hair tag (`palette: "tag"`, `ref`, `anchors`), ink maps shared by an age-sex class, declared texel densities, and hero lines (`hero_file`). See [the composed contract](HANDMADE_COMPOSED.md). The v1–v1.2 fields keep their meanings; `palette` defaults to `"fixed"`, which is v1.
+
 **Why:** dev-box's hand-made character Cora (`own-cora-live.glb`) read as a glossy helmet in the client. The diagnosis (`.local/living/cora-material/FINDINGS.md` on the laptop) found four causes:
 
 - the gloss is painted into the hair's vertex colours;

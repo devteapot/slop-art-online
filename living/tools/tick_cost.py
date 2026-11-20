@@ -78,7 +78,7 @@ def scrape(ident):
 
 
 def server_pid():
-    return int(subprocess.run(["podman", "inspect", look_cost.CONTAINER, "--format", "{{.State.Pid}}"], capture_output=True, text=True, check=True).stdout.strip())
+    return int(subprocess.run(["docker", "inspect", look_cost.CONTAINER, "--format", "{{.State.Pid}}"], capture_output=True, text=True, check=True).stdout.strip())
 
 
 def thread_cpu(pid):

@@ -34,15 +34,20 @@ W, H = 1600, 900
 SCENARIOS = {}
 CULLET = set()
 EXPLICIT = set()
+# FRESH: scenarios that launch their own world under the run's name (no world may exist yet).
+FRESH = set()
 
 
-def scenario(name, cullet=False, explicit=False):
+def scenario(name, cullet=False, explicit=False, fresh=False):
     def register(function):
         assert name not in SCENARIOS, f"scenario {name} registered twice"
         SCENARIOS[name] = function
         if cullet:
             CULLET.add(name)
         if explicit:
+            EXPLICIT.add(name)
+        if fresh:
+            FRESH.add(name)
             EXPLICIT.add(name)
         return function
     return register
@@ -261,6 +266,116 @@ def windows(run, c):
     c.check(s, "Esc with nothing open opens Menu", d["10"] and d["10"]["menu"])
     c.check(s, "Esc closes the Menu list first", d["11"] and not d["11"]["menu"])
     c.check(s, "Esc again opens Menu (and frees the cursor)", d["12"] and d["12"]["menu"] and "Esc with nothing open: Menu, cursor freed" in log(out))
+
+
+def utc_ms(line):
+    """The client log line's UTC time (ms since the epoch), from its leading ISO stamp."""
+    import datetime
+    m = re.match(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(\.\d+)?Z", line)
+    if not m:
+        return None
+    t = datetime.datetime.strptime(m[1], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=datetime.timezone.utc).timestamp()
+    return int((t + float(m[2] or 0)) * 1000)
+
+
+@scenario("preparing", fresh=True)
+def preparing(run, c):
+    """Staged genesis (docs/STAGED_GENESIS.md §4, living/game/src/genesis.rs): the client joins a
+    world still being made. The scenario launches the run's island world itself (`verify.py
+    launch`, which waits for genesis through genesis_wait.py) and starts the client as soon as the
+    publish is under way, so it connects while the world is made: the cover says "Preparing the
+    world…" with the step, the steps and a bar, nothing is shown as a failure, and the client
+    joins once `genesis.done` turns true. Beside it, a probe `join` as verify.py's player
+    identity records the authority's refusal text while the world is made. Run it on a run name
+    with no world yet (`check.py --run ui-<new> preparing`), then `cleanup`."""
+    sys.path.insert(0, os.path.join(ROOT, "living/tools"))
+    import genesis_wait
+    s = "preparing"
+    st = verify.load(run)
+    if st.get("published") or st.get("publish_attempted"):
+        c.check(s, "a run name with no world yet", False, f"verify-{run} was already launched; use a new run name")
+        return
+    out = os.path.join(ROOT, ".local/living/verify", run, "ui", s)
+    os.makedirs(out, exist_ok=True)
+    seed = os.environ.get("VERIFY_UI_PREPARING_SEED", "island")
+    target = os.environ.get("VERIFY_UI_TARGET_DIR", os.path.join(ROOT, ".local/living/verify", run, "target"))
+    launch_log = open(os.path.join(out, "launch.log"), "w")
+    launch = subprocess.Popen([sys.executable, V, "launch", "--run", run, "--seed", seed, "--target-dir", target], stdout=launch_log, stderr=subprocess.STDOUT, cwd=ROOT)
+    # The client goes as soon as the publish is under way (the module is built): it cannot reach
+    # the world for a moment, tries again every 3 s, and gets in while the world is being made.
+    state = os.path.join(ROOT, ".local/living/verify", run, "state.json")
+    while launch.poll() is None and not (os.path.exists(state) and json.load(open(state)).get("publish_attempted")):
+        time.sleep(0.2)
+    if launch.poll() not in (None, 0):
+        c.check(s, "the world launched", False, open(os.path.join(out, "launch.log")).read()[-600:])
+        return
+    plan = ("preparing:180;wait:0.5;shot:01_preparing;dump:01;wait:3;shot:02_preparing;dump:02;"
+            "ready;wait:1;shot:03_joined;dump:03;quit")
+    cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", s, "--plan", plan, "--timeout", "600", "--preparing"]
+    client = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    # Meanwhile, the authority's side: the `genesis` row as it goes, and one probe `join` while
+    # the world is still being made (verify.py's player identity; refused, so nothing is made).
+    samples, probe, owner = [], None, None
+    while client.poll() is None:
+        st = verify.load(run)
+        if st.get("published"):
+            owner = owner or verify.admin_token()
+            try:
+                row = genesis_wait.genesis_row(verify.URL, st["db"], owner)
+            except genesis_wait.GenesisNotReady:
+                row = None
+            if row is not None and (not samples or (samples[-1]["step"], samples[-1]["done"]) != (row["step"], row["done"])):
+                samples.append({"wall_ms": int(time.time() * 1000), "step": row["step"], "steps": row["steps"], "label": row["label"], "done": row["done"], "updated_ms": row["updated_ms"]})
+            if row is not None and not row["done"] and probe is None:
+                r = subprocess.run([sys.executable, V, "player", "--run", run, "join", "Probe"], capture_output=True, text=True)
+                probe = {"code": r.returncode, "out": (r.stdout + r.stderr).strip()[-400:]}
+        time.sleep(0.25)
+    text_out = client.stdout.read()
+    code = client.wait()
+    launch.wait()
+    launch_log.close()
+    final = None
+    if owner:
+        try:
+            final = genesis_wait.genesis_row(verify.URL, f"verify-{run}", owner)
+        except genesis_wait.GenesisNotReady:
+            pass
+    json.dump({"genesis": samples, "final": final, "probe": probe}, open(os.path.join(out, "genesis.json"), "w"), indent=1)
+    c.check(s, "the world launched and was made", launch.returncode == 0 and final and final.get("done"), open(os.path.join(out, "launch.log")).read()[-400:])
+    c.check(s, "client ran and joined", code == 0, text_out[-300:])
+    c.check(s, "the authority refuses join while the world is made, with world_preparing",
+            probe is not None and re.search(r"world_preparing: the world is still being made \(step \d+ of \d+: [^)]*", probe["out"]), repr(probe))
+    t = log(out)
+    d1, d2, d3 = dump(out, "01"), dump(out, "02"), dump(out, "03")
+    g1, g2, g3 = ((d or {}).get("genesis") or {} for d in (d1, d2, d3))
+    cover = g1.get("cover") or {}
+    progress = g1.get("progress") or {}
+    c.check(s, "the client saw the world being made", g1.get("gate") == "Preparing" and ("genesis: the world is being made" in t or "genesis: preparing step" in t), json.dumps(g1)[:300])
+    c.check(s, "the cover says Preparing the world… with the step, the steps and a bar",
+            cover.get("title") == "Preparing the world…" and progress.get("steps", 0) > 0 and cover.get("bar") is not None
+            and f"step {progress.get('step')} of {progress.get('steps')}" in (cover.get("detail") or ""), json.dumps(cover))
+    p2 = g2.get("progress") or {}
+    c.check(s, "the progress line moves while the world is made", g2.get("gate") != "Preparing" or (p2.get("step", 0), p2.get("label")) != (progress.get("step", 0), progress.get("label")),
+            f"{progress} -> {p2}")
+    c.check(s, "joined after the world was ready", "genesis: the world is ready after" in t and re.search(r"playing character #\d+", t) and g3.get("gate") == "Ready" and not g3.get("cover"), json.dumps(g3)[:300])
+    held = [e for d in (d1, d2, d3) for e in ((d or {}).get("genesis") or {}).get("errors", [])]
+    notes = [n for d in (d1, d2, d3) for n in (d or {}).get("notes", [])]
+    c.check(s, "no error shown: world_preparing never lands in the errors, the notes or a warning",
+            not held and not [n for n in notes if "world_preparing" in n] and not re.search(r"WARN.*(world_preparing|join refused)", t), f"errors {held}; notes {notes}")
+    m = re.search(r"genesis: joined ([\d.]+) s after the world was ready", t)
+    joined_line = next((l for l in t.splitlines() if re.search(r"playing character #\d+", l)), "")
+    # When the authority's world turned ready: the first owner read that saw `done` (polled every
+    # 0.25 s, so up to about 0.3 s late). Not `genesis.updated_ms`: the last step stamps it when
+    # it starts, and populate runs about 4 s on the island after that.
+    done_ms = next((x["wall_ms"] for x in samples if x["done"]), None)
+    joined_ms = utc_ms(joined_line)
+    gap = (joined_ms - done_ms) / 1000 if done_ms and joined_ms else None
+    stamp = (done_ms - final["updated_ms"]) / 1000 if done_ms and final else None
+    detail = (f"client: {m[1] if m else '?'} s from seeing done to playing; authority done (first owner read of done) to the client's 'playing character': "
+              f"{gap if gap is None else round(gap, 2)} s; that read came {stamp if stamp is None else round(stamp, 2)} s after the done row's updated_ms")
+    print(f"      {detail}", flush=True)
+    c.check(s, "joined within 10 s of done", gap is not None and 0 <= gap < 10, detail)
+    json.dump({"client_done_to_join_s": float(m[1]) if m else None, "authority_done_to_join_s": gap, "done_seen_ms": done_ms, "done_updated_ms": final and final.get("updated_ms"), "joined_ms": joined_ms}, open(os.path.join(out, "timing.json"), "w"), indent=1)
 
 
 @scenario("bubble-once")
@@ -1189,7 +1304,8 @@ def camera(run, c):
                 f"clear_{stop}=place_at|{{me}}|{street[0]}|{street[1]}",
                 f"roof_{stop}=place_at|{{me}}|{roof[0]}|{roof[1]}",
             ]
-        with resident_fixture(run, ids):
+        # The scene turns `fov_on` and the clock; the fixture puts the world's own law and daylight back.
+        with sight_fixture(run, {"fov_on": "false"}), resident_fixture(run, ids):
             out, code, text = drive(run, f"{s}-{field}", plan + "quit",
                                     places=[f"{front}:0:-2.5", f"{back}:2.5:4.5", f"{behind_wall}:1.0:-14.0"], syncs=syncs + roof_syncs,
                                     env={"LIVING_GAME_DEV": "1", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
@@ -1942,6 +2058,516 @@ def law_override(run, c):
     c.check(s, "fresh client: compiled with the world's overrides", bool(fcomp) and int(fcomp[0]) >= 2, f"{fcomp}")
     c.check(s, "fresh client: only the untiered set subscribed", fsub == ["untiered"], f"{fsub}")
     json.dump(report, open(os.path.join(base, f"{name}.json"), "w"), indent=1)
+
+
+DELIVERY_LAWS = ("cue_transport_on", "near_tier_on", "motion_tables_on", "characters_table_on")
+
+
+def shipped_law(name):
+    """A law's value in the shipped script's law block (`living/scripts/skills.rhai`), as JSON text."""
+    m = re.search(rf"^\s*{name}:\s*(true|false),", open(os.path.join(ROOT, "living/scripts/skills.rhai")).read(), re.M)
+    return m.group(1) if m else None
+
+
+def owner_rows(run, query):
+    """Owner SQL over HTTP straight to the world (fast enough to poll): rows as dicts, or None."""
+    st = verify.load(run)
+    code, body = verify.http(f"/v1/database/{st['db']}/sql", query, verify.admin_token(), raw=True, timeout=5)
+    if code != 200:
+        return None
+    res = json.loads(body)[-1]
+    names = [col["name"]["some"] for col in res["schema"]["elements"]]
+    return [dict(zip(names, row)) for row in res["rows"]]
+
+
+def feed_of(laws):
+    """The perception set the client chooses (`net::Delivery::feed`): (tier, motion table, characters table)."""
+    on = lambda k: laws[k] == "true"
+    return ("tiered" if on("cue_transport_on") or on("near_tier_on") else "untiered", on("motion_tables_on"), on("characters_table_on"))
+
+
+def set_on_line(feed):
+    tier, m, ch = feed
+    return rf"perception: on the {tier} set after \d+ ms \(tables: motion {str(m).lower()} characters {str(ch).lower()};"
+
+
+def set_sub_line(feed):
+    tier, m, ch = feed
+    return rf"perception: subscribing the {tier} set \(\d+ queries; tables: motion {str(m).lower()} characters {str(ch).lower()};"
+
+
+def identity_of(out):
+    m = re.search(r"connected as ([0-9a-f]{64})", log(out))
+    return m.group(1) if m else None
+
+
+@scenario("battle-views", explicit=True)
+def battle_views(run, c):
+    """battle-views' client switch (docs/BATTLE_VIEWERS.md, "Rollout"): while one client plays, the
+    two table laws (`motion_tables_on`, `characters_table_on`) and the two frame laws are set
+    through `law_override` rows alone, through all four table-law combinations in both frame-tier
+    states (and each tiered state's way: cues only, tiers only, both). For each step: the call
+    accepted with the script revision unchanged, laid over in place as delivery, the client's set
+    switched before broken when the set changes (the new set subscribed beside the old, nobody and
+    no character missing in its line or in any frame: `LIVING_GAME_SEEN_LOG`) and not at all when
+    it does not, the reads on the tables the laws name, and the tick never standing still. A
+    table law going off is the kill switch by row: within a second the authority's public rows are
+    gone (motion: moved back to the private tables, none split; the mirror: deleted), while the
+    client keeps drawing until the views are in. Then a reconnect with both table laws on (the
+    tables set first, no view set before it) and a fresh client. The four laws are restored from
+    the world's own values (`law_values.own_laws`), else the shipped ones."""
+    import threading
+    s = "battle-views"
+    st = verify.load(run)
+    db, token = st["db"], verify.admin_token()
+    name = f"{s}-{THEME}" if THEME else s
+    base = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    out = os.path.join(base, name)
+    q = lambda query: owner_rows(run, query)
+
+    def revision():
+        return ((q("SELECT revision FROM script WHERE name = 'skills'") or [{}])[0]).get("revision")
+
+    def set_law(law, value):
+        verify.refresh_lease(st)
+        t0 = time.time()
+        code, body = verify.http(f"/v1/database/{db}/call/set_world_law", [law, value], token, timeout=60)
+        return {"law": law, "value": value, "code": code, "reply": body[:300], "t0": t0, "t1": time.time()}
+
+    ticks, stop = [], threading.Event()
+
+    def sample():
+        while not stop.is_set():
+            rows = q("SELECT tick FROM clock WHERE id = 0")
+            if rows:
+                ticks.append((time.time(), int(rows[0]["tick"])))
+            time.sleep(0.02)
+
+    def gap(t0, t1):
+        w = [(t, k) for t, k in ticks if t0 <= t <= t1]
+        worst, last_t, last_k = 0.0, None, None
+        for t, k in w:
+            if last_k is None or k != last_k:
+                if last_t is not None:
+                    worst = max(worst, t - last_t)
+                last_t, last_k = t, k
+        if w and last_t is not None:
+            worst = max(worst, w[-1][0] - last_t)
+        rate = (w[-1][1] - w[0][1]) / (w[-1][0] - w[0][0]) if len(w) > 1 and w[-1][0] > w[0][0] else 0.0
+        return round(worst * 1000, 1), round(rate, 1)
+
+    def copies(ident):
+        """My copies where the authority holds them: public motion rows, private motion rows, mirror rows, projections."""
+        x = f"0x{ident}"
+        n = lambda query: len(q(query) or [])
+        return {"public": n(f"SELECT body FROM seen_body_copy WHERE viewer = {x}"),
+                "private": n(f"SELECT id FROM motion_seen WHERE viewer = {x}") + n(f"SELECT id FROM motion_near WHERE viewer = {x}"),
+                "public_all": n("SELECT body FROM seen_body_copy"),
+                "mirror": n(f"SELECT id FROM seen_character_copy WHERE viewer = {x}"),
+                "mirror_all": n("SELECT id FROM seen_character_copy"),
+                "projected": n(f"SELECT id FROM projected WHERE viewer = {x}")}
+
+    original = own_laws(lambda x: sql(run, x))
+    shipped = {k: shipped_law(k) for k in DELIVERY_LAWS}
+    state = {k: original.get(k, shipped[k]) for k in DELIVERY_LAWS}
+    start = dict(state)
+    steps = [("motion_tables_on", "true"), ("characters_table_on", "true"),
+             ("motion_tables_on", "false"), ("motion_tables_on", "true"),
+             ("characters_table_on", "false"), ("characters_table_on", "true"),
+             ("cue_transport_on", "false"), ("near_tier_on", "false"),
+             ("motion_tables_on", "false"), ("characters_table_on", "false"),
+             ("motion_tables_on", "true"), ("characters_table_on", "true"),
+             ("cue_transport_on", "true"), ("near_tier_on", "true")]
+    c.check(s, "the world starts with both frame laws on and both table laws off", feed_of(start) == ("tiered", False, False), json.dumps(start))
+    plan = "ready;wait:2;sync:armed;wait:1;dump:before;sync:toggled;dump:toggled;reconnect;wait:8;dump:reconnected;sync:done;quit"
+    cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "900"]
+    os.makedirs(base, exist_ok=True)
+    seen_path = os.path.join(base, f"{name}.seen.jsonl")
+    env = dict(os.environ, LIVING_GAME_SEEN_LOG=seen_path)
+    results = []
+    sampler = threading.Thread(target=sample, daemon=True)
+    sampler.start()
+    drive_log = open(os.path.join(base, f"{name}.drive.log"), "w")
+    p = subprocess.Popen(cmd, stdout=drive_log, stderr=subprocess.STDOUT, env=env)
+
+    def wait_for(pattern, secs):
+        end = time.time() + secs
+        while time.time() < end and p.poll() is None:
+            if re.search(pattern, log(out)):
+                return True
+            time.sleep(0.2)
+        return False
+
+    def go(sync):
+        open(os.path.join(out, f"{sync}.go"), "w").close()
+
+    fresh_out, fresh_code, ident = None, None, None
+    try:
+        if not wait_for(r"live script: waiting for \S*/armed\.go", 400):
+            c.check(s, "the client reached the toggles", False, f"drive exit {p.poll()}")
+            return
+        ident = identity_of(out)
+        go("armed")
+        time.sleep(4)
+        quiet = gap(time.time() - 3.5, time.time())
+        for law, value in steps:
+            before = feed_of(state)
+            state[law] = value
+            after = feed_of(state)
+            rev = revision()
+            r = set_law(law, value)
+            r.update(before=before, after=after, state=dict(state))
+            # The kill switch: how soon the authority's public rows of that table are gone.
+            if value == "false" and law in ("motion_tables_on", "characters_table_on"):
+                table = "seen_body_copy" if law == "motion_tables_on" else "seen_character_copy"
+                gone = None
+                while time.time() - r["t1"] < 3.0:
+                    rows = q(f"SELECT viewer FROM {table}")
+                    if rows == []:
+                        gone = round((time.time() - r["t1"]) * 1000, 1)
+                        break
+                    time.sleep(0.02)
+                r["empty_after_ms"] = gone
+            time.sleep(3.0)
+            r["rev_before"], r["rev_after"] = rev, revision()
+            r["gap_ms"], r["ticks_per_s"] = gap(r["t0"] - 0.5, r["t1"] + 1.5)
+            r["copies"] = copies(ident) if ident else None
+            results.append(r)
+        # The reconnect with both table laws on: the client's first set after it is the tables set.
+        t_reconnect = time.time()
+        go("toggled")
+        offline = wait_for(r"offline: ", 30)
+        wait_for(r"live script: waiting for \S*/done\.go", 60)
+        go("done")
+        p.wait(timeout=120)
+        fresh_out, fresh_code, _ = drive(run, f"{s}-fresh", "ready;wait:4;dump:fresh;quit", env={"LIVING_GAME_SEEN_LOG": os.path.join(base, f"{name}-fresh.seen.jsonl")})
+    finally:
+        if p.poll() is None:
+            p.terminate()
+        for law in DELIVERY_LAWS:
+            set_law(law, original.get(law, shipped[law]))
+        stop.set()
+        drive_log.close()
+    lines = timed_lines(out)
+    frames = []
+    if os.path.exists(seen_path):
+        for line in open(seen_path):
+            try:
+                frames.append(json.loads(line))
+            except ValueError:
+                pass
+    report = {"identity": ident, "start": start, "quiet_gap_ms": quiet, "steps": results}
+    c.check(s, "the world's tick ran between calls (quiet gap under 150 ms)", quiet[0] < 150, f"{quiet}")
+    in_place = r"rules: law overrides laid over in place .*changed \[\"{law}\"\]; delivery true cover false gaze false"
+    ids = lambda f: {row[0] for row in f.get("rows", [])}
+    chars = lambda f: set(f.get("characters", []))
+    for r in results:
+        law, value, before, after = r["law"], r["value"], tuple(r["before"]), tuple(r["after"])
+        tag = f"{law}={value} ({after[0]}, motion table {after[1]}, characters table {after[2]})"
+        c.check(s, f"{tag}: set_world_law accepted", r["code"] == 200, r["reply"])
+        c.check(s, f"{tag}: the script revision did not change", r["rev_before"] == r["rev_after"] and r["rev_before"] is not None, f"{r['rev_before']} -> {r['rev_after']}")
+        hit = first_after(lines, in_place.format(law=law), r["t0"] - 0.05, r["t0"] + 3.0)
+        r["laid_over_ms"] = round((hit[0] - r["t1"]) * 1000, 1) if hit else None
+        c.check(s, f"{tag}: laid over in place as delivery", hit is not None)
+        c.check(s, f"{tag}: no world freeze (tick gap under 150 ms)", r["gap_ms"] < 150, f"{r['gap_ms']} ms")
+        if after == before:
+            eff = first_after(lines, "rules: " + " ".join(f"{k} {r['state'][k]}" for k in DELIVERY_LAWS), r["t0"] - 0.05, r["t0"] + 3.0)
+            r["effect_ms"] = round((eff[0] - r["t1"]) * 1000, 1) if eff else None
+            c.check(s, f"{tag}: the client read the law within a second", eff is not None and eff[0] - r["t1"] < 1.0, f"{r['effect_ms']} ms")
+            c.check(s, f"{tag}: the set kept (no subscribe)", first_after(lines, r"perception: subscribing", r["t0"] - 0.05, r["t0"] + 3.0) is None)
+            continue
+        sub = first_after(lines, set_sub_line(after), r["t0"] - 0.05)
+        eff = first_after(lines, set_on_line(after), r["t0"] - 0.05)
+        r["effect_ms"] = round((eff[0] - r["t1"]) * 1000, 1) if eff else None
+        r["switch_line"] = eff[1] if eff else None
+        c.check(s, f"{tag}: the new set subscribed beside the old and the reads moved to it within 1.5 s", sub is not None and eff is not None and eff[0] - r["t1"] < 1.5, f"{r['effect_ms']} ms")
+        c.check(s, f"{tag}: the switch line lists nobody and no character missing", bool(eff) and eff[1].count("missing now []") == 2, eff[1] if eff else "")
+        if eff:
+            t0_ms, t1_ms = r["t0"] * 1000 - 300, (eff[0] + 1.0) * 1000
+            pre = [f for f in frames if f.get("wall_ms", 0) < r["t0"] * 1000]
+            post = [f for f in frames if f.get("wall_ms", 0) >= t1_ms]
+            keep = (ids(pre[-1]) & ids(post[0])) if pre and post else set()
+            keep_c = (chars(pre[-1]) & chars(post[0])) if pre and post else set()
+            window = [f for f in frames if t0_ms <= f.get("wall_ms", 0) <= t1_ms]
+            gaps = [f["wall_ms"] for f in window if keep - ids(f)]
+            gaps_c = [f["wall_ms"] for f in window if keep_c - chars(f)]
+            r["frames"], r["kept"], r["kept_characters"], r["frames_missing"], r["frames_missing_characters"] = len(window), len(keep), len(keep_c), len(gaps), len(gaps_c)
+            c.check(s, f"{tag}: no frame without a creature or a character kept across the switch", window and keep and keep_c and not gaps and not gaps_c,
+                    f"{len(window)} frames, {len(keep)} kept ({len(gaps)} frames missing one), {len(keep_c)} characters kept ({len(gaps_c)} frames missing one)")
+            tables = post[0].get("tables", {}) if post else {}
+            c.check(s, f"{tag}: the reads take the tables the laws name", post and post[0].get("reads") == after[0] and tables == {"motion": after[1], "characters": after[2]}, json.dumps(tables))
+        cp = r["copies"] or {}
+        if law == "motion_tables_on":
+            if value == "true":
+                c.check(s, f"{tag}: my motion copies all in seen_body_copy, none left private", cp.get("public", 0) > 0 and cp.get("private") == 0, json.dumps(cp))
+            else:
+                c.check(s, f"{tag}: the kill switch: seen_body_copy empty within a second, my copies back in the private tables, none split",
+                        r.get("empty_after_ms") is not None and r["empty_after_ms"] < 1000 and cp.get("public_all") == 0 and cp.get("private", 0) > 0, f"empty after {r.get('empty_after_ms')} ms; {json.dumps(cp)}")
+        if law == "characters_table_on":
+            if value == "true":
+                c.check(s, f"{tag}: my mirror whole (a row per projection)", cp.get("mirror", 0) > 0 and cp.get("mirror") == cp.get("projected"), json.dumps(cp))
+            else:
+                c.check(s, f"{tag}: the kill switch: seen_character_copy empty within a second",
+                        r.get("empty_after_ms") is not None and r["empty_after_ms"] < 1000 and cp.get("mirror_all") == 0, f"empty after {r.get('empty_after_ms')} ms; {json.dumps(cp)}")
+    combos = sorted({(r["after"][0], r["after"][1], r["after"][2]) for r in results} | {feed_of(start)})
+    report["combinations"] = combos
+    c.check(s, "every table-law combination ran in both frame-tier states", len(combos) == 8, json.dumps(combos))
+    final = feed_of({**start, **{r["law"]: r["value"] for r in results}})
+    after_rc = [(t, x) for t, x in lines if t >= t_reconnect]
+    subscribed = [x for _, x in after_rc if x.startswith("perception: subscribing")]
+    report["reconnect"] = {"offline": bool(offline), "subscribed": subscribed}
+    c.check(s, "reconnect with both table laws on: the client went offline and came back", bool(offline) and any(x.startswith("world subscribed after") for _, x in after_rc))
+    c.check(s, "reconnect: the first set chosen reads both tables, no view set before it",
+            bool(subscribed) and re.search(set_sub_line(final), subscribed[0]) is not None and all("tables: motion true characters true" in x for x in subscribed), f"{subscribed}")
+    c.check(s, "reconnect: the reads moved to the tables", first_after(lines, set_on_line(final), t_reconnect) is not None)
+    flog = log(fresh_out) if fresh_out else ""
+    fsub = re.findall(r"perception: subscribing the .*", flog)
+    report["fresh"] = {"exit": fresh_code, "subscribed": fsub}
+    c.check(s, "fresh client with both table laws on: only the tables set subscribed, and read", len(fsub) == 1 and re.search(set_sub_line(final), fsub[0]) is not None and re.search(set_on_line(final), flog) is not None, f"{fsub}")
+    c.check(s, "the four laws restored to the world's own values", {k: own_laws(lambda x: sql(run, x)).get(k, shipped[k]) for k in DELIVERY_LAWS} == {k: original.get(k, shipped[k]) for k in DELIVERY_LAWS})
+    json.dump(report, open(os.path.join(base, f"{name}.json"), "w"), indent=1)
+
+
+@scenario("battle-views-ui", explicit=True)
+def battle_views_ui(run, c):
+    """camera, talk and far with both table laws on (docs/BATTLE_VIEWERS.md, "Rollout" step 5):
+    each scenario's checks, and every client those scenarios started read both tables (its switch
+    line names them, and no view set was read). The table laws are put back after."""
+    s = "battle-views-ui"
+    original = own_laws(lambda x: sql(run, x))
+    shipped = {k: shipped_law(k) for k in DELIVERY_LAWS}
+    t0 = time.time()
+    try:
+        for law in ("motion_tables_on", "characters_table_on"):
+            call_admin(run, "set_world_law", [law, "true"], check=True)
+        laws = own_laws(lambda x: sql(run, x))
+        c.check(s, "both table laws read on in law_override", laws.get("motion_tables_on") == "true" and laws.get("characters_table_on") == "true", json.dumps({k: laws.get(k) for k in DELIVERY_LAWS}))
+        for name in ("camera", "talk", "far"):
+            SCENARIOS[name](run, c)
+        laws = own_laws(lambda x: sql(run, x))
+        c.check(s, "both table laws still on after the scenarios (far's script install kept them)", laws.get("motion_tables_on") == "true" and laws.get("characters_table_on") == "true", json.dumps({k: laws.get(k) for k in DELIVERY_LAWS}))
+    finally:
+        for law in ("motion_tables_on", "characters_table_on"):
+            call_admin(run, "set_world_law", [law, original.get(law, shipped[law])], check=True)
+    logs = [p for p in glob.glob(os.path.join(ROOT, ".local/living/verify", run, "ui", "*", "client.log")) if os.path.getmtime(p) >= t0]
+    on = []
+    for p in sorted(logs):
+        t = log(os.path.dirname(p))
+        if "playing character" not in t:
+            continue
+        reads = re.findall(r"perception: on the \w+ set after \d+ ms \(tables: motion (\w+) characters (\w+);", t)
+        on.append((os.path.basename(os.path.dirname(p)), reads))
+    bad = [(n, r) for n, r in on if not r or any(x != ("true", "true") for x in r)]
+    c.check(s, f"every client of camera, talk and far read both tables ({len(on)} clients)", on and not bad, json.dumps(bad or [n for n, _ in on]))
+    json.dump({"clients": on}, open(os.path.join(ROOT, ".local/living/verify", run, "ui", "battle-views-ui.json"), "w"), indent=1)
+
+
+class ByteRelay:
+    """A TCP relay in front of the authority for the client alone, counting what the server sends
+    each connection (the client's subscription traffic on the wire), sampled every 0.5 s."""
+
+    def __init__(self, upstream_port):
+        import socket, threading
+        self.socket, self.threading = socket, threading
+        self.up = upstream_port
+        self.ls = socket.socket()
+        self.ls.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.ls.bind(("127.0.0.1", 0))
+        self.ls.listen(8)
+        self.port = self.ls.getsockname()[1]
+        self.down = []
+        self.samples = []
+        self.done = threading.Event()
+        threading.Thread(target=self.accept, daemon=True).start()
+        threading.Thread(target=self.sample, daemon=True).start()
+
+    def accept(self):
+        while not self.done.is_set():
+            try:
+                cl, _ = self.ls.accept()
+            except OSError:
+                return
+            up = self.socket.create_connection(("127.0.0.1", self.up))
+            i = len(self.down)
+            self.down.append(0)
+            self.threading.Thread(target=self.pipe, args=(up, cl, i), daemon=True).start()
+            self.threading.Thread(target=self.pipe, args=(cl, up, None), daemon=True).start()
+
+    def pipe(self, a, b, i):
+        try:
+            while True:
+                d = a.recv(65536)
+                if not d:
+                    break
+                if i is not None:
+                    self.down[i] += len(d)
+                b.sendall(d)
+        except OSError:
+            pass
+        for x in (a, b):
+            try:
+                x.shutdown(self.socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+    def sample(self):
+        while not self.done.is_set():
+            self.samples.append((time.time(), sum(self.down)))
+            time.sleep(0.5)
+
+    def bytes_between(self, t0, t1):
+        s0 = max((b for t, b in self.samples if t <= t0), default=0)
+        s1 = max((b for t, b in self.samples if t <= t1), default=0)
+        return s1 - s0
+
+    def close(self):
+        self.done.set()
+        self.ls.close()
+
+
+# Where `battle-views-cost` stands the player: the island newcomer's arrival on Brackenford's
+# square, among residents (where a play-test starts), and a quiet open spot (look-walk's).
+BV_PLACES = (("square", (412.5, 256.5)), ("open", (300.0, 330.0)))
+
+
+def walker_ages(frames, walker, w0, w1):
+    """Near ages of a walker's fresh segments in a seen log: for each newer `t_ms` of it in the
+    reads, the first frame holding it less its `t_ms` (ms), in [w0, w1] (s). A re-entry into
+    sight (absent the frame before) is not a fresh segment, as gate_load's sampler counts."""
+    ages, last, present = [], None, False
+    for f in frames:
+        t = next((t for i, t in f.get("rows", []) if i == walker), None)
+        inside = w0 <= f.get("wall_ms", 0) / 1000 <= w1
+        if t is not None and present and last is not None and t > last and inside:
+            ages.append(f["wall_ms"] - t)
+        if t is not None:
+            last = t if last is None else max(last, t)
+        present = t is not None
+    return sorted(ages)
+
+
+@scenario("battle-views-cost", explicit=True)
+def battle_views_cost(run, c):
+    """kB/s and near p90 with both table laws on against off (docs/BATTLE_VIEWERS.md, "Rollout"
+    step 7), on the real client, at two places (`BV_PLACES`): Brackenford's square among its
+    residents (as a play-test), and a quiet open spot. At each, four drives, off, on, off, on,
+    each with the client's connection through a byte-counting relay (`LIVING_GAME_CLIENT_SERVER`)
+    and a second player (verify.py's player identity) placed 1.2 m from it walking a small
+    octagon (a new `human_move` every 0.75 s for 40 s), as frame-views' near-age fixture did.
+    kB/s: what the server sent the client in that window, less its first second. Near age: for
+    each fresh segment of the walker, the first frame whose reads hold it (`LIVING_GAME_SEEN_LOG`)
+    less its `t_ms`, so frame-quantized alike in both arms; re-entries into sight are left out
+    (`walker_ages`), and the time the walker was out of sight is reported. The admin moves only
+    the two players (`place_at`), and puts both back after; no resident is moved. The table laws
+    are put back after."""
+    s = "battle-views-cost"
+    st = verify.load(run)
+    db = st["db"]
+    upstream = int(re.search(r":(\d+)", os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300")).group(1))
+    original = own_laws(lambda x: sql(run, x))
+    shipped = {k: shipped_law(k) for k in DELIVERY_LAWS}
+
+    def body():
+        r = subprocess.run([sys.executable, V, "sql", "--run", run, "SELECT id FROM my_body", "--as-player"], capture_output=True, text=True)
+        rows = json.loads(r.stdout[r.stdout.find("["):]) if "[" in r.stdout else []
+        return rows[0]["id"] if rows else None
+    walker = body()
+    if walker is None:
+        subprocess.run([sys.executable, V, "player", "--run", run, "join", "Walker"], capture_output=True, text=True)
+        walker = body()
+    c.check(s, "a second player to walk beside me", walker is not None)
+    if walker is None:
+        return
+    st = verify.load(run)
+    dirs = [(math.cos(math.radians(a)), math.sin(math.radians(a))) for a in range(0, 360, 45)]
+    walker_at = (sql(run, f"SELECT x, y FROM body WHERE id = {walker}") or [None])[0]
+
+    def walk(stop_at, sent):
+        i = 0
+        while time.time() < stop_at:
+            dx, dy = dirs[i % 8]
+            code, _ = verify.http(f"/v1/database/{db}/call/human_move", [dx, dy, False], st["token"], timeout=5)
+            sent.append((time.time(), code))
+            i += 1
+            time.sleep(max(0.0, 0.75 - (time.time() - sent[-1][0])))
+        verify.http(f"/v1/database/{db}/call/human_move", [0, 0, False], st["token"], timeout=5)
+
+    pct = lambda v, p: v[min(len(v) - 1, max(0, math.ceil(p * len(v)) - 1))] if v else None
+    me_before = None
+    tables = lambda on: json.dumps({"motion": on, "characters": on}, sort_keys=True)
+    arms = []
+    try:
+        for place, (px, py) in BV_PLACES:
+            for k, on in enumerate((False, True, False, True)):
+                for law in ("motion_tables_on", "characters_table_on"):
+                    call_admin(run, "set_world_law", [law, "true" if on else "false"], check=True)
+                name = f"{s}-{place}-{k}-{'on' if on else 'off'}"
+                out = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
+                seen = os.path.join(ROOT, ".local/living/verify", run, "ui", f"{name}.seen.jsonl")
+                relay = ByteRelay(upstream)
+                env = dict(os.environ, LIVING_GAME_SEEN_LOG=seen, LIVING_GAME_CLIENT_SERVER=f"http://127.0.0.1:{relay.port}")
+                plan = "ready;wait:2;sync:scene;sync:spot;wait:3;sync:near;wait:3;sync:walk;wait:43;quit"
+                cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "600",
+                       "--sync", f"spot=place_at|{{me}}|{px}|{py}", "--sync", f"near=place_at|{walker}|(mx+1.2)|(my)"]
+                dlog = open(os.path.join(ROOT, ".local/living/verify", run, "ui", f"{name}.drive.log"), "w")
+                p = subprocess.Popen(cmd, stdout=dlog, stderr=subprocess.STDOUT, env=env)
+                sent, arm = [], {"arm": name, "place": place, "on": on}
+                w0 = w1 = time.time()
+                try:
+                    end = time.time() + 400
+                    while time.time() < end and p.poll() is None and not re.search(r"live script: waiting for \S*/walk\.go", log(out)):
+                        time.sleep(0.2)
+                    w0 = time.time()
+                    open(os.path.join(out, "walk.go"), "w").close()
+                    walk(w0 + 40, sent)
+                    w1 = time.time()
+                    p.wait(timeout=120)
+                finally:
+                    if p.poll() is None:
+                        p.terminate()
+                    dlog.close()
+                    relay.close()
+                sc = os.path.join(out, "scene.json")
+                if me_before is None and os.path.exists(sc):
+                    scene = json.load(open(sc))
+                    me_before = (scene.get("me"), scene.get("me_at"))
+                frames = [json.loads(l) for l in open(seen)] if os.path.exists(seen) else []
+                window = [f for f in frames if w0 <= f.get("wall_ms", 0) / 1000 <= w1]
+                ages = walker_ages(frames, walker, w0 + 1, w1)
+                absent = [f for f in window if not any(i == walker for i, _ in f.get("rows", []))]
+                kb = relay.bytes_between(w0 + 1, w1) / 1000 / max(1e-6, w1 - w0 - 1)
+                reads = {json.dumps(f.get("tables"), sort_keys=True) for f in window}
+                others = sorted(len(f.get("rows", [])) for f in window)
+                arm.update(kB_per_s=round(kb, 2), total_kB=round(sum(relay.down) / 1000, 1), segments=len(ages), near_p50=pct(ages, 0.5), near_p90=pct(ages, 0.9),
+                           near_max=ages[-1] if ages else None, walker_absent_s=round(len(absent) / max(1, len(window)) * (w1 - w0), 1),
+                           others_median=others[len(others) // 2] if others else None, fps=round(len(window) / max(1e-6, w1 - w0), 1),
+                           moves=len(sent), moves_ok=sum(1 for _, x in sent if x == 200), reads=sorted(reads), connections=len(relay.down), exit=p.returncode)
+                arms.append(dict(arm, ages=ages))
+                print(f"{s}: {json.dumps(arm)}", flush=True)
+                c.check(s, f"{name}: the client ran, the walker walked, the reads took the {'tables' if on else 'views'}",
+                        p.returncode == 0 and arm["moves_ok"] >= 40 and arm["segments"] >= 10 and reads == {tables(on)}, json.dumps(arm))
+    finally:
+        for law in ("motion_tables_on", "characters_table_on"):
+            call_admin(run, "set_world_law", [law, original.get(law, shipped[law])], check=True)
+        # The two players back where they stood, so a later scenario finds the scene it expects.
+        if me_before and me_before[0] is not None and me_before[1]:
+            call_admin(run, "place_at", [int(me_before[0]), me_before[1][0], me_before[1][1]])
+        if walker_at:
+            call_admin(run, "place_at", [walker, walker_at["x"], walker_at["y"]])
+
+    def pooled(place, on):
+        mine = [a for a in arms if a["place"] == place and a["on"] == on]
+        kbs = [a["kB_per_s"] for a in mine]
+        ages = sorted(x for a in mine for x in a["ages"])
+        return {"kB_per_s": round(sum(kbs) / len(kbs), 2) if kbs else None, "kB_per_s_arms": kbs, "segments": len(ages),
+                "near_p50": pct(ages, 0.5), "near_p90": pct(ages, 0.9), "near_max": ages[-1] if ages else None,
+                "near_p90_arms": [a["near_p90"] for a in mine], "walker_absent_s": [a["walker_absent_s"] for a in mine]}
+    summary = {place: {"off": pooled(place, False), "on": pooled(place, True)} for place, _ in BV_PLACES}
+    summary["arms"] = arms
+    json.dump(summary, open(os.path.join(ROOT, ".local/living/verify", run, "ui", "battle-views-cost.json"), "w"), indent=1)
+    print(f"{s}: " + json.dumps({k: v for k, v in summary.items() if k != "arms"}), flush=True)
+    c.check(s, "kB/s and near ages recorded for both arms at both places",
+            all(summary[p][a]["kB_per_s"] and summary[p][a]["segments"] for p, _ in BV_PLACES for a in ("off", "on")), json.dumps({k: v for k, v in summary.items() if k != "arms"}))
 
 
 @scenario("gaze", cullet=True, explicit=True)
@@ -4249,7 +4875,7 @@ def main():
     ap.add_argument("scenarios", nargs="*")
     a = ap.parse_args()
     if a.list:
-        print("\n".join(n + (" *" if n in CULLET else "") for n in SCENARIOS))
+        print("\n".join(n + (" *" if n in CULLET else "") + (" (launches its own world)" if n in FRESH else "") for n in SCENARIOS))
         return
     if not a.run:
         ap.error("--run is required")
@@ -4262,7 +4888,8 @@ def main():
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
         owner = owner or verify.admin_token()
-        verify.require_running(verify.load(a.run), owner)
+        if name not in FRESH:
+            verify.require_running(verify.load(a.run), owner)
         SCENARIOS[name](a.run, c)
     p = os.path.join(ROOT, ".local/living/verify", a.run, "ui", f"checks{BEARING_SUFFIX}.json")
     os.makedirs(os.path.dirname(p), exist_ok=True)

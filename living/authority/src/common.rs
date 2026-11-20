@@ -368,6 +368,15 @@ pub fn set_law_override(ctx: &ReducerContext, name: &str, value: &str) -> u32 {
     rev
 }
 
+/// A new law revision with no value changed: what is kept in memory by the law revision is
+/// computed again (the cover geometry's last step: the cover in force changed).
+pub fn bump_law_rev(ctx: &ReducerContext) -> u32 {
+    let rev = law_rev(ctx) + 1;
+    ctx.db.law_revision().id().update(LawRevision { id: 0, revision: rev });
+    invalidate_law_rev();
+    rev
+}
+
 /// Call after writing `law_override`: the laws in force are laid over again at their next read.
 /// Whatever module memory holds by a law revision goes too, since a transaction that wrote one
 /// and then failed leaves it under a number the next write takes again (docs/LAW_OVERRIDE.md).
@@ -464,10 +473,18 @@ pub fn cover_law_of(l: &living_rules::script::Laws) -> CoverLaw {
         cover_brush_min_fill: l.cover_brush_min_fill, cover_cliff_step_m: l.cover_cliff_step_m }
 }
 
-/// Publish the cover policy in force (`cover_law`, one row). The cached map's cover mask follows
-/// the laws by itself (`map`, `COVER_FOR`): the terrain is kept.
+/// The cover in force: the laws' cover policy, with cover sight on only once the land's cover
+/// geometry is complete (`geometry::ready`; a world switched on later derives it in steps).
+pub fn cover_in_force(ctx: &ReducerContext, l: &living_rules::script::Laws) -> CoverLaw {
+    let mut row = cover_law_of(l);
+    row.cover_sight_on = row.cover_sight_on && crate::geometry::ready(ctx);
+    row
+}
+
+/// Publish the cover policy in force (`cover_law`, one row; [`cover_in_force`]). The cached
+/// map's cover mask follows by itself (`map`, `COVER_FOR`): the terrain is kept.
 pub fn publish_cover_law(ctx: &ReducerContext, l: living_rules::script::Laws) {
-    let row = cover_law_of(&l);
+    let row = cover_in_force(ctx, &l);
     match ctx.db.cover_law().id().find(0) {
         None => { ctx.db.cover_law().insert(row); }
         Some(old) if old != row => { ctx.db.cover_law().id().update(row); }
@@ -488,13 +505,14 @@ thread_local! {
 fn cover_mask(ctx: &ReducerContext, map: &Map) -> Option<std::sync::Arc<living_rules::cover::Mask>> {
     let law = laws(ctx);
     if !law.cover_sight_on { return None; }
+    if !crate::geometry::ready(ctx) {
+        // Not this land's yet (`geometry`): sight without cover until every band is kept.
+        log::info!("cover: on, but this land's cover geometry is not complete; none until it is");
+        return None;
+    }
     let _span = spacetimedb::log_stopwatch::LogStopwatch::new("map.cover");
     let recipe = ctx.db.land_plan().id().find(0).and_then(|p| serde_json::from_str(&p.params).ok()).unwrap_or_default();
     let mut bands: Vec<_> = ctx.db.cover_ground().iter().collect();
-    if bands.is_empty() {
-        log::warn!("cover: this land predates quantized genesis data");
-        return None;
-    }
     bands.sort_unstable_by_key(|b| b.id);
     let candidates = bands.iter().flat_map(|b| b.candidates.iter().copied()).collect::<Vec<_>>();
     let ground = bands.into_iter().flat_map(|b| b.heights).collect();
@@ -542,7 +560,7 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
             // The cover policy in force: the mask again only when it changed (a cover law's value).
             let revs = (scripts_rev(ctx), law_rev(ctx));
             if COVER_FOR.with(|c| c.get()) != Some(revs) {
-                let policy = cover_law_of(&laws(ctx));
+                let policy = cover_in_force(ctx, &laws(ctx));
                 if COVER_BUILT.with(|c| c.get()) != Some(policy) {
                     let mm = Rc::make_mut(map);
                     mm.cover = cover_mask(ctx, mm);
@@ -559,7 +577,7 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
         map.set_blocked(gate_blocks(ctx, w.width, w.height));
         map.cover = cover_mask(ctx, &map);
         COVER_FOR.with(|c| c.set(Some((scripts_rev(ctx), law_rev(ctx)))));
-        COVER_BUILT.with(|c| c.set(Some(cover_law_of(&laws(ctx)))));
+        COVER_BUILT.with(|c| c.set(Some(cover_in_force(ctx, &laws(ctx)))));
         let map = Rc::new(map);
         *cached = Some(map.clone());
         map

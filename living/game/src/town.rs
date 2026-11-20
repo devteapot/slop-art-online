@@ -260,8 +260,8 @@ fn read(net: NonSend<Net>, scene: NonSend<Scene>, mut acts: ResMut<Acts>, mut we
 /// Whom my act goes to: under or nearest the cursor (combat's pick), else the nearest within
 /// reach, ahead of me first; a person, or any creature I perceive when `people` is false.
 #[allow(clippy::too_many_arguments)]
-fn whom(conn: &DbConnection, scene: &Scene, me_id: u32, me: Vec2, ahead: Vec2, picked: Option<u32>, reach: f32, people: bool, town: &Town) -> Option<u32> {
-    let person = |id: &u32| *id != me_id && !town.hidden(*id) && conn.db.seen_characters().id().find(id).is_some_and(|c| !people || c.kind == "person");
+fn whom(conn: &crate::net::PlayerConnection, scene: &Scene, me_id: u32, me: Vec2, ahead: Vec2, picked: Option<u32>, reach: f32, people: bool, town: &Town) -> Option<u32> {
+    let person = |id: &u32| *id != me_id && !town.hidden(*id) && crate::net::find_character(conn, *id).is_some_and(|c| !people || c.kind == "person");
     if let Some(id) = picked.filter(person).filter(|id| scene.shown.get(id).is_some_and(|(p, _)| p.distance(me) <= reach)) {
         return Some(id);
     }
@@ -358,7 +358,7 @@ pub fn shows(net: NonSend<Net>, scene: NonSend<Scene>, acts: Res<Acts>, weather:
         let row = crate::net::find_doing(conn, id);
         let card = row.as_ref().and_then(|d| acts.by_code(d.code));
         // Animals have no house: asleep or resting they stay where they are, drawn.
-        let animal = conn.db.seen_characters().id().find(&id).is_some_and(|c| c.kind != "person");
+        let animal = crate::net::find_character(conn, id).is_some_and(|c| c.kind != "person");
         let card = card.filter(|c| !(animal && matches!(look(c), Pose::Rest | Pose::Indoors)));
         // Where its target is now: the one it is aimed at (as drawn), else the row's spot.
         let spot = row.as_ref().map(|d| scene.shown.get(&d.target).filter(|_| d.target != 0).map_or(Vec2::new(d.x, d.y), |s| s.0));

@@ -1,0 +1,32 @@
+{
+  "source_glb_sha256": "cbe287865e645ab7862370c6b1f5972c238c2a04fe185bb2fa13457a9f451d1f",
+  "video_sha256": "6fe49a7a20f940bcf5b0fac6f1a9187e82182021aa8a2d413480253512c56128",
+  "source": "embedded walk",
+  "seconds": 5,
+  "camera": "Middle, 12 m, 58-degree pitch, 44-degree FOV, yaw 20.0 to 34.9 at 0.1 degree/frame",
+  "hour": 11,
+  "pose_time_seconds": "(frame % 30) / 30",
+  "clip_info": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "vp9",
+        "width": 1600,
+        "height": 900,
+        "pix_fmt": "gbrp",
+        "r_frame_rate": "30/1",
+        "nb_read_frames": "150"
+      }
+    ],
+    "format": {
+      "duration": "5.000000"
+    }
+  },
+  "decoded_max_abs_rgb_error_vs_source": {
+    "0": 0,
+    "7": 0,
+    "74": 0,
+    "149": 0
+  }
+}

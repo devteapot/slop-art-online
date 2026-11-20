@@ -34,7 +34,7 @@ The next edit then takes the same law revision.
 
 ```bash
 R=client-law-$(date +%H%M%S)   # a client-* name: the first-result checks drive verify-client's drive.py
-python3 "$V" launch --run "$R" --seed island     # gaze off: the rollback scene runs; cover geometry: the cover laws too
+python3 "$V" launch --run "$R" --seed island     # gaze off: the rollback scene runs; cover off at creation: the derivation, then the cover laws
 python3 "$V" doctor --run "$R"
 python3 .agents/skills/verify-core/scripts/law_override.py checks --run "$R" > ".local/living/verify/$R/law-checks.txt" 2>&1
 python3 .agents/skills/verify-core/scripts/law_override.py time --run "$R" > ".local/living/verify/$R/law-time.txt" 2>&1
@@ -69,6 +69,6 @@ The scenes for the laws themselves:
 ## Gotchas
 
 - `law_override.py checks` needs a seed whose `gaze_on` is off for its rollback scene: the island, or the default world. On Cullet, gaze is on in its laws, and an overlay with a bad ceiling would be refused at its install. The scene says when it skips.
-- The cover laws are driven only on a world with quantized cover geometry (`cover_ground` row 0): the island and Cullet. `cover_sight_on` true without geometry is refused before anything is written.
+- On a land made with its cover off (the island, since `cover-genesis`), `checks` first switches `cover_sight_on` on. It proves the derivation: accepted, `cover_law` false while `cover_step` derives the bands, then every band kept, `cover_derivation` done, a further law revision and `cover_law` true; `cover_derivation` is private. It switches cover off again, and the world then has geometry for the cover laws' value-only checks. `cover_sight_on` true is refused only on a world with no `land` row ("cover sight requires a land world …").
 - The timing spans are logged by the module. On a module from before `law-override` there is no `set_world_law` span, so the round trip and `install.*` spans are the measure.
 - The verify lease is 10 minutes. `time` with `--repeat 3` on Cullet takes about 3 minutes on main's module (each change about 2.4 s plus the waits), and less than a minute on the branch.

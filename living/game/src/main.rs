@@ -39,6 +39,7 @@ mod live;
 mod loading;
 mod lookdev;
 mod mouth;
+mod genesis;
 mod net;
 mod perf;
 mod phase;
@@ -106,11 +107,25 @@ fn main() {
             primary_window: Some(Window {
                 title: "Slop Art Online — camera spike".into(),
                 resolution: bevy::window::WindowResolution::new(size.x, size.y),
+                // `LIVING_GAME_VSYNC=0|immediate|mailbox` (measurement): a window that presents
+                // without waiting for the display and updates as fast as it can when it hasn't
+                // the focus (below), so a windowed run's frame time is its cost, not 16.7 ms.
+                present_mode: match std::env::var("LIVING_GAME_VSYNC").as_deref().map(str::trim) {
+                    Ok("0") => bevy::window::PresentMode::AutoNoVsync,
+                    Ok("immediate") => bevy::window::PresentMode::Immediate,
+                    Ok("mailbox") => bevy::window::PresentMode::Mailbox,
+                    _ => bevy::window::PresentMode::default(),
+                },
                 ..default()
             }),
             ..default()
         }))
         .add_plugins(EguiPlugin::default());
+        // Bevy's game settings update an unfocused window at 60 Hz: a measurement run started
+        // in the background would read 16.7 ms whatever it cost.
+        if std::env::var("LIVING_GAME_VSYNC").is_ok_and(|v| !v.trim().is_empty() && v.trim() != "1") {
+            app.insert_resource(bevy::winit::WinitSettings::continuous());
+        }
     }
     app.add_systems(PostUpdate, perf::apply.before(post::update));
     perf::diagnostics(&mut app);

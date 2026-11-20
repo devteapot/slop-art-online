@@ -371,7 +371,7 @@ pub struct Scripted {
 }
 
 /// Resolve a scripted aim to a ground point and a creature.
-fn scripted_aim(conn: &DbConnection, scene: &Scene, me_id: u32, me: Vec2, spec: &str, look: Option<Vec2>) -> (Vec2, Option<u32>) {
+fn scripted_aim(conn: &crate::net::PlayerConnection, scene: &Scene, me_id: u32, me: Vec2, spec: &str, look: Option<Vec2>) -> (Vec2, Option<u32>) {
     if let Some((x, y)) = spec.split_once(',').and_then(|(x, y)| Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))) {
         return (me + Vec2::new(x, y), None);
     }
@@ -379,7 +379,7 @@ fn scripted_aim(conn: &DbConnection, scene: &Scene, me_id: u32, me: Vec2, spec: 
     let pick = scene
         .shown
         .iter()
-        .filter(|(id, _)| **id != me_id && kind.is_none_or(|k| conn.db.seen_characters().id().find(id).is_some_and(|c| c.kind == k)))
+        .filter(|(id, _)| **id != me_id && kind.is_none_or(|k| crate::net::find_character(conn, **id).is_some_and(|c| c.kind == k)))
         .min_by(|a, b| a.1 .0.distance(me).total_cmp(&b.1 .0.distance(me)))
         .map(|(id, (p, _))| (*p, *id));
     match pick {
@@ -533,7 +533,7 @@ pub fn input(
     // Sheathed (`weapon.rs`), a tap on a person talks to them (play-test 2: the owner, tapping to
     // interact, struck the first resident who greeted him). Drawn, a tap strikes whoever is
     // under the cursor.
-    let person = |id: u32| conn.db.seen_characters().id().find(&id).is_some_and(|k| k.kind == "person");
+    let person = |id: u32| crate::net::find_character(conn, id).is_some_and(|k| k.kind == "person");
     let tap_target = |c: &Combat| {
         let reach = roles.skill(Act::Primary).and_then(|s| cards.by_name(s)).map_or(0.0, |k| k.reach);
         c.target.or_else(|| nearest(&scene, &picking, me, aim_point(&cam, me, &input), reach + 0.4))
@@ -773,7 +773,7 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
     let mut out: HashMap<u32, Action> = HashMap::new();
     let ids: Vec<u32> = scene.shown.keys().copied().collect();
     for &id in &ids {
-        if !c.animals.contains(&id) && conn.db.seen_characters().id().find(&id).is_some_and(|c| c.kind != "person") {
+        if !c.animals.contains(&id) && crate::net::find_character(conn, id).is_some_and(|c| c.kind != "person") {
             c.animals.insert(id);
         }
     }

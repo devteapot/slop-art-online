@@ -1,0 +1,158 @@
+{
+ "files": {
+  "woman": {
+   "glb": "binary chunk identical; JSON identical but for the name",
+   "atlas.png": "identical",
+   "face.png": "identical",
+   "iris.png": "identical",
+   "tint.png": "identical",
+   "params.json": "identical but for the name"
+  },
+  "man": {
+   "glb": "binary chunk identical; JSON identical but for the name",
+   "atlas.png": "identical",
+   "face.png": "identical",
+   "iris.png": "identical",
+   "tint.png": "identical",
+   "params.json": "identical but for the name"
+  },
+  "elder": {
+   "glb": "binary chunk identical; JSON identical but for the name",
+   "atlas.png": "identical",
+   "face.png": "identical",
+   "iris.png": "identical",
+   "tint.png": "identical",
+   "params.json": "identical but for the name"
+  },
+  "girl": {
+   "glb": "binary chunk identical; JSON identical but for the name",
+   "atlas.png": "identical",
+   "face.png": "identical",
+   "iris.png": "identical",
+   "tint.png": "identical",
+   "params.json": "identical but for the name"
+  }
+ },
+ "frames": {
+  "woman": {
+   "00-clip-idle@0-0_8_0.36_0.88.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "01-clip-idle@0--35_8_0.36_0.88.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "02-clip-idle@0-90_8_0.36_0.88.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "03-clip-idle@0-0_8_0.18_0.86.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "04-clip-idle@0--35_8_0.18_0.86.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "05-clip-idle@0-near_0.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "06-clip-idle@0-middle_0.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   }
+  },
+  "man": {
+   "00-clip-idle@0-0_8_0.36_0.88.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "01-clip-idle@0--35_8_0.36_0.88.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "02-clip-idle@0-90_8_0.36_0.88.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "03-clip-idle@0-0_8_0.18_0.86.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "04-clip-idle@0--35_8_0.18_0.86.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "05-clip-idle@0-near_0.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "06-clip-idle@0-middle_0.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   }
+  },
+  "elder": {
+   "00-clip-idle@0-0_8_0.36_0.88.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "01-clip-idle@0--35_8_0.36_0.88.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "02-clip-idle@0-90_8_0.36_0.88.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "03-clip-idle@0-0_8_0.18_0.86.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "04-clip-idle@0--35_8_0.18_0.86.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "05-clip-idle@0-near_0.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "06-clip-idle@0-middle_0.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   }
+  },
+  "girl": {
+   "00-clip-idle@0-0_8_0.36_0.88.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "01-clip-idle@0--35_8_0.36_0.88.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "02-clip-idle@0-90_8_0.36_0.88.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "03-clip-idle@0-0_8_0.18_0.86.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "04-clip-idle@0--35_8_0.18_0.86.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "05-clip-idle@0-near_0.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   },
+   "06-clip-idle@0-middle_0.png": {
+    "pixels_differing": 0,
+    "max_levels": 0
+   }
+  }
+ }
+}

@@ -12,7 +12,9 @@
 //! The cover lifts when the island and your character are in, every chunk in reach has its ground
 //! and things and nothing waits to spawn, and no pipeline was created for [`QUIET_S`] s (the render
 //! world counts them into [`Pipelines`]); it fades over [`FADE_S`]. It lifts after [`MAX_S`]
-//! whatever happens. Only the first load is covered: later arrivals stream in budgeted
+//! whatever happens, unless connected play never got through or the world is still being made
+//! (staged genesis, `genesis.rs`): then it says "Preparing the world…", the step, the steps and
+//! the step's label over a bar, and stays until you are in. Only the first load is covered: later arrivals stream in budgeted
 //! (`island.rs`).
 //!
 //! **Prewarm.** Under the cover, a cluster of throwaway characters at the arrival point wears
@@ -46,6 +48,9 @@ pub struct Loading {
     pub done: bool,
     /// The prewarm characters, once spawned.
     prewarm: Option<Vec<Entity>>,
+    /// What the cover says now: its title, its detail line and its bar's share (shown while the
+    /// world is being made), for the UI dump.
+    pub cover: (String, String, Option<f32>),
 }
 
 impl Loading {
@@ -62,13 +67,22 @@ struct Cover;
 #[derive(Component)]
 struct CoverDetail;
 
+/// The cover's bar (shown while the world is being made) and its fill.
+#[derive(Component)]
+struct CoverBar;
+#[derive(Component)]
+struct CoverFill;
+
+/// The bar's width (UI px).
+const BAR_W: f32 = 320.0;
+
 pub struct LoadingPlugin;
 
 impl Plugin for LoadingPlugin {
     fn build(&self, app: &mut App) {
         let count = Pipelines::default();
         app.insert_resource(count.clone())
-            .insert_resource(Loading { fading: None, pipelines: (0, 0.0), done: false, prewarm: None })
+            .insert_resource(Loading { fading: None, pipelines: (0, 0.0), done: false, prewarm: None, cover: ("Arriving…".into(), String::new(), None) })
             .add_systems(Startup, spawn)
             .add_systems(Update, prewarm)
             .add_systems(Update, status)
@@ -96,6 +110,16 @@ fn spawn(mut commands: Commands, assets: Res<AssetServer>) {
             c.spawn(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: px(8), ..default() }).with_children(|col| {
                 col.spawn((Text::new("Arriving…"), font.clone(), TextColor(Color::srgba(1.0, 1.0, 1.0, 0.95)), TextShadow::default()));
                 col.spawn((CoverDetail, Text::new(""), TextFont { font_size: bevy::text::FontSize::Px(15.0), ..font }, TextColor(Color::srgba(1.0, 1.0, 1.0, 0.9)), TextShadow::default(), TextLayout::justify(Justify::Center)));
+                // How far the world's making is: a plain track and its fill, in the cover's own
+                // white (no theme loads before the first view).
+                col.spawn((
+                    CoverBar,
+                    Node { display: Display::None, width: px(BAR_W), height: px(6), margin: UiRect::top(px(6)), border_radius: BorderRadius::all(px(3)), overflow: Overflow::clip(), ..default() },
+                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.22)),
+                ))
+                .with_children(|bar| {
+                    bar.spawn((CoverFill, Node { width: px(0), height: percent(100), border_radius: BorderRadius::all(px(3)), ..default() }, BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.85))));
+                });
             });
         });
 }
@@ -111,6 +135,9 @@ fn status(
     covers: Query<Entity, With<Cover>>,
     children: Query<&Children>,
     mut texts: Query<(&mut Text, Has<CoverDetail>)>,
+    mut bars: Query<&mut Node, (With<CoverBar>, Without<CoverFill>)>,
+    mut fills: Query<&mut Node, (With<CoverFill>, Without<CoverBar>)>,
+    mut loading: ResMut<Loading>,
 ) {
     let Some(net) = net.filter(|_| !crate::lookdev::enabled()) else { return };
     // Where the first load is, under "Arriving…": the world reached, the land drawn, then me.
@@ -123,7 +150,12 @@ fn status(
     } else {
         ""
     };
-    let (title, detail) = if net.ever_live || net.attempts == 0 {
+    // The world is still being made (staged genesis): how far, over a bar.
+    let preparing = net.genesis.text(time.elapsed_secs_f64());
+    let share = preparing.as_ref().map(|_| net.genesis.bar);
+    let (title, detail) = if let Some(t) = preparing {
+        t
+    } else if net.ever_live || net.attempts == 0 {
         ("Arriving…".to_string(), stage.to_string())
     } else if net.status == crate::net::Status::Offline {
         let why = if net.detail.contains("refused") || net.detail.contains("Connect") { "the server isn't answering".to_string() } else { net.detail.chars().take(90).collect() };
@@ -141,6 +173,21 @@ fn status(
                 }
             }
         }
+    }
+    let display = if share.is_some() { Display::Flex } else { Display::None };
+    for mut n in &mut bars {
+        if n.display != display {
+            n.display = display;
+        }
+    }
+    let width = px(BAR_W * share.unwrap_or(0.0));
+    for mut n in &mut fills {
+        if n.width != width {
+            n.width = width;
+        }
+    }
+    if loading.cover.0 != title || loading.cover.1 != detail || loading.cover.2 != share {
+        loading.cover = (title, detail, share);
     }
 }
 
@@ -172,9 +219,7 @@ fn prewarm(mut commands: Commands, assets: Res<AssetServer>, island: Option<Res<
     let conn = net.as_ref().and_then(|n| n.conn.as_ref());
     let (keys, fallback): (Vec<String>, Fallback) = match conn {
         Some(conn) => {
-            use living_bindings::*;
-            use spacetimedb_sdk::Table;
-            let people: Vec<String> = conn.db.seen_characters().iter().filter(|c| c.kind == "person").map(|c| c.look).collect();
+            let people: Vec<String> = crate::net::characters(conn).into_iter().filter(|c| c.kind == "person").map(|c| c.look).collect();
             let mut keys: Vec<String> = people.iter().filter(|k| !k.is_empty()).cloned().collect();
             keys.sort();
             keys.dedup();
@@ -295,7 +340,8 @@ fn lift(
     let warmed = loading.prewarm.as_ref().is_none_or(|es| es.iter().all(|e| fitted.contains(*e)));
     let ready = island.as_ref().is_some_and(|i| i.settled()) && !me.is_empty() && warmed && now - loading.pipelines.1 > QUIET_S;
     // Connected play that never got through keeps its cover: it says why (`status`).
-    let stranded = net.as_ref().is_some_and(|n| !crate::lookdev::enabled() && !n.ever_live);
+    // So does a world still being made, until I am in it.
+    let stranded = net.as_ref().is_some_and(|n| !crate::lookdev::enabled() && (!n.ever_live || n.genesis.preparing()));
     if loading.fading.is_none() && (ready || (now > MAX_S && !stranded)) {
         info!("loading: the first view is in after {now:.1} s ({n} pipelines)");
         loading.fading = Some(now);

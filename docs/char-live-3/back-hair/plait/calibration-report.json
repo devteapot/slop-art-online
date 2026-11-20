@@ -1,0 +1,525 @@
+{
+  "file": "view/own-cora-live.glb",
+  "out": ".",
+  "audit": {
+    "errors": [],
+    "warnings": [],
+    "notes": [],
+    "facts": {
+      "forward": "+Z",
+      "profiles": {
+        "M00_000_Hair_00_HAIR": {
+          "shade": [
+            44,
+            8,
+            2
+          ],
+          "mid": [
+            104,
+            37,
+            8
+          ],
+          "light": [
+            119,
+            43,
+            6
+          ],
+          "highlight": [
+            135,
+            47,
+            3
+          ],
+          "t1": -0.2,
+          "t2": 0.4,
+          "edge": 0.02,
+          "highlight_feather": 0.08,
+          "ink": [
+            4,
+            0,
+            0
+          ],
+          "ink_px": 1.05,
+          "ink_range": 0.009,
+          "ink_fade_px": 2.0
+        },
+        "Cora_PlaitCrest_HAIR": {
+          "shade": [
+            104,
+            37,
+            8
+          ],
+          "mid": [
+            119,
+            43,
+            6
+          ],
+          "light": [
+            135,
+            47,
+            3
+          ],
+          "highlight": [
+            135,
+            47,
+            3
+          ],
+          "t1": -0.2,
+          "t2": 0.4,
+          "edge": 0.02,
+          "highlight_feather": 0.08,
+          "ink": [
+            4,
+            0,
+            0
+          ],
+          "ink_px": 1.05,
+          "ink_range": 0.009,
+          "ink_fade_px": 2.0
+        }
+      },
+      "hair_materials": [
+        1,
+        2
+      ],
+      "slots": {
+        "M00_001_01_Cloth_01_CLOTH": "cloth",
+        "M00_000_Hair_00_HAIR": "hair",
+        "Cora_PlaitCrest_HAIR": "hair",
+        "M00_000_00_Body_00_SKIN": "skin",
+        "M00_000_00_Face_00_SKIN": "face",
+        "M00_000_00_Eye_00_EYE": "eyes",
+        "M00_000_00_EyeIris_00_EYE": "eyes",
+        "M00_000_00_FaceEyeline_00_FACE": "eyes",
+        "M00_000_00_FaceBrow_00_FACE": "eyes",
+        "M00_000_00_FaceTint_00_FACE": "tint"
+      },
+      "face_normals_point": "+Z",
+      "mask": "texture view/own-cora-live.hair.png",
+      "mask_texture": "2048x2048, 3 channel(s)",
+      "ink_field": "G: 9979 texels on a line, 9.4% within range",
+      "face_forward_uv1": [
+        0.0,
+        1.0
+      ],
+      "face_map": "view/own-cora-live.face.png"
+    }
+  },
+  "shots": {
+    "portrait": "stills/00-clip-idle@0-0_8_0.36_0.88.png",
+    "near": "stills/01-clip-idle@0-near_0.png",
+    "portrait45": "stills/02-clip-idle@0-45_8_0.36_0.88.png",
+    "near_180": "stills/03-clip-idle@0-near_180.png",
+    "middle_180": "stills/04-clip-idle@0-middle_180.png",
+    "near_135": "stills/05-clip-idle@0-near_135.png",
+    "middle_135": "stills/06-clip-idle@0-middle_135.png",
+    "middle_0": "stills/07-clip-idle@0-middle_0.png",
+    "90:8:0.36:0.88": "stills/08-clip-idle@0-90_8_0.36_0.88.png",
+    "180:8:0.36:0.88": "stills/09-clip-idle@0-180_8_0.36_0.88.png",
+    "-35:8:0.36:0.88": "stills/10-clip-idle@0--35_8_0.36_0.88.png",
+    "0:5:1.14:0.50": "stills/11-clip-idle@0-0_5_1.14_0.50.png",
+    "180:8:0.75:0.68": "stills/12-clip-idle@0-180_8_0.75_0.68.png"
+  },
+  "patches": [
+    {
+      "patch": "hair shade",
+      "shot": "portrait",
+      "x": 860,
+      "y": 488,
+      "target": [
+        88,
+        42,
+        27
+      ],
+      "measured": [
+        90,
+        49,
+        33
+      ],
+      "delta": [
+        2,
+        7,
+        6
+      ],
+      "tolerance": 8,
+      "passed": true,
+      "luminance": 0.0448,
+      "target_luminance": 0.0381,
+      "saturation": 0.6333,
+      "target_saturation": 0.6932
+    },
+    {
+      "patch": "hair shade",
+      "shot": "portrait45",
+      "x": 917,
+      "y": 465,
+      "target": [
+        88,
+        42,
+        27
+      ],
+      "measured": [
+        82,
+        37,
+        24
+      ],
+      "delta": [
+        -6,
+        -5,
+        -3
+      ],
+      "tolerance": 8,
+      "passed": true,
+      "luminance": 0.0318,
+      "target_luminance": 0.0381,
+      "saturation": 0.7073,
+      "target_saturation": 0.6932
+    },
+    {
+      "patch": "hair mid",
+      "shot": "portrait",
+      "x": 759,
+      "y": 341,
+      "target": [
+        152,
+        72,
+        43
+      ],
+      "measured": [
+        146,
+        69,
+        42
+      ],
+      "delta": [
+        -6,
+        -3,
+        -1
+      ],
+      "tolerance": 8,
+      "passed": true,
+      "luminance": 0.1053,
+      "target_luminance": 0.1148,
+      "saturation": 0.7123,
+      "target_saturation": 0.7171
+    },
+    {
+      "patch": "hair mid",
+      "shot": "portrait45",
+      "x": 873,
+      "y": 406,
+      "target": [
+        152,
+        72,
+        43
+      ],
+      "measured": [
+        146,
+        65,
+        36
+      ],
+      "delta": [
+        -6,
+        -7,
+        -7
+      ],
+      "tolerance": 8,
+      "passed": true,
+      "luminance": 0.1002,
+      "target_luminance": 0.1148,
+      "saturation": 0.7534,
+      "target_saturation": 0.7171
+    },
+    {
+      "patch": "hair light",
+      "shot": "portrait",
+      "x": 826,
+      "y": 271,
+      "target": [
+        171,
+        88,
+        56
+      ],
+      "measured": [
+        171,
+        87,
+        60
+      ],
+      "delta": [
+        0,
+        -1,
+        4
+      ],
+      "tolerance": 8,
+      "passed": true,
+      "luminance": 0.158,
+      "target_luminance": 0.1592,
+      "saturation": 0.6491,
+      "target_saturation": 0.6725
+    },
+    {
+      "patch": "hair light",
+      "shot": "portrait45",
+      "x": 820,
+      "y": 275,
+      "target": [
+        171,
+        88,
+        56
+      ],
+      "measured": [
+        171,
+        87,
+        59
+      ],
+      "delta": [
+        0,
+        -1,
+        3
+      ],
+      "tolerance": 8,
+      "passed": true,
+      "luminance": 0.1579,
+      "target_luminance": 0.1592,
+      "saturation": 0.655,
+      "target_saturation": 0.6725
+    },
+    {
+      "patch": "hair highlight",
+      "shot": "portrait",
+      "x": 773,
+      "y": 267,
+      "target": [
+        187,
+        99,
+        63
+      ],
+      "measured": [
+        185,
+        95,
+        68
+      ],
+      "delta": [
+        -2,
+        -4,
+        5
+      ],
+      "tolerance": 8,
+      "passed": true,
+      "luminance": 0.1892,
+      "target_luminance": 0.1985,
+      "saturation": 0.6324,
+      "target_saturation": 0.6631
+    },
+    {
+      "patch": "hair highlight",
+      "shot": "portrait45",
+      "x": 874,
+      "y": 290,
+      "target": [
+        187,
+        99,
+        63
+      ],
+      "measured": [
+        185,
+        93,
+        65
+      ],
+      "delta": [
+        -2,
+        -6,
+        2
+      ],
+      "tolerance": 8,
+      "passed": true,
+      "luminance": 0.1852,
+      "target_luminance": 0.1985,
+      "saturation": 0.6486,
+      "target_saturation": 0.6631
+    },
+    {
+      "patch": "hair ink",
+      "shot": "portrait",
+      "x": 751,
+      "y": 295,
+      "target": [
+        65,
+        41,
+        33
+      ],
+      "measured": [
+        66,
+        39,
+        31
+      ],
+      "delta": [
+        1,
+        -2,
+        -2
+      ],
+      "tolerance": 8,
+      "passed": true,
+      "luminance": 0.0271,
+      "target_luminance": 0.0282,
+      "saturation": 0.5303,
+      "target_saturation": 0.4923
+    },
+    {
+      "patch": "skin base",
+      "shot": "portrait",
+      "x": 815,
+      "y": 432,
+      "target": [
+        241,
+        183,
+        148
+      ],
+      "measured": [
+        238,
+        181,
+        144
+      ],
+      "delta": [
+        -3,
+        -2,
+        -4
+      ],
+      "tolerance": 10,
+      "passed": true,
+      "luminance": 0.5324,
+      "target_luminance": 0.5471,
+      "saturation": 0.395,
+      "target_saturation": 0.3859
+    },
+    {
+      "patch": "skin cheek",
+      "shot": "portrait",
+      "x": 853,
+      "y": 411,
+      "target": [
+        235,
+        164,
+        128
+      ],
+      "measured": [
+        236,
+        165,
+        128
+      ],
+      "delta": [
+        1,
+        1,
+        0
+      ],
+      "tolerance": 10,
+      "passed": true,
+      "luminance": 0.463,
+      "target_luminance": 0.4577,
+      "saturation": 0.4576,
+      "target_saturation": 0.4553
+    },
+    {
+      "patch": "skin shadow",
+      "shot": "portrait",
+      "x": 800,
+      "y": 506,
+      "target": [
+        192,
+        121,
+        90
+      ],
+      "measured": [
+        195,
+        128,
+        98
+      ],
+      "delta": [
+        3,
+        7,
+        8
+      ],
+      "tolerance": 10,
+      "passed": true,
+      "luminance": 0.2792,
+      "target_luminance": 0.2562,
+      "saturation": 0.4974,
+      "target_saturation": 0.5312
+    },
+    {
+      "patch": "coat",
+      "shot": "portrait",
+      "x": 656,
+      "y": 696,
+      "target": [
+        156,
+        126,
+        135
+      ],
+      "measured": [
+        153,
+        125,
+        134
+      ],
+      "delta": [
+        -3,
+        -1,
+        -1
+      ],
+      "tolerance": 10,
+      "passed": true,
+      "luminance": 0.2316,
+      "target_luminance": 0.2374,
+      "saturation": 0.183,
+      "target_saturation": 0.1923
+    },
+    {
+      "patch": "jersey",
+      "shot": "portrait",
+      "x": 800,
+      "y": 767,
+      "target": [
+        118,
+        50,
+        43
+      ],
+      "measured": [
+        120,
+        50,
+        44
+      ],
+      "delta": [
+        2,
+        0,
+        1
+      ],
+      "tolerance": 10,
+      "passed": true,
+      "luminance": 0.0646,
+      "target_luminance": 0.0631,
+      "saturation": 0.6333,
+      "target_saturation": 0.6356
+    }
+  ],
+  "suggested": {
+    "shade": [
+      45,
+      8,
+      2
+    ],
+    "mid": [
+      108,
+      40,
+      10
+    ],
+    "light": [
+      119,
+      44,
+      5
+    ],
+    "highlight": [
+      136,
+      50,
+      3
+    ]
+  },
+  "passed": true
+}

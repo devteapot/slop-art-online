@@ -1,10 +1,1 @@
-{
-  "island": {
-    "rustc 1.99.1 (58cf8f9c3 2026-10-13)": {
-      "commit": "0228d94c0ff3aa177dd2c9f6580ebebc952790af",
-      "init_fuel": 118323042425.5,
-      "note": "Spark, merged tree 0228d94c (genesis-fuel-guard on main 0e310415, status-parts-genesis); gate run gate-1120015522-c1db8a",
-      "recorded": "2026-11-20"
-    }
-  }
-}
+{}

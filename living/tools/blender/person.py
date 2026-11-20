@@ -1534,7 +1534,16 @@ def make_neck(arm):
         clavicle_z = 1.456 + 0.22 * abs(co.x)
         front = smooth((co.y - y) / 0.026)
         clavicle = front * math.exp(-((co.z - clavicle_z) / 0.006) ** 2)
-        return mix(SKIN, SKIN_SHADE, 0.25 * smooth((1.56 - co.z) / 0.08) + 0.18 * clavicle)
+        base = mix(SKIN, SKIN_SHADE, 0.25 * smooth((1.56 - co.z) / 0.08) + 0.18 * clavicle)
+        ns = cage_head.NECK_SHADE
+        if TYPED and ns:
+            # The port's neck shade (SLOP_PORT=neck): full from the jaw down to `full_below_chin`,
+            # clear by `clear_below_chin`; the edge rises toward the sides and fades round the back.
+            side = min(abs(co.x) / ns["side_m"], 1.0) ** 2
+            top = 1.535 - ns["full_below_chin"] + ns["side_rise"] * side
+            low = 1.535 - ns["clear_below_chin"] + ns["side_rise"] * side
+            base = cage_head.neck_shaded(base, smooth((co.z - low) / max(top - low, 1e-6)) * (1 - ns["side_fade"] * side))
+        return base
 
     return build(part, arm, MAT["skin"], skin_colour)
 

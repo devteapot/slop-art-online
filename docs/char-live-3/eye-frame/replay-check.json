@@ -1,0 +1,82 @@
+{
+  "approved_meshes_identical": [
+    "Cora_PlaitCrest_HAIR",
+    "M00_000_00_Body_00_SKIN",
+    "M00_000_00_FaceBrow_00_FACE",
+    "M00_000_Hair_00_HAIR",
+    "M00_001_01_Cloth_01_CLOTH"
+  ],
+  "volume": {
+    "spread": 1.8700001239776611,
+    "crown_lift": 0.12436522243664064,
+    "rear_depth": 0.5191808751459246
+  },
+  "near_max_channel_change": 7,
+  "near_pixels_changed_over_eight_levels": 0,
+  "distinct_passed_colour_checks": 20,
+  "factory_sha256": {
+    "own-cora-live.glb": "54a11c9627de11443607b545f46f5f9d8a4e9ccc316604ad6706a5c13db1604e",
+    "own-cora-live.face.png": "f9fff170e2b9d7ef8a3b28a576e5b91b22f29167e2ffaced5d862d59d07143dc",
+    "own-cora-live.hair.png": "8a0d72abaefafc0f0f661b4b19513d38a8ad2b6e93a3f8c781e399b58b29d2fa",
+    "own-cora-live.calibration.json": "471e3655afccb12eea5236f69e057ff98520bc1f8bde8657dbdf3de5b155d37f"
+  },
+  "expressive_pixels": {
+    "Fcl_EYE_Close": 4322,
+    "Fcl_EYE_Close_L": 2341,
+    "Fcl_EYE_Close_R": 1984,
+    "Fcl_EYE_Joy": 6473,
+    "Fcl_MTH_A": 6077,
+    "Fcl_MTH_I": 5359,
+    "Fcl_MTH_U": 5586,
+    "Fcl_MTH_E": 5733,
+    "Fcl_MTH_O": 7007,
+    "Fcl_MTH_Fun": 1752,
+    "Fcl_MTH_Sorrow": 895,
+    "Fcl_BRW_Angry": 947,
+    "Fcl_BRW_Sorrow": 958,
+    "Fcl_BRW_Surprised": 1286,
+    "Fcl_BRW_Fun": 981
+  },
+  "returned_neutral_pixels": 0,
+  "factory_expression_different_pixels": {
+    "eye-neutral": 0,
+    "eye-Fcl_EYE_Close": 0,
+    "eye-Fcl_EYE_Close_L": 0,
+    "eye-Fcl_EYE_Close_R": 0,
+    "eye-Fcl_EYE_Joy": 0,
+    "eye-Fcl_MTH_A": 0,
+    "eye-Fcl_MTH_I": 0,
+    "eye-Fcl_MTH_U": 0,
+    "eye-Fcl_MTH_E": 0,
+    "eye-Fcl_MTH_O": 0,
+    "eye-Fcl_MTH_Fun": 0,
+    "eye-Fcl_MTH_Sorrow": 0,
+    "eye-Fcl_BRW_Angry": 0,
+    "eye-Fcl_BRW_Sorrow": 0,
+    "eye-Fcl_BRW_Surprised": 0,
+    "eye-Fcl_BRW_Fun": 0,
+    "eye-returned": 0,
+    "eye-three-quarter": 0
+  },
+  "factory_daylight_different_pixels": {
+    "portrait": 0,
+    "near": 0,
+    "portrait45": 0,
+    "near_180": 0,
+    "middle_180": 0,
+    "near_135": 0,
+    "middle_135": 0,
+    "middle_0": 0,
+    "90:8:0.36:0.88": 0,
+    "180:8:0.36:0.88": 0,
+    "-35:8:0.36:0.88": 0,
+    "0:5:1.14:0.50": 0,
+    "180:8:0.75:0.68": 0
+  },
+  "approved_rear_different_pixels": {
+    "near_180": 0,
+    "middle_180": 0,
+    "180:8:0.36:0.88": 0,
+    "180:8:0.75:0.68": 0
+  }
+}

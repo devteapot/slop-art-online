@@ -16,6 +16,7 @@ highlights on the same side in both eyes. Beyond theirs: stubble and beards, age
 """
 
 import math
+import os
 import struct
 import zlib
 
@@ -155,6 +156,50 @@ SHARED_IRIS_SEED = 7
 LIP_PIGMENT = (0.56, 0.16, 0.17)
 BLUSH_PIGMENT = (0.70, 0.26, 0.22)
 
+# char-port-2 S2 (`SLOP_PORT=paint`, docs/char-port-2/s2): Cora's face paint (char-live-1..3) as
+# parameters of the generator's own landmarks. Off unless named; with it off nothing changes.
+PORT = {f.strip() for f in os.environ.get("SLOP_PORT", "").split(",") if f.strip()}
+# The part of the face's picture the types' shared tint page keeps (living/tools/characters/share.py
+# TYPE_PAGES["tint"]): u0, v0, u1, v1.
+TINT_WINDOW = (0.1875, 0.59375, 0.8125, 0.875)
+PAINT = dict(
+    # The cheeks: a broad warm blush (Cora's pigment), and a band of it across the nose's bridge,
+    # as the drawing's. Centre and radii in metres on the head, from the eye's height down.
+    blush=dict(pigment=(0.83, 0.53, 0.40), x=0.040, below_eye=0.040, rx=0.030, rz=0.018, weight=1.5, bridge=0.55, bridge_rx=0.014, bridge_rz=0.008),
+    # The mouth: the crease darker toward the skin's line colour and a little wider; the lower lip
+    # diffuse; a cast shade under the lower lip (Cora's lip-shadow pad, .60 toward its colour).
+    mouth=dict(crease_line=0.6, crease_width=1.2, lower_lip=0.45, shadow=0.60, shadow_colour=(0.60, 0.32, 0.23)),
+    # The nose: a shade band hugging the underside (arching up at the sides), a glint at the tip,
+    # and two soft filled nostrils. Widths are shares of the nose's own width (`nose_wid`).
+    nose=dict(band_half=0.0115, band_above=0.0020, band_below=0.0013, band_bend=0.0010, pigment=(0.40, 0.44, 0.46),
+              glint_up=0.0012, glint_rx=0.0015, glint_rz=0.0009, glint_rgb=(1.0, 0.925, 0.827), glint=0.85,
+              nostril_x=0.0046, nostril_up=0.0030, nostril_rx=0.0025, nostril_rz=0.0013, nostril_tilt_deg=14.0, nostril_soft=0.0003,
+              nostril_fill=1.0, nostril_multiply=(0.08, 0.05, 0.05)),
+)
+
+
+def _port_nose(c, x, z, ax, front, wid, zs, zt, look):
+    """The nose as Cora's was painted (char-live-3 ink-batch/paint.py, ink-batch-2/nostrils.py), on
+    the generator's own landmarks: the underside shade, the tip's glint and the nostrils."""
+    p = PAINT["nose"]
+    half = p["band_half"] * wid
+    s_ = x / half
+    curve = zs + 0.0006 + p["band_bend"] * np.minimum(s_ * s_, 2.0)
+    shade = np.exp(-((z - curve) / np.where(z > curve, p["band_above"], p["band_below"])) ** 2) * np.exp(-s_ ** 4) * front
+    c.img *= 1 - (shade * c.mask)[..., None] * np.array(p["pigment"])
+    glint = np.exp(-((x / p["glint_rx"]) ** 2 + ((z - zt - p["glint_up"]) / p["glint_rz"]) ** 2)) * front
+    c.img += (np.array(p["glint_rgb"]) - c.img) * (p["glint"] * glint * c.mask)[..., None]
+    # Each nostril an ellipse leaning up at its outer end, filled with a soft edge.
+    k = math.radians(p["nostril_tilt_deg"])
+    dx, dz = ax - p["nostril_x"] * wid, z - (zs + p["nostril_up"])
+    u, v = dx * math.cos(k) + dz * math.sin(k), -dx * math.sin(k) + dz * math.cos(k)
+    r = np.sqrt((u / p["nostril_rx"]) ** 2 + (v / p["nostril_rz"]) ** 2)
+    edge = (r - 1.0) * min(p["nostril_rx"], p["nostril_rz"])
+    # The look's `nostril` (soft on women's and children's faces) only shades them a little:
+    # the drawing's woman has them plain.
+    fill = p["nostril_fill"] * (0.75 + 0.25 * min(look.get("nostril", 1.0), 1.0)) * smooth(0.5 - edge / p["nostril_soft"]) * front
+    c.img *= 1 - (fill * c.mask)[..., None] * (1 - np.array(p["nostril_multiply"]))
+
 
 def paint_skin(hf, look, rng, layer=None):
     """The skin's picture. With `layer` (a dict to fill), the lips' colour and the blush are left
@@ -195,8 +240,30 @@ def paint_skin(hf, look, rng, layer=None):
         else:
             lay(BLUSH_PIGMENT, 0.56 * amount * blob_of(cx, cz, rx, rz, mirror))
 
-    blush(0.041, ez - 0.036 * L, 0.021, 0.014, look["blush"])
-    blush(0.0, zt + 0.001, 0.009, 0.007, 0.5 * look["blush"] + 0.10 * old, mirror=False)
+    if "paint" in PORT:
+        b_ = PAINT["blush"]
+        pig = b_["pigment"]
+
+        # The broader blush stays inside the part of the picture the types' shared tint page
+        # keeps (share.py TYPE_PAGES["tint"]): faded out inside it, since the layer's mesh takes
+        # two rings of faces round every painted texel (person.make_head) and only its u is held
+        # to the window: 0.02 at the sides, 0.05 above (where the faces are tallest), 0.035 below.
+        rr, cc = np.indices(x.shape)
+        u_, v_ = (cc + 0.5) / ATLAS, (EYE_ROWS + rr + 0.5) / ATLAS
+        u0, v0, u1, v1 = TINT_WINDOW
+        keep = smooth((np.minimum(u_ - u0, u1 - u_) - 0.02) / 0.015) * smooth((v_ - v0 - 0.05) / 0.015) * smooth((v1 - v_ - 0.035) / 0.015)
+
+        def blush(cx, cz, rx, rz, amount, mirror=True):  # noqa: F811 (the port's pigment)
+            if layer is None:
+                c.blob(cx, cz, rx, rz, mix(warm, pig, 0.5), amount * b_["weight"] * keep, mirror=mirror)
+            else:
+                lay(pig, 0.56 * b_["weight"] * amount * blob_of(cx, cz, rx, rz, mirror) * keep)
+
+        blush(b_["x"], ez - b_["below_eye"] * L, b_["rx"], b_["rz"], look["blush"])
+        blush(0.0, ez - b_["below_eye"] * L, b_["bridge_rx"], b_["bridge_rz"], b_["bridge"] * look["blush"], mirror=False)
+    else:
+        blush(0.041, ez - 0.036 * L, 0.021, 0.014, look["blush"])
+        blush(0.0, zt + 0.001, 0.009, 0.007, 0.5 * look["blush"] + 0.10 * old, mirror=False)
     c.blend(shade, 0.16 * smooth((ax - 0.050) / 0.022) * smooth((ez - 0.01 - z) / 0.05))
     c.blend(shade, 0.14 * smooth((z - (ez + hf.eye_up + 0.034)) / 0.03))  # under the hair
     # The eyes' hollows: shade on the upper lid and at the inner corner, a little under the eye.
@@ -211,14 +278,17 @@ def paint_skin(hf, look, rng, layer=None):
     # nostrils; stronger on a grown man's or an old face.
     wid = hf.nose_wid
     nl = look["nose_line"]
-    c.blob(0.0, zs + 0.0010, 0.0078 * wid, 0.0022, shade, 0.80, mirror=False)
-    c.blob(0.0, zs - 0.0012, 0.0042 * wid, 0.0015, line, 0.40, mirror=False)
-    c.blob(0.0088 * wid, zs + 0.0030, 0.0019, 0.0026, line, 0.60 * look["nostril"])
-    c.stroke([(0.0048 * wid, zs + 0.0010), (0.0080 * wid, zs + 0.0016), (0.0112 * wid, zs + 0.0034), (0.0122 * wid, zs + 0.0062)], 0.00042, line, 0.85 * look["nostril"], taper=(0.25, 0.45))
-    t = np.clip((zn - z) / (zn - zt), 0, 1)
-    flank = np.exp(-(((ax - lerp(0.0060, 0.0100, t) * wid * 1.05) / 0.0026) ** 2)) * smooth((zn - 0.006 - z) / 0.012) * smooth((z - zt - 0.002) / 0.008)
-    c.blend(shade, 0.30 * nl * flank)
-    c.blob(0.0, zt + 0.0035, 0.0028 * wid, 0.0030, mix(skin, (1.0, 0.97, 0.93), 0.5), 0.30 * nl, mirror=False)
+    if "paint" in PORT:
+        _port_nose(c, x, z, ax, front, wid, zs, zt, look)
+    else:
+        c.blob(0.0, zs + 0.0010, 0.0078 * wid, 0.0022, shade, 0.80, mirror=False)
+        c.blob(0.0, zs - 0.0012, 0.0042 * wid, 0.0015, line, 0.40, mirror=False)
+        c.blob(0.0088 * wid, zs + 0.0030, 0.0019, 0.0026, line, 0.60 * look["nostril"])
+        c.stroke([(0.0048 * wid, zs + 0.0010), (0.0080 * wid, zs + 0.0016), (0.0112 * wid, zs + 0.0034), (0.0122 * wid, zs + 0.0062)], 0.00042, line, 0.85 * look["nostril"], taper=(0.25, 0.45))
+        t = np.clip((zn - z) / (zn - zt), 0, 1)
+        flank = np.exp(-(((ax - lerp(0.0060, 0.0100, t) * wid * 1.05) / 0.0026) ** 2)) * smooth((zn - 0.006 - z) / 0.012) * smooth((z - zt - 0.002) / 0.008)
+        c.blend(shade, 0.30 * nl * flank)
+        c.blob(0.0, zt + 0.0035, 0.0028 * wid, 0.0030, mix(skin, (1.0, 0.97, 0.93), 0.5), 0.30 * nl, mirror=False)
     # The lips: a tint, fuller below; the line between them; shade beneath.
     tint = look["lip_tint"]
     lz = hf.mouth_line(x)
@@ -229,6 +299,8 @@ def paint_skin(hf, look, rng, layer=None):
     upper = smooth((lz + up_h - z) / lip_soft + 0.5) * smooth((z - lz) / lip_soft + 0.5) * (u < 1.0)
     lower = smooth((z - (lz - lo_h)) / lip_soft + 0.5) * smooth((lz - z) / lip_soft + 0.5) * (u < 0.92)
     lip = look["lip"]
+    mp = PAINT["mouth"] if "paint" in PORT else dict(crease_line=0.2, crease_width=1.0, lower_lip=1.0, shadow=0.42, shadow_colour=None)
+    lower = lower * mp["lower_lip"]
     if layer is None:
         c.blend(mix(lip, shade, 0.25), 0.90 * tint * upper)
         c.blend(lip, 0.80 * tint * lower)
@@ -238,10 +310,11 @@ def paint_skin(hf, look, rng, layer=None):
         lay(mix(LIP_PIGMENT, (0.34, 0.09, 0.10), 0.35), 0.78 * tint * upper)
         lay(LIP_PIGMENT, 0.72 * tint * lower)
         lay(mix(LIP_PIGMENT, (1.0, 0.90, 0.86), 0.75), 0.34 * tint * lower * blob_of(0.0, zm - 0.45 * 0.0060 * hf.lip, 0.0050, 0.0013, mirror=False))
-    c.blob(0.0, zm - 0.0060 * hf.lip - 0.0028, 0.0095, 0.0022, shade, 0.42, mirror=False)
+    c.blob(0.0, zm - 0.0060 * hf.lip - 0.0028, 0.0095, 0.0022, shade if mp["shadow_colour"] is None else mix(shade, mp["shadow_colour"], 0.5), mp["shadow"], mirror=False)
     pts = [(mw * t_, float(hf.mouth_line(np.array([mw * t_]))[0])) for t_ in np.linspace(0, 1.0, 12)]
-    mouth_c = mix(look["mouth_line"], line, 0.2)
-    c.stroke(pts, lambda a: 0.00052 - 0.00022 * a, mouth_c, 0.95, soft=0.0003)
+    mouth_c = mix(look["mouth_line"], line, mp["crease_line"])
+    cw = mp["crease_width"]
+    c.stroke(pts, lambda a: (0.00052 - 0.00022 * a) * cw, mouth_c, 0.95, soft=0.0003)
     c.blob(mw, pts[-1][1], 0.0013, 0.0011, mouth_c, 0.7)
     # Stubble: a cool shade over the jaw and lip, grained.
     stub = look["stubble"]

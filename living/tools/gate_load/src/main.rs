@@ -39,7 +39,7 @@ mod soak;
 use living_bindings::*;
 use serde_json::{json, Value};
 use spacetimedb_sdk::{DbContext, Event, EventTable, Identity, Table, TableWithPrimaryKey};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::{BufRead, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -264,7 +264,50 @@ struct Player {
     errors: Arc<Mutex<Vec<String>>>,
     /// Sampled for motion freshness (`Fresh`).
     fresh: bool,
+    /// The copy rows this connection received and whose they were (copy-privacy).
+    privacy: Arc<Mutex<Privacy>>,
 }
+
+/// Every `seen_body_copy` and `seen_character_copy` row a viewer receives (its initial rows, then
+/// each insert and update), checked against the connection's own identity: row-level security
+/// (`viewer = :sender`) must give it only its own (copy-privacy, docs/BATTLE_VIEWERS.md). Counted
+/// from the connection on, across deaths and rejoins (the identity stays).
+#[derive(Default)]
+struct Privacy {
+    body_rows: u64,
+    character_rows: u64,
+    foreign_rows: u64,
+    /// Up to 8 foreign viewers' identities (hex), for the report.
+    foreign_viewers: BTreeSet<String>,
+}
+
+impl Privacy {
+    fn check(&mut self, own: Identity, viewer: Identity, body: bool) {
+        if body {
+            self.body_rows += 1;
+        } else {
+            self.character_rows += 1;
+        }
+        if viewer != own {
+            self.foreign_rows += 1;
+            if self.foreign_viewers.len() < 8 {
+                self.foreign_viewers.insert(viewer.to_hex().to_string());
+            }
+        }
+    }
+
+    fn json(&self) -> Value {
+        json!({"body_rows": self.body_rows, "character_rows": self.character_rows, "foreign_rows": self.foreign_rows, "foreign_viewers": self.foreign_viewers})
+    }
+}
+
+/// The copies a connection holds now (its client cache), by table.
+fn held_copies(db: &RemoteTables) -> Value {
+    json!({"body": db.seen_body_copy().count(), "character": db.seen_character_copy().count()})
+}
+
+/// `held` on stdin: print every player's copies held now and its privacy counts (copy-privacy).
+static HELD_REQ: AtomicBool = AtomicBool::new(false);
 
 fn status(res: &Result<Result<(), String>, spacetimedb_sdk::__codegen::InternalError>) -> String {
     match res {
@@ -420,8 +463,16 @@ fn connect(uri: &str, db: &str, token: &str, confirmed: Option<bool>) -> (DbConn
     (conn, identity)
 }
 
-fn hook(p: &Player, log: &Log) {
+fn hook(p: &Player, log: &Log, own: Identity) {
     let conn = &p.conn;
+    {
+        let pv = p.privacy.clone();
+        conn.db.seen_body_copy().on_insert(move |_, c| pv.lock().unwrap().check(own, c.viewer, true));
+        let pv = p.privacy.clone();
+        conn.db.seen_character_copy().on_insert(move |_, c| pv.lock().unwrap().check(own, c.viewer, false));
+        let pv = p.privacy.clone();
+        conn.db.seen_character_copy().on_update(move |_, _, c| pv.lock().unwrap().check(own, c.viewer, false));
+    }
     count!(conn, p.counts, seen_bodies);
     count!(conn, p.counts, seen_characters);
     count!(conn, p.counts, seen_fighters);
@@ -889,8 +940,8 @@ fn players_mode() {
         let (conn, identity) = connect(&uri, &db, p["token"].as_str().unwrap(), client.confirmed());
         log.put(json!({"k": "conn", "p": idx, "role": format!("{role:?}"), "identity": identity.to_hex().to_string(), "ts": t, "connected": unix_us()}));
         let fresh = fresh_every > 0 && idx % fresh_every == 0;
-        let pl = Player { idx, role, name: p["name"].as_str().unwrap().to_string(), conn, counts: Arc::default(), st: Arc::default(), applied: Arc::default(), errors: Arc::default(), fresh };
-        hook(&pl, &log);
+        let pl = Player { idx, role, name: p["name"].as_str().unwrap().to_string(), conn, counts: Arc::default(), st: Arc::default(), applied: Arc::default(), errors: Arc::default(), fresh, privacy: Arc::default() };
+        hook(&pl, &log, identity);
         let mut queries = client.base();
         // What the game client subscribes with the tiers (frame-views): the two tiers of each
         // perception view in place of the view; with cues, also the three cue event tables.
@@ -983,6 +1034,7 @@ fn players_mode() {
                 FRESH_ON.store(l == "fresh on", Ordering::SeqCst);
                 lg.put(json!({"k": l, "ts": unix_us()}));
             }
+            "held" => HELD_REQ.store(true, Ordering::SeqCst),
             "stop" | "eof" => {
                 FRESH_ON.store(false, Ordering::SeqCst);
                 s2.store(true, Ordering::SeqCst);
@@ -1007,6 +1059,10 @@ fn players_mode() {
     let mut late = 0u64;
     let mut duel_turns = [0; 2];
     while !stop.load(Ordering::SeqCst) {
+        if HELD_REQ.swap(false, Ordering::SeqCst) {
+            let held: Vec<Value> = players.iter().map(|p| json!({"p": p.idx, "alive": p.st.lock().unwrap().me.is_some(), "held": held_copies(&p.conn.db), "privacy": p.privacy.lock().unwrap().json()})).collect();
+            println!("{}", json!({"event": "held", "players": held}));
+        }
         let now = Instant::now();
         for (i, p) in players.iter().enumerate() {
             if next[i] > now {
@@ -1056,6 +1112,7 @@ fn players_mode() {
             let s = p.st.lock().unwrap();
             json!({"p": p.idx, "role": format!("{:?}", p.role), "lives": s.lives, "alive": s.me.is_some(), "calls": s.seq, "unanswered": s.pending,
                    "events": counts_json(&p.counts), "fresh": p.fresh.then(|| fresh_json(&s.fresh)), "held": {"bodies": seen_body_count(&p.conn.db), "characters": seen_characters_of(&p.conn.db).len()},
+                   "copies": held_copies(&p.conn.db), "privacy": p.privacy.lock().unwrap().json(),
                    "errors": *p.errors.lock().unwrap()})
         })
         .collect();

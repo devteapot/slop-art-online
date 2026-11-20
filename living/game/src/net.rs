@@ -8,13 +8,20 @@
 //! state come from per-sender views on the authority, which enforces the perception boundary
 //! (docs/PERCEPTION.md): nothing of a creature beyond my sight or behind a wall reaches me.
 //!
-//! 1. On connect: `world`, `land` and `settlement` (1, 1 and about 6 rows).
+//! 1. On connect: `world`, `land` and `settlement` (1, 1 and about 6 rows), and beside them, as
+//!    a subscription of its own, the one `genesis` row (staged genesis, `genesis.rs`): a world
+//!    still being made holds what follows, `join` among it, until the row says `done`. A module
+//!    without the table fails only that subscription, and its world counts as ready.
 //! 2. Then, for the connection's lifetime (so the death screen keeps its rows):
-//!    - what I perceive: `seen_characters` (mine too), and the others' motion, fighter and
-//!      doing rows as a set of their own, chosen by the world's delivery laws once the installed
-//!      script is compiled (`perception_law`): the near and far tier views and their cue tables,
-//!      or, while `cue_transport_on` and `near_tier_on` are both off, `seen_bodies`,
-//!      `seen_fighters` and `seen_doing` as on main;
+//!    - what I perceive: the characters I perceive (mine too), and the others' motion, fighter
+//!      and doing rows, as a set of their own ([`Feed`]), chosen by the world's delivery laws
+//!      once the installed script is compiled (`perception_law`): the near and far tier views and
+//!      their cue tables, or, while `cue_transport_on` and `near_tier_on` are both off,
+//!      `seen_bodies`, `seen_fighters` and `seen_doing` as on main; the bodies from the public
+//!      `seen_body_copy` table instead of the motion views while `motion_tables_on` is on, and
+//!      the characters from `seen_character_copy` instead of `seen_characters` while
+//!      `characters_table_on` is on (battle-views, docs/BATTLE_VIEWERS.md: rows only I can
+//!      read, by row-level security, so no per-viewer view re-runs);
 //!    - my own state: my body, fighter and doing rows (`my_body`, `my_fighter`, `my_doing`),
 //!      `my_characters` (the one I play, kept after its death until I join again),
 //!      `my_vitals`, `my_experience`, `my_places`, `my_inventory`, `my_know_how`, my combat
@@ -72,7 +79,8 @@ const STATIC: &[&str] = &["SELECT * FROM cover_law", "SELECT * FROM world", "SEL
 /// What my character perceives and its own state (per-sender views, docs/PERCEPTION.md), and
 /// the rules' cards, for the connection's lifetime.
 const PERCEIVED: &[&str] = &[
-    "SELECT * FROM seen_characters",
+    // The characters I perceive are in the perception set ([`Feed`]): `seen_characters`, or
+    // `seen_character_copy` while `characters_table_on` is on.
     // My own body, move and act, apart from my scene's: my own changes re-run one row.
     "SELECT * FROM my_body",
     "SELECT * FROM my_fighter",
@@ -138,6 +146,14 @@ enum Signal {
     Identity(Identity, String),
     Static,
     Base,
+    /// The `genesis` subscription is in (its row, if any, is in the cache).
+    GenesisApplied,
+    /// The `genesis` subscription failed: a module from before staged genesis.
+    GenesisMissing(String),
+    /// A call refused with `world_preparing` (`join` or `join_as` when `join`).
+    Preparing { join: bool, err: String },
+    /// The `genesis` subscription's handle, kept for the connection's lifetime.
+    GenesisSub(SubscriptionHandle),
     GazeReply(GazeBand, GazeReply),
     Disconnected(String),
     Error(String),
@@ -281,6 +297,12 @@ pub struct Net {
     pub attempts: u32,
     pub ever_live: bool,
     join_sent: bool,
+    /// Whether the world is made yet, and the join retry while it is not (`genesis.rs`).
+    pub genesis: crate::genesis::Wait,
+    genesis_sub: Option<SubscriptionHandle>,
+    genesis_applied: bool,
+    /// The static set is in; the base waits for the world to be ready.
+    static_in: bool,
     /// The call `on_reply` just logged, for `report` (`actions.rs`).
     last_call: std::cell::Cell<Option<crate::actions::Sent>>,
     base: Option<SubscriptionHandle>,
@@ -288,15 +310,85 @@ pub struct Net {
     gaze: GazeInput,
     near: Window,
     far: Window,
-    /// The perception streams' set: key [`TIERED`] or [`UNTIERED`] (`perception_law`).
+    /// The perception set: keyed by its [`Feed::key`] (`perception_law`).
     perception: Window,
     /// When the set being subscribed was asked for (elapsed s), for the switch's log line.
     perception_asked: f64,
+    /// Whether the wait for my copies to reach the tables was logged for the set being subscribed.
+    perception_waited: bool,
 }
 
-/// The perception sets' keys in [`Net::perception`].
-const TIERED: u32 = 0;
-const UNTIERED: u32 = 1;
+/// What the perception set reads, as the world's delivery laws choose it ([`Delivery::feed`]).
+/// Every switch of the set is a change of this, made in one place (`perception_law`), before
+/// broken.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub(crate) struct Feed {
+    /// The near and far tier views and their cue tables (`cue_transport_on` or `near_tier_on`
+    /// on), else each stream's one untiered view, as main's client subscribes them.
+    pub tiered: bool,
+    /// `motion_tables_on`: the others' bodies from `seen_body_copy` in place of the motion views
+    /// (`seen_bodies`, or `seen_bodies_near` and `_far`). The motion cue table stays with the
+    /// tiers (a cue stands until that creature's next copy row).
+    pub motion_table: bool,
+    /// `characters_table_on`: the characters from `seen_character_copy` in place of
+    /// `seen_characters`.
+    pub characters_table: bool,
+}
+
+const CHARACTERS_VIEW: &str = "SELECT * FROM seen_characters";
+const CHARACTERS_TABLE: &str = "SELECT * FROM seen_character_copy";
+const MOTION_TABLE: &str = "SELECT * FROM seen_body_copy";
+
+impl Feed {
+    /// Its key in [`Net::perception`].
+    fn key(self) -> u32 {
+        self.tiered as u32 | (self.motion_table as u32) << 1 | (self.characters_table as u32) << 2
+    }
+
+    fn of_key(k: u32) -> Self {
+        Self { tiered: k & 1 != 0, motion_table: k & 2 != 0, characters_table: k & 4 != 0 }
+    }
+
+    /// Its queries: the characters, then the streams (the motion views replaced by the table).
+    pub(crate) fn queries(self) -> Vec<&'static str> {
+        let mut q = vec![if self.characters_table { CHARACTERS_TABLE } else { CHARACTERS_VIEW }];
+        let streams = if self.tiered { TIERED_STREAMS } else { UNTIERED_STREAMS };
+        if self.motion_table {
+            q.push(MOTION_TABLE);
+            q.extend(streams.iter().copied().filter(|s| !MOTION_VIEWS.contains(s)));
+        } else {
+            q.extend(streams.iter().copied());
+        }
+        q
+    }
+
+    /// `tiered` or `untiered`, as the log lines and the seen log name the set.
+    fn tier(self) -> &'static str {
+        if self.tiered { "tiered" } else { "untiered" }
+    }
+
+    /// Which tables it reads, for the log lines.
+    fn tables(self) -> String {
+        format!("tables: motion {} characters {}", self.motion_table, self.characters_table)
+    }
+}
+
+/// The world's four delivery laws, as a compiled script gives them.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct Delivery {
+    pub cues: bool,
+    pub tiers: bool,
+    pub motion_tables: bool,
+    pub characters_table: bool,
+}
+
+impl Delivery {
+    /// The perception set they choose: the untiered streams only while both frame laws are off;
+    /// each copy table while its law is on.
+    pub(crate) fn feed(self) -> Feed {
+        Feed { tiered: self.cues || self.tiers, motion_table: self.motion_tables, characters_table: self.characters_table }
+    }
+}
 
 impl Default for Net {
     fn default() -> Self {
@@ -322,6 +414,10 @@ impl Default for Net {
             attempts: 0,
             ever_live: false,
             join_sent: false,
+            genesis: Default::default(),
+            genesis_sub: None,
+            genesis_applied: false,
+            static_in: false,
             last_call: Default::default(),
             base: None,
             gaze_view: None,
@@ -330,6 +426,7 @@ impl Default for Net {
             far: Window::default(),
             perception: Window::default(),
             perception_asked: 0.0,
+            perception_waited: false,
         }
     }
 }
@@ -362,6 +459,117 @@ struct Cues {
     /// Reads take the untiered views (`seen_bodies`, `seen_fighters`, `seen_doing`): the set in
     /// place is the untiered one (`Perception`). Else the tiers and the overlays.
     untiered: AtomicBool,
+    /// The copy tables (battle-views), as this connection holds them.
+    copies: Copies,
+}
+
+/// The copy tables' rows (battle-views), indexed for the readers: `seen_body_copy` has no key
+/// (a client finds its row of a creature by `body`, and sees a change as an insert and a delete),
+/// and `seen_character_copy` is keyed by the projected row's id, not the creature's. Kept by the
+/// tables' callbacks, whichever set is in place; read only while the set in place reads the
+/// table (`motion`, `characters`).
+#[derive(Default)]
+struct Copies {
+    /// My copy of each creature's motion, by creature.
+    bodies: Mutex<HashMap<u32, SeenBodyCopy>>,
+    /// My mirror of each creature's projection, by creature.
+    characters: Mutex<HashMap<u32, SeenCharacterCopy>>,
+    /// Reads take the bodies from `bodies` (the set in place has `seen_body_copy`).
+    motion: AtomicBool,
+    /// Reads take the characters from `characters` (the set in place has `seen_character_copy`).
+    characters_on: AtomicBool,
+    /// The set being subscribed leaves a table the reads are on: its deletes are not taken
+    /// (the kill switch empties a table in one tick) until the reads move to the views.
+    leaving_motion: AtomicBool,
+    leaving_characters: AtomicBool,
+}
+
+/// A body's motion as the views give it, from its copy row: the segment with the creature's id
+/// (`Segment::moving` on the authority).
+pub(crate) fn moving_of(c: &SeenBodyCopy) -> Moving {
+    let s = &c.seg;
+    Moving {
+        id: c.body,
+        x: s.x,
+        y: s.y,
+        t_ms: s.t_ms,
+        vx: s.vx,
+        vy: s.vy,
+        heading: s.heading,
+        turn: s.turn,
+        turn_s: s.turn_s,
+        next_ms: s.next_ms,
+        speed: s.speed,
+        face_off: s.face_off,
+        face_turn: s.face_turn,
+        face_turn_s: s.face_turn_s,
+        running: s.running,
+    }
+}
+
+/// Whether the world's `law_override` row for `law` holds `false` now. The kill switch's deletes
+/// come in a tick after that row's change, so a delete callback that sees it can keep the rows
+/// for the frames until the views are in, even when both arrive in one frame.
+fn law_row_off(db: &RemoteTables, law: &str) -> bool {
+    db.law_override().name().find(&law.to_string()).is_some_and(|r| serde_json::from_str::<bool>(r.value.trim()).ok() == Some(false))
+}
+
+impl Copies {
+    fn motion_frozen(&self, db: &RemoteTables) -> bool {
+        self.leaving_motion.load(Ordering::Relaxed) || law_row_off(db, "motion_tables_on")
+    }
+
+    fn characters_frozen(&self, db: &RemoteTables) -> bool {
+        self.leaving_characters.load(Ordering::Relaxed) || law_row_off(db, "characters_table_on")
+    }
+
+    /// A body's copy row came: it replaces what I had of that creature. Returns the row it
+    /// replaced (a change arrives as this insert, then the old row's delete).
+    fn put_body(&self, row: &SeenBodyCopy) -> Option<SeenBodyCopy> {
+        self.bodies.lock().unwrap().insert(row.body, row.clone())
+    }
+
+    /// A body's copy row went: forgotten only if it is still the row I hold (not one its
+    /// replacement's insert already took the place of), and not while the rows are kept.
+    fn drop_body(&self, row: &SeenBodyCopy, frozen: bool) {
+        if frozen {
+            return;
+        }
+        let mut b = self.bodies.lock().unwrap();
+        if b.get(&row.body) == Some(row) {
+            b.remove(&row.body);
+        }
+    }
+
+    fn put_character(&self, row: &SeenCharacterCopy) {
+        self.characters.lock().unwrap().insert(row.row.id, row.clone());
+    }
+
+    /// As `drop_body`: only the mirror row I hold of that creature (its projected row's id).
+    fn drop_character(&self, row: &SeenCharacterCopy, frozen: bool) {
+        if frozen {
+            return;
+        }
+        let mut c = self.characters.lock().unwrap();
+        if c.get(&row.row.id).is_some_and(|h| h.id == row.id) {
+            c.remove(&row.row.id);
+        }
+    }
+
+    /// The indexes again from the client cache, while the rows are not kept and they differ in
+    /// size (a delete missed while kept, or a switch back before the views were in).
+    fn resync(&self, db: &RemoteTables) {
+        if !self.motion_frozen(db) && self.bodies.lock().unwrap().len() as u64 != db.seen_body_copy().count() {
+            let rows: HashMap<u32, SeenBodyCopy> = db.seen_body_copy().iter().map(|r| (r.body, r)).collect();
+            debug!("seen_body_copy: index rebuilt from the cache ({} rows)", rows.len());
+            *self.bodies.lock().unwrap() = rows;
+        }
+        if !self.characters_frozen(db) && self.characters.lock().unwrap().len() as u64 != db.seen_character_copy().count() {
+            let rows: HashMap<u32, SeenCharacterCopy> = db.seen_character_copy().iter().map(|r| (r.row.id, r)).collect();
+            debug!("seen_character_copy: index rebuilt from the cache ({} rows)", rows.len());
+            *self.characters.lock().unwrap() = rows;
+        }
+    }
 }
 
 /// The player's SDK connection and its transient cue state. Each reconnect gets fresh overlays.
@@ -381,14 +589,57 @@ impl PlayerConnection {
         self.cues.untiered.load(Ordering::Relaxed)
     }
 
+    /// Whether reads take the bodies from `seen_body_copy`.
+    pub fn motion_table(&self) -> bool {
+        self.cues.copies.motion.load(Ordering::Relaxed)
+    }
+
+    /// Whether reads take the characters from `seen_character_copy`.
+    pub fn characters_table(&self) -> bool {
+        self.cues.copies.characters_on.load(Ordering::Relaxed)
+    }
+
+    /// What the reads take now.
+    fn reads(&self) -> Feed {
+        Feed { tiered: !self.untiered(), motion_table: self.motion_table(), characters_table: self.characters_table() }
+    }
+
     /// The others I perceive by the set in place (id, segment `t_ms`), for the seen log.
-    fn perceived_rows(&self, untiered: bool) -> Vec<(u32, u64)> {
-        if untiered {
+    fn perceived_rows(&self) -> Vec<(u32, u64)> {
+        if self.motion_table() {
+            let b = self.cues.copies.bodies.lock().unwrap();
+            if self.untiered() {
+                return b.values().map(|c| (c.body, c.seg.t_ms)).collect();
+            }
+            let o = self.cues.motion.lock().unwrap();
+            return b.values().map(|c| (c.body, o.get(&c.body).map_or(c.seg.t_ms, |m| m.t_ms))).collect();
+        }
+        if self.untiered() {
             motion::all(&self.db).iter().map(|m| (m.id, m.t_ms)).collect()
         } else {
             let o = self.cues.motion.lock().unwrap();
             motion::near(&self.db).iter().chain(motion::far(&self.db).iter()).map(|m| (m.id, o.get(&m.id).map_or(m.t_ms, |c| c.t_ms))).collect()
         }
+    }
+
+    /// The characters I perceive by the set in place (ids), for the seen log and the switch.
+    fn perceived_characters(&self) -> Vec<u32> {
+        if self.characters_table() {
+            self.cues.copies.characters.lock().unwrap().keys().copied().collect()
+        } else {
+            self.db.seen_characters().iter().map(|c| c.id).collect()
+        }
+    }
+
+    /// Whether `feed`'s tables hold my scene, so reads can move to them: a viewer's motion
+    /// copies move to `seen_body_copy` whole, in one transaction, at its next frame after the law
+    /// goes on, and its mirror fills whole at its next frame (the authority's `to_public`,
+    /// `fill_mirror`); until then the views hold it. A scene that is empty in the reads now is
+    /// lost by none.
+    fn tables_hold(&self, feed: Feed) -> bool {
+        let motion = !feed.motion_table || self.motion_table() || self.db.seen_body_copy().count() > 0 || self.perceived_rows().is_empty();
+        let characters = !feed.characters_table || self.characters_table() || self.db.seen_character_copy().count() > 0 || self.perceived_characters().is_empty();
+        motion && characters
     }
 }
 
@@ -472,8 +723,22 @@ perception_streams! {
     },
 }
 
+/// The motion views `seen_body_copy` replaces while `motion_tables_on` is on ([`Feed::queries`]).
+const MOTION_VIEWS: &[&str] = &["SELECT * FROM seen_bodies", "SELECT * FROM seen_bodies_near", "SELECT * FROM seen_bodies_far"];
+
 fn motion_tier(db: &RemoteTables, id: u32) -> Option<Moving> {
     motion::near(db).id().find(&id).or_else(|| motion::far(db).id().find(&id))
+}
+
+impl Cues {
+    /// A perceived creature's motion row as the tiers hold it (without its cue), from the table
+    /// the reads take bodies from.
+    fn motion_row(&self, db: &RemoteTables, id: u32) -> Option<Moving> {
+        if self.copies.motion.load(Ordering::Relaxed) {
+            return self.copies.bodies.lock().unwrap().get(&id).map(moving_of);
+        }
+        motion_tier(db, id)
+    }
 }
 
 fn clear_on_tier_change<R: 'static, T, H>(tier: H, overlay: &Overlay<T>, id: fn(&R) -> u32)
@@ -538,6 +803,39 @@ impl Cues {
         let cues = self.clone();
         far.on_delete(move |ctx, row| cues.forget_hidden(&ctx.db, row.id));
 
+        // battle-views: the copy tables, indexed whichever set is in place. A body's copy row is
+        // its tier row while the table is read: a change of it ends its motion cue, as a tier
+        // row's change does, and only a changed segment tells the display clock how late rows
+        // arrive (`track_motion_time`); a change comes as the new row's insert, then the old's
+        // delete.
+        let (cues, segment, any) = (self.clone(), latest.clone(), latest_all.clone());
+        conn.db.seen_body_copy().on_insert(move |_, row| {
+            let old = cues.copies.put_body(row);
+            any.fetch_max(row.seg.t_ms, Ordering::Relaxed);
+            if old.is_some_and(|o| o.seg.t_ms != row.seg.t_ms) {
+                segment.fetch_max(row.seg.t_ms, Ordering::Relaxed);
+            }
+            cues.motion.lock().unwrap().remove(&row.body);
+        });
+        let cues = self.clone();
+        conn.db.seen_body_copy().on_delete(move |ctx, row| {
+            let frozen = cues.copies.motion_frozen(&ctx.db);
+            cues.copies.drop_body(row, frozen);
+            cues.motion.lock().unwrap().remove(&row.body);
+            if !frozen && cues.copies.motion.load(Ordering::Relaxed) {
+                cues.forget_hidden(&ctx.db, row.body);
+            }
+        });
+        let cues = self.clone();
+        conn.db.seen_character_copy().on_insert(move |_, row| cues.copies.put_character(row));
+        let cues = self.clone();
+        conn.db.seen_character_copy().on_update(move |_, _, row| cues.copies.put_character(row));
+        let cues = self.clone();
+        conn.db.seen_character_copy().on_delete(move |ctx, row| {
+            let frozen = cues.copies.characters_frozen(&ctx.db);
+            cues.copies.drop_character(row, frozen);
+        });
+
         let (cues, latest, latest_all) = (self.clone(), latest.clone(), latest_all.clone());
         motion::cue(&conn.db).on_insert(move |ctx, cue| {
             if !cues.taking() {
@@ -545,7 +843,7 @@ impl Cues {
             }
             let motion = &cues.motion;
             let (id, row) = motion::cue_value(cue);
-            let Some(tier) = motion_tier(&ctx.db, id) else { return };
+            let Some(tier) = cues.motion_row(&ctx.db, id) else { return };
             let mut motion = motion.lock().unwrap();
             let previous = motion.get(&id).unwrap_or(&tier);
             latest_all.fetch_max(row.t_ms, Ordering::Relaxed);
@@ -559,7 +857,7 @@ impl Cues {
         let cues = self.clone();
         fighting::cue(&conn.db).on_insert(move |ctx, cue| {
             let (id, row) = fighting::cue_value(cue);
-            if cues.taking() && motion_tier(&ctx.db, id).is_some() {
+            if cues.taking() && cues.motion_row(&ctx.db, id).is_some() {
                 cues.fighter.lock().unwrap().insert(id, row.clone());
                 trace!(id, "accepted fighter cue");
             }
@@ -568,7 +866,7 @@ impl Cues {
         let cues = self.clone();
         activity::cue(&conn.db).on_insert(move |ctx, cue| {
             let (id, row) = activity::cue_value(cue);
-            if cues.taking() && motion_tier(&ctx.db, id).is_some() {
+            if cues.taking() && cues.motion_row(&ctx.db, id).is_some() {
                 cues.doing.lock().unwrap().insert(id, row.clone());
                 trace!(id, "accepted doing cue");
             }
@@ -577,7 +875,7 @@ impl Cues {
 
     fn forget_hidden(&self, db: &RemoteTables, id: u32) {
         // SDK callbacks see both tiers after the transaction, including tier migrations.
-        if motion_tier(db, id).is_none() {
+        if self.motion_row(db, id).is_none() {
             self.fighter.lock().unwrap().remove(&id);
             self.doing.lock().unwrap().remove(&id);
         }
@@ -602,48 +900,53 @@ fn track_motion_time(
     });
 }
 
-/// The two laws as a compiled script gives them: (`cue_transport_on`, `near_tier_on`).
-fn delivery_laws(l: &living_rules::script::Laws) -> (bool, bool) {
-    (l.cue_transport_on, l.near_tier_on)
+/// The four delivery laws as a compiled script gives them.
+fn delivery_laws(l: &living_rules::script::Laws) -> Delivery {
+    Delivery { cues: l.cue_transport_on, tiers: l.near_tier_on, motion_tables: l.motion_tables_on, characters_table: l.characters_table_on }
 }
 
 /// The laws taken while the world's script does not compile here and none was read before: the
-/// rules' defaults, as a fresh world starts (both on since frame-views' acceptance).
-fn delivery_fallback() -> (bool, bool) {
+/// rules' defaults, as a fresh world starts.
+fn delivery_fallback() -> Delivery {
     delivery_laws(&living_rules::script::Laws::default())
 }
 
-/// The perception set the two laws choose: the untiered set only while both are off.
-fn perception_set(cues_on: bool, tiers_on: bool) -> u32 {
-    if !cues_on && !tiers_on { UNTIERED } else { TIERED }
-}
-
-/// The world's delivery laws, `cue_transport_on` and `near_tier_on`, read from the installed
-/// `skills` script the client already compiles with the world's `law_override` rows laid over it
-/// (`verbs::Rules`, docs/LAW_OVERRIDE.md), again whenever the laws in force change
-/// (`Rules::laws_key`: a compile, or a value-only edit laid over in place with the script
-/// revision unchanged, `Applied::delivery`). They choose the perception set: both off, the
-/// untiered views as main's client subscribes them (`UNTIERED_STREAMS`: on the authority both off
-/// is main's delivery, and a client on the tiers then pays for twice the views, docs/TICK_RATE.md
-/// "Short series"); either on, the tiers and the cue tables (`TIERED_STREAMS`). A script that
-/// does not compile here keeps the last values, or before any the rules' defaults
-/// (`delivery_fallback`: both on, so the tiers with cues). The new set is subscribed beside the
-/// old, the old dropped once the new one is applied (no frame without the others), and then
-/// reads move to it and the overlays are cleared. Each frame the cue law is passed to the
+/// The world's delivery laws, `cue_transport_on`, `near_tier_on`, `motion_tables_on` and
+/// `characters_table_on`, read from the installed `skills` script the client already compiles
+/// with the world's `law_override` rows laid over it (`verbs::Rules`, docs/LAW_OVERRIDE.md), again
+/// whenever the laws in force change (`Rules::laws_key`: a compile, or a value-only edit laid
+/// over in place with the script revision unchanged, `Applied::delivery`). They choose the
+/// perception set ([`Delivery::feed`]): both frame laws off, the untiered views as main's client
+/// subscribes them (`UNTIERED_STREAMS`: on the authority both off is main's delivery, and a client
+/// on the tiers then pays for twice the views, docs/TICK_RATE.md "Short series"); either on, the
+/// tiers and the cue tables (`TIERED_STREAMS`); and with them, the bodies from `seen_body_copy`
+/// while `motion_tables_on` is on, the characters from `seen_character_copy` while
+/// `characters_table_on` is on (docs/BATTLE_VIEWERS.md). A script that does not compile here
+/// keeps the last values, or before any the rules' defaults (`delivery_fallback`).
+///
+/// Every switch is made here, before broken: the new set is subscribed beside the old, and the
+/// old dropped once the new one is applied and holds my scene (`tables_hold`: a viewer's copies
+/// reach a table at its next frame after the law goes on, while the views hold them meanwhile);
+/// then reads move to it and the overlays are cleared. Leaving a table (its law off, the kill
+/// switch), its rows are kept for the reads until the views are in, though the authority empties
+/// it in one tick (`Copies::leaving_*`, `law_row_off`). Each frame the cue law is passed to the
 /// connection's overlays, so a fresh connection takes it at once.
-pub fn perception_law(mut net: NonSendMut<Net>, rules: Option<NonSend<crate::verbs::Rules>>, time: Res<Time>, mut law: Local<Option<(u64, bool, bool)>>) {
+pub fn perception_law(mut net: NonSendMut<Net>, rules: Option<NonSend<crate::verbs::Rules>>, time: Res<Time>, mut law: Local<Option<(u64, Delivery)>>) {
     let Some(rules) = rules else { return };
     if let Some(sc) = rules.scripts.as_ref() {
-        if law.is_none_or(|(key, _, _)| key != rules.laws_key) {
-            let (c, t) = delivery_laws(&sc.laws());
-            if law.is_none_or(|(_, oc, ot)| (oc, ot) != (c, t)) {
-                info!("rules: cue_transport_on {c} near_tier_on {t} (script revision {}, laws {})", rules.revision, rules.laws_key);
+        if law.is_none_or(|(key, _)| key != rules.laws_key) {
+            let d = delivery_laws(&sc.laws());
+            if law.is_none_or(|(_, old)| old != d) {
+                info!(
+                    "rules: cue_transport_on {} near_tier_on {} motion_tables_on {} characters_table_on {} (script revision {}, laws {})",
+                    d.cues, d.tiers, d.motion_tables, d.characters_table, rules.revision, rules.laws_key
+                );
             }
-            *law = Some((rules.laws_key, c, t));
+            *law = Some((rules.laws_key, d));
         }
     }
-    let (cues_on, tiers_on) = match *law {
-        Some((_, c, t)) => (c, t),
+    let d = match *law {
+        Some((_, d)) => d,
         None if rules.error.is_some() => delivery_fallback(),
         None => return,
     };
@@ -651,64 +954,110 @@ pub fn perception_law(mut net: NonSendMut<Net>, rules: Option<NonSend<crate::ver
         return;
     }
     if let Some(conn) = net.conn.as_ref() {
-        conn.cues.set_transport(cues_on);
+        conn.cues.set_transport(d.cues);
     }
-    let want = perception_set(cues_on, tiers_on);
+    let want = d.feed();
     let now = time.elapsed_secs_f64();
-    if net.perception.wanted() != Some(&vec![want]) {
-        let set = if want == UNTIERED { UNTIERED_STREAMS } else { TIERED_STREAMS };
-        info!("perception: subscribing the {} set ({} queries; cue_transport_on {cues_on}, near_tier_on {tiers_on})", if want == UNTIERED { "untiered" } else { "tiered" }, set.len());
-        let sub = net.subscribe(set.iter().map(|q| q.to_string()).collect(), vec![want]);
+    if net.perception.wanted() != Some(&vec![want.key()]) {
+        let set = want.queries();
+        info!(
+            "perception: subscribing the {} set ({} queries; {}; cue_transport_on {} near_tier_on {})",
+            want.tier(),
+            set.len(),
+            want.tables(),
+            d.cues,
+            d.tiers
+        );
+        let sub = net.subscribe(set.iter().map(|q| q.to_string()).collect(), vec![want.key()]);
         net.perception.replace(sub);
         net.perception_asked = now;
+        net.perception_waited = false;
+        if let Some(conn) = net.conn.as_ref() {
+            let c = &conn.cues.copies;
+            c.leaving_motion.store(conn.motion_table() && !want.motion_table, Ordering::Relaxed);
+            c.leaving_characters.store(conn.characters_table() && !want.characters_table, Ordering::Relaxed);
+        }
     }
-    let before = net.perception.current.as_ref().map(|s| s.key[0]);
-    let old_rows = if before.is_some() && net.perception.next.as_ref().is_some_and(|s| s.handle.is_active()) {
-        net.conn.as_ref().map(|c| c.perceived_rows(c.untiered()))
-    } else {
-        None
-    };
+    let Some(conn) = net.conn.as_ref() else { return };
+    conn.cues.copies.resync(&conn.db);
+    let Some(next) = net.perception.next.as_ref().filter(|s| s.handle.is_active()).map(|s| Feed::of_key(s.key[0])) else { return };
+    if !conn.tables_hold(next) {
+        if !net.perception_waited && now - net.perception_asked > 2.0 {
+            info!(
+                "perception: the {} set is in, waiting for my copies to reach the tables ({}; seen_body_copy {} rows, seen_character_copy {} rows)",
+                next.tier(),
+                next.tables(),
+                conn.db.seen_body_copy().count(),
+                conn.db.seen_character_copy().count()
+            );
+            net.perception_waited = true;
+        }
+        return;
+    }
+    let had = net.perception.current.is_some();
+    let old_rows: Vec<(u32, u64)> = if had { conn.perceived_rows() } else { Vec::new() };
+    let old_chars: Vec<u32> = if had { conn.perceived_characters() } else { Vec::new() };
     net.perception.settle();
-    let after = net.perception.current.as_ref().map(|s| s.key[0]);
-    if after != before {
-        let untiered = after == Some(UNTIERED);
-        let asked = net.perception_asked;
-        let Some(conn) = net.conn.as_ref() else { return };
-        let counts = conn.cues.counts();
-        conn.cues.clear();
-        conn.cues.untiered.store(untiered, Ordering::Relaxed);
-        let new: std::collections::HashSet<u32> = conn.perceived_rows(untiered).into_iter().map(|(id, _)| id).collect();
-        let old: std::collections::HashSet<u32> = old_rows.unwrap_or_default().into_iter().map(|(id, _)| id).collect();
-        let mut missing: Vec<u32> = old.difference(&new).copied().collect();
-        missing.sort_unstable();
-        info!(
-            "perception: on the {} set after {:.0} ms ({} others; {} were in the old set, missing now {:?}); overlays cleared (motion, fighter, doing): {:?}",
-            if untiered { "untiered" } else { "tiered" },
-            (now - asked) * 1000.0,
-            new.len(),
-            old.len(),
-            missing,
-            counts
-        );
+    let asked = net.perception_asked;
+    let Some(conn) = net.conn.as_ref() else { return };
+    let counts = conn.cues.counts();
+    conn.cues.clear();
+    let c = &conn.cues.copies;
+    // Into a table: its index from the cache as it stands; out of one: nothing kept.
+    c.leaving_motion.store(false, Ordering::Relaxed);
+    c.leaving_characters.store(false, Ordering::Relaxed);
+    if next.motion_table != conn.motion_table() {
+        c.bodies.lock().unwrap().clear();
     }
+    if next.characters_table != conn.characters_table() {
+        c.characters.lock().unwrap().clear();
+    }
+    conn.cues.untiered.store(!next.tiered, Ordering::Relaxed);
+    c.motion.store(next.motion_table, Ordering::Relaxed);
+    c.characters_on.store(next.characters_table, Ordering::Relaxed);
+    c.resync(&conn.db);
+    let new: std::collections::HashSet<u32> = conn.perceived_rows().into_iter().map(|(id, _)| id).collect();
+    let old: std::collections::HashSet<u32> = old_rows.into_iter().map(|(id, _)| id).collect();
+    let mut missing: Vec<u32> = old.difference(&new).copied().collect();
+    missing.sort_unstable();
+    let new_chars: std::collections::HashSet<u32> = conn.perceived_characters().into_iter().collect();
+    let mut missing_chars: Vec<u32> = old_chars.into_iter().filter(|id| !new_chars.contains(id)).collect();
+    missing_chars.sort_unstable();
+    info!(
+        "perception: on the {} set after {:.0} ms ({}; {} others; {} were in the old set, missing now {:?}; {} characters, missing now {:?}); overlays cleared (motion, fighter, doing): {:?}",
+        next.tier(),
+        (now - asked) * 1000.0,
+        next.tables(),
+        new.len(),
+        old.len(),
+        missing,
+        new_chars.len(),
+        missing_chars,
+        counts
+    );
 }
 
 /// `LIVING_GAME_SEEN_LOG=<file>`: every frame, the others as the reads see them then (the set in
-/// place, its rows' segment `t_ms`, the overlays' sizes) and the wall clock (`wall_ms`, to line
-/// frames up with an outside driver's calls), one JSON line, for checking a switch of perception
-/// sets frame by frame.
+/// place, its rows' segment `t_ms`, the overlays' sizes), the characters' ids and the wall clock
+/// (`wall_ms`, to line frames up with an outside driver's calls), one JSON line, for checking a
+/// switch of perception sets frame by frame.
 pub fn seen_log(net: NonSend<Net>, time: Res<Time>, mut out: Local<Option<Option<std::io::BufWriter<std::fs::File>>>>) {
     use std::io::Write;
     let w = out.get_or_insert_with(|| std::env::var("LIVING_GAME_SEEN_LOG").ok().filter(|p| !p.is_empty()).and_then(|p| std::fs::File::create(p).ok()).map(std::io::BufWriter::new));
     let (Some(w), Some(conn)) = (w.as_mut(), net.conn.as_ref()) else { return };
-    let untiered = conn.untiered();
+    let reads = conn.reads();
+    let set = net.perception.current.as_ref().map(|s| Feed::of_key(s.key[0]));
     let wall_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
+    let mut chars = conn.perceived_characters();
+    chars.sort_unstable();
     let line = serde_json::json!({
         "t": time.elapsed_secs_f64(),
         "wall_ms": wall_ms,
-        "set": net.perception.current.as_ref().map(|s| if s.key[0] == UNTIERED { "untiered" } else { "tiered" }),
-        "reads": if untiered { "untiered" } else { "tiered" },
-        "rows": conn.perceived_rows(untiered),
+        "set": set.map(|f| f.tier()),
+        "reads": reads.tier(),
+        "tables": {"motion": reads.motion_table, "characters": reads.characters_table},
+        "rows": conn.perceived_rows(),
+        "characters": chars,
         "overlays": conn.cues.counts(),
     });
     let _ = writeln!(w, "{line}");
@@ -716,10 +1065,10 @@ pub fn seen_log(net: NonSend<Net>, time: Res<Time>, mut out: Local<Option<Option
 }
 
 /// A perceived body as the drawing code takes it: its motion row (which carries
-/// no path, chunk or kind), with the creature's kind from its `seen_characters` row (both views
-/// hold the same creatures).
-pub fn body_of(conn: &DbConnection, m: Moving) -> Body {
-    let kind = conn.db.seen_characters().id().find(&m.id).map(|c| c.kind).unwrap_or_default();
+/// no path, chunk or kind), with the creature's kind from its character row (both sources hold
+/// the same creatures).
+pub fn body_of(conn: &PlayerConnection, m: Moving) -> Body {
+    let kind = find_character(conn, m.id).map(|c| c.kind).unwrap_or_default();
     Body {
         id: m.id,
         kind,
@@ -742,18 +1091,61 @@ pub fn body_of(conn: &DbConnection, m: Moving) -> Body {
     }
 }
 
-/// Every body my character perceives, mine included.
-pub fn bodies(conn: &PlayerConnection) -> impl Iterator<Item = Body> + '_ {
-    if conn.untiered() {
-        let rows: Vec<Moving> = conn.db.my_body().iter().chain(motion::all(&conn.db).iter()).collect();
-        return Box::new(rows.into_iter().map(move |m| body_of(conn, m))) as Box<dyn Iterator<Item = Body> + '_>;
+/// Every character my character perceives, mine included: `seen_characters`, or its mirror
+/// `seen_character_copy` while the set in place reads it.
+pub fn characters(conn: &PlayerConnection) -> Vec<SeenCharacter> {
+    if conn.characters_table() {
+        return conn.cues.copies.characters.lock().unwrap().values().map(|c| c.row.clone()).collect();
+    }
+    conn.db.seen_characters().iter().collect()
+}
+
+/// A perceived character's row by its creature id, mine included (as [`characters`]).
+pub fn find_character(conn: &PlayerConnection, id: u32) -> Option<SeenCharacter> {
+    if conn.characters_table() {
+        return conn.cues.copies.characters.lock().unwrap().get(&id).map(|c| c.row.clone());
+    }
+    conn.db.seen_characters().id().find(&id)
+}
+
+/// How many characters I perceive (as [`characters`]).
+pub fn character_count(conn: &PlayerConnection) -> usize {
+    if conn.characters_table() {
+        return conn.cues.copies.characters.lock().unwrap().len();
+    }
+    conn.db.seen_characters().count() as usize
+}
+
+/// How many others' motion rows the set in place holds (the live report).
+pub fn motion_count(conn: &PlayerConnection) -> usize {
+    if conn.motion_table() {
+        return conn.cues.copies.bodies.lock().unwrap().len();
+    }
+    (motion::all(&conn.db).count() + motion::near(&conn.db).count() + motion::far(&conn.db).count()) as usize
+}
+
+/// The others' motion rows by the set in place, each with its cue laid over (tiers only).
+fn others_motion(conn: &PlayerConnection) -> Vec<Moving> {
+    let untiered = conn.untiered();
+    if conn.motion_table() {
+        let b = conn.cues.copies.bodies.lock().unwrap();
+        if untiered {
+            return b.values().map(moving_of).collect();
+        }
+        let motion = conn.cues.motion.lock().unwrap();
+        return b.values().map(|c| motion.get(&c.body).cloned().unwrap_or_else(|| moving_of(c))).collect();
+    }
+    if untiered {
+        return motion::all(&conn.db).iter().collect();
     }
     let motion = conn.cues.motion.lock().unwrap();
-    let rows: Vec<_> = conn.db.my_body().iter().chain(motion::near(&conn.db).iter()
-        .chain(motion::far(&conn.db).iter())
-        .map(|row| motion.get(&row.id).cloned().unwrap_or(row)))
-        .collect();
-    Box::new(rows.into_iter().map(move |m| body_of(conn, m)))
+    motion::near(&conn.db).iter().chain(motion::far(&conn.db).iter()).map(|row| motion.get(&row.id).cloned().unwrap_or(row)).collect()
+}
+
+/// Every body my character perceives, mine included.
+pub fn bodies(conn: &PlayerConnection) -> impl Iterator<Item = Body> + '_ {
+    let rows: Vec<Moving> = conn.db.my_body().iter().chain(others_motion(conn)).collect();
+    rows.into_iter().map(move |m| body_of(conn, m))
 }
 
 pub fn find_body(conn: &PlayerConnection, id: u32) -> Option<Body> {
@@ -762,12 +1154,13 @@ pub fn find_body(conn: &PlayerConnection, id: u32) -> Option<Body> {
 
 /// A perceived body's motion row, mine included.
 pub fn find_motion(conn: &PlayerConnection, id: u32) -> Option<Moving> {
-    if conn.untiered() {
-        return conn.db.my_body().id().find(&id).or_else(|| motion::all(&conn.db).id().find(&id));
+    if let Some(mine) = conn.db.my_body().id().find(&id) {
+        return Some(mine);
     }
-    conn.db.my_body().id().find(&id)
-        .or_else(|| conn.cues.motion.lock().unwrap().get(&id).cloned())
-        .or_else(|| motion_tier(&conn.db, id))
+    if conn.untiered() {
+        return if conn.motion_table() { conn.cues.motion_row(&conn.db, id) } else { motion::all(&conn.db).id().find(&id) };
+    }
+    conn.cues.motion.lock().unwrap().get(&id).cloned().or_else(|| conn.cues.motion_row(&conn.db, id))
 }
 
 /// A perceived fighter's row, mine included.
@@ -837,6 +1230,7 @@ impl Net {
         args: impl FnOnce() -> serde_json::Value,
     ) -> impl FnOnce(&ReducerEventContext, Result<Result<(), String>, spacetimedb_sdk::__codegen::InternalError>) + Send + 'static {
         let errors = self.errors.clone();
+        let inbox = self.inbox.clone();
         let sent = crate::actions::sent(reducer, what, args);
         self.last_call.set(sent);
         move |ctx, r| {
@@ -853,6 +1247,13 @@ impl Net {
             }
             let msg = match r {
                 Ok(Ok(())) => return,
+                // The world is still being made: never a failure the player sees; `pump` holds
+                // it and sends `join` again when the world is ready (`genesis.rs`).
+                Ok(Err(e)) if crate::genesis::is_preparing(&e) => {
+                    debug!("{what} held: {e}");
+                    inbox.lock().unwrap().push(Signal::Preparing { join: matches!(reducer, "join" | "join_as"), err: e });
+                    return;
+                }
                 Ok(Err(e)) => format!("{what} refused: {e}"),
                 Err(e) => format!("{what} failed: {e}"),
             };
@@ -889,6 +1290,15 @@ impl Net {
                 conn.db.law_override().on_insert(|_, _| law_rows_moved());
                 conn.db.law_override().on_update(|_, _, _| law_rows_moved());
                 conn.db.law_override().on_delete(|_, _| law_rows_moved());
+                // Whether the world is made yet: its own subscription, so a module without the
+                // table fails only this one (`genesis.rs`). Asked first, so it answers first.
+                let (g_ok, g_err) = (applied.clone(), applied.clone());
+                let genesis = conn
+                    .subscription_builder()
+                    .on_applied(move |_| g_ok.lock().unwrap().push(Signal::GenesisApplied))
+                    .on_error(move |_, e| g_err.lock().unwrap().push(Signal::GenesisMissing(e.to_string())))
+                    .subscribe(["SELECT * FROM genesis"]);
+                applied.lock().unwrap().push(Signal::GenesisSub(genesis));
                 let ok = applied.clone();
                 let err = applied.clone();
                 conn.subscription_builder()
@@ -1020,7 +1430,7 @@ impl Net {
     }
 
     /// Keep my own rows and the chunk window around me subscribed.
-    fn maintain(&mut self) {
+    fn maintain(&mut self, now: f64) {
         if self.status != Status::Live {
             return;
         }
@@ -1040,6 +1450,9 @@ impl Net {
             self.far = Window::default();
             if let Some(id) = found {
                 info!("playing character #{id}");
+                if let Some(done) = self.genesis.done_at.take() {
+                    info!("genesis: joined {:.2} s after the world was ready", now - done);
+                }
             }
         }
         let Some(body) = self.my_body() else { return };
@@ -1112,6 +1525,37 @@ impl Net {
         Some((vec![chunk_id(cx as u32, cy as u32)], q))
     }
 
+    /// Staged genesis (`genesis.rs`): read the `genesis` row, subscribe the base once the world is
+    /// ready, and send a held `join` again when it turns ready or its backoff runs out.
+    fn watch_genesis(&mut self, now: f64) {
+        if self.genesis_applied {
+            let row = self.conn.as_ref().and_then(|c| c.db.genesis().id().find(&0));
+            let was = self.genesis.gate;
+            let before = self.genesis.progress.clone();
+            self.genesis.row(row.as_ref().map(crate::genesis::Progress::of_row), row.as_ref().is_some_and(|g| g.done), now);
+            match (was, self.genesis.gate) {
+                (crate::genesis::Gate::Preparing, crate::genesis::Gate::Ready) => {
+                    info!("genesis: the world is ready after {:.1} s preparing", now - self.genesis.since.unwrap_or(now));
+                }
+                (_, crate::genesis::Gate::Preparing) if self.genesis.progress != before => {
+                    info!("genesis: preparing {}", self.genesis.progress.as_ref().map(|p| p.line()).unwrap_or_default());
+                }
+                _ => {}
+            }
+        }
+        if self.genesis.long(now) && !self.genesis.told_long {
+            self.genesis.told_long = true;
+            warn!("genesis: still preparing after {:.0} s; waiting on", crate::genesis::TIMEOUT_S);
+        }
+        if self.static_in && self.base.is_none() && self.genesis.ready() {
+            self.subscribe_base();
+        }
+        if self.genesis.poll(now) == crate::genesis::Retry::Join && self.my_id.is_none() {
+            info!("genesis: joining again ({})", if self.genesis.ready() { "the world is ready" } else { "after a wait" });
+            self.join_sent = false;
+        }
+    }
+
     /// Ask for a new character after my death (the death screen's "Arrive as a new stranger"):
     /// the next `maintain` joins again.
     pub fn rejoin(&mut self) {
@@ -1163,7 +1607,22 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 }
                 info!("connected as {identity}");
             }
-            Signal::Static => net.subscribe_base(),
+            // The base waits for the world to be made (below).
+            Signal::Static => net.static_in = true,
+            Signal::GenesisSub(h) => net.genesis_sub = Some(h),
+            Signal::GenesisApplied => net.genesis_applied = true,
+            Signal::GenesisMissing(e) => {
+                // A module from before staged genesis: its worlds are made inline, so ready.
+                info!("genesis: no `genesis` table on this world ({e}); it counts as ready");
+                net.genesis.no_table(now);
+            }
+            Signal::Preparing { join, err } => {
+                let was = net.genesis.gate;
+                net.genesis.refused(&err, join, now);
+                if was != crate::genesis::Gate::Preparing {
+                    info!("genesis: the world is being made: {}", net.genesis.progress.as_ref().map(|p| p.line()).unwrap_or_default());
+                }
+            }
             Signal::Base => {
                 info!("world subscribed after {now:.1} s ({} law overrides)", net.conn.as_ref().map_or(0, |c| c.db.law_override().count()));
                 // The rows are this connection's now: laid over before a law is read this frame
@@ -1199,6 +1658,10 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 net.perception = Window::default();
                 net.my_id = None;
                 net.join_sent = false;
+                net.genesis = Default::default();
+                net.genesis_sub = None;
+                net.genesis_applied = false;
+                net.static_in = false;
                 net.connecting = false;
                 net.status = Status::Offline;
                 net.detail = e;
@@ -1215,7 +1678,8 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
     if net.conn.is_none() && !net.connecting && now >= net.retry_at {
         net.connect();
     }
-    net.maintain();
+    net.watch_genesis(now);
+    net.maintain(now);
 }
 
 #[cfg(test)]
@@ -1226,46 +1690,164 @@ mod cue_tests {
         Moving { id, x: 0.0, y: 0.0, t_ms: 1, vx: 0.0, vy: 0.0, heading: 0.0, turn: 0.0, turn_s: 0.0, next_ms: 0, speed: 0.0, face_off: 0.0, face_turn: 0.0, face_turn_s: 0.0, running: false }
     }
 
+    const TIERED: Feed = Feed { tiered: true, motion_table: false, characters_table: false };
+    const UNTIERED: Feed = Feed { tiered: false, motion_table: false, characters_table: false };
+    // The shipped laws since bv-defaults-on: both copy tables on (motion_tables_on, characters_table_on).
+    const SHIPPED_TIERED: Feed = Feed { tiered: true, motion_table: true, characters_table: true };
+    const SHIPPED_UNTIERED: Feed = Feed { tiered: false, motion_table: true, characters_table: true };
+
+    fn feed_of(cues: bool, tiers: bool, motion_tables: bool, characters_table: bool) -> Feed {
+        Delivery { cues, tiers, motion_tables, characters_table }.feed()
+    }
+
     #[test]
     fn the_untiered_set_is_main_s_three_views_and_the_base_holds_no_stream() {
-        // Both laws off: the client subscribes exactly main's perception queries.
+        // Both frame laws off and both table laws off: the client subscribes exactly main's
+        // perception queries (main had `seen_characters` in its base set; it is in the
+        // perception set here, so the table law can replace it).
         assert_eq!(UNTIERED_STREAMS, ["SELECT * FROM seen_bodies", "SELECT * FROM seen_fighters", "SELECT * FROM seen_doing"]);
         assert_eq!(TIERED_STREAMS.len(), 9);
-        for q in UNTIERED_STREAMS.iter().chain(TIERED_STREAMS) {
+        assert_eq!(UNTIERED.queries(), ["SELECT * FROM seen_characters", "SELECT * FROM seen_bodies", "SELECT * FROM seen_fighters", "SELECT * FROM seen_doing"]);
+        let mut tiered = vec![CHARACTERS_VIEW];
+        tiered.extend(TIERED_STREAMS);
+        assert_eq!(TIERED.queries(), tiered);
+        for q in UNTIERED_STREAMS.iter().chain(TIERED_STREAMS).chain([&CHARACTERS_VIEW, &CHARACTERS_TABLE, &MOTION_TABLE]) {
             assert!(!PERCEIVED.contains(q), "{q} is in the base set too");
+        }
+        for v in MOTION_VIEWS {
+            assert!(UNTIERED_STREAMS.contains(v) || TIERED_STREAMS.contains(v), "{v} is not a motion stream");
         }
     }
 
     #[test]
-    fn both_delivery_laws_are_read_beside_the_seen_ranges_laws_and_choose_the_set() {
+    fn each_table_law_replaces_exactly_its_views_in_every_frame_tier_state() {
+        for k in 0..8 {
+            let f = Feed::of_key(k);
+            assert_eq!(f.key(), k, "the key round-trips");
+            let q = f.queries();
+            let has = |x: &str| q.contains(&x);
+            // The characters: the view or the mirror, never both.
+            assert_eq!((has(CHARACTERS_VIEW), has(CHARACTERS_TABLE)), (!f.characters_table, f.characters_table), "{f:?}");
+            // The bodies: the motion views of the tier state, or the table in their place.
+            for v in MOTION_VIEWS {
+                assert!(!(f.motion_table && has(v)), "{f:?} keeps {v} beside the table");
+            }
+            assert_eq!(has(MOTION_TABLE), f.motion_table, "{f:?}");
+            if !f.motion_table {
+                if f.tiered {
+                    assert!(has("SELECT * FROM seen_bodies_near") && has("SELECT * FROM seen_bodies_far") && !has("SELECT * FROM seen_bodies"));
+                } else {
+                    assert!(has("SELECT * FROM seen_bodies") && !has("SELECT * FROM seen_bodies_near"));
+                }
+            }
+            // The other streams follow the tier state alone; the motion cue stays with the tiers
+            // (a cue stands until that creature's next copy row).
+            let rest: Vec<&str> = if f.tiered { TIERED_STREAMS.to_vec() } else { UNTIERED_STREAMS.to_vec() };
+            for s in rest.iter().filter(|s| !MOTION_VIEWS.contains(s)) {
+                assert!(has(s), "{f:?} lacks {s}");
+            }
+            assert_eq!(has("SELECT * FROM seen_body_cue"), f.tiered, "{f:?}");
+            let n = 1 + rest.len() - if f.motion_table { if f.tiered { 2 } else { 1 } } else { 0 } + f.motion_table as usize;
+            assert_eq!(q.len(), n, "{f:?}: {q:?}");
+        }
+    }
+
+    #[test]
+    fn the_four_delivery_laws_are_read_beside_the_seen_ranges_laws_and_choose_the_set() {
         use living_rules::script::{with_world_laws, Scripts};
         let shipped = include_str!("../../scripts/skills.rhai");
         let sc = Scripts::new(shipped).unwrap();
-        // The shipped script: both laws found (both on, cues too, since frame-views' acceptance),
-        // beside main's seen_ranges laws, and the tiered set.
-        assert_eq!(delivery_laws(&sc.laws()), (true, true));
+        // The shipped script as this branch finds it: both frame laws on, both table laws off
+        // (dev-box flips the table laws' defaults in the same change set; nothing here depends on
+        // them), beside main's seen_ranges laws.
+        let d = delivery_laws(&sc.laws());
+        assert!(d.cues && d.tiers, "{d:?}");
         assert!(sc.laws().seen_ranges && !sc.laws().seen_ranges_check, "the seen_ranges laws read as shipped");
-        assert_eq!(perception_set(true, true), TIERED);
+        assert_eq!(d.feed().tiered, true);
+        assert_eq!((d.feed().motion_table, d.feed().characters_table), (d.motion_tables, d.characters_table));
         // A world's own values, as the authority writes them after `set_world_law`: each of the
-        // four states, with the seen_ranges laws changed beside them so a neighbour cannot mask
-        // a law that was not found.
-        for (cues, tiers, set) in [(true, true, TIERED), (true, false, TIERED), (false, true, TIERED), (false, false, UNTIERED)] {
+        // sixteen states, with the seen_ranges laws changed beside them so a neighbour cannot
+        // mask a law that was not found.
+        for k in 0..16u32 {
+            let (cues, tiers, motion, chars) = (k & 1 != 0, k & 2 != 0, k & 4 != 0, k & 8 != 0);
             let values = [
                 ("seen_ranges".to_string(), serde_json::json!(false)),
                 ("cue_transport_on".to_string(), serde_json::json!(cues)),
                 ("seen_ranges_check".to_string(), serde_json::json!(true)),
                 ("near_tier_on".to_string(), serde_json::json!(tiers)),
+                ("motion_tables_on".to_string(), serde_json::json!(motion)),
+                ("characters_table_on".to_string(), serde_json::json!(chars)),
             ];
             let l = Scripts::new(&with_world_laws(shipped, &values)).unwrap().laws();
-            assert_eq!(delivery_laws(&l), (cues, tiers), "cue_transport_on {cues} near_tier_on {tiers}");
+            let d = delivery_laws(&l);
+            assert_eq!(d, Delivery { cues, tiers, motion_tables: motion, characters_table: chars });
             assert!(!l.seen_ranges && l.seen_ranges_check);
-            assert_eq!(perception_set(cues, tiers), set);
+            assert_eq!(d.feed(), Feed { tiered: cues || tiers, motion_table: motion, characters_table: chars }, "{d:?}");
+            assert_eq!(d.feed(), feed_of(cues, tiers, motion, chars));
         }
         // A script that does not compile, with no law read before: the rules' defaults, as a fresh
-        // world starts, and so the tiered set with cues taken.
-        assert_eq!(delivery_fallback(), (true, true));
-        assert_eq!(delivery_fallback(), delivery_laws(&sc.laws()));
-        assert_eq!(perception_set(delivery_fallback().0, delivery_fallback().1), TIERED);
+        // world starts.
+        assert_eq!(delivery_fallback(), delivery_laws(&living_rules::script::Laws::default()));
+        assert!(delivery_fallback().feed().tiered);
+    }
+
+    #[test]
+    fn copy_rows_map_to_the_views_rows() {
+        // `seen_body_copy`: the segment and the creature, as `seen_bodies` gives it (every field
+        // distinct, so a swapped pair fails).
+        let seg = Segment { x: 1.5, y: 2.5, t_ms: 3, vx: 4.5, vy: 5.5, heading: 6.5, turn: 7.5, turn_s: 8.5, next_ms: 9, speed: 10.5, face_off: 11.5, face_turn: 12.5, face_turn_s: 13.5, running: true };
+        let row = SeenBodyCopy { viewer: Identity::ZERO, body: 42, near: true, seg };
+        let m = Moving { id: 42, x: 1.5, y: 2.5, t_ms: 3, vx: 4.5, vy: 5.5, heading: 6.5, turn: 7.5, turn_s: 8.5, next_ms: 9, speed: 10.5, face_off: 11.5, face_turn: 12.5, face_turn_s: 13.5, running: true };
+        assert_eq!(moving_of(&row), m);
+        // `seen_character_copy`: the row is the view's row, keyed by the creature, not the
+        // projected row's id.
+        let c = Copies::default();
+        let ch = SeenCharacterCopy { id: 900, viewer: Identity::ZERO, row: character(7) };
+        c.put_character(&ch);
+        assert_eq!(c.characters.lock().unwrap().get(&7).map(|c| c.row.clone()), Some(character(7)));
+        assert!(!c.characters.lock().unwrap().contains_key(&900));
+    }
+
+    fn character(id: u32) -> SeenCharacter {
+        SeenCharacter { id, name: "Ash".into(), label: "a woman".into(), kind: "person".into(), stage: 2, folk: "f".into(), style: "s".into(), own: false, band: 1, hp: 9.0, max_hp: 10.0, look: "k".into() }
+    }
+
+    fn copy(body: u32, t_ms: u64) -> SeenBodyCopy {
+        let m = moving(body);
+        let seg = Segment { x: m.x, y: m.y, t_ms, vx: m.vx, vy: m.vy, heading: m.heading, turn: m.turn, turn_s: m.turn_s, next_ms: m.next_ms, speed: m.speed, face_off: m.face_off, face_turn: m.face_turn, face_turn_s: m.face_turn_s, running: m.running };
+        SeenBodyCopy { viewer: Identity::ZERO, body, near: false, seg }
+    }
+
+    #[test]
+    fn a_copy_change_replaces_the_row_in_either_callback_order_and_the_kill_switch_keeps_rows() {
+        let c = Copies::default();
+        // A change comes as the new row's insert, then the old row's delete (the SDK fires inserts
+        // first): the new row stays.
+        assert!(c.put_body(&copy(5, 1)).is_none());
+        let old = c.put_body(&copy(5, 2));
+        assert_eq!(old, Some(copy(5, 1)), "the replaced row is told (the display clock's segment change)");
+        c.drop_body(&copy(5, 1), false);
+        assert_eq!(c.bodies.lock().unwrap().get(&5), Some(&copy(5, 2)));
+        // A creature that left: its row goes.
+        c.drop_body(&copy(5, 2), false);
+        assert!(c.bodies.lock().unwrap().is_empty());
+        // The kill switch empties the table in one tick: while the rows are kept (leaving, or
+        // the law's row reads off), its deletes leave them for the reads until the views are in.
+        c.put_body(&copy(6, 1));
+        c.drop_body(&copy(6, 1), true);
+        assert!(c.bodies.lock().unwrap().contains_key(&6));
+        // The mirror: a projected row replaced under a new id (insert first) keeps the new one;
+        // kept rows stay through the kill switch's deletes.
+        let a = SeenCharacterCopy { id: 1, viewer: Identity::ZERO, row: character(7) };
+        let b = SeenCharacterCopy { id: 2, viewer: Identity::ZERO, row: character(7) };
+        c.put_character(&a);
+        c.put_character(&b);
+        c.drop_character(&a, false);
+        assert_eq!(c.characters.lock().unwrap().get(&7).map(|x| x.id), Some(2));
+        c.drop_character(&b, true);
+        assert!(c.characters.lock().unwrap().contains_key(&7));
+        c.drop_character(&b, false);
+        assert!(c.characters.lock().unwrap().is_empty());
     }
 
     /// `law_override` rows as the bindings deliver them.
@@ -1273,9 +1855,8 @@ mod cue_tests {
         of.iter().enumerate().map(|(i, (name, value))| LawOverride { name: name.to_string(), value: value.to_string(), revision: i as u32 + 1 }).collect()
     }
 
-    fn set_of(rules: &crate::verbs::Rules) -> u32 {
-        let (c, t) = delivery_laws(&rules.scripts.as_ref().expect("compiled").laws());
-        perception_set(c, t)
+    fn set_of(rules: &crate::verbs::Rules) -> Feed {
+        delivery_laws(&rules.scripts.as_ref().expect("compiled").laws()).feed()
     }
 
     const SHIPPED: &str = include_str!("../../scripts/skills.rhai");
@@ -1300,7 +1881,7 @@ mod cue_tests {
         let mut rules = crate::verbs::Rules::default();
         rules.take(7, SHIPPED, living_rules::DEFAULT_DAY_MS, &[], 1);
         assert_eq!((rules.revision, rules.applied.as_ref()), (7, None), "a compile");
-        assert_eq!(set_of(&rules), TIERED);
+        assert_eq!(set_of(&rules), SHIPPED_TIERED);
         let key = rules.laws_key;
         // Both delivery laws off by `law_override` alone, the script row unchanged.
         let off = crate::verbs::overrides_of_rows(&rows(&[("cue_transport_on", "false"), ("near_tier_on", "false")]));
@@ -1310,19 +1891,65 @@ mod cue_tests {
         assert_eq!(a.changed, ["cue_transport_on", "near_tier_on"]);
         assert_eq!(rules.revision, 7);
         assert!(rules.laws_key > key, "the laws' readers see a change");
-        assert_eq!(set_of(&rules), UNTIERED, "both off: main's untiered set");
+        assert_eq!(set_of(&rules), SHIPPED_UNTIERED, "both tier laws off: the untiered set, the copy tables still on");
         // One back on: the tiers again.
         let one = crate::verbs::overrides_of_rows(&rows(&[("cue_transport_on", "false"), ("near_tier_on", "true")]));
         let key = rules.laws_key;
         rules.take(7, SHIPPED, living_rules::DEFAULT_DAY_MS, &one, 3);
         assert_eq!(rules.applied.as_ref().map(|a| a.changed.clone()), Some(vec!["near_tier_on".to_string()]));
         assert!(rules.laws_key > key);
-        assert_eq!(set_of(&rules), TIERED);
+        assert_eq!(set_of(&rules), SHIPPED_TIERED);
         // The same rows again (a row rewritten with its value): nothing in force changed, so
         // nothing that reads the laws reads them again.
         let key = rules.laws_key;
         rules.take(7, SHIPPED, living_rules::DEFAULT_DAY_MS, &one, 4);
         assert_eq!(rules.laws_key, key);
+    }
+
+    #[test]
+    fn the_table_laws_flip_the_set_in_place_as_delivery_laws_in_every_combination() {
+        let mut rules = crate::verbs::Rules::default();
+        rules.take(7, SHIPPED, living_rules::DEFAULT_DAY_MS, &[], 1);
+        let start = set_of(&rules);
+        let mut n = 2;
+        // Each table law alone, both, and back, under each frame state the doc allows: every
+        // change is laid over in place as the delivery class (`Applied::delivery`, the subscription
+        // switch), with the script revision kept and the laws' key moved.
+        for (cues, tiers) in [("true", "true"), ("true", "false"), ("false", "true"), ("false", "false")] {
+            for (motion, chars) in [("true", "false"), ("false", "true"), ("true", "true"), ("false", "false")] {
+                let key = rules.laws_key;
+                let before = set_of(&rules);
+                let over = crate::verbs::overrides_of_rows(&rows(&[("cue_transport_on", cues), ("near_tier_on", tiers), ("motion_tables_on", motion), ("characters_table_on", chars)]));
+                rules.take(7, SHIPPED, living_rules::DEFAULT_DAY_MS, &over, n);
+                n += 1;
+                let want = feed_of(cues == "true", tiers == "true", motion == "true", chars == "true");
+                assert_eq!(set_of(&rules), want);
+                assert_eq!(rules.revision, 7);
+                if want != before {
+                    let a = rules.applied.clone().expect("laid over in place, not compiled");
+                    assert!(a.delivery && !a.cover && !a.gaze, "{a:?}");
+                    assert!(rules.laws_key > key, "the set's reader sees the change");
+                }
+            }
+        }
+        // The rows gone: the shipped values again, in place.
+        rules.take(7, SHIPPED, living_rules::DEFAULT_DAY_MS, &[], n);
+        assert_eq!(set_of(&rules), start);
+    }
+
+    #[test]
+    fn a_reconnect_with_the_table_laws_on_chooses_the_tables_first() {
+        // A fresh compile with the rows (a reconnect, or a client started on the world): the
+        // first set chosen reads both tables, so no view set comes first.
+        let on = crate::verbs::overrides_of_rows(&rows(&[("motion_tables_on", "true"), ("characters_table_on", "true")]));
+        let mut rules = crate::verbs::Rules::default();
+        rules.take(9, SHIPPED, living_rules::DEFAULT_DAY_MS, &on, 1);
+        assert!(rules.applied.is_none(), "compiled with them");
+        assert_eq!(set_of(&rules), Feed { tiered: true, motion_table: true, characters_table: true });
+        let off = crate::verbs::overrides_of_rows(&rows(&[("cue_transport_on", "false"), ("near_tier_on", "false"), ("motion_tables_on", "true"), ("characters_table_on", "true")]));
+        let mut rules = crate::verbs::Rules::default();
+        rules.take(9, SHIPPED, living_rules::DEFAULT_DAY_MS, &off, 1);
+        assert_eq!(set_of(&rules), Feed { tiered: false, motion_table: true, characters_table: true });
     }
 
     #[test]
@@ -1365,7 +1992,7 @@ mod cue_tests {
         let mut rules = crate::verbs::Rules::default();
         rules.take(9, SHIPPED, living_rules::DEFAULT_DAY_MS, &off, 1);
         assert!(rules.applied.is_none(), "compiled with them");
-        assert_eq!(set_of(&rules), UNTIERED);
+        assert_eq!(set_of(&rules), SHIPPED_UNTIERED);
         assert_eq!(rules.scripts.as_ref().unwrap().law_value("walk_base"), Some(serde_json::json!(2.8)));
         // A reconnect to the same world, the rows as they were: nothing changed in force.
         let key = rules.laws_key;
@@ -1376,7 +2003,7 @@ mod cue_tests {
         let rest = crate::verbs::overrides_of_rows(&rows(&[("walk_base", "2.8")]));
         rules.take(9, SHIPPED, living_rules::DEFAULT_DAY_MS, &rest, 3);
         assert!(rules.applied.as_ref().is_some_and(|a| a.delivery));
-        assert_eq!(set_of(&rules), TIERED);
+        assert_eq!(set_of(&rules), SHIPPED_TIERED);
     }
 
     #[test]

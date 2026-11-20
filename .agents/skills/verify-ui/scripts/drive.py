@@ -35,6 +35,8 @@
   the player with nothing opaque between (chosen from the terrain and the bodies, so where it
   lands is known: `scene.json` `free_spots`); `--sync NAME=refree` puts them back there.
 - `--expect REGEX` (repeatable) must match client.log, else the run fails (exit 1).
+- `--preparing` skips the start's tick check: the world is still being made (staged genesis) and
+  the client is meant to join while it is (`check.py preparing`).
 
 Exit code: the client's, or 1 when an expectation fails or the client never joined.
 """
@@ -175,6 +177,7 @@ def main():
     ap.add_argument("--expect", action="append", default=[])
     ap.add_argument("--admin-link", action="store_true")
     ap.add_argument("--timeout", type=float, default=600)
+    ap.add_argument("--preparing", action="store_true", help="the world is still being made (staged genesis): skip the start's tick check (check.py preparing)")
     a = ap.parse_args()
     if a.self_test:
         self_test()
@@ -186,7 +189,10 @@ def main():
         sys.exit(f"refusing {db}: verify-ui runs use verify-ui-* worlds (run names ui-*)")
     st = load(a.run)
     owner = admin_token()
-    require_running(st, owner)
+    # A world still being made does not tick yet (staged genesis): `check.py preparing` starts its
+    # client before the world is ready, on purpose.
+    if not a.preparing:
+        require_running(st, owner)
     out = os.path.join(ROOT, ".local/living/verify", a.run, "ui", a.name)
     os.makedirs(out, exist_ok=True)
     for f in os.listdir(out):
@@ -204,7 +210,10 @@ def main():
     open(os.path.join(out, "plan.txt"), "w").write(a.plan.replace(";", ";\n") + "\n")
     token = a.token or os.path.join(ROOT, ".local/living/verify", a.run, "ui", "player.token")
     # A worker's own server (`LIVING_STDB_URL`, the verify entry point's "Your own server"), else the shared one.
-    env = dict(os.environ, LIVING_SERVER=os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300"), LIVING_DB=db, LIVING_GAME_NAME=a.player, LIVING_GAME_TOKEN=token,
+    # `LIVING_GAME_CLIENT_SERVER` points the client alone elsewhere (a byte-counting relay in front of
+    # that server: check.py `battle-views-cost`); the harness's own calls still go direct.
+    server = os.environ.get("LIVING_GAME_CLIENT_SERVER") or os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300")
+    env = dict(os.environ, LIVING_SERVER=server, LIVING_DB=db, LIVING_GAME_NAME=a.player, LIVING_GAME_TOKEN=token,
                LIVING_GAME_LIVE=out, LIVING_GAME_LIVE_PLAN=a.plan, LIVING_GAME_SIZE=a.size,
                LIVING_GAME_SETTINGS=os.path.join(out, "settings.json"), RUST_LOG=os.environ.get("RUST_LOG", "info,wgpu=warn,naga=warn"))
     secret = None
