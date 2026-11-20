@@ -13,7 +13,8 @@ with the flag: the file's hair laid out at 1 mm a texel in a rectangle, and its 
   rows top to bottom, then columns left to right. A page that is full starts a second
   (`hair-masks-1.png`, its own material), and the manifest says so.
 - **The file.** Its hair primitives' TEXCOORD_0 (`Hair` and `FarHair`) move into its cells; the
-  hair material loses its texture and takes `slop.hair` (the profile below, the same object on every
+  hair material loses its texture, and the strands' picture with it (`prune_orphans`: every texture,
+  image and sampler no material uses goes, in both modes, so the client loads none) and takes `slop.hair` (the profile below, the same object on every
   file of the page, `highlight_map` the page); the scene opts in (`slop` `{"contract": 1}`).
 - **The page.** R: the highlight, each file's `_HIGHLIGHT` rasterised from its near `Hair` mesh,
   and the parting (`parting_strip`: a pale strip where the hair parts, on what lies near the
@@ -105,6 +106,61 @@ def accessor(j, binary, i):
         raise SystemExit(f"hair_page: accessor {i} is interleaved")
     arr = np.frombuffer(bytes(binary[off: off + a["count"] * n * np.dtype(dt).itemsize]), dt).reshape(a["count"], n)
     return arr, off
+
+
+def texture_infos(node):
+    """Every texture-info a material holds (any key ending in `Texture`, extensions included:
+    a dict with an integer `index`)."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k.endswith(("Texture", "texture")) and isinstance(v, dict) and isinstance(v.get("index"), int):
+                yield v
+            yield from texture_infos(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from texture_infos(v)
+
+
+def prune_orphans(j):
+    """Drop the textures no material names, then the images and samplers no texture uses, and
+    renumber what is left. Profile hair loses its base texture (the strands' picture), and a
+    picture left in the file is still loaded by the client, though nothing draws it; its path,
+    written where the file was built, can even lie outside the asset folder (an error at every
+    load). Returns how many textures and images went."""
+    textures, images, samplers = j.get("textures", []), j.get("images", []), j.get("samplers", [])
+    used_t = sorted({t["index"] for t in texture_infos(j.get("materials", []))})
+    tmap = {old: new for new, old in enumerate(used_t)}
+    kept_t = [textures[i] for i in used_t if i < len(textures)]
+
+    def image_refs(t):
+        out = [t["source"]] if isinstance(t.get("source"), int) else []
+        for ext in (t.get("extensions") or {}).values():
+            if isinstance(ext, dict) and isinstance(ext.get("source"), int):
+                out.append(ext["source"])
+        return out
+
+    used_i = sorted({i for t in kept_t for i in image_refs(t)})
+    imap = {old: new for new, old in enumerate(used_i)}
+    used_s = sorted({t["sampler"] for t in kept_t if isinstance(t.get("sampler"), int)})
+    smap = {old: new for new, old in enumerate(used_s)}
+    for t in kept_t:
+        if isinstance(t.get("source"), int):
+            t["source"] = imap[t["source"]]
+        for ext in (t.get("extensions") or {}).values():
+            if isinstance(ext, dict) and isinstance(ext.get("source"), int):
+                ext["source"] = imap[ext["source"]]
+        if isinstance(t.get("sampler"), int):
+            t["sampler"] = smap[t["sampler"]]
+
+    for info in list(texture_infos(j.get("materials", []))):
+        info["index"] = tmap[info["index"]]
+    gone = (len(textures) - len(kept_t), len(images) - len(used_i))
+    for key, kept in (("textures", kept_t), ("images", [images[i] for i in used_i]), ("samplers", [samplers[i] for i in used_s])):
+        if kept:
+            j[key] = kept
+        else:
+            j.pop(key, None)
+    return gone
 
 
 def hair_prims(j):
@@ -299,6 +355,7 @@ def main():
                     h["strands"] = True
                 done = True
             if done:
+                prune_orphans(j)
                 write_glb(g, j, binary)
                 n += 1
         print(f"hair_page: the profile rewritten on {n} files")
@@ -366,6 +423,7 @@ def main():
         slop = scene.setdefault("extras", {}).setdefault("slop", {})
         slop.pop("character", None)
         slop["contract"] = 1
+        prune_orphans(j)  # the strands' picture, now that no material names it
         write_glb(path, j, binary)
         lines_field(D[k], [np.asarray(l, float) + off for l in sp["creases"]], rng)
     for k in range(n_pages):
