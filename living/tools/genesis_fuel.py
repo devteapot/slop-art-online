@@ -2,9 +2,14 @@
 """Genesis fuel per seed: `init` and each staged-genesis step against SpacetimeDB 2.14.1's per-call
 budget (docs/STAGED_GENESIS.md §7; the format the Spark's genesis-fuel guard reads).
 
-    LIVING_SEED=island LIVING_GENESIS_STEPPING=1 cargo build -p living-authority --target wasm32-unknown-unknown --release
-    cp living/target/wasm32-unknown-unknown/release/living_authority.wasm <the server's /wasm>/genesis-island.wasm
-    python3 living/tools/genesis_fuel.py --seed island --wasm genesis-island.wasm [--out FILE]
+    python3 living/tools/genesis_fuel.py --seed island [--out FILE] [--check]          # as the guard calls it
+    python3 living/tools/genesis_fuel.py --seed island --wasm genesis-island.wasm       # a stepping build already in /wasm
+
+Without `--wasm` it builds the seed's stepping module itself (`LIVING_SEED=S LIVING_GENESIS_STEPPING=1`,
+release wasm) in its own target directory (`$CARGO_TARGET_DIR/genesis-fuel`, or
+`living/target/genesis-fuel`) and without sccache, so the measurement build never shares an
+artifact with an ordinary one (the flag is an `option_env!`), copies it into the directory the
+server's container mounts as `/wasm` (as `verify.py` finds it) and removes the copy after.
 
 A measurement build (`LIVING_GENESIS_STEPPING=1`) schedules no step by itself: this tool publishes it
 fresh on the worker's own server (`LIVING_STDB_CONTAINER`, `LIVING_STDB_URL`), reads `init`'s fuel
@@ -17,7 +22,8 @@ database is deleted after (world_delete.py). Prints one JSON object:
     {"seed", "commit", "budget", "init_fuel", "init_runs",
      "steps": [{"phase", "label", "fuel", "reducer"}], "largest_step_share"}
 
-and exits 1 when `init` or a step is above 90% of the budget (the guard's rule), 0 otherwise.
+on stdout and exits 0 when it measured (the guard judges the report); with `--check`, 1 when
+`init` or a step is above 90% of the budget (the guard's rule).
 """
 import argparse
 import json
@@ -55,17 +61,57 @@ def counters(ident):
     return fuel, calls
 
 
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def build_stepping(seed):
+    """The seed's stepping module, built apart from ordinary builds; its path."""
+    base = Path(os.environ.get("CARGO_TARGET_DIR") or ROOT / "living/target")
+    target = base / "genesis-fuel"
+    env = dict(os.environ, LIVING_SEED=seed, LIVING_GENESIS_STEPPING="1", CARGO_TARGET_DIR=str(target))
+    for name in ("RUSTC_WRAPPER", "LIVING_NO_TICK"):
+        env.pop(name, None)
+    r = subprocess.run(["cargo", "build", "--manifest-path", str(ROOT / "living/Cargo.toml"), "-p", "living-authority",
+                        "--target", "wasm32-unknown-unknown", "--release"], env=env, capture_output=True, text=True, timeout=3600)
+    if r.returncode:
+        raise SystemExit(f"genesis_fuel: the stepping build of {seed} failed:\n{r.stderr[-2000:]}")
+    return target / "wasm32-unknown-unknown/release/living_authority.wasm"
+
+
+def wasm_mount():
+    """The host directory the server's container serves as /wasm (verify.py's rule)."""
+    r = subprocess.run(["podman", "inspect", lc.CONTAINER, "--format", '{{range .Mounts}}{{if eq .Destination "/wasm"}}{{.Source}}{{end}}{{end}}'],
+                       capture_output=True, text=True)
+    src = r.stdout.strip().removeprefix("/host_mnt")
+    if not src:
+        raise SystemExit(f"genesis_fuel: {lc.CONTAINER} has no /wasm mount")
+    return Path(src)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seed", required=True)
-    ap.add_argument("--wasm", required=True, help="a stepping build of that seed, relative to the server's /wasm")
+    ap.add_argument("--wasm", help="a stepping build of that seed, relative to the server's /wasm (default: build it)")
+    ap.add_argument("--check", action="store_true", help="exit 1 when init or a step is above 90%% of the budget")
     ap.add_argument("--out")
     ap.add_argument("--max-steps", type=int, default=500)
     ap.add_argument("--floor-seed", help="a floor module (built with LIVING_SEED=none): give it this seed JSON with create_floor after the publish; its fuel is reported as create_floor_fuel")
     a = ap.parse_args()
     db = f"verify-lookcost-gfuel-{a.seed}-{time.strftime('%H%M%S')}"[:60]
-    commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()   # the full sha (the guard matches it)
-    lc.stdb("publish", "-s", "local", "-b", str(Path("/wasm") / a.wasm), db, "--delete-data", "-y")
+    commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=ROOT).stdout.strip()   # the full sha (the guard matches it)
+    copied = None
+    if a.wasm:
+        wasm = a.wasm
+    else:
+        built = build_stepping("none" if a.floor_seed else a.seed)
+        wasm = f"genesis-fuel-{a.seed}-{os.getpid()}.wasm"
+        copied = wasm_mount() / wasm
+        copied.write_bytes(built.read_bytes())
+    try:
+        lc.stdb("publish", "-s", "local", "-b", str(Path("/wasm") / wasm), db, "--delete-data", "-y")
+    finally:
+        if copied:
+            copied.unlink(missing_ok=True)   # the module is stored in the database once published
     try:
         token = lc.admin_token()
         ident = json.loads(lc.http(f"/v1/database/{db}")[1])["database_identity"]["__identity__"].removeprefix("0x")
@@ -122,7 +168,7 @@ def main():
     for what, share in [("init", init_share)] + [(f"step {i} ({s['phase']})", s["fuel"] / BUDGET) for i, s in enumerate(out["steps"])]:
         if share > WARN_SHARE:
             print(f"{'FAIL' if share > FAIL_SHARE else 'warn'}: {what} uses {share:.1%} of the budget", file=sys.stderr)
-    sys.exit(1 if max([init_share] + [s["fuel"] / BUDGET for s in out["steps"]]) > FAIL_SHARE else 0)
+    sys.exit(1 if a.check and max([init_share] + [s["fuel"] / BUDGET for s in out["steps"]]) > FAIL_SHARE else 0)
 
 
 if __name__ == "__main__":
