@@ -22,10 +22,18 @@ and `module.log`, so `tick_report.py` reads it as a tick_cost run. With `--flip-
 `<out>/v<count>/flip-off.json` records the kill switch's one tick: the copies moved, its
 `tick.motion_private` and `tick` spans, and the tick gaps (slots of 16.7 ms) 2 s before and 4 s
 after it.
+
+Also (combat-phase, docs/COMBAT_PHASE.md): `--detail` writes `load.log` (the host's 1-minute load
+and MemAvailable every second of the window, as tick_report.py reads it). `--no-profile` keeps
+`--detail`'s server metrics and thread CPU but leaves profiling off, so the window carries no span
+logging (the uninstrumented cost). `--full-log` reads the replica's whole module log from the
+server's data directory instead of the CLI's tail, which drops lines when detail spans log tens
+of thousands a second; `span_report.py` reads it.
 """
 import argparse
 import json
 import math
+import subprocess
 import sys
 import threading
 import time
@@ -43,6 +51,40 @@ def tick_count(ident):
         if line.startswith("spacetime_reducer_plus_query_duration_sec_count{") and f'"{ident}"' in line and 'reducer="tick"' in line:
             return float(line.rsplit(" ", 1)[1])
     return None
+
+
+class LoadLog(threading.Thread):
+    """Every second: the wall time, the host's 1-minute load and MemAvailable (GiB)."""
+
+    def __init__(self, path):
+        super().__init__(daemon=True)
+        self.path, self.stop = path, threading.Event()
+
+    def run(self):
+        with open(self.path, "w") as f:
+            while not self.stop.wait(1.0):
+                load = open("/proc/loadavg").read().split()[0]
+                mem = next((int(l.split()[1]) for l in open("/proc/meminfo") if l.startswith("MemAvailable:")), 0)
+                f.write(f"{time.time():.1f} {load} {mem / 1048576:.1f}\n")
+                f.flush()
+
+
+def replica_log(replica):
+    """The replica's whole module log, its files in name order (the server's data directory),
+    each JSON record as the CLI prints it: `<UTC stamp>Z <LEVEL>: <message>`."""
+    from datetime import datetime, timezone
+    d = f"/home/spacetime/.local/share/spacetime/data/replicas/{replica}/module_logs"
+    r = subprocess.run(["podman", "exec", lc.CONTAINER, "sh", "-c", f"cat $(ls -1 {d}/* | sort)"], capture_output=True, timeout=900)
+    out = []
+    for line in r.stdout.decode("utf-8", "replace").splitlines():
+        try:
+            j = json.loads(line)
+        except ValueError:
+            continue
+        ts = int(j.get("ts", 0))
+        at = datetime.fromtimestamp(ts // 1_000_000, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        out.append(f"{at}.{ts % 1_000_000:06d}Z {str(j.get('level', '')).upper()}: {j.get('message', '')}")
+    return "\n".join(out) + "\n"
 
 
 class KeepAlive(threading.Thread):
@@ -87,6 +129,7 @@ def one(a, n, out):
     load = None
     try:
         lc.stdb("publish", "-s", "local", "-b", str(Path("/wasm") / a.wasm), db, "--delete-data", "-y")
+        res["replica"] = lc.newest_replica()
         # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
         import genesis_wait
         genesis_wait.wait_ready(lc.URL, db, lc.admin_token())
@@ -109,7 +152,7 @@ def one(a, n, out):
             load = lc.Proc([a.load, "players"], out / f"players-v{n}.stderr")
             load.send(json.dumps({"uri": lc.URL, "db": db, "events": str(out / f"events-v{n}.jsonl"), "battle": list(site),
                                   "behaviour": {"walk_period_ms": 1500, "rejoin_s": 3}, "players": players, "client": "gate",
-                                  "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables, "fresh_every": a.fresh_every}))
+                                  "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables, "character_tables": a.character_tables, "fresh_every": a.fresh_every}))
             joined = load.expect("joined", 900)
             lo, hi = (float(x) for x in a.ring.split(",")) if a.ring else (0.0, 6.0)
             for i, p in enumerate(sorted(joined["players"], key=lambda p: p["p"])):
@@ -139,10 +182,14 @@ def one(a, n, out):
             keep.start()
         time.sleep(a.warmup)
         d = out / f"v{n}"
+        loadlog = None
         if a.detail or a.flip_off:
             d.mkdir(parents=True, exist_ok=True)
             pid = tc.server_pid()
-            lc.call(db, "set_profile", [True], token)
+            if not a.no_profile:
+                lc.call(db, "set_profile", [True], token)
+            loadlog = LoadLog(d / "load.log")
+            loadlog.start()
             m0, th0, p0 = tc.scrape(ident), tc.thread_cpu(pid), tc.proc_cpu(pid)
         c0, t0 = tick_count(ident), time.time()
         k0 = (keep.calls, keep.restored) if keep else None
@@ -155,6 +202,8 @@ def one(a, n, out):
                                         "calls_per_s": round((keep.calls - k0[0]) / (t1 - t0), 2)}
         if load:
             load.send("fresh off")
+        if loadlog:
+            loadlog.stop.set()
         if a.detail or a.flip_off:
             m1, th1, p1 = tc.scrape(ident), tc.thread_cpu(pid), tc.proc_cpu(pid)
             dur = t1 - t0
@@ -195,10 +244,23 @@ def one(a, n, out):
             lc.call(db, "set_world_law", ["motion_tables_on", "false"], token)
             time.sleep(4)
             res["public_rows_after_flip"] = lc.sql(db, "SELECT COUNT(*) AS n FROM seen_body_copy", token)[0]["n"]
-        if a.detail or a.flip_off:
+        if (a.detail or a.flip_off) and not a.no_profile:
             lc.call(db, "set_profile", [False], token)
             span = (t1 - t0) + a.warmup + (14 if a.flip_off else 0)
-            log = lc.stdb("logs", "-s", "local", db, "-n", str(int(span * 60 * 40 + 50_000)), timeout=900)
+            if a.full_log:
+                # A busy module's log lands late: read again until the window's tick spans are
+                # all there (the server's tick counter over the window), for up to 10 minutes.
+                want, waited = (c1 - c0) if c0 is not None and c1 is not None else 0, 0
+                while True:
+                    time.sleep(10)
+                    waited += 10
+                    log = replica_log(res["replica"])
+                    got = len(tc.ticks(log, t0, t1).get("rows", []))
+                    if got >= 0.995 * want or waited >= 600:
+                        res["log_ticks"] = {"spans": got, "counter": want, "waited_s": waited}
+                        break
+            else:
+                log = lc.stdb("logs", "-s", "local", db, "-n", str(int(span * 60 * 40 + 50_000)), timeout=900)
             (d / "module.log").write_text(log)
             (d / "ticks.json").write_text(json.dumps(tc.ticks(log, t0, t1), indent=1) + "\n")
             sp = lc.spans(log, t0, t1)
@@ -257,6 +319,8 @@ def one(a, n, out):
         if n:
             deaths = [e for e in (json.loads(l) for l in open(out / f"events-v{n}.jsonl")) if e.get("k") == "death"]
             res["viewer_deaths"] = {"window": sum(1 for e in deaths if t0 * 1e6 <= e.get("ts", 0) < t1 * 1e6), "run": len(deaths)}
+        if a.detail and a.no_profile:
+            (d / "ticks.json").write_text("{}\n")
         if a.detail or a.flip_off:
             held = res.get("held_at_ready")
             chars = [h.get("characters", 0) for h in held] if isinstance(held, list) else []
@@ -311,6 +375,7 @@ def main():
     ap.add_argument("--tiers", action="store_true")
     ap.add_argument("--cues", action="store_true")
     ap.add_argument("--motion-tables", action="store_true", help="the viewers subscribe seen_body_copy in place of the motion views (battle-views)")
+    ap.add_argument("--character-tables", action="store_true", help="the viewers subscribe seen_character_copy in place of seen_characters (battle-views)")
     ap.add_argument("--law", action="append", default=[])
     ap.add_argument("--fresh-every", type=int, default=0, help="sample every Nth viewer's motion freshness (gate-load `fresh`)")
     ap.add_argument("--keep-alive", type=float, default=0, metavar="SECS", help="every SECS s, set each hurt viewer back to full health (admin_set_vitals; the agreed keep-alive fixture)")
@@ -319,6 +384,8 @@ def main():
     ap.add_argument("--battle-after-placing", action="store_true", help="spawn the battle after the viewers are placed")
     ap.add_argument("--ring", default=None, metavar="LO,HI", help="place the viewers over the ring LO-HI m from the battle's centre (outside the fighters' reach) instead of within 6 m")
     ap.add_argument("--detail", action="store_true", help="profile each window as tick_cost.py does (<out>/v<count>/)")
+    ap.add_argument("--no-profile", action="store_true", help="with --detail: server metrics and thread CPU only, profiling left off (no spans)")
+    ap.add_argument("--full-log", action="store_true", help="with --detail: read the replica's whole module log from the server's data directory")
     ap.add_argument("--flip-off", action="store_true", help="after the window, turn motion_tables_on off and time the kill switch's tick")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
