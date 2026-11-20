@@ -1,0 +1,60 @@
+{
+  "file": "look:lk_f9b43925739984c0",
+  "slot": "hair",
+  "material": null,
+  "ink": {
+    "composed": "slot hair"
+  },
+  "also": [
+    "portrait"
+  ],
+  "passed": true,
+  "sequences": [
+    {
+      "sequence": "near pan",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "near zoom",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "middle pan",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "middle zoom",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "far pan",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "far zoom",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "portrait pan",
+      "f_ink": 0.045,
+      "f_edge": 0.139,
+      "ratio": 0.33,
+      "ink_px": 1040.2,
+      "result": "pass"
+    },
+    {
+      "sequence": "portrait zoom",
+      "f_ink": 0.114,
+      "f_edge": 0.549,
+      "ratio": 0.21,
+      "ink_px": 1050.2,
+      "result": "pass"
+    }
+  ]
+}

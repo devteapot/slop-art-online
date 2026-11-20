@@ -381,8 +381,10 @@ fn relative_of(h: &serde_json::Value, own: [[u8; 3]; 4], ink: Option<[u8; 3]>) -
     };
     let mut out = vec![anchor(h, Some((own, ink)))?];
     for a in h["anchors"].as_array().into_iter().flatten() {
-        if out.len() >= 4 {
-            warn_once("handmade: hair profile: more than 3 anchors; the rest are dropped".into());
+        // Four besides the profile's own (char-port-2 S5: black, brown, blond and grey; a single
+        // dark anchor moved brown by black's ratio, 1.8 times its lightness, past auburn).
+        if out.len() >= 5 {
+            warn_once("handmade: hair profile: more than 4 anchors; the rest are dropped".into());
             break;
         }
         match anchor(a, None) {

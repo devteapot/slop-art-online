@@ -328,10 +328,12 @@ The GC approved a minimal hero mechanism (2026-11-20). This is the proposed shap
 **As built in S5** ([s5/README.md](s5/README.md)), to the laptop's final contract (HANDMADE_COMPOSED v1.3), behind `SLOP_PORT=hair`:
 - **UV:** every piece of a style is its own island at 1 mm a texel (`hair.page_layout`), on the shared hair-mask page (4096², cells of 512). The far mesh takes the near pieces' places.
 - **Highlight:** `_HIGHLIGHT` per vertex and the page's R, a scalloped band on the upper hair.
-- **Lock ink:** lines up the notches between a sheet's points, rasterised into G by `hair_page.py` rather than `ink_field.py --seams-as-lines`. Island borders aren't drawn as lines. `ink_range` is 6 texels, set by padding rather than by line spacing, so the lines fade before Near: an open choice (s5/README.md).
-- **Palette:** the contract's `palette: "tag"` with `ref` and anchors (dark, light, grey) replaces the per-channel multipliers in step 5 above.
-- **Calibration:** run once per bin on a composed woman, not on the four bodies. Every band is within ±8 except auburn's shade, which the sky fill holds 14–16 levels light in G and B.
-- **Capacity:** the generator's 86 style files need three pages.
+- **Lock ink:** grouped into locks: a curving line of its own length up each notch, and shorter companions inside the lock (`hair.LOCK_LINES`). They are rasterised into G by `hair_page.py`, not `ink_field.py --seams-as-lines`, and island borders aren't drawn as lines. `ink_range` is 6 texels, so the lines fade before Near: close-up only, as the GC decided.
+- **Parting:** a pale strip in R where the hair parts (over-sheet styles, curtain fringes, braids): the structure that holds in play, with the bands.
+- **The strands (B2):** main's strand picture under the bands at low contrast, in the page's B. This is a proposed contract amendment with a client step in `toon.wesl`. The other variant, B1 (lock-wise band breaks), was built beside it; the GC takes the one that reads better (s5/README.md).
+- **Palette:** the contract's `palette: "tag"` with `ref` and anchors replaces the per-channel multipliers in step 5 above. There are four anchors (black, brown, blond, grey); the contract allowed 3, the other proposed amendment.
+- **Calibration:** run once per bin on a composed woman, not on the four bodies. Every band is within ±4, except auburn's shade, which the sky fill holds 15–17 levels light in G and B. Black and brown are floored to what play distance needs: at Middle black is within 4 of main's luma, and brown is 14 above it.
+- **Capacity:** the generator's 86 style files need three pages, at 1 mm (the GC's decision).
 
 ## 4. The client step this needs (summary of §0.3, §2.6, §3)
 

@@ -21,10 +21,10 @@ each band: the median colour.
 - **the other bins:** the same four moved from auburn to the bin's hair colour by the palette's own
   rule (palette.py `entry`: lightness and chroma by ratio, hue by offset, in OKLCh), the drawing's
   contrast in that colour;
-- **dark:** with a floor on OKLab lightness (shade 0.35, mid 0.42, light 0.46, highlight 0.55),
-  so black and near-black hair draw readable greys in order, and the lock lines (ink, near black)
-  and the highlight stay visible on them. The shade band cannot go darker than its floor in any
-  case: the sky's fill lights it, about (61, 56, 45) with a black swatch at 11:00;
+- **dark and brown:** with a floor on OKLab lightness (`FLOOR`), so black hair is about main's
+  black at play distance and brown a step above it; up close the lock lines and the highlight
+  carry them. Their shade is held at the sky's floor (`SKY`), the darkest the shade band shows: the
+  sky's fill lights it, about (61, 56, 45) with a black swatch at 11:00;
 - **every bin:** with a ceiling (shade 0.55, mid 0.72, light 0.79, highlight 0.86), since light
   hair's moved targets run past what the grade shows (grey's highlight 249).
 
@@ -56,11 +56,19 @@ HAIR = ASSETS/'lookdev/styles/hair'
 BANDS = ('shade', 'mid', 'light', 'highlight')
 AUBURN = (102, 46, 26)
 DRAWING = dict(shade=(88, 42, 27), mid=(152, 72, 43), light=(171, 88, 56), highlight=(187, 99, 63))
-BINS = dict(auburn=AUBURN, dark=(19, 17, 17), light=(158, 125, 71), grey=(133, 133, 133))
-FLOOR = dict(shade=0.35, mid=0.42, light=0.46, highlight=0.55)
+BINS = dict(auburn=AUBURN, dark=(19, 17, 17), brown=(51, 34, 23), light=(158, 125, 71), grey=(133, 133, 133))
+# Floors on OKLab lightness (the second pass, 2026-11-20): black and brown hair no lighter than
+# play distance needs them to be told apart (black about main's at Middle, brown a step above it);
+# up close the lock lines and the highlight carry them. S5's first floors (shade 0.35, mid 0.42,
+# light 0.46, highlight 0.55, black only) lifted black toward grey at Near and Middle.
+FLOOR = dict(dark=dict(shade=0.30, mid=0.31, light=0.345, highlight=0.44), brown=dict(shade=0.32, mid=0.39, light=0.43, highlight=0.47))
 # Light hair's targets moved from auburn's run past what the grade shows (grey's highlight 249,
 # blond's light 255): a ceiling on OKLab lightness keeps four bands and the highlight a highlight.
 CEIL = dict(shade=0.55, mid=0.72, light=0.79, highlight=0.86)
+# The darkest the shade band shows at 11:00 (the sky's fill on a black swatch, measured in S5):
+# a floored bin's shade target is held at it, channel by channel. Auburn's drawn shade, which lies
+# under it in green and blue, stays the drawing's (the exception S5 noted).
+SKY = (61, 56, 45)
 SHOTS = ['0:8:0.36:0.88', '-35:8:0.36:0.88']
 DEBUG = dict(palette='fixed', shade=[255, 0, 0], mid=[0, 255, 0], light=[0, 0, 255], highlight=[255, 255, 0])
 
@@ -83,8 +91,10 @@ def targets():
         t = {b: list(rows[i]) for i, b in enumerate(BANDS)}
         for b in BANDS:
             L, a_, b_ = palette.oklab(tuple(t[b]))
-            if name == 'dark' and L < FLOOR[b]:
-                t[b] = [palette.enc(x) for x in palette.from_oklab(FLOOR[b], a_, b_)]
+            if name in FLOOR and L < FLOOR[name][b]:
+                t[b] = [palette.enc(x) for x in palette.from_oklab(FLOOR[name][b], a_, b_)]
+            if name in FLOOR and b == 'shade':
+                t[b] = [max(x, y) for x, y in zip(t[b], SKY)]
             if L > CEIL[b]:
                 k = CEIL[b] / L  # keep the chroma's share of the lightness
                 t[b] = [palette.enc(x) for x in palette.from_oklab(CEIL[b], a_ * k, b_ * k)]

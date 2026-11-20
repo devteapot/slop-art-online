@@ -15,8 +15,12 @@ with the flag: the file's hair laid out at 1 mm a texel in a rectangle, and its 
 - **The file.** Its hair primitives' TEXCOORD_0 (`Hair` and `FarHair`) move into its cells; the
   hair material loses its texture and takes `slop.hair` (the profile below, the same object on every
   file of the page, `highlight_map` the page); the scene opts in (`slop` `{"contract": 1}`).
-- **The page.** R: the highlight, each file's `_HIGHLIGHT` rasterised from its near `Hair` mesh.
-  G: the lock lines' distance field over `ink_range` (HANDMADE_HAIR v1.1; 255 is no line). B 0.
+- **The page.** R: the highlight, each file's `_HIGHLIGHT` rasterised from its near `Hair` mesh,
+  and the parting (`parting_strip`: a pale strip where the hair parts, on what lies near the
+  scalp there). G: the lock lines' distance field over `ink_range` (HANDMADE_HAIR v1.1; 255 is no
+  line). B: main's strands under the bands at low contrast (`strands_bake`, `--strands`; the
+  client multiplies the bands by 2 B, 128 none), for files that carry the strands' mapping
+  (`_STRANDU`, `_STRANDV`, `_STRANDK`, removed once read); 0 on a page without.
 - **The manifest**, `hair-masks.json`: `{"page", "size", "cell", "density_mm", "files": {name: [col,
   row, w, h]}}` (the first page) and, when there is more than one, `"pages"`: each page's `page`
   and `files`. The generator's 86 files take 190 cells: three pages (docs/char-port-2/s5).
@@ -47,14 +51,16 @@ PAGE, CELL = 4096, 512
 GRID = PAGE // CELL
 DENSITY_MM = 1.0
 PAGE_PATH = "lookdev/styles/hair/hair-masks.png"
+STRANDS = 0.9  # main's strands under the bands, at this share of their own contrast (B; char-port-2 S5's B2)
 AUBURN = [102, 46, 26]
 # At auburn: Cora's accepted hair (docs/char-live-3/ink-batch-2/own-cora-live.glb) as calibrated on a
-# composed person against the drawing's hair patches (docs/char-port-2/s5/calibrate_bins.py).
-PROFILE = dict(palette="tag", ref=AUBURN, shade=[38, 1, 0], mid=[101, 34, 6], light=[119, 44, 5], highlight=[139, 53, 3],
+# composed person against the drawing's hair patches, with the strands under the bands
+# (docs/char-port-2/s5/calibrate_bins.py).
+PROFILE = dict(palette="tag", ref=AUBURN, shade=[35, 1, 0], mid=[92, 30, 5], light=[108, 39, 4], highlight=[138, 53, 3],
                t1=-0.2, t2=0.4, edge=0.02, highlight_feather=0.08, ink=[4, 0, 0], ink_px=1.05, ink_fade_px=2.0)
-# One anchor a colour bin besides auburn (HANDMADE_COMPOSED "Several anchors"); calibrated in
-# docs/char-port-2/s5 (anchors.json there, passed with --anchors).
-ANCHORS = [{"ref": [19, 17, 17], "shade": [0, 0, 10], "mid": [38, 39, 48], "light": [48, 49, 57], "highlight": [69, 69, 79]}, {"ref": [158, 125, 71], "shade": [83, 64, 28], "mid": [162, 125, 56], "light": [198, 163, 105], "highlight": [227, 222, 213]}, {"ref": [133, 133, 133], "shade": [61, 67, 79], "mid": [121, 128, 142], "light": [155, 162, 178], "highlight": [211, 219, 239]}]
+# One anchor a colour bin besides auburn (HANDMADE_COMPOSED "Several anchors"): black, brown, blond
+# and grey, calibrated in docs/char-port-2/s5 (calibrate_bins.py; the second pass's bins.json).
+ANCHORS = [{"ref": [19, 17, 17], "shade": [0, 0, 4], "mid": [5, 7, 16], "light": [19, 18, 24], "highlight": [47, 47, 54]}, {"ref": [51, 34, 23], "shade": [5, 4, 1], "mid": [40, 24, 17], "light": [50, 34, 24], "highlight": [68, 48, 38]}, {"ref": [158, 125, 71], "shade": [76, 59, 26], "mid": [151, 116, 51], "light": [185, 152, 96], "highlight": [223, 218, 211]}, {"ref": [133, 133, 133], "shade": [56, 61, 73], "mid": [113, 119, 131], "light": [143, 150, 165], "highlight": [206, 215, 235]}]
 
 
 def accessor(j, binary, i):
@@ -119,6 +125,93 @@ def raster_highlight(R, uv_px, tris, hl):
         R[Y[ok], X[ok]] = np.maximum(R[Y[ok], X[ok]], v[ok])
 
 
+def raster(uv_px, tris, attrs):
+    """Per triangle, the texels it covers (their centres inside it) and each attribute there,
+    interpolated (barycentric): yields (X, Y, {name: values})."""
+    for a, b, c in tris:
+        P = uv_px[[a, b, c]]
+        lo = np.floor(P.min(0)).astype(int)
+        hi = np.ceil(P.max(0)).astype(int)
+        xs, ys = np.meshgrid(np.arange(lo[0], hi[0] + 1) + 0.5, np.arange(lo[1], hi[1] + 1) + 0.5)
+        d = (P[1, 1] - P[2, 1]) * (P[0, 0] - P[2, 0]) + (P[2, 0] - P[1, 0]) * (P[0, 1] - P[2, 1])
+        if abs(d) < 1e-12:
+            continue
+        w0 = ((P[1, 1] - P[2, 1]) * (xs - P[2, 0]) + (P[2, 0] - P[1, 0]) * (ys - P[2, 1])) / d
+        w1 = ((P[2, 1] - P[0, 1]) * (xs - P[2, 0]) + (P[0, 0] - P[2, 0]) * (ys - P[2, 1])) / d
+        w2 = 1 - w0 - w1
+        inside = (w0 >= -1e-6) & (w1 >= -1e-6) & (w2 >= -1e-6)
+        X, Y = (xs[inside] - 0.5).astype(int), (ys[inside] - 0.5).astype(int)
+        ok = (X >= 0) & (X < PAGE) & (Y >= 0) & (Y < PAGE)
+        if not ok.any():
+            continue
+        vals = {}
+        for k, v in attrs.items():
+            q = w0[inside][:, None] * v[a] + w1[inside][:, None] * v[b] + w2[inside][:, None] * v[c]
+            vals[k] = q[ok]
+        yield X[ok], Y[ok], vals
+
+
+def parting_strip(R, uv_px, tris, pos, partings, width, depth):
+    """The parting (person.py's partings, in Blender's frame): R raised to 1 on what lies within
+    `depth` of the scalp and within half `width` across of the parting's line, the width tapering
+    to nothing over the line's first and last fifths."""
+    if not partings:
+        return 0
+    segs = []
+    for pt in partings:
+        P = np.array([[x, z, -y] for x, y, z in pt["pts"]], float)  # glTF: y up, z forward
+        O = np.array([[x, z, -y] for x, y, z in pt["out"]], float)
+        run = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(P, axis=0), axis=1))])
+        for i in range(len(P) - 1):
+            segs.append((P[i], P[i + 1], O[i], O[i + 1], run[i] / run[-1], run[i + 1] / run[-1]))
+    lo = np.min([np.minimum(s[0], s[1]) for s in segs], axis=0) - depth - width
+    hi = np.max([np.maximum(s[0], s[1]) for s in segs], axis=0) + depth + width
+    n = 0
+    for X, Y, v in raster(uv_px, tris, dict(p=pos)):
+        x = v["p"]
+        near = np.all((x >= lo) & (x <= hi), axis=1)
+        if not near.any():
+            continue
+        x, Xn, Yn = x[near], X[near], Y[near]
+        best = np.full(len(x), np.inf)
+        for a, b, oa, ob, ta, tb in segs:
+            ab = b - a
+            t = np.clip(((x - a) @ ab) / max(ab @ ab, 1e-12), 0, 1)
+            c = a + t[:, None] * ab
+            o = oa + t[:, None] * (ob - oa)
+            o /= np.linalg.norm(o, axis=1, keepdims=True)
+            r = x - c
+            up = np.einsum("ij,ij->i", r, o)
+            across = np.linalg.norm(r - up[:, None] * o, axis=1)
+            share = ta + t * (tb - ta)
+            half = 0.5 * width * np.clip(np.minimum(share, 1 - share) / 0.2, 0, 1) ** 0.5
+            ok = (up > -0.004) & (up < depth) & (across < half)
+            best = np.where(ok, np.minimum(best, across / np.maximum(half, 1e-9)), best)
+        hit = np.isfinite(best)
+        R[Yn[hit], Xn[hit]] = 1.0
+        n += int(hit.sum())
+    return n
+
+
+def strands_bake(B, uv_px, tris, su, sv, sk, picture, contrast):
+    """b2: main's strands under the bands, at low contrast: B = (1 + contrast x (m - 1)) / 2,
+    m the strands' picture (over its mean) at the vertex's own mapping times main's shading of
+    the vertex (its colour over the median), the larger where a sheet's front and back share a
+    texel."""
+    H, W = picture.shape
+    mean = float(picture.mean())
+    for X, Y, v in raster(uv_px, tris, dict(u=su[:, None], v=sv[:, None], k=sk[:, None])):
+        px = (v["u"][:, 0] % 1.0) * W
+        py = (1.0 - v["v"][:, 0]) % 1.0 * H  # Blender's v up; the picture's root at the top
+        x0, y0 = np.floor(px - 0.5).astype(int), np.floor(py - 0.5).astype(int)
+        fx, fy = px - 0.5 - x0, py - 0.5 - y0
+        g = lambda yy, xx: picture[yy % H, xx % W]
+        val = (g(y0, x0) * (1 - fx) * (1 - fy) + g(y0, x0 + 1) * fx * (1 - fy) + g(y0 + 1, x0) * (1 - fx) * fy + g(y0 + 1, x0 + 1) * fx * fy) / mean
+        m = np.clip(val * v["k"][:, 0], 0.4, 1.6)
+        b = np.clip(0.5 * (1 + contrast * (m - 1)), 0.05, 0.95)
+        B[Y, X] = np.maximum(B[Y, X], b)
+
+
 def lines_field(D, lines, rng):
     """The distance (texels) to the nearest line segment, within `rng` (D starts at rng)."""
     for pts in lines:
@@ -141,6 +234,7 @@ def main():
     ap.add_argument("--anchors", help="the calibrated anchors (a JSON list, HANDMADE_COMPOSED's `anchors`)")
     ap.add_argument("--profile", help="the profile's own swatches at its `ref` (JSON: shade, mid, light, highlight, ink), over PROFILE's")
     ap.add_argument("--profile-only", action="store_true", help="rewrite only the files' slop.hair (files already on the page; for calibration)")
+    ap.add_argument("--strands", type=float, default=STRANDS, help=f"lay main's strands under the bands at this contrast (the page's B), for files that carry their mapping (_STRANDU/V/K; default {STRANDS}; 0 none)")
     a = ap.parse_args()
     anchors = json.load(open(a.anchors)) if a.anchors else ANCHORS
     if a.profile:
@@ -178,6 +272,15 @@ def main():
     cells, n_pages = place([(n, wh) for n, _, wh in files])
     rng = files[0][1]["range_px"]
     R = [np.zeros((PAGE, PAGE), np.float32) for _ in range(n_pages)]
+    # The strands (B) when any file carries their mapping; a page without them keeps B 0.
+    carries = a.strands > 0 and any("_STRANDU" in p["attributes"] for n, _, _ in files for _, p in hair_prims(read_glb(os.path.join(a.folder, n))[0]))
+    B = [np.zeros((PAGE, PAGE), np.float32) for _ in range(n_pages)] if carries else None
+    picture = None
+    if B is not None:
+        picture = np.asarray(Image.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../game/assets/lookdev/strands.png")).convert("L"), np.float64) / 255.0
+        for b in B:
+            b[:] = 0.5  # neutral wherever no hair is, so the filter never reads a strand's edge as dark
+    parted = 0
     D = [np.full((PAGE, PAGE), float(rng), np.float32) for _ in range(n_pages)]
     page_path = lambda k: PAGE_PATH if k == 0 else PAGE_PATH.replace(".png", f"-{k}.png")
     for name, sp, _ in files:
@@ -200,6 +303,7 @@ def main():
                 j["accessors"][ai]["max"] = new.max(0).tolist()
                 moved.add(ai)
             p["attributes"].pop("_RING", None)  # a profile has no ring (HANDMADE_COMPOSED)
+            strand = {k: p["attributes"].pop(k) for k in ("_STRANDU", "_STRANDV", "_STRANDK") if k in p["attributes"]}  # b2's, used below
             mat = j["materials"][p["material"]]
             mat.get("pbrMetallicRoughness", {}).pop("baseColorTexture", None)
             mat.setdefault("extras", {})["slop"] = {"slot": "hair", "hair": profile}
@@ -207,6 +311,11 @@ def main():
                 hl, _ = accessor(j, binary, p["attributes"]["_HIGHLIGHT"])
                 idx, _ = accessor(j, binary, p["indices"])
                 raster_highlight(R[k], px + off, idx.reshape(-1, 3), hl[:, 0].astype(np.float64))
+                pos, _ = accessor(j, binary, p["attributes"]["POSITION"])
+                parted += parting_strip(R[k], px + off, idx.reshape(-1, 3), pos.astype(np.float64), sp.get("partings", []), **sp.get("parting", dict(width=0.008, depth=0.014)))
+                if B is not None and len(strand) == 3:
+                    su, sv, sk = (accessor(j, binary, strand[n])[0][:, 0].astype(np.float64) for n in ("_STRANDU", "_STRANDV", "_STRANDK"))
+                    strands_bake(B[k], px + off, idx.reshape(-1, 3), su, sv, sk, picture, a.strands)
         scene = j["scenes"][j.get("scene", 0)]
         slop = scene.setdefault("extras", {}).setdefault("slop", {})
         slop.pop("character", None)
@@ -217,13 +326,16 @@ def main():
         img = np.zeros((PAGE, PAGE, 3), np.uint8)
         img[..., 0] = np.round(np.clip(R[k], 0, 1) * 255)
         img[..., 1] = np.round(np.clip(D[k] / rng, 0, 1) * 255)
+        if B is not None:
+            img[..., 2] = np.round(np.clip(B[k], 0, 1) * 255)
         Image.fromarray(img, "RGB").save(os.path.join(a.folder, os.path.basename(page_path(k))))
     manifest = dict(page=PAGE_PATH, size=PAGE, cell=CELL, density_mm=DENSITY_MM, files={n: v[1:] for n, v in cells.items() if v[0] == 0})
     if n_pages > 1:
         manifest["pages"] = [dict(page=page_path(k), files={n: v[1:] for n, v in cells.items() if v[0] == k}) for k in range(n_pages)]
     json.dump(manifest, open(os.path.join(a.folder, "hair-masks.json"), "w"), indent=1)
     used = sum(v[3] * v[4] for v in cells.values())
-    print(f"hair_page: {len(files)} files on {n_pages} page(s), {used} cells of {n_pages * GRID * GRID}; lines from {sum(len(sp['creases']) for _, sp, _ in files)} creases")
+    print(f"hair_page: {len(files)} files on {n_pages} page(s), {used} cells of {n_pages * GRID * GRID}; lines from {sum(len(sp['creases']) for _, sp, _ in files)} creases;"
+          f" partings over {parted} texels; strands {'at ' + str(a.strands) if B is not None else 'none'}")
 
 
 if __name__ == "__main__":

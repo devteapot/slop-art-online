@@ -61,7 +61,7 @@
    "about": "S4: the lid, its wing, flicks and fringe, the outer lower lid and the brow as ink on carriers (living/tools/blender/ink_carriers.py), on the types' shared ink page (lookdev/types/types.eyes.ink.png, docs/HANDMADE_COMPOSED.md), in place of the lid band, lash cards, lower line and brow strip; an opaque lid core keeps the lid at play distance (docs/char-port-2/s4)."
   },
   "hair": {
-   "about": "S5: hair styles laid out for the handmade-hair profile on the shared hair-mask page (lookdev/styles/hair/hair-masks.png, 4096 at 1 mm a texel, docs/HANDMADE_COMPOSED.md): each piece its own UV island by its own lengths (hair.page_layout), a highlight on the upper hair (_HIGHLIGHT and the mask's R), lock lines up the notches between a sheet's points (G), and one tag-relative profile with an anchor per colour bin (living/tools/characters/hair_page.py; docs/char-port-2/s5)."
+   "about": "S5: hair styles laid out for the handmade-hair profile on the shared hair-mask pages (lookdev/styles/hair/hair-masks.png and -1, -2: 4096 at 1 mm a texel, docs/HANDMADE_COMPOSED.md): each piece its own UV island by its own lengths (hair.page_layout), a highlight on the upper hair and a pale parting (_HIGHLIGHT and the mask's R), lock lines grouped into locks from the notches between a sheet's points (G), main's strands under the bands at low contrast (B), and one tag-relative profile with anchors for black, brown, blond and grey (living/tools/characters/hair_page.py; docs/char-port-2/s5)."
   }
  }
 }

@@ -4,6 +4,13 @@ portrait, three-quarter, Near and Middle (58°), and a sheet of them beside main
 
     python3 hair_rows.py render OUT --binary BIN [--style bob] [--tag NAME]     # renders OUT/<tag>/<colour>/
     python3 hair_rows.py sheet OUT SHEET.png [--tags port,main]
+    python3 hair_rows.py compare OUT SHEET.png [--tags b1,b2,main]               # Near and Middle, four colours
+    python3 hair_rows.py luma OUT TABLE.json [--tags port,main]                  # the mean hair luma at Middle
+
+**The luma** (the second pass's acceptance for black and brown): at Middle, the mean luma
+(0.2126 R + 0.7152 G + 0.0722 B of the screen's sRGB values) over the hair's pixels. The hair is
+where the white row and the black row differ by more than 40 levels (everything else in the two
+frames is the same person), the same pixels for every colour of a tag.
 
 The colours are the generator's hair colours (person_params.HAIR_COLOURS through palette.py): the
 four calibration bins' (black, auburn, blond, grey) and brown, chestnut and white between them.
@@ -15,6 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 REPO = Path(__file__).resolve().parents[3]
@@ -80,6 +88,35 @@ def sheet(out, path, tags):
     S.save(path)
 
 
+def compare(out, path, tags, colours=('black', 'brown', 'grey', 'blond')):
+    cell = 192
+    shots = [s for s in SHOTS if 'native' in s[0]]
+    S = Image.new('RGB', (130 + len(shots) * len(tags) * (cell + 4) + 20, 70 + len(colours) * (cell + 4)), BG)
+    d = ImageDraw.Draw(S)
+    for i, (name, shot, box) in enumerate(shots):
+        for t, tag in enumerate(tags):
+            x = 130 + (i * len(tags) + t) * (cell + 4) + 20 * i
+            d.text((x, 20), f'{name.replace(", native", "")}\n{tag}', fill=(40, 40, 40), font=font(13))
+            for r, c in enumerate(colours):
+                f = next((p for p in sorted((out/tag/c).rglob('*.png')) if p.name.endswith(shot.replace(':', '_').replace('@', '_') + '.png')), None)
+                if f:
+                    S.paste(Image.open(f).convert('RGB').crop(box).resize((cell, cell), Image.NEAREST), (x, 70 + r * (cell + 4)))
+    for r, c in enumerate(colours):
+        d.text((10, 70 + r * (cell + 4) + 80), c, fill=(40, 40, 40), font=font(15))
+    S.save(path)
+
+
+def luma(out, path, tags):
+    Y = lambda f: (lambda a: a[..., 0] * 0.2126 + a[..., 1] * 0.7152 + a[..., 2] * 0.0722)(np.asarray(Image.open(f).convert('RGB')).astype(float))
+    pick = lambda tag, c: next(p for p in sorted((out/tag/c).rglob('*.png')) if p.name.endswith('middle_0.png'))
+    res = {}
+    for tag in tags:
+        m = np.abs(Y(pick(tag, 'white')) - Y(pick(tag, 'black'))) > 40
+        res[tag] = dict(pixels=int(m.sum()), **{c: round(float(Y(pick(tag, c))[m].mean()), 1) for c in COLOURS})
+        print(tag, res[tag])
+    Path(path).write_text(json.dumps(res, indent=1))
+
+
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('cmd')
@@ -92,5 +129,9 @@ if __name__ == '__main__':
     a = ap.parse_args()
     if a.cmd == 'render':
         render(a.out, a.binary, a.style, a.tag)
+    elif a.cmd == 'compare':
+        compare(a.out, a.dest, a.tags.split(','))
+    elif a.cmd == 'luma':
+        luma(a.out, a.dest, a.tags.split(','))
     else:
         sheet(a.out, a.dest, a.tags.split(','))

@@ -131,7 +131,7 @@ v1's palette *replaces* the hair's colour (HANDMADE_HAIR, "The palette replaces 
 | `palette` | `"fixed"` or `"tag"` | `"fixed"` | `"fixed"`: v1's absolute swatches. `"tag"`: the swatches follow the mesh's tag colour, as below. |
 | `ref` | `[r, g, b]` integers, sRGB 0–255 | **required** with `"tag"` | The hair tag colour the swatches were tuned on, as it appears in a line's `colors.hair` (for example auburn `[102, 46, 26]`). Its OKLab lightness must be at least 0.05. |
 | `shade`, `mid`, `light`, `highlight`, `ink`, thresholds | as v1 and v1.1 | as v1 and v1.1 | Unchanged. They are the palette **at `ref`**. A person whose tag equals `ref` draws exactly these values. |
-| `anchors` | array of up to 3 objects | none | More tuned palettes: each object has `ref` and the four swatches (`ink` optional), tuned on another hair colour, for example from S5's dark, light and grey calibration bins. See [several anchors](#several-anchors). |
+| `anchors` | array of up to 4 objects | none | More tuned palettes: each object has `ref` and the four swatches (`ink` optional), tuned on another hair colour, for example from S5's dark, brown, light and grey calibration bins. See [several anchors](#several-anchors). Up to 3 until char-port-2 S5's second pass (2026-11-20, proposed): one dark anchor moves brown by black's lightness ratio, past auburn, so brown takes its own. |
 
 `slop.ink` gains `ref` with the same meaning: when it is set and the mesh has a tag colour, `color` is moved by the same rule. For example, a brow carrier's ink follows the hair, and a lid carrier, whose name takes no colour, keeps `color`.
 
@@ -260,7 +260,8 @@ With `anchors`, each anchor `i` (the profile's own swatches are anchor 0) gives 
 | | |
 |---|---|
 | **File** | `lookdev/styles/hair/hair-masks.png` and its `.ktx2` copy; further pages `hair-masks-1.png`, … |
-| **Content** | HANDMADE_HAIR's mask texture: **R** the highlight (v1), **G** the lock-ink distance field (v1.1), B 0, A 255. RGB, linear, with mips in KTX2 (class `hairmask`). |
+| **Content** | HANDMADE_HAIR's mask texture: **R** the highlight (v1; generated cuts also draw the parting there, a pale strip), **G** the lock-ink distance field (v1.1), **B** the strands (proposed, char-port-2 S5's second pass: below), A 255. RGB, linear, with mips in KTX2 (class `hairmask`). |
+| **The strands (B, proposed)** | Main's strand picture under the profile's bands at low contrast: the client multiplies the three bands (not the highlight or the ink) by `2 · B`, so 128 changes nothing; **B 0 means no strands** (a page without them), and the client then multiplies by 1. The generator writes 128 wherever no hair lies, so filtering never reads an island's edge as dark. Needs the client step in `toon.wesl` `hand_hair` (on `char-port-2-s5`). |
 | **Size** | 4096 × 4096 texels. |
 | **Cells** | A grid of 512 × 512-texel cells, 8 × 8, numbered `[col, row]` from the top-left (glTF's UV origin). |
 | **What a file takes** | A rectangle of whole cells, `[col, row, w, h]`. A short cut takes 1 × 1; a long cut or a plait may take 2 × 1, 1 × 2 or 2 × 2. |
@@ -413,7 +414,7 @@ dev-box's composed bundles (`char-4-composed-<sha>.tar.gz` and its `-ktx2` twin,
 
 - **The scene:** `contract` is 1 and there is no `character`. Material slots: a slot whose kind differs from the name rule's (for example `tint` on a `…_FACE` name) is a warning, since the name rule decides.
 - **`palette`:**
-  - **Errors:** the value; `ref` (three integers, OKLab L ≥ 0.05); anchors (at most 3, each complete).
+  - **Errors:** the value; `ref` (three integers, OKLab L ≥ 0.05); anchors (at most 4, each complete).
   - **Warnings:** a clamp hit on `kL` or `kC`; |dh| > 30°.
   - **Facts:** the [entries](#the-maths) for the nine `HAIR_COLOURS`, two silvers and the anchors' refs, with any gamut-reduced swatch marked.
 - **Ink:** v1.2's ink audit, plus:

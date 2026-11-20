@@ -42,18 +42,18 @@
     },
     {
       "sequence": "portrait pan",
-      "f_ink": 0.19,
-      "f_edge": 0.186,
-      "ratio": 1.02,
-      "ink_px": 740.1,
+      "f_ink": 0.043,
+      "f_edge": 0.161,
+      "ratio": 0.26,
+      "ink_px": 1396.1,
       "result": "pass"
     },
     {
       "sequence": "portrait zoom",
-      "f_ink": 0.195,
-      "f_edge": 0.605,
-      "ratio": 0.32,
-      "ink_px": 736.9,
+      "f_ink": 0.125,
+      "f_edge": 0.576,
+      "ratio": 0.22,
+      "ink_px": 1425.1,
       "result": "pass"
     }
   ]

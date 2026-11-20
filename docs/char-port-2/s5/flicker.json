@@ -1,0 +1,80 @@
+{
+ "b1": {
+  "near pan": {
+   "pixels": 577,
+   "F": 0.0029
+  },
+  "near zoom": {
+   "pixels": 505,
+   "F": 0.0109
+  },
+  "middle pan": {
+   "pixels": 233,
+   "F": 0.0027
+  },
+  "middle zoom": {
+   "pixels": 176,
+   "F": 0.0072
+  },
+  "far pan": {
+   "pixels": 78,
+   "F": 0.0024
+  },
+  "far zoom": {
+   "pixels": 68,
+   "F": 0.0104
+  }
+ },
+ "b2": {
+  "near pan": {
+   "pixels": 594,
+   "F": 0.0033
+  },
+  "near zoom": {
+   "pixels": 505,
+   "F": 0.0139
+  },
+  "middle pan": {
+   "pixels": 235,
+   "F": 0.0029
+  },
+  "middle zoom": {
+   "pixels": 174,
+   "F": 0.0105
+  },
+  "far pan": {
+   "pixels": 78,
+   "F": 0.003
+  },
+  "far zoom": {
+   "pixels": 68,
+   "F": 0.0111
+  }
+ },
+ "main": {
+  "near pan": {
+   "pixels": 579,
+   "F": 0.0069
+  },
+  "near zoom": {
+   "pixels": 498,
+   "F": 0.0321
+  },
+  "middle pan": {
+   "pixels": 217,
+   "F": 0.0064
+  },
+  "middle zoom": {
+   "pixels": 176,
+   "F": 0.0298
+  },
+  "far pan": {
+   "pixels": 76,
+   "F": 0.0057
+  },
+  "far zoom": {
+   "pixels": 65,
+   "F": 0.0279
+  }
+ }
+}

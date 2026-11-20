@@ -127,7 +127,24 @@ TEXEL_M = 0.001  # the page's density: 1 mm a texel
 PAGE_PX = 4096
 INK_RANGE_PX = 6  # the lock lines' range, texels (6 mm: above px x 4.03 mm + a pixel at ink_px 1.05)
 ISLAND_PAD_PX = 2 * INK_RANGE_PX + 8  # between islands and from the file's rectangle's edge (the contract's)
-CREASE = dict(notch=0.55, up=0.55, clear=INK_RANGE_PX + 3)  # a column cut back this far is a notch; its line runs this share up; it starts this many texels in
+CREASE = dict(notch=0.55, clear=INK_RANGE_PX + 3)  # a column cut back this far is a notch; a line starts this many texels in from the hem
+# The lock lines, grouped into locks (the plait's lesson: even, parallel, equal stripes read as
+# melon stripes, and the fringe's as clips): up each notch, a line a share of the way to the root
+# (`notch_len`), bending across by up to `drift` columns as it goes; beside a notch, inside the
+# lock, 0 to 2 shorter companions (`mate_len`), started a share of the way from the notch to the
+# point's tip (`mate_at`), bending with the notch's line.
+LOCK_LINES = dict(notch_len=(0.30, 0.72), drift=1.3, mate_len=(0.16, 0.40), mate_at=(0.30, 0.55), mates=(0, 0, 1, 1))
+# The parting (char-port-2 S5's second pass): a pale strip on the page (the highlight's R) where
+# the hair parts, `width` across (metres, tapering to its ends), on what lies within `depth` of
+# the scalp there. Close up the bands and lines carry the hair; in play the parting does.
+PARTING = dict(width=0.010, depth=0.014, from_deg=84.0, curtain_from_deg=70.0, to_deg=122.0)
+# The look the second pass gives the bands at play distance. Two were built side by side
+# (docs/char-port-2/s5): `b1` turns each lock's normals across it as a low cylinder, so the bands
+# break lock by lock; `b2` keeps the bands smooth and has hair_page.py lay main's strands under
+# them at low contrast (the page's B, which the client multiplies into the bands). B2 is kept;
+# SLOP_HAIR_LOOK=b1 builds the other again.
+HAIR_LOOK = __import__("os").environ.get("SLOP_HAIR_LOOK", "b2")
+LOCK_ROUND = 0.60  # b1: how far a lock's normals turn across it, at its sides
 
 
 FRINGE_OVER = 0.003  # a full fringe ends this far above the top of the head's own brows
@@ -320,7 +337,8 @@ class Hair:
         self.locks = []
         self.sheets = []  # sheets' own records; their columns are walked with the locks
         self.extra = []  # (kind, data) for person.py: ties and bands in cloth
-        self.creases = []  # (SLOP_PORT=hair) lock lines: vertex indices up a sheet's notch column, hem first
+        self.creases = []  # (SLOP_PORT=hair) lock lines: points, hem first, each [(vertex, weight), ...] on a sheet's front
+        self.partings = []  # where the hair parts: dict(pts, nrm, deg) on the scalp, head frame
         style = spec["style"]
         if style not in STYLES:
             raise SystemExit(f"hair.style: {style!r} is not one of {STYLES}")
@@ -519,6 +537,13 @@ class Hair:
                 th = math.radians(lerp(4, back_th, smooth((t - 0.45) / 0.55)))
                 dirs.append([side * math.cos(th), -0.16 - math.sin(th), 0.0])
             sides[side] = (roots, dirs)
+        # The parting: between the two sides' roots, on the scalp, from the front over the top.
+        mids, deg = [], []
+        for t, a, b in zip(np.linspace(0, 1, 13), sides[-1][0], sides[1][0]):
+            d = unit((a + b) / 2 - ORIGIN)
+            mids.append(ORIGIN + d * self.hf.radius(d[None, :])[0])
+            deg.append(lerp(front, 128, t))
+        self.partings.append(dict(pts=np.array(mids), deg=np.array(deg)))
         # The wider side of an off-centre parting takes more points.
         count = {side: max(2, round(points * (0.75 + 0.5 * (0.5 + 0.5 * side * (px / 0.05) * -1)))) for side in (-1, 1)}
         if mid:
@@ -574,6 +599,8 @@ class Hair:
             sweep = 1.0 if px <= 0 else -1.0  # away from the parting
             if abs(px) < 0.004:
                 sweep = 1.0 if self.rng.random() < 0.5 else -1.0
+        for pt in self.partings:  # a fringe that is not parted covers the parting's front
+            pt["from"] = PARTING["curtain_from_deg"] if mode == "curtain" else PARTING["from_deg"]
         if mode == "curtain":
             for s in (-1, 1):
                 ts = np.linspace(0.10, 1.0, 9)
@@ -820,6 +847,9 @@ class Hair:
     def _braids(self):
         # Two braids from behind the ears, the hair parted down the middle and drawn to each.
         self.braid = []
+        deg = np.linspace(62.0, 150.0, 23)
+        dirs = np.stack([np.zeros(len(deg)), np.cos(np.radians(deg)), np.sin(np.radians(deg))], axis=1)
+        self.partings.append(dict(pts=ORIGIN + dirs * self.hf.radius(dirs)[:, None], deg=deg))
         for side in (-1, 1):
             g = self.comb.surface(side * 118.0, -8.0)[0]
             az = side * (8 + 172 * (np.arange(12) + 0.5) / 12)
@@ -1177,6 +1207,8 @@ class Hair:
         P = np.stack([F[..., 0], F[..., 1] + 0.010, RING_TILT * np.maximum(F[..., 2] - (self.hf.top_z - RING_FROM), 0.0)], axis=-1)
         own = (0.2 + 0.3 * smooth((0.02 - F[..., 2]) / 0.06))[..., None]
         N = OUT if tube else unit(own * OUT + (1 - own) * unit(P))
+        if PAGE_HAIR and HAIR_LOOK == "b1" and not tube:
+            N = self._lock_round(sp, C, SIDE, N, T)
         # Across the picture of strands: a whole number of times round a closed sheet.
         if loop:
             U = sp["u0"] + np.append(u, 1.0) * max(1, round(sp["W"] / 0.22))
@@ -1206,11 +1238,7 @@ class Hair:
                 chain_pts.setdefault(ch, []).append((C[jj], S[jj], free_from, first, first + nr))
         at = lambda j, i, back: v0 + j * nr + 2 * i + back
         if PAGE_HAIR and self.detail >= 1:
-            # Lock lines: up the front of each notch's column (not a sheet's own edge columns), from
-            # the hem toward the root.
-            for j in range(1, M - 1):
-                if kk[j] >= CREASE["notch"]:
-                    self.creases.append([at(j, i, 0) for i in range(R, -1, -1)])
+            self._lock_lines(sp, kk, M, R, at)
         for j in range(Mx - 1):
             for i in range(R):
                 self.f.append((at(j, i, 0), at(j + 1, i, 0), at(j + 1, i + 1, 0), at(j, i + 1, 0)))
@@ -1238,6 +1266,67 @@ class Hair:
                 self.f.append((at(Mx - 1, i + 1, 0), at(Mx - 1, i, 0), at(Mx - 1, i, 1), at(Mx - 1, i + 1, 1)))
 
     # --------------------------------------------------------------------- springs, bun, braid
+
+    def _lock_lines(self, sp, kk, M, R, at):
+        """A sheet's lock lines (SLOP_PORT=hair), grouped into locks (LOCK_LINES): from the hem
+        toward the root, up each notch and beside it inside the lock, of uneven lengths, bending
+        across. Never on the sheet's own edge columns, so a line keeps its distance from the
+        island's border. Their own random numbers, so the hair's shape does not change."""
+        if M < 3 or R < 2:
+            return
+        cr = random.Random(f"lines/{self.spec.get('seed', 0)}/{sp['u0']:.9f}/{len(self.creases)}")
+        q = list(sp["q"])
+        lines = []  # (start column, its bend, length share)
+        tips = {}
+        for j in range(M):
+            if q[j] not in tips or kk[j] < kk[tips[q[j]]]:
+                tips[q[j]] = j
+        for j in range(1, M - 1):
+            if kk[j] < CREASE["notch"]:
+                continue
+            bend = cr.uniform(-1, 1) * LOCK_LINES["drift"]
+            lines.append((float(j), bend, cr.uniform(*LOCK_LINES["notch_len"])))
+            # Inside the locks either side of this notch: companions, toward each lock's tip.
+            for side in (-1, 1):
+                jt = tips.get(q[j] if side > 0 else q[j - 1] if j > 0 else q[j])
+                if jt is None or jt == j:
+                    continue
+                for _ in range(cr.choice(LOCK_LINES["mates"])):
+                    j0 = j + (jt - j) * cr.uniform(*LOCK_LINES["mate_at"])
+                    lines.append((j0, 0.6 * bend + cr.uniform(-0.15, 0.15), cr.uniform(*LOCK_LINES["mate_len"])))
+        for j0, bend, share in lines:
+            n = max(4, int(math.ceil(share * R * 3)))
+            pts = []
+            for t in np.linspace(0.0, 1.0, n):
+                jj = float(np.clip(j0 + bend * t ** 2.2, 1.0, M - 2.0))
+                ii = R - t * share * R
+                a, b = min(int(jj), M - 2), min(int(ii), R - 1)
+                fa, fb = jj - a, ii - b
+                pts.append([(at(a, b, 0), (1 - fa) * (1 - fb)), (at(a + 1, b, 0), fa * (1 - fb)), (at(a, b + 1, 0), (1 - fa) * fb), (at(a + 1, b + 1, 0), fa * fb)])
+            self.creases.append(pts)
+
+    def _lock_round(self, sp, C, SIDE, N, T):
+        """b1: each lock (a point of the sheet's hem, notch to notch) shaded as a low cylinder:
+        its normals turned across it, out toward its sides, more toward the hem than at the root,
+        each lock by its own amount, so the bands' edges break lock by lock."""
+        u, q = np.array(sp["u"]), list(sp["q"])
+        M = len(u)
+        if len(set(q)) < 2:  # a sheet without points (drawn to a tie): one smooth surface
+            return N
+        starts = {}
+        for j in range(M):
+            starts.setdefault(q[j], u[j])
+        a = np.zeros(M)
+        for j in range(M):
+            lo = starts[q[j]]
+            hi = starts.get(q[j] + 1, starts[q[0]] + 1.0 if sp["loop"] else u[-1])  # a closed sheet's last lock runs round to its first
+            a[j] = 2.0 * (u[j] - lo) / max(hi - lo, 1e-9) - 1.0
+        gain = [0.7 + 0.6 * ((i * 0.618034 + sp["u0"]) % 1.0) for i in range(max(q) + 1)]
+        # Which way across is out of the lock: SIDE's sign against the way u runs.
+        across = np.gradient(C[:, :, :], axis=0)
+        sgn = np.sign(np.einsum("jik,jik->ji", across, SIDE))
+        amp = LOCK_ROUND * smooth(T / 0.30)[None, :] * np.array([gain[k] for k in q])[:, None] * a[:, None] * sgn
+        return unit(N + SIDE * amp[..., None])
 
     def _springs(self, chain_pts):
         """Each chain's joints: where its locks leave the head, then every 9 cm down their mean

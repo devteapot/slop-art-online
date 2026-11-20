@@ -71,10 +71,10 @@ def palette_checks(name, h, errors, warns, facts):
     if not isinstance(anchors, list):
         errors.append(f"{pre}.anchors is not a list (ignored)")
         anchors = []
-    if len(anchors) > 3:
-        errors.append(f"{pre}: {len(anchors)} anchors; at most 3 (the rest are dropped)")
+    if len(anchors) > 4:
+        errors.append(f"{pre}: {len(anchors)} anchors; at most 4 (the rest are dropped)")
     good = []
-    for i, a in enumerate(anchors[:3]):
+    for i, a in enumerate(anchors[:4]):
         bad = [k for k in ("ref", "shade", "mid", "light", "highlight") if not RGB_OK(a.get(k) if isinstance(a, dict) else None)]
         if bad:
             errors.append(f"{pre}.anchors[{i}]: {', '.join(bad)} not three integers 0-255 (the anchor is dropped)")
