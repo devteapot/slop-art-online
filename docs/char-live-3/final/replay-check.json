@@ -1,0 +1,38 @@
+{
+  "tree": "f53d46700 (origin/main merged: staged genesis)",
+  "factory_replay": "docs/char-live-3/replay.py from Blender factory startup on the merged tree",
+  "artifacts_identical_to_ink_batch_2": {
+    "own-cora-live.glb": "cbe287865e645ab7862370c6b1f5972c238c2a04fe185bb2fa13457a9f451d1f",
+    "own-cora-live.face.png": "f9fff170e2b9d7ef8a3b28a576e5b91b22f29167e2ffaced5d862d59d07143dc",
+    "own-cora-live.hair.png": "8a0d72abaefafc0f0f661b4b19513d38a8ad2b6e93a3f8c781e399b58b29d2fa",
+    "own-cora-live.calibration.json": "471e3655afccb12eea5236f69e057ff98520bc1f8bde8657dbdf3de5b155d37f",
+    "own-cora-live.eyes.ink.png": "d94e57952aa969a38209248f1b310e8e9dd752fd40b0a5839f4764ff75a22189"
+  },
+  "material_audits": {
+    "count": 12,
+    "failures": 0,
+    "last": "item4-5-expression-sweep"
+  },
+  "contract_audit": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "client": {
+    "built_from": "f53d46700",
+    "rustc": "1.99.1",
+    "identical_to_attempt_2_client": true
+  },
+  "calibration_passed": true,
+  "cloth_passed": true,
+  "stills_shared_with_ink_batch_2_changed_pixels": {
+    "00-clip-idle@0-0_8_0.36_0.88.png": 0,
+    "01-clip-idle@0-near_0.png": 0,
+    "02-clip-idle@0-45_8_0.36_0.88.png": 0
+  },
+  "walk": {
+    "0": 0,
+    "7": 0,
+    "74": 0,
+    "149": 0
+  }
+}

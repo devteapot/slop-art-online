@@ -126,3 +126,16 @@ One attempt at xhigh effort, from 02:38 to about 03:15 UTC on 20 November. It co
 No client rebuild was needed: the merged-main client built for attempt 1 was used. Some time was lost waiting on the general coordinator's gate lock for Blender. Free disk stayed at 56 GB or more. No paid calls, no database.
 
 Per the stop rule, the lid and the nostrils now go to the general coordinator as they stand.
+
+## GC verdict
+
+**Both pass.**
+- **Lid:** in front it matches the drawing's width and darkness, which was the goal.
+- **Nostrils:** they read as the drawing's two nostrils.
+
+**Recorded follow-ups:**
+
+- **View-dependent strokes (client).** One follow-up with two items:
+  1. **The lid at three-quarter** is about 25% over the drawing, because a stroke on the surface can't thin as the lid turns from the camera.
+  2. **The jaw outline**, dropped from attempt 1: a static carrier can't follow a silhouette that changes with the view.
+- **The nostrils** are slightly light (about 22 levels at the core, at 440 px) and flat (3–4 px tall against the drawing's 5).
