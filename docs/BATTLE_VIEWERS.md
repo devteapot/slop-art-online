@@ -202,6 +202,70 @@ The table arms' privacy proofs that the Spark's diagnosis listed as still to run
 
 Evidence: `.local/cp/runs/` on the dev-box (worktree, archived with the branch). Not covered: real game clients (the laptop's client switch has its own verify-ui proofs), reconnect storms, the 30-minute gate.
 
+## Addendum 4: `my_combat` as a per-viewer event table, `combat_feed` (views step 2, built 2026-11-20)
+
+The second step of the views track (docs/COMBAT_PHASE.md, "Plan", step 2), approved by the GC with the name `combat_feed` and the rollout of step 1.
+
+**What it costs today.** A player's combat feed lives in the private `combat_seen` table:
+- the two characters in a blow, written at once;
+- onlookers, written at their next frame and kept 300 ms (`frame::ONLOOKER_MS`);
+- a refusal, kept 4 s;
+- a death and its witnesses, kept 2 minutes for the death screen.
+
+Players read it through the per-sender view `my_combat`. In 2.14.1 a view is re-run for every subscriber whenever anything in its read set changes, so every write to `combat_seen` re-runs every viewer's `my_combat`. The Spark measured 185–189 calls a second at 75–84 µs each at 216 viewers, and the largest view left at 16 viewers once step 1 is on.
+
+**As built.**
+- **The table:** `combat_feed` is a public event table with `combat_seen`'s columns in its order. `id` is the matching `combat_seen` row's id; `viewer` is indexed.
+- **Its rule:** one row-level-security rule, `SELECT * FROM combat_feed WHERE viewer = :sender` (`frame::COMBAT_FEED_FILTER`).
+- **Its rows:** with the `combat_feed_on` law on, `combat::feed_row`, the one place every feed row is written, also inserts the event row (`CombatFeed::of`).
+- **`combat_seen` stays private and unchanged.** It is still the source of truth for the death screen, reconnect and the frame's expiry, and the view stays for the observer, tools and verify-player.
+- **The law:** `combat_feed_on` is a value-only delivery law (`VALUE_ONLY`), **off by default**, switched per world by its `law_override` row with no reinstall. Off writes no event rows: main's path exactly.
+
+**The client contract** (the laptop's half, a later change set):
+- with the law on, subscribe to `combat_feed` instead of `my_combat`;
+- on connect or reconnect, read `my_combat` once (subscribe, take the rows, unsubscribe; the Rust SDK has no one-off query), so a death screen survives a reconnect;
+- the shared `id` lets `combat::ingest`'s `seen_ids` merge both sources unchanged;
+- switch make-before-break, as the tier switch does.
+
+**SpacetimeDB documentation** (read 2026-11-20; the pages show version 2.0.0, the pinned server and crates are 2.14.1):
+- [Event tables](https://spacetimedb.com/docs/tables/event-tables/): rows are broadcast at commit and then deleted, never kept in the client cache (only `on_insert` fires), and views cannot read them. They cannot be the lookup side of a subscription join. Their inserts are still recorded in the commitlog. They need the v2 WebSocket protocol, which the 2.14.1 SDK uses, and the `event` flag cannot change after the first publish.
+- [Row-level security](https://spacetimedb.com/docs/how-to/rls): "applies to event tables with the same semantics as regular tables". `:sender` is the requesting client's identity. The module owner bypasses RLS. The feature is experimental (`unstable`, already enabled in the authority crate for the cue tables).
+- [Subscriptions](https://spacetimedb.com/docs/clients/subscriptions/): distinct overlapping queries are processed and serialized separately. Unsubscribing is asynchronous and removes the rows. Neither page states a per-subscriber cost for RLS or views.
+- The pinned `spacetimedb-bindings-macro` 2.14.1 accepts `event`, as the three cue tables do on main.
+
+**Data paths.**
+- **Writes:** with the law on, one event row per feed row, to one viewer. Nothing is retained, so no table grows; the commitlog records each insert, as it does the cue tables'.
+- **Reads:** no new reads. The law is read through the per-transaction law cache in `feed_row`.
+- **Subscriptions:** a client on `combat_feed` drops the per-sender view, so no view re-runs for its feed. The observer and the mind service subscribe nothing new (`drive.py`'s owner guard names `combat_feed`).
+
+**Safeguards.**
+- **`combat_feed.py`** (verify-client), 17 checks:
+  - isolation for players A, B and C, the anonymous connection, a peek by identity, a by-name subscribe-all, `SELECT * FROM *`, and the SDK's `subscribe_to_all_tables` (refused whole for a player);
+  - the event rows and the `my_combat` rows are the same rows: ids and every field;
+  - the GC's death-screen check: the killer, skill, damage, time, place and witnesses by the event rows alone equal what the view shows, and what a new connection's one read of `my_combat` shows;
+  - the law off by row: no event row, the view still delivering, no reinstall.
+- **The negative:** built without the rule, 8 of the 17 checks fail (one-off, recorded in the validation record).
+- **The gate case `combat_feed`** (client group), plus `combat.rs` in `COPY_PRIVACY_PATHS`.
+- **`RLS_TABLES` and the owner guard** in `drive.py`, and the pin list (docs/TICK_RATE.md).
+- **At battle density:** `gate-load` checks every `combat_feed` row against its viewer, and `battle_viewers.py --combat-feed --privacy` runs it with the side probes.
+
+**Measurement.** Dev-box, `sg-stdb` v2.14.1 (no core pinning: the dev-box has one core type). Cullet module `cf-cullet` from `03cc00683` (rustc 1.99.1, no sccache). 200 fighters, keep-alive every 0.5 s, paused placement, the battle after placing, tiers and cues, both copy tables on (the new defaults) with the viewers on them. 20 s warm-up, 60 s window, L0 (`--detail --no-profile`: server metrics, no spans). Two runs per arm, alternating base and feed; the 1-minute load was below 4 at each start (2.3–4.4 within the windows). No viewer died in any window.
+- **base:** `combat_feed_on` off, viewers on `my_combat`.
+- **feed:** on, viewers on `combat_feed`.
+
+| Arm | Ticks/s | Views ms/s (of which `my_combat`) | Tick WASM ms/s | Whole tick call ms/s | DB thread CPU ms/s |
+|---|---|---|---|---|---|
+| base, 16 viewers, 10 m ring | 58.8 / 58.8 | 79.3 / 77.4 (42.6 / 41.5) | 369 / 364 | 490 / 482 | 498 / 491 |
+| feed, 16 viewers, 10 m ring | 59.3 / 59.8 | 44.4 / 43.1 (0) | 381 / 369 | 470 / 456 | 476 / 462 |
+| base, 216 viewers, 26–32 m ring | 19.9 / 21.1 | 78.0 / 75.1 (18.0 / 17.0) | 570 / 552 | 798 / 777 | 832 / 812 |
+| feed, 216 viewers, 26–32 m ring | 19.6 / 22.2 | 64.5 / 62.2 (0) | 582 / 573 | 795 / 782 | 822 / 810 |
+
+- **16 viewers, the dense case:** views fall by about 35 ms/s (`my_combat` 42 → 0) and tick WASM rises about 8 ms/s (the event inserts), so the database thread does about 26 ms/s less (about 1.6 ms/s per viewer, near the Spark's expected −37 ms/s of views).
+- **216 viewers on the wider ring:** `my_combat` cost only 17–18 ms/s (145–150 re-runs a second at about 20 ticks a second: it is re-run only for viewers whose rows changed). The feed wrote 5,208 event rows a second (one per `combat_seen` row), about 3.3 µs of tick WASM each (+17 ms/s). The database thread is within the runs' spread (−6 ms/s), and ticks/s too.
+- **So the step pays at battle density close in, and is about neutral where the tick rate is already low.** The insert per row (one indexed event row with a string per feed row) is the remaining cost.
+- **Not measured:** the commitlog. Event inserts are recorded there (the event-tables docs), so the feed roughly doubles the combat feed's share of written WAL at 216 (5,208 more inserts a second); `battle_viewers.py` does not measure WAL.
+- **Privacy at density with the feed:** `--privacy --combat-feed` (16 viewers, 10 m ring) passed 15 of 15. The viewers checked 97,354 `combat_feed` rows besides 172,076 body and 60,410 character copies, 0 foreign.
+
 ## Rollout: one change set, one play-test window (decided 2026-11-20; merged, defaults on)
 
 **Where it stands.** Merged, defaults on: `bv-defaults-on` (dev-box) on the laptop's client switch (`battle-views-client`), gated as one change set after the copy tables' privacy proofs passed at battle density (Addendum 3, the GC's condition). `motion_tables_on` and `characters_table_on` are **on** in both default sets (`living/scripts/skills.rhai`'s law block and `Laws::default`); a world turns either off by its `law_override` row (the kill switch), and with both off the authority and the client take main's old path (`frame::tests::both_delivery_laws_off_take_main_s_path`, through overrides; `law_override_check` turns `motion_tables_on` off and back). Both copy tables were on main since `a407be01a` (battle-views), behind the two laws, off by default until this change. The laws are measured on (216 battle with keep-alive, 0 deaths: ticks 9.56 → 14.12/s; Cullet 216: far pairs p90 250–367 → 67 ms, `seen_characters` view 67.7 → 0 ms/s, kB/player +36% and +10%; the kill switch by override row 51 ms against a 2,333 ms reinstall; evidence `~/archive/worktree-evidence-20261120/battle-views-local.tar.gz` on the dev-box). No separate laws-on window is run before the client reads the tables: with no client on them, laws-on only costs bytes.
@@ -225,3 +289,26 @@ Evidence: `.local/cp/runs/` on the dev-box (worktree, archived with the branch).
 7. Note kB/s per player and near p90 in the play-test's notes, against play-test 11.
 
 If a check fails, switch the law off by row (step 6) and leave the world running; the client follows the law.
+
+### Step 2: `combat_feed` (views step 2)
+
+The same rollout as step 1, in two change sets:
+
+| Part | What | Who |
+|---|---|---|
+| 1. The authority | `combat_feed`, its rule and the `combat_feed_on` law, **off** by default (`combat-feed`). With the law off nothing changes: no event row is written, and clients read `my_combat` as now. The gate's `combat_feed` case, and `copy_privacy` (it touches `combat.rs`). | dev-box |
+| 2. The client switch | The game client subscribes to `combat_feed` while the law is on (read from the law, as the copy tables are), reads `my_combat` once on connect or reconnect (subscribe, take the rows, unsubscribe), merges both by `id` (`combat::ingest`'s `seen_ids`), and switches make-before-break both ways. | laptop, when its slot allows |
+| 3. The default | `combat_feed_on: true` in `skills.rhai`'s law block and `Laws::default`, in one change set with part 2. The script and law-override tests follow, as for step 1, and `cargo test -p living-game` (a default flip reaches the client's own tests: `bv-defaults-on`'s first gate). **Before it (the GC, 2026-11-20): the commitlog growth at 216 viewers**, law on against off, measured alongside part 2: event inserts are written to the commitlog (about 5,200 a second at 216 on the 26–32 m ring), and the 216 arm measured CPU only. | dev-box, with the laptop's part 2 |
+
+**The window's checklist** for part 3 (whoever stages the play-test):
+
+0. Before the flip is merged: the commitlog growth at 216 viewers measured (the replica's commitlog bytes over a window, `combat_feed_on` on against off, the same fixture as Addendum 4's 216 arm), and recorded here beside the CPU numbers.
+1. The owner is not in a session.
+2. Main contains parts 1–3, and the gate's `combat_feed` and `copy_privacy` cases passed on that merge.
+3. In the world, `combat_feed_on` reads on (the default, or its `law_override` row), and the client subscribes to `combat_feed`: `combat_feed.py` against the world, or a verify-client probe.
+4. verify-ui: a fight, a death screen, and a reconnect while dead (the screen is still there) pass with the law on.
+5. The kill switch: `set_world_law combat_feed_on false`; the client goes back to `my_combat` with nothing missing, and the `script` row's revision is unchanged. Then on again.
+6. Note the views ms/s and `my_combat`'s share in the play-test notes, against the last play-test.
+
+If a check fails, switch the law off by row and leave the world running; the client follows the law.
+

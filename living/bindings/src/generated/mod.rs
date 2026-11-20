@@ -48,6 +48,8 @@ pub mod client_connected_reducer;
 pub mod client_disconnected_reducer;
 pub mod clock_table;
 pub mod clock_type;
+pub mod combat_feed_table;
+pub mod combat_feed_type;
 pub mod combat_seen_table;
 pub mod combat_seen_type;
 pub mod community_table;
@@ -429,6 +431,8 @@ pub use client_connected_reducer::client_connected;
 pub use client_disconnected_reducer::client_disconnected;
 pub use clock_table::*;
 pub use clock_type::Clock;
+pub use combat_feed_table::*;
+pub use combat_feed_type::CombatFeed;
 pub use combat_seen_table::*;
 pub use combat_seen_type::CombatSeen;
 pub use community_table::*;
@@ -1417,6 +1421,7 @@ pub struct DbUpdate {
     character_senses: __sdk::TableUpdate<CharacterSenses>,
     chronicle: __sdk::TableUpdate<Chronicle>,
     clock: __sdk::TableUpdate<Clock>,
+    combat_feed: __sdk::TableUpdate<CombatFeed>,
     combat_seen: __sdk::TableUpdate<CombatSeen>,
     community: __sdk::TableUpdate<Community>,
     connection: __sdk::TableUpdate<Connection>,
@@ -1624,6 +1629,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "clock" => db_update
                     .clock
                     .append(clock_table::parse_table_update(table_update)?),
+                "combat_feed" => db_update
+                    .combat_feed
+                    .append(combat_feed_table::parse_table_update(table_update)?),
                 "combat_seen" => db_update
                     .combat_seen
                     .append(combat_seen_table::parse_table_update(table_update)?),
@@ -2133,6 +2141,7 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.clock = cache
             .apply_diff_to_table::<Clock>("clock", &self.clock)
             .with_updates_by_pk(|row| &row.id);
+        diff.combat_feed = self.combat_feed.into_event_diff();
         diff.combat_seen = cache
             .apply_diff_to_table::<CombatSeen>("combat_seen", &self.combat_seen)
             .with_updates_by_pk(|row| &row.id);
@@ -2611,6 +2620,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "clock" => db_update
                     .clock
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "combat_feed" => db_update
+                    .combat_feed
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "combat_seen" => db_update
                     .combat_seen
@@ -3108,6 +3120,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "clock" => db_update
                     .clock
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "combat_feed" => db_update
+                    .combat_feed
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "combat_seen" => db_update
                     .combat_seen
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3568,6 +3583,7 @@ pub struct AppliedDiff<'r> {
     character_senses: __sdk::TableAppliedDiff<'r, CharacterSenses>,
     chronicle: __sdk::TableAppliedDiff<'r, Chronicle>,
     clock: __sdk::TableAppliedDiff<'r, Clock>,
+    combat_feed: __sdk::TableAppliedDiff<'r, CombatFeed>,
     combat_seen: __sdk::TableAppliedDiff<'r, CombatSeen>,
     community: __sdk::TableAppliedDiff<'r, Community>,
     connection: __sdk::TableAppliedDiff<'r, Connection>,
@@ -3758,6 +3774,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<Chronicle>("chronicle", &self.chronicle, event);
         callbacks.invoke_table_row_callbacks::<Clock>("clock", &self.clock, event);
+        callbacks.invoke_table_row_callbacks::<CombatFeed>("combat_feed", &self.combat_feed, event);
         callbacks.invoke_table_row_callbacks::<CombatSeen>("combat_seen", &self.combat_seen, event);
         callbacks.invoke_table_row_callbacks::<Community>("community", &self.community, event);
         callbacks.invoke_table_row_callbacks::<Connection>("connection", &self.connection, event);
@@ -4751,6 +4768,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         character_senses_table::register_table(client_cache);
         chronicle_table::register_table(client_cache);
         clock_table::register_table(client_cache);
+        combat_feed_table::register_table(client_cache);
         combat_seen_table::register_table(client_cache);
         community_table::register_table(client_cache);
         connection_table::register_table(client_cache);
@@ -4914,6 +4932,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "character_senses",
         "chronicle",
         "clock",
+        "combat_feed",
         "combat_seen",
         "community",
         "connection",

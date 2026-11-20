@@ -1753,6 +1753,39 @@ pub struct CombatSeen {
     pub note: String,
 }
 
+/// A `combat_seen` row as an event for its viewer alone (views step 2, the `combat_feed_on` law;
+/// docs/BATTLE_VIEWERS.md, addendum 4): public, filtered per client by row-level security
+/// (`frame::COMBAT_FEED_FILTER`), delivered at commit and never kept. `id` is the `combat_seen`
+/// row's, so a client that also read `my_combat` (once, at connect) merges the two by it. The
+/// columns are `CombatSeen`'s, in its order.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = combat_feed, public, event)]
+pub struct CombatFeed {
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub expires_ms: u64,
+    pub at_ms: u64,
+    pub kind: u8,
+    pub actor: u32,
+    pub target: u32,
+    pub skill: u8,
+    pub x: f32,
+    pub y: f32,
+    pub dx: f32,
+    pub dy: f32,
+    pub amount: f32,
+    pub ms: u32,
+    pub note: String,
+}
+
+impl CombatFeed {
+    pub fn of(r: &CombatSeen) -> Self {
+        CombatFeed { id: r.id, viewer: r.viewer, expires_ms: r.expires_ms, at_ms: r.at_ms, kind: r.kind, actor: r.actor, target: r.target, skill: r.skill,
+                     x: r.x, y: r.y, dx: r.dx, dy: r.dy, amount: r.amount, ms: r.ms, note: r.note.clone() }
+    }
+}
+
 /// One blow of a fight as its onlookers saw it (private; docs/BATTLE_SCALE.md, fix 4): who
 /// struck whom, how it ended, and everyone who could see it under the sight rule at that instant
 /// (`perceive::witnessed`'s test), the two in it excepted. Each onlooker is told what it saw as

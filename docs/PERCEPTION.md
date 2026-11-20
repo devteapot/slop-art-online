@@ -86,7 +86,7 @@ Every table, by what it holds. "Open" and "scoped" are the two builds ([Compatib
 | `know_how` | own private state: techniques the character knows | public | private → `my_know_how` | game client (skill bar), mind service (owner) |
 | `activity` | own private state (the activity under way, its words and topic) | private | private | observer (owner); others see `doing` |
 | `practice` | own private state (uses per skill) | private | private | rules only |
-| `combat_seen` | own private state, through `my_combat` | private | private | game client (view) |
+| `combat_seen` | own private state, through `my_combat` (and, with `combat_feed_on`, as event rows of the public `combat_feed`, row-level security) | private | private | game client (view) |
 | `readiness` | own private state, through `my_readiness` | private | private | game client (view) |
 | `skill_use` | own private state, through `my_skill_uses` | private | private | game client (view) |
 | `character_senses` | own private state, through `my_senses` (eighth change: what the character senses now, the `senses` law's answer) | private | private | game client (view) |

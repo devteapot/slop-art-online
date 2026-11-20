@@ -17,7 +17,9 @@ touches behaviour, these cases with the fake model only:
                  public copy tables, motion and projections, reach only their viewer under row-level
                  security, and each law off empties its table at once); one default-seed world, the SDK probe;
                  copy_privacy (battle_viewers.py --privacy: the same at battle density, 16 viewers;
-                 only when a merge touches COPY_PRIVACY_PATHS)
+                 only when a merge touches COPY_PRIVACY_PATHS), combat_feed (combat_feed.py: a
+                 player's combat feed as event rows reaches only its viewer, equals my_combat's
+                 rows and death screen, and the combat_feed_on law off writes none)
   living-mind    mind-unit: its cargo tests (`just living-check` builds the mind, tests only the rules)
   verify-generation  generation-default, generation-island, generation-cullet (generation.py --smoke:
                  its per-world checks, the seed's laws composed over the shipped script among them,
@@ -118,6 +120,7 @@ BEHAVIOUR = ("living/authority/", "living/rules/", "living/scripts/", "living/mi
 # frames (frame.rs, where the row-level-security filters are), perception, the table definitions,
 # and the drivers that prove it (GC, 2026-11-20).
 COPY_PRIVACY_PATHS = ("living/authority/src/frame.rs", "living/authority/src/perception.rs", "living/authority/src/tables.rs",
+                      "living/authority/src/combat.rs",
                       "living/tools/battle_viewers.py", "living/tools/gate_load/", ".agents/skills/verify-client/scripts/probe/",
                       ".agents/skills/verify-client/scripts/motion_tables.py", ".agents/skills/verify-client/scripts/cues.py")
 
@@ -149,6 +152,10 @@ CASES = {
     # viewer's every copy row its own, the side probes, the paused table-equals-view comparison
     # and the kill switch (battle_viewers.py --privacy). Only for merges touching `paths`.
     "copy_privacy": {"skill": "verify-client", "group": "privacy", "paths": COPY_PRIVACY_PATHS},
+    # The same for a player's combat feed as event rows (views step 2, `combat_feed`): only its
+    # viewer receives a row, the event rows and the `my_combat` rows are the same rows, a death
+    # screen reads the same either way, and the law off writes none.
+    "combat_feed":  {"skill": "verify-client", "group": "client"},
     # verify-generation's light smoke (generation.py --smoke): its per-world checks, the seed's laws
     # composed over the shipped script among them, one case per seed family. The first pass reads
     # the genesis fuel worlds before they are deleted; a retry or main's run launches its own.
@@ -753,6 +760,9 @@ class Runner:
                 if "motion_tables" in cases:
                     code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/motion_tables.py", "--run", run], root, ev / "motion_tables.txt", 300)
                     res["motion_tables"] = (code == 0, str(ev / "motion_tables.json"), time.time() - t0)
+                if "combat_feed" in cases:
+                    code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/combat_feed.py", "--run", run], root, ev / "combat_feed.txt", 300)
+                    res["combat_feed"] = (code == 0, str(ev / "combat_feed.json"), time.time() - t0)
                 return res
             if group == "privacy":
                 return {"copy_privacy": self.copy_privacy(root, run, ev, log, t0)}
