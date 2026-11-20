@@ -18,6 +18,14 @@ data's own `generation`, so each block is compared with its source as the compil
 - `plan`: a world with a plan compiler that checks itself (Cullet: `cullet_plan.py --check`, which
   rebuilds plan.json, the seed's land, plan, ways and town life, and the game's ground map in
   memory and compares them byte for byte).
+- `compile`: the whole seed. `author_world.py <world> --compile-only --seed-out TMP` compiles the
+  world from its sources over the tracked seed (as a recompile would) into a scratch file, and the
+  two must be equal as JSON. This catches what the targeted checks above do not name: a field the
+  compiler learned after the seed was last compiled (aske-coast's `sheet.pastimes`, 2026-11-20).
+- `derived`: a tracked seed whose `run` names an authored world without being that world's seed
+  (aske-coast's `-crypercept`, `-dynamic`, `-yieldnorm`, which differ only in their own `rules`)
+  must carry the compiled world's residents exactly; nothing recompiles it, so it is rebuilt from
+  the compiled seed by copying the residents.
 
 Usage: seed_fresh.py [--json PATH] [--world NAME]...
 Prints one line per stale block, `stale <seed> <block>: <what differs>; recompile: <command>`,
@@ -27,6 +35,7 @@ import argparse
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -125,13 +134,58 @@ def check_world(wd):
             stale.append(("residents", f"{len(told)} residents' sheet narratives differ from {sheets_dir.relative_to(ROOT)} "
                                        f"({', '.join(told[:3])}{', …' if len(told) > 3 else ''})"))
 
+    compiled = compile_seed(wd, into)
+    if isinstance(compiled, str):
+        stale.append(("compile", compiled))
+    elif compiled != seed:
+        stale.append(("compile", f"{count_differences(seed, compiled)} differences from a fresh compile, first {first_difference(seed, compiled)}"))
+
     if wd.name in PLAN_CHECKS:
         got = subprocess.run([sys.executable, str(ROOT / PLAN_CHECKS[wd.name][0]), *PLAN_CHECKS[wd.name][1:]],
                              cwd=ROOT, capture_output=True, text=True, timeout=120)
         if got.returncode:
             stale.append(("plan", f"{' '.join(PLAN_CHECKS[wd.name])} exit {got.returncode}: "
                                   f"{(got.stdout + got.stderr).strip().replace(str(ROOT) + '/', '')[-300:]}"))
-    return into, stale
+    return into, stale, compiled if not isinstance(compiled, str) else None
+
+
+def compile_seed(wd, into):
+    """The world compiled now from its sources over the tracked seed, or what stopped the compile."""
+    with tempfile.TemporaryDirectory(prefix="seed-fresh-") as tmp:
+        out = Path(tmp) / f"{into}.json"
+        got = subprocess.run([sys.executable, str(ROOT / "living/tools/author_world.py"), wd.name, "--compile-only", "--seed-out", str(out)],
+                             cwd=ROOT, capture_output=True, text=True, timeout=300)
+        if got.returncode or not out.exists():
+            return f"author_world.py {wd.name} --compile-only exit {got.returncode}: {(got.stdout + got.stderr).strip()[-300:]}"
+        return load(out)
+
+
+def count_differences(a, b):
+    """How many leaves differ between two JSON values (a key on one side only counts once)."""
+    if isinstance(a, dict) and isinstance(b, dict):
+        return sum(1 if k not in a or k not in b else count_differences(a[k], b[k]) for k in set(a) | set(b))
+    if isinstance(a, list) and isinstance(b, list):
+        return 1 if len(a) != len(b) else sum(count_differences(x, y) for x, y in zip(a, b))
+    return 0 if a == b else 1
+
+
+def check_derived(compiled_by_run):
+    """[(seed, run, why)] for tracked seeds derived from a compiled world: the same residents, exactly."""
+    stale = []
+    for path in sorted((ROOT / "living/seeds").glob("*.json")):
+        try:
+            seed = load(path)
+        except ValueError:
+            continue
+        run = seed.get("run") if isinstance(seed, dict) else None
+        if run not in compiled_by_run or path.stem == run:
+            continue
+        want, have = residents(compiled_by_run[run]), residents(seed)
+        if want != have:
+            off = sorted(n for n in set(want) | set(have) if want.get(n) != have.get(n))
+            stale.append((path.stem, run, f"{len(off)} residents differ from {run}'s compiled residents ({', '.join(off[:3])}{', …' if len(off) > 3 else ''}), "
+                                     f"first {first_difference(have, want, 'residents')}"))
+    return stale
 
 
 def main(argv=None):
@@ -142,13 +196,20 @@ def main(argv=None):
     worlds = sorted(d for d in WORLDS.iterdir() if d.is_dir() and (not a.world or d.name in a.world))
     report, fresh = {}, []
     try:
+        compiled_by_run = {}
         for wd in worlds:
-            into, stale = check_world(wd)
+            into, stale, compiled = check_world(wd)
+            if compiled is not None:
+                compiled_by_run[into] = compiled
             if not stale:
                 fresh.append(into)
             for block, why in stale:
                 print(f"stale {into} {block}: {why}; recompile: {recompile(wd.name)}", flush=True)
                 report.setdefault(into, {"world": wd.name, "recompile": recompile(wd.name), "stale": {}})["stale"].setdefault(block, []).append(why)
+        for name, run, why in check_derived(compiled_by_run):
+            how = f"copy the residents of living/seeds/{run}.json (recompiled) into living/seeds/{name}.json"
+            print(f"stale {name} derived: {why}; rebuild: {how}", flush=True)
+            report.setdefault(name, {"world": None, "recompile": how, "stale": {}})["stale"].setdefault("derived", []).append(why)
     except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as e:
         print(f"seed freshness: cannot read the sources: {type(e).__name__}: {e}", flush=True)
         return 2

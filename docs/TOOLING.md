@@ -175,12 +175,14 @@ A failing check is a part, `<case>:<seed>:<check>`, that the red-on-main list ca
 
 ### Seed freshness
 
-[`seed_fresh.py`](../living/tools/seed_fresh.py) compares every compiled seed with the sources it is compiled from, files only (no publish, no build, about 0.2 s). Each `living/seeds/worlds/<world>/` compiles into `living/seeds/<into>.json` through `author_world.py <world> --compile-only` (`into` from `cast.json` or `world.json`, else the world's name). Cullet's land, plan, ways and town life come from `cullet_plan.py`. The compilers stamp nothing but the look data's own `generation`, so the check compares each block as its compiler copies it:
+[`seed_fresh.py`](../living/tools/seed_fresh.py) compares every compiled seed with the sources it is compiled from, files only (no publish, no build, no model; about 0.5 s). Each `living/seeds/worlds/<world>/` compiles into `living/seeds/<into>.json` through `author_world.py <world> --compile-only` (`into` from `cast.json` or `world.json`, else the world's name). Cullet's land, plan, ways and town life come from `cullet_plan.py`. The compilers stamp nothing but the look data's own `generation`, so the check compares each block as its compiler copies it:
 
 - `looks`: the seed's `looks.generation` against `looks.json`'s, then the whole block, then each resident's `look`;
 - `ways`: `ways.json`'s `top`, `common` and `occupations` entries in the seed's `ways`, its `town_life`, and its `work` within the seed's `town_life.work`;
 - `residents`: the residents against the drafted sheets in `sheets/*.json` by name, and each sheet's narrative;
 - `plan`: Cullet's `cullet_plan.py --check`, which rebuilds the plan, the land seed and the game's ground map in memory and compares them byte for byte.
+- `compile`: the whole seed. `author_world.py <world> --compile-only --seed-out TMP` compiles the world over the tracked seed into a scratch file (about 0.1 s a world), and the two must be equal as JSON. It catches a field the compiler learned after the seed was last compiled, which the targeted blocks above do not name (aske-coast's `sheet.pastimes` from `efcd489a8`, found 2026-11-20).
+- `derived`: a tracked seed whose `run` names an authored world without being its seed (aske-coast's `-crypercept`, `-dynamic` and `-yieldnorm`, which differ only in their own `rules`) must carry the compiled world's residents exactly. Nothing recompiles a derived seed: rebuild it by copying the recompiled world's residents into it, keeping its own blocks.
 
 `just living-scene-gate seeds` runs it with the red-on-main list, and `living-merge` runs that before the check. A stale block prints, for example:
 

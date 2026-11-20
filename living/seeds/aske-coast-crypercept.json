@@ -93,6 +93,7 @@
        "Leave the Common Store and the council in steady hands.",
        "See the midsummer Oath renewed without bloodshed."
       ],
+      "pastimes": [],
       "mood": "Weary and watchful, with a stubborn warmth for those who have stood by the Oath.",
       "traits": {
        "caution": 78,
@@ -255,6 +256,7 @@
        "Earn the confidence of Brandholm's households as a leader.",
        "Learn to read and write from Maelis."
       ],
+      "pastimes": [],
       "mood": "Determined, with a guarded irritation toward anyone who mistakes patience for surrender.",
       "traits": {
        "caution": 74,
@@ -448,6 +450,7 @@
        "Support Sigrun without turning every disagreement into a household quarrel.",
        "Understand what changed in Ulf after that winter."
       ],
+      "pastimes": [],
       "mood": "Quietly concerned, most at ease with work in his hands.",
       "traits": {
        "caution": 69,
@@ -599,6 +602,7 @@
        "Spend time with Siv and hear about hunting.",
        "Play with Sten and Ake whenever they can."
       ],
+      "pastimes": [],
       "mood": "Eager and a little impatient to be trusted with more.",
       "traits": {
        "caution": 42,
@@ -721,6 +725,7 @@
        "Be held when I am frightened.",
        "Play when the grown-ups let me."
       ],
+      "pastimes": [],
       "mood": "Comfortable near family, wary of sounds outside.",
       "traits": {
        "caution": 79,
@@ -803,6 +808,7 @@
        "Win better terms for our hides and meat",
        "Keep Ulf silent about Tomas"
       ],
+      "pastimes": [],
       "mood": "Impatient and watchful; the thinning deer make every hunt feel like an argument.",
       "traits": {
        "caution": 48,
@@ -971,6 +977,7 @@
        "Stop Brann's ambition from making enemies we cannot afford",
        "Understand what Runa is hiding without driving her away"
       ],
+      "pastimes": [],
       "mood": "Steady, with a thread of worry beneath it.",
       "traits": {
        "caution": 75,
@@ -1109,6 +1116,7 @@
        "Make my father proud of me",
        "Be treated as a full hunter, not a boy"
       ],
+      "pastimes": [],
       "mood": "Restless and proud, quick to bristle at a slight.",
       "traits": {
        "caution": 31,
@@ -1242,6 +1250,7 @@
        "Become more skilled as a trapper",
        "Keep the people I care about safe from my father's anger"
       ],
+      "pastimes": [],
       "mood": "Restless and bright when alone; guarded around family.",
       "traits": {
        "caution": 52,
@@ -1379,6 +1388,7 @@
        "See my daughter and great-granddaughter safe through winter",
        "Hold on to the standing our household earned"
       ],
+      "pastimes": [],
       "mood": "Wary and stubborn, softened by the pleasure of telling a story to a listening child.",
       "traits": {
        "caution": 74,
@@ -1531,6 +1541,7 @@
        "Pay what I owe the Tally without letting it make a fool of me",
        "Keep Vidar and Ylva secure"
       ],
+      "pastimes": [],
       "mood": "Proud and prickly, with worry tucked under the anger.",
       "traits": {
        "caution": 58,
@@ -1694,6 +1705,7 @@
        "Keep family quarrels from swallowing the whole household",
        "Be a good friend to Arne"
       ],
+      "pastimes": [],
       "mood": "Even-tempered and quietly concerned.",
       "traits": {
        "caution": 53,
@@ -1838,6 +1850,7 @@
        "Be trusted to do my office without being pulled into every town quarrel",
        "Keep ties with my kin in Oathstone"
       ],
+      "pastimes": [],
       "mood": "Attentive and composed, with a quiet homesickness for Oathstone.",
       "traits": {
        "caution": 82,
@@ -1978,6 +1991,7 @@
        "Stay warm",
        "Sleep close to my family"
       ],
+      "pastimes": [],
       "mood": "Content when held, fretful when hungry.",
       "traits": {
        "caution": 30,
@@ -2061,6 +2075,7 @@
        "Teach Pell the work properly, not merely the motions.",
        "See the Oath kept and the middle lands treated with respect."
       ],
+      "pastimes": [],
       "mood": "Steady, with an old shame he rarely puts into words.",
       "traits": {
        "caution": 73,
@@ -2248,6 +2263,7 @@
        "Stay close to Hakon and his children, even when the walk between us feels long.",
        "Make sure Pell has a warm place and people who ask after him."
       ],
+      "pastimes": [],
       "mood": "Warm and busy, with a tender ache for the son who moved away.",
       "traits": {
        "caution": 61,
@@ -2414,6 +2430,7 @@
        "Keep in touch with Gwen, Robin, and Rook in Saltreach.",
        "Be judged for my work instead of where I was born."
       ],
+      "pastimes": [],
       "mood": "Restless and watchful, but pleased when a piece of wood finally fits.",
       "traits": {
        "caution": 58,
@@ -2587,6 +2604,7 @@
        "Be present for Maren and the children, even when I have little to say",
        "Avoid Brann's notice"
       ],
+      "pastimes": [],
       "mood": "Withdrawn, watchful, and ashamed",
       "traits": {
        "caution": 85,
@@ -2721,6 +2739,7 @@
        "Keep Ulf from shutting everyone out",
        "Give Sten and Frida a home where they feel safe"
       ],
+      "pastimes": [],
       "mood": "Lively on the surface, quietly concerned",
       "traits": {
        "caution": 47,
@@ -2868,6 +2887,7 @@
        "Play with Liv and Ake",
        "Learn more about the forest from Father"
       ],
+      "pastimes": [],
       "mood": "Curious and eager",
       "traits": {
        "caution": 43,
@@ -2957,6 +2977,7 @@
        "Stay close to Mother",
        "Play near Sten"
       ],
+      "pastimes": [],
       "mood": "Comfortable when held, wary of the cold",
       "traits": {
        "caution": 66,
@@ -3037,6 +3058,7 @@
        "Find a way to trade bows with Saltreach",
        "Keep my family out of other people's quarrels"
       ],
+      "pastimes": [],
       "mood": "Thoughtful, quietly frustrated by limits on trade.",
       "traits": {
        "caution": 61,
@@ -3181,6 +3203,7 @@
        "Trade honestly at Oathstone",
        "See Brann's temper kept from deciding matters for everyone"
       ],
+      "pastimes": [],
       "mood": "Clear-eyed and watchful.",
       "traits": {
        "caution": 68,
@@ -3321,6 +3344,7 @@
        "Serve Hekka faithfully",
        "Prove myself worthy of the trust people place in the Gate-ward"
       ],
+      "pastimes": [],
       "mood": "Alert, reserved, and quietly hopeful.",
       "traits": {
        "caution": 71,
@@ -3460,6 +3484,7 @@
        "Prove myself worthy of Brann's trust",
        "See Brandholm get a fair share for its meat"
       ],
+      "pastimes": [],
       "mood": "Certain in public, restless when the house is quiet.",
       "traits": {
        "caution": 35,
@@ -3603,6 +3628,7 @@
        "Store enough food to see us through winter",
        "Help Kjell understand why the Oath and Oathstone matter"
       ],
+      "pastimes": [],
       "mood": "Tender and watchful, with a worry I try not to make louder.",
       "traits": {
        "caution": 71,
@@ -3734,6 +3760,7 @@
       "narrative": "Warm arms. A familiar voice. Firelight flickers, and then I am sleepy. When I cry, someone comes close.",
       "values": [],
       "goals": [],
+      "pastimes": [],
       "mood": "Drowsy and easily startled.",
       "traits": {
        "caution": 15,
@@ -3801,6 +3828,7 @@
        "Pay down what I owe without letting the Tally shame my household.",
        "Keep Siv and Ake safe, and out of other people's quarrels."
       ],
+      "pastimes": [],
       "mood": "Wary, proud, and burdened by debt.",
       "traits": {
        "caution": 72,
@@ -3942,6 +3970,7 @@
        "Help my family without letting our debts decide my worth.",
        "Find out whether Jorund has the nerve to speak plainly to me."
       ],
+      "pastimes": [],
       "mood": "Steady and self-possessed, with a watchful edge.",
       "traits": {
        "caution": 55,
@@ -4082,6 +4111,7 @@
        "Learn how traps work and how to make a good fire.",
        "Keep playing with Liv and Sten."
       ],
+      "pastimes": [],
       "mood": "Restless and curious, with a little worry about wolves.",
       "traits": {
        "caution": 24,
@@ -4223,6 +4253,7 @@
        "Keep trade with Brandholm alive and press for debts to be settled through the Tally.",
        "Teach Pim his letters and help him understand what a written promise is worth."
       ],
+      "pastimes": [],
       "mood": "Watchful and frustrated; steady in council, but uneasy about what the missing fish may mean.",
       "traits": {
        "caution": 82,
@@ -4398,6 +4429,7 @@
        "Stand by Maelis while she sorts out the missing fish and the argument over Brandholm's debts.",
        "Keep the family talking to one another, even when council business follows us home."
       ],
+      "pastimes": [],
       "mood": "Easygoing on the surface, privately troubled by the missing stores and old grief.",
       "traits": {
        "caution": 68,
@@ -4540,6 +4572,7 @@
        "Keep making the trade walks to Oathstone and see the people I care about there.",
        "Find room for the life I want without turning my family or my work into a battleground."
       ],
+      "pastimes": [],
       "mood": "Bright and restless, with a private tenderness and a watchful edge.",
       "traits": {
        "caution": 61,
@@ -4695,6 +4728,7 @@
        "Go with the others to see Brandholm's palisade someday.",
        "Play and talk with Robin and Rook."
       ],
+      "pastimes": [],
       "mood": "Curious and eager, with a little impatience for grown-up work.",
       "traits": {
        "caution": 43,
@@ -4790,6 +4824,7 @@
        "Make Brandholm answer for what happened to Tomas.",
        "Support a firm response to unpaid debts and protect Saltreach from being cheated."
       ],
+      "pastimes": [],
       "mood": "Grieving, resolute, and quick to anger when Brandholm is excused.",
       "traits": {
        "caution": 65,
@@ -4944,6 +4979,7 @@
        "Do my Watch duty without letting my anger decide who is guilty.",
        "Keep Nell and Mira safe, even when the work takes me into danger."
       ],
+      "pastimes": [],
       "mood": "Grim, watchful, and restless beneath a disciplined exterior.",
       "traits": {
        "caution": 62,
@@ -5095,6 +5131,7 @@
        "Help Tobin stay safe without trying to command him.",
        "Keep my basket work steady and my friendship with Gwen strong."
       ],
+      "pastimes": [],
       "mood": "Patient and affectionate, with a quiet thread of worry.",
       "traits": {
        "caution": 67,
@@ -5224,6 +5261,7 @@
       "narrative": "Warm arms, milk, familiar voices. I reach for bright things and cry when the room goes cold.",
       "values": [],
       "goals": [],
+      "pastimes": [],
       "mood": "Mostly content, easily unsettled by cold or unfamiliar sounds.",
       "traits": {
        "caution": 36,
@@ -5303,6 +5341,7 @@
        "Be there for Tobin and Mira without becoming another person who only talks about Tomas.",
        "Learn enough fishing to be useful on my own terms."
       ],
+      "pastimes": [],
       "mood": "Restless, sharp-tongued, and more tender than she lets on.",
       "traits": {
        "caution": 39,
@@ -5425,6 +5464,7 @@
        "Get Brandholm's debts paid, even if trade must stop until they are.",
        "Keep the watch respected and Saltreach safe."
       ],
+      "pastimes": [],
       "mood": "Irritable, watchful, and impatient with delay.",
       "traits": {
        "caution": 49,
@@ -5602,6 +5642,7 @@
        "Find out why fish goes missing without putting blame on the wrong person.",
        "Keep Orrin's anger from making every disagreement worse."
       ],
+      "pastimes": [],
       "mood": "Tired, practical, and quietly concerned.",
       "traits": {
        "caution": 68,
@@ -5763,6 +5804,7 @@
        "Show Father I can be trusted with real work.",
        "Spend time with Ness without everyone making a fuss."
       ],
+      "pastimes": [],
       "mood": "Restless and eager to prove myself.",
       "traits": {
        "caution": 44,
@@ -5876,6 +5918,7 @@
        "Stay close to Mother when the Smokehouse is busy.",
        "Get Dag to play with me."
       ],
+      "pastimes": [],
       "mood": "Cheerful and easily distracted.",
       "traits": {
        "caution": 24,
@@ -5959,6 +6002,7 @@
        "Help Maelis hold the council to what is written and agreed.",
        "Keep peace with Brandholm without pretending the Hunger Winter did not happen."
       ],
+      "pastimes": [],
       "mood": "Grave, watchful, and quietly stubborn.",
       "traits": {
        "caution": 79,
@@ -6105,6 +6149,7 @@
        "Keep carrying messages between Saltreach and Oathstone.",
        "Hold on to my friendship with Rafe, even when the Watch's search makes that difficult."
       ],
+      "pastimes": [],
       "mood": "Cheerful on the surface, uneasy underneath.",
       "traits": {
        "caution": 51,
@@ -6260,6 +6305,7 @@
        "Be a good friend to Wenna while giving her room to speak in her own time.",
        "Decide for myself what I think of Colm's courtship."
       ],
+      "pastimes": [],
       "mood": "Practical and composed, with a curious edge.",
       "traits": {
        "caution": 62,
@@ -6400,6 +6446,7 @@
        "Keep peace between Saltreach and Brandholm",
        "Make time for my family despite the calls for help"
       ],
+      "pastimes": [],
       "mood": "Thoughtful and watchful, with old grief close to the surface.",
       "traits": {
        "caution": 72,
@@ -6541,6 +6588,7 @@
        "Be treated fairly for the work I do at the Smokehouse",
        "Keep Kit safe and give her room to explore"
       ],
+      "pastimes": [],
       "mood": "Practical, affectionate, and a little tired.",
       "traits": {
        "caution": 59,
@@ -6678,6 +6726,7 @@
        "Find interesting shells and stones",
        "Show my finds to Fen and Oriel"
       ],
+      "pastimes": [],
       "mood": "Curious and content.",
       "traits": {
        "caution": 38,
@@ -6767,6 +6816,7 @@
        "Keep the market fair and the Trading House prosperous.",
        "Protect my household from the quarrels gathering around the Tally."
       ],
+      "pastimes": [],
       "mood": "Jovial on the surface, watchful underneath; impatient with needless stubbornness.",
       "traits": {
        "caution": 73,
@@ -6927,6 +6977,7 @@
        "Keep my household close and well supplied.",
        "Trade fairly with Maren and keep the old friendships across the water and road."
       ],
+      "pastimes": [],
       "mood": "Warm and practical, with a keen eye for what people leave unsaid.",
       "traits": {
        "caution": 58,
@@ -7067,6 +7118,7 @@
        "Find a way to repay what I owe without bringing shame on my family.",
        "Keep my friendship with Jory, even while he serves the Watch."
       ],
+      "pastimes": [],
       "mood": "Restless and guarded, with excitement he tries to keep out of his face.",
       "traits": {
        "caution": 61,
@@ -7196,6 +7248,7 @@
        "Stay close to Mama and Papa.",
        "Play with Lotte."
       ],
+      "pastimes": [],
       "mood": "Cheerful and eager for company.",
       "traits": {
        "caution": 30,
@@ -7283,6 +7336,7 @@
        "Weigh Maelis's and Orrin's arguments before I take a side",
        "Protect the trade that brings Saltreach timber and hides"
       ],
+      "pastimes": [],
       "mood": "Thoughtful, quietly concerned",
       "traits": {
        "caution": 68,
@@ -7433,6 +7487,7 @@
        "Help my apprentices learn without making them afraid to ask",
        "Stay close to Pell across the distance between towns"
       ],
+      "pastimes": [],
       "mood": "Warm but wistful",
       "traits": {
        "caution": 59,
@@ -7573,6 +7628,7 @@
        "Play with Rook and Pim",
        "Hear more stories about Brandholm"
       ],
+      "pastimes": [],
       "mood": "Curious and content",
       "traits": {
        "caution": 48,
@@ -7685,6 +7741,7 @@
        "Learn more kinds of knots at the Net-loft",
        "Get Robin to come with me when there is something exciting"
       ],
+      "pastimes": [],
       "mood": "Restless and cheerful",
       "traits": {
        "caution": 30,
@@ -7798,6 +7855,7 @@
        "Make sure the net-house families have food put by before winter.",
        "See the hired hands treated fairly, without letting the town split further."
       ],
+      "pastimes": [],
       "mood": "Worried, practical, and stubbornly affectionate.",
       "traits": {
        "caution": 74,
@@ -7946,6 +8004,7 @@
        "Keep trade with Brandholm open while debts are argued over fairly.",
        "Find a way to disagree with Orrin without losing him as a brother."
       ],
+      "pastimes": [],
       "mood": "Steady, frustrated, and hopeful enough to keep speaking.",
       "traits": {
        "caution": 65,
@@ -8097,6 +8156,7 @@
        "Keep my work and pay secure without letting Orrin intimidate us into silence.",
        "Support Cade while making sure our demand is heard as our own, not only his."
       ],
+      "pastimes": [],
       "mood": "Wry, alert, and impatient with being dismissed.",
       "traits": {
        "caution": 44,
@@ -8286,6 +8346,7 @@
        "Find someone willing and fit to learn the Keeper\u2019s duties.",
        "Make sure disputes at the Stone are heard without favor."
       ],
+      "pastimes": [],
       "mood": "Wary, patient, and conscious of her failing strength.",
       "traits": {
        "caution": 79,
@@ -8427,6 +8488,7 @@
        "Trade fairly with Egil and the people who need tools or paving.",
        "Care for Aud without letting others decide my life for me."
       ],
+      "pastimes": [],
       "mood": "Steady, independent, and a little tired of being pressed about the Keeper\u2019s place.",
       "traits": {
        "caution": 57,
@@ -8565,6 +8627,7 @@
        "Keep trade between the towns steady enough for Oathstone to live through winter",
        "Give my children room to belong to both sides"
       ],
+      "pastimes": [],
       "mood": "Wary and stubborn, with pride in the household he has made.",
       "traits": {
        "caution": 63,
@@ -8725,6 +8788,7 @@
        "Help the berry fields recover where hunters have trampled them",
        "Make room for my children to know their kin in both towns"
       ],
+      "pastimes": [],
       "mood": "Patient but tired of being judged for a marriage that is her own.",
       "traits": {
        "caution": 58,
@@ -8893,6 +8957,7 @@
        "Help with the berry bushes without breaking them",
        "Find a place where children from either town will play with me"
       ],
+      "pastimes": [],
       "mood": "Curious, a little stung by teasing, and glad of familiar company.",
       "traits": {
        "caution": 46,
@@ -9012,6 +9077,7 @@
        "Stay with my family",
        "Play near Wynn"
       ],
+      "pastimes": [],
       "mood": "Content and watchful when voices rise.",
       "traits": {
        "caution": 48,
@@ -9106,6 +9172,7 @@
       "goals": [
        "Be held when I am upset"
       ],
+      "pastimes": [],
       "mood": "Sleepy and comforted.",
       "traits": {
        "caution": 30,
@@ -9192,6 +9259,7 @@
        "Earn enough from trade days to see the household through winter.",
        "Keep Colm from turning his anger into a quarrel that costs us trade."
       ],
+      "pastimes": [],
       "mood": "Practical, watchful, and a little worried about the coming winter.",
       "traits": {
        "caution": 75,
@@ -9345,6 +9413,7 @@
        "Protect the berry fields from hunters crossing them carelessly.",
        "Earn Elin's affection without making her feel caught between towns."
       ],
+      "pastimes": [],
       "mood": "Earnest and impatient, with anger close to the surface.",
       "traits": {
        "caution": 41,
@@ -9495,6 +9564,7 @@
        "Keep peace with Colm even when he wants me to take his side in every quarrel.",
        "Hold on to the small, private things people trust me not to repeat."
       ],
+      "pastimes": [],
       "mood": "Dreamy and observant, with a guarded streak.",
       "traits": {
        "caution": 47,
@@ -9628,6 +9698,7 @@
        "Make the Waystone Inn steady enough to see us through lean seasons.",
        "Stay on friendly terms with Old Aud and the traders who keep the road busy."
       ],
+      "pastimes": [],
       "mood": "Easygoing, watchful, and quietly pleased when the room is full.",
       "traits": {
        "caution": 63,
@@ -9781,6 +9852,7 @@
        "Help Ansgar keep the Waystone a safe place to eat and sleep.",
        "See the trade days stay busy enough that we can lay by what winter needs."
       ],
+      "pastimes": [],
       "mood": "Warm and capable, with a practical watchfulness beneath it.",
       "traits": {
        "caution": 72,
