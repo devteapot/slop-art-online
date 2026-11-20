@@ -1,10 +1,44 @@
 # Staged genesis (design note)
 
-Status: 2026-11-20, dev-box, branch `staged-genesis` (from `origin/main` `a407be01a`). Reviewed by the coordinator and the Spark; the GC's go (2026-11-20), to build after the Spark's revert of status-parts lands. Nothing here is built yet. Designed for main **without** status-parts: its re-land removes its genesis work (filled lazily on first ask) rather than staging it; anything that truly must run per body at genesis becomes one of the steps below, under 50 × 10⁹. Here the island's `init` uses 99.8% of its budget.
+Status: 2026-11-20, dev-box, branch `staged-genesis`. **Built** (see "As built" below), on main with status-parts (the revert was abandoned; the Spark's `status-parts-genesis` lazy fill is on main) and rustc 1.99.1 (`pin-toolchain`). Reviewed by the coordinator, the Spark and the GC before building.
 
 **Existing worlds are unaffected.** `init` runs only on a fresh publish (or a clear); a module update of a running world does not run it, and nothing in a made world's tables changes. Only worlds created after this lands take the staged path.
 
 **The GC's decisions** (2026-11-20): populate stays one step (per settlement later, if a seed needs it); the double overlay validation (§1) is fixed first, as its own small merge (`overlay-validate-once`); `join` and `mind_*` before the world is ready are refused with the stable code `world_preparing` (§4).
+
+## As built (2026-11-20)
+
+Measured on the branch merged with main `a3ef6383e` (genesis-fuel-guard, pin-toolchain, law-compose), rustc 1.99.1, the worker's own server (`sg-stdb`, v2.14.1). Fuel per `init` run (each fresh publish runs it twice) and per step, from `living/tools/genesis_fuel.py` (stepping builds); the guard's own run on those reports passed for all five of its seeds (`scene_gate.py run --genesis-only --genesis-fuel-report …`).
+
+| Seed | `init` (share of 120 × 10⁹) | Steps | Largest step | Ready, staged (s) | Ready, inline on main (s) |
+|---|---:|---:|---:|---:|---:|
+| island (and the player world) | 11.62 × 10⁹ (9.7%; inline baseline 118.32) | 40 | 25.2 × 10⁹ populate (21.0%) | 17.1–21.6 | 17.1–20.2 |
+| Cullet | 37.37 × 10⁹ (31.1%) | 23 | 7.8 × 10⁹ (6.5%) | 10.7–11.7 | 12.2–12.8 |
+| `cullet-laws` | 37.31 × 10⁹ (31.1%) | 1 | 0.3 × 10⁹ | | |
+| plan-test | 11.51 × 10⁹ (9.6%) | 25 | 4.9 × 10⁹ (4.1%) | 5.2–6.1 | 6.1–6.8 |
+| default world | 11.48 × 10⁹ (9.6%) | 1 | 6.0 × 10⁹ (5.0%) | 5.2–6.4 | 5.8–6.6 |
+| `floor-megacity-2k` (compiled) | 11.54 × 10⁹ (9.6%) | 119 | 38.4 × 10⁹ hosting (32.0%) | 10.5–11.6 | publish refused (out of energy) |
+| `floor-megacity-4k` (floor) | 10.13 × 10⁹ (`create_floor` 1.34) | 130 of 141 | **step 131, hosting: out of energy (120 × 10⁹)** | stalls | stalls |
+
+Wall times: three publishes each, publish start to the first tick, the 1-minute load 5–7. Evidence: `.local/sg/final/` (`fuel/*.json`, `guard.log`, `wall.jsonl`, `hash/`, `meta.txt`).
+
+**`floor-megacity-4k`.** Its 130 land steps pass (largest 28.8 × 10⁹); hosting (`island::host`, one call: buildings into the tiles, digests, and cover's ground grid) runs out of energy at 4096 m, as it costs 38.4 × 10⁹ at 2048 m and grows with the tiles. The Spark found `island::host` derives cover's ground grid even with `cover_sight_on` off (megacity's setting); its `cover-genesis` fix comes first. If hosting is still over the 50 × 10⁹ step target after it, hosting is split here (by region), sized on what remains. Not built.
+
+**Cullet's `init` (31%).** What stays in it: the shipped script's validation (about 9 × 10⁹, as for every seed), the seed check's one validation of its laws overlay (about 25 × 10⁹, `floor::check`) and the rules (about 1 × 10⁹). Moving the check and the rules into a first `rules` step is cheap (the check writes nothing; the rules are a day, an install and the law values) and would bring Cullet's `init` to about 11 × 10⁹. The cost: a compiled seed whose overlay fails would stop the chain (its label says why) instead of refusing the publish; the native seed tests (`seed::tests`, in `just living-check`) already compile and validate every shipped seed's overlay. `create_floor` keeps its check before anything is written. Within the targets as it is; a follow-up if wanted.
+
+**Genesis output.** Every table's row count is the same staged and inline. Compared on content without id-like columns (`living/tools/genesis_hash.py`), the island and the default world are identical staged and inline; Cullet and plan-test differ only in `resource_node`, which differs as much between two inline publishes of the same module. Auto-increment ids differ between any two publishes (hash-map iteration order at genesis), as verify-generation's repeatability feature already allows. Pinning that order (so a seed gives the same ids) is a separate follow-up.
+
+**Differences from the design below:**
+
+- The seed check and rules stay in `init` (above); the `rules` step is not built.
+- No `phase` column: adding a column to the existing `genesis` table would rewrite it and disconnect every client on update. The phase is the `label`'s prefix before `:` (`land`, `build`, `chunks`, `resources`, `populate`, `world`, `done`), and the label names the step just done.
+- The step-by-step mode is a measurement build (`LIVING_GENESIS_STEPPING=1`), and a no-tick build (`LIVING_NO_TICK=1`, in `start_ticking`) leaves a made world still for hashes; neither is in a shipped module.
+- A land up to 2048 m gets its resources in one step over the whole map (the inline draws and caps), so it is the same world; larger lands keep the floors' row bands.
+- Steps stamp what they make with `genesis.started_ms` (`init`'s time), not their own.
+
+**Consumers, as built:** `floor::ready` refuses `join`, `join_as`, the `human_*` reducers, `use_skill`, `release_skill`, every `mind_*` reducer and the `mind_act_checked`/`mind_reach` procedures with `world_preparing: …`; the mind service subscribes `genesis` and waits, quietly, before it bootstraps any mind; `living/tools/genesis_wait.py` (`wait_ready`, `wait_ready_cli`, `wait_until`) is used by `verify.py` (launch waits before `install_script`; doctor reports a world being made), `play.py` (before the laws read-back and the minds), `gate.py`, `latency.py`, `verify_mechanics.py`, `verify_steering.py`, `duel.py`, `bench.py`, `lab.py`, `soak.py`, `perception_bench.py`, `look_cost.py` (and `tick_cost.py`), `battle_viewers.py`, `trials.py` and verify-core's `updates.py`; `world_guard` needed no change (it watches a driver or a lease, not ticks).
+
+**Scenes** (the branch before the toolchain pin; `.local/living/verify/gate-1120022029*`): the scene gate's `skirmish` and `combat` (the island, staged), `tick`, `sight`, `senses`, `refusal`, `mechanics`, `roundtrip`, `mind-unit` pass; the minds' `acts`, `dealings`, `conversation` and `cues` pass on their retry (first pass under a load of up to 46); `motion_tables` failed its first pass under that load and its retry could not launch (`motion_tables` is not a valid run name; the gate's fix is `gate-run-names`), and passes 27/27 alone. verify-generation: island, plan-test, plan-test-floor and the authored worlds pass; Cullet's look-band checks and both `cullet-laws` composition checks fail as on main (red on main, owner the Spark); `floor-megacity-4k` stalls at hosting (above).
 
 ## Why
 
