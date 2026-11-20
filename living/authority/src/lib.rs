@@ -12,6 +12,7 @@ mod breath;
 mod codes;
 mod combat;
 mod floor;
+mod geometry;
 mod frame;
 mod frame_trace;
 mod island;
@@ -113,6 +114,10 @@ pub(crate) fn start_ticking(ctx: &ReducerContext) {
     ctx.db.slow_timer().insert(SlowTimer { scheduled_id: 0, scheduled_at: ScheduleAt::Interval(Duration::from_secs(1).into()) });
 }
 
+/// Why cover sight cannot go on: only a land has the ground its cover geometry is sampled from
+/// (a land without the geometry derives it: `geometry`).
+const NO_COVER_LAND: &str = "cover sight requires a land world (a seed whose map kind is \"land\"), once it is made";
+
 fn require_admin(ctx: &ReducerContext) -> Result<World, String> {
     let w = common::world(ctx);
     if ctx.sender() != w.admin {
@@ -166,9 +171,10 @@ fn install(ctx: &ReducerContext, source: String, checked: bool) -> Result<(), St
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.compile");
         living_rules::script::Scripts::with_overrides(&source, common::world(ctx).day_ms, &values)?
     };
-    if sc.laws().cover_sight_on && !common::world(ctx).run.is_empty()
-        && ctx.db.cover_ground().id().find(0).is_none() {
-        return Err("cover sight requires a land created with quantized cover geometry".into());
+    // A made world without cover geometry derives it once cover is on (`geometry::ensure`,
+    // below); only a world that is not a land cannot have it.
+    if sc.laws().cover_sight_on && !common::world(ctx).run.is_empty() && ctx.db.land().id().find(0).is_none() {
+        return Err(NO_COVER_LAND.into());
     }
     if checked && values.is_empty() {
         log::info!("install_script: validated by the seed check");
@@ -200,6 +206,8 @@ fn install(ctx: &ReducerContext, source: String, checked: bool) -> Result<(), St
     k.scripts_rev = rev;
     ctx.db.clock().id().update(k);
     common::invalidate_scripts_rev();
+    // Cover on in a land without its geometry: derived in steps, in force once complete.
+    geometry::ensure(ctx, sc.laws().cover_sight_on);
     common::publish_cover_law(ctx, sc.laws());
     if !sc.gaze_enabled() {
         attention::clear_projection(ctx);
@@ -247,8 +255,8 @@ pub fn set_world_law(ctx: &ReducerContext, name: String, value: String) -> Resul
     let v: serde_json::Value = serde_json::from_str(value.trim()).map_err(|_| format!("`{value}` is not a value: give a number or true or false"))?;
     let sc = common::scripts(ctx);
     sc.laws_with(&[(name.clone(), v.clone())])?;
-    if name == "cover_sight_on" && v == true && ctx.db.cover_ground().id().find(0).is_none() {
-        return Err("cover sight requires a land created with quantized cover geometry".into());
+    if name == "cover_sight_on" && v == true && ctx.db.land().id().find(0).is_none() {
+        return Err(NO_COVER_LAND.into());
     }
     let old = sc.law_value(&name).map(|o| o.to_string()).unwrap_or_default();
     let class = sc.value_only(&name);
@@ -269,7 +277,13 @@ pub fn set_world_law(ctx: &ReducerContext, name: String, value: String) -> Resul
             let sc = common::try_scripts(ctx)?;
             match class {
                 living_rules::script::ValueOnly::Delivery => {}
-                living_rules::script::ValueOnly::Cover => common::publish_cover_law(ctx, common::laws(ctx)),
+                living_rules::script::ValueOnly::Cover => {
+                    // A land without its cover geometry derives it (`geometry`): cover is in
+                    // force, for everyone at once, when every band is kept.
+                    let laws = common::laws(ctx);
+                    geometry::ensure(ctx, laws.cover_sight_on);
+                    common::publish_cover_law(ctx, laws);
+                }
                 living_rules::script::ValueOnly::Gaze => {
                     if !sc.gaze_enabled() {
                         attention::clear_projection(ctx);
