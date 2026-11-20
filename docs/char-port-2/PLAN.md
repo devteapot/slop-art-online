@@ -224,6 +224,57 @@ The carrier code (`carriers.py`: lift, harmonic fill, isometric flatten, binding
 
 **Unsure:** whether the look book should carry heroes at all, since it's append-only and keyless by design. Decide with the look-book owner.
 
+### 2.10 Hero override contract (proposed; for agreement with the laptop before S3)
+
+The GC approved a minimal hero mechanism (2026-11-20). This is the proposed shape, sent to the laptop for agreement before S3 builds.
+
+**Where it lives.** A world seed names its heroes in one short block beside the town's residents. A hero is never a per-person blob for the whole town:
+
+```json
+"looks": {
+  "generation": "…",
+  "heroes": {
+    "Cora Stannard": {
+      "hero_file": "characters/heroes/own-cora-live.glb",
+      "bands": [3],
+      "override": {
+        "type":  { "jaw": { "jaw_taper": 0.24, "chin_taper": -0.27 },
+                   "eye": { "iris_wide": 1.12, "outer_lift_mm": 1.3 } },
+        "paint": { "blush": { "weight": 0.51 }, "nostril": { "gain": 2.3 } },
+        "hair":  { "master": "swept_braid", "colour": "#8a3b1f" }
+      }
+    }
+  }
+}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `heroes` | object, keyed by the resident's `name` in the seed | **At most 8 entries a world.** A name not among the seed's residents is an error. |
+| `hero_file` | string, a path under `living/game/assets/`, optional | A hand-made whole file (HANDMADE_HAIR/INK contract, `slop.character: "handmade"`). When present, it is drawn for the bands in `bands` instead of a composed person. Its sidecars sit beside it. |
+| `bands` | list of look bands (0–4), optional, default: the resident's band at genesis | The bands the hero file covers. The other bands are composed from the seed's draw plus `override`. |
+| `override` | object, optional | Three sub-objects, each validated against the generator's parameter table (names and ranges in §2.1–§2.6, and §3 for hair). An unknown key or an out-of-range value is an **error** at seed check (`look_lines.py` and `town.py`), never silently clamped. |
+| `override.type` | object | Type-record values (`jaw`, `nose`, `brow`, `eye`, `sections.p00_offsets`). They make a **hero type file** `lookdev/types/hero-<slug>.glb` (and its sidecars), because type values shape the cage. |
+| `override.paint` | object | Paint parameters (§2.5). They are baked into the hero type file's atlas and tint. |
+| `override.hair` | object | A hair master and its parameters (§3). They make a style file `lookdev/styles/hair/hero-<slug>.glb`. |
+
+**How the generator and the composer use it:**
+
+- **Generator (`town.py`, `look_lines.py`):** for a hero, it draws the person as for anyone, applies `override` on top, writes the hero type and style files, and writes the hero's look-book lines.
+  - A line's `type` names `hero-<slug>` and its `styles.hair` names `hero-<slug>`.
+  - For the bands in `bands`, the line also carries **`hero_file`**, a new canonical field. It enters the line's key, so the key changes only for heroes.
+- **Composer (client, S3):**
+  - A line with `hero_file` spawns that whole file (the recipe's `base`), as a recipe without a person line is drawn today.
+  - Any other line composes as now: `lookdev/types/<type>.glb` plus its styles. A hero type is just another type file.
+  - The client needs no override logic of its own: overrides are resolved at build time.
+- **The book stays keyless about people:** it doesn't say a line is a hero's. Only the world seed names heroes, and it isn't shipped to clients.
+
+**For the laptop to agree:**
+1. `hero_file` as a canonical line field, drawn instead of composing.
+2. `hero-<slug>` type and style names in the shared folders.
+3. The 8-entry cap.
+4. Whether a hero file's band coverage should also be checked client-side.
+
 ## 3. The hair system
 
 **Recommendation: keep the procedural lock generator (`hair.py`) and add Cora's grammar to it as parameterised masters,** rather than shipping hand-made lock layouts.
