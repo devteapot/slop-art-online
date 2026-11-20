@@ -1097,9 +1097,9 @@ class CageFace(head_mesh.Face):
     LINES = True
     LINE_CHIN, LINE_JAW, LINE_EAR, LINE_MOUTH = 0.0019, 0.0010, 0.0007, 0.00032
     # The whole-underside shell's (port `jaw_shell`): nearer even, as the drawing's jaw stroke is
-    # from the ear to the chin (docs/char-port-2/s1: 1.9 mm under the chin drew it 1.7 times the
-    # drawing's weight there).
-    LINE_CHIN_UNDER, LINE_JAW_UNDER = 0.0013, 0.0011
+    # from the ear to the chin, and lighter: on the underside the line is seen across its width,
+    # and 1.9 mm under the chin drew it 2.6 times the drawing's weight there (docs/char-port-2/s1).
+    LINE_CHIN_UNDER, LINE_JAW_UNDER = 0.0008, 0.0007
 
     def _ears(self, m):
         first = len(m.f)

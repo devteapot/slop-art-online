@@ -789,7 +789,7 @@ Pass 3's fifth step (2026-11-12). A figure's outline today is its silhouette: th
 
 - **Why inside out.** A hull's faces are seen only where the surface they copy faces away from the viewer. The skin under the jaw faces away from anyone looking at the face, so its hull shows as a dark edge exactly where the jaw stands over the neck, and not from below, where the skin itself is seen.
 - **At portrait height the jaw's line draws nothing in front** (char-port-2 S0, 2026-11-20). The first ring under the jaw faces the camera there, so its hull is culled. The line shows only as a stub under the ear, and the silhouette of the chin over the neck lies further down the underside. [The jaw sheet](char-port-2/s0/README.md)
-  - **Behind a flag:** `SLOP_PORT=jaw_shell` builds the jaw's hull over the whole underside, from the jaw line to the neck's ring (`_underside_shell`, 1.3 mm under the chin, 1.1 mm along the jaw). That draws the jaw's outline in front and at three-quarter. [S1](char-port-2/s1/README.md)
+  - **Behind a flag:** `SLOP_PORT=jaw_shell` builds the jaw's hull over the whole underside, from the jaw line to the neck's ring (`_underside_shell`, 0.8 mm under the chin, 0.7 mm along the jaw: about the drawing's weight in a close-up). That draws the jaw's outline in front and at three-quarter. [S1](char-port-2/s1/README.md)
   - **The flag's other feature:** `SLOP_PORT=jaw` sets per-class jaw and chin tapers from `living/tools/characters/port.json`.
   - **Both off by default.** With `SLOP_PORT` unset, every file builds as before.
 - **The colour** is the skin's own line colour taken halfway to a dark brown (`cage_head.line_colour`), so it reads on every skin tone.

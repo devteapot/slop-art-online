@@ -40,7 +40,18 @@ S0 found that the generator's jaw line draws nothing in front or at three-quarte
 - **Per expression:** like the other shell lines, it is built for each expression, so it follows talk and smile.
 - **Unchanged:** the ears' outlines and the mouth thread.
 
-**Widths.** With main's widths (1.9 mm under the chin, 1.0 mm along the jaw), the front close-up drew the chin line 3.5 px for a pupil-to-chin span of 256 px: 0.0137 of the span, against the drawing's 0.0082 (1.7 px of 207). That is 1.7 times the drawing's weight. The drawing's jaw stroke is nearly even from the ear to the chin. So the underside shell takes **1.3 mm under the chin and 1.1 mm along the jaw** (`LINE_CHIN_UNDER`, `LINE_JAW_UNDER`). It now draws 2.4 px, or 0.0094 of the span: 1.15 times the drawing.
+**Widths.** The front close-up is measured down the midline under the chin.
+- **Span:** pupils at row 325, chin at 487, so the pupil-to-chin span is 162 px.
+- **Line width:** each pixel's darkness counts as a share of the line's full darkness.
+- **The drawing:** its jaw stroke is 1.7 px of a 207 px span, 0.0082 of the span. It is nearly even from the ear to the chin.
+
+| Underside shell widths (chin / jaw) | Woman: line (px), share of span | Times the drawing | Girl |
+|---|---|---|---|
+| Main's widths, 1.9 / 1.0 mm | 3.5 px, 0.0216 | 2.6 | – |
+| First try, 1.3 / 1.1 mm | 2.4 px, 0.0148 | 1.8 | 1.85 |
+| **Kept, 0.8 / 0.7 mm** (`LINE_CHIN_UNDER`, `LINE_JAW_UNDER`) | **1.2 px, 0.0076** | **0.93** | **0.96** |
+
+*Correction:* this README first gave the 1.3 / 1.1 mm widths at 1.15 times the drawing. That figure used a wrong pupil row (a 256 px span). The table above is measured with the pupils found in the still.
 
 ## Results on the four bodies
 
