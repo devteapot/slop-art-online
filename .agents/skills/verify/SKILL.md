@@ -114,6 +114,7 @@ $V cleanup --run <run> [--keep-db]
 
 - Leaves the observer if other runs still use it; otherwise stops it.
 - Requires the scratch database name, server and identity recorded at launch. Cleanup refuses unrecorded databases, older records without an identity, reference names and the kept play and walk worlds.
+- A publish the server refused (a seed's `init` error, an `init` out of energy) raises in the world guard and leaves no database. Launch removes the module copy then, and records the attempt (`publish_attempted` in `state.json`) before publishing, so a driver can tell a refused publish from none, and cleanup of such a run removes the guard's lease (and any module copy) once SQL answers 404 for the database; it refuses if the database answers. The server's error is in the run's `world-guard.log` (since `law-compose`, 2026-11-20).
 - The epoch check detects a world reset in place under the same database identity. Set the clock through owner SQL using `$V sql --run <run> "UPDATE world SET epoch_ms = <milliseconds> WHERE id = 0"`. This records the new epoch for cleanup and the orphan guard in both guard modes. The verify-ui noon fixtures use this command. An epoch changed outside the harness still causes cleanup to refuse.
 - Pauses and verifies the pause before deleting `verify-<run>` (the one shared rule, `living/tools/world_delete.py` `pause_confirmed`, through `trial_archive.finish`; self-test `python3 living/tools/world_delete_test.py`, with a fake HTTP server: no delete without a confirmed pause). Launch with `--archive-commitlog` to save and validate a compressed commitlog and SHA-256 sidecar under `~/slop-evidence/` before deletion. With `--keep-db`, the world stays paused. Battle diagnostics enable archiving. See `docs/TRIAL_DISK.md`.
 - Stops the SpacetimeDB container only if this run started it and no other `verify-*` database is live, with a 60 s grace period. Exit code 137 means podman forced the stop with SIGKILL; report it as forced. The server runs as PID 1 and handles SIGINT but not SIGTERM. Cleanup therefore sends SIGINT, and `living/deploy/compose.yml` sets `stop_signal: SIGINT`; a clean stop exits 0 within a second.
@@ -124,6 +125,25 @@ Run cleanup after failed attempts too.
 ## Scene gate
 
 `living/tools/scene_gate.py` (`just living-scene-gate`, and `just living-merge <branch> --scenes`, docs/TOOLING.md) runs a fixed set of this harness's cases on scratch `verify-gate-<stamp>-*` databases when a change touches behaviour: verify-core `tick`, `sight`, `senses`, `refusal`, `skirmish`; verify-minds `roundtrip`, `acts`, `dealings`, `conversation` (`--no-unit-tests`: the check ran them); verify-player `combat --scene all` (`combat.py` names each check's `scene`); verify-client `cues` (`cues.py` on a default-seed world: row-level security keeps each cue to its viewer, and the `cue_transport_on` law off writes none; with `near_tier.py`) and `motion_tables` (`motion_tables.py` on the same world: the public copy tables, `seen_body_copy` and `seen_character_copy`, reach only their viewer, and each law off empties its table at once; the gate builds the SDK probe first); `mind-unit`, living-mind's cargo tests. Fake model only, no Neo4j; the trial server `slop-trials-stdb` by default. The drivers accept `gate-*` run names for it (`scenes.py`, `verify_minds.py`, `verify_llm.Run`). A failing case runs again once on a fresh world and blocks only when it fails twice and passes on main; red on main too is reported and kept on the red-on-main list (`just living-scene-gate reds`; `reds --add/--drop/--owner`, `recheck` on origin/main). The list is shared through git so every machine's gate sees it (the Spark's and dev-box's, each on its own server): the branch `red-on-main` holds one file, `red-on-main.json`, and is never merged into main. Every gate command fetches it first; every change is a commit pushed to it without force, fetched and retried when another writer got there first (one writer per clone at a time). The local file (`LIVING_GATE_REDS`, `~/slop-mq/red-on-main.json` on the Spark) is only a cache: when the fetch fails the gate says so and reads the cache, and a change made then fails without changing anything. `python3 living/tools/scene_gate_selftest.py` proves both directions between two clones, racing writers and the fallback. A listed part (`living-mind::<test>`, `combat:<scene>`) that fails is reported without failing its case. Known flakes under load, from the validation records: minds `dealings` (the demand or the rules' ask late), core `tick` (the pause after the giver's wait), player `combat` (staged fights in town geometry; its `kill` scene, listed), minds `conversation` (the talk-turn count once), living-mind's timing tests (`unreachable_provider_holds_calls`, listed); they get the same one retry, never a silent pass. Evidence: `.local/living/verify/gate-<stamp>/` (`gate.json`, each group's log) and each case's own run folder, printed per case. A change to one of these cases' drivers or names changes the gate: keep `CASES` in `scene_gate.py` in step.
+
+Before running those scenes, the gate measures genesis fuel: it publishes fresh
+`verify-gate-<stamp>-fuel-<seed>` worlds for island, Cullet, cullet-laws, plan-test and the
+default world, reads `init`'s Wasmtime fuel per run from the server's `/v1/metrics` (two runs on a
+fresh publish) and deletes them through `cleanup`. Over 90% of the 120e9 budget fails, a missing
+metric fails, and a seed with a baseline for this rustc in `living/tools/genesis_fuel_baselines.json`
+may not rise more than 0.1% above it. When the staged-genesis reporter `living/tools/genesis_fuel.py`
+exists, each scheduled step is also checked against its own budget. Each seed prints a
+`scene-gate: genesis <seed>: …` line and gets a record in `genesis.json` and `gate.json`. Genesis
+failures block before the scenes, with no retry or red-on-main exception.
+The verify-generation cases `generation-default`, `generation-island` and `generation-cullet`
+(`generation.py --smoke`) read the world, island, cullet and cullet-laws genesis worlds before
+they are deleted; a failing check is a part `<case>:<seed>:<check>` the red-on-main list can hold.
+`just living-scene-gate seeds` (and `living-merge`, before the check) compares every compiled seed
+with its `living/seeds/worlds/<world>/` sources, files only; see [seed
+freshness](../../../docs/TOOLING.md#seed-freshness).
+`just living-scene-gate run --genesis-only` measures without scenes; `just living-scene-gate
+genesis-baseline <genesis.json> <seed>` records a baseline. See [genesis fuel in the tooling
+guide](../../../docs/TOOLING.md#genesis-fuel) for the rules, toolchains and overrides.
 
 ## Safety rules
 

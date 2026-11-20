@@ -17,6 +17,10 @@ touches behaviour, these cases with the fake model only:
                  public copy tables, motion and projections, reach only their viewer under row-level
                  security, and each law off empties its table at once); one default-seed world, the SDK probe
   living-mind    mind-unit: its cargo tests (`just living-check` builds the mind, tests only the rules)
+  verify-generation  generation-default, generation-island, generation-cullet (generation.py --smoke:
+                 its per-world checks, the seed's laws composed over the shipped script among them,
+                 on the world, island, cullet and cullet-laws genesis worlds; a failing check is a
+                 part `<case>:<seed>:<check>` the red-on-main list can hold)
 
 The world groups and the tests run at once. A case whose only failures are parts on the red-on-main
 list (a mind test `living-mind::<test>`, a combat scene `combat:<scene>`) passes and says which. Flakes: a failing case runs again once, alone, on a fresh scratch
@@ -27,14 +31,28 @@ own checkout and build (twice at most). Red on main too: the case is reported an
 block, and the persistent red-on-main list records it until it passes on main. Red only on the
 branch: the gate fails.
 
+Before the scenes, genesis fuel (docs/TOOLING.md, "Genesis fuel"): each seed in GENESIS_SEEDS is
+published fresh and its `init` fuel per run read from the server's metrics (or, once
+living/tools/genesis_fuel.py exists, from its report, steps included). Over 90% of the reducer
+budget fails (SLOP_GATE_GENESIS_HEADROOM), except a seed with a baseline for this rustc in
+genesis_fuel_baselines.json, which may not rise more than 0.1% above it. A missing metric fails.
+Every seed's fuel is printed (`scene-gate: genesis SEED: …`) and kept in genesis.json and gate.json.
+
 Usage:
   scene_gate.py run [--base REF] [--head REF] [--force] [--cases a,b] [--no-main-check]
                     [--stdb-container NAME] [--stdb-url URL] [--reds PATH] [--main-dir DIR]
-                    [--json PATH]
+                    [--json PATH] [--genesis-only] [--genesis-fuel-report JSON]...
       --base REF  what the change is measured against (default: HEAD^1 when HEAD is a merge,
                   else origin/main); the run and the main check use its commit
       --head REF  the tree under test; must be the checked-out HEAD (default HEAD)
       --force     run even when no behavioural path changed
+      --genesis-only  the genesis fuel publishes alone: no scenes, no red-on-main list
+      --genesis-fuel-report JSON  a staged genesis_fuel.py report for its seed (repeatable)
+  scene_gate.py seeds [--json PATH]   compiled seeds against their living/seeds/worlds/ sources
+                  (seed_fresh.py, files only); a stale block listed red on main as
+                  `seeds:<seed>:<block>` does not fail. living-merge runs it before the check
+  scene_gate.py genesis-baseline RECORD SEED... [--note TEXT]   record SEEDs' init fuel from a
+                  gate's genesis.json or gate.json as their baselines for its rustc
   scene_gate.py touches --base A --head B   exit 0 when A..B touches behaviour, 1 when not
   scene_gate.py reds [--reds PATH] [--json] [--owner CASE WHO] [--drop CASE]
                   [--add CASE --skill S --who OWNER --reason WHY [--main SHA] [--evidence PATH]]
@@ -50,28 +68,33 @@ it without force (retried after a fetch when another writer got there first). Th
 cache, read when the fetch fails (the gate says so).
 
 Environment: LIVING_GATE_STDB_CONTAINER / LIVING_GATE_STDB_URL (default the Spark's trial server
-slop-trials-stdb on http://127.0.0.1:3320), LIVING_GATE_REDS (the list's local cache; default
+slop-trials-stdb on http://127.0.0.1:3320), SLOP_GATE_GENESIS_HEADROOM (percent; default 10),
+SLOP_GATE_GENESIS_CHECK=0 (disable with a warning), LIVING_GATE_REDS (the list's local cache; default
 ~/slop-mq/red-on-main.json when ~/slop-mq exists, else the state folder below),
 LIVING_GATE_REDS_REMOTE / _BRANCH (origin, red-on-main), LIVING_GATE_REDS_REPO (the repository that
 reaches it; default this file's), LIVING_GATE_REDS_GIT=0 (the cache alone, no git), LIVING_GATE_MAIN_DIR (main's checkout for
 the main check; its build folder is <dir>-target). State: ~/.local/state/slop-merge/scene-gate/.
-Exit: 0 passed, skipped, or failed only where main fails too; 1 a case failed on the branch
-only (or could not be judged on main); 2 usage or setup error (no server, a dirty main checkout).
+Exit: 0 passed, skipped, or scenes failed only where main fails too; 1 genesis failed, or a
+scene failed only on the branch (or could not be judged on main); 2 usage or setup error.
 No case uses Neo4j (the minds cases run LIVING_NEO4J=off). It never touches a database outside
 verify-gate-<this run>-*: not the paid verify-trial-* batches, nor sao-living_*.
 """
 import concurrent.futures
 import datetime
 import json
+import math
 import os
 import re
+import secrets
 import shutil
 import signal
 import subprocess
 import sys
 import threading
 import time
+import urllib.request
 from pathlib import Path
+from urllib.error import HTTPError
 
 HOME = Path.home()
 STATE = Path(os.environ.get("XDG_STATE_HOME") or HOME / ".local/state") / "slop-merge" / "scene-gate"
@@ -82,8 +105,8 @@ REDS_DEFAULT = HOME / "slop-mq/red-on-main.json" if (HOME / "slop-mq").is_dir() 
 # other tools and verify-ui changes skip it.
 BEHAVIOUR = ("living/authority/", "living/rules/", "living/scripts/", "living/mind/", "living/seeds/",
              "living/configs/", "living/bindings/", "living/Cargo.toml", "living/Cargo.lock",
-             "living/tools/scene_gate.py", "living/tools/install_script.py", "living/tools/stdb",
-             "living/tools/verify_mechanics.py",
+             "living/tools/scene_gate.py", "living/tools/genesis_fuel.py", "living/tools/genesis_fuel_baselines.json",
+             "living/tools/install_script.py", "living/tools/stdb", "living/tools/verify_mechanics.py",
              ".agents/skills/verify/scripts/", ".agents/skills/verify-core/scripts/",
              ".agents/skills/verify-minds/scripts/", ".agents/skills/verify-player/scripts/",
              ".agents/skills/verify-llm/scripts/", ".agents/skills/verify-client/scripts/")
@@ -112,6 +135,13 @@ CASES = {
     "cues":         {"skill": "verify-client", "group": "client"},
     # The same for the public motion copies (battle-views, `seen_body_copy`).
     "motion_tables": {"skill": "verify-client", "group": "client"},
+    # verify-generation's light smoke (generation.py --smoke): its per-world checks, the seed's laws
+    # composed over the shipped script among them, one case per seed family. The first pass reads
+    # the genesis fuel worlds before they are deleted; a retry or main's run launches its own.
+    # A failing check is a part, `<case>:<seed>:<check>`, that the red-on-main list can hold.
+    "generation-default": {"skill": "verify-generation", "group": "generation", "seeds": ("world",)},
+    "generation-island":  {"skill": "verify-generation", "group": "generation", "seeds": ("island",)},
+    "generation-cullet":  {"skill": "verify-generation", "group": "generation", "seeds": ("cullet", "cullet-laws")},
     # living-mind's own cargo tests: `just living-check` builds the mind but tests only living-rules.
     "mind-unit":    {"skill": "living-mind", "group": "unit",
                      "flaky": "timing bounds under load: llm::tests::unreachable_provider_holds_calls (1.97 s against 2 s), "
@@ -123,7 +153,160 @@ CASES = {
 # The skills name no owners; the surface is the owner until `reds --owner` names one.
 ORDER = list(CASES)
 V = ".agents/skills/verify/scripts/verify.py"
+GEN = ".agents/skills/verify-generation/scripts/generation.py"
 LOCK = threading.RLock()  # say() inside the list updates takes it again
+
+
+# SpacetimeDB v2.14.1 FunctionBudget::DEFAULT_BUDGET (client-api-messages/src/energy.rs).
+GENESIS_BUDGET = 120_000_000_000
+# The gate's scene worlds (combat and minds use island), Cullet and the player fixtures
+# (verify-player's plan-test and cullet-laws). The default world goes last: its build in
+# CARGO_TARGET_DIR is the one the core, mechanics and client scenes then launch.
+GENESIS_SEEDS = ("island", "cullet", "cullet-laws", "plan-test", "world")
+GENESIS_FUEL = "reducer_wasmtime_fuel_used"
+GENESIS_RUNS = "spacetime_reducer_plus_query_duration_sec_count"
+GENESIS_BASELINE_FILE = Path(__file__).with_name("genesis_fuel_baselines.json")
+
+
+def genesis_threshold(env):
+    if env.get("SLOP_GATE_GENESIS_CHECK") == "0":
+        return None
+    try:
+        threshold = float(env.get("SLOP_GATE_GENESIS_HEADROOM", "10"))
+    except ValueError:
+        raise ValueError("SLOP_GATE_GENESIS_HEADROOM must be a percentage between 0 and 100") from None
+    if not 0 <= threshold <= 100:
+        raise ValueError("SLOP_GATE_GENESIS_HEADROOM must be a percentage between 0 and 100")
+    return threshold
+
+
+def genesis_metrics(metrics, identity):
+    samples = {}
+    for line in metrics.splitlines():
+        match = re.fullmatch(r'([^{}]+)\{([^{}]*)\}\s+(\S+)', line)
+        if not match or match[1] not in (GENESIS_FUEL, GENESIS_RUNS):
+            continue
+        labels = dict(re.findall(r'(\w+)="([^"]*)"', match[2]))
+        if labels.get("db") == identity and labels.get("reducer") == "init":
+            value = float(match[3])
+            if match[1] in samples or not math.isfinite(value) or not 0 < value < 2**64 or not value.is_integer():
+                raise ValueError(f"invalid or duplicate {match[1]} for init on {identity}")
+            samples[match[1]] = int(value)
+    for name in (GENESIS_FUEL, GENESIS_RUNS):
+        if name not in samples:
+            raise ValueError(f"missing or empty metric {name} for init on {identity}")
+    runs = samples[GENESIS_RUNS]
+    return dict(init_fuel=samples[GENESIS_FUEL] / runs, init_runs=runs,
+                steps=[], largest_step_share=0.0)
+
+
+def staged_genesis_report(report, seed, commit):
+    if not isinstance(report, dict) or any(report.get(key) != value for key, value in
+                                          dict(seed=seed, commit=commit, budget=GENESIS_BUDGET).items()):
+        raise ValueError("staged genesis report must match the seed, commit and budget")
+    runs, fuel, steps = (report.get(key) for key in ("init_runs", "init_fuel", "steps"))
+    if type(runs) is not int or runs != 2 or not valid_fuel(fuel) or not isinstance(steps, list) or not steps:
+        raise ValueError("staged genesis report needs two init runs, positive init fuel and measured steps")
+    for step in steps:
+        if (not isinstance(step, dict) or not valid_fuel(step.get("fuel"))
+                or any(not isinstance(step.get(key), str) or not step[key] for key in ("phase", "label", "reducer"))):
+            raise ValueError("staged genesis step needs a phase, label, positive fuel and reducer")
+    largest = max(step["fuel"] for step in steps) / GENESIS_BUDGET
+    if type(report.get("largest_step_share")) not in (float, int) or not math.isclose(
+        largest, report["largest_step_share"], rel_tol=1e-9
+    ):
+        raise ValueError("largest_step_share does not match the measured steps")
+    return dict(init_fuel=fuel, init_runs=runs, steps=steps, largest_step_share=largest)
+
+
+def valid_fuel(fuel):
+    return type(fuel) in (int, float) and 0 < fuel < 2**64
+
+
+def genesis_toolchain(env, root):
+    """`rustc --version` for the module build: fuel counts wasm instructions, so a module built by
+    another rustc counts differently (the island: 118.735e9 on rustc 1.99.1 aarch64, 119.79e9 on
+    rustc 1.97.1 x86_64 with the same seed and source)."""
+    got = subprocess.run(["rustc", "--version"], cwd=Path(root) / "living", env=env, capture_output=True, text=True)
+    if got.returncode or not got.stdout.strip():
+        raise ValueError(f"rustc --version failed: {got.stderr.strip()[-300:]}")
+    return got.stdout.strip()
+
+
+def load_genesis_baselines(path):
+    """{seed: {toolchain: {"init_fuel": per-run fuel, "commit": …, "recorded": …}}}; checked."""
+    baselines = json.loads(Path(path).read_text())
+    if not isinstance(baselines, dict):
+        raise ValueError(f"{path} must hold an object of seeds")
+    for seed, by_toolchain in baselines.items():
+        if seed not in GENESIS_SEEDS or not isinstance(by_toolchain, dict):
+            raise ValueError(f"{path}: {seed!r} is not a gate seed with baselines by toolchain")
+        for toolchain, entry in by_toolchain.items():
+            if (not toolchain.startswith("rustc ") or not isinstance(entry, dict) or not valid_fuel(entry.get("init_fuel"))
+                    or entry["init_fuel"] > GENESIS_BUDGET):
+                raise ValueError(f"{path}: {seed} / {toolchain!r} needs a positive init_fuel within the budget")
+    return baselines
+
+
+def genesis_baseline(baselines, seed, toolchain):
+    """(baseline fuel or None, a note when the seed has baselines only for other toolchains)."""
+    by_toolchain = baselines.get(seed) or {}
+    if toolchain in by_toolchain:
+        return by_toolchain[toolchain]["init_fuel"], ""
+    return None, (f" for {toolchain} (recorded for {', '.join(sorted(by_toolchain))})" if by_toolchain else "")
+
+
+def genesis_policy(measurement, threshold, baseline, missing=""):
+    fuel = measurement["init_fuel"]
+    headroom = 100 * (GENESIS_BUDGET - fuel) / GENESIS_BUDGET
+    # The interim rule (docs/TOOLING.md, "Genesis fuel"): a seed with a recorded baseline that is
+    # short of the headroom may not rise more than 0.1% above it; with the headroom it graduates.
+    use_baseline = headroom < threshold and baseline is not None
+    init_passed = fuel * 1000 <= baseline * 1001 if use_baseline else headroom >= threshold
+    limit = baseline * 1.001 if use_baseline else GENESIS_BUDGET * (100 - threshold) / 100
+    failures, warnings = [], []
+    if not init_passed:
+        why = ("more than 0.1% above its recorded baseline" if use_baseline else
+               f"under {threshold:g}% headroom" + ("" if baseline is not None else
+                                                    f" and no recorded baseline in {GENESIS_BASELINE_FILE.name}{missing}"))
+        failures.append(f"init {fuel / 1e9:.3f}e9 is over its limit {limit / 1e9:.3f}e9: {why}")
+    if fuel > GENESIS_BUDGET / 2:
+        warnings.append(f"init uses {fuel / 1e9:.3f}e9 fuel, over 50% of its budget")
+    for step in measurement["steps"]:
+        step_fuel = step["fuel"]
+        detail = f"step {step['phase']} / {step['label']} ({step['reducer']}) uses {step_fuel / 1e9:.3f}e9 fuel"
+        step_headroom = 100 * (GENESIS_BUDGET - step_fuel) / GENESIS_BUDGET
+        if step_headroom < threshold:
+            failures.append(f"{detail} ({step_headroom:.2f}% headroom, requires {threshold:g}%)")
+        if step_fuel > GENESIS_BUDGET / 2:
+            warnings.append(f"{detail}, over 50% of its budget")
+    return dict(headroom_pct=headroom, policy="baseline + 0.1%" if use_baseline else f"{threshold:g}% minimum headroom",
+                baseline_fuel=baseline, limit_fuel=limit, warnings=warnings, failures=failures, passed=not failures)
+
+
+def genesis_result_line(result):
+    def e9(fuel):
+        return f"{fuel / 1e9:.3f}e9"
+    line = f"genesis {result['seed']}: "
+    if "headroom_pct" in result:
+        line += (f"init {e9(result['init_fuel'])} fuel per run ({result['init_runs']} init run{'s' if result['init_runs'] != 1 else ''}), "
+                 f"{100 - result['headroom_pct']:.2f}% of the {result['budget'] / 1e9:g}e9 budget, "
+                 f"{result['headroom_pct']:.2f}% headroom; rule {result['policy']}, limit {e9(result['limit_fuel'])}")
+        if result["baseline_fuel"] is not None:
+            line += f" (recorded baseline {e9(result['baseline_fuel'])})"
+    else:
+        line += "init fuel unavailable"
+    if result.get("steps"):
+        line += f"; largest of {len(result['steps'])} steps {result['largest_step_share']:.2%} of its budget"
+    for detail in [*result.get("failures", []), result.get("error")]:
+        if detail:
+            line += f"; {detail}"
+    return line + (" — PASS" if result["passed"] else " — FAIL")
+
+
+def genesis_http(url):
+    with urllib.request.urlopen(url, timeout=15) as response:
+        return response.read().decode()
 
 
 def say(msg):
@@ -341,13 +524,16 @@ class Runner:
         self.runs = []  # every gate run name launched, for the final sweep
         self.procs = set()
         self.notes = {}  # (tag, case) -> what a passing run with listed failures failed
+        self.smoke_seeds = set()  # seeds whose genesis world the generation smoke reads first
+        self.smoke = {}  # (root, seed) -> (failed checks or None when it did not run, evidence)
+        self.fresh = 0  # numbers the generation cases' own worlds
 
-    def sh(self, cmd, root, log, timeout):
+    def sh(self, cmd, root, log, timeout, stdout=None):
         """Run one command in its own process group, output appended to log; return its code."""
         with open(log, "a") as f:
             f.write(f"$ {' '.join(map(str, cmd))}\n")
             f.flush()
-            p = subprocess.Popen([str(c) for c in cmd], cwd=root, env=self.env, stdout=f, stderr=subprocess.STDOUT,
+            p = subprocess.Popen([str(c) for c in cmd], cwd=root, env=self.env, stdout=stdout or f, stderr=f,
                                  start_new_session=True)
             with LOCK:
                 self.procs.add(p)
@@ -375,8 +561,98 @@ class Runner:
             return False
         return self.sh([sys.executable, V, "doctor", "--run", run], root, log, 300) == 0
 
+    def genesis(self, root, seed, commit, threshold, baseline, report=None, toolchain=None, missing=""):
+        tool = Path(root) / "living/tools/genesis_fuel.py"
+        if report is None and not tool.is_file():
+            result = self.genesis_live(root, seed, commit, threshold, baseline, toolchain, missing)
+        else:
+            result = dict(seed=seed, commit=commit, budget=GENESIS_BUDGET, toolchain=toolchain, passed=False)
+            try:
+                if report is None:
+                    report = self.out / f"genesis-{seed}-staged.json"
+                    log = self.out / f"genesis-{seed}.log"
+                    result["log"] = str(log)
+                    with report.open("w") as output:
+                        code = self.sh([sys.executable, tool, "--seed", seed], root, log, 1500, stdout=output)
+                    if code:
+                        raise ValueError(f"{tool.name} exited {code}; see {log}")
+                result["staged_report"] = str(report)
+                result.update(staged_genesis_report(json.loads(report.read_text()), seed, commit))
+                result.update(genesis_policy(result, threshold, baseline, missing))
+            except (OSError, ValueError) as error:
+                result["error"] = str(error)
+        # scene-gate: lines are what the merge queue forwards, on a pass and on a failure.
+        say(genesis_result_line(result))
+        for warning in result.get("warnings", []):
+            say(f"WARNING genesis {seed}: {warning}")
+        return result
+
+    def genesis_live(self, root, seed, commit, threshold, baseline, toolchain=None, missing=""):
+        run = f"gate-{self.stamp}-fuel-{seed}"
+        db = f"verify-{run}"
+        log = self.out / f"genesis-{seed}.log"
+        run_dir = Path(root) / ".local/living/verify" / run
+        self.runs.append((root, run))
+        result = dict(seed=seed, commit=commit, database=db, budget=GENESIS_BUDGET, toolchain=toolchain, passed=False, log=str(log),
+                      world_guard_log=str(run_dir / "world-guard.log"))
+        url = self.env["LIVING_STDB_URL"].rstrip("/")
+        identity_url = f"{url}/v1/database/{db}/identity"
+        try:
+            # A unique name must be unused, including names reserved by a failed publish.
+            try:
+                genesis_http(identity_url)
+            except HTTPError as e:
+                if e.code != 404:
+                    raise
+            else:
+                raise ValueError(f"scratch database name already exists: {db}")
+            code = self.sh([sys.executable, V, "launch", "--run", run, "--seed", seed,
+                            "--target-dir", self.env["CARGO_TARGET_DIR"], "--driver-pid", os.getpid()],
+                           root, log, 1500)
+            state = load_json(run_dir / "state.json", {})
+            published = state.get("published", False)
+            try:
+                identity = state.get("database_identity") or genesis_http(identity_url).strip()
+                if not re.fullmatch(r"[0-9a-f]{64}", identity):
+                    raise ValueError(f"invalid identity for {db}")
+                metrics = genesis_http(f"{url}/v1/metrics")
+                # Keep the measured series as evidence without retaining unrelated databases' metrics.
+                series = self.out / f"genesis-{seed}.prom"
+                series.write_text("".join(line + "\n" for line in metrics.splitlines()
+                                          if line.startswith((GENESIS_FUEL + "{", GENESIS_RUNS + "{"))
+                                          and f'db="{identity}"' in line and 'reducer="init"' in line))
+                result.update(database_identity=identity, metrics=str(series))
+                result.update(genesis_metrics(series.read_text(), identity))
+                result.update(genesis_policy(result, threshold, baseline, missing))
+                if result["init_runs"] != 2 and published:
+                    raise ValueError(f"expected two init runs for a fresh publish, got {result['init_runs']}")
+            except (OSError, ValueError) as e:
+                result.update(passed=False, error=str(e))
+            if not published:
+                detail = f"fresh publish not confirmed (launch exit {code}; see {log} and {result['world_guard_log']})"
+                result.update(passed=False, error="; ".join(filter(None, (detail, result.get("error")))))
+            elif seed in self.smoke_seeds:
+                # The generation cases' first pass, on this world before it is deleted.
+                self.smoke[(str(root), seed)] = self.generation_smoke(root, run)
+        except (OSError, ValueError) as e:
+            result.update(passed=False, error=str(e))
+        finally:
+            state = load_json(run_dir / "state.json", {})
+            if state.get("published") and self.cleanup(root, run, log):
+                result.update(passed=False, error=f"pause-confirm-delete failed; see {log}")
+        return result
+
+    def generation_smoke(self, root, run):
+        """generation.py --smoke on a launched run: (failed check names, or None when it did not run; evidence)."""
+        ev = Path(root) / ".local/living/verify" / run
+        code = self.sh([sys.executable, GEN, "--run", run, "--smoke"], root, ev / "generation-smoke.log", 600)
+        got = load_json(ev / "smoke.json", {})
+        if code and not got.get("failed"):
+            return None, f"{ev / 'generation-smoke.log'} (exit {code}; no result)"
+        return list(got.get("failed", [])), str(ev / "checks.json")
+
     def cleanup(self, root, run, log):
-        self.sh([sys.executable, V, "cleanup", "--run", run], root, log, 300)
+        return self.sh([sys.executable, V, "cleanup", "--run", run], root, log, 300)
 
     def group(self, root, group, cases, tag):
         """Run `cases` of one group on fresh worlds; {case: (ok, evidence, seconds)}."""
@@ -394,6 +670,30 @@ class Runner:
             elif code and failed:
                 self.notes[(tag, "mind-unit")] = f"failed: {', '.join(failed)}" + (f" (listed: {', '.join(sorted(set(failed) & listed))})" if set(failed) & listed else "")
             return {"mind-unit": (ok, str(log), time.time() - t0)}
+        if group == "generation":
+            for c in cases:
+                failed, evidence = [], []
+                for seed in CASES[c]["seeds"]:
+                    got = self.smoke.pop((str(root), seed), None) if tag.startswith("a-") else None
+                    if got is None:  # a retry, main's run, or no genesis world: a world of its own
+                        with LOCK:
+                            self.fresh += 1
+                            run = f"gate-{self.stamp}-g{self.fresh}-{seed}"
+                        log = self.out / f"{tag}-{seed}.log"
+                        try:
+                            got = self.generation_smoke(root, run) if self.world(root, run, seed, log) else \
+                                (None, f"{log} (launch or doctor failed)")
+                        finally:
+                            if load_json(Path(root) / ".local/living/verify" / run / "state.json", {}).get("published"):
+                                self.cleanup(root, run, log)
+                    evidence.append(got[1])
+                    failed += [f"{seed}:{name}" for name in got[0]] if got[0] is not None else [f"{seed}:(did not run)"]
+                listed = listed_parts(self.reds_path, f"{c}:")
+                ok = not failed or (set(failed) <= listed and not any(f.endswith(":(did not run)") for f in failed))
+                if failed:
+                    self.notes[(tag, c)] = ("only listed red checks failed: " if ok else "failed: ") + "; ".join(failed)
+                res[c] = (ok, ", ".join(evidence), time.time() - t0)
+            return res
         if group == "minds":
             suite = f"gate-{self.stamp}-{tag}"
             ev = Path(root) / ".local/living/verify" / suite
@@ -586,6 +886,7 @@ def judge_on_main(a, runner, repo, base, cases, record):
 
 def cmd_run(a):
     repo = git("rev-parse", "--show-toplevel")
+    report_paths = [Path(path).resolve() for path in a.genesis_fuel_report]
     os.chdir(repo)
     head = git("rev-parse", a.head or "HEAD")
     if head != git("rev-parse", "HEAD"):
@@ -606,28 +907,64 @@ def cmd_run(a):
     dirty = git("status", "--porcelain", "--untracked-files=no")
     if dirty:
         say(f"note: the tree has uncommitted changes; they are what is tested:\n{dirty}")
-    if not touched and not a.force:
+    if not touched and not (a.force or a.genesis_only):
         say(f"skipped: {base[:10]}..{head[:10]} changes {len(paths)} path{'s' if len(paths) != 1 else ''}, none behavioural "
             f"({', '.join(paths[:5])}{', …' if len(paths) > 5 else ''})")
         record.update(result="skipped", seconds=round(time.time() - t0))
         return finish(a, record, 0)
     container = a.stdb_container
-    up = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", container], capture_output=True, text=True)
-    if up.stdout.strip() != "true":
-        say(f"setup error: the SpacetimeDB container {container} is not running (--stdb-container, LIVING_GATE_STDB_CONTAINER)")
-        record.update(result="setup error")
-        return finish(a, record, 2)
-    stamp = time.strftime("%m%d%H%M%S")
+    stamp = time.strftime("%m%d%H%M%S") + "-" + secrets.token_hex(3)
     out = Path(repo) / ".local/living/verify" / f"gate-{stamp}"
     out.mkdir(parents=True, exist_ok=True)
     record["evidence"] = str(out)
     env = dict(os.environ, LIVING_STDB_CONTAINER=container, LIVING_STDB_URL=a.stdb_url, PYTHONDONTWRITEBYTECODE="1")
     env.setdefault("CARGO_TARGET_DIR", str(Path(repo) / "living/target"))
+    work = "genesis publishes" if a.genesis_only else "genesis publishes and " + ", ".join(cases)
     say(f"{base[:10]}..{head[:10]} touches {len(touched)} behavioural path{'s' if len(touched) != 1 else ''} "
-        f"({', '.join(touched[:4])}{', …' if len(touched) > 4 else ''}); running {', '.join(cases)} on {container} ({a.stdb_url}), "
+        f"({', '.join(touched[:4])}{', …' if len(touched) > 4 else ''}); running {work} on {container} ({a.stdb_url}), "
         f"databases verify-gate-{stamp}-*, evidence {out}")
     runner = Runner(stamp, env, out, a.reds)
     try:
+        try:
+            threshold = genesis_threshold(env)
+            baselines = load_genesis_baselines(GENESIS_BASELINE_FILE) if threshold is not None else {}
+            toolchain = genesis_toolchain(env, repo) if threshold is not None else None
+            reports = {}
+            for report_path in report_paths if threshold is not None else []:
+                data = json.loads(report_path.read_text())
+                seed = data.get("seed") if isinstance(data, dict) else None
+                if seed not in GENESIS_SEEDS or seed in reports:
+                    raise ValueError(f"unknown or duplicate seed in {report_path}")
+                reports[seed] = report_path
+        except (OSError, ValueError) as e:
+            say(f"genesis setup error: {e}")
+            record.update(result="genesis setup error", genesis_error=str(e))
+            return finish(a, record, 2)
+        if not a.genesis_only or (threshold is not None and len(reports) != len(GENESIS_SEEDS)):
+            up = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", container], capture_output=True, text=True)
+            if up.stdout.strip() != "true":
+                say(f"setup error: the SpacetimeDB container {container} is not running (--stdb-container, LIVING_GATE_STDB_CONTAINER)")
+                record.update(result="setup error")
+                return finish(a, record, 2)
+        if threshold is None:
+            say("WARNING genesis fuel check disabled by SLOP_GATE_GENESIS_CHECK=0: init fuel is not measured")
+        if not a.genesis_only:
+            runner.smoke_seeds = {seed for c in cases if CASES[c]["group"] == "generation" for seed in CASES[c]["seeds"]}
+        measurements = []
+        for seed in GENESIS_SEEDS if threshold is not None else ():
+            baseline, missing = genesis_baseline(baselines, seed, toolchain)
+            measurements.append(runner.genesis(repo, seed, head, threshold, baseline, reports.get(seed), toolchain, missing))
+        record.update(genesis=measurements, genesis_disabled=threshold is None)
+        save_json(out / "genesis.json", dict(head=head, base=base, disabled=threshold is None, toolchain=toolchain,
+                                            minimum_headroom_pct=threshold, seeds=measurements))
+        failed_seeds = [item["seed"] for item in measurements if not item["passed"]]
+        if failed_seeds:
+            record.update(result="failed genesis: " + ", ".join(failed_seeds), seconds=round(time.time() - t0))
+            return finish(a, record, 1)
+        if a.genesis_only:
+            record.update(result="passed genesis" if threshold is not None else "genesis skipped",
+                          seconds=round(time.time() - t0))
+            return finish(a, record, 0)
         first = run_cases(runner, repo, cases, "a")
         record["first_seconds"] = round(time.time() - t0)
         failed = [c for c in cases if not first[c][0]]
@@ -684,6 +1021,59 @@ def finish(a, record, code):
     if record.get("evidence"):
         save_json(Path(record["evidence"]) / "gate.json", record)
     return code
+
+
+def cmd_genesis_baseline(a):
+    """Record seeds' measured init fuel from a gate record as their baselines for its toolchain."""
+    record = load_json(a.record, {})
+    measured = {g.get("seed"): g for g in record.get("seeds") or record.get("genesis") or []}
+    path = Path(a.file)
+    baselines = load_genesis_baselines(path) if path.exists() else {}
+    for seed in a.seeds:
+        g = measured.get(seed)
+        if not g or g.get("error") or g.get("init_runs") != 2 or not valid_fuel(g.get("init_fuel")) or not g.get("toolchain"):
+            say(f"genesis-baseline: {a.record} has no clean two-run measurement of {seed}; nothing recorded")
+            return 1
+        entry = dict(init_fuel=g["init_fuel"], commit=g.get("commit"), recorded=datetime.date.today().isoformat())
+        if a.note:
+            entry["note"] = a.note
+        baselines.setdefault(seed, {})[g["toolchain"]] = entry
+        say(f"genesis-baseline: {seed} {g['init_fuel'] / 1e9:.3f}e9 for {g['toolchain']} (commit {str(g.get('commit'))[:10]})")
+    path.write_text(json.dumps(baselines, indent=2, sort_keys=True) + "\n")
+    load_genesis_baselines(path)
+    return 0
+
+
+def cmd_seeds(a):
+    """Seed freshness (living/tools/seed_fresh.py, files only), with the red-on-main list: a stale
+    block listed as `seeds:<seed>:<block>` is reported and does not fail."""
+    repo = git("rev-parse", "--show-toplevel")
+    tool = Path(repo) / "living/tools/seed_fresh.py"
+    if not tool.is_file():
+        say("seeds: no living/tools/seed_fresh.py in this tree; skipped")
+        return 0
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="seed-fresh-") as t:
+        record = Path(a.json).resolve() if a.json else Path(t) / "seeds.json"
+        got = subprocess.run([sys.executable, str(tool), "--json", str(record)], cwd=repo, capture_output=True, text=True, timeout=300)
+        report = load_json(record, None)
+    for line in got.stdout.splitlines() + got.stderr.splitlines():
+        say(f"seeds: {line}")
+    if got.returncode not in (0, 1) or report is None:
+        say(f"seeds: the freshness check could not run (exit {got.returncode})")
+        return 2
+    stale = sorted(f"{seed}:{block}" for seed, r in report.get("stale", {}).items() for block in r.get("stale", {}))
+    reds = load_json(a.reds, {})
+    listed = sorted(p for p in stale if f"seeds:{p}" in reds)
+    blocking = [p for p in stale if p not in listed]
+    for p in listed:
+        e = reds[f"seeds:{p}"]
+        say(f"seeds: {p} is stale and listed red on main (owner {e.get('owner') or '-'}; {e.get('reason') or 'no reason'}); not blocking")
+    if blocking:
+        say(f"seeds: FAILED, stale: {', '.join(blocking)}")
+        return 1
+    say("seeds: passed" + (f" (listed red on main: {', '.join(listed)})" if listed else ""))
+    return 0
 
 
 def cmd_touches(a):
@@ -789,6 +1179,9 @@ def main(argv):
     r.add_argument("--head")
     r.add_argument("--force", action="store_true")
     r.add_argument("--cases")
+    r.add_argument("--genesis-fuel-report", action="append", default=[], metavar="JSON",
+                   help="read a staged genesis_fuel.py report for its seed; repeat for other seeds")
+    r.add_argument("--genesis-only", action="store_true", help="measure fresh publishes without running scenes")
     r.add_argument("--no-main-check", action="store_true")
     r.add_argument("--stdb-container", default=os.environ.get("LIVING_GATE_STDB_CONTAINER", "slop-trials-stdb"))
     r.add_argument("--stdb-url", default=os.environ.get("LIVING_GATE_STDB_URL", "http://127.0.0.1:3320"))
@@ -820,13 +1213,22 @@ def main(argv):
     st.add_argument("--record", required=True)
     st.add_argument("--main", required=True)
     st.set_defaults(f=cmd_settle)
-    for p in (r, t, s, st, rc):  # --reds is accepted after the command too
+    sd = sub.add_parser("seeds", help="seed freshness against living/seeds/worlds/ (files only), with the red-on-main list")
+    sd.add_argument("--json")
+    sd.set_defaults(f=cmd_seeds)
+    gb = sub.add_parser("genesis-baseline", help="record seeds' init fuel from a gate record (genesis.json or gate.json)")
+    gb.add_argument("record")
+    gb.add_argument("seeds", nargs="+")
+    gb.add_argument("--file", default=str(GENESIS_BASELINE_FILE))
+    gb.add_argument("--note")
+    gb.set_defaults(f=cmd_genesis_baseline)
+    for p in (r, t, s, st, rc, gb, sd):  # --reds is accepted after the command too
         p.add_argument("--reds", default=argparse.SUPPRESS)
     a = ap.parse_args(argv or ["run"])
     if not getattr(a, "f", None):
         ap.print_help()
         return 2
-    if a.f in (cmd_run, cmd_recheck) or (a.f is cmd_reds and not (a.add or a.drop or a.owner)):
+    if (a.f is cmd_run and not a.genesis_only) or a.f in (cmd_recheck, cmd_seeds) or (a.f is cmd_reds and not (a.add or a.drop or a.owner)):
         refresh_reds(a.reds)  # the shared list from git into the cache (or the cache, said so)
     return a.f(a)
 
