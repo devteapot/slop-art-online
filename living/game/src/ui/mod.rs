@@ -350,6 +350,11 @@ fn dump(
         // Every text that names a person or a place on screen (perceived-names-1), by where it
         // shows, and what the authority has given me to name (`known_names`, `given_places`).
         "naming": naming(&model, &verbs, talk.as_deref(), &ws, &extra),
+        // The death screen as drawn (its words, place, life and witnesses) and what it was made
+        // from: the killer's and the witnesses' ids `combat::ingest` took from my combat feed,
+        // either source (combat-switches: the same whichever is in use).
+        "death": model.death.as_ref().map(|d| serde_json::json!({"cause": d.cause, "place": d.place, "lived": d.lived, "witnesses": d.witnesses,
+            "killer_id": extra.combat.as_ref().and_then(|c| c.killer), "witness_ids": extra.combat.as_ref().map(|c| c.witnesses.clone())})),
         "known_names": crate::looks::known_names(&extra.net),
         "given_places": crate::looks::given_places(&extra.net),
         "perceived": crate::looks::perceived_ids(&extra.net),
@@ -480,6 +485,7 @@ pub struct DumpExtra<'w, 's> {
     shine: Res<'w, crate::style::HairShine>,
     town: Option<Res<'w, crate::town::Town>>,
     loading: Option<Res<'w, crate::loading::Loading>>,
+    combat: Option<Res<'w, crate::combat::Combat>>,
 }
 
 impl DumpExtra<'_, '_> {
