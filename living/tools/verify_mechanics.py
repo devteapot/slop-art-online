@@ -294,7 +294,10 @@ def main():
     if not results["a net brings in two fish at once"]:
         report_pack_failure("net")
 
-    reset_pack(D, fish=1, wood=3, fiber=1, stone=1, hide=1)
+    # Raw fish spoils by chance each minute it is carried (tick::spoil), so a lone fish can be
+    # lost before a slow walk to the campfire ends (gate flakes, 2026-11-20): carry spares and
+    # judge the products without the raw fish left over.
+    reset_pack(D, fish=3, wood=3, fiber=1, stone=1, hide=1)
     call(db, "place_structure", str(D), "campfire")
     call(db, "set_behavior", str(D), seq(
         {"do": {"skill": "smoke", "target": {"nearest": "campfire"}, "item": "fish"}},
@@ -303,8 +306,9 @@ def main():
         {"do": {"skill": "craft", "item": "leather"}},
     ))
     products = {"smoked_fish": 1, "bow": 1, "arrow": 3, "leather": 1}
+    made = lambda: {k: v for k, v in inventory(D).items() if k != "fish"}
     results["smoking, bow, arrows and leather"] = bool(
-        wait_for(lambda: inventory(D) == products, timeout=90))
+        wait_for(lambda: made() == products, timeout=90))
     if not results["smoking, bow, arrows and leather"]:
         report_pack_failure("craft")
 
@@ -332,9 +336,13 @@ def main():
     max_hp = lambda who: float(rows(db, f"SELECT id, max_hp FROM vitals WHERE id = {who}")[0]["max_hp"])
     call(db, "place_near", str(G), str(F))
     call(db, "set_behavior", str(G), json.dumps({"first": [{"if": {"threatened": True}, "then": {"do": "yield", "target": {"id": F}}}, {"wait": 1}]}))
-    call(db, "set_behavior", str(F), seq({"do": {"skill": "threaten", "target": {"id": G}}}))
+    # Threatened holds only while a threat is under way (2 s, brain.rs), and G must evaluate
+    # inside it; under load one window can pass unseen (gate flakes, 2026-11-20), so F keeps
+    # threatening until G gives in.
+    call(db, "set_behavior", str(F), json.dumps({"first": [{"do": {"skill": "threaten", "target": {"id": G}}}, {"wait": 1}]}))
     menaced = wait_for(lambda: heard(G, "threatens you"), timeout=20)
-    gave_in = wait_for(lambda: [r for r in story("yield") if int(r["a"]) == G], timeout=15)
+    gave_in = wait_for(lambda: [r for r in story("yield") if int(r["a"]) == G], timeout=30)
+    call(db, "set_behavior", str(F), idle)
     results["force: a threat is perceived and counts as being threatened"] = bool(menaced) and bool(story("threat")) and bool(gave_in)
     if not results["force: a threat is perceived and counts as being threatened"]:
         print("  threat:", bool(menaced), story("threat"), [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {G}")][-5:])
@@ -374,8 +382,10 @@ def main():
         W = int(min(wolves, key=lambda w: hunger[w]))
         call(db, "place_near", str(W), str(I))
         h0 = hp(I)
-        call(db, "set_behavior", str(W), seq({"do": {"skill": "attack", "target": {"id": I}}}))
-        balked = wait_for(lambda: [r for r in story("balk") if int(r["a"]) == W], timeout=15)
+        # Just placed, the wolf may not see I yet under load ("stuck: attack: no #I in sight",
+        # 2026-11-20), and a one-step sequence then gives up: attempt in a loop until it balks.
+        call(db, "set_behavior", str(W), json.dumps({"first": [{"do": {"skill": "attack", "target": {"id": I}}}, {"wait": 1}]}))
+        balked = wait_for(lambda: [r for r in story("balk") if int(r["a"]) == W], timeout=20)
         time.sleep(3)
         results["force: a wolf does not dare attack a healthy adult among others"] = bool(balked) and hp(I) >= h0 - 0.5
         if not results["force: a wolf does not dare attack a healthy adult among others"]:

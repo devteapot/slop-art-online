@@ -1282,12 +1282,63 @@ fn vertex_mean(mesh: &Mesh) -> Option<Vec3> {
     (w > 0.0).then(|| sum / w)
 }
 
+/// Where a mesh sits in its file, to choose which of a material's meshes gives its recolour
+/// source ([`Sources`]): a glTF primitive's index, its file and its mesh index, read from its
+/// mesh asset's path (`<file>#Mesh<m>/Primitive<p>`, Bevy's `GltfAssetLabel::Primitive`). It
+/// orders by primitive first, so a mesh's own first primitive comes before a patch that wears
+/// the material as a later primitive of another mesh (a type's body, `Skin` primitive 0, before
+/// its neck patch, `Face` primitive 5), and then by file, as one toon is shared by every type
+/// file that draws the same content. A mesh without such a path (one made at run time) comes
+/// after every file's.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct SourceKey {
+    primitive: usize,
+    file: String,
+    mesh: usize,
+}
+
+impl SourceKey {
+    fn of(path: Option<&bevy::asset::AssetPath>) -> Self {
+        let place = path.and_then(|p| {
+            let (m, prim) = p.label()?.strip_prefix("Mesh")?.split_once("/Primitive")?;
+            Some((prim.parse().ok()?, p.path().to_string_lossy().to_string(), m.parse().ok()?))
+        });
+        match place {
+            Some((primitive, file, mesh)) => Self { primitive, file, mesh },
+            None => Self { primitive: usize::MAX, file: path.map(|p| p.to_string()).unwrap_or_default(), mesh: usize::MAX },
+        }
+    }
+}
+
+/// The recolour sources offered in one run of [`recolor`]: for each material still without
+/// one, the mean colour of the mesh with the least [`SourceKey`] (equal keys by the colour
+/// itself). The choice is the same whatever order the meshes are offered in, which Bevy's
+/// queries do not promise: a material shared by several meshes (a type's body and neck patch, the
+/// same toon in several type files) used to take the first mesh iterated, and a new resource or
+/// component could change that (docs/HANDMADE_COMPOSED.md, "Built").
+#[derive(Default)]
+pub(crate) struct Sources(HashMap<AssetId<Toon>, (SourceKey, Vec3)>);
+
+impl Sources {
+    pub(crate) fn offer(&mut self, toon: AssetId<Toon>, key: SourceKey, mean: Vec3) {
+        let rank = |k: &SourceKey, m: Vec3| (k.clone(), m.to_array().map(f32::to_bits));
+        match self.0.get(&toon) {
+            Some((k, m)) if rank(k, *m) <= rank(&key, mean) => {}
+            _ => {
+                self.0.insert(toon, (key, mean));
+            }
+        }
+    }
+}
+
 /// Give each character's meshes their recipe's colours. Characters share their base file's toon
 /// materials, so their meshes batch: the material learns its texture's mean colour once
 /// (recolouring mode 3), and each mesh carries its recipe colour in its tag, which the shader
 /// turns into the remapping. A material per recipe colour split every character into about ten
-/// draws of its own in every view and pass.
-#[allow(clippy::type_complexity)]
+/// draws of its own in every view and pass. Of the meshes that first wear a material in the same
+/// frame, the one with the least [`SourceKey`] gives its source colour ([`Sources`]), so the
+/// result does not hang on the order the query visits them.
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn recolor(
     mut commands: Commands,
     q: Query<(Entity, &MeshMaterial3d<Toon>, &Mesh3d, Option<&bevy::gltf::GltfMaterialName>, Option<&outfit::Piece>), (With<Converted>, Without<Recolored>)>,
@@ -1299,7 +1350,9 @@ pub fn recolor(
     mut tints: ResMut<compose::HairTints>,
     mut images: ResMut<Assets<Image>>,
     mut ready: Local<std::collections::HashSet<AssetId<Toon>>>,
+    assets: Res<AssetServer>,
 ) {
+    let mut sources = Sources::default();
     for (e, mat, mesh, name, piece) in &q {
         let mut cur = e;
         let mut owner = None;
@@ -1355,14 +1408,15 @@ pub fn recolor(
         if !ready.contains(&mat.0.id()) {
             let Some(toon) = toons.get(&mat.0) else { continue };
             let Some(mean) = meshes.get(&mesh.0).and_then(|m| mean_color(toon, m, &thumbs)) else { continue };
-            let m = hsv(mean);
-            if let Some(mut t) = toons.get_mut(&mat.0) {
-                t.extension.params.recolor = Vec4::new(0.0, 0.0, 0.0, 3.0);
-                t.extension.params.recolor_from = Vec4::new(m.x, HUE_SPREAD, m.y, m.z);
-            }
-            ready.insert(mat.0.id());
+            sources.offer(mat.0.id(), SourceKey::of(assets.get_path(mesh.0.id()).as_ref()), mean);
         }
         commands.entity(e).insert((bevy::mesh::MeshTag::new(tag_color(srgb)), Recolored));
+    }
+    for (id, (_, mean)) in sources.0 {
+        if let Some(mut t) = toons.get_mut(id) {
+            (t.extension.params.recolor, t.extension.params.recolor_from) = recolor_source(mean);
+        }
+        ready.insert(id);
     }
     // A grown palette: its toons are touched so their bind groups take the new texels.
     if std::mem::take(&mut tints.grown) {
@@ -1993,6 +2047,90 @@ pub fn springs(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn toon(n: u128) -> AssetId<Toon> {
+        AssetId::Uuid { uuid: bevy::asset::uuid::Uuid::from_u128(n) }
+    }
+
+    fn key(path: &str) -> SourceKey {
+        SourceKey::of(Some(&bevy::asset::AssetPath::parse(path)))
+    }
+
+    /// Every ordering of `items`, by Heap's algorithm.
+    fn orders<T: Clone>(items: &[T]) -> Vec<Vec<T>> {
+        fn go<T: Clone>(k: usize, a: &mut Vec<T>, out: &mut Vec<Vec<T>>) {
+            if k <= 1 {
+                out.push(a.clone());
+                return;
+            }
+            go(k - 1, a, out);
+            for i in 0..k - 1 {
+                a.swap(if k % 2 == 0 { i } else { 0 }, k - 1);
+                go(k - 1, a, out);
+            }
+        }
+        let mut out = Vec::new();
+        go(items.len(), &mut items.to_vec(), &mut out);
+        out
+    }
+
+    #[test]
+    fn source_key_reads_a_primitives_place() {
+        let k = key("lookdev/types/adult-f-a.glb#Mesh2/Primitive0");
+        assert_eq!(k, SourceKey { primitive: 0, file: "lookdev/types/adult-f-a.glb".into(), mesh: 2 });
+        // A body's first primitive before a neck patch's later one, whatever the mesh index.
+        assert!(k < key("lookdev/types/adult-f-a.glb#Mesh0/Primitive5"));
+        // Then by file.
+        assert!(k < key("lookdev/types/elder-f-c.glb#Mesh2/Primitive0"));
+        // A mesh made at run time, or of another label, after every file's primitive.
+        let made = SourceKey::of(None);
+        assert!(key("lookdev/types/zz.glb#Mesh9/Primitive99") < made);
+        assert!(key("lookdev/types/zz.glb#Mesh9/Primitive99") < key("lookdev/types/a.glb#Mesh0"));
+    }
+
+    /// The case main hit (2026-11-20, the asset view's composed people): one `Body_00_SKIN`
+    /// toon shared by three type files, offered in one frame by each file's body (`Skin`,
+    /// primitive 0) and neck patch (`Face`, primitive 5), whose means differ. The first mesh
+    /// iterated used to decide, and the reverse order took elder-f-c's neck patch (about 0.04 in
+    /// value, up to 49 levels on screen). Every order of offering now gives adult-f-a's body,
+    /// the mesh main's order took, and a second material is chosen on its own.
+    #[test]
+    fn recolour_source_does_not_hang_on_order() {
+        let body = Vec3::new(0.52, 0.45, 0.40);
+        let offered = [
+            (1, "lookdev/types/adult-f-a.glb#Mesh2/Primitive0", body),
+            (1, "lookdev/types/adult-m-b.glb#Mesh2/Primitive0", Vec3::new(0.521, 0.45, 0.40)),
+            (1, "lookdev/types/elder-f-c.glb#Mesh2/Primitive0", Vec3::new(0.519, 0.45, 0.40)),
+            (1, "lookdev/types/adult-f-a.glb#Mesh0/Primitive5", Vec3::new(0.47, 0.39, 0.33)),
+            (1, "lookdev/types/adult-m-b.glb#Mesh0/Primitive5", Vec3::new(0.471, 0.39, 0.33)),
+            (1, "lookdev/types/elder-f-c.glb#Mesh0/Primitive5", Vec3::new(0.469, 0.39, 0.33)),
+            (2, "lookdev/types/elder-f-c.glb#Mesh1/Primitive0", Vec3::new(0.3, 0.2, 0.1)),
+            (2, "lookdev/types/adult-m-b.glb#Mesh1/Primitive0", Vec3::new(0.31, 0.2, 0.1)),
+        ];
+        let first_wins = |order: &[(u128, &str, Vec3)]| order.iter().find(|o| o.0 == 1).unwrap().2;
+        let all = orders(&offered);
+        assert_eq!(all.len(), 40320);
+        assert_eq!(all.iter().map(|o| o.iter().map(|x| x.1).collect::<Vec<_>>()).collect::<std::collections::HashSet<_>>().len(), 40320);
+        // The old rule: two orders, two sources.
+        assert_ne!(first_wins(&all[0]), first_wins(all.iter().find(|o| o[0].1.contains("elder-f-c.glb#Mesh0")).unwrap()));
+        for order in &all {
+            let mut s = Sources::default();
+            for (t, path, mean) in order {
+                s.offer(toon(*t), key(path), *mean);
+            }
+            assert_eq!(s.0.len(), 2);
+            assert_eq!(s.0[&toon(1)].1, body, "{order:?}");
+            assert_eq!(s.0[&toon(2)].1, Vec3::new(0.31, 0.2, 0.1), "{order:?}");
+        }
+        // Equal keys (two meshes made at run time) are settled by the colour, not the order.
+        let pick = |a: Vec3, b: Vec3| {
+            let mut s = Sources::default();
+            s.offer(toon(3), SourceKey::of(None), a);
+            s.offer(toon(3), SourceKey::of(None), b);
+            s.0[&toon(3)].1
+        };
+        assert_eq!(pick(Vec3::X, Vec3::Y), pick(Vec3::Y, Vec3::X));
+    }
     use bevy::world_serialization::{WorldInstanceReady, WorldInstanceSpawner};
 
     /// The belly bone scales with the spine, for every build and both widths of hips, so the

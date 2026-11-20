@@ -495,7 +495,12 @@ calibrate.py --line LINE.json [--targets T.json]
 
 - **Palettes are made by commands.**
   - **How:** `palette::register` and `tag_later` queue them; `Composer` (an observer) adds them directly. `Palettes` is made on first use and sits in no system's parameters.
-  - **Why:** registering it when the app was built shifted every later component id. That reordered which mesh a type's shared `Body_00_SKIN` takes its recolour source from (`recolor` takes the first mesh's vertex mean, an order dependence that is on main), and people without `slop` drew up to 31 levels differently on the neck.
+  - **Why:** registering it when the app was built shifted every later component id. That reordered which mesh a type's shared `Body_00_SKIN` took its recolour source from (`recolor` took the first mesh's vertex mean), and people without `slop` drew up to 31 levels differently on the neck.
+  - **Fixed since (`recolour-order`, 2026-11-20):** the order no longer matters. Of the meshes that first wear a material in one frame, `recolor` takes the source from the one with the least `SourceKey`: primitive index, then file path, then mesh index, read from the mesh asset's glTF label (`characters::Sources`).
+    - **What the shared material really is:** `Body_00_SKIN` is one toon shared by every type file on the shared pages, not one per file. In the asset view's first frame it had six candidates: each type's body (`Skin`, primitive 0, value 0.762) and neck patch (`Face`, primitive 5, value 0.719).
+    - **Which one main took:** `adult-f-a`'s body, which the rule keeps. Main's query order gave it, and a reversed order gave `elder-f-c`'s neck patch: up to 49 levels on screen.
+    - **Pixels:** 0 differ against main on 49 shots. The proof is in [the validation record](../.agents/skills/verify-ui/references/validation/2026-11-20-1434-recolour-order.md).
+    - **Still order-dependent:** a material's first frame decides, so a candidate whose file loads in a later frame is not considered. That follows asset loading, not system or entity order.
 - **`noink`** drops a profile's v1.1 lock ink as well as `slop.ink`.
 - **Two measurement switches beside `LIVING_GAME_COMPOSED_SLOP`:**
   - `LIVING_GAME_VSYNC=0|immediate|mailbox` (main.rs): a windowed run presents without vsync and updates without focus (Bevy's game settings run an unfocused window at 60 Hz);
