@@ -11,6 +11,9 @@
 //!   [`HairProfile`]), shaded by `toon.wesl` `hand_hair`.
 //! - **The highlight mask:** the hair's `_HIGHLIGHT` per vertex, moved into its second UVs' y as
 //!   1 + value ([`pack_highlight`]), or `<stem>.hair.png` (R, linear) beside the file, which wins.
+//! - **Ink** (contract v1.2, docs/HANDMADE_INK.md): any material but a tint may carry `ink`
+//!   ([`InkProfile`]), drawn from its ink map (`<stem>.<slot>.ink.png`, [`ink_map`]: G the
+//!   distance to the nearest stroke, R its width) through the material's own light.
 //!
 //! Files without `slop` extras are untouched: nothing here applies to them.
 
@@ -89,7 +92,7 @@ pub fn scene_of(j: &serde_json::Value, file: &str) -> Option<Handmade> {
 
 /// A material's slot (`slop.slot`), read by its lowercase variant name (`"hair"`, `"tint"`, ...):
 /// serde spells them, so the client's skill-name guard doesn't read the `face` slot as the skill.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Slot {
     Hair,
@@ -133,11 +136,46 @@ pub const T2: f32 = 0.40;
 pub const EDGE: f32 = 0.02;
 pub const FEATHER: f32 = 0.08;
 
+impl Slot {
+    /// The slot as a file spells it (`"eyes"`, ...), from its serde name.
+    pub fn name(self) -> String {
+        serde_json::to_value(self).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default()
+    }
+}
+
+/// How an ink line's width is set (`slop.ink.width`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InkWidth {
+    /// A screen-pixel line from `px`, up to 4 x `px` close (the hair's).
+    Px,
+    /// A world-sized stroke: its half-width is the map's R x `range` in UV, at least `min_px`.
+    Uv,
+}
+
+/// A material's ink (contract v1.2, docs/HANDMADE_INK.md, `slop.ink`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct InkProfile {
+    pub color: [u8; 3],
+    pub width: InkWidth,
+    pub px: f32,
+    pub min_px: f32,
+    pub range: f32,
+    pub fade_px: f32,
+    /// A path under the asset folder, instead of the slot's `<stem>.<slot>.ink.png`.
+    pub map: Option<String>,
+    /// In "px" mode: the map's R is the local width fraction.
+    pub taper: bool,
+}
+
+pub const INK_MIN_PX: f32 = 1.0;
+
 /// What a material's extras declare.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct MaterialSlop {
     pub slot: Option<Slot>,
     pub hair: Option<HairProfile>,
+    pub ink: Option<InkProfile>,
 }
 
 /// A material's `slop` from its glTF extras (Bevy's `GltfMaterialExtras` JSON); `what` names it
@@ -169,7 +207,109 @@ pub fn material_of(extras: Option<&str>, what: &str) -> MaterialSlop {
         }
         _ => None,
     };
-    MaterialSlop { slot, hair }
+    let ink = match slop.get("ink") {
+        None => None,
+        Some(_) if slot == Some(Slot::Tint) => {
+            warn_once(format!("handmade: {what}: ink on a tint, which is multiplied over the skin, is ignored; put the line on a carrier or on the skin"));
+            None
+        }
+        Some(i) => match ink_of(i) {
+            Ok(p) if slot.is_none() && p.map.is_none() => {
+                warn_once(format!("handmade: {what}: ink on a material without a slot needs a map; ignored"));
+                None
+            }
+            Ok(p) => Some(p),
+            Err(e) => {
+                warn_once(format!("handmade: {what}: ink ignored ({e}); drawn without ink"));
+                None
+            }
+        },
+    };
+    if ink.is_some() && hair.as_ref().is_some_and(|h| h.inked) {
+        warn_once(format!("handmade: {what}: both slop.ink and the hair profile's ink fields; slop.ink wins"));
+    }
+    MaterialSlop { slot, hair, ink }
+}
+
+/// An ink profile from its JSON, or what is wrong with it.
+pub fn ink_of(v: &serde_json::Value) -> Result<InkProfile, String> {
+    if !v.is_object() {
+        return Err("ink is not an object".into());
+    }
+    let a = v["color"].as_array().ok_or("color is missing")?;
+    let c: Vec<u8> = a.iter().filter_map(|x| x.as_u64().filter(|v| *v <= 255).map(|v| v as u8)).collect();
+    if a.len() != 3 || c.len() != 3 {
+        return Err("color is not three integers 0-255".into());
+    }
+    let num = |k: &str, d: f32| -> Result<f32, String> {
+        match v.get(k) {
+            None => Ok(d),
+            Some(x) => x.as_f64().map(|x| x as f32).filter(|x| x.is_finite() && *x >= 0.0).ok_or(format!("{k} is not a number 0 or above")),
+        }
+    };
+    let width = match v.get("width") {
+        None => InkWidth::Px,
+        Some(w) => serde_json::from_value::<InkWidth>(w.clone()).map_err(|_| format!("width {w} is not \"px\" or \"uv\""))?,
+    };
+    let taper = match v.get("taper") {
+        None => false,
+        Some(t) => t.as_bool().ok_or("taper is not true or false")?,
+    };
+    let range = match v.get("range") {
+        None => INK_RANGE,
+        Some(x) => x.as_f64().map(|x| x as f32).filter(|x| x.is_finite() && *x > 0.0).ok_or(format!("range {x} is not a number above 0"))?,
+    };
+    Ok(InkProfile {
+        color: [c[0], c[1], c[2]],
+        width,
+        px: num("px", INK_PX)?,
+        min_px: num("min_px", INK_MIN_PX)?,
+        range,
+        fade_px: num("fade_px", INK_FADE_PX)?,
+        map: v["map"].as_str().map(String::from),
+        taper,
+    })
+}
+
+/// The ink map for a material of `file` with `slot`: the profile's own `map`, else
+/// `<stem>.<slot>.ink.png` beside the file; each its KTX2 copy first.
+pub fn ink_map(file: &str, slot: Option<Slot>, p: &InkProfile) -> Option<String> {
+    let stem = file.trim_end_matches(".glb").trim_end_matches(".gltf");
+    let own = slot.map(|s| format!("{stem}.{}.ink.png", s.name()));
+    let root = crate::lookdev::asset_root();
+    p.map.iter().cloned().chain(own).flat_map(|f| crate::lookdev::face_map_files(&f)).find(|f| std::path::Path::new(&root).join(f).exists())
+}
+
+impl InkProfile {
+    /// Put the ink into a material's parameters: `colour_map` whether the map has colour
+    /// channels (R as well as G), `m_uv` the mesh's texel density. Returns false (with a
+    /// warning) when it can't be drawn.
+    pub fn apply(&self, p: &mut ToonParams, colour_map: bool, m_uv: Option<f32>, what: &str) -> bool {
+        let Some(m_uv) = m_uv else {
+            warn_once(format!("handmade: {what}: ink on a mesh whose TEXCOORD_0 spans no area: no ink is drawn"));
+            return false;
+        };
+        let mode = match self.width {
+            InkWidth::Uv if !colour_map => {
+                warn_once(format!("handmade: {what}: width \"uv\" with a greyscale ink map (no R): no ink is drawn"));
+                return false;
+            }
+            // `LIVING_GAME_PERF=inkfw`: the half-width through the screen derivatives, as the
+            // distance is (mode 4), for an A/B against the texel-density path.
+            InkWidth::Uv if crate::perf::has("inkfw") => 4.0,
+            InkWidth::Uv => 3.0,
+            InkWidth::Px if self.taper && !colour_map => {
+                warn_once(format!("handmade: {what}: taper with a greyscale ink map (no R): drawn at full width"));
+                1.0
+            }
+            InkWidth::Px if self.taper => 2.0,
+            InkWidth::Px => 1.0,
+        };
+        let w = if self.width == InkWidth::Uv { self.min_px } else { self.px };
+        p.ink = linear(self.color).extend(w);
+        p.ink_shape = Vec4::new(self.range, self.fade_px, mode, m_uv);
+        true
+    }
 }
 
 /// A hair profile from its JSON, or what is wrong with it.
@@ -420,6 +560,84 @@ mod tests {
         assert_eq!(hair_of(&inked).unwrap().ink, Some([20, 8, 4]));
         inked["ink_range"] = json!(0.0);
         assert!(hair_of(&inked).is_err());
+    }
+
+    #[test]
+    fn ink_takes_its_defaults_and_its_width_mode() {
+        let p = ink_of(&json!({"color": [34, 18, 16]})).unwrap();
+        assert_eq!(p, InkProfile { color: [34, 18, 16], width: InkWidth::Px, px: INK_PX, min_px: INK_MIN_PX, range: INK_RANGE, fade_px: INK_FADE_PX, map: None, taper: false });
+        let p = ink_of(&json!({"color": [0, 0, 0], "width": "uv", "min_px": 0.5, "range": 0.02, "fade_px": 0, "map": "view/x.ink.png", "taper": true})).unwrap();
+        assert_eq!((p.width, p.min_px, p.range, p.fade_px, p.map.as_deref(), p.taper), (InkWidth::Uv, 0.5, 0.02, 0.0, Some("view/x.ink.png"), true));
+    }
+
+    #[test]
+    fn ink_refuses_bad_values() {
+        for bad in [
+            json!([1, 2, 3]),
+            json!({}),
+            json!({"color": [300, 0, 0]}),
+            json!({"color": [1, 2]}),
+            json!({"color": [1, 2, 3], "range": 0}),
+            json!({"color": [1, 2, 3], "range": -0.1}),
+            json!({"color": [1, 2, 3], "px": -1}),
+            json!({"color": [1, 2, 3], "fade_px": "wide"}),
+            json!({"color": [1, 2, 3], "width": "mm"}),
+            json!({"color": [1, 2, 3], "taper": 1}),
+        ] {
+            assert!(ink_of(&bad).is_err(), "{bad} was accepted");
+        }
+    }
+
+    #[test]
+    fn ink_is_opt_in_per_material_and_never_on_a_tint() {
+        let ink = json!({"color": [10, 10, 10]});
+        let eyes = material_of(Some(&json!({"slop": {"slot": "eyes", "ink": ink}}).to_string()), "t");
+        assert_eq!(eyes.slot, Some(Slot::Eyes));
+        assert_eq!(eyes.ink.unwrap().color, [10, 10, 10]);
+        assert_eq!(material_of(Some(&json!({"slop": {"slot": "eyes"}}).to_string()), "t").ink, None);
+        assert_eq!(material_of(Some(&json!({"slop": {"slot": "tint", "ink": ink}}).to_string()), "t").ink, None);
+        // Without a slot the sidecar has no name: only an explicit map will do.
+        assert_eq!(material_of(Some(&json!({"slop": {"ink": ink}}).to_string()), "t").ink, None);
+        let mapped = json!({"color": [10, 10, 10], "map": "view/m.ink.png"});
+        assert!(material_of(Some(&json!({"slop": {"ink": mapped}}).to_string()), "t").ink.is_some());
+        // An invalid ink leaves the rest of the material's slop as it was.
+        let hair = material_of(Some(&json!({"slop": {"slot": "hair", "hair": profile(), "ink": {"color": "black"}}}).to_string()), "t");
+        assert!(hair.hair.is_some() && hair.ink.is_none());
+    }
+
+    #[test]
+    fn slots_name_their_sidecars_by_serde() {
+        for (slot, v) in [(Slot::Hair, json!("hair")), (Slot::Eyes, json!("eyes")), (Slot::Cloth, json!("cloth"))] {
+            assert_eq!(serde_json::Value::String(slot.name()), v);
+            assert_eq!(serde_json::from_value::<Slot>(v).unwrap(), slot);
+        }
+        // Every slot round-trips through its name.
+        for slot in [Slot::Hair, Slot::Skin, Slot::Face, Slot::Eyes, Slot::Tint, Slot::Cloth] {
+            assert_eq!(serde_json::from_value::<Slot>(serde_json::Value::String(slot.name())).unwrap(), slot);
+        }
+    }
+
+    #[test]
+    fn ink_goes_into_the_parameters_by_mode() {
+        let mut p = ToonParams::default();
+        let px = ink_of(&json!({"color": [255, 255, 255], "px": 2.0, "range": 0.01, "fade_px": 2.5})).unwrap();
+        assert!(px.apply(&mut p, true, Some(0.05), "t"));
+        assert_eq!(p.ink, Vec4::new(1.0, 1.0, 1.0, 2.0));
+        assert_eq!(p.ink_shape, Vec4::new(0.01, 2.5, 1.0, 0.05));
+        let taper = InkProfile { taper: true, ..px.clone() };
+        assert!(taper.apply(&mut p, true, Some(0.05), "t"));
+        assert_eq!(p.ink_shape.z, 2.0);
+        // A greyscale map has no R: taper falls back to full width, "uv" draws nothing.
+        assert!(taper.apply(&mut p, false, Some(0.05), "t"));
+        assert_eq!(p.ink_shape.z, 1.0);
+        let uv = InkProfile { width: InkWidth::Uv, min_px: 0.75, ..px.clone() };
+        assert!(uv.apply(&mut p, true, Some(0.05), "t"));
+        assert_eq!((p.ink.w, p.ink_shape.z), (0.75, 3.0));
+        let mut q = ToonParams::default();
+        assert!(!uv.apply(&mut q, false, Some(0.05), "t"));
+        // A mesh whose UVs span no area takes no ink.
+        assert!(!px.apply(&mut q, true, None, "t"));
+        assert_eq!(q.ink_shape, Vec4::ZERO);
     }
 
     #[test]
