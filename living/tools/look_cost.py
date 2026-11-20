@@ -53,7 +53,7 @@ def sh(*args, timeout=600, check=True):
 
 
 def stdb(*args, timeout=600):
-    return sh("podman", "exec", "-i", CONTAINER, "spacetime", *args, timeout=timeout)
+    return sh("docker", "exec", "-i", CONTAINER, "spacetime", *args, timeout=timeout)
 
 
 def delete_world(db):
@@ -64,7 +64,7 @@ def delete_world(db):
         raise RuntimeError(f"refusing to delete {db}: not a verify-lookcost- database")
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import world_delete
-    cli = lambda *a: subprocess.run(["podman", "exec", "-i", CONTAINER, "spacetime", *a], capture_output=True, text=True, timeout=600)
+    cli = lambda *a: subprocess.run(["docker", "exec", "-i", CONTAINER, "spacetime", *a], capture_output=True, text=True, timeout=600)
     deleted, why = world_delete.cli_pause_and_delete(cli, db)
     print(f"delete {db}: {why}", file=sys.stderr, flush=True)
     if not deleted:
@@ -199,12 +199,12 @@ def clog_bytes(replica):
     """The size of a replica's commitlog in the server container (bytes), or None."""
     if replica is None:
         return None
-    r = subprocess.run(["podman", "exec", CONTAINER, "du", "-sb", f"/home/spacetime/.local/share/spacetime/data/replicas/{replica}/clog"], capture_output=True, text=True)
+    r = subprocess.run(["docker", "exec", CONTAINER, "du", "-sb", f"/home/spacetime/.local/share/spacetime/data/replicas/{replica}/clog"], capture_output=True, text=True)
     return int(r.stdout.split()[0]) if r.returncode == 0 and r.stdout.strip() else None
 
 
 def newest_replica():
-    r = subprocess.run(["podman", "exec", CONTAINER, "ls", "/home/spacetime/.local/share/spacetime/data/replicas"], capture_output=True, text=True)
+    r = subprocess.run(["docker", "exec", CONTAINER, "ls", "/home/spacetime/.local/share/spacetime/data/replicas"], capture_output=True, text=True)
     ids = [int(x) for x in r.stdout.split() if x.isdigit()]
     return max(ids) if ids else None
 

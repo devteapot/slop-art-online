@@ -117,6 +117,9 @@ async fn main() -> Result<()> {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<()>();
     let ready = Arc::new(Mutex::new(Some(ready_tx)));
+    // Whether the `genesis` subscription applied (true) or failed (false: a module without the table).
+    let (genesis_tx, genesis_rx) = tokio::sync::oneshot::channel::<bool>();
+    let genesis_ready = Arc::new(Mutex::new(Some(genesis_tx)));
     let conn = DbConnection::builder()
         .with_uri(server.clone())
         .with_database_name(db.clone())
@@ -124,6 +127,7 @@ async fn main() -> Result<()> {
         .on_connect(move |c, identity, _| {
             log::info!("connected as {identity}");
             let ready = ready.clone();
+            let genesis_ready = genesis_ready.clone();
             let experiences = format!("SELECT * FROM experience WHERE controller = 0x{}", identity.to_hex());
             // With player memory on (the default): the experiences of characters people play
             // (every other controller's), and where the settlements are.
@@ -162,6 +166,23 @@ async fn main() -> Result<()> {
                     .on_error(|_, e| log::warn!("no `audience` subscription ({e:?}): this world does not keep who heard a line; LIVING_GREET falls back to `off` here"))
                     .subscribe(["SELECT * FROM audience".to_string()]);
             }
+            // Staged genesis: whether the world is made yet (public, one row; docs/STAGED_GENESIS.md
+            // §4). Its own subscription, so that a module without the table (built before staged
+            // genesis) still starts: its world counts as made.
+            let genesis_failed = genesis_ready.clone();
+            c.subscription_builder()
+                .on_applied(move |_| {
+                    if let Some(tx) = genesis_ready.lock().unwrap().take() {
+                        let _ = tx.send(true);
+                    }
+                })
+                .on_error(move |_, e| {
+                    log::warn!("no `genesis` subscription ({e:?}): this world was made before staged genesis; it counts as made");
+                    if let Some(tx) = genesis_failed.lock().unwrap().take() {
+                        let _ = tx.send(false);
+                    }
+                })
+                .subscribe(["SELECT * FROM genesis".to_string()]);
             c.subscription_builder()
                 .on_applied(move |_| {
                     if let Some(tx) = ready.lock().unwrap().take() {
@@ -172,8 +193,6 @@ async fn main() -> Result<()> {
                 .subscribe(queries.into_iter().chain([
                     "SELECT * FROM mind_cursor",
                     "SELECT * FROM world",
-                    // Staged genesis: whether the world is made yet (docs/STAGED_GENESIS.md §4).
-                    "SELECT * FROM genesis",
                     "SELECT * FROM character",
                     "SELECT * FROM brain",
                     "SELECT * FROM persona",
@@ -289,7 +308,9 @@ async fn main() -> Result<()> {
     ready_rx.await.map_err(|_| anyhow!("subscription never applied"))?;
     // Staged genesis: a world still being made has no one to deliberate for, and its mind
     // reducers refuse (`world_preparing`); wait, quietly, until its `genesis` row is done (or
-    // absent: a world made before staged genesis).
+    // absent, or the table missing: a world made before staged genesis). The `genesis`
+    // subscription is separate, so its rows are read only once it has applied.
+    genesis_rx.await.map_err(|_| anyhow!("the genesis subscription never answered"))?;
     let mut waited = false;
     while let Some(g) = conn.db.genesis().id().find(&0).filter(|g| !g.done) {
         if !waited {
