@@ -267,6 +267,69 @@ impl Palettes {
     }
 }
 
+/// Make `toon`'s palette image and register it, by a command: the image goes into the toon's
+/// `ToonExt::tints` (binding 105).
+///
+/// [`Palettes`] is reached only through commands, made on first use, and is in no system's
+/// parameters: a resource registered when the app is built shifts every later component id, and
+/// that reordered which mesh a shared type material takes its recolour source from (`recolor`'s
+/// first mesh), so people without `slop` drew differently. This way they don't.
+pub fn register(commands: &mut Commands, toon: AssetId<crate::style::Toon>, spec: Spec) {
+    commands.queue(move |world: &mut World| {
+        let img = image(&mut world.resource_mut::<Assets<Image>>());
+        if let Some(mut t) = world.resource_mut::<Assets<crate::style::Toon>>().get_mut(toon) {
+            t.extension.tints = Some(img.clone());
+        }
+        world.get_resource_or_init::<Palettes>().add(toon, img, spec);
+    });
+}
+
+/// Register a palette material whose image is already made and set (`compose.rs`).
+pub fn register_made(commands: &mut Commands, toon: AssetId<crate::style::Toon>, image: Handle<Image>, spec: Spec) {
+    commands.queue(move |world: &mut World| {
+        world.get_resource_or_init::<Palettes>().add(toon, image, spec);
+    });
+}
+
+/// What a mesh's palette tag is worked out from: its colour (sRGB bytes) and, for a greying
+/// person's hair, the natural colour, the silver and how grey.
+#[derive(Clone, Copy, Debug)]
+pub struct TagSource {
+    pub colour: [u8; 3],
+    pub greying: Option<([u8; 3], [u8; 3], f32)>,
+}
+
+/// Tag `entity` from its palette material `toon`, by a command (as [`register`]): its entries
+/// placed, the grown toons touched so their bind groups take the new texels. A palette that
+/// refuses leaves the mesh untagged: it draws the profile's own swatches.
+pub fn tag_later(commands: &mut Commands, entity: Entity, toon: AssetId<crate::style::Toon>, src: TagSource) {
+    commands.queue(move |world: &mut World| {
+        if !world.contains_resource::<Palettes>() {
+            return;
+        }
+        let tag = world.resource_scope(|world, mut palettes: Mut<Palettes>| {
+            let mut images = world.resource_mut::<Assets<Image>>();
+            let t = match src.greying {
+                Some((n, s, g)) => {
+                    let n = palettes.place(toon, n, &mut images);
+                    let s = palettes.place(toon, s, &mut images);
+                    n.zip(s).map(|(n, s)| tag(n, s, g))
+                }
+                None => palettes.place(toon, src.colour, &mut images).map(|i| tag(i, i, 0.0)),
+            };
+            let grown = std::mem::take(&mut palettes.grown);
+            let mut toons = world.resource_mut::<Assets<crate::style::Toon>>();
+            for id in grown {
+                let _ = toons.get_mut(id);
+            }
+            t
+        });
+        if let (Some(tag), Ok(mut e)) = (tag, world.get_entity_mut(entity)) {
+            e.insert(bevy::mesh::MeshTag::new(tag));
+        }
+    });
+}
+
 /// A palette tag (`toon.wesl` `hand_colours`): the natural colour's and the silver's columns, how
 /// grey (0 to 1 in 8 bits), bit 24 (a character's colour) and bit 27 (a palette); bit 25 clear.
 pub fn tag(natural: u8, silver: u8, grey: f32) -> u32 {

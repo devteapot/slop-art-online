@@ -496,8 +496,6 @@ pub fn convert(
     mut glows: ResMut<NightGlows>,
     detail: Option<Res<crate::style::DetailLayers>>,
     palette: Res<Palette>,
-    mut palettes: ResMut<crate::characters::palette::Palettes>,
-    mut images: ResMut<Assets<Image>>,
     mut done: Local<(HashMap<(AssetId<StandardMaterial>, u32), AssetId<Toon>>, HashSet<AssetId<Mesh>>, HashMap<String, AssetId<Toon>>, HashSet<AssetId<Mesh>>)>,
 ) {
     for (e, mat, mesh, name, extras) in &q {
@@ -678,20 +676,19 @@ pub fn convert(
                             relative_ink = p.reference.map(|r| (r, p.color));
                         }
                     }
-                    // v1.3: a palette material's entries per hair colour, in its own image.
+                    // v1.3: a palette material's entries per hair colour, in its own image (made
+                    // by a command, so this system's access, and so the schedule, are as before).
                     let anchors = profile.and_then(|p| p.relative.clone()).unwrap_or_default();
                     let book = (!anchors.is_empty() || relative_ink.is_some()).then(|| {
-                        let image = crate::characters::palette::image(&mut images);
-                        toon.extension.tints = Some(image.clone());
                         toon.extension.params.palette = Vec4::new(if anchors.is_empty() { 0.0 } else { 1.0 }, if relative_ink.is_some() { 1.0 } else { 0.0 }, 0.0, 0.0);
-                        (image, crate::characters::palette::Spec { anchors, ink: relative_ink })
+                        crate::characters::palette::Spec { anchors, ink: relative_ink }
                     });
                     if let Some(layers) = painted {
                         crate::style::with_detail(&mut toon, layers);
                     }
                     let h = toons.add(toon);
-                    if let Some((image, spec)) = book {
-                        palettes.add(h.id(), image, spec);
+                    if let Some(spec) = book {
+                        crate::characters::palette::register(&mut commands, h.id(), spec);
                     }
                     h
                 });

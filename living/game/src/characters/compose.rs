@@ -445,6 +445,8 @@ pub struct Plans {
     /// A type's rest (bind) world matrix by joint name.
     rests: HashMap<String, Arc<HashMap<String, Mat4>>>,
     outlined: HashSet<AssetId<Mesh>>,
+    /// Palette materials made and not yet registered (`palette::register_made`, by `attach`).
+    pending: Vec<(AssetId<Toon>, Handle<Image>, super::palette::Spec)>,
     /// Toons that are a hair profile (`Kind::HandHair`): their meshes pack `_HIGHLIGHT`.
     hand: HashSet<AssetId<Toon>>,
 }
@@ -465,7 +467,6 @@ pub struct Composer<'w> {
     thumbs: Res<'w, super::Thumbs>,
     images: ResMut<'w, Assets<Image>>,
     tints: ResMut<'w, HairTints>,
-    palettes: ResMut<'w, super::palette::Palettes>,
 }
 
 impl Composer<'_> {
@@ -581,7 +582,7 @@ impl Composer<'_> {
                     self.tints.users.push(h.id());
                 }
                 if let Some((image, spec)) = palette {
-                    self.palettes.add(h.id(), image, spec);
+                    self.plans.pending.push((h.id(), image, spec));
                 }
                 if kind == Kind::HandHair {
                     self.plans.hand.insert(h.id());
@@ -817,6 +818,9 @@ pub fn attach(c: &mut Composer, commands: &mut Commands, e: Entity, type_file: &
                 n += 1;
             }
         }
+    }
+    for (toon, image, spec) in std::mem::take(&mut c.plans.pending) {
+        super::palette::register_made(commands, toon, image, spec);
     }
     debug!("compose: {name} wears {} on {type_file}: {n} meshes", styled.worn.iter().map(|w| w.file.rsplit('/').next().unwrap_or_default()).collect::<Vec<_>>().join(", "));
     n
