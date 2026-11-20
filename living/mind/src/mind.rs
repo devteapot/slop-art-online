@@ -1591,12 +1591,14 @@ impl Minds {
             let shared = tokio::runtime::Handle::current();
             std::thread::Builder::new().name("mind-checks".into()).spawn(move || {
                 // The checks start their work as tasks on the shared runtime.
+                // The first pass is at once, as the loop's interval ticked before (a consolidation
+                // due at the start runs before the first deliberations, not 2 s into them).
                 let _on = shared.enter();
                 let mut next = Instant::now();
                 loop {
+                    me.checks();
                     next += Duration::from_millis(2000);
                     std::thread::sleep(next.saturating_duration_since(Instant::now()));
-                    me.checks();
                 }
             })?;
         }
