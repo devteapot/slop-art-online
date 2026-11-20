@@ -29,6 +29,10 @@ and MemAvailable every second of the window, as tick_report.py reads it). `--no-
 logging (the uninstrumented cost). `--full-log` reads the replica's whole module log from the
 server's data directory instead of the CLI's tail, which drops lines when detail spans log tens
 of thousands a second; `span_report.py` reads it.
+
+`--keep-fighters SECS` (battle-laws): a sustained battle; every SECS s the fighters alive (`Fighter…`)
+are counted and the dead replaced one for one with `spawn_battle` (`result.json` `keeper_window`: the
+census at the window's start and end, its mean and minimum, the refills).
 """
 import argparse
 import json

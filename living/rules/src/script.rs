@@ -3470,13 +3470,20 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 10] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 14] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
     ("motion_tables_on", ValueOnly::Delivery),
     // battle-views: the mirror of a player's projections (`perception.rs`, `seen_character_copy`).
     ("characters_table_on", ValueOnly::Delivery),
+    // battle-laws (docs/COMBAT_PHASE.md, docs/BATTLE_LAWS.md §4), read live by the tick: the wakes
+    // `fighter_bystander_wakes`, the combat cadence `combat_eval_hz`, the sweeps' memory
+    // `sweep_keep_memory` and its check, each at its next tick.
+    ("fighter_bystander_wakes", ValueOnly::Delivery),
+    ("combat_eval_hz", ValueOnly::Delivery),
+    ("sweep_keep_memory", ValueOnly::Delivery),
+    ("sweep_keep_check", ValueOnly::Delivery),
     ("cover_sight_on", ValueOnly::Cover),
     ("cover_eye_height_m", ValueOnly::Cover),
     ("cover_brush_on", ValueOnly::Cover),
