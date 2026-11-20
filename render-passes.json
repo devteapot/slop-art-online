@@ -14,5 +14,21 @@
     "head": "446fffd3205ab6a8a90a226abcc624c26cb8a5d0",
     "host": "dev-box",
     "set": "79072c65d37f"
+  },
+  "bafddae65a5cb2e49856b97dee1bb28c0850bae5": {
+    "at": "2026-11-20T23:54:03+01:00",
+    "base": "65bf3740b4853edd44ef9f03fd61c2b64be2541e",
+    "cases": {
+      "hair": "pass",
+      "looks": "pass",
+      "seat": "red-on-main"
+    },
+    "evidence": "/home/carlid/.t3/worktrees/slop-art-online/render-roundtrip-pass/.local/living/verify/gate-1120233042-e69980",
+    "halves": [
+      "character"
+    ],
+    "head": "1d97840c0e424dfb019782643bff37cb5b068bdd",
+    "host": "dev-box",
+    "set": "79072c65d37f"
   }
 }
