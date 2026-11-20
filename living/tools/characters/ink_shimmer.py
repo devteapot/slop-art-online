@@ -92,11 +92,16 @@ def shots(clip, also=()):
 
 
 PERF = []
+# Variables passed to the client as well (a composed person's book, contract v1.3).
+EXTRA = {}
 
 
-def render(glb, out, binary, also=()):
-    clips = clips_of(glb)
-    clip = "idle" if "idle" in clips else (clips[0] if clips else None)
+def render(glb, out, binary, also=(), extra=None):
+    if glb.startswith("look:"):
+        clip = "idle"
+    else:
+        clips = clips_of(glb)
+        clip = "idle" if "idle" in clips else (clips[0] if clips else None)
     env = {k: v for k, v in os.environ.items() if not k.startswith("LIVING_GAME_")}
     env.update(LIVING_GAME_VIEW=glb, LIVING_GAME_VIEW_SHOTS=shots(clip, also), LIVING_GAME_VIEW_OUT=str(out), LIVING_GAME_HOUR="11", LIVING_GAME_DAY_MINUTES="0",
                LIVING_GAME_FILM="soft", LIVING_GAME_SETTINGS=str(out) + ".settings.json", LIVING_GAME_SIZE="1600x900", LIVING_GAME_SPRINGS="0", RUST_LOG="warn")
@@ -104,6 +109,8 @@ def render(glb, out, binary, also=()):
         env["LIVING_GAME_VIEW_CLIP"] = clip
     if PERF:
         env["LIVING_GAME_PERF"] = ",".join(PERF)
+    env.update(EXTRA)
+    env.update(extra or {})
     with open(str(out) + ".log", "w") as log:
         subprocess.run([str(binary)], env=env, stdout=log, stderr=subprocess.STDOUT, timeout=900, check=True)
 
@@ -349,7 +356,7 @@ def stills(d):
 
 def main(argv=None, tool="ink_shimmer"):
     ap = argparse.ArgumentParser(prog=tool, description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("glb", help="the inked file, as a path under living/game/assets (view/<file>.glb)")
+    ap.add_argument("glb", help="the inked file, as a path under living/game/assets (view/<file>.glb); or look:<key>, a composed person (contract v1.3) from the book (LIVING_GAME_LOOK_BOOK, passed on)")
     ap.add_argument("--slot", help="score only the ink of this slot's materials")
     ap.add_argument("--material", help="score only this material's ink")
     ap.add_argument("--fade", help="comma-separated fade_px values to score, one ink copy each")
@@ -362,10 +369,22 @@ def main(argv=None, tool="ink_shimmer"):
     ap.add_argument("--ink-stills", help="reuse an ink run's stills folder (without --fade)")
     a = ap.parse_args(argv)
     PERF[:] = [f for f in (a.perf or "").split(",") if f]
-    glb = os.path.relpath(a.glb, ASSETS) if os.path.isabs(a.glb) else a.glb
-    stem = Path(glb).stem
-    j, _ = read_glb(ASSETS / glb)
-    inks = inks_of(j, a.slot, a.material)
+    composed = a.glb.startswith("look:")
+    glb = a.glb if composed or not os.path.isabs(a.glb) else os.path.relpath(a.glb, ASSETS)
+    if composed:
+        # A composed person: their files are shared, so the reference is the same person with
+        # the targeted ink switched off in the client (docs/HANDMADE_COMPOSED.md, "The audit and
+        # tools"), not a copy.
+        if a.fade or a.material:
+            sys.exit(f"{tool}: --fade and --material need a file; a composed person is scored by slot")
+        if os.environ.get("LIVING_GAME_LOOK_BOOK"):
+            EXTRA["LIVING_GAME_LOOK_BOOK"] = os.environ["LIVING_GAME_LOOK_BOOK"]
+        stem = glb.replace(":", "_")
+        inks = {"composed": f"slot {a.slot or 'all'}"}
+    else:
+        stem = Path(glb).stem
+        j, _ = read_glb(ASSETS / glb)
+        inks = inks_of(j, a.slot, a.material)
     if not inks:
         sys.exit(f"{tool}: {glb} has no ink" + (f" on slot {a.slot!r}" if a.slot else "") + (f" on material {a.material!r}" if a.material else "") + ": nothing to compare")
     out = Path(a.out) if a.out else REPO / ".local" / "living" / ("hair-shimmer" if tool == "hair_shimmer" else "ink-shimmer") / stem / time.strftime("%Y%m%d-%H%M%S")
@@ -374,7 +393,9 @@ def main(argv=None, tool="ink_shimmer"):
     print(f"{tool}: {glb}: ink {inks}")
     hair = a.slot == "hair"
     fades = [float(v) for v in a.fade.split(",")] if a.fade else [None]
-    if not a.plain_stills:
+    if not a.plain_stills and composed:
+        render(glb, out / "plain", binary, a.also, {"LIVING_GAME_COMPOSED_SLOP": f"noink:{a.slot}" if a.slot else "noink"})
+    elif not a.plain_stills:
         plain = copy_with(glb, "-noink", a.slot, a.material)
         try:
             render(plain, out / "plain", binary, a.also)

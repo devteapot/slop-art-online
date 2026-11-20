@@ -204,6 +204,41 @@ pub struct Person {
     /// `colors.hair_natural` to `colors.hair_silver` by the hair file's `_GREY`.
     #[serde(default)]
     pub grey: f32,
+    /// A hero's hand-made whole file (contract v1.3, docs/HANDMADE_COMPOSED.md, "Heroes"):
+    /// `lookdev/heroes/<id>.glb`, drawn instead of composing when it is there ([`hero_file`]).
+    #[serde(default)]
+    pub hero_file: Option<String>,
+}
+
+/// Where hero files are, under the asset folder.
+pub const HEROES: &str = "lookdev/heroes";
+
+/// Whether a hero file's path is one the contract allows: `lookdev/heroes/<id>.glb`, no deeper.
+pub fn hero_path_ok(path: &str) -> bool {
+    path.strip_prefix(HEROES).and_then(|r| r.strip_prefix('/')).is_some_and(|f| f.ends_with(".glb") && f.len() > 4 && !f.contains('/') && !f.contains(".."))
+}
+
+/// The hero file a line draws instead of composing: its `hero_file` when the path is allowed,
+/// the file is on disk and declares a hand-made character this client reads; else None (one
+/// warning a file naming why, and the line is composed).
+pub fn hero_file(p: &Person) -> Option<String> {
+    let f = p.hero_file.as_deref()?;
+    let why = if !hero_path_ok(f) {
+        Some(format!("is not under {HEROES}/ as <id>.glb"))
+    } else if !exists(f) {
+        Some("is not on disk".to_string())
+    } else if crate::handmade::of(f).is_none() {
+        Some("does not declare a hand-made character this client reads".to_string())
+    } else {
+        None
+    };
+    match why {
+        Some(w) => {
+            warn_once(format!("compose: hero file {f} {w}; the line is composed"));
+            None
+        }
+        None => Some(f.to_string()),
+    }
 }
 
 /// How far `J_Fit_Belly` moves forward for a `belly` of 1 (metres in the file, along -Z).
@@ -277,6 +312,11 @@ fn warn_once(msg: String) {
 /// as it is.
 pub fn prepare(recipe: &Recipe, assets: &AssetServer) -> (Recipe, Option<Styled>) {
     let Some(p) = recipe.person.as_ref().filter(|_| enabled()) else { return (recipe.clone(), None) };
+    // A hero's whole file, at the line's height; nothing else of the line applies to it.
+    if let Some(f) = hero_file(p) {
+        let hero = Recipe { name: recipe.name.clone(), base: f, height: p.height, proportions: Default::default(), colors: Default::default(), outfit: BTreeMap::new(), identity: BTreeMap::new(), person: None };
+        return (hero, None);
+    }
     let base = format!("{TYPES}/{}.glb", p.kind);
     if !exists(&base) {
         warn_once(format!("compose: no type file {base}; {} is drawn from {}", recipe.name, recipe.base));
@@ -405,6 +445,8 @@ pub struct Plans {
     /// A type's rest (bind) world matrix by joint name.
     rests: HashMap<String, Arc<HashMap<String, Mat4>>>,
     outlined: HashSet<AssetId<Mesh>>,
+    /// Toons that are a hair profile (`Kind::HandHair`): their meshes pack `_HIGHLIGHT`.
+    hand: HashSet<AssetId<Toon>>,
 }
 
 #[derive(bevy::ecs::system::SystemParam)]
@@ -421,8 +463,9 @@ pub struct Composer<'w> {
     style: Res<'w, Style>,
     plans: ResMut<'w, Plans>,
     thumbs: Res<'w, super::Thumbs>,
-    images: Res<'w, Assets<Image>>,
+    images: ResMut<'w, Assets<Image>>,
     tints: ResMut<'w, HairTints>,
+    palettes: ResMut<'w, super::palette::Palettes>,
 }
 
 impl Composer<'_> {
@@ -448,6 +491,12 @@ impl Composer<'_> {
 
     /// The toon a style file's material takes: one already made that draws the same (the same
     /// content and source colour), else a new one. `sources` are the file's meshes in it.
+    ///
+    /// A file that opts in to `slop` (contract v1.3, docs/HANDMADE_COMPOSED.md) brings its
+    /// material's hair profile (on a material the name rule classes as hair) and ink: they join
+    /// the content, and such a material is shared by content alone (its colour comes from the
+    /// profile or the palette, not from the source colour). A file without `slop` keeps today's
+    /// key and sharing exactly.
     fn toon(&mut self, file: &str, name: &str, material: Option<&Handle<GltfMaterial>>, sources: &[Handle<Mesh>]) -> Handle<Toon> {
         let own = format!("{file}#{name}");
         if let Some(h) = self.plans.file_toons.get(&own) {
@@ -460,35 +509,86 @@ impl Composer<'_> {
         // file, else as skin; eyes and lines as face parts; clothes plain.
         let map = format!("{}.face.png", file.trim_end_matches(".glb"));
         let face_map = wants_face_map(name).then(|| crate::lookdev::face_map_files(&map).into_iter().find(|m| exists(m))).flatten();
-        let face = face_map.clone().map(|m| self.assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(m));
-        let kind = kind_of(name, face.is_some());
+        let kind = kind_of(name, face_map.is_some());
+        // v1.3: the file's own `slop` (nothing unless its scene opts in).
+        let slop = crate::handmade::composed_material(file, name);
+        let what = format!("{file} material {name:?}");
+        let profile = slop.hair.clone().filter(|_| kind == Kind::Hair);
+        let kind = if profile.is_some() { Kind::HandHair } else { kind };
+        let hair_map = profile.as_ref().and_then(|p| crate::handmade::highlight_map(file, p));
+        let ink = slop.ink.clone().filter(|_| slop.slot != Some(crate::handmade::Slot::Tint));
+        let ink_map = ink.as_ref().and_then(|p| {
+            let m = crate::handmade::ink_map(file, slop.slot, p);
+            if m.is_none() {
+                crate::handmade::warn_once(format!("compose: {what}: no ink map found (map {:?}, or the slot's <stem>.<slot>.ink.png): no ink is drawn", p.map));
+            }
+            m
+        });
+        let ink = ink.filter(|_| ink_map.is_some());
+        let opted = profile.is_some() || ink.is_some();
+        let linear = |assets: &AssetServer, f: &str| assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(f.to_string());
         // The source colour the recolour moves to a person's: over the file's meshes in this
         // material. Without it (a picture not yet readable) the material is the file's own and
         // `recolor` finds it from the first mesh, as for any character.
         let meshes: Vec<&Mesh> = sources.iter().filter_map(|m| self.meshes.get(m)).collect();
         let source = super::source_mean(&base, &meshes, &self.thumbs, &self.images);
-        let content = format!("{kind:?} {face_map:?} {base:?}");
-        let shared = source.filter(|_| !crate::perf::has("filestyles")).and_then(|src| {
-            self.plans.toons.get(&content)?.iter().find(|(m, _)| (*m - src).abs().max_element() < SAME_SOURCE).map(|(_, h)| h.clone())
-        });
+        let measured = meshes.first().and_then(|m| crate::handmade::metres_per_uv(m));
+        let slop_key = if opted { format!(" {profile:?} {hair_map:?} {ink:?} {ink_map:?}") } else { String::new() };
+        let content = format!("{kind:?} {face_map:?} {base:?}{slop_key}");
+        let shared = if opted {
+            self.plans.toons.get(&content).and_then(|v| v.first()).map(|(_, h)| h.clone())
+        } else {
+            source.filter(|_| !crate::perf::has("filestyles")).and_then(|src| self.plans.toons.get(&content)?.iter().find(|(m, _)| (*m - src).abs().max_element() < SAME_SOURCE).map(|(_, h)| h.clone()))
+        };
         let h = match shared {
             Some(h) => h,
             None => {
-                let mut toon = self.style.kind(base, kind, face);
+                // The face's shadow map, or a profile hair's mask, in the same binding (101).
+                let aux = face_map.as_deref().or(hair_map.as_deref()).map(|f| linear(&self.assets, f));
+                let mut toon = self.style.kind(base, kind, aux);
                 if let Some((recolor, from)) = source.map(super::recolor_source) {
                     toon.extension.params.recolor = recolor;
                     toon.extension.params.recolor_from = from;
+                }
+                if let Some(p) = &profile {
+                    p.apply(&mut toon.extension.params, hair_map.as_deref());
+                    toon.extension.params.hand_ink_range.w = p.ink_m_uv.or(measured).unwrap_or(0.0);
+                }
+                let mut relative_ink = None;
+                if let (Some(p), Some(map)) = (&ink, &ink_map) {
+                    if p.apply(&mut toon.extension.params, crate::handmade::has_green(map), p.m_uv.or(measured), &what) {
+                        toon.extension.ink = Some(linear(&self.assets, map));
+                        // slop.ink wins over a hair profile's own (v1.1) ink.
+                        toon.extension.params.hand_ink_range.z = 0.0;
+                        relative_ink = p.reference.map(|r| (r, p.color));
+                    }
                 }
                 // Hair greys lock by lock from the shared palette.
                 let hair = matches!(kind, Kind::Hair) && !name.contains("Overlay");
                 if hair {
                     toon.extension.tints = Some(self.tints.image.clone());
                 }
+                // v1.3: a palette material's entries per hair colour, in its own image (105).
+                let anchors = profile.as_ref().and_then(|p| p.relative.clone()).unwrap_or_default();
+                let palette = (!anchors.is_empty() || relative_ink.is_some()).then(|| {
+                    let image = super::palette::image(&mut self.images);
+                    toon.extension.tints = Some(image.clone());
+                    toon.extension.params.palette = Vec4::new(if anchors.is_empty() { 0.0 } else { 1.0 }, if relative_ink.is_some() { 1.0 } else { 0.0 }, 0.0, 0.0);
+                    (image, super::palette::Spec { anchors, ink: relative_ink })
+                });
                 let h = self.toons.add(toon);
                 if hair {
                     self.tints.users.push(h.id());
                 }
-                if let Some(src) = source {
+                if let Some((image, spec)) = palette {
+                    self.palettes.add(h.id(), image, spec);
+                }
+                if kind == Kind::HandHair {
+                    self.plans.hand.insert(h.id());
+                }
+                if opted {
+                    self.plans.toons.entry(content).or_default().push((Vec3::ZERO, h.clone()));
+                } else if let Some(src) = source {
                     self.plans.toons.entry(content).or_default().push((src, h.clone()));
                 }
                 h
@@ -577,18 +677,26 @@ impl Composer<'_> {
                 let mname = p.material.as_ref().map(name_of).unwrap_or_default();
                 let own = sources.get(&mname).map(|(near, far)| if near.is_empty() { far.clone() } else { near.clone() }).unwrap_or_default();
                 let toon = self.toon(&wear.file, &mname, p.material.as_ref(), &own);
+                let hand = self.plans.hand.contains(&toon.id());
                 if self.plans.outlined.insert(p.mesh.id()) {
                     if let Some(mut m) = self.meshes.get_mut(&p.mesh) {
                         crate::style::outline_normals(&mut m);
-                        // A hair mesh's greying and ring mask into its second UVs
-                        // ([`ATTRIBUTE_GREY`], [`ATTRIBUTE_RING`] as 1 + its value; 0 without).
-                        let ring = match m.remove_attribute(ATTRIBUTE_RING) {
-                            Some(bevy::mesh::VertexAttributeValues::Float32(r)) => Some(r),
-                            _ => None,
-                        };
-                        if let Some(bevy::mesh::VertexAttributeValues::Float32(g)) = m.remove_attribute(ATTRIBUTE_GREY) {
-                            let uv: Vec<[f32; 2]> = g.iter().enumerate().map(|(i, v)| [*v, ring.as_ref().and_then(|r| r.get(i)).map_or(0.0, |r| 1.0 + r.clamp(0.0, 1.0))]).collect();
-                            m.insert_attribute(Mesh::ATTRIBUTE_UV_1, uv);
+                        if hand {
+                            // A hair profile (v1.3): its highlight mask in the second UVs' y
+                            // (1 + `_HIGHLIGHT`), its greying in x; a profile has no ring.
+                            m.remove_attribute(ATTRIBUTE_RING);
+                            crate::handmade::pack_highlight(&mut m);
+                        } else {
+                            // A hair mesh's greying and ring mask into its second UVs
+                            // ([`ATTRIBUTE_GREY`], [`ATTRIBUTE_RING`] as 1 + its value; 0 without).
+                            let ring = match m.remove_attribute(ATTRIBUTE_RING) {
+                                Some(bevy::mesh::VertexAttributeValues::Float32(r)) => Some(r),
+                                _ => None,
+                            };
+                            if let Some(bevy::mesh::VertexAttributeValues::Float32(g)) = m.remove_attribute(ATTRIBUTE_GREY) {
+                                let uv: Vec<[f32; 2]> = g.iter().enumerate().map(|(i, v)| [*v, ring.as_ref().and_then(|r| r.get(i)).map_or(0.0, |r| 1.0 + r.clamp(0.0, 1.0))]).collect();
+                                m.insert_attribute(Mesh::ATTRIBUTE_UV_1, uv);
+                            }
                         }
                     }
                 }
@@ -753,6 +861,23 @@ mod tests {
             assert!(tints.place(0, [i as u8, (i >> 8) as u8, 1], &mut images).is_some());
         }
         assert_eq!(tints.place(0, [9, 9, 9], &mut images), None);
+    }
+
+    /// A hero line (contract v1.3): `hero_file` reads, enters no ordinary line, and only
+    /// `lookdev/heroes/<id>.glb` is allowed.
+    #[test]
+    fn a_hero_file_is_a_line_field_under_heroes() {
+        let p: Person = serde_json::from_str(r#"{"type": "hero-3f9a0c21", "height": 1.64, "hero_file": "lookdev/heroes/hero-3f9a0c21.glb"}"#).unwrap();
+        assert_eq!(p.hero_file.as_deref(), Some("lookdev/heroes/hero-3f9a0c21.glb"));
+        let q: Person = serde_json::from_str(r#"{"type": "adult-f-a", "height": 1.6}"#).unwrap();
+        assert_eq!(q.hero_file, None);
+        assert!(hero_path_ok("lookdev/heroes/hero-3f9a0c21.glb"));
+        for bad in ["characters/heroes/own-cora-live.glb", "lookdev/heroes/a/b.glb", "lookdev/heroes/../types/adult-f-a.glb", "lookdev/heroes/x.gltf", "lookdev/heroes/.glb", "lookdev/heroesx/a.glb"] {
+            assert!(!hero_path_ok(bad), "{bad}");
+        }
+        // A file that is not there: the line is composed.
+        let missing = Person { hero_file: Some("lookdev/heroes/hero-00000000.glb".into()), ..q };
+        assert_eq!(hero_file(&missing), None);
     }
 
     /// Composing is the default; only `LIVING_GAME_COMPOSE=0` turns it off.

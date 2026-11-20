@@ -82,7 +82,9 @@ POOL, DECOR = 128, 96
 # A cloth's name (person_params.CLOTH) as the one colour word a glance gives it: ten cloths, nine words.
 CLOTH_WORDS = dict(oilskin="yellow", tarred="black", olive="green", canvas="tan", blue="blue", red="red", green="green", cream="cream", navy="navy", heather="purple")
 # The fields of a line the client draws: what a line's key is the hash of, and all the book keeps.
-DRAWN = ("type", "height", "proportions", "identity", "colors", "styles", "belly", "grey")
+# `hero_file` (contract v1.3, docs/HANDMADE_COMPOSED.md "Heroes") is drawn only when present, so no
+# existing line's key changes.
+DRAWN = ("type", "height", "proportions", "identity", "colors", "styles", "belly", "grey", "hero_file")
 # Of the decor's people, how many are drawn at each band: the island's background, as a town's ages run.
 DECOR_BANDS = (1, 2, 3, 3, 3, 3, 3, 4)
 

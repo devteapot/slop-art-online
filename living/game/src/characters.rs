@@ -69,6 +69,7 @@ pub mod compose;
 pub mod seen;
 pub mod identity;
 pub mod outfit;
+pub mod palette;
 
 use crate::lookdev::{Converted, Fitted, Model};
 use crate::style::Toon;
@@ -643,6 +644,7 @@ impl Plugin for CharactersPlugin {
             .add_observer(compose::on_ready)
             .init_resource::<compose::Plans>()
             .init_resource::<compose::HairTints>()
+            .init_resource::<palette::Palettes>()
             .init_resource::<Thumbs>()
             .add_systems(PreUpdate, (place_scenes, force_rebuild, thumb_pictures))
             .add_systems(Startup, gpu_formats)
@@ -1038,6 +1040,32 @@ fn grey_tag(c: &Character, mesh: &Mesh, toon: &Toon, tints: &mut compose::HairTi
     Some(n | s << 8 | g << 16 | 1 << 24 | 1 << 26)
 }
 
+/// A mesh's palette tag (contract v1.3, `palette::tag`) on material `toon`: its entry for the
+/// colour `srgb`, or, for a greying person's hair (`hair`, with `hair_natural`, `hair_silver` and
+/// `grey`), the natural colour's and the silver's entries. None when the palette refuses.
+fn palette_tag(c: &Character, toon: AssetId<Toon>, hair: bool, srgb: Srgba, palettes: &mut palette::Palettes, images: &mut Assets<Image>) -> Option<u32> {
+    let bytes = |c: Srgba| {
+        let b = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+        [b(c.red), b(c.green), b(c.blue)]
+    };
+    let greying = c.recipe.person.as_ref().filter(|p| hair && p.grey > 0.0).and_then(|p| {
+        let n = Srgba::hex(p.colors.hair_natural.as_ref()?).ok()?;
+        let s = Srgba::hex(p.colors.hair_silver.as_ref()?).ok()?;
+        Some((bytes(n), bytes(s), p.grey))
+    });
+    match greying {
+        Some((n, s, g)) => {
+            let n = palettes.place(toon, n, images)?;
+            let s = palettes.place(toon, s, images)?;
+            Some(palette::tag(n, s, g))
+        }
+        None => {
+            let i = palettes.place(toon, bytes(srgb), images)?;
+            Some(palette::tag(i, i, 0.0))
+        }
+    }
+}
+
 /// A recipe colour packed for a mesh's tag: sRGB bytes, bit 24 marks it set (`toon.wesl`
 /// `recolor`).
 fn tag_color(c: Srgba) -> u32 {
@@ -1280,6 +1308,7 @@ pub fn recolor(
     thumbs: Res<Thumbs>,
     meshes: Res<Assets<Mesh>>,
     mut tints: ResMut<compose::HairTints>,
+    mut palettes: ResMut<palette::Palettes>,
     mut images: ResMut<Assets<Image>>,
     mut ready: Local<std::collections::HashSet<AssetId<Toon>>>,
 ) {
@@ -1307,6 +1336,14 @@ pub fn recolor(
             commands.entity(e).insert(Recolored);
             continue;
         };
+        // A palette material (contract v1.3, `palette.rs`): the mesh's tag names its entries for
+        // this colour (a greying person's hair, the natural colour's and the silver's).
+        if palettes.books.contains_key(&mat.0.id()) {
+            if let Some(tag) = owner.and_then(|c| palette_tag(c, mat.0.id(), piece.is_none() && name.is_some_and(|n| n.0.contains("_HAIR") && !n.0.contains("Overlay")), srgb, &mut palettes, &mut images)) {
+                commands.entity(e).insert((bevy::mesh::MeshTag::new(tag), Recolored));
+                continue;
+            }
+        }
         if !ready.contains(&mat.0.id()) {
             let Some(toon) = toons.get(&mat.0) else { continue };
             // A material given its source colour when it was made (a composed person's style
@@ -1341,6 +1378,9 @@ pub fn recolor(
         for id in tints.users.clone() {
             let _ = toons.get_mut(id);
         }
+    }
+    for id in std::mem::take(&mut palettes.grown) {
+        let _ = toons.get_mut(id);
     }
 }
 
