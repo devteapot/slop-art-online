@@ -11,6 +11,7 @@ The [performance contract](PERFORMANCE_CONTRACT.md) asks for 200 local fighters 
   - With profiling spans it uses 240–270 ms/s: tick p50 3.6–4.2 ms, p99 8–10 ms, at most 5 late slots a minute.
   - The fighters' 15 Hz evaluations are the largest part (57% with spans). Their cost is per fighter: 61–70 µs an evaluation at about 142 engaged fighters and 69–72 µs at about 70. Nothing measured grows as fighters squared at this density. The scans of the crowd (scenes, nearest target) cost about the same per call with 48 or 84 creatures in a scene, and a blow has about 25 onlookers with 70 or 140 fighters. The tick is about 1.5 ms per engaged fighter-second uninstrumented (1.8 with spans). The fight thins without refills (about 190 → 100 engaged over the window). At a sustained 200 the tick body would be about 300 ms/s uninstrumented.
 - **(b) The viewers are the blocker, and their cost goes by (viewer × creature in sight) pairs.** At 16 viewers on the 10 m ring the world still runs at 59 ticks/s, but with 56–99 late slots a minute and a tick p99 of 11–13 ms. Each viewer adds about 12.4 ms/s to the database thread. That splits into views 6.7, the whole call's remainder (commit, read sets, subscription evaluation) 2.2, sweeps 1.7, frames 1.6 and cues 0.2 ms/s. That is about 130 µs a second for each pair. At 216 viewers on the same ring each viewer sees about 160 creatures, about 35,000 pairs. The thread saturates at 1.7–1.9 ticks/s (five pinned runs), with a tick taking about 530 ms: tick WASM 445–459 ms/s (perception sweeps 275), views 302–313 ms/s, and about 200 ms/s of the remaining overhead. Every reducer, including the keep-alive fixture's `admin_set_vitals`, waits 240–320 ms behind a tick. 16–30 viewers die in each window despite the keep-alive.
+- **Step 2, the exact sweep fixes, measured** ([results](#step-2-results-exact-sweep-fixes), branch `sweep-exact`): a sweep at 216 viewers on the 10 m ring costs 574–634 µs against 689–711 (8–19% less), on the far ring 3–9% less, and no measurable change at 16 viewers. What players and minds perceive is unchanged, checked in the same tick for every sweep. The expected 30–45% rested on a misreading of hearing's cost.
 - **The gap is about 15–20× per pair.** To fit 216 viewers and 200 fighters at 60 Hz, the per-viewer side has about 300–360 ms/s. That is roughly 7–10 µs a pair-second against about 130 today. The built table delivery (dev-box's `seen_body_copy` and `seen_character_copy`) removes about a third of the view cost. Converting the remaining views and making the sweep exact-cheaper might reach 3–4×. The rest needs fewer pairs or fewer refreshes, and every such option changes what players perceive or when, so it is a **law** for the owner.
 
 ## Fixture and method
@@ -485,7 +486,7 @@ Shares are of the AI-only tick (253 ms/s with detail spans, 0 viewers) or of the
 6. **Projection by memo.** About 6 µs a re-projection, about 53 a sweep at the 10 m ring, of which about 23 are newcomers. Memoize the projection on its inputs (the law's input, health band, stage, knowledge epoch) per tick across viewers: many viewers project the same target with the same input in the same tick. Exact by construction, checkable with the existing `regard_cache_check`. Expected: a large share of `sweep.project` (326 µs).
 7. **Row churn.** Sight changes as viewers turn and fighters move: about 23 in and 23 out a sweep on the 10 m ring, 118 µs. Batch the perceived-row and copy writes, and keep a creature's copy across a short absence instead of a delete and an insert. The second is not exact for what a client sees (a copy lingers), so it is a **law**.
 
-   **Expected from 5–6 (exact):** about 30–45% of the sweep. Sweeps go from about 1.7 to about 1.0 ms/s per viewer.
+   **Expected from 5–6 (exact):** about 30–45% of the sweep. Sweeps go from about 1.7 to about 1.0 ms/s per viewer. **Measured** ([Step 2 results](#step-2-results-exact-sweep-fixes)): 8–19% of the sweep at 216 viewers on the 10 m ring, 3–9% on the far ring, none measurable at 16. Hearing's second gather was 9 µs, not about 90; the rest of a sweep is mostly its own row reads and writes.
 
 ### The AI tick body: exact trims (Spark)
 
@@ -525,6 +526,167 @@ The estimates assume costs stay proportional to pairs and refreshes. Each step's
 - Each paired with this note's runs, or rerun against main in the same window.
 - Plus a sustained fixture that holds 200 fighters. `spawn_battle` thins to about 100 within the window, so `battle_viewers.py` needs a keeper, as `battle_diag.py` has.
 - Liveness stays a result: deaths and heals, and the keep-alive's wait behind ticks.
+
+## Step 2 results: exact sweep fixes
+
+Status: measured, 2026-11-20, branch `sweep-exact` (Spark), cut from `combat-phase` `836a27be` and later merged with `origin/main`. Steps 5 and 6 of the plan, plus the other exact savings the per-viewer sweep's spans showed. Nothing a player or a mind perceives changes, nor when.
+
+**In short.** At 216 viewers on the 10 m ring a sweep costs 574–634 µs against 689–711 on main with combat-phase: 8–19% less. `tick.perception` falls from 273–280 to 244–254 ms/s, and the world runs 1.83–1.99 ticks/s against 1.83. On the 26–32 m ring a sweep costs 204–209 µs against 216–223 (3–9% less). At 16 viewers (one or two sweeps a tick) there is no measurable change. The plan's expected 30–45% is not reached. Its split of a sweep (the [T3 table](#t3-viewer-side-spans-and-views-l2-pinned)) put about 109 µs of hearing in "a second gather of the crowd". Finer spans show that gather costs 8.7 µs at the 10 m ring and 2.5 µs at the far ring. Hearing's cost is reading the viewer's own `heard` rows and writing the changes. Most of what remains in a sweep is likewise row reads and writes that an exact change cannot remove.
+
+### What changed (`perception.rs`, `common.rs`)
+
+- **One gather for sight and hearing.** A sweep gathers once, within the larger of the sight gather and the hearing reach (`common::creatures_near_filed`, unsorted, each creature with the chunk it is filed under). Sight keeps those within its gather whose chunk its own gather covers. Hearing keeps those within hearing, not seen, whose chunk the hearing reach covers. The chunk test is what makes this exact: a body is filed under the chunk where its segment began, so near a chunk edge it can stand in a neighbour that a smaller gather does not visit. Hearing is still told only while the senses have a field, as `heard` does.
+- **Hearing matches rows by target** (a map, first row for each target, as the linear search found) instead of a search of the viewer's rows for each sound.
+- **A tick's sweeps share** (`Shared`): each creature's health and record read once, and each projection worked out once per target and answer of the law (`project_shared`). A projection is a function of the target's record, health and look and the law's answer alone (`project_as`), and no sweep writes any of these. The memos run only when two or more viewers sweep in the tick (a lone sweep would fill them for no one).
+- **The law's input once per kind.** Within a viewer's sweep, a target with no reveal held has nothing revealed. Its input is therefore one of a few (target kind, name known, itself), built once each, and the law's answer and band at each whole metre are asked once per input. `law_band_of` no longer clones its key on a hit. A reveal is read only for a target it holds for (`revealing`, read once a sweep).
+- **No health read where the law hides health** (Cullet past `known_within`): the row's fields are the same whatever the health is.
+- **An integer hasher for the sweep's own id maps** (`IdHasher`): the kept rows, the previously perceived set, the tick's memos, hearing's maps. Only maps whose order of iteration decides no row's content; at most it orders the deletes of rows leaving sight.
+- **The kept sweep projects, then writes.** A projection reads none of the rows the writes touch, so the rows written are as before. Finer detail spans: `sight.gather`, `hear.read`, `rows.out`, `rows.in`, `project.test`, `project.regard`, `project.as`, `project.write`, `project.show`. New counters while profiling: `hear:now|rows|update|insert|delete`, `project:insert|update|same`, `sweep:health_read`, `sweep:dist_read`.
+
+No table, reducer, view, subscription or law changed. The memos are local values in one tick's call. Module memory across transactions is unchanged (`KEPT`, `HEARD_LAST`), and so are its rollback rules.
+
+### Exactness
+
+A cross-build per-tick diff of perceived rows is not deterministic here: a tick's `now` comes from the host's clock, and `ctx.rng()` draws from the transaction. The same seeded battle therefore diverges between two runs within a second, on either build. Instead, every sweep compares the new path with the old one in the same tick, on the same state, under the existing `regard_cache_check` law:
+
+- each sweep's one gather against the two it replaces: `creatures_near` within the sight gather, and `heard` (the old function, kept as the reference). They must hold the same creatures, at bit-identical positions and distances, with the same kinds;
+- each projection given from the tick's memo against a fresh `project_as`;
+- every row of every viewer after each kept sweep against a fresh `project` (the existing `check_rows`: one row per creature seen and one for the viewer, each equal to projecting it afresh);
+- every shared answer against a fresh one (the existing regard-answers check).
+
+The results go in `sweep exact: gathers_checked=… sight_differed=… heard_differed=… memo=… memo_compared=… memo_differed=…`, beside `sweep kept: … compared=… differed=…`.
+
+| Run (battle_viewers fixture, `regard_cache_check=true`, 30 s window) | Sweeps' gathers compared | Projections from the memo compared | Rows and shared answers compared | Differed |
+|---|---:|---:|---:|---:|
+| first build (hearing, memo, law input), 216 viewers, 10 m ring | 14,639 | 538,736 | – | 0 |
+| `sx`, 216 viewers, 10 m ring | 15,045 | 553,599 | 2,408,995 | 0 |
+| `sx`, 216 viewers, 26–32 m ring | 38,286 | 269,274 | 2,134,513 | 0 |
+| final, 216 viewers, 10 m ring | 15,105 | 546,504 | 3,327,643 | 0 |
+| final, 16 viewers, 10 m ring | 4,491 | 4,268 | 690,881 | 0 |
+
+(With 16 viewers the memo runs only in the ticks where two or more sweep.) The scenes below drive every path again on scripted worlds. Row ids (`projected.id`, auto-increment) can differ between any two runs: the order of a `HashSet`'s iteration, which orders the inserts, already depends on the instance's history in 2.14.1's WASM (`RandomState` with fixed keys, incremented per map). Rows are compared by (viewer, body) and content.
+
+### Measurement
+
+The [fixture](#fixture-and-method) as above. `battle_viewers.py`, a fresh Cullet world per run, 200 AI fighters, `--tiers --cues --paused-placement --keep-alive 0.5 --fresh-every 3`. Density case `--ring 10,10` with 216 viewers; clean case `--ring 26,32` with 216; and 16 viewers on the 10 m ring. 20 s warm-up and a 60 s window. L0 is `--no-profile`; L2 is `--full-log --law profile_detail=true`.
+
+- **Arms.** `cp` is the merged `combat-phase` head `836a27be` (main `b6aa7489` with the diagnosis). `sx` is `sweep-exact` at `74ddd30e`. The final build is `a51d6b55` (as `sx`, with the memos only when two or more viewers sweep in a tick). Built with rustc 1.99.1, the Cullet seed compiled in.
+- **Order.** Series `ab` interleaved `cp` and `sx` arm by arm, twice (24 runs). Series `conf` interleaved `cp` and the final build at 16 viewers (L0 and L2), twice, with two runs of the final build at 216 r10 L2.
+- **Placement.** Private server `slop-sweep-20261120`, pinned to the X925 cores (`docker update --cpuset-cpus 5-9,15-19`) before the first run. Each run's start line in `series.log` records the cpuset (`5-9,15-19` in all 34). Which core the database thread ran on was not sampled.
+- **Discipline.** Every series held `~/slop-mq/battle.lock`. Each run started only when `flock -n ~/slop-mq/lock true` succeeded (the merge queue held it 04:31–05:02, 05:18–05:31 and 05:47–06:01) and MemAvailable was ≥ 40 GB and the disk ≥ 45 GB free. Host load per run is in the table (1-minute load, median of the window). The proofs ran on a second private server pinned to the A725 cores, with builds on those cores too.
+
+#### T4: A/B per arm (ranges over runs)
+
+| Arm | Build | Runs | Ticks/s | Tick WASM ms/s | Whole tick call ms/s | Views ms/s | `tick.perception` ms/s | µs a sweep | Seen a sweep | µs a sweep per creature seen | Per viewer ms/s | Viewer deaths / heals (window) | Host load (median) |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
+| v216r10-L2 | `cp` | 2 | 1.83 | 456.1–456.3 | 958.1–959.3 | 302.1–306.8 | 272.9–280.0 | 689–711 | 156 | 4.42–4.57 | – | 22 / 62, 28 / 56 | 5.5, 3.1 |
+| v216r10-L2 | `sx` | 2 | 1.83–1.91 | 432.9–434.7 | 956.2–958.1 | 318.6–323.3 | 248.5–253.6 | 613–634 | 152–165 | 3.85–4.02 | – | 31 / 64, 28 / 59 | 4.4, 7.9 |
+| v216r10-L2 | final | 2 | 1.91–1.99 | 424.5–435.0 | 962.7–963.7 | 325.1–328.2 | 243.7–246.5 | 574–600 | 151–157 | 3.80–3.81 | – | 20 / 61, 23 / 68 | 5.7, 5.0 |
+| v216r10-L0 | `cp` | 2 | 1.45–1.75 | 411.8–447.4 | 960.8–967.1 | 254.3–315.1 | – | – | – | – | – | 29 / 27, 29 / 59 | 10.0, 3.6 |
+| v216r10-L0 | `sx` | 2 | 1.76–2.01 | 416.1–430.0 | 962.0–962.1 | 322.7–333.6 | – | – | – | – | – | 24 / 52, 27 / 67 | 37.7, 3.5 |
+| v216r26-L2 | `cp` | 2 | 12.53–12.99 | 425.8–435.4 | 865.3–876.1 | 255.3–260.0 | 220.1–224.9 | 216–223 | 55–56 | 3.90–3.96 | – | 0 / 71, 0 / 113 | 10.5, 3.7 |
+| v216r26-L2 | `sx` | 2 | 11.81–12.78 | 421.4–423.7 | 875.5–879.8 | 257.9–267.5 | 208.1–210.7 | 204–209 | 56–59 | 3.52–3.67 | – | 0 / 110, 0 / 128 | 6.2, 2.4 |
+| v16r10-L2 | `cp` | 4 | 58.07–59.02 | 319.4–348.3 | 466.8–505.3 | 106.9–115.3 | 26.0–30.1 | 320–367 | 83–93 | 3.70–4.21 | – | 0 / 148, 0 / 173, 0 / 152, 0 / 136 | 4.3, 2.2, 10.6, 6.5 |
+| v16r10-L2 | `sx` | 2 | 58.97–59.02 | 328.4–335.8 | 480.7–496.2 | 110.5–117.6 | 28.1–28.5 | 342–347 | 88–91 | 3.82–3.90 | – | 0 / 163, 0 / 176 | 5.5, 5.0 |
+| v16r10-L2 | final | 2 | 58.47–58.82 | 337.6–340.0 | 486.4–499.0 | 101.5–117.2 | 29.0–29.6 | 353–360 | 82–94 | 3.75–4.36 | – | 0 / 146, 0 / 153 | 7.7, 25.4 |
+| v16r10-L0 | `cp` | 4 | 58.74–59.35 | 275.0–305.0 | 435.7–476.5 | 110.9–124.5 | – | – | – | – | 13.4–15.9 | 0 / 141, 0 / 198, 0 / 147, 0 / 197 | 31.8, 4.4, 7.5, 14.3 |
+| v16r10-L0 | `sx` | 2 | 58.65–59.01 | 276.6–311.0 | 437.3–484.6 | 117.0–123.8 | – | – | – | – | 13.1–16.1 | 0 / 178, 0 / 163 | 21.9, 4.4 |
+| v16r10-L0 | final | 2 | 59.39 | 261.4–281.8 | 420.7–437.5 | 113.1–116.8 | – | – | – | – | 12.1–13.1 | 0 / 175, 0 / 150 | 6.1, 10.4 |
+| v0-L0 | `cp` | 2 | 60.25–60.40 | 212.1–215.5 | 219.8–224.1 | 0.0 | – | – | – | – | – | – | 19.5, 3.5 |
+| v0-L0 | `sx` | 2 | 60.26–60.37 | 218.7–219.1 | 227.2–227.4 | 0.0 | – | – | – | – | – | – | 11.7, 3.9 |
+
+Per viewer is (whole tick call − the same build's 0-viewer call) / 16, at L0; the final build is taken against `sx`'s 0-viewer arm (with no viewer nothing it changed runs). The 16-viewer arms differ between runs by how much the viewers are fought over (heals 136–198 a window), which moves the whole call by ±20 ms/s; per creature seen the sweep is the same.
+
+#### T5: the sweep's parts (µs a sweep, L2; `cp` has the parts the diagnosis spanned)
+
+| Part | 216 r10 `cp` | 216 r10 `sx` | 216 r10 final | 216 r26 `cp` | 216 r26 `sx` | 16 r10 `cp` | 16 r10 `sx` | 16 r10 final |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `sweep.one` | 689–711 | 613–634 | 574–600 | 216–223 | 204–209 | 320–367 | 342–347 | 353–360 |
+| `sweep.setup` | 19–20 | 19 | 18–19 | 9–10 | 9 | 15–19 | 16 | 16–17 |
+| `sight.player_candidates` | 97–98 | 80 | 78–80 | 71–72 | 60–62 | 45–48 | 39–42 | 41–42 |
+| `sweep.hear` | 98–99 | 94–102 | 86–92 | 17–18 | 19 | 56–62 | 56–57 | 58–62 |
+| `sweep.rows` | 112–116 | 109–113 | 102–108 | 26–27 | 28–29 | 33–37 | 36–38 | 39–40 |
+| `sweep.scene` | 49–51 | 52–58 | 48–50 | 8 | 8–9 | 32–40 | 36–37 | 38–39 |
+| `sweep.project` | 303–320 | 252–256 | 233–244 | 78–79 | 72–75 | 129–150 | 150 | 150–151 |
+
+#### T6: the finer split (µs a sweep)
+
+The "before" columns are one run each of `cp` with the finer spans and no other change (`fa5d4678`, series `split`, host load 16–20 against 2–8 for most of `ab`). The "after" columns are the `sx` runs of series `ab`. Read the parts' shares from it; T5 holds the A/B.
+
+| Part | 216 r10 before | 216 r10 after | 216 r26 before | 216 r26 after | 16 r10 before | 16 r10 after |
+|---|---:|---:|---:|---:|---:|---:|
+| `sweep.one` | 687 | 613–634 | 234 | 204–209 | 395 | 342–347 |
+| `sweep.setup` | 20 | 19 | 10 | 9 | 19 | 16 |
+| `sight.player_candidates` | 97 | 79–80 | 73 | 60–61 | 48 | 39–42 |
+| `sight.gather` | 17 | 6 | 13 | 5–6 | 8 | 5 |
+| `sweep.hear` | 96 | 94–102 | 19 | 19 | 66 | 56–57 |
+| `hear.read` | – | 21–23 | – | 6–7 | – | 17–18 |
+| `sweep.rows` | 108 | 109–113 | 28 | 28–29 | 42 | 36–38 |
+| `rows.out` | 38 | 37–40 | 9 | 9–10 | 17 | 14 |
+| `rows.in` | (70) | 65–67 | (19) | 15–16 | (26) | 18–19 |
+| `sweep.scene` | 50 | 51–58 | 8 | 8–9 | 45 | 36–37 |
+| `sweep.project` | 306 | 252–255 | 87 | 72–75 | 165 | 150 |
+| `project.test` | 72 | 66 | 27 | 21–23 | 76 | 67–72 |
+| `project.regard` | 62 | 37 | 16 | 11 | 22 | 18–19 |
+| `project.as` | 40 | 11–13 | 11 | 7 | 17 | 16–17 |
+| `project.write` | 64 | 65–68 | 16 | 15–16 | 22 | 20–21 |
+| `project.show` | 59 | 62–66 | 12 | 12–13 | 19 | 16–17 |
+
+`rows.in` in the spans build was scoped wrongly: it ran on to the end of the sweep, over the scene and the projections. The bracketed values are `sweep.rows` less `rows.out`.
+
+### What the finer split says
+
+- **Hearing (86–102 µs a sweep at 216 r10, 56–62 at 16).** The second gather was 9 µs at the 10 m ring and is gone (`sight.gather` also fell from 17 to 6 µs: it no longer sorts). The rest is the viewer's `heard` rows:
+  - reading them: `hear.read`, 21–23 µs for about 100 rows at 216 r10, 17–18 µs for about 63 at 16;
+  - writing what changed: at 16 viewers, per sweep, 46–48 sounds, about 5 bearing or band updates, 6 new and 7 gone.
+  The by-target match saved about 5 µs. Fewer reads would need the rows in module memory, across transactions. That is the `KEPT` pattern, exact only while every writer marks it.
+- **The change test (`project.test`, 66–72 µs).** About 0.4 µs a seen creature with health warm (216 viewers sweeping in one tick). At 16 viewers, health is read cold in almost every sweep: 108 `vitals` reads for 137 seen. Neither the hasher nor skipping hidden health moved it measurably at the 10 m ring, where Cullet's `known_within` (24 m) covers almost everyone.
+- **Projections (`project.regard` 62 → 37 µs, `project.as` 40 → 11–13 µs at 216 r10).** The memos and the input built once per kind remove most of what the law and the projection cost. Writes (`project.write`, 62–68 µs) and newcomers' fighter and doing copies (`project.show`, 59–66 µs, `frame.rs`) are writes and stay. At 16 viewers, 7.5 of the 9.5 re-projections a sweep are newcomers, each a row insert (`project:insert`).
+- **Row churn (`sweep.rows` about 110 µs at 216 r10).** Perceived rows in and out, and their motion copies: writes, unchanged.
+
+So at 60 Hz with few viewers in a tick, the exact savings found here are small. The per-viewer cost is row I/O: reading what the viewer had (perceived, heard, projected rows) and writing what changed.
+
+### What next, each for its owner
+
+- **Exact, dev-box (`frame.rs`).** `show_fighter` reads back the projection just written for each newcomer (`perceived_band`). The kept sweep holds that band, so passing it in would save one row read a newcomer. And `deliver` could take the sweep's health readings for the same tick (same formula, no write between); today it reads them again.
+- **Module memory across transactions (Spark, needs a decision).** Keep each viewer's `heard` rows and the tick-to-tick health readings in memory, like `KEPT`. Exact only while every writer marks it; `KEPT_REFRESH_SWEEPS` bounds a missed mark. That is the same bounded imprecision the kept sweep accepts, so it is the coordinator's call, not an exact fix.
+- **Fewer pairs or refreshes:** the laws in [What exact work cannot reach](#what-exact-work-cannot-reach-decisions-for-the-owner-each-a-law-off-by-default-measured-before-it-is-proposed), unchanged.
+
+### Proofs
+
+On the merged head `eed2505e` (the final build with `origin/main` `8031d785` merged in; main's changes since the base touch no file of this change), on a second private server `slop-sweep-verify-20261120` pinned to the A725 cores. Fake model only, no Neo4j.
+
+| Surface | Scene | Result |
+|---|---|---|
+| exactness | the same-tick checks above, under `regard_cache_check` | 0 differed in every run (87,677 sweeps' gathers, 1.91 M memo projections) |
+| verify-core | `tick`, `sight`, `senses`, `refusal` (default world) | pass (6, 6, 7, 4 checks) |
+| verify-core | `skirmish` (island) | pass (8) |
+| verify-core | `sweep_marks` (Cullet) | pass (6) |
+| verify-core | `sweep_kept`, `sweep_rollback` (Cullet) | 0 rows differed, but each fails its volume threshold: 524 rows compared (needs 1,000) and 369 (needs 500). `cp` fails both the same way on this server (526 and 357), as does `sx` (536 and 363). The cause is this server and its CLI log tail, not the change. |
+| verify-client | `cues` with `near_tier`, `motion_tables` | pass (22, 7, 27) |
+| verify-player | `combat --scene all` (island) | 54 of 54 |
+| verify-player | `combat --scene shot`, alone | `sx` 2 of 5 and `cp` 3 of 5, failing the same check: the unseen archer's arrow did not strike within 12 s (no line, `hurt_by` still the near archer). The `shot` scene is a known flake in staged geometry (scene gate). |
+| verify-player | `fov` (heard and not seen, `heard_sounds`) | `sx` 1 of 1. Merged head: 3 of 4. The failing run (12 of 18) never saw R, either way, in a placement found at the sixth try. Two reruns passed 18 of 18, and a third passed with `regard_cache_check` on (111 sweeps' gathers compared, none differed). |
+| build | `just living-check` | ok on `74ddd30e` (1,266 s) and on `eed2505e` (734 s) |
+
+Not covered:
+- verify-minds and verify-knowledge. Minds' percepts and scenes (`Sensing`, `heard`, `project`) are unchanged code, but their scenes were not run.
+- The scene gate as a whole.
+- A sustained 200-fighter battle, and the 30-minute and 8-hour gates.
+- Real clients' input rates.
+- These numbers are one host's A/B. They do not establish acceptance or capacity.
+
+### SpacetimeDB documentation
+
+Read 2026-11-20 (docs version 2.0.0; the pinned server and crates are 2.14.1):
+- [Reducers](https://spacetimedb.com/docs/functions/reducers/): "Every reducer runs inside a database transaction"; on an error all of its changes are rolled back. "Global and Static Variables Are Undefined Behavior": module-level state is not guaranteed between calls, a rolled-back transaction's change to it "may remain", and a reducer may run in a fresh instance or concurrently in another.
+  - The design follows from this. The new memos (`Shared`) are local values within one tick's call, made at its sweep and dropped at its end, so neither rollback nor another instance can carry them.
+  - Module memory across calls is unchanged: `KEPT` and `HEARD_LAST`, with their tick-continuity clearing ([PERCEPTION.md](PERCEPTION.md#module-memory-and-rollback)). Only the hasher of their maps changed.
+- No table, index, view, subscription or event table changed, so the data paths are as in the diagnosis. The same rows are read and written in the same order, minus repeated reads of `character`, `vitals`, `reveal` and the second chunk gather within one tick.
+
+### Evidence
+
+`~/slop-evidence/sweep-exact-20261120.tar.zst` and `.sha256`. It holds the series (`split`, `split1`, `ab`, `conf`: each run's `result.json`, `metrics.json`, `threads.json`, `ticks.json`, `load.log` and `module.log`, plus `series.log` and `arms.txt`), the check runs (`chk1`–`chk4`), the diagnostic runs, the rollups (`rollup-ab.json`, `rollup-conf.json`) and their scripts, the proofs' run folders and logs, and every wasm measured.
 
 ## Instrumentation added on this branch
 
