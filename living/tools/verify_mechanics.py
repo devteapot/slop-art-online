@@ -346,6 +346,11 @@ def main():
     results["force: a threat is perceived and counts as being threatened"] = bool(menaced) and bool(story("threat")) and bool(gave_in)
     if not results["force: a threat is perceived and counts as being threatened"]:
         print("  threat:", bool(menaced), story("threat"), [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {G}")][-5:])
+        # What G and F were doing when G did not give in (a teleport mid-approach can leave an
+        # activity unfinishable; the stuck-jump report, 2026-11-20).
+        for who in (G, F):
+            print(f"  threat state {who}:", rows(db, f"SELECT id, skill, phase, node, started_ms, ends_ms, victim FROM activity WHERE id = {who}"),
+                  rows(db, f"SELECT id, status FROM mind_state WHERE id = {who}"))
     # F attacks H (who does not defend) with a spear: there is no beating that stops short;
     # the blows go on and the one that exceeds H's health kills.
     call(db, "grant_items", str(F), "spear", "1")
