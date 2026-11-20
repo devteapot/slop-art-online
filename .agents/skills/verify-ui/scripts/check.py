@@ -183,6 +183,14 @@ def partition_sync(text, name, *, last=False):
     return text[:match.start()], match[0], text[match.end():]
 
 
+def fresh_log(out):
+    """Remove a drive's earlier client.log (a scenario run again under the same run), so a wait
+    on the log for a sync can only match the new client's lines."""
+    p = os.path.join(out, "client.log")
+    if os.path.exists(p):
+        os.remove(p)
+
+
 def cutaway_fades(text, folder):
     """Return the fading asset paths from this exact directory."""
     files = re.findall(r"cutaway: (\S+) fades to ", text)
@@ -1938,6 +1946,7 @@ def law_override(run, c):
     sampler = threading.Thread(target=sample, daemon=True)
     sampler.start()
     drive_log = open(os.path.join(base, f"{name}.drive.log"), "w")
+    fresh_log(out)
     p = subprocess.Popen(cmd, stdout=drive_log, stderr=subprocess.STDOUT, env=env)
 
     def wait_for(pattern, secs):
@@ -2023,7 +2032,9 @@ def law_override(run, c):
             # Frame by frame: each creature in the reads just before the call and 1 s after the
             # switch is in every frame between.
             if eff:
-                t0_ms, t1_ms = r["t0"] * 1000 - 300, (eff[0] + 1.0) * 1000
+                # From the call on: "kept" is what the last frame before the call held, so a creature
+                # coming into sight just before it is not missing from the frames before that.
+                t0_ms, t1_ms = r["t0"] * 1000, (eff[0] + 1.0) * 1000
                 before = [f for f in frames if f.get("wall_ms", 0) < r["t0"] * 1000]
                 after = [f for f in frames if f.get("wall_ms", 0) >= t1_ms]
                 ids = lambda f: {row[0] for row in f.get("rows", [])}
@@ -2060,7 +2071,10 @@ def law_override(run, c):
     json.dump(report, open(os.path.join(base, f"{name}.json"), "w"), indent=1)
 
 
-DELIVERY_LAWS = ("cue_transport_on", "near_tier_on", "motion_tables_on", "characters_table_on")
+# The world's delivery laws in the order the client's `rules:` line names them (`net::perception_law`).
+DELIVERY_LAWS = ("cue_transport_on", "near_tier_on", "motion_tables_on", "characters_table_on", "fighter_tables_on", "combat_feed_on")
+# The two laws combat-switches adds to the client's switch (docs/BATTLE_VIEWERS.md, addenda 4 and 5).
+COMBAT_LAWS = ("fighter_tables_on", "combat_feed_on")
 
 
 def shipped_law(name):
@@ -2081,19 +2095,32 @@ def owner_rows(run, query):
 
 
 def feed_of(laws):
-    """The perception set the client chooses (`net::Delivery::feed`): (tier, motion table, characters table)."""
-    on = lambda k: laws[k] == "true"
-    return ("tiered" if on("cue_transport_on") or on("near_tier_on") else "untiered", on("motion_tables_on"), on("characters_table_on"))
+    """The perception set the client chooses (`net::Delivery::feed`): (tier, motion table,
+    characters table, fighter table, combat feed). A law the world never set is read as shipped."""
+    on = lambda k: laws.get(k, shipped_law(k)) == "true"
+    return ("tiered" if on("cue_transport_on") or on("near_tier_on") else "untiered", on("motion_tables_on"), on("characters_table_on"),
+            on("fighter_tables_on"), on("combat_feed_on"))
+
+
+def tables_line(feed):
+    """The `tables: …;` part of the client's perception lines for a set (`net::Feed::tables`)."""
+    tier, m, ch, f, cf = feed
+    b = lambda x: str(x).lower()
+    return rf"tables: motion {b(m)} characters {b(ch)} fighters {b(f)} combat_feed {b(cf)};"
+
+
+def seen_tables(feed):
+    """The seen log's `tables` for a set (the reads)."""
+    tier, m, ch, f, cf = feed
+    return {"motion": m, "characters": ch, "fighters": f, "combat_feed": cf}
 
 
 def set_on_line(feed):
-    tier, m, ch = feed
-    return rf"perception: on the {tier} set after \d+ ms \(tables: motion {str(m).lower()} characters {str(ch).lower()};"
+    return rf"perception: on the {feed[0]} set after \d+ ms \(" + tables_line(feed)
 
 
 def set_sub_line(feed):
-    tier, m, ch = feed
-    return rf"perception: subscribing the {tier} set \(\d+ queries; tables: motion {str(m).lower()} characters {str(ch).lower()};"
+    return rf"perception: subscribing the {feed[0]} set \(\d+ queries; " + tables_line(feed)
 
 
 def identity_of(out):
@@ -2171,14 +2198,17 @@ def battle_views(run, c):
     shipped = {k: shipped_law(k) for k in DELIVERY_LAWS}
     state = {k: original.get(k, shipped[k]) for k in DELIVERY_LAWS}
     start = dict(state)
-    steps = [("motion_tables_on", "true"), ("characters_table_on", "true"),
+    # Both table laws off first (on by default since bv-defaults-on; a step that changes nothing
+    # is checked as kept), so the sequence reaches all eight combinations from any start.
+    steps = [("motion_tables_on", "false"), ("characters_table_on", "false"),
+             ("motion_tables_on", "true"), ("characters_table_on", "true"),
              ("motion_tables_on", "false"), ("motion_tables_on", "true"),
              ("characters_table_on", "false"), ("characters_table_on", "true"),
              ("cue_transport_on", "false"), ("near_tier_on", "false"),
              ("motion_tables_on", "false"), ("characters_table_on", "false"),
              ("motion_tables_on", "true"), ("characters_table_on", "true"),
              ("cue_transport_on", "true"), ("near_tier_on", "true")]
-    c.check(s, "the world starts with both frame laws on and both table laws off", feed_of(start) == ("tiered", False, False), json.dumps(start))
+    c.check(s, "the world starts with both frame laws on", feed_of(start)[0] == "tiered", json.dumps(start))
     plan = "ready;wait:2;sync:armed;wait:1;dump:before;sync:toggled;dump:toggled;reconnect;wait:8;dump:reconnected;sync:done;quit"
     cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "900"]
     os.makedirs(base, exist_ok=True)
@@ -2188,6 +2218,7 @@ def battle_views(run, c):
     sampler = threading.Thread(target=sample, daemon=True)
     sampler.start()
     drive_log = open(os.path.join(base, f"{name}.drive.log"), "w")
+    fresh_log(out)
     p = subprocess.Popen(cmd, stdout=drive_log, stderr=subprocess.STDOUT, env=env)
 
     def wait_for(pattern, secs):
@@ -2281,9 +2312,11 @@ def battle_views(run, c):
         r["effect_ms"] = round((eff[0] - r["t1"]) * 1000, 1) if eff else None
         r["switch_line"] = eff[1] if eff else None
         c.check(s, f"{tag}: the new set subscribed beside the old and the reads moved to it within 1.5 s", sub is not None and eff is not None and eff[0] - r["t1"] < 1.5, f"{r['effect_ms']} ms")
-        c.check(s, f"{tag}: the switch line lists nobody and no character missing", bool(eff) and eff[1].count("missing now []") == 2, eff[1] if eff else "")
+        c.check(s, f"{tag}: the switch line lists nobody and no character missing", bool(eff) and eff[1].count("missing now []") == 3, eff[1] if eff else "")
         if eff:
-            t0_ms, t1_ms = r["t0"] * 1000 - 300, (eff[0] + 1.0) * 1000
+            # From the call on: "kept" is what the last frame before the call held, so a creature
+            # coming into sight just before it is not missing from the frames before that.
+            t0_ms, t1_ms = r["t0"] * 1000, (eff[0] + 1.0) * 1000
             pre = [f for f in frames if f.get("wall_ms", 0) < r["t0"] * 1000]
             post = [f for f in frames if f.get("wall_ms", 0) >= t1_ms]
             keep = (ids(pre[-1]) & ids(post[0])) if pre and post else set()
@@ -2295,7 +2328,7 @@ def battle_views(run, c):
             c.check(s, f"{tag}: no frame without a creature or a character kept across the switch", window and keep and keep_c and not gaps and not gaps_c,
                     f"{len(window)} frames, {len(keep)} kept ({len(gaps)} frames missing one), {len(keep_c)} characters kept ({len(gaps_c)} frames missing one)")
             tables = post[0].get("tables", {}) if post else {}
-            c.check(s, f"{tag}: the reads take the tables the laws name", post and post[0].get("reads") == after[0] and tables == {"motion": after[1], "characters": after[2]}, json.dumps(tables))
+            c.check(s, f"{tag}: the reads take the tables the laws name", post and post[0].get("reads") == after[0] and tables == seen_tables(after), json.dumps(tables))
         cp = r["copies"] or {}
         if law == "motion_tables_on":
             if value == "true":
@@ -2309,7 +2342,7 @@ def battle_views(run, c):
             else:
                 c.check(s, f"{tag}: the kill switch: seen_character_copy empty within a second",
                         r.get("empty_after_ms") is not None and r["empty_after_ms"] < 1000 and cp.get("mirror_all") == 0, f"empty after {r.get('empty_after_ms')} ms; {json.dumps(cp)}")
-    combos = sorted({(r["after"][0], r["after"][1], r["after"][2]) for r in results} | {feed_of(start)})
+    combos = sorted({tuple(r["after"][:3]) for r in results} | {feed_of(start)[:3]})
     report["combinations"] = combos
     c.check(s, "every table-law combination ran in both frame-tier states", len(combos) == 8, json.dumps(combos))
     final = feed_of({**start, **{r["law"]: r["value"] for r in results}})
@@ -2355,7 +2388,7 @@ def battle_views_ui(run, c):
         t = log(os.path.dirname(p))
         if "playing character" not in t:
             continue
-        reads = re.findall(r"perception: on the \w+ set after \d+ ms \(tables: motion (\w+) characters (\w+);", t)
+        reads = re.findall(r"perception: on the \w+ set after \d+ ms \(tables: motion (\w+) characters (\w+) ", t)
         on.append((os.path.basename(os.path.dirname(p)), reads))
     bad = [(n, r) for n, r in on if not r or any(x != ("true", "true") for x in r)]
     c.check(s, f"every client of camera, talk and far read both tables ({len(on)} clients)", on and not bad, json.dumps(bad or [n for n, _ in on]))
@@ -2460,7 +2493,23 @@ def battle_views_cost(run, c):
     (`walker_ages`), and the time the walker was out of sight is reported. The admin moves only
     the two players (`place_at`), and puts both back after; no resident is moved. The table laws
     are put back after."""
-    s = "battle-views-cost"
+    summary = delivery_cost(run, c, "battle-views-cost", ("motion_tables_on", "characters_table_on"), "battle-views-cost")
+    json.dump(summary, open(os.path.join(ROOT, ".local/living/verify", run, "ui", "battle-views-cost.json"), "w"), indent=1)
+
+
+# The seen log's `tables` key for each delivery law with a table (`net::seen_log`).
+SEEN_KEY = {"motion_tables_on": "motion", "characters_table_on": "characters", "fighter_tables_on": "fighters", "combat_feed_on": "combat_feed"}
+
+
+def delivery_cost(run, c, s, laws, prefix, fight=False):
+    """`battle-views-cost`'s measurement for `laws` set together on against off (see its doc).
+    With `fight`, every third move my own player identity (the client's token) asks a strike at
+    no one, which the rules refuse: a refusal is a combat feed row for me alone
+    (`combat::show_to`), no damage to anyone. The walker must have fought before (a `fighter` row
+    lasts until death), so my fighter reads hold it. It does not jump: a jump puts no row in an
+    onlooker's feed, and one jump left a walker rooted for good (an authority gap, the
+    combat-switches record). The arm reports the combat rows the client took and the fighters it
+    read."""
     st = verify.load(run)
     db = st["db"]
     upstream = int(re.search(r":(\d+)", os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300")).group(1))
@@ -2479,29 +2528,39 @@ def battle_views_cost(run, c):
     if walker is None:
         return
     st = verify.load(run)
+    if fight and not owner_rows(run, f"SELECT id FROM fighter WHERE id = {walker}"):
+        # One guard raised (no damage), so the walker has a `fighter` row for my reads.
+        verify.http(f"/v1/database/{db}/call/use_skill", ["block", 0, 0.0, 0.0], st["token"], timeout=5)
+        time.sleep(1.0)
     dirs = [(math.cos(math.radians(a)), math.sin(math.radians(a))) for a in range(0, 360, 45)]
     walker_at = (sql(run, f"SELECT x, y FROM body WHERE id = {walker}") or [None])[0]
 
-    def walk(stop_at, sent):
+    def walk(stop_at, sent, jumps):
         i = 0
         while time.time() < stop_at:
             dx, dy = dirs[i % 8]
             code, _ = verify.http(f"/v1/database/{db}/call/human_move", [dx, dy, False], st["token"], timeout=5)
             sent.append((time.time(), code))
+            if fight and i % 3 == 1:
+                jc, _ = verify.http(f"/v1/database/{db}/call/use_skill", ["strike", 0, 0.0, 0.0], my_token(), timeout=5)
+                jumps.append(jc)
             i += 1
             time.sleep(max(0.0, 0.75 - (time.time() - sent[-1][0])))
         verify.http(f"/v1/database/{db}/call/human_move", [0, 0, False], st["token"], timeout=5)
 
     pct = lambda v, p: v[min(len(v) - 1, max(0, math.ceil(p * len(v)) - 1))] if v else None
     me_before = None
-    tables = lambda on: json.dumps({"motion": on, "characters": on}, sort_keys=True)
+    # My client's token, written by its first connection (read at the walk, once a drive is on).
+    my_token = lambda: open(os.path.join(ROOT, ".local/living/verify", run, "ui", "player.token")).read().strip()
+    reads_of = lambda f: json.dumps({SEEN_KEY[k]: (f.get("tables") or {}).get(SEEN_KEY[k]) for k in laws}, sort_keys=True)
+    tables = lambda on: json.dumps({SEEN_KEY[k]: on for k in laws}, sort_keys=True)
     arms = []
     try:
         for place, (px, py) in BV_PLACES:
             for k, on in enumerate((False, True, False, True)):
-                for law in ("motion_tables_on", "characters_table_on"):
+                for law in laws:
                     call_admin(run, "set_world_law", [law, "true" if on else "false"], check=True)
-                name = f"{s}-{place}-{k}-{'on' if on else 'off'}"
+                name = f"{prefix}-{place}-{k}-{'on' if on else 'off'}"
                 out = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
                 seen = os.path.join(ROOT, ".local/living/verify", run, "ui", f"{name}.seen.jsonl")
                 relay = ByteRelay(upstream)
@@ -2510,8 +2569,9 @@ def battle_views_cost(run, c):
                 cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "600",
                        "--sync", f"spot=place_at|{{me}}|{px}|{py}", "--sync", f"near=place_at|{walker}|(mx+1.2)|(my)"]
                 dlog = open(os.path.join(ROOT, ".local/living/verify", run, "ui", f"{name}.drive.log"), "w")
+                fresh_log(out)
                 p = subprocess.Popen(cmd, stdout=dlog, stderr=subprocess.STDOUT, env=env)
-                sent, arm = [], {"arm": name, "place": place, "on": on}
+                sent, jumps, arm = [], [], {"arm": name, "place": place, "on": on}
                 w0 = w1 = time.time()
                 try:
                     end = time.time() + 400
@@ -2519,7 +2579,7 @@ def battle_views_cost(run, c):
                         time.sleep(0.2)
                     w0 = time.time()
                     open(os.path.join(out, "walk.go"), "w").close()
-                    walk(w0 + 40, sent)
+                    walk(w0 + 40, sent, jumps)
                     w1 = time.time()
                     p.wait(timeout=120)
                 finally:
@@ -2536,18 +2596,21 @@ def battle_views_cost(run, c):
                 ages = walker_ages(frames, walker, w0 + 1, w1)
                 absent = [f for f in window if not any(i == walker for i, _ in f.get("rows", []))]
                 kb = relay.bytes_between(w0 + 1, w1) / 1000 / max(1e-6, w1 - w0 - 1)
-                reads = {json.dumps(f.get("tables"), sort_keys=True) for f in window}
+                reads = {reads_of(f) for f in window}
                 others = sorted(len(f.get("rows", [])) for f in window)
+                fighters = sorted(len(f.get("fighters", [])) for f in window)
                 arm.update(kB_per_s=round(kb, 2), total_kB=round(sum(relay.down) / 1000, 1), segments=len(ages), near_p50=pct(ages, 0.5), near_p90=pct(ages, 0.9),
                            near_max=ages[-1] if ages else None, walker_absent_s=round(len(absent) / max(1, len(window)) * (w1 - w0), 1),
                            others_median=others[len(others) // 2] if others else None, fps=round(len(window) / max(1e-6, w1 - w0), 1),
-                           moves=len(sent), moves_ok=sum(1 for _, x in sent if x == 200), reads=sorted(reads), connections=len(relay.down), exit=p.returncode)
+                           moves=len(sent), moves_ok=sum(1 for _, x in sent if x == 200), reads=sorted(reads), connections=len(relay.down), exit=p.returncode,
+                           refusals_asked=sum(1 for x in jumps if x == 200), combat_rows=sum(len(f.get("combat", [])) for f in window),
+                           fighters_median=fighters[len(fighters) // 2] if fighters else None)
                 arms.append(dict(arm, ages=ages))
                 print(f"{s}: {json.dumps(arm)}", flush=True)
-                c.check(s, f"{name}: the client ran, the walker walked, the reads took the {'tables' if on else 'views'}",
-                        p.returncode == 0 and arm["moves_ok"] >= 40 and arm["segments"] >= 10 and reads == {tables(on)}, json.dumps(arm))
+                c.check(s, f"{name}: the client ran, the walker walked{' and fought' if fight else ''}, the reads took the {'tables' if on else 'views'}",
+                        p.returncode == 0 and arm["moves_ok"] >= 40 and arm["segments"] >= 10 and reads == {tables(on)} and (not fight or (arm["refusals_asked"] >= 5 and arm["combat_rows"] > 0 and (arm["fighters_median"] or 0) > 0)), json.dumps(arm))
     finally:
-        for law in ("motion_tables_on", "characters_table_on"):
+        for law in laws:
             call_admin(run, "set_world_law", [law, original.get(law, shipped[law])], check=True)
         # The two players back where they stood, so a later scenario finds the scene it expects.
         if me_before and me_before[0] is not None and me_before[1]:
@@ -2563,11 +2626,482 @@ def battle_views_cost(run, c):
                 "near_p50": pct(ages, 0.5), "near_p90": pct(ages, 0.9), "near_max": ages[-1] if ages else None,
                 "near_p90_arms": [a["near_p90"] for a in mine], "walker_absent_s": [a["walker_absent_s"] for a in mine]}
     summary = {place: {"off": pooled(place, False), "on": pooled(place, True)} for place, _ in BV_PLACES}
+    summary["laws"] = list(laws)
     summary["arms"] = arms
-    json.dump(summary, open(os.path.join(ROOT, ".local/living/verify", run, "ui", "battle-views-cost.json"), "w"), indent=1)
     print(f"{s}: " + json.dumps({k: v for k, v in summary.items() if k != "arms"}), flush=True)
-    c.check(s, "kB/s and near ages recorded for both arms at both places",
+    c.check(s, f"{'+'.join(laws)}: kB/s and near ages recorded for both arms at both places",
             all(summary[p][a]["kB_per_s"] and summary[p][a]["segments"] for p, _ in BV_PLACES for a in ("off", "on")), json.dumps({k: v for k, v in summary.items() if k != "arms"}))
+    return summary
+
+
+def second_player(run, name):
+    """verify.py's player identity as a creature beside mine (joined once per run): its id."""
+    def body():
+        rows = sql_as_player(run, "SELECT id FROM my_body")
+        return rows[0]["id"] if rows else None
+    me = body()
+    if me is None:
+        subprocess.run([sys.executable, V, "player", "--run", run, "join", name], capture_output=True, text=True)
+        me = body()
+    return me
+
+
+def seen_frames(path):
+    frames = []
+    if os.path.exists(path):
+        for line in open(path):
+            try:
+                frames.append(json.loads(line))
+            except ValueError:
+                pass
+    return frames
+
+
+@scenario("combat-switches", explicit=True)
+def combat_switches(run, c):
+    """combat-switches' client switch (docs/BATTLE_VIEWERS.md, addenda 4 and 5, "Rollout"): while
+    one client plays beside a fight, `fighter_tables_on` and `combat_feed_on` are set through
+    `law_override` rows alone, each on, off (the kill switch) and on again, under the tiered and
+    the untiered frame state and with the copy-table laws off and on. A second player (verify.py's
+    player identity) strikes a resident held beside me just before and after each combat-feed
+    call, so events are in flight across every switch. For each call: accepted, the script
+    revision kept, laid over in place as delivery, the tick never standing still; when the set
+    changes, the new set subscribed beside the old and the reads on it within 1.5 s, nobody, no
+    character and no fighter missing in the switch line or in any frame (`LIVING_GAME_SEEN_LOG`),
+    the reads on the tables the laws name; `fighter_tables_on` on: my fighter copies all in
+    `seen_fighter_copy`, none private; off: the table empty within a second and my copies back in
+    `fighter_seen`/`fighter_near`. Across the run: every `combat_seen` row the authority wrote for
+    me (owner SQL polled every ~60 ms) was taken by the client, whichever source was in place.
+    Then a reconnect with both laws on (the first set reads the fighter table and the feed, and
+    `my_combat` is read once) and a fresh client. The six delivery laws are restored from the
+    world's own values (`law_values.own_laws`), else the shipped ones; the resident by
+    `resident_fixture`."""
+    import threading
+    s = "combat-switches"
+    st = verify.load(run)
+    db, token = st["db"], verify.admin_token()
+    name = f"{s}-{THEME}" if THEME else s
+    base = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    out = os.path.join(base, name)
+    q = lambda query: owner_rows(run, query)
+    # The two healthiest residents, held side by side; each strike goes to the healthier, and
+    # none below `STRIKE_FLOOR` (a resident struck run after run would die: two strikes a
+    # combat-feed call, 5 damage each).
+    hp = lambda i: ((q(f"SELECT hp FROM vitals WHERE id = {i}") or [{}])[0]).get("hp") or 0
+    pool = sorted(residents(run, 12), key=hp, reverse=True)[:2]
+    targets = [i for i in pool if hp(i) >= STRIKE_FLOOR]
+    target = targets[0] if targets else None
+    striker = second_player(run, "Striker")
+    c.check(s, "two healthy residents to strike and a second player to strike them", len(targets) == 2 and striker is not None, f"{[(i, hp(i)) for i in pool]} {striker}")
+    if len(targets) < 2 or striker is None:
+        return
+    st = verify.load(run)   # the player identity's token, recorded when it joined
+
+    def revision():
+        return ((q("SELECT revision FROM script WHERE name = 'skills'") or [{}])[0]).get("revision")
+
+    def set_law(law, value):
+        verify.refresh_lease(st)
+        t0 = time.time()
+        code, body = verify.http(f"/v1/database/{db}/call/set_world_law", [law, value], token, timeout=60)
+        return {"law": law, "value": value, "code": code, "reply": body[:300], "t0": t0, "t1": time.time()}
+
+    strikes = []
+
+    def strike():
+        health = {i: hp(i) for i in targets}
+        who = max(targets, key=lambda i: health[i])
+        if health[who] < STRIKE_FLOOR:
+            strikes.append({"t": time.time(), "code": None, "reply": f"skipped: {health}"})
+            return
+        at = (q(f"SELECT x, y FROM body WHERE id = {who}") or [None])[0]
+        if not at:
+            return
+        code, body = verify.http(f"/v1/database/{db}/call/use_skill", ["strike", who, at["x"], at["y"]], st["token"], timeout=10)
+        strikes.append({"t": time.time(), "target": who, "hp": health[who], "code": code, "reply": body[:120]})
+
+    ticks, stop, ident_box, feed_rows = [], threading.Event(), [None], {}
+
+    def sample():
+        n = 0
+        while not stop.is_set():
+            rows = q("SELECT tick FROM clock WHERE id = 0")
+            if rows:
+                ticks.append((time.time(), int(rows[0]["tick"])))
+            n += 1
+            if ident_box[0] and n % 3 == 0:
+                for r in q(f"SELECT id, kind, actor, target FROM combat_seen WHERE viewer = 0x{ident_box[0]}") or []:
+                    feed_rows.setdefault(int(r["id"]), {"first": time.time(), **r})
+            time.sleep(0.02)
+
+    def gap(t0, t1):
+        w = [(t, k) for t, k in ticks if t0 <= t <= t1]
+        worst, last_t, last_k = 0.0, None, None
+        for t, k in w:
+            if last_k is None or k != last_k:
+                if last_t is not None:
+                    worst = max(worst, t - last_t)
+                last_t, last_k = t, k
+        if w and last_t is not None:
+            worst = max(worst, w[-1][0] - last_t)
+        return round(worst * 1000, 1)
+
+    def fighter_copies(ident):
+        x = f"0x{ident}"
+        n = lambda query: len(q(query) or [])
+        return {"public": n(f"SELECT id FROM seen_fighter_copy WHERE viewer = {x}"),
+                "private": n(f"SELECT id FROM fighter_seen WHERE viewer = {x}") + n(f"SELECT id FROM fighter_near WHERE viewer = {x}"),
+                "public_all": n("SELECT id FROM seen_fighter_copy")}
+
+    original = own_laws(lambda x: sql(run, x))
+    shipped = {k: shipped_law(k) for k in DELIVERY_LAWS}
+    state = {k: original.get(k, shipped[k]) for k in DELIVERY_LAWS}
+    start = dict(state)
+    # Both new laws off first (a step that changes nothing is checked as kept), so the sequence is
+    # the same from any start; then each alone and both, on and off, tiered; the frame laws off
+    # (untiered) and the same; the copy-table laws off and on under both; the frame laws back.
+    steps = [("fighter_tables_on", "false"), ("combat_feed_on", "false"),
+             ("fighter_tables_on", "true"), ("combat_feed_on", "true"),
+             ("fighter_tables_on", "false"), ("fighter_tables_on", "true"),
+             ("combat_feed_on", "false"), ("combat_feed_on", "true"),
+             ("motion_tables_on", "false"), ("characters_table_on", "false"),
+             ("cue_transport_on", "false"), ("near_tier_on", "false"),
+             ("fighter_tables_on", "false"), ("combat_feed_on", "false"),
+             ("fighter_tables_on", "true"), ("combat_feed_on", "true"),
+             ("motion_tables_on", "true"), ("characters_table_on", "true"),
+             ("combat_feed_on", "false"), ("fighter_tables_on", "false"),
+             ("combat_feed_on", "true"), ("fighter_tables_on", "true"),
+             ("cue_transport_on", "true"), ("near_tier_on", "true")]
+    c.check(s, "the world starts with both frame laws on", feed_of(start)[0] == "tiered", json.dumps(start))
+    plan = "ready;wait:2;sync:scene;sync:near;wait:2;sync:armed;wait:1;dump:before;sync:toggled;dump:toggled;reconnect;wait:8;dump:reconnected;sync:done;quit"
+    os.makedirs(base, exist_ok=True)
+    seen_path = os.path.join(base, f"{name}.seen.jsonl")
+    cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "900",
+           "--place", f"{targets[0]}:1.6:0", "--place", f"{targets[1]}:1.6:1.2", "--sync", f"near=place_at|{striker}|(mx+2.4)|(my+0.6)"]
+    env = dict(os.environ, LIVING_GAME_SEEN_LOG=seen_path)
+    results = []
+    sampler = threading.Thread(target=sample, daemon=True)
+    fresh_out, fresh_code, ident, quiet, t_reconnect, offline = None, None, None, 0.0, time.time(), False
+    report_held = {"public": 0, "private": 0}
+    with resident_fixture(run, targets):
+        sampler.start()
+        drive_log = open(os.path.join(base, f"{name}.drive.log"), "w")
+        fresh_log(out)
+        p = subprocess.Popen(cmd, stdout=drive_log, stderr=subprocess.STDOUT, env=env)
+
+        def wait_for(pattern, secs):
+            end = time.time() + secs
+            while time.time() < end and p.poll() is None:
+                if re.search(pattern, log(out)):
+                    return True
+                time.sleep(0.2)
+            return False
+
+        def go(sync):
+            open(os.path.join(out, f"{sync}.go"), "w").close()
+
+        try:
+            if not wait_for(r"live script: waiting for \S*/armed\.go", 400):
+                c.check(s, "the client reached the toggles", False, f"drive exit {p.poll()}")
+                return
+            ident = identity_of(out)
+            ident_box[0] = ident
+            # Strikes until my scene holds fighter copies (a `fighter` row lasts until death), so
+            # the first fighter step has rows to move; a refused strike also answers 200.
+            for _ in range(8):
+                strike()
+                time.sleep(1.5)
+                held = fighter_copies(ident)
+                if held["public"] + held["private"] > 0:
+                    break
+            report_held = fighter_copies(ident)
+            go("armed")
+            time.sleep(4)
+            quiet = gap(time.time() - 3.5, time.time())
+            for law, value in steps:
+                before = feed_of(state)
+                state[law] = value
+                after = feed_of(state)
+                rev = revision()
+                fighting = law == "combat_feed_on" and before != after
+                if fighting:
+                    strike()   # windup about 0.65 s: the blow lands across the call
+                    time.sleep(0.4)
+                r = set_law(law, value)
+                r.update(before=before, after=after, state=dict(state))
+                if fighting:
+                    time.sleep(0.2)
+                    strike()
+                if value == "false" and law == "fighter_tables_on" and before != after:
+                    gone = None
+                    while time.time() - r["t1"] < 3.0:
+                        if q("SELECT id FROM seen_fighter_copy") == []:
+                            gone = round((time.time() - r["t1"]) * 1000, 1)
+                            break
+                        time.sleep(0.02)
+                    r["empty_after_ms"] = gone
+                time.sleep(3.0)
+                r["rev_before"], r["rev_after"] = rev, revision()
+                r["gap_ms"] = gap(r["t0"] - 0.5, r["t1"] + 1.5)
+                r["fighters"] = fighter_copies(ident) if ident else None
+                results.append(r)
+            time.sleep(4.5)   # the last rows written are taken (and polled) before the reconnect
+            t_reconnect = time.time()
+            go("toggled")
+            offline = wait_for(r"offline: ", 30)
+            wait_for(r"live script: waiting for \S*/done\.go", 60)
+            go("done")
+            p.wait(timeout=120)
+            fresh_out, fresh_code, _ = drive(run, f"{s}-fresh", "ready;wait:4;dump:fresh;quit", env={"LIVING_GAME_SEEN_LOG": os.path.join(base, f"{name}-fresh.seen.jsonl")})
+        finally:
+            if p.poll() is None:
+                p.terminate()
+            for law in DELIVERY_LAWS:
+                set_law(law, original.get(law, shipped[law]))
+            stop.set()
+            drive_log.close()
+    lines = timed_lines(out)
+    frames = seen_frames(seen_path)
+    report = {"identity": ident, "start": start, "quiet_gap_ms": quiet, "targets": targets, "striker": striker, "strikes": strikes, "steps": results}
+    c.check(s, "fighters in my scene before the first call", report_held["public"] + report_held["private"] > 0, json.dumps(report_held))
+    c.check(s, "the world's tick ran between calls (quiet gap under 150 ms)", quiet < 150, f"{quiet}")
+    in_place = r"rules: law overrides laid over in place .*changed \[\"{law}\"\]; delivery true cover false gaze false"
+    key = lambda k: (lambda f: {row[0] for row in f.get("rows", [])} if k == "rows" else set(f.get(k, [])))
+    for r in results:
+        law, value, before, after = r["law"], r["value"], tuple(r["before"]), tuple(r["after"])
+        tag = f"{law}={value} ({after[0]}, motion {after[1]}, characters {after[2]}, fighters {after[3]}, combat feed {after[4]})"
+        c.check(s, f"{tag}: set_world_law accepted", r["code"] == 200, r["reply"])
+        c.check(s, f"{tag}: the script revision did not change", r["rev_before"] == r["rev_after"] and r["rev_before"] is not None, f"{r['rev_before']} -> {r['rev_after']}")
+        c.check(s, f"{tag}: no world freeze (tick gap under 150 ms)", r["gap_ms"] < 150, f"{r['gap_ms']} ms")
+        if after == before:
+            eff = first_after(lines, "rules: " + " ".join(f"{k} {r['state'][k]}" for k in DELIVERY_LAWS), r["t0"] - 0.05, r["t0"] + 3.0)
+            r["effect_ms"] = round((eff[0] - r["t1"]) * 1000, 1) if eff else None
+            # A row rewritten with the value it had is no change in force: no line at all.
+            kept = first_after(lines, r"perception: subscribing", r["t0"] - 0.05, r["t0"] + 3.0) is None
+            c.check(s, f"{tag}: the set kept (no subscribe)", kept)
+            continue
+        hit = first_after(lines, in_place.format(law=law), r["t0"] - 0.05, r["t0"] + 3.0)
+        r["laid_over_ms"] = round((hit[0] - r["t1"]) * 1000, 1) if hit else None
+        c.check(s, f"{tag}: laid over in place as delivery", hit is not None)
+        sub = first_after(lines, set_sub_line(after), r["t0"] - 0.05)
+        eff = first_after(lines, set_on_line(after), r["t0"] - 0.05)
+        r["effect_ms"] = round((eff[0] - r["t1"]) * 1000, 1) if eff else None
+        r["switch_line"] = eff[1] if eff else None
+        c.check(s, f"{tag}: the new set subscribed beside the old and the reads moved to it within 1.5 s", sub is not None and eff is not None and eff[0] - r["t1"] < 1.5, f"{r['effect_ms']} ms")
+        c.check(s, f"{tag}: the switch line lists nobody, no character and no fighter missing", bool(eff) and eff[1].count("missing now []") == 3, eff[1] if eff else "")
+        if eff:
+            # From the call on: "kept" is what the last frame before the call held, so a creature
+            # coming into sight just before it is not missing from the frames before that.
+            t0_ms, t1_ms = r["t0"] * 1000, (eff[0] + 1.0) * 1000
+            pre = [f for f in frames if f.get("wall_ms", 0) < r["t0"] * 1000]
+            post = [f for f in frames if f.get("wall_ms", 0) >= t1_ms]
+            window = [f for f in frames if t0_ms <= f.get("wall_ms", 0) <= t1_ms]
+            counts = {}
+            for k in ("rows", "characters", "fighters"):
+                keep = (key(k)(pre[-1]) & key(k)(post[0])) if pre and post else set()
+                counts[k] = (len(keep), len([f for f in window if keep - key(k)(f)]))
+            r["frames"], r["kept"] = len(window), counts
+            c.check(s, f"{tag}: no frame without a creature, a character or a fighter kept across the switch",
+                    window and all(counts[k][0] > 0 and counts[k][1] == 0 for k in counts), f"{len(window)} frames; kept, frames missing one: {json.dumps(counts)}")
+            tables = post[0].get("tables", {}) if post else {}
+            c.check(s, f"{tag}: the reads take the tables the laws name", post and post[0].get("reads") == after[0] and tables == seen_tables(after), json.dumps(tables))
+        cp = r["fighters"] or {}
+        if law == "fighter_tables_on":
+            if value == "true":
+                c.check(s, f"{tag}: my fighter copies all in seen_fighter_copy, none left private", cp.get("public", 0) > 0 and cp.get("private") == 0, json.dumps(cp))
+            else:
+                c.check(s, f"{tag}: the kill switch: seen_fighter_copy empty within a second, my copies back in the private tables",
+                        r.get("empty_after_ms") is not None and r["empty_after_ms"] < 1000 and cp.get("public_all") == 0 and cp.get("private", 0) > 0, f"empty after {r.get('empty_after_ms')} ms; {json.dumps(cp)}")
+    combos = sorted({(r["after"][0], r["after"][3], r["after"][4]) for r in results} | {(feed_of(start)[0], *feed_of(start)[3:])})
+    report["combinations"] = combos
+    c.check(s, "fighter table and combat feed in all four combinations in both frame-tier states", len(combos) == 8, json.dumps(combos))
+    copies = sorted({(r["after"][1], r["after"][2], r["after"][3], r["after"][4]) for r in results})
+    report["with_copy_tables"] = copies
+    c.check(s, "both new laws on with the copy tables off and on", (False, False, True, True) in copies and (True, True, True, True) in copies, json.dumps(copies))
+    # No event missing: every combat_seen row the authority wrote for me while the client ran, in
+    # the frames' wall time, was taken by the client, whichever source was in place.
+    taken = {}
+    for f in frames:
+        for i in f.get("combat", []):
+            taken.setdefault(int(i), f)
+    t_first = (frames[0]["wall_ms"] / 1000) if frames else 0
+    t_last = (frames[-1]["wall_ms"] / 1000 - 1.0) if frames else 0
+    polled = {i: r for i, r in feed_rows.items() if t_first <= r["first"] <= t_last}
+    missing = sorted(set(polled) - set(taken))
+    by_source = {}
+    for i in polled:
+        f = taken.get(i)
+        if f:
+            k = "combat_feed" if f.get("tables", {}).get("combat_feed") else "my_combat"
+            by_source[k] = by_source.get(k, 0) + 1
+    switch_windows = [(r["t0"] - 1.0, r["t1"] + 3.0) for r in results if r["law"] == "combat_feed_on" and tuple(r["before"]) != tuple(r["after"])]
+    across = sorted(i for i, r in polled.items() if any(a <= r["first"] <= b for a, b in switch_windows))
+    report["events"] = {"polled": len(polled), "taken": len(taken), "missing": missing, "by_source": by_source, "across_switches": len(across),
+                        "strikes": len(strikes), "strikes_ok": sum(1 for x in strikes if x["code"] == 200), "skipped": sum(1 for x in strikes if x["code"] is None)}
+    c.check(s, "every combat_seen row the authority wrote for me was taken by the client, whichever source",
+            polled and not missing and by_source.get("combat_feed", 0) > 0 and by_source.get("my_combat", 0) > 0, json.dumps(report["events"]))
+    c.check(s, "events in flight across the combat-feed switches, none missing", len(across) >= len(switch_windows) and not (set(across) & set(missing)), f"{len(across)} rows across {len(switch_windows)} switches")
+    final = feed_of({**start, **{r["law"]: r["value"] for r in results}})
+    after_rc = [(t, x) for t, x in lines if t >= t_reconnect]
+    subscribed = [x for _, x in after_rc if x.startswith("perception: subscribing")]
+    report["reconnect"] = {"offline": bool(offline), "subscribed": subscribed}
+    c.check(s, "reconnect with both new laws on: the client went offline and came back", bool(offline) and any(x.startswith("world subscribed after") for _, x in after_rc))
+    c.check(s, "reconnect: the first set chosen reads the fighter table and the combat feed, no view set before it",
+            bool(subscribed) and re.search(set_sub_line(final), subscribed[0]) is not None and all("fighters true combat_feed true" in x for x in subscribed), f"{subscribed}")
+    c.check(s, "reconnect: my_combat read once, and the reads moved to the set", any(x.startswith("combat feed: my_combat read once") for _, x in after_rc) and first_after(lines, set_on_line(final), t_reconnect) is not None)
+    flog = log(fresh_out) if fresh_out else ""
+    fsub = re.findall(r"perception: subscribing the .*", flog)
+    report["fresh"] = {"exit": fresh_code, "subscribed": fsub}
+    c.check(s, "fresh client with both new laws on: only that set subscribed and read, my_combat read once",
+            len(fsub) == 1 and re.search(set_sub_line(final), fsub[0]) is not None and re.search(set_on_line(final), flog) is not None and "combat feed: my_combat read once" in flog, f"{fsub}")
+    alive = {i: (q(f"SELECT alive FROM character WHERE id = {i}") or [{}])[0].get("alive") for i in targets}
+    c.check(s, "the struck residents are alive (and put back by the fixture)", all(v is True for v in alive.values()), json.dumps({i: [alive[i], hp(i)] for i in targets}))
+    c.check(s, "the six delivery laws restored to the world's own values", {k: own_laws(lambda x: sql(run, x)).get(k, shipped[k]) for k in DELIVERY_LAWS} == {k: original.get(k, shipped[k]) for k in DELIVERY_LAWS})
+    json.dump(report, open(os.path.join(base, f"{name}.json"), "w"), indent=1)
+
+
+# The least health a resident may have to be struck by `combat-switches` (of 100).
+STRIKE_FLOOR = 50.0
+
+
+def death_truth(rows, me):
+    """My death as the authority's rows give it (owner SQL on `combat_seen`, kept two minutes,
+    snapshot by the drive while dead, before anything else can clear it): the killer (the death
+    row's target) and the witnesses' ids (id 0 is no one)."""
+    deaths = [r for r in rows if r["kind"] == 7 and r["actor"] == me]
+    if not deaths:
+        return None
+    d = max(deaths, key=lambda r: r["id"])
+    return {"death_id": d["id"], "killer": d["target"] or None, "witnesses": sorted({r["actor"] for r in rows if r["kind"] == 8 and r["actor"] != 0 and r["id"] > d["id"]})}
+
+
+@scenario("combat-switches-death", explicit=True)
+def combat_switches_death(run, c):
+    """The death screen is the same whichever source the combat feed comes from (dev-box's
+    death-screen equality, docs/BATTLE_VIEWERS.md addendum 4, on the client): two fresh players
+    killed by a stranger (verify.py's player identity, the death scenario's sharper free strike),
+    beside a resident held still as a witness, one with `combat_feed_on` off (the `my_combat`
+    view) and one with it on (the `combat_feed` event table). In each, the death screen (cause,
+    killer, witnesses: the dump's `death`) equals what the authority's `combat_seen` rows say;
+    stays the same when the law flips while dead and back, and across a reconnect while dead (the
+    connection's first set then reads `my_combat` once with the law on); and was taken from the
+    arm's source (the seen log). Across the two arms: the same cause words, the same killer, the
+    same names for the witnesses both had. The laws and the resident are put back."""
+    s = "combat-switches-death"
+    original = own_laws(lambda x: sql(run, x))
+    shipped = {k: shipped_law(k) for k in DELIVERY_LAWS}
+    num = lambda k, d: original.get(k) or (re.search(rf"\b{k}:\s*([0-9.]+)", open(os.path.join(ROOT, "living/scripts/skills.rhai")).read()) or [None, d])[1]
+    dmg0, cost0 = num("dmg_strike", "5"), num("cost_strike", "20")
+    w = (residents(run, 1) or [None])[0]
+    striker = second_player(run, "Striker")
+    c.check(s, "a resident to witness and a stranger to strike", w is not None and striker is not None, f"{w} {striker}")
+    if w is None or striker is None:
+        return
+    d = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    os.makedirs(d, exist_ok=True)
+    arms = {}
+    hits = "".join(f"sync:hit{i};wait:0.9;" for i in range(8))
+    try:
+        with resident_fixture(run, [w]):
+            for arm in ("off", "on"):
+                law = "true" if arm == "on" else "false"
+                flip = "false" if arm == "on" else "true"
+                call_admin(run, "set_world_law", ["combat_feed_on", law], check=True)
+                name = f"{s}-{arm}"
+                seen = os.path.join(d, f"{name}.seen.jsonl")
+                plan = ("ready;wait:3;sync:scene;sync:sharp;sync:near;wait:1.5;dump:00;" + hits +
+                        "wait:2.5;shot:01_died;dump:01;sync:truth;sync:flip;wait:2.5;dump:02;sync:back;wait:2.5;dump:03;reconnect;wait:8;shot:04_reconnected;dump:04;sync:blunt;quit")
+                syncs = ['sharp=set_world_law|"dmg_strike"|"40";set_world_law|"cost_strike"|"0"', f"near=place_at|{striker}|(mx+0.9)|(my)",
+                         *[f'hit{i}=player|use_skill|strike|{{me}}|(mx)|(my)' for i in range(8)],
+                         "truth=sql|SELECT id, kind, actor, target FROM combat_seen WHERE viewer = 0x{ident}",
+                         f'flip=set_world_law|"combat_feed_on"|"{flip}"', f'back=set_world_law|"combat_feed_on"|"{law}"',
+                         f'blunt=set_world_law|"dmg_strike"|"{dmg0}";set_world_law|"cost_strike"|"{cost0}"']
+                tok = os.path.join(d, f"{name}-{int(time.time())}.token")
+                out, code, text = drive(run, name, plan, places=[f"{w}:-1.4:1.0"], syncs=syncs, extra=["--token", tok, "--player", f"Fallen {arm}"], env={"LIVING_GAME_SEEN_LOG": seen})
+                scene = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+                me, ident = scene.get("me"), identity_of(out)
+                snap = ((scene.get("snaps") or {}).get("truth") or [{}])[0].get("rows")
+                truth = death_truth(snap, me) if snap is not None and me else None
+                dumps = {k: (dump(out, k) or {}).get("death") for k in ("01", "02", "03", "04")}
+                frames = seen_frames(seen)
+                death_frame = next((f for f in frames if truth and truth["death_id"] in f.get("combat", [])), None)
+                text_log = log(out)
+                arms[arm] = {"me": me, "identity": ident, "truth": truth, "dumps": dumps, "exit": code,
+                             "death_taken_from": None if not death_frame else ("combat_feed" if death_frame.get("tables", {}).get("combat_feed") else "my_combat"),
+                             "read_once": re.findall(r"combat feed: my_combat read once \((\d+) rows\)", text_log)}
+                a = arms[arm]
+                c.check(s, f"{arm}: the client ran, joined and was killed by the stranger", code == 0 and truth is not None and truth["killer"] == striker, json.dumps(truth))
+                first = dumps["01"]
+                c.check(s, f"{arm}: the death screen shows the authority's killer and witnesses",
+                        bool(first) and first.get("killer_id") == (truth or {}).get("killer") and sorted(first.get("witness_ids") or []) == (truth or {}).get("witnesses")
+                        and (first.get("cause") or "").startswith("Killed by") and w in (first.get("witness_ids") or []), json.dumps({"screen": first, "truth": truth}))
+                c.check(s, f"{arm}: the same screen after the law flipped while dead, back, and across a reconnect while dead",
+                        bool(first) and all(dumps[k] == first for k in ("02", "03", "04")), json.dumps(dumps))
+                c.check(s, f"{arm}: the death was taken from the arm's source ({'combat_feed' if arm == 'on' else 'my_combat'})",
+                        a["death_taken_from"] == ("combat_feed" if arm == "on" else "my_combat"), str(a["death_taken_from"]))
+                if arm == "on":
+                    c.check(s, "on: the reconnect while dead read my_combat once, with the death's rows", bool(a["read_once"]) and int(a["read_once"][-1]) >= 1 + len((truth or {}).get("witnesses", [])), str(a["read_once"]))
+    finally:
+        call_admin(run, "set_world_law", ["dmg_strike", dmg0])
+        call_admin(run, "set_world_law", ["cost_strike", cost0])
+        call_admin(run, "set_world_law", ["combat_feed_on", original.get("combat_feed_on", shipped["combat_feed_on"])])
+    off, on = (arms.get(k, {}).get("dumps", {}).get("01") or {} for k in ("off", "on"))
+    names = lambda x: dict(zip(x.get("witness_ids") or [], x.get("witnesses") or []))
+    common = set(names(off)) & set(names(on))
+    c.check(s, "off against on: the same cause words, killer and witnesses' names",
+            bool(off) and bool(on) and off.get("cause") == on.get("cause") and off.get("killer_id") == on.get("killer_id") and common >= {w, striker} - {None} and all(names(off)[i] == names(on)[i] for i in common),
+            json.dumps({"off": off, "on": on}))
+    c.check(s, "combat_feed_on restored to the world's own value", own_laws(lambda x: sql(run, x)).get("combat_feed_on", shipped["combat_feed_on"]) == original.get("combat_feed_on", shipped["combat_feed_on"]))
+    json.dump(arms, open(os.path.join(d, f"{s}.json"), "w"), indent=1)
+
+
+@scenario("combat-switches-ui", explicit=True)
+def combat_switches_ui(run, c):
+    """camera, talk, far and the combat scenarios (death, bar, own, committed, move-off) with
+    `fighter_tables_on` and `combat_feed_on` both on: each scenario's own checks, and every client
+    those scenarios started read the fighter table and the combat feed (its switch lines name
+    them, and no other set was read). The two laws are put back after."""
+    s = "combat-switches-ui"
+    original = own_laws(lambda x: sql(run, x))
+    shipped = {k: shipped_law(k) for k in DELIVERY_LAWS}
+    t0 = time.time()
+    try:
+        for law in COMBAT_LAWS:
+            call_admin(run, "set_world_law", [law, "true"], check=True)
+        laws = own_laws(lambda x: sql(run, x))
+        c.check(s, "both laws read on in law_override", all(laws.get(k) == "true" for k in COMBAT_LAWS), json.dumps({k: laws.get(k) for k in DELIVERY_LAWS}))
+        for name in ("camera", "talk", "far", "death", "bar", "own", "committed", "move-off"):
+            SCENARIOS[name](run, c)
+        laws = own_laws(lambda x: sql(run, x))
+        c.check(s, "both laws still on after the scenarios (their installs kept them)", all(laws.get(k) == "true" for k in COMBAT_LAWS), json.dumps({k: laws.get(k) for k in DELIVERY_LAWS}))
+    finally:
+        for law in COMBAT_LAWS:
+            call_admin(run, "set_world_law", [law, original.get(law, shipped[law])], check=True)
+    logs = [p for p in glob.glob(os.path.join(ROOT, ".local/living/verify", run, "ui", "*", "client.log")) if os.path.getmtime(p) >= t0]
+    on = []
+    for p in sorted(logs):
+        t = log(os.path.dirname(p))
+        if "playing character" not in t:
+            continue
+        reads = re.findall(r"perception: on the \w+ set after \d+ ms \(tables: motion \w+ characters \w+ fighters (\w+) combat_feed (\w+);", t)
+        on.append((os.path.basename(os.path.dirname(p)), reads))
+    bad = [(n, r) for n, r in on if not r or any(x != ("true", "true") for x in r)]
+    c.check(s, f"every client of the scenarios read the fighter table and the combat feed ({len(on)} clients)", on and not bad, json.dumps(bad or [n for n, _ in on]))
+    json.dump({"clients": on}, open(os.path.join(ROOT, ".local/living/verify", run, "ui", f"{s}.json"), "w"), indent=1)
+
+
+@scenario("combat-switches-cost", explicit=True)
+def combat_switches_cost(run, c):
+    """kB/s and near p90 with each of `fighter_tables_on` and `combat_feed_on` on against off
+    (docs/BATTLE_VIEWERS.md, "Rollout"), as `battle-views-cost` measures them (two places, four
+    drives each, a byte-counting relay, the walker 1.2 m away), the walker also jumping every
+    third move so the fighter copies and the combat feed carry rows. Each law alone; the other
+    stays as the world has it. `combat-switches-cost.json`."""
+    s = "combat-switches-cost"
+    report = {}
+    for law in COMBAT_LAWS:
+        report[law] = delivery_cost(run, c, s, (law,), f"{s}-{law}", fight=True)
+    json.dump(report, open(os.path.join(ROOT, ".local/living/verify", run, "ui", f"{s}.json"), "w"), indent=1)
 
 
 @scenario("gaze", cullet=True, explicit=True)
