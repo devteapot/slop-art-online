@@ -789,9 +789,12 @@ fn bodies(
         let h = aimed.or(look).or(busy).or(standing.filter(|_| slow)).or(heading);
         if !live.shown.contains_key(&id) {
             let Some(body) = crate::net::find_body(conn, id) else { continue };
-            let character = conn.db.seen_characters().id().find(&id);
-            // Wait for a person's character row (folk, stage) before drawing them.
-            if body.kind == "person" && character.is_none() {
+            let character = crate::net::find_character(conn, id);
+            // Wait for a person's character row (folk, stage) before drawing them, and for any
+            // body's (its kind is the row's): my own body comes in the base set, a round trip
+            // before the characters in the perception set (`net::Feed`), and a body drawn
+            // without its kind would stay a placeholder.
+            if character.is_none() {
                 continue;
             }
             let h = h.unwrap_or(body.heading);
@@ -829,7 +832,7 @@ fn bodies(
         }
         // A new look key for someone drawn (a band change, a `relook`): redrawn in place.
         if live.shown.get(&id).is_some_and(|s| s.person) {
-            if let Some(c) = conn.db.seen_characters().id().find(&id) {
+            if let Some(c) = crate::net::find_character(conn, id) {
                 let now = crate::characters::seen::of(&c);
                 if live.shown.get(&id).is_some_and(|s| s.look != now.look) {
                     swap_look(&mut commands, &assets, &mut live, &mut q, (id, mine), &c, island.land.seed, now);
@@ -1093,7 +1096,7 @@ fn bodies(
         let dir = Vec2::new(yaw.cos(), yaw.sin());
         // A rigged creature is drawn at its file's size times its life stage's (it grows up), its
         // body lying on the ground under its paws.
-        let size = if beast { conn.db.seen_characters().id().find(&id).map_or(1.0, |c| stage_scale(c.stage)) } else { 1.0 };
+        let size = if beast { crate::net::find_character(conn, id).map_or(1.0, |c| stage_scale(c.stage)) } else { 1.0 };
         let (ground, tilt) = if beast {
             let (want, y) = crate::bodies::lie_on(&s.kind, |x, z| island.height(x, z), p, dir, size);
             s.tilt = s.tilt.slerp(want, 1.0 - (-dt * crate::bodies::TILT_RATE).exp());
@@ -1249,8 +1252,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
     });
     info!(
         "live: cache body {} character {} doing {} act_card {} weather {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}; cue overlays {:?}",
-        conn.db.my_body().count() + crate::net::motion::all(&conn.db).count() + crate::net::motion::near(&conn.db).count() + crate::net::motion::far(&conn.db).count(),
-        conn.db.seen_characters().count(),
+        conn.db.my_body().count() as usize + crate::net::motion_count(conn),
+        crate::net::character_count(conn),
         conn.db.my_doing().count() + crate::net::activity::all(&conn.db).count() + crate::net::activity::near(&conn.db).count() + crate::net::activity::far(&conn.db).count(),
         conn.db.act_card().count(),
         conn.db.weather().iter().next().map_or("none", |w| if w.raining { "rain" } else { "dry" }),

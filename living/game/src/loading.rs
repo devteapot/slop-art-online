@@ -219,9 +219,7 @@ fn prewarm(mut commands: Commands, assets: Res<AssetServer>, island: Option<Res<
     let conn = net.as_ref().and_then(|n| n.conn.as_ref());
     let (keys, fallback): (Vec<String>, Fallback) = match conn {
         Some(conn) => {
-            use living_bindings::*;
-            use spacetimedb_sdk::Table;
-            let people: Vec<String> = conn.db.seen_characters().iter().filter(|c| c.kind == "person").map(|c| c.look).collect();
+            let people: Vec<String> = crate::net::characters(conn).into_iter().filter(|c| c.kind == "person").map(|c| c.look).collect();
             let mut keys: Vec<String> = people.iter().filter(|k| !k.is_empty()).cloned().collect();
             keys.sort();
             keys.dedup();
