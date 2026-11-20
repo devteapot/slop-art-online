@@ -12,9 +12,10 @@
 //! since 2026-11-20), a scheduled reducer that runs one bounded step per call and schedules the
 //! next back to back: [`living_rules::land::Gen`]'s steps (each under half a budget at 8192 m,
 //! measured with `living/tools/land_fuel`), then hosting, the terrain chunks, lots and
-//! resources, then the people; a seed without a land map is made in one step. `init` keeps the
-//! script, the seed's check and its rules. The public `genesis` row shows how far it is; ticks
-//! start when it is done, and until then the player and mind reducers refuse with
+//! resources, then the people; a seed without a land map is made in one step. A last call that
+//! makes nothing ([`finish`]) marks the world done, so the row's `updated_ms` is when it became
+//! ready. `init` keeps the script, the seed's check and its rules. The public `genesis` row shows
+//! how far it is; ticks start when it is done, and until then the player and mind reducers refuse with
 //! [`PREPARING`] ([`ready`]).
 //!
 //! **The same world as inline.** A land up to [`INLINE_MAX_M`] (every seeded world before staged
@@ -51,7 +52,10 @@ pub const PREPARING: &str = "world_preparing";
 /// made before staged genesis, or done). Otherwise the refusal, `world_preparing: …`.
 pub fn ready(ctx: &ReducerContext) -> Result<(), String> {
     match ctx.db.genesis().id().find(0) {
-        Some(g) if !g.done => Err(format!("{PREPARING}: the world is still being made (step {} of {}: {})", g.step, g.steps.max(g.step + 1), g.label)),
+        Some(g) if !g.done => {
+            let steps = if made(&g) { g.steps } else { g.steps.max(g.step + 1) };
+            Err(format!("{PREPARING}: the world is still being made (step {} of {steps}: {})", g.step, g.label))
+        }
         _ => Ok(()),
     }
 }
@@ -75,10 +79,13 @@ const RESOURCE_ROWS: u32 = 1024;
 pub struct Genesis {
     #[primary_key]
     pub id: u8,
-    /// Steps done, and the steps expected (the count grows once the city's wards are known).
+    /// Making steps done, and the steps expected (the count grows once the city's wards are
+    /// known). They are equal once every making step has run; the finishing call adds none.
     pub step: u32,
     pub steps: u32,
-    /// What the next step does.
+    /// The step just done, phase first (`land: …`, `build: …`, `chunks: …`, `resources: …`,
+    /// `populate: …`, `world: …`); before the first, what it will do; `done` when done, and
+    /// `stopped…` when a step failed or the admin stopped the chain.
     pub label: String,
     /// Steps of generation and hosting done in this instance's memory (see the module notes).
     pub generated: u32,
@@ -88,6 +95,8 @@ pub struct Genesis {
     pub resource_rows: u32,
     /// Times generation started over because the instance's memory was lost.
     pub restarts: u32,
+    /// When `init` began the creation, and the last change (a step's start; on the done row,
+    /// when the world became ready, so `updated_ms - started_ms` is the whole creation).
     pub started_ms: u64,
     pub updated_ms: u64,
     pub done: bool,
@@ -365,6 +374,10 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
     if g.done {
         return Ok(());
     }
+    if made(&g) {
+        finish(ctx, g);
+        return Ok(());
+    }
     seed::load(ctx);
     let text = seed::active();
     let s: Seed = serde_json::from_str(&text).map_err(|e| format!("seed: {e}"))?;
@@ -375,14 +388,14 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
     let Some(m) = s.map.as_ref().filter(|m| m.kind == "land") else {
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("genesis.world");
         seed::seed(ctx, now);
-        log::info!("genesis: the world is made (1 step, {} ms)", wall.saturating_sub(g.started_ms));
         g.step += 1;
         g.steps = g.step;
-        g.label = "done".into();
+        g.label = "world: terrain, resources, people".into();
         g.updated_ms = wall;
-        g.done = true;
         ctx.db.genesis().id().update(g);
-        crate::start_ticking(ctx);
+        if !stepping() {
+            schedule(ctx);
+        }
         return Ok(());
     };
     let (size, params) = crate::island::params_of(m)?;
@@ -461,7 +474,6 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
             crate::island::keep_land(ctx, h.info.clone());
             seed::populate(ctx, &s, &h.map, Some(&h), None, Vec::new(), now);
             *cell = None;
-            log::info!("genesis: the world is made ({} steps, {} ms)", g.step + 1, wall.saturating_sub(g.started_ms));
             g.label = label;
             return Ok(true);
         }
@@ -469,20 +481,37 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
         Ok(false)
     })?;
     g.step += 1;
-    g.steps = expected(&g, size);
+    // `steps` equals `step` only once the world is made (`made`): before, it is kept ahead of
+    // the steps done, which a restart's repeated land steps could otherwise reach.
+    g.steps = if done { g.step } else { expected(&g, size).max(g.step + 1) };
     g.updated_ms = wall;
-    g.done = done;
-    if done {
-        g.steps = g.step;
-        g.label = "done".into();
-    }
     ctx.db.genesis().id().update(g);
-    if done {
-        crate::start_ticking(ctx);
-    } else if !stepping() {
+    if !stepping() {
         schedule(ctx);
     }
     Ok(())
+}
+
+/// Every making step has run (the last one set `steps` to `step`); only `finish` is left.
+fn made(g: &Genesis) -> bool {
+    g.step > 0 && g.step == g.steps
+}
+
+/// The call after the last making step: the world is ready. A module has no clock but its
+/// call's timestamp, which for the last step is when it started; this call is scheduled by that
+/// step, and SpacetimeDB 2.14.1 stamps a scheduled call when its scheduler prepares it
+/// (`scheduler.rs`, `scheduled_call_time`: the later of the scheduled time and now), after the
+/// last step committed. So `updated_ms` on the done row is when the world became ready, and
+/// `updated_ms - started_ms` is the whole creation. It writes nothing else and cannot fail, so
+/// a creation never stops between its last step and this one but by `stop_genesis`.
+fn finish(ctx: &ReducerContext, mut g: Genesis) {
+    let wall = common::now_ms(ctx);
+    log::info!("genesis: the world is made ({} steps, {} ms)", g.step, wall.saturating_sub(g.started_ms));
+    g.label = "done".into();
+    g.updated_ms = wall;
+    g.done = true;
+    ctx.db.genesis().id().update(g);
+    crate::start_ticking(ctx);
 }
 
 /// The steps a creation is expected to take, from what this instance knows so far.
