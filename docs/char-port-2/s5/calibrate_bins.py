@@ -33,7 +33,11 @@ by target / measured, as Cora's calibration was; an anchor's only in lightness (
 the luminance's target / measured), its chroma the palette's own rule from Cora's swatches, so
 that it carries no correction for the calibration frame's light (the second pass found grey's,
 corrected channel by channel, blue on its shadow side); written to every file
-(`hair_page.py --profile-only`), and drawn again. Pass: every band within 8 levels of its target.
+(`hair_page.py --profile-only`), and drawn again. **Pass** (`check`, the GC's rule of 2026-11-20):
+every band of every bin; a near-neutral band (black, grey) by its luma within 5 levels and a
+neutral swatch, any other within 5 levels on every channel; white (no anchor, and its moved
+targets held at grey's by the ceiling) by a neutral swatch and its luma at least 5 above grey's; a shade channel whose target lies under the sky's floor checked against the
+floor (auburn's shade).
 Writes OUT/bins.json (the swatches, targets, measured and deltas a round), OUT/anchors.json and
 OUT/profile.json.
 """
@@ -60,7 +64,23 @@ HAIR = ASSETS/'lookdev/styles/hair'
 BANDS = ('shade', 'mid', 'light', 'highlight')
 AUBURN = (102, 46, 26)
 DRAWING = dict(shade=(88, 42, 27), mid=(152, 72, 43), light=(171, 88, 56), highlight=(187, 99, 63))
-BINS = dict(auburn=AUBURN, dark=(19, 17, 17), brown=(51, 34, 23), light=(158, 125, 71), grey=(133, 133, 133))
+BINS = dict(auburn=AUBURN, dark=(19, 17, 17), brown=(51, 34, 23), light=(158, 125, 71), grey=(133, 133, 133), white=(199, 199, 194))
+# Bins that are checked but have no anchor of their own: white is drawn from grey's and blond's.
+# Its moved targets lie over the lightness ceiling, which holds them at grey's: so white is checked
+# against grey's measured bands, not a target of its own: a neutral swatch, and its luma at least
+# ORDER above grey's in every band.
+CHECK_ONLY = {'white': 'grey'}
+ORDER = 5
+# The check (the GC, 2026-11-20). A band passes when:
+# - near-neutral (its target's OKLab chroma under NEUTRAL_C: black, grey, white): its luma within
+#   TOL of the target's and the swatch drawn neutral (chroma under SWATCH_C). Per channel a
+#   neutral swatch shows the scene's own warm light, as main's grey does; correcting it channel by
+#   channel is what turned grey's shadow side blue;
+# - otherwise: every channel within TOL;
+# - for the shade band, a target channel under the sky's floor (SKY: the darkest the shade band
+#   shows at 11:00) is checked against the floor, which is the auburn shade's noted exception
+#   (the drawing's shade lies under it in green and blue) made a rule.
+TOL, NEUTRAL_C, SWATCH_C = 5, 0.03, 0.02
 # Floors on OKLab lightness (the second pass, 2026-11-20): black and brown hair no lighter than
 # play distance needs them to be told apart (black about main's at Middle, brown a step above it);
 # up close the lock lines and the highlight carry them. S5's first floors (shade 0.35, mid 0.42,
@@ -80,6 +100,25 @@ DEBUG = dict(palette='fixed', shade=[255, 0, 0], mid=[0, 255, 0], light=[0, 0, 2
 def lin(c):
     c = np.asarray(c, float) / 255
     return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+
+
+def luma(c):
+    return float(np.dot(np.asarray(c, float), [0.2126, 0.7152, 0.0722]))
+
+
+def chroma(c):
+    _, a_, b_ = palette.oklab(tuple(int(x) for x in c))
+    return math.hypot(a_, b_)
+
+
+def check(band, measured, target, swatch):
+    """(passed, the rule used, per-channel delta, luma delta) of one band."""
+    t = [max(x, y) for x, y in zip(target, SKY)] if band == 'shade' else list(target)
+    d = (np.array(measured) - np.array(t)).tolist()
+    dl = round(luma(measured) - luma(t), 1)
+    if chroma(target) < NEUTRAL_C:
+        return abs(dl) <= TOL and chroma(swatch) < SWATCH_C, 'neutral: luma and a neutral swatch', d, dl
+    return max(abs(x) for x in d) <= TOL, 'per channel', d, dl
 
 
 def Y(c):
@@ -203,7 +242,7 @@ def main():
     if a.start:
         sw['auburn'] = json.load(open(a.start))['rounds'][-1]['profile']
     for name, tag in BINS.items():
-        if name == 'auburn':
+        if name == 'auburn' or name in CHECK_ONLY:
             continue
         # The seed's swatches (the last calibration's, or the page tool's); with
         # --palette-chroma, an anchor's chroma is reset to the palette's own (Cora's swatches
@@ -227,7 +266,7 @@ def main():
         keys = book(a.out/'book-real.json', a.style, BINS)
         ms = {n: masks(render(dkeys[n], bpath, a.binary, a.out/'debug'/n)) for n in BINS}
         for rnd in range(a.rounds + 1):
-            anchors = [dict(ref=list(BINS[n]), **{b: sw[n][b] for b in BANDS}) for n in BINS if n != 'auburn']
+            anchors = [dict(ref=list(BINS[n]), **{b: sw[n][b] for b in BANDS}) for n in BINS if n != 'auburn' and n not in CHECK_ONLY]
             (a.out/'anchors.json').write_text(json.dumps(anchors, indent=1))
             (a.out/'profile.json').write_text(json.dumps(sw['auburn'], indent=1))
             subprocess.run([sys.executable, str(REPO/'living/tools/characters/hair_page.py'), str(HAIR), '--profile-only', '--anchors', str(a.out/'anchors.json'),
@@ -235,13 +274,31 @@ def main():
             set_profile(dbg)
             got = {n: measure(render(keys[n], a.out/'book-real.json', a.binary, a.out/f'r{rnd}'/n), ms[n]) for n in BINS}
             delta = {n: {b: (np.array(got[n][b]['rgb']) - np.array(tgt[n][b])).tolist() if got[n][b]['rgb'] else None for b in BANDS} for n in BINS}
-            ok = all(d is not None and max(abs(x) for x in d) <= 8 for n in BINS for d in delta[n].values())
-            log['rounds'].append(dict(profile=sw['auburn'], anchors=anchors, measured=got, delta=delta, passed=ok))
+            # What each bin draws: the profile's own, an anchor's, or (white) the palette's entry.
+            drawn = dict(sw)
+            for n in CHECK_ONLY:
+                rows, _ = palette.entry(palette.anchors_of(dict(hair_page.PROFILE, **sw['auburn'], anchors=anchors)), BINS[n])
+                drawn[n] = {b: list(rows[i]) for i, b in enumerate(BANDS)}
+            checks = {n: {b: dict(zip(('passed', 'rule', 'delta', 'luma_delta'), check(b, got[n][b]['rgb'], tgt[n][b], drawn[n][b]))) if got[n][b]['rgb'] else dict(passed=False, rule='not measured')
+                          for b in BANDS} for n in BINS if n not in CHECK_ONLY}
+            for n, below in CHECK_ONLY.items():
+                checks[n] = {}
+                for b in BANDS:
+                    m, g = got[n][b]['rgb'], got[below][b]['rgb']
+                    if not (m and g):
+                        checks[n][b] = dict(passed=False, rule='not measured')
+                        continue
+                    above = round(luma(m) - luma(g), 1)
+                    checks[n][b] = dict(passed=above >= ORDER and chroma(drawn[n][b]) < SWATCH_C, rule=f'neutral swatch, luma {ORDER}+ above {below}', luma_above=above)
+            ok = all(c['passed'] for n in BINS for c in checks[n].values())
+            log['rounds'].append(dict(profile=sw['auburn'], anchors=anchors, measured=got, delta=delta, checks=checks, passed=ok))
             (a.out/'bins.json').write_text(json.dumps(log, indent=1))
-            print(f'round {rnd}:', 'PASS' if ok else 'not yet', {n: {b: delta[n][b] for b in BANDS} for n in BINS}, flush=True)
+            print(f'round {rnd}:', 'PASS' if ok else 'not yet', {n: {b: (checks[n][b].get('delta'), checks[n][b].get('luma_delta', checks[n][b].get('luma_above')), 'ok' if checks[n][b]['passed'] else 'FAIL') for b in BANDS} for n in BINS}, flush=True)
             if ok or a.measure_only or rnd == a.rounds:
                 break
             for n in BINS:
+                if n in CHECK_ONLY:
+                    continue
                 for b in BANDS:
                     m = got[n][b]['rgb']
                     if m:

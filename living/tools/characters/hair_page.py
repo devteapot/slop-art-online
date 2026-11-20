@@ -32,7 +32,7 @@ with the flag: the file's hair laid out at 1 mm a texel in a rectangle, and its 
 relative to the tag (`palette: "tag"`), with an anchor for each other colour bin (`--anchors`, or
 this file's ANCHORS: black, brown, blond and grey; HANDMADE_COMPOSED v1.3.1 allows 4), as
 calibrated in docs/char-port-2/s5. The lock lines' `ink`, on the profile and on every anchor, is a
-darker shade of its own mid swatch (INK_RULE). A page with strands gives every file on it
+darker shade of its own mid swatch (INK_RULE; softer on light hair). A page with strands gives every file on it
 `strands: true` (v1.3.1).
 Plain Python, numpy and Pillow.
 """
@@ -70,17 +70,21 @@ PROFILE = dict(palette="tag", ref=AUBURN, shade=[35, 1, 0], mid=[92, 30, 5], lig
 ANCHORS = [{"ref": [19, 17, 17], "shade": [0, 0, 0], "mid": [6, 5, 5], "light": [20, 18, 17], "highlight": [51, 46, 46]}, {"ref": [51, 34, 23], "shade": [6, 2, 1], "mid": [39, 25, 15], "light": [51, 34, 24], "highlight": [67, 49, 36]}, {"ref": [158, 125, 71], "shade": [79, 58, 29], "mid": [151, 116, 52], "light": [181, 151, 96], "highlight": [238, 198, 121]}, {"ref": [133, 133, 133], "shade": [61, 61, 61], "mid": [118, 118, 118], "light": [150, 150, 150], "highlight": [193, 193, 193]}]
 
 
-# The lock lines' colour (the second pass, 2026-11-20): a darker shade of the hair's own mid swatch,
+# The lock lines' colour (the third pass, 2026-11-20): a darker shade of the hair's own mid swatch,
 # never near-black on hair that is not: OKLab lightness `lightness` x the mid's, and at least
 # `contrast` below it (which keeps a line on black hair, whose mid is near black, at black), the
-# mid's own a and b. Set on the profile (its `ink`) and on every anchor, so the palette moves it
-# with the hair like a swatch.
-INK_RULE = dict(lightness=0.65, contrast=0.12)
+# mid's own a and b. Light hair (the GC, 2026-11-20: its mid drawn above OKLab L 0.7 at 11:00,
+# which is its mid swatch above `light_from`: blond and grey, drawn at 0.72) takes `light`, a
+# softer line: dark strokes on pale hair read as scratches at portrait. Set on the profile (its
+# `ink`) and on every anchor, so the palette moves it with the hair like a swatch (white's lines
+# come from grey's and blond's).
+INK_RULE = dict(lightness=0.65, contrast=0.12, light_from=0.5, light=dict(lightness=0.8, contrast=0.08))
 
 
 def line_ink(mid):
     L, a, b = palette.oklab(tuple(mid))
-    Li = max(0.0, min(INK_RULE["lightness"] * L, L - INK_RULE["contrast"]))
+    r = INK_RULE["light"] if L > INK_RULE["light_from"] else INK_RULE
+    Li = max(0.0, min(r["lightness"] * L, L - r["contrast"]))
     return [palette.enc(x) for x in palette.from_oklab(Li, a, b)]
 
 

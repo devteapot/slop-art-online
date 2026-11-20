@@ -7,7 +7,10 @@ This follows the laptop's contract, [HANDMADE_COMPOSED.md](../../HANDMADE_COMPOS
 **Three passes:**
 1. **The first** (`e73de3751`) built the profile output.
 2. **The second** (`f0be41c37`) did the dark palette, the structure at play distance (B1 and B2 side by side; the GC took B2), the parting and the fringe's lines.
-3. **The third** (this commit) set the line colour relative to the hair, took the band off light hair's hairline, made grey's shading neutral, and wrote the two amendments to the laptop's terms. [The third pass](#the-third-pass).
+3. **The third** (`3d0efc222`) set the line colour relative to the hair, took the band off light hair's hairline, made grey's shading neutral, and wrote the two amendments to the laptop's terms. [The third pass](#the-third-pass).
+4. **The fourth** (this commit), on the GC's answers:
+   - softer lines on light hair;
+   - the calibration rule for near-neutral colours, written down and implemented. [The fourth pass](#the-fourth-pass-softer-lines-on-light-hair-and-the-calibration-rule).
 
 [Rows: every colour, S5 beside main](rows.png) · [Lines on light hair, before and now](lines.png) · [Before, now and main at Near and Middle](compare.png) · [The strands across a cell border](border.png) ([numbers](border.json)) · [Middle luma](luma.json) · [Lock-line close-ups](closeups.png) ([numbers](closeups.json)) · [Page 0](page0.png) · [bob's cells at 1:1](page-bob.png) · [Calibration](bins.json) ([check on the final build](bins-check.json)) · [Shimmer](shimmer/) · [Surface flicker](flicker.json) · [Audit](audit.txt)
 
@@ -18,6 +21,47 @@ This follows the laptop's contract, [HANDMADE_COMPOSED.md](../../HANDMADE_COMPOS
 1. **Capacity:** three pages at 1 mm a texel, no contract change.
 2. **Lock lines:** close-up only, like Cora's face ink. Fading before Near is accepted.
 3. **Parting:** added, as one more source of lines in the generator. Structure at play distance comes from the bands and the parting.
+
+## The fourth pass: softer lines on light hair, and the calibration rule
+
+**The laptop:** v1.3.1 is accepted as written (the shader line, the `hand[0].w` packing, the flag and its tests). `strands` is part of `HairProfile`, so it is part of the material cache key, as intended.
+
+### Softer lines on light hair
+
+**The GC's parameter:** where the hair's L is above 0.7, the line is about 0.8 times the mid's L, with the minimum contrast relaxed to match; other colours are unchanged.
+- **Which L:** the mid as drawn at 11:00, which is blond's and grey's calibration target, both 0.72.
+- **In swatch terms:** that is a mid swatch above OKLab L 0.5 (blond 0.58, grey 0.57; the next, auburn, is 0.33).
+- **The rule** (`hair_page.INK_RULE`): those take lightness 0.8 with a minimum contrast of 0.08. All others keep 0.65 and 0.12.
+- **White** has no anchor; its line comes from grey's and blond's by the palette, so it softens with them.
+
+| line | blond | grey | white (moved) | black, brown, auburn, chestnut |
+|---|---|---|---|---|
+| third pass | (91, 58, 0) | (63, 63, 63) | (90, 90, 88) | unchanged |
+| now | (116, 82, 9) | (86, 86, 86) | (116, 116, 113) | (0, 0, 0), (11, 2, 0), (56, 0, 0), (25, 4, 0) |
+
+**[light-lines.png](light-lines.png):** grey and white in bob, at portrait and three-quarter, before (`3d0efc222`) and now. The eyes are closed in both three-quarter "now" stills, in two renders. That is most likely the client's clock blink landing on that shot; this change only rewrites the hair's profile, so it can't reach the eyes.
+
+**Shimmer,** since the line changed: bob in grey, white and blond, at fade 2.0. Portrait pan 0.18 / 0.18 / 0.17, zoom 0.23 / 0.21 / 0.22; the game stops are faded. All pass ([shimmer/](shimmer/)).
+
+### The calibration rule (the GC's, 2026-11-20)
+
+`calibrate_bins.check`; every band of every bin passes by rule:
+
+- **Saturated colours** (the target's OKLab chroma 0.03 or more: auburn, brown, blond): **every channel within ±5** of the target.
+- **Near-neutral colours** (black, grey): **luma within ±5** of the target's, and **a neutral swatch** (OKLab chroma under 0.02). Per channel a neutral swatch shows the scene's warm light, as main's grey does. Correcting that channel by channel was what made grey's shadow blue.
+- **White** has no anchor of its own. Its targets, moved from the drawing, lie over the lightness ceiling, which holds them at grey's. So white is checked against grey as measured: a neutral swatch, and luma at least 5 above grey's in every band.
+- **The shade band:** a target channel below the sky's floor, (61, 56, 45) (the darkest the shade band shows at 11:00), is checked against the floor. That is auburn's noted exception, now a rule: its drawn shade lies under the floor in green and blue.
+
+**The check on the final build** ([bins-check.json](bins-check.json)): **every band of every bin passes.**
+
+| Bin | rule | shade | mid | light | highlight |
+|---|---|---|---|---|---|
+| auburn | channels | (1, 1, −1) against the floor | (0, 0, 2) | (0, 0, 2) | (0, 0, 3) |
+| black | luma | +0.9 | +2.0 | +0.7 | −0.3 |
+| brown | channels | (4, 2, 0) | (−1, 1, −2) | 0 | (−1, 1, −2) |
+| blond | channels | (4, 0, 2) | (1, 0, 1) | (0, 1, −1) | (−2, 2, 0) |
+| grey | luma | +0.3 | −0.4 | +0.4 | +0.4 |
+| white | above grey | +24.1 | +34.6 | +31.8 | +21.6 |
 
 ## The third pass
 
@@ -80,7 +124,7 @@ The grey anchor is now (61, 61, 61), (118, 118, 118), (150, 150, 150), (193, 193
 - **Auburn's shade** is the sky-floor exception, as before.
 - **Black and grey** keep neutral swatches. Per channel they now show the scene's warm light: the screen is warmer than a neutral target, R up to +6 and B down to −13. That is the same warmth main's neutral grey has in the sun. Their luminance is within 2 levels (grey −0.6 to +0.4, black up to +2.0).
 
-**I propose checking near-neutral bins by luminance (±8) and a neutral swatch, not per channel.** Holding ±8 per channel there means correcting the swatch toward blue, which is what made the shadow blue.
+I proposed checking near-neutral bins by luminance and a neutral swatch, not per channel, since holding them per channel means correcting the swatch toward blue. The GC agreed; the rule is under [the fourth pass](#the-calibration-rule-the-gcs-2026-11-20).
 
 ### 4. The contract: v1.3.1, the laptop's terms
 
@@ -253,7 +297,7 @@ The lines are bilinear on the sheet's grid, in page texels. There are 1,772 over
 | `palette` | `"tag"`, `ref` auburn (102, 46, 26), Cora's hair |
 | swatches at `ref` | shade (35, 1, 0), mid (92, 30, 5), light (108, 39, 4), highlight (138, 53, 3): calibrated with the strands under them |
 | thresholds | `t1` −0.2, `t2` 0.4, `edge` 0.02, `highlight_feather` 0.08 (Cora's) |
-| lock ink | `ink` (56, 0, 0) by the line rule (each anchor has its own), `ink_px` 1.05, `ink_fade_px` 2.0 (Cora's), `ink_range` 6/4096, `ink_m_uv` 4.096 |
+| lock ink | `ink` (56, 0, 0) by the line rule, softer on light hair (each anchor has its own), `ink_px` 1.05, `ink_fade_px` 2.0 (Cora's), `ink_range` 6/4096, `ink_m_uv` 4.096 |
 | `anchors` | black (19, 17, 17), brown (51, 34, 23), blond (158, 125, 71), grey (133, 133, 133) |
 | `strands` | true: the page's B is the strands (v1.3.1) |
 | `highlight_map` | the file's page |
@@ -264,7 +308,7 @@ The lines are bilinear on the sheet's grid, in page texels. There are 1,772 over
 
 ### The audit: 0 / 0
 
-[audit.txt](audit.txt). `calibrate.py --no-run` gives **0 errors and 0 warnings on all 86 files.** `--pages lookdev` is **0 / 0** over all three pages:
+[audit.txt](audit.txt), on the fourth pass's files. `calibrate.py --no-run` gives **0 errors and 0 warnings on all 86 files.** `--pages lookdev` is **0 / 0** over all three pages:
 - every file opts in;
 - one profile per page;
 - every hair UV inside the file's cells;
@@ -315,7 +359,7 @@ Every sequence passes (≤ 1.5). The lines are faded at the game stops, as the G
 
 ### Flag off: byte-identical
 
-Ten styles were built with main's generator (`origin/main` at `d05d01b9f`, its `living/tools`) and with this branch without `SLOP_PORT`:
+Ten styles were built with main's generator (`origin/main` at `65a3dd2cb` for the fourth pass, `d05d01b9f` for the third; its `living/tools`) and with this branch without `SLOP_PORT`:
 - bob, long.2.collar, braid.3.collar.full, braids, balding.3, crop.cap, bun, tail.m, kerchief and shag.2.
 
 **Every GLB binary chunk is identical,** and the JSON is identical but for the strand picture's relative URI. No `.hairpage.json` is written without the flag. Main's own files also draw the same under the new client (above).
