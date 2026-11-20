@@ -25,15 +25,17 @@ touches behaviour, these cases with the fake model only:
                  its per-world checks, the seed's laws composed over the shipped script among them,
                  on the world, island, cullet and cullet-laws genesis worlds; a failing check is a
                  part `<case>:<seed>:<check>` the red-on-main list can hold)
-  verify-ui      the render group, only when a merge changes how the client draws (RENDER_CHARACTER,
-                 RENDER_CAMERA, RENDER_BOTH; docs/TOOLING.md, "The render group"): looks (Cullet),
-                 hair, seat, camera-faces, camera-lod, far (island), check.py one at a time after
+  verify-ui      the render group, only when a merge changes how the client draws, split by path
+                 (RENDER_CHARACTER: looks (Cullet), hair, seat; RENDER_CAMERA: camera-faces,
+                 camera-lod, far (island); RENDER_BOTH: all six; docs/TOOLING.md, "The render
+                 group"), check.py one at a time after
                  every other group, on the pinned render asset set (render_set.py check, then link;
                  corrupt or stale fail setup, exit 2). A case fails on check.py's exit and on
                  shader/pipeline, asset (bevy_asset) or panic ERROR lines in its client logs; a log
                  saying the book lacks a key or generation is "asset set stale" (exit 2). A host
                  without a set runs render-smoke and refuses the merge unless the render host
-                 recorded a pass for the same content (the `render-passes` branch).
+                 recorded a pass for the same content and the halves it needs (the `render-passes`
+                 branch).
 
 The world groups and the tests run at once. A case whose only failures are parts on the red-on-main
 list (a mind test `living-mind::<test>`, a combat scene `combat:<scene>`) passes and says which. Flakes: a failing case runs again once, alone, on a fresh scratch
@@ -61,10 +63,8 @@ Usage:
       --force     run even when no behavioural path changed
       --genesis-only  the genesis fuel publishes alone: no scenes, no red-on-main list
       --genesis-fuel-report JSON  a staged genesis_fuel.py report for its seed (repeatable)
-      --render-only  only the render cases the diff selects (all with --force), on this host's set;
-                  records the pass (for a merge another host refused)
-      --render-split  character paths run looks, hair and seat; camera paths camera-faces,
-                  camera-lod and far (LIVING_GATE_RENDER_SPLIT=1)
+      --render-only  only the render cases the diff selects (all six with --force), on this host's
+                  set; records the pass (for a merge another host refused)
   scene_gate.py seeds [--json PATH]   compiled seeds against their living/seeds/worlds/ sources
                   (seed_fresh.py, files only); a stale block listed red on main as
                   `seeds:<seed>:<block>` does not fail. living-merge runs it before the check
@@ -92,7 +92,7 @@ LIVING_GATE_REDS_REMOTE / _BRANCH (origin, red-on-main), LIVING_GATE_REDS_REPO (
 reaches it; default this file's), LIVING_GATE_REDS_GIT=0 (the cache alone, no git), LIVING_GATE_MAIN_DIR (main's checkout for
 the main check; its build folder is <dir>-target), LIVING_GATE_RENDER_ASSETS (the pinned render asset
 set; default ~/slop-assets/current), LIVING_GATE_RENDER_HOST (named in a refusal; default dev-box),
-LIVING_GATE_RENDER_SPLIT=1, LIVING_GATE_PASSES (the recorded render passes' cache; default
+LIVING_GATE_PASSES (the recorded render passes' cache; default
 ~/slop-mq/render-passes.json when ~/slop-mq exists), LIVING_GATE_PASSES_BRANCH (render-passes),
 LIVING_GATE_SMOKE_ASSETS (render-smoke's cache; default ~/.cache/slop-render-smoke).
 State: ~/.local/state/slop-merge/scene-gate/.
@@ -145,15 +145,16 @@ COPY_PRIVACY_PATHS = ("living/authority/src/frame.rs", "living/authority/src/per
 
 # The render group (gate-render, 2026-11-20): verify-ui's drawing cases, for merges that change how
 # the client draws people, the camera or sight. Each glob's `*` stays within a folder, `**` crosses
-# folders. A character path selects the character cases, a camera path the camera cases; a path in
-# RENDER_BOTH (another shader, the verify-ui drivers, the client's manifest) selects both. Without
-# the split (LIVING_GATE_RENDER_SPLIT=1, --render-split) any of them selects every render case.
+# folders. The group is split in two halves by path (render-autosplit, 2026-11-21; the whole group
+# took about 11 minutes on dev-box): a character path selects the character half (looks, hair, seat;
+# about 6 minutes), a camera, LOD or sight path the camera half (camera-faces, camera-lod, far;
+# about 5 minutes); a path in RENDER_BOTH (any shader, the client's manifest, the verify-ui drivers)
+# selects both, as does a diff touching one path of each half. RENDER_BOTH is matched first.
 GAME = "living/game/src/"
 RENDER_CHARACTER = tuple(GAME + p for p in (
-    "toon*.wesl", "edges.wesl", "characters/**", "characters.rs", "handmade.rs", "style.rs", "lookdev.rs", "looks.rs",
-    "bodies.rs", "anim.rs", "gait.rs", "ik.rs", "twist.rs", "mouth.rs", "facing.rs", "post.rs"))
-RENDER_CAMERA = tuple(GAME + p for p in (
-    "terrain.wesl", "sky.wesl", "water.wesl", "camera.rs", "perf.rs", "fade.rs", "envs.rs", "sightfield.rs", "sightedge.rs"))
+    "characters/**", "characters.rs", "handmade.rs", "compose.rs", "lookdev.rs", "looks.rs", "style.rs", "bodies.rs",
+    "anim.rs", "gait.rs", "ik.rs", "twist.rs", "mouth.rs", "facing.rs", "post.rs", "**hair*.rs"))
+RENDER_CAMERA = tuple(GAME + p for p in ("camera.rs", "perf.rs", "fade.rs", "envs.rs", "sightfield.rs", "sightedge.rs"))
 RENDER_BOTH = (GAME + "*.wesl", "living/game/Cargo.toml", ".agents/skills/verify-ui/scripts/**")
 
 # Each case: its surface skill and the world group it runs in. Known flakes are from the skills'
@@ -201,7 +202,7 @@ CASES = {
                               "fake_transport_records_caching_usage_and_paced_429_recovery (the 180 ms queue wait)"},
     # The render group (verify-ui's check.py, one case at a time, after every other group; on the
     # host with a render asset set, `LIVING_GATE_RENDER_ASSETS`): `world` is the seed its world is
-    # launched from, `render` the class of paths that selects it with the split on.
+    # launched from, `render` the half it belongs to (the class of paths that selects it).
     "looks":        {"skill": "verify-ui", "group": "render", "world": "cullet", "render": "character"},
     "hair":         {"skill": "verify-ui", "group": "render", "world": "island", "render": "character"},
     "seat":         {"skill": "verify-ui", "group": "render", "world": "island", "render": "character"},
@@ -425,12 +426,16 @@ def glob_match(path, globs):
     return any((_GLOBS.get(g) or _GLOBS.setdefault(g, glob_re(g))).match(path) for g in globs)
 
 
+HALVES = ("character", "camera")  # the render group's halves, in the order they run
+HALF_CASES = {h: [c for c in RENDER_CASES if CASES[c]["render"] == h] for h in HALVES}
+
+
 def render_classes(paths):
-    """{class: [paths]} for the drawing paths among `paths`: `character`, `camera`, `both`."""
+    """{class: [paths]} for the drawing paths among `paths`: `both`, `character`, `camera`."""
     out = {}
     for p in paths:
-        kind = ("character" if glob_match(p, RENDER_CHARACTER) else "camera" if glob_match(p, RENDER_CAMERA)
-                else "both" if glob_match(p, RENDER_BOTH) else None)
+        kind = ("both" if glob_match(p, RENDER_BOTH) else "character" if glob_match(p, RENDER_CHARACTER)
+                else "camera" if glob_match(p, RENDER_CAMERA) else None)
         if kind:
             out.setdefault(kind, []).append(p)
     return out
@@ -440,15 +445,22 @@ def rendering(paths):
     return [p for ps in render_classes(paths).values() for p in ps]
 
 
-def render_selection(paths, split=False):
-    """The render cases a diff needs: none when it draws nothing; all of them, or with the split
-    the character cases for character paths and the camera cases for camera paths."""
+def render_halves(paths):
+    """The halves a diff needs: a character path the character half, a camera path the camera half,
+    a RENDER_BOTH path (or one of each) both; none when it draws nothing."""
     kinds = render_classes(paths)
-    if not kinds:
-        return []
-    if not split or "both" in kinds:
-        return list(RENDER_CASES)
-    return [c for c in RENDER_CASES if CASES[c]["render"] in kinds]
+    return [h for h in HALVES if h in kinds or "both" in kinds]
+
+
+def halves_of(cases):
+    """The halves `cases` name a case of, in order."""
+    return [h for h in HALVES if set(HALF_CASES[h]) & set(cases)]
+
+
+def render_selection(paths):
+    """The render cases a diff needs: every case of each half it needs."""
+    needed = render_halves(paths)
+    return [c for c in RENDER_CASES if CASES[c]["render"] in needed]
 
 
 # ---------------------------------------------------------------- the render asset set
@@ -626,6 +638,11 @@ def smoke_assets():
 # A host without the set may merge a drawing change only when the render host recorded a pass
 # for the same content: the trees of `living/` and the verify skills the cases run, so the same
 # merge made on two machines (two merge commits) has one key, and a docs commit on main keeps it.
+# A pass covers a (content, half) pair: the half is covered when every one of its cases passed for
+# that content, so a character-half pass does not let a camera change through, and a change that
+# needs both halves needs both covered (by one pass of all six, or by two passes, one per half,
+# which merge into the content's entry). An entry from before the split (2ed2d93d65c7, all six
+# cases, no `halves`) covers both halves by its cases.
 RENDER_KEY_PATHS = ("living", ".agents/skills/verify", ".agents/skills/verify-ui")
 PASSES_BRANCH = os.environ.get("LIVING_GATE_PASSES_BRANCH", "render-passes")
 PASSES_FILE = "render-passes.json"
@@ -644,6 +661,17 @@ def render_key(rev="HEAD", cwd=None):
 def pass_covers(entry, needed):
     """Whether a recorded render pass covers every needed case."""
     return bool(entry) and all((entry.get("cases") or {}).get(c) in PASS_OK for c in needed)
+
+
+def pass_halves(entry):
+    """The halves a recorded pass covers: those whose every case passed (from the cases, so an entry
+    recorded before the split covers what its cases cover)."""
+    return [h for h in HALVES if pass_covers(entry, HALF_CASES[h])]
+
+
+def halves_covered(entry, halves):
+    """Whether a recorded pass covers every needed half."""
+    return set(halves) <= set(pass_halves(entry))
 
 
 # ---------------------------------------------------------------- the red-on-main list
@@ -1378,10 +1406,10 @@ def judge_on_main(a, runner, repo, base, cases, record):
 
 # ---------------------------------------------------------------- commands
 
-def plan_cases(a, paths, touched, split):
+def plan_cases(a, paths, touched):
     """(scene cases, render cases) a run needs. --cases names them exactly; otherwise the scene
     cases when behaviour is touched (all with --force; a `paths` case only for its paths) and the
-    render cases the drawing paths select (all of them with --render-only --force)."""
+    render cases of the halves the drawing paths select (all six with --render-only --force)."""
     if a.cases:
         cases = a.cases.split(",")
         return [c for c in cases if c not in RENDER_CASES], [c for c in cases if c in RENDER_CASES]
@@ -1392,8 +1420,8 @@ def plan_cases(a, paths, touched, split):
     scenes = [c for c in scenes if c not in unneeded]
     if getattr(a, "render_only", False) or not (touched or a.force):
         scenes = []
-    render = render_selection(paths, split)
-    if not render and getattr(a, "render_only", False) and a.force:
+    render = render_selection(paths)
+    if getattr(a, "render_only", False) and a.force:
         render = list(RENDER_CASES)
     return scenes, render
 
@@ -1415,11 +1443,13 @@ def cmd_run(a):
     paths = changed(base, head)
     touched = behavioural(paths)
     drawn = rendering(paths)
-    split = a.render_split or os.environ.get("LIVING_GATE_RENDER_SPLIT") == "1"
+    if getattr(a, "render_split", False) or os.environ.get("LIVING_GATE_RENDER_SPLIT"):
+        say("note: --render-split and LIVING_GATE_RENDER_SPLIT are retired: the render group is split by path "
+            "(character paths the character half, camera paths the camera half); `--render-only --force` runs all six")
     bad = [c for c in (a.cases.split(",") if a.cases else []) if c not in CASES]
     if bad:
         raise SystemExit(f"scene-gate: unknown case {bad}; cases: {ORDER}")
-    cases, render = plan_cases(a, paths, touched, split)
+    cases, render = plan_cases(a, paths, touched)
     dirty = git("status", "--porcelain", "--untracked-files=no")
     if dirty:
         say(f"note: the tree has uncommitted changes; they are what is tested:\n{dirty}")
@@ -1433,7 +1463,8 @@ def cmd_run(a):
     key = render_key("HEAD")
     render_set, needs_host = None, []
     if render:
-        record.update(render={"cases": render, "split": split, "key": key, "paths": drawn[:20]})
+        halves = halves_of(render)
+        record.update(render={"cases": render, "halves": halves, "key": key, "paths": drawn[:20]})
         if render_set_present():
             verdict, render_set, why = render_set_check(repo)
             record["render"]["set"] = {"path": RENDER_ASSETS, "verdict": verdict, "reasons": why[:20],
@@ -1454,20 +1485,26 @@ def cmd_run(a):
         else:
             passes = refresh_reds(a.passes, PASSES_BRANCH, PASSES_FILE) if REDS_GIT else load_json(a.passes, {})
             entry = passes.get(key)
-            if pass_covers(entry, render):
+            have = pass_halves(entry)
+            record["render"]["recorded_halves"] = have
+            if halves_covered(entry, halves) and pass_covers(entry, render):
                 say(f"render: not run here; {entry.get('host')} recorded a pass for this content at {entry.get('at')} "
-                    f"(head {str(entry.get('head'))[:10]}, set {entry.get('set')}): {', '.join(render)}")
+                    f"(key {key[:12]}, head {str(entry.get('head'))[:10]}, set {entry.get('set')}) covering the "
+                    f"{' and '.join(halves)} {'halves' if len(halves) > 1 else 'half'}: {', '.join(render)}")
                 for c in render:
                     record["cases"][c] = {"status": "recorded-pass", "skill": "verify-ui", "evidence": [entry.get("evidence") or ""],
                                           "recorded": entry}
             else:
                 needs_host = render
+                missing = [h for h in halves if h not in have]
+                todo = [c for c in render if not pass_covers(entry, [c])]
                 parents = git("rev-list", "--parents", "-n", "1", "HEAD").split()[1:]
                 say(f"render: not run here; needs a pinned asset set ({RENDER_HOST}): none at {RENDER_ASSETS}, and no render pass "
-                    f"recorded for this content (key {key[:12]}). "
+                    f"recorded for this content's {' and '.join(missing or halves)} {'halves' if len(missing or halves) > 1 else 'half'} "
+                    f"(key {key[:12]}{'; recorded: the ' + ' and '.join(have) + ' half' if have else ''}). "
                     f"There: make the same tree ({'merge ' + parents[1][:10] + ' into ' + parents[0][:10] if len(parents) > 1 else 'check out ' + head[:10]}"
-                    f") and run `just living-scene-gate run --render-only"
-                    f"{' --render-split' if split else ''} --base {base[:10]}`; the merge here is refused until then")
+                    f", content key {key[:12]}) and run `just living-scene-gate run --render-only --base {base[:10]}"
+                    f"{' --cases ' + ','.join(todo) if todo != render else ''}`; the merge here is refused until then")
             cases = cases + ["render-smoke"]
             render = []
     container = a.stdb_container
@@ -1569,7 +1606,8 @@ def cmd_run(a):
                               **({"known_flake": CASES[c]["flaky"]} if "flaky" in CASES[c] and status != "pass" else {})}
     for c in needs_host:
         record["cases"][c] = {"status": "needs-render-host", "skill": "verify-ui", "evidence": [],
-                              "why": f"render: not run here; needs a pinned asset set ({RENDER_HOST}); no pass recorded for key {key[:12]}"}
+                              "why": f"render: not run here; needs a pinned asset set ({RENDER_HOST}); no pass recorded for key {key[:12]}, "
+                                     f"{CASES[c]['render']} half"}
         blocking.append(c)
     if render and all(record["cases"][c]["status"] in PASS_OK for c in render):
         record_render_pass(a, key, head, render, record, render_set)
@@ -1614,13 +1652,15 @@ def record_render_pass(a, key, head, cases, record, render_set):
     def change(passes):
         old = passes.get(key) or {}
         merged = dict(entry, cases={**(old.get("cases") or {}), **entry["cases"]})
+        merged["halves"] = pass_halves(merged)  # what this content's entry now covers, for readers
         passes[key] = merged
         for k in sorted(passes, key=lambda k: passes[k].get("at", ""))[:-300]:  # the last 300
             passes.pop(k)
         return True
     try:
         update_reds(a.passes, change, f"render pass: {head[:10]} ({', '.join(cases)})", branch=PASSES_BRANCH, file=PASSES_FILE)
-        say(f"render: pass recorded for this content (key {key[:12]}) on {REDS_REMOTE}/{PASSES_BRANCH}")
+        say(f"render: pass recorded for this content (key {key[:12]}; {' and '.join(halves_of(cases)) or 'no whole'} "
+            f"{'halves' if len(halves_of(cases)) > 1 else 'half'}) on {REDS_REMOTE}/{PASSES_BRANCH}")
     except Exception as e:
         say(f"WARNING: the render pass could not be recorded on {REDS_REMOTE}/{PASSES_BRANCH} ({e})")
 
@@ -1817,9 +1857,8 @@ def main(argv):
     r.add_argument("--main-dir", default=os.environ.get("LIVING_GATE_MAIN_DIR", str(STATE / "main")))
     r.add_argument("--json")
     r.add_argument("--render-only", action="store_true",
-                   help="only the render cases the diff selects (all of them with --force), on this host's render asset set; records the pass")
-    r.add_argument("--render-split", action="store_true",
-                   help="character paths select the character cases, camera paths the camera cases (LIVING_GATE_RENDER_SPLIT=1)")
+                   help="only the render cases of the halves the diff selects (all six with --force), on this host's render asset set; records the pass")
+    r.add_argument("--render-split", action="store_true", help=argparse.SUPPRESS)  # retired: the split is automatic
     r.set_defaults(f=cmd_run)
     t = sub.add_parser("touches")
     t.add_argument("--base", required=True)

@@ -40,7 +40,7 @@ def sh(cmd, cwd):
 
 def gate(clone, cache, *args, wait=True, env_extra=None):
     env = {**os.environ, "LIVING_GATE_REDS_REPO": clone, "LIVING_GATE_REDS": cache, "LIVING_GATE_REDS_GIT": "1",
-           **(env_extra or {})}
+           "LIVING_GATE_PASSES": cache + ".passes", **(env_extra or {})}
     p = subprocess.Popen([sys.executable, GATE, *args], cwd=clone, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if not wait:
         return p
@@ -428,44 +428,63 @@ def check_staged_genesis():
 
 
 def check_render_selection():
-    """Drawing paths select the render cases (all, or by class with the split); others select none."""
+    """Drawing paths select the render group by half: character paths looks, hair and seat; camera,
+    LOD and sight paths camera-faces, camera-lod and far; shaders, the manifest and the verify-ui
+    drivers (or one path of each half) all six; other paths none."""
     sel = scene_gate.render_selection
     char, cam = ["looks", "hair", "seat"], ["camera-faces", "camera-lod", "far"]
-    for path, split_want in (
-            ("living/game/src/toon.wesl", char), ("living/game/src/toon_light.wesl", char), ("living/game/src/edges.wesl", char),
-            ("living/game/src/handmade.rs", char), ("living/game/src/characters/compose.rs", char),
-            ("living/game/src/characters/palette.rs", char), ("living/game/src/lookdev.rs", char), ("living/game/src/post.rs", char),
-            ("living/game/src/camera.rs", cam), ("living/game/src/perf.rs", cam), ("living/game/src/terrain.wesl", cam),
-            ("living/game/src/sightfield.rs", cam), ("living/game/src/envs.rs", cam),
-            ("living/game/src/record_frames.wesl", char + cam), ("living/game/Cargo.toml", char + cam),
-            (".agents/skills/verify-ui/scripts/check.py", char + cam)):
-        whole = sel([path])
-        split = sel([path], split=True)
-        expect(f"render selection: {path} -> all six, split {len(split_want)}",
-               set(whole) == set(char + cam) and set(split) == set(split_want), f"{whole} / {split}")
+    expect("render halves: the cases split three and three, character then camera",
+           scene_gate.HALF_CASES == {"character": char, "camera": cam} and scene_gate.RENDER_CASES == char + cam,
+           str(scene_gate.HALF_CASES))
+    g = "living/game/src/"
+    for path, want in (
+            *((g + p, char) for p in ("characters/compose.rs", "characters/palette.rs", "characters/book.rs", "handmade.rs",
+                                     "compose.rs", "lookdev.rs", "looks.rs", "style.rs", "characters.rs", "bodies.rs",
+                                     "anim.rs", "gait.rs", "ik.rs", "twist.rs", "mouth.rs", "facing.rs", "post.rs",
+                                     "hair.rs", "characters/hair_cards.rs")),
+            *((g + p, cam) for p in ("camera.rs", "perf.rs", "fade.rs", "envs.rs", "sightfield.rs", "sightedge.rs")),
+            *((g + p, char + cam) for p in ("toon.wesl", "toon_light.wesl", "edges.wesl", "terrain.wesl", "sky.wesl",
+                                           "water.wesl", "record_frames.wesl", "hair.wesl")),
+            ("living/game/Cargo.toml", char + cam), (".agents/skills/verify-ui/scripts/check.py", char + cam),
+            (".agents/skills/verify-ui/scripts/drive.py", char + cam)):
+        got = sel([path])
+        expect(f"render selection: {path} -> {'all six' if len(want) == 6 else want[0] + ' half'}", got == want, str(got))
     for path in ("living/game/src/ui/win.rs", "living/game/src/net.rs", "living/game/src/characters.rs.orig",
                  "living/game/src/sub/toon.wesl", "docs/CHARACTERS.md", "living/authority/src/frame.rs",
-                 ".agents/skills/verify-ui/SKILL.md", "living/game/assets/envs/cullet.json"):
-        expect(f"render selection: {path} draws nothing", sel([path]) == [] and sel([path], split=True) == [], str(sel([path])))
-    both = sel(["living/game/src/camera.rs", "living/game/src/handmade.rs"], split=True)
-    expect("render selection: a character and a camera path together select all six with the split", set(both) == set(char + cam), str(both))
+                 ".agents/skills/verify-ui/SKILL.md", "living/game/assets/envs/cullet.json", "living/game/src/sight.rs"):
+        expect(f"render selection: {path} draws nothing", sel([path]) == [] and scene_gate.render_halves([path]) == [], str(sel([path])))
+    for paths, want, name in (
+            ([g + "camera.rs", g + "handmade.rs"], char + cam, "a character and a camera path together select both halves"),
+            ([g + "handmade.rs", g + "characters/outfit.rs", "docs/TOOLING.md"], char, "two character paths and a doc select the character half"),
+            ([g + "fade.rs", g + "ui/win.rs", "living/authority/src/lib.rs"], cam, "a camera path beside non-drawing paths selects the camera half"),
+            ([g + "perf.rs", g + "toon.wesl"], char + cam, "a camera path and a shader select both halves")):
+        got = sel(paths)
+        expect(f"render selection: {name}", got == want and scene_gate.halves_of(got) == scene_gate.render_halves(paths), str(got))
     expect("render selection: the render cases run in the render group on their seeds",
            all(scene_gate.CASES[c]["group"] == "render" and scene_gate.CASES[c]["world"] in scene_gate.RENDER_SEEDS for c in char + cam)
            and scene_gate.CASES["looks"]["world"] == "cullet")
 
     class A:
         cases, force, render_only = None, False, False
-    expect("plan: a client-only drawing diff runs the render cases alone (no scenes, no genesis)",
-           scene_gate.plan_cases(A, ["living/game/src/toon.wesl"], [], False) == ([], scene_gate.RENDER_CASES))
-    scenes, render = scene_gate.plan_cases(A, ["living/authority/src/lib.rs"], ["living/authority/src/lib.rs"], False)
+    expect("plan: a client-only shader diff runs both halves alone (no scenes, no genesis)",
+           scene_gate.plan_cases(A, [g + "toon.wesl"], []) == ([], scene_gate.RENDER_CASES))
+    expect("plan: a character diff runs the character half alone", scene_gate.plan_cases(A, [g + "handmade.rs"], []) == ([], char))
+    expect("plan: a camera diff runs the camera half alone", scene_gate.plan_cases(A, [g + "camera.rs"], []) == ([], cam))
+    scenes, render = scene_gate.plan_cases(A, ["living/authority/src/lib.rs"], ["living/authority/src/lib.rs"])
     expect("plan: a behavioural diff runs the scenes, no render case and no smoke",
            render == [] and "tick" in scenes and not set(scenes) & {"render-smoke", *scene_gate.RENDER_CASES}, str(scenes))
-    expect("plan: a diff that touches neither runs nothing", scene_gate.plan_cases(A, ["docs/TOOLING.md"], [], False) == ([], []))
-    A.render_only, A.force = True, True
-    expect("plan: --render-only --force runs every render case and no scene",
-           scene_gate.plan_cases(A, ["living/authority/src/lib.rs"], ["living/authority/src/lib.rs"], False) == ([], scene_gate.RENDER_CASES))
+    scenes, render = scene_gate.plan_cases(A, ["living/authority/src/lib.rs", g + "sightedge.rs"], ["living/authority/src/lib.rs"])
+    expect("plan: a behavioural and camera diff runs the scenes and the camera half", "tick" in scenes and render == cam, str(render))
+    expect("plan: a diff that touches neither runs nothing", scene_gate.plan_cases(A, ["docs/TOOLING.md"], []) == ([], []))
+    A.render_only = True
+    expect("plan: --render-only runs the selected half and no scene",
+           scene_gate.plan_cases(A, [g + "envs.rs", "living/authority/src/lib.rs"], ["living/authority/src/lib.rs"]) == ([], cam))
+    A.force = True
+    expect("plan: --render-only --force runs all six (a manual full pass), whatever the diff selects",
+           scene_gate.plan_cases(A, ["living/authority/src/lib.rs"], ["living/authority/src/lib.rs"]) == ([], scene_gate.RENDER_CASES)
+           and scene_gate.plan_cases(A, [g + "handmade.rs"], []) == ([], scene_gate.RENDER_CASES))
     A.render_only, A.force, A.cases = False, False, "tick,hair,render-smoke"
-    expect("plan: --cases names them exactly", scene_gate.plan_cases(A, [], [], False) == (["tick", "render-smoke"], ["hair"]))
+    expect("plan: --cases names them exactly", scene_gate.plan_cases(A, [], []) == (["tick", "render-smoke"], ["hair"]))
 
 
 def check_render_logs():
@@ -637,11 +656,34 @@ def check_smoke_links():
 
 def check_render_passes(t):
     """Recorded render passes: shared through their own branch like the red-on-main list; a pass
-    covers the cases it names; a merge's content key ignores everything outside living/ and the skills."""
+    covers the cases it names and the halves all of whose cases it names; a merge's content key
+    ignores everything outside living/ and the skills."""
     expect("passes: a pass covers its cases", scene_gate.pass_covers({"cases": {"hair": "pass", "looks": "flaky-pass", "far": "red-on-main"}}, ["hair", "looks", "far"]))
     expect("passes: a missing or failed case is not covered",
            not scene_gate.pass_covers({"cases": {"hair": "pass"}}, ["hair", "looks"])
            and not scene_gate.pass_covers({"cases": {"hair": "fail"}}, ["hair"]) and not scene_gate.pass_covers(None, ["hair"]))
+    full = {"cases": dict.fromkeys(scene_gate.RENDER_CASES, "pass")}  # dev-box's 2ed2d93d65c7, before the split: no `halves`
+    character = {"cases": {"looks": "pass", "hair": "flaky-pass", "seat": "red-on-main"}, "halves": ["character"]}
+    camera = {"cases": {"camera-faces": "pass", "camera-lod": "pass", "far": "pass"}, "halves": ["camera"]}
+    partial = {"cases": {"looks": "pass", "hair": "pass", "camera-faces": "pass", "camera-lod": "pass", "far": "fail"}}
+    hc = scene_gate.halves_covered
+    for name, entry, need, want in (
+            ("a full pass from before the split covers the character half", full, ["character"], True),
+            ("a full pass from before the split covers the camera half", full, ["camera"], True),
+            ("a full pass from before the split covers both halves", full, ["character", "camera"], True),
+            ("a character-half pass covers a character change", character, ["character"], True),
+            ("a character-half pass does not cover a camera change", character, ["camera"], False),
+            ("a character-half pass does not cover a change needing both", character, ["character", "camera"], False),
+            ("a camera-half pass does not cover a character change", camera, ["character"], False),
+            ("a camera-half pass covers a camera change", camera, ["camera"], True),
+            ("a half with a case missing or failed is not covered", partial, ["character"], False),
+            ("... nor the other with a failed case", partial, ["camera"], False),
+            ("no pass covers nothing", None, ["character"], False),
+            ("a change needing no half is covered by anything", None, [], True)):
+        expect(f"passes: {name}", hc(entry, need) == want, str(scene_gate.pass_halves(entry)))
+    merged = {"cases": {**character["cases"], **camera["cases"]}}
+    expect("passes: a character pass and a camera pass recorded for one content together cover both halves",
+           hc(merged, ["character", "camera"]) and scene_gate.pass_halves(merged) == ["character", "camera"])
     repo = os.path.join(t, "keys")
     sh(f"git init -q -b main {repo}", t)
     for d in ("living/game/src", ".agents/skills/verify/scripts", ".agents/skills/verify-ui/scripts", "docs"):
@@ -675,6 +717,77 @@ def check_render_passes(t):
            r.returncode == 0 and passes and passes.get("k", {}).get("host") == "devbox" and "k" not in (reds or {}), r.stderr + r2.stderr + r2.stdout)
     files = sh("git ls-tree --name-only origin/render-passes", os.path.join(t, "spark")).split()
     expect("passes: the branch holds its one file", files == ["render-passes.json"], str(files))
+    check_render_passes_cli(t, tools)
+
+
+def record_pass(t, tools, key, cases, legacy=False):
+    """dev-box's side, written from the devbox clone to the shared branch: the gate's own
+    record_render_pass for `cases` of content `key`, or with `legacy` a raw entry as recorded before
+    the split (all its cases, no `halves`)."""
+    code = ("import json,sys,scene_gate as g\n"
+            "key, cases = sys.argv[2], json.loads(sys.argv[3])\n"
+            "class A:\n    passes = sys.argv[1]\n"
+            "if sys.argv[4] == '1':\n"
+            "    def ch(p):\n        p[key] = {'cases': dict.fromkeys(cases, 'pass'), 'host': 'dev-box', 'head': 'h', 'at': 'then', 'set': 's'}\n        return True\n"
+            "    g.update_reds(A.passes, ch, 'render pass', branch='render-passes', file='render-passes.json')\n"
+            "else:\n"
+            "    g.record_render_pass(A, key, 'h' * 40, cases, {'base': 'b', 'evidence': 'e', 'cases': {c: {'status': 'pass'} for c in cases}}, {'id': 's'})\n")
+    env = {**os.environ, "LIVING_GATE_REDS_REPO": os.path.join(t, "devbox"), "PYTHONPATH": tools}
+    r = subprocess.run([sys.executable, "-c", code, os.path.join(t, "devbox-passes.json"), key, json.dumps(list(cases)), "1" if legacy else "0"],
+                       env=env, capture_output=True, text=True, cwd=tools)
+    if r.returncode or "pass recorded" not in r.stdout + r.stderr and not legacy:
+        raise RuntimeError(r.stdout + r.stderr)
+
+
+def check_render_passes_cli(t, tools):
+    """The Spark's gate (no asset set) reads dev-box's recorded passes by (content, half) through the
+    real CLI: a character-half pass does not let a camera change through, and the refusal names the
+    missing half (and, when the other half is recorded, only the missing half's cases to run); the camera half recorded too, or one full pass from before
+    the split, lets it through. (The run then stops at the missing SpacetimeDB container, exit 2:
+    the render decision is printed and recorded before.)"""
+    spark, cache = os.path.join(t, "spark"), os.path.join(t, "spark.json")
+    g = Path(spark, "living/game/src")
+    g.mkdir(parents=True, exist_ok=True)
+    for f in ("camera.rs", "handmade.rs"):
+        (g / f).write_text("// one\n")
+    sh("git add -A living && git commit -q -m 'drawing base'", spark)
+    base = sh("git rev-parse HEAD", spark).strip()
+    (g / "camera.rs").write_text("// two\n")
+    sh("git commit -q -am 'camera change'", spark)
+    key = scene_gate.render_key("HEAD", cwd=spark)
+    env = {"LIVING_GATE_RENDER_ASSETS": os.path.join(t, "no-render-set"), "LIVING_GATE_RENDER_HOST": "dev-box"}
+
+    def run():
+        code, out = gate(spark, cache, "run", "--base", base, "--stdb-container", "no-such-gate-container", env_extra=env)
+        records = sorted(Path(spark, ".local/living/verify").glob("gate-*/gate.json"), key=os.path.getmtime)
+        return code, out, json.loads(records[-1].read_text()).get("render", {}) if records else {}
+    record_pass(t, tools, key, ["looks", "hair", "seat"])
+    code, out, rec = run()
+    expect("cli: a camera change with only a character-half pass recorded is refused, naming the camera half and its cases",
+           "render: not run here; needs a pinned asset set (dev-box)" in out and "this content's camera half" in out
+           and "recorded: the character half" in out and "--cases" not in out
+           and rec.get("halves") == ["camera"] and rec.get("recorded_halves") == ["character"], out)
+    record_pass(t, tools, key, ["camera-faces", "camera-lod", "far"])
+    code, out, rec = run()
+    expect("cli: with the camera half recorded too, the same content's camera change is let through",
+           "recorded a pass for this content" in out and "covering the camera half" in out
+           and "needs a pinned asset set" not in out and rec.get("recorded_halves") == ["character", "camera"], out)
+    (g / "handmade.rs").write_text("// two\n")
+    sh("git commit -q -am 'character change too'", spark)
+    key2 = scene_gate.render_key("HEAD", cwd=spark)
+    record_pass(t, tools, key2, ["looks", "hair", "seat"])
+    code, out, rec = run()
+    expect("cli: a change touching both halves with one half recorded is refused, naming the other",
+           "this content's camera half" in out and "--cases camera-faces,camera-lod,far" in out
+           and rec.get("halves") == ["character", "camera"], out)
+    record_pass(t, tools, key2, scene_gate.RENDER_CASES, legacy=True)  # one full pass as before the split (no `halves`)
+    code, out, rec = run()
+    expect("cli: a full pass (all six) lets a both-halves change through",
+           "covering the character and camera halves" in out and "needs a pinned asset set" not in out, out)
+    passes = json.loads(sh("git show origin/render-passes:render-passes.json", os.path.join(t, "devbox")))
+    expect("cli: the shared entries are keyed by content alone, each naming the halves it covers",
+           set(passes) >= {key, key2} and passes[key].get("halves") == ["character", "camera"]
+           and set(passes[key]["cases"]) == set(scene_gate.RENDER_CASES) and "halves" not in passes[key2], json.dumps(passes)[:800])
 
 
 def main():
