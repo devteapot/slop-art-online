@@ -386,6 +386,79 @@ Two rules for any script, queue or agent shell that starts or restarts a Spaceti
 - **Its own systemd scope:** `systemd-run --user --scope --quiet podman start NAME`. Rootless podman's `conmon` and `fuse-overlayfs` otherwise join the caller's cgroup: started from an agent's shell, the overlay helper is lost within minutes (`podman exec` then fails with "transport endpoint is not connected"), and started from a systemd unit (the dev-box merge queue), stopping that unit kills the container's processes with it, a forced stop (dev-box, 2026-11-20). `~/.local/state/devbox-queue/run.sh` starts `coord-stdb` this way.
 - **No lock fd:** close the gate lock's descriptor in the command that starts the container, e.g. `systemd-run --user --scope --quiet podman start NAME 9>&-` for a lock held on fd 9 (`exec 9>~/.local/state/slop-build/gate.lock; flock -x 9`). A container started while a shell holds the lock inherits the descriptor in `conmon` and `fuse-overlayfs` and keeps the lock after the script exits: on 2026-11-20 a scratch server recycled inside a locked measurement held `gate.lock` for 70 minutes, stalling a merge gate for two hours and Blender's `flock -s` pause. Python's `subprocess` does not pass descriptors on by default (`close_fds=True`). To see who holds the lock: `fuser ~/.local/state/slop-build/gate.lock`, then `ps` on each pid; a container's `conmon` among them is this case, and stopping the (idle) container with `podman kill -s INT` releases it.
 
+## Building the render asset set
+
+The scene gate's verify-ui `render` group draws with the game client's generated assets, which are git-ignored and made on the dev-box only (Blender, the clip library, the KTX2 encoder's AVX2 kernel). The gate therefore reads a fixed, read-only set: `~/slop-assets/<id>/`, with `~/slop-assets/current` linking to the pinned one. [`living/tools/render_set.py`](../living/tools/render_set.py) builds, checks, links and pins sets. How the gate uses one is under the scene gate, [Render asset set](#render-asset-set). In short, it runs `check` and then `link`: exit 1 means corrupt, exit 2 stale. Its fields change only by a name the gate asks for, not by a fork of the format.
+
+**What a set holds.**
+- `assets/`, laid out as `living/game/assets`. From the checkout:
+  - the VRoid and KayKit bases;
+  - the animated bases with their clips, the wolf and the deer;
+  - `textures/`, `envs/<name>/`, and `view/` when present.
+
+  From the composed bundle:
+  - the types, pages, styles, strands and `own-clips.glb`;
+  - the look book.
+- `bundle/`: the bundle as built, its `MANIFEST.txt` and the world look data it was checked against.
+- `SET-MANIFEST.txt`: every file's sha256.
+- `set.json`:
+  - `bundle`: file, sha256, commit, port and pictures;
+  - `main_commit`, for provenance only;
+  - `generator_trees` and their one `generator_tree`;
+  - `looks`: the book's generations and each world's;
+  - `clips`;
+  - `book_drift`.
+
+`<id>` is the first 12 hex digits of the bundle file's sha256.
+
+**Stale or corrupt.** `check` compares a set with a checkout:
+- **corrupt** (exit 1): a file's sha256 differs, or a file is missing or extra;
+- **stale** (exit 2): the checkout's generator tree hash differs (`git rev-parse <commit>:living/tools/{blender,characters,textures}`), or a world's look generation (`living/seeds/worlds/<w>/looks.json`) is not in the set's book.
+
+The test is content-addressed, so a main commit outside those three folders never makes a set stale. Any edit inside them does, even one that changes no output: rebuild and pin again after it lands.
+
+**Rebuild and pin** (dev-box, about 41 minutes beside other Blender work at `JOBS=2`; 2026-11-20: 2,768 files, 407 MB). Work in a worktree at main, with no tracked changes. Use the full clip library, `~/archive/clip-library`. `animate.py` and `gen_person.sh` read it from `.local/kimodo/library` first. The coordinator's `.local/kimodo/outputs/library` is partial.
+
+```bash
+mkdir -p .local/kimodo && ln -sfn ~/archive/clip-library .local/kimodo/library   # the full clip library, where the bakes look first
+just living-game-assets                                 # 1-2: bases, textures, scenery, the bases' clip bake (under assets_guard.py)
+living/tools/blender/gen_types.sh                       # 3: the 21 types and their pages
+living/tools/blender/gen_styles.sh                      # 3: hair, outfit and overlay styles, strands.png
+python3 living/tools/characters/town.py .local/town --town living/seeds/cullet.json --models-only --no-pages --lod near --jobs 2   # 4: the 64 residents the checks need
+ONLY=present LOD=near living/tools/blender/gen_person.sh clips=man     # 5: the shared clip bake, own-clips.glb
+python3 living/tools/characters/bundle.py OUT --name render-set --with-clips --book SHIPPED_LOOKS.json \
+    [--allow-book-drift living/tools/characters/book-drift-<generation>.json]   # 6: the checks, PNG and KTX2 bundles
+python3 living/tools/render_set.py build --bundle OUT/render-set-<sha8>-ktx2.tar.gz   # 7: ~/slop-assets/<id>/, read-only
+python3 living/tools/render_set.py check ~/slop-assets/<id>    # must print "ok"
+python3 living/tools/render_set.py pin ~/slop-assets/<id>      # then, and only then
+```
+
+- **`--no-pages` (step 4).** Without it `town.py` writes town pages into `lookdev/pages/`. `pictures.py` then refuses them as pictures of no known class.
+- **The book.** It is the one the last bundle shipped (`--book`), never one rebuilt in place.
+  - `book_drift.py` rebuilds it into a scratch file. Outfit colours may differ by one level of 255.
+  - Known larger differences pass only through a reviewed, tracked list: `book_drift.py --json` writes it, and `--allow-book-drift` reads it. Its path and sha256 go into the manifest and `set.json`.
+  - `book-drift-c4-cbcc40bf.json` holds the 6 differences of 2026-11-20 (Wick Marl's smock jersey by 49 levels; the shipped book's colours were measured on an earlier build). The next generation, which rebuilds the book whole, deletes it.
+- **A set is never rebuilt in place.** A new bundle has a new id. `pin` replaces `current` atomically.
+
+**A generator branch builds its own** for its own render pass, without touching the pinned set. Its worktree, at its branch with no tracked changes, runs the same steps with `--root` set to a scratch root, and does not pin:
+
+```bash
+python3 living/tools/render_set.py build --bundle OUT/…-ktx2.tar.gz --root ~/slop-assets/branches/<branch>
+python3 living/tools/render_set.py check ~/slop-assets/branches/<branch>/<id> && python3 living/tools/render_set.py link ~/slop-assets/branches/<branch>/<id> --repo .
+```
+
+`link` symlinks `lookdev`, `view`, `textures`, each `envs/<name>` and `characters/looks.json` into the checkout's `living/game/assets`. The client reads its assets from its own checkout (`lookdev::asset_root`, a compiled-in path), so each worktree that draws needs the links or its own build. `.gitignore` matches the links as it matches the folders. With port output (`SLOP_PORT=hair,ink`), pass `--port hair,ink` to `bundle.py`: it refuses a build whose port files do not match.
+
+**Generated assets never change tracked files.** `just living-game-assets` runs under [`assets_guard.py`](../living/tools/assets_guard.py), which fails the run, naming them, if it changed any tracked file. The rules' footprint table (`living/rules/data/buildings.json`) is tracked because the authority and the client compile it in. It changes on purpose:
+- `just living-rules-table` gathers it from the generated models' sidecars under `envs/`, Cullet's lots included, and prints the diff to review;
+- the change merges as a rules change, through the gate with scenes.
+
+**Follow-up: the table writers' opt-in.**
+- **Today.** `gen_buildings.sh`, `gen_city.sh` and `gen_cullet.sh` still write the table on every full run. Their output equals the committed table, so the guard passes: on 2026-11-20 a full recipe run left every tracked file as it was.
+- **The opt-in.** Making the write opt-in (`RULES_TABLE=1`) touches the hashed `blender` tree. It therefore goes in with the next change to the generator trees that rebuilds its own set (char-port-2's S6 or S8). The patch is `~/.t3/worktrees/slop-art-online/t3-b749c655-2e53274b9e364084/.local/rs/blender-optin.patch` on the dev-box.
+
+**Known on main** (2026-11-20, `error-lines.txt` of the build). `gen_anim.sh`'s own `marker_check.py` exits 1: `strafe_run_left_v48` has "no contact window" for a foot on both VRoid bases, and so does `run_diag_br_v48` on Vivi. These are clip-library takes. The bake is written anyway, and the set records 84 clips a base.
+
 ## Measurements (dev-box, 2026-11-11)
 
 All runs used `CARGO_BUILD_JOBS=12` on the 32-core dev-box while other workers were building. The load average at each run's start (and the range during it) is given because it moved the numbers more than anything else. Before/after arms on the same change are interleaved A B B A. The runs used a scratch clone of the repository and private target folders; reflink snapshots gave each warm arm the same starting state. The raw records are in each run's JSON (`check.py --json`) and the step logs.

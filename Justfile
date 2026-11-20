@@ -162,8 +162,13 @@ living-script-gate:
 # The game client's generated assets (git-ignored; the scripts are the source), on any machine
 # with Blender: CC0 look-dev models, nature, buildings, then the animated characters. The
 # animation step needs the Kimodo cache in .local/kimodo/outputs/library/: make it with
-# living/tools/kimodo/spark.sh, or copy it from a machine that has it.
+# living/tools/kimodo/spark.sh, or copy it from a machine that has it. Run under assets_guard.py:
+# it fails, naming them, if the run changed any tracked file (rules data such as the footprint
+# table is changed on purpose: `just living-rules-table`).
 living-game-assets:
+    python3 living/tools/assets_guard.py -- just _living-game-assets-steps
+
+_living-game-assets-steps:
     living/tools/lookdev_assets.sh
     just living-game-textures --set all
     living/tools/blender/gen_nature.sh
@@ -171,6 +176,13 @@ living-game-assets:
     living/tools/blender/gen_city.sh
     living/tools/blender/gen_cullet.sh
     living/tools/blender/gen_anim.sh
+
+# The rules' footprint table (living/rules/data/buildings.json, tracked: the authority and the
+# client compile it in) from the generated models' footprint sidecars under envs/ (every set,
+# Cullet's lots included), after `just living-game-assets`. A rules change: review the diff.
+living-rules-table:
+    blender -b --python-exit-code 1 -P living/tools/blender/buildings.py -- --table living/rules/data/buildings.json --envs living/game/assets/envs 2>&1 | grep -E '^TABLE|Error|Traceback' || true
+    git diff --stat -- living/rules/data/buildings.json
 
 # The calibration frame for a hand-made character (docs/HANDMADE_HAIR.md): the contract's audit,
 # three fixed daylight shots through the asset view, and each patch's colour against its target in
