@@ -45,8 +45,8 @@ use std::rc::Rc;
 
 /// A multiplicative hash for the sweep's own maps of ids (docs/COMBAT_PHASE.md, step 2): the
 /// default SipHash costs several times more per lookup, and the keys are not chosen by anyone.
-/// Only for maps whose order of iteration reaches no write (lookups, and loops whose effects do
-/// not depend on order).
+/// Only for maps whose order of iteration decides no row's content (lookups, and loops whose
+/// effects do not depend on order: at most the order of deletes).
 #[derive(Default)]
 pub(crate) struct IdHasher(u64);
 
