@@ -193,6 +193,9 @@ def main():
         sys.exit("benchmarks run only on verify-* scratch databases")
     if not a.keep:
         B.stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", a.db, "--delete-data", "-y")
+        # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+        import genesis_wait
+        genesis_wait.wait_ready(URL, a.db, admin_token())
         # Over HTTP: the script is past the 128 KiB one command-line argument may hold.
         from install_script import install
         code, body = install(a.db, (ROOT / "living/scripts/skills.rhai").read_text())

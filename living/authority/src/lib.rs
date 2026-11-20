@@ -104,6 +104,11 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
 
 /// The world's clocks: the 60 Hz tick and the 1 s housekeeping, once the world exists.
 pub(crate) fn start_ticking(ctx: &ReducerContext) {
+    // A measurement build (`LIVING_NO_TICK=1`: genesis compared by table hashes,
+    // docs/STAGED_GENESIS.md §5) makes the world and leaves it still.
+    if option_env!("LIVING_NO_TICK").is_some() {
+        return;
+    }
     ctx.db.tick_timer().insert(TickTimer { scheduled_id: 0, scheduled_at: ScheduleAt::Interval(Duration::from_micros(crate::frame::TICK_US as u64).into()) });
     ctx.db.slow_timer().insert(SlowTimer { scheduled_id: 0, scheduled_at: ScheduleAt::Interval(Duration::from_secs(1).into()) });
 }
@@ -680,6 +685,7 @@ pub fn my_deliberations(ctx: &ViewContext) -> Vec<Deliberation> {
 
 #[spacetimedb::reducer]
 pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     join_with(ctx, name, None)
 }
 
@@ -689,6 +695,7 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
 /// (changing an existing reducer's arguments is not a safe module update).
 #[spacetimedb::reducer]
 pub fn join_as(ctx: &ReducerContext, name: String, sex: String) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let Some(s) = living_rules::sex::Sex::parse(&sex) else {
         return Err(format!("sex must be \"f\" or \"m\", not {sex:?}"));
     };
@@ -752,6 +759,7 @@ fn my_character(ctx: &ReducerContext) -> Result<Character, String> {
 /// other node becomes the character's behavior.
 #[spacetimedb::reducer]
 pub fn human_act(ctx: &ReducerContext, node: String) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     let g = living_rules::graph::parse(&node)?;
     if let living_rules::graph::Node::Do(a) = &g.root {
@@ -794,6 +802,7 @@ pub(crate) fn command_done(ctx: &ReducerContext, id: u32, now: u64) {
 /// that follows the cursor sends looks freely and only changes write rows.
 #[spacetimedb::reducer]
 pub fn human_face(ctx: &ReducerContext, dx: f32, dy: f32) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     if !dx.is_finite() || !dy.is_finite() {
         return Err("direction must be finite".into());
@@ -805,6 +814,7 @@ pub fn human_face(ctx: &ReducerContext, dx: f32, dy: f32) -> Result<(), String> 
 /// Select Middle (0), Far (1) or Near (2). The scheduled sight sweep applies the new band.
 #[spacetimedb::reducer]
 pub fn human_gaze(ctx: &ReducerContext, band: u8) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     attention::set(ctx, me.id, living_rules::sight::GazeBand::try_from(band)?, common::now_ms(ctx))
 }
@@ -816,6 +826,7 @@ pub fn human_gaze(ctx: &ReducerContext, band: u8) -> Result<(), String> {
 /// changes are rate-limited by the `input_hz`/`input_burst` laws.
 #[spacetimedb::reducer]
 pub fn human_move(ctx: &ReducerContext, dx: f32, dy: f32, run: bool) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     if !dx.is_finite() || !dy.is_finite() {
         return Err("direction must be finite".into());
@@ -860,6 +871,7 @@ pub(crate) fn player_controls(ctx: &ReducerContext, id: u32, now: u64) -> Result
 /// before `human_speak`.
 #[spacetimedb::reducer]
 pub fn human_say(ctx: &ReducerContext, text: String, to: u32) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     speech::speak(ctx, me.id, &text, to, "say", common::now_ms(ctx))
 }
@@ -868,6 +880,7 @@ pub fn human_say(ctx: &ReducerContext, text: String, to: u32) -> Result<(), Stri
 /// with 0. A line the way refuses comes back as the reducer's error, in the world's words.
 #[spacetimedb::reducer]
 pub fn human_speak(ctx: &ReducerContext, text: String, to: u32, way: String) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     speech::speak(ctx, me.id, &text, to, &way, common::now_ms(ctx))
 }

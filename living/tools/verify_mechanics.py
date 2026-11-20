@@ -82,6 +82,9 @@ def main():
             ap.error("--gate-world requires a launched mechanics gate database")
     else:
         stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", db, "--delete-data", "-y")
+        # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+        import genesis_wait
+        genesis_wait.wait_ready_cli(stdb, db)
         time.sleep(3)
     stdb("call", "-s", "local", db, "spawn_crowd", "10", "true")
     time.sleep(1.5)
