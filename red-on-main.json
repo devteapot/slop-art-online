@@ -11,6 +11,18 @@
     "skill": "verify-player",
     "times": 4
   },
+  "generation-cullet:cullet-laws:the seed's laws are composed over the shipped script": {
+    "case": "generation-cullet:cullet-laws:the seed's laws are composed over the shipped script",
+    "first_main": "bfbbc0796f633169b306c7eca0f9a8132ed919c2",
+    "first_seen": "2026-11-20T01:29:16+01:00",
+    "last_evidence": ".local/living/verify/gate-1120012132-5bacae-fuel-cullet-laws/checks.json (Spark)",
+    "last_main": "bfbbc0796f633169b306c7eca0f9a8132ed919c2",
+    "last_seen": "2026-11-20T01:29:16+01:00",
+    "owner": "Spark coordinator (after status-parts-genesis)",
+    "reason": "red on main: the installed script's overlay part differs from the seed's laws on both cullet-laws seeds (GC: diagnosed and fixed separately, after status-parts-genesis). Drop by hand when green: reds --drop this key",
+    "skill": "verify-generation",
+    "times": 0
+  },
   "skirmish": {
     "case": "skirmish",
     "first_main": "3b24a6ba1ac1900ff63b4e656f3f15dcf0b1992b",
