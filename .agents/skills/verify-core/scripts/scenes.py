@@ -12,8 +12,13 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+import sys
 
 ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(ROOT / "living/tools"))
+from law_values import own_laws  # noqa: E402
+from verify_credentials import redact  # noqa: E402
+
 STDB = ROOT / "living/tools/stdb"
 BASE = ROOT / ".local/living/verify"
 
@@ -35,10 +40,10 @@ class Scene:
     def command(self, *args, check=True):
         r = subprocess.run([str(STDB), *args], capture_output=True, text=True, timeout=180)
         with self.log.open("a") as f:
-            f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": args,
-                                "exit": r.returncode, "stdout": r.stdout, "stderr": r.stderr}) + "\n")
+            f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": [redact(arg) for arg in args],
+                                "exit": r.returncode, "stdout": redact(r.stdout), "stderr": redact(r.stderr)}) + "\n")
         if check and r.returncode:
-            raise RuntimeError(f"stdb {args[0]} failed: {r.stderr[-500:]}")
+            raise RuntimeError(f"stdb {args[0]} failed: {redact(r.stderr)[-500:]}")
         return r
 
     def call(self, reducer, *args, check=True):
@@ -62,10 +67,11 @@ class Scene:
                 code, body = r.status, r.read().decode()
         except urllib.error.HTTPError as e:
             code, body = e.code, e.read().decode()
+        safe_body = redact(body, (self.token,))
         with self.log.open("a") as f:
-            f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": ["call (http)", self.db, reducer, f"{len(json.dumps(args))} bytes"], "exit": 0 if code == 200 else 1, "stdout": body, "stderr": ""}) + "\n")
+            f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": ["call (http)", self.db, reducer, f"{len(json.dumps(args))} bytes"], "exit": 0 if code == 200 else 1, "stdout": safe_body, "stderr": ""}) + "\n")
         if check and code != 200:
-            raise RuntimeError(f"{reducer} over HTTP failed: {code} {body[-500:]}")
+            raise RuntimeError(f"{reducer} over HTTP failed: {code} {safe_body[-500:]}")
         return subprocess.CompletedProcess([reducer], 0 if code == 200 else 1, body, "")
 
     def http_rows(self, query):
@@ -89,7 +95,7 @@ class Scene:
         names = [e["name"]["some"] for e in table["schema"]["elements"]]
         rows = [dict(zip(names, row)) for row in table["rows"]]
         if label:
-            (self.out / f"{self.name}-{label}.json").write_text(json.dumps(rows, indent=2) + "\n")
+            (self.out / f"{self.name}-{label}.json").write_text(redact(json.dumps(rows, indent=2)) + "\n")
         return rows
 
     def expect(self, name, passed, detail=None, fatal=True, known=False):
@@ -186,7 +192,7 @@ def tick(s):
     finally:
         s.call("set_profile", False)
     r = s.command("logs", "-s", "local", s.db)
-    (s.out / "tick-profile.txt").write_text(r.stdout)
+    (s.out / "tick-profile.txt").write_text(redact(r.stdout))
     s.expect("profile emits actual tick spans", 'tick' in r.stdout and ('µs' in r.stdout or 'us' in r.stdout), s.db)
 
 
@@ -1389,14 +1395,14 @@ def moves(s):
 
 
 def law_value(s, name):
-    """A world law in force: the world's own value (`world_law`, set with `set_world_law`), else
-    the installed script's `laws()` number."""
+    """A world law in force: the world's own value (`law_override`, or `world_law` on an older
+    module: `living/tools/law_values.py`), else the installed script's `laws()` number."""
     def val(v):
         v = str(v).strip().strip('"')
         return {"true": True, "false": False}[v] if v in ("true", "false") else float(v)
-    own = [r for r in s.rows("SELECT * FROM world_law") if r["name"] == name]
-    if own:
-        return val(own[0]["value"])
+    own = own_laws(s.rows)
+    if name in own:
+        return val(own[name])
     src = s.rows("SELECT source FROM script WHERE name = 'skills'")[0]["source"]
     # A world's own values block (`world_law_values`, a seed's `laws`) comes before laws().
     m = re.search(r"\b" + name + r": (true|false|[0-9.]+)", src)
@@ -2704,7 +2710,10 @@ SHORT_HOURS = {
 
 
 def compose(base, overlay):
-    for name in overlay:
+    # As `floors::compose`: an overlay that replaces `status_of` alone is asked it whole, the base's
+    # parts kept as `base_status_parts` (docs/STATUS_PARTS.md).
+    names = list(overlay) + (["status_parts"] if "status_of" in overlay and "status_parts" not in overlay else [])
+    for name in names:
         base = base.replace(f"fn {name}(", f"fn base_{name}(")
     return base + "\n" + "\n".join(overlay.values()) + "\n"
 
@@ -3523,7 +3532,7 @@ def sleeper_cue(s):
     try:
         set_law(s, "cues_on", True)
         set_cues(s, o, [cue("stance:verify_watch", who="unknown", at="verify bed", within=20.0)], [bed])
-        s.wait(lambda: any(w["name"] == "cues_on" and w["value"] == "true" for w in s.rows("SELECT * FROM world_law")), 10)
+        s.wait(lambda: own_laws(s.rows).get("cues_on") == "true", 10)
         s.graph(o, {"seq": [{"do": "sleep"}]})
         s.wait(lambda: slumber(), seconds=20)
         s.call("place_at", n, line[2][0], line[2][1] + 1.0)
@@ -3889,7 +3898,7 @@ def stranger_filter(s):
         off = waved_at()
         s.expect("law off: the nearest stranger is A, of O's community with no relation row", off == a, {"waved_at": off, "A": a, "N": n})
         set_law(s, "stranger_by_name", True)
-        s.wait(lambda: any(r["name"] == "stranger_by_name" and r["value"] == "true" for r in s.rows("SELECT * FROM world_law")), 10)
+        s.wait(lambda: own_laws(s.rows).get("stranger_by_name") == "true", 10)
         on = waved_at()
         s.expect("law on: the nearest stranger is N, whose name O does not know (its relation row does not count)", on == n, {"waved_at": on, "A": a, "N": n})
         # Too far away to make out: who someone is only within 4 m (as Cullet's law within 24 m).
@@ -4004,7 +4013,7 @@ def cues(s):
         time.sleep(2)
         set_law(s, "cues_on", True)
         set_law(s, "cue_gap_s", 15)
-        s.wait(lambda: any(w["name"] == "cues_on" and w["value"] == "true" for w in s.rows("SELECT * FROM world_law")), 10)
+        s.wait(lambda: own_laws(s.rows).get("cues_on") == "true", 10)
         t1 = now()
         s.call("place_at", n, line[2][0], line[2][1] + 1.0)
         got = s.wait(lambda: noticed(t1), 10)
@@ -5637,6 +5646,134 @@ def body_sex(s):
     finally:
         s.call("install_script", shipped)
 
+REST_MS = 8000  # rest_duration in living/scripts/skills.rhai
+
+
+def doing_watch(s, who, seconds, every=0.02):
+    """Samples of `who`'s `doing` row over HTTP for `seconds` (about every 20 ms): (local ms, row
+    or None, the authority's clock when sampled)."""
+    out = []
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        rows = s.http_rows(f"SELECT * FROM doing WHERE id = {who}")
+        out.append((time.time_ns() // 1_000_000, rows[0] if rows else None))
+        time.sleep(every)
+    return out
+
+
+def doing_renewals(samples):
+    """What a run of samples shows: each renewal (the row's end moved on to a new rest's, the row
+    held, past its end, between them), with the authority's gap between the old
+    rest's end and the next one's start (its end less the rest's 8 s): the pacing, which the
+    hold must leave as it was; whether the start (`since_ms`) was kept; how many samples saw the
+    row held; and the longest stretch the row was absent (local ms, from the last sample with a
+    row to the next)."""
+    renewals, last, held = [], None, 0
+    for at, row in samples:
+        if row is None:
+            continue
+        if row["until_ms"] < at:
+            # Past its end and still there: held until the next evaluation (local and authority
+            # clocks are the host's).
+            held += 1
+        if last is not None and row["until_ms"] != last["until_ms"]:
+            renewals.append({"old_until": last["until_ms"], "new_since": row["since_ms"], "new_until": row["until_ms"],
+                             "gap_ms": (row["until_ms"] - REST_MS) - last["until_ms"], "since_kept": row["since_ms"] == last["since_ms"]})
+        last = row
+    misses = [i for i, (_, r) in enumerate(samples) if r is None]
+    longest, i = 0, 0
+    while i < len(samples):
+        if samples[i][1] is None:
+            j = i
+            while j < len(samples) and samples[j][1] is None:
+                j += 1
+            if i > 0 and j < len(samples):
+                longest = max(longest, samples[j][0] - samples[i - 1][0])
+            i = j
+        else:
+            i += 1
+    steps = [samples[k + 1][0] - samples[k][0] for k in range(len(samples) - 1)]
+    step = sorted(steps)[len(steps) // 2] if steps else None
+    return {"renewals": renewals, "samples": len(samples), "missing_samples": len(misses), "held_samples": held, "longest_absent_ms": longest, "median_sample_ms": step}
+
+
+def doing_renew(s):
+    """A rest renewed in place (doing-renew): a resident whose only desire is to rest rests 8 s at a
+    time, and each rest that finishes is followed by the next at the body's next evaluation, as
+    before (about a second later here: the pacing is unchanged). Its `doing` row stays: held as it
+    was (past its end) between two rests, then renewed in place. Polled about every 20 ms
+    for 34 s (three renewals or more): no sample lacks it, the gap between a rest's end and the
+    next one's start is the old one (median 500 ms or more, none past 1.1 s), and the row keeps
+    its `since_ms` (one rest going on). A rest under a `first` root renews the same way.
+    A real change still shows at once: a graph that walks the resident off ends the rest, and the
+    row is gone while it walks (walking is not shown), within a second of the install. With the
+    `renew_in_place` law off the old way comes back: the row is absent after each rest.
+    `--baseline` (a build before doing-renew) records the same without asserting the renewal:
+    there the row is absent for a while after each rest (about 1 s) and a new rest starts anew."""
+    line = open_line(s, avoid=[(b["x"], b["y"]) for b in s.rows("SELECT x, y FROM body")])
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    rester, other = s.people(2)
+    s.call("place_at", rester, *line[2])
+    s.call("place_at", other, *line[12])
+    results = {}
+    for root, graph in (("desires", {"desires": [{"want": "rest", "weight": {"base": 1.0}, "do": {"do": "rest"}}]}),
+                        ("first", {"first": [{"do": "rest"}]})):
+        s.graph(rester, graph)
+        s.wait(lambda: s.http_rows(f"SELECT * FROM doing WHERE id = {rester}"), 10, 0.1)
+        samples = doing_watch(s, rester, 34 if root == "desires" else 18)
+        (s.out / f"{s.name}-samples-{root}.json").write_text(json.dumps(samples) + "\n")
+        got = doing_renewals(samples)
+        results[root] = got
+        (s.out / f"{s.name}-renewals-{root}.json").write_text(json.dumps(got, indent=1) + "\n")
+        print(json.dumps({root: {k: v for k, v in got.items() if k != "renewals"}, "gaps_ms": [r["gap_ms"] for r in got["renewals"]], "since_kept": [r["since_kept"] for r in got["renewals"]]}), flush=True)
+        want = 3 if root == "desires" else 1
+        enough = len(got["renewals"]) >= want
+        if s.baseline:
+            s.expect(f"baseline ({root}): renewals seen", enough, got["renewals"], fatal=False)
+            continue
+        s.expect(f"{root}: the rest was renewed {want} times or more", enough, len(got["renewals"]))
+        s.expect(f"{root}: no sample lacks the doing row (none absent 100 ms or more)", got["missing_samples"] == 0 and got["longest_absent_ms"] < 100, {k: got[k] for k in ("missing_samples", "longest_absent_ms", "median_sample_ms")})
+        gaps = sorted(r["gap_ms"] for r in got["renewals"])
+        s.expect(f"{root}: the pacing is the old one: each next rest begins at the body's next evaluation (median 500 ms or more, none past 1.1 s), the row held between", gaps and gaps[len(gaps) // 2] >= 500 and gaps[-1] <= 1100 and got["held_samples"] > 0, {"gaps_ms": gaps, "held_samples": got["held_samples"]})
+        s.expect(f"{root}: a renewed rest keeps its since_ms (one rest going on)", all(r["since_kept"] for r in got["renewals"]), got["renewals"])
+    # A real change: walked off, the rest ends and the row goes at once.
+    row = s.http_rows(f"SELECT * FROM doing WHERE id = {rester}")
+    sent = time.time_ns() // 1_000_000
+    s.call("set_behavior", rester, json.dumps({"seq": [{"do": {"skill": "goto", "target": {"at": list(line[14])}}}, {"wait": 300}]}))
+    after = doing_watch(s, rester, 2.0)
+    (s.out / f"{s.name}-samples-walk.json").write_text(json.dumps(after) + "\n")
+    gone = next((at for at, r in after if r is None), None)
+    act = s.rows(f"SELECT id, skill, phase, started_ms FROM activity WHERE id = {rester}", "walk-activity")
+    back = [at for at, r in after if r is not None and gone is not None and at > gone]
+    detail = {"row_before": row, "gone_after_ms": None if gone is None else gone - sent, "activity": act, "row_again": len(back)}
+    print(json.dumps({"walk": detail}), flush=True)
+    s.expect("rest → walk: the doing row is gone within a second of the new graph", gone is not None and gone - sent < 1000, detail)
+    s.expect("rest → walk: it walks (goto) and nothing is shown while it does", bool(act) and act[0]["skill"] == "goto" and not back, detail)
+    off = None
+    if not s.baseline:
+        # The switch: with the `renew_in_place` law off, each rest starts afresh at the next
+        # evaluation, as before doing-renew (the row is absent meanwhile).
+        set_law(s, "renew_in_place", False)
+        try:
+            s.graph(rester, {"desires": [{"want": "rest", "weight": {"base": 1.0}, "do": {"do": "rest"}}]})
+            s.wait(lambda: s.http_rows(f"SELECT * FROM doing WHERE id = {rester}"), 10, 0.1)
+            samples = doing_watch(s, rester, 18)
+            (s.out / f"{s.name}-samples-law-off.json").write_text(json.dumps(samples) + "\n")
+            off = doing_renewals(samples)
+            print(json.dumps({"law_off": {k: v for k, v in off.items() if k != "renewals"}, "gaps_ms": [r["gap_ms"] for r in off["renewals"]]}), flush=True)
+            s.expect("renew_in_place off: the row is absent after each rest, and the next starts afresh", off["renewals"] and off["missing_samples"] > 0 and not any(r["since_kept"] for r in off["renewals"]), off)
+        finally:
+            set_law(s, "renew_in_place", True)
+    (s.out / f"{s.name}-summary.json").write_text(json.dumps({"results": {k: {kk: vv for kk, vv in v.items()} for k, v in results.items()}, "walk": detail, "law_off": off}, indent=1) + "\n")
+    # Off the shared open line, standing: later scenes (doing) place their own people on it.
+    for k, who in enumerate((rester, other)):
+        s.graph(who, {"wait": 120})
+        s.call("place_at", who, line[0][0] + 60 + 2 * k, line[0][1] + 40, check=False)
+
+
+SCENES["doing_renew"] = doing_renew
+
+
 def main():
     import sys
     if sys.argv[1:2] == ["sex-seed"]:
@@ -5902,7 +6039,7 @@ def first_sight(s):
         # On: refused within think_min_s, owed, asked again while in sight.
         set_law(s, "first_sight_thinks", True)
         set_law(s, "first_sight_gap_s", 40)
-        s.wait(lambda: any(r["name"] == "first_sight_thinks" and r["value"] == "true" for r in s.rows("SELECT * FROM world_law")), 10)
+        s.wait(lambda: own_laws(s.rows).get("first_sight_thinks") == "true", 10)
         t1 = think_now()
         near(u2, 2)
         seen = s.wait(lambda: about(u2, t1), 10)
@@ -6336,7 +6473,7 @@ def heard_first(s):
         s.expect("law off: O's line after L's is said", any("verify hf O1" in c["text"] for c in said_by(o, t0)), said_by(o, t0))
         # On: mind_say (a deliberation carrying on).
         set_law(s, "heard_first_rethinks", True)
-        s.wait(lambda: any(w["name"] == "heard_first_rethinks" and w["value"] == "true" for w in s.rows("SELECT * FROM world_law")), 10)
+        s.wait(lambda: own_laws(s.rows).get("heard_first_rethinks") == "true", 10)
         clear()
         t1 = now()
         l_says("Good day, friend. verify hf L2", u)
@@ -6544,6 +6681,111 @@ def battle_cheap(s):
 SCENES["cheap_check_ctx"] = battle_cheap
 SCENES["cheap_alarms"] = battle_cheap
 SCENES["cheap_warmth"] = battle_cheap
+
+
+def status_parts(s):
+    """The body's statuses asked by their parts (`status_parts`, docs/STATUS_PARTS.md) are the whole
+    `status_of`'s, for every status the shipped law has, and the `status_parts` law off asks the law
+    whole again (the rollback). Eight minded fighters on an open line (strikes, dodges, blocks, heals:
+    hurt, in combat, out of breath, recovering) and eight bodies beside them set by admin fixtures
+    (`admin_set_vitals` for health; owner SQL for hunger and energy, as the verify-ui noon fixtures
+    set the clock): starving, very hungry and exhausted, hungry and spent, peckish and tired, fed and
+    hurt, well rested and badly hurt, barely alive; the world's clock moved to its night (owner SQL
+    through `verify.py sql`, which records the epoch) and rain set (`set_weather`), so those out in it
+    lose health: freezing, wasting. With `status_parts_check` on for 75 s every ask by the parts is
+    also asked of the whole law with the whole body (`status_parts:checked`, `:differed`), and each
+    status the compared asks gave is counted (`status_parts:has:<name>`). Then 25 s with
+    `status_parts` off: no ask goes by the parts (`eval:status_parts_asked`) and the whole law
+    answers (`eval:status_run`, `eval:status_memo`). Every law is put back."""
+    import subprocess as sp
+    line = clear_line(s)
+    ppl = s.people(16)
+    fighters, bodies = ppl[:8], ppl[8:]
+    for k, who in enumerate(fighters):
+        s.call("place_at", who, line[2 + k % 4][0], line[2 + k % 4][1] + (k // 4) * 1.4)
+        s.call("grant_know_how", who, "wound_tending")
+        s.graph(who, {"first": [
+            {"if": {"cond": {"health": {"below": 50}}, "then": {"do": {"skill": "heal", "target": "self"}}}},
+            {"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if who % 2 == 0 else "block"}}}},
+            {"do": {"skill": "strike", "target": {"nearest": "person"}}}]})
+    for k, who in enumerate(bodies):
+        s.call("place_at", who, line[8 + k % 6][0], line[8 + k % 6][1] + 3.0 + (k // 6) * 1.4)
+        s.graph(who, {"wait": 300})
+    # (hunger, energy, health) of each body: every band of the three meters among them.
+    fixtures = [(99, 60, None), (85, 5, None), (60, 0, None), (45, 20, None), (10, 40, 50), (30, 90, 25), (20, 70, 10), (70, 15, 70)]
+    clock = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    for who, (hunger, energy, hp) in zip(bodies, fixtures):
+        if hp is not None:
+            s.call("admin_set_vitals", who, float(hp))
+        s.command("sql", "-s", "local", s.db, f"UPDATE vitals SET hunger = {float(hunger)}, energy = {float(energy)}, at_ms = {clock()}, rate_key = 0 WHERE id = {who}")
+    s.rows("SELECT * FROM vitals", "fixtures")
+    # The world's night, now: its clock moved by owner SQL through the harness (which records the
+    # epoch for cleanup), and rain.
+    w = s.rows("SELECT epoch_ms, day_ms FROM world", "world-before")[0]
+    now = clock()
+    epoch = now - w["day_ms"] * 16 // 24
+    verify = str(ROOT / ".agents/skills/verify/scripts/verify.py")
+    r = sp.run(["python3", verify, "sql", "--run", s.out.name, f"UPDATE world SET epoch_ms = {epoch} WHERE id = 0"], capture_output=True, text=True)
+    s.expect("the world's clock moved to its night", r.returncode == 0, r.stderr[-300:])
+    s.call("set_weather", True, 600)
+    for law in ("status_parts_check",):
+        set_law(s, law, True)
+    s.call("set_profile", True)
+    windows = {}
+    t0 = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    try:
+        time.sleep(75)
+        t1 = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        set_law(s, "status_parts_check", False)
+        set_law(s, "status_parts", False)
+        time.sleep(3)
+        t2 = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        time.sleep(25)
+        t3 = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    finally:
+        s.call("set_profile", False)
+        set_law(s, "status_parts_check", False)
+        set_law(s, "status_parts", True)
+        s.call("set_weather", False, 0)
+    s.rows("SELECT * FROM vitals", "after")
+    logs = s.command("logs", "-s", "local", s.db, "-n", "400000").stdout.splitlines()
+    def window(a, b):
+        text = "\n".join(l for l in logs if a <= l[:19] < b and "diag:" in l)
+        keys = set(re.findall(r'"([^"]+)":\d+', text))
+        return {k: sum(int(x) for x in re.findall(rf'"{re.escape(k)}":(\d+)', text)) for k in keys}
+    check, whole = window(t0, t1), window(t2, t3)
+    errors = [l for l in logs if t0 <= l[:19] and "status_parts of" in l][:10]
+    has = {k.split(":", 2)[2]: n for k, n in check.items() if k.startswith("status_parts:has:")}
+    g = lambda m, k: m.get(k, 0)
+    m = {"check": {k: v for k, v in sorted(check.items()) if k.startswith(("status_parts", "eval:status", "alarm:"))},
+         "whole": {k: v for k, v in sorted(whole.items()) if k.startswith(("status_parts", "eval:status", "alarm:"))},
+         "has": has, "errors": errors, "windows": [t0, t1, t2, t3]}
+    (s.out / f"{s.name}-status-parts.json").write_text(json.dumps(m, indent=1) + "\n")
+    print("MEASURE", json.dumps({"check": m["check"], "whole": m["whole"], "has": has}), flush=True)
+    families = {
+        "hunger": ("starving", "very_hungry", "hungry", "peckish", "fed", "not_hungry"),
+        "energy": ("spent", "exhausted", "tired", "a_little_tired", "rested", "well_rested"),
+        "health": ("barely_alive", "badly_hurt", "hurt", "a_little_hurt", "unhurt"),
+        "cold": ("freezing",), "combat": ("in_combat",), "breath": ("out_of_breath",), "slowed": ("slowed",),
+        "mending": ("wasting", "recovering")}
+    try:
+        s.expect("many asks by the parts were also asked of the whole law, and none differed",
+                 g(check, "status_parts:checked") >= 500 and g(check, "status_parts:differed") == 0 and not errors,
+                 {"checked": g(check, "status_parts:checked"), "differed": g(check, "status_parts:differed"), "errors": errors})
+        s.expect("the compared asks gave a status of every part", all(any(has.get(n, 0) > 0 for n in names) for names in families.values()),
+                 {f: [n for n in names if has.get(n, 0)] for f, names in families.items()})
+        s.expect("every band of hunger, energy and health was compared, and both wasting and recovering",
+                 all(has.get(n, 0) > 0 for names in families.values() for n in names), sorted(n for names in families.values() for n in names if not has.get(n, 0)))
+        s.expect("kept parts answered most part asks", g(check, "eval:status_part_memo") > g(check, "eval:status_part_run") > 0, m["check"])
+        s.expect("status_parts off: the law asked whole, nothing by the parts",
+                 g(whole, "eval:status_calls") > 0 and g(whole, "eval:status_parts_asked") == 0 and g(whole, "eval:status_run") + g(whole, "eval:status_memo") == g(whole, "eval:status_calls"), m["whole"])
+    finally:
+        for who in ppl:
+            s.graph(who, {"wait": 300})
+        off_the_line(s, line, ppl, dy=80)
+
+
+SCENES["status_parts"] = status_parts
 
 
 def _sweep_player(s, name):
@@ -6789,7 +7031,7 @@ def scene_lazy(s):
             {"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if who % 2 == 0 else "block"}}}},
             {"do": {"skill": "strike", "target": {"nearest": "person"}}}]})
     # The world's own fov_on, else the shipped script's (off).
-    fov0 = any(r["name"] == "fov_on" and str(r["value"]).lower() == "true" for r in s.rows("SELECT * FROM world_law"))
+    fov0 = str(own_laws(s.rows).get("fov_on", "")).lower() == "true"
 
     def window(secs):
         # Counts gathered while profiling stopped are reported when it starts again, in the

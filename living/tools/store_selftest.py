@@ -15,12 +15,15 @@ import os
 import random
 import re
 import string
+import subprocess
 import sys
 import tarfile
 import tempfile
 import types
 import unittest
+import zipfile
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import store  # noqa: E402
@@ -412,8 +415,8 @@ class Motion(unittest.TestCase):
             lib = os.path.join(t, "library")
             os.makedirs(lib)
             for i in range(3):
-                with open(os.path.join(lib, f"walk_s{i}.npz"), "wb") as f:
-                    f.write(b"PK\x03\x04\x00" + bytes([i]) * 64)
+                with zipfile.ZipFile(os.path.join(lib, f"walk_s{i}.npz"), "w") as f:
+                    f.writestr("motion.npy", b"\x00" + bytes([i]) * 64)
             out = os.path.join(t, "stage")
             man = store.pack_motion(lib, out, scrubber(), machine="test")
             self.assertEqual(len(man["files"]), 3)
@@ -463,6 +466,71 @@ class Gate(unittest.TestCase):
             be = store.HFBackend(self.cfg(True), yes_publish=True, api=api, op=lambda **k: k)
             be.publish("assets", os.path.join(t, "many"), "motion/raw", "m")
             self.assertEqual(api.calls, ["create_repo", "create_commit", "create_commit", "create_commit"])
+
+    def test_credential_payloads_refuse_before_backend_writes(self):
+        fixtures = [
+            (JWT, JWT, "JWT"),
+            ("Authorization: Basic c29tZS1jcmVk", "c29tZS1jcmVk", "authorization"),
+            ("Bearer bare-bearer-demo", "bare-bearer-demo", "bearer"),
+            ('{"token":"demo-player-pass","identity":"test"}', "demo-player-pass", "player or bystander"),
+            ('{"token2":"demo-bystander-pass"}', "demo-bystander-pass", "player or bystander"),
+            ('{"auth_token":"demo-auth-pass"}', "demo-auth-pass", "credential field"),
+            ('{"identity_token":"demo-identity-pass"}', "demo-identity-pass", "credential field"),
+            ('{"password":"demo-pw"}', "demo-pw", "credential field"),
+            ('{"api_key":"demo-key"}', "demo-key", "credential field"),
+            ("neo4j://neo4j:demo-uri-pass@localhost", "neo4j:demo-uri-pass", "Neo4j URI credential"),
+            ("NEO4J_PASSWORD=demo-neo-pass", "demo-neo-pass", "Neo4j credential field"),
+            ("NEO4J_AUTH=neo4j/demo-neo-auth", "neo4j/demo-neo-auth", "Neo4j credential field"),
+            ("MISTRAL_API_KEY=demo-mistral-key", "demo-mistral-key", "project API key"),
+            ("CARGO_NPC_API_KEY=demo-cargo-key", "demo-cargo-key", "project API key"),
+            ("TYPESAFE_API_KEY=demo-typesafe-key", "demo-typesafe-key", "project API key"),
+            ("--token=demo-cli-arg", "demo-cli-arg", "token argument"),
+            ("#token=demo-url-fragment", "demo-url-fragment", "token argument"),
+        ]
+        with tempfile.TemporaryDirectory() as t:
+            stage = Path(t)
+            for index, (line, _, _) in enumerate(fixtures):
+                (stage / f"case-{index}.jsonl").write_text(line, encoding="utf-8")
+            tar = io.BytesIO()
+            with tarfile.open(fileobj=tar, mode="w") as archive:
+                data = json.dumps({"out": "The auth token is " + JWT}).encode()
+                store._tar_add(archive, "scene-actions.jsonl", data)
+            (stage / "scene.tar.zst").write_bytes(subprocess.run(
+                ["zstd", "-c"], input=tar.getvalue(), stdout=subprocess.PIPE, check=True).stdout)
+
+            api = self.FakeApi()
+            backend = store.HFBackend(self.cfg(True), yes_publish=True, api=api)
+            with self.assertRaises(store.Refused) as error:
+                backend.publish("runs", stage, "batches/x/y", "m")
+            report = str(error.exception)
+            for index, (_, secret, kind) in enumerate(fixtures):
+                self.assertRegex(report, rf"case-{index}\.jsonl @ byte \d+: .*{kind}")
+                self.assertNotIn(secret, report)
+            self.assertIn("scene.tar.zst!scene-actions.jsonl", report)
+            self.assertIn("scratch-server token", report)
+            self.assertEqual(api.calls, [])
+            with self.assertRaises(store.Refused):
+                backend.put_file("runs", stage / "case-0.jsonl", "README.md", "card")
+            with self.assertRaises(store.Refused):
+                backend.publish_units("runs", [("batches/x/y", stage)], "bulk")
+            self.assertEqual(api.calls, [])
+
+    def test_unreadable_archive_refuses_before_backend_writes(self):
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "broken.tar.zst", "invalid archive")
+            api = self.FakeApi()
+            backend = store.HFBackend(self.cfg(True), yes_publish=True, api=api)
+            with self.assertRaisesRegex(store.Refused, r"broken\.tar\.zst: credential scan failed"):
+                backend.publish("runs", t, "batches/x/y", "m")
+            self.assertEqual(api.calls, [])
+
+    def test_credential_scan_ignores_redactions_and_key_names(self):
+        with tempfile.TemporaryDirectory() as t:
+            write(t, "clean.jsonl", '{"token":"<redacted>","password":"[redacted:password]"}\n'
+                  'Authorization: Bearer <redacted>\n'
+                  'MISTRAL_API_KEY CARGO_NPC_API_KEY TYPESAFE_API_KEY\n'
+                  'NEO4J_PASSWORD=$NEO4J_PASSWORD\n')
+            store.check_credentials(("clean", t))
 
     def test_missing_library_refuses_before_packing(self):
         # gate open, no injected api, no huggingface_hub for this Python: refused by gate(), which
@@ -1646,8 +1714,8 @@ class AssetPacksNameNoMachine(unittest.TestCase):
             lib = os.path.join(t, "library")
             os.makedirs(lib)
             for i in range(3):
-                with open(os.path.join(lib, f"walk_s{i}.npz"), "wb") as f:
-                    f.write(b"PK\x03\x04\x00" + bytes([i]) * 64)
+                with zipfile.ZipFile(os.path.join(lib, f"walk_s{i}.npz"), "w") as f:
+                    f.writestr("motion.npy", b"\x00" + bytes([i]) * 64)
             write(lib, "batch_stats.json", json.dumps({"model": "Kimodo-SOMA-RP-v1.2", "runs": [{"name": "walk"}]}))
             os.environ["STORE_MACHINE"] = label
             os.environ["STORE_CONFIG"] = os.path.join(t, "absent.json")

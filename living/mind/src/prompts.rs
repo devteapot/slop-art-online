@@ -1388,6 +1388,24 @@ pub fn talk_user(t: &TalkUser) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// The mind service compiles the world's `script` row alone, without `law_override`
+    /// (docs/LAW_OVERRIDE.md): every law it reads must be one whose change installs the script
+    /// again with the value written at its end. A law the mind reads made value-only would leave
+    /// the minds on its old value until the next install.
+    #[test]
+    fn the_laws_minds_read_change_by_an_install() {
+        let read = ["cues_on", "cue_cooldown_s", "cue_gap_s", "speech_truth", "stranger_by_name", "think_framing", "fast_lane_inflight"];
+        for l in read {
+            assert!(living_rules::script::VALUE_ONLY.iter().all(|(n, _)| *n != l), "{l} is value-only: the mind service must lay `law_override` over its script first");
+        }
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+        let src: String = std::fs::read_dir(dir).unwrap().filter_map(|e| e.ok()).filter(|e| e.path().extension().is_some_and(|x| x == "rs")).map(|e| std::fs::read_to_string(e.path()).unwrap()).collect();
+        let mut asked: Vec<&str> = src.match_indices(".laws().").map(|(i, m)| &src[i + m.len()..]).map(|t| &t[..t.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(t.len())]).collect();
+        asked.extend(src.match_indices("l.cue_").map(|(i, _)| &src[i + 2..]).map(|t| &t[..t.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(t.len())]));
+        for l in asked.into_iter().filter(|l| !l.is_empty() && !l.ends_with('_')) {
+            assert!(read.contains(&l), "the minds read `{l}`: add it to this list once it is checked");
+        }
+    }
 
     /// Every speaking mind is told, in the same words, that the `#<id>` handles are for acts and
     /// memory and never spoken (fix-spoken-ids: r2e's minds said three lines with them).

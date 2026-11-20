@@ -14,6 +14,8 @@ import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
 
+from verify_credentials import redact
+
 GRACE_SECONDS = 120
 
 
@@ -151,9 +153,12 @@ def prepare(config):
             if not prior or prior[0] != config["expected_epoch"]:
                 raise RuntimeError(f"refusing to guard or publish {db}: world epoch differs from run record")
         if command := config["command"]:
-            published = subprocess.run(command, check=True, timeout=300, stdin=subprocess.DEVNULL,
-                                       stdout=subprocess.PIPE, text=True)
-            print(published.stdout, end="", flush=True)
+            published = subprocess.run(command, timeout=300, stdin=subprocess.DEVNULL,
+                                       capture_output=True, text=True)
+            print(redact(published.stdout, (token,)), end="", flush=True)
+            print(redact(published.stderr, (token,)), end="", file=sys.stderr, flush=True)
+            if published.returncode:
+                raise RuntimeError(f"publish failed for {db} (exit {published.returncode})")
             op = "Updated" if existing else "Created new"
             receipt = re.search(rf"^{op} database with name: [^,]+, identity: ([0-9a-f]{{64}})$",
                                 published.stdout, re.MULTILINE)

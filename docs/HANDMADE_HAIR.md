@@ -4,6 +4,8 @@
 
 **v1.1 (2026-11-19): lock ink lines,** for the opt-in profile only; see [lock ink lines](#lock-ink-lines-v11). It adds optional fields and the mask texture's G channel, and makes one change to v1's meaning: a mask texture no longer replaces `_HIGHLIGHT` but combines with it (the larger wins), so a texture made for ink alone keeps a file's per-vertex highlight. Files keep `"contract": 1`. A v1 file draws as before (one with both a mask texture and `_HIGHLIGHT` now shows the larger of the two; none has been made): no v1 file can carry ink fields, and ink is drawn only where they are set. The shader for v1.1 is in progress on branch `hair-ink`; `ink_field.py` and the audit are there now.
 
+**v1.2 (2026-11-19, draft): a general ink profile,** for any hand-made material (eyes, brows, face lines, skin, hair): its own `slop.ink` object, an ink map per slot (`<stem>.<slot>.ink.png`, G the distance, R the width) in a binding of its own, lit by the material's own light. See [the ink contract](HANDMADE_INK.md). The v1.1 fields below keep their meaning and drawing; `HANDMADE_INK.md` maps them onto the general profile.
+
 **Why:** dev-box's hand-made character Cora (`own-cora-live.glb`) read as a glossy helmet in the client. The diagnosis (`.local/living/cora-material/FINDINGS.md` on the laptop) found four causes:
 
 - the gloss is painted into the hair's vertex colours;
@@ -212,6 +214,8 @@ Use a texture when the highlight needs a sharper shape than the hair's triangles
 
 ## Lock ink lines (v1.1)
 
+v1.2 generalises this ink to every slot ([the ink contract](HANDMADE_INK.md)); what follows stays the hair profile's own ink, unchanged.
+
 Cora's drawing separates locks with thin dark ink lines where they meet; the client's outline draws only silhouettes, so the locks merge. The profile can draw those lines from a distance field in the mask texture.
 
 **The field:** `<stem>.hair.png`, channel **G**, linear, in the hair's TEXCOORD_0 (like R): the distance from each texel to the nearest lock line, as G = min(1, d / `ink_range`), d in UV units (a texel is 1/width across, 1/height down). 0 is on a line; 1 (255), or a file without G (greyscale), is no ink. R stays the highlight mask; B is 0. Make it with the tool below; do not paint G by hand.
@@ -371,7 +375,7 @@ One fixed daylight frame that authors render after every palette change and comp
   python3 living/tools/characters/hair_shimmer.py view/<file>.glb [--out DIR] [--binary PATH] [--plain-stills DIR] [--ink-stills DIR]
   ```
 
-  It takes the file as it is, with its own `ink_range`, `ink_px`, `ink_fade_px` and `ink`, and as the reference a temporary copy without the ink fields (the hair-only profile, highlight and all; removed afterwards). It renders both through the asset view: 1600×900, 11:00, paused idle, springs off, at the Near, Middle and Far stops, a pan (16 stills, 0.1° a frame) and a zoom (16, the height up 0.3% a frame) each. For each sequence it prints the flicker ratio F = Σ|x(i+1) − 2·x(i) + x(i−1)| / Σx of the ink's darkening (F_ink) and of the profile's own band edges (F_edge), over the hair pixels round the ink, and **passes when F_ink ≤ 1.5 × F_edge**: the line flickers no more, per unit of what it draws, than the band edges already seen in motion, with half again for a line's two edges. A sequence whose ink darkens fewer than one pixel a frame by more than 8 levels is `faded`, not scored. Output goes to `.local/living/hair-shimmer/<stem>/<time>/` (`plain/`, `ink/`, `shimmer.json`); the exit code is 1 on a failing sequence. `--plain-stills` and `--ink-stills` reuse an earlier run's still folders. Plain Python; about 25 s to score, plus the two renders.
+  It takes the file as it is, with its own `ink_range`, `ink_px`, `ink_fade_px` and `ink`, and as the reference a temporary copy without the ink fields (the hair-only profile, highlight and all; removed afterwards). It renders both through the asset view: 1600×900, 11:00, paused idle, springs off, at the Near, Middle and Far stops, a pan (16 stills, 0.1° a frame) and a zoom (16, the height up 0.3% a frame) each. For each sequence it prints the flicker ratio F = Σ|x(i+1) − 2·x(i) + x(i−1)| / Σx of the ink's darkening (F_ink) and of the profile's own band edges (F_edge), over the hair pixels round the ink, and **passes when F_ink ≤ 1.5 × F_edge**: the line flickers no more, per unit of what it draws, than the band edges already seen in motion, with half again for a line's two edges. A sequence whose ink darkens fewer than one pixel a frame by more than 8 levels is `faded`, not scored. Output goes to `.local/living/hair-shimmer/<stem>/<time>/` (`plain/`, `ink/`, `shimmer.json`); the exit code is 1 on a failing sequence. `--plain-stills` and `--ink-stills` reuse an earlier run's still folders. Plain Python; about 25 s to score, plus the two renders. Since v1.2 it is `ink_shimmer.py --slot hair` ([the ink contract](HANDMADE_INK.md#shimmer-per-slot)), with the same arguments, region, numbers and folder; on Cora's accepted file (fade 2.0) it gives the six `faded` rows dev-box's run did.
 - **A palette is done** when every measured patch passes. The tolerances are starting values, to agree with the owner on the first Cora pass, and the owner judges the result in-game.
 
 ### Calibrating lock ink against the display floor

@@ -14,6 +14,8 @@ import subprocess
 import sys
 import time
 import traceback
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "living/tools"))
+from law_values import own_laws  # noqa: E402  (the world's own law values, docs/LAW_OVERRIDE.md)
 import urllib.error
 import urllib.request
 
@@ -1117,6 +1119,67 @@ def doing_case(run):
     return {'status': 'pass', 'visibly': entry.get('visibly'), 'entry': entry, 'purposes': sorted(text)}
 
 
+@case('doing-renew')
+def doing_renew_case(run):
+    """A resting resident is seen resting on (doing-renew; docs/PERCEPTION.md, "What someone is
+    visibly doing"): the other rests 8 s at a time under a desire to rest, each rest renewed as it
+    ends. The eye's deliberation is asked about 150 ms after one of the other's rests ends, where a
+    build before doing-renew showed nobody doing anything for 0.4–1 s. The request's scene lists the
+    other with `visibly` {is: rest} and its activity, and the think prompt the fake model is sent
+    carries it."""
+    people = prepare(run)
+    eye, other = [p['id'] for p in people]
+    e = wall_spots(run)['open']
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    run.admin('set_behavior', eye, json.dumps({'wait': 300}))
+    run.admin('place_at', eye, *e)
+    run.admin('place_at', other, e[0] + 3.0, e[1])
+    run.admin('set_behavior', other, json.dumps({'desires': [{'want': 'rest', 'weight': {'base': 1.0}, 'do': {'do': 'rest'}}]}))
+    row = run.wait(lambda: run.private(f'SELECT * FROM doing WHERE id = {other}', 'doing-first'), 'the other rests', 20)[0]
+    # Wait out the first renewal (so the rest has renewed once), then aim at the end of the next.
+    run.wait(lambda: [d for d in run.private(f'SELECT * FROM doing WHERE id = {other}', 'doing-renewed') if d['until_ms'] != row['until_ms']], 'the rest renewed', 20)
+    script = {'replies': {'think': {'thought': 'They are resting.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+    models = model(run, script)
+    # A think asks only once the eye's deliberation clock has settled 45 s (brain.rs): wait it
+    # out, so the ask comes at the install and not at a later evaluation.
+    settled = run.private(f'SELECT deliberated_ms FROM mind_state WHERE id = {eye}', 'eye-clock')[0]['deliberated_ms'] + 47_000
+    run.wait(lambda: run.private('SELECT last_ms FROM clock', 'clock-settle')[0]['last_ms'] > settled, "the eye's deliberation clock settled", 60)
+    # How long `request` takes to reach its install (its reads, then the admin call), measured.
+    t0 = time.monotonic()
+    run.thoughts(eye, 'thoughts-lead')
+    run.admin('set_behavior', eye, json.dumps({'wait': 300}))
+    lead = (time.monotonic() - t0) * 1000
+    now = run.private('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
+    local = time.time() * 1000
+    ends = run.private(f'SELECT * FROM doing WHERE id = {other}', 'doing-aimed')[0]
+    if ends['until_ms'] - now < lead + 500:
+        # Too close to this rest's end to aim at it: the next one.
+        ends = run.wait(lambda: [d for d in run.private(f'SELECT * FROM doing WHERE id = {other}', 'doing-aimed-next') if d['until_ms'] != ends['until_ms']], 'the next rest', 20)[0]
+        now = run.private('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
+        local = time.time() * 1000
+    target = ends['until_ms'] + 150
+    run.note(f"rest ends at {ends['until_ms']}; asking at {target} (authority clock {now} at local {local:.0f}; request lead {lead:.0f} ms)")
+    time.sleep(max(0.0, (target - now - lead) / 1000 - (time.time() * 1000 - local) / 1000))
+    pending = run.request(eye, 'doing-renew')
+    asked = pending[0].get('requested_ms') if pending else None
+    scene = json.loads(pending[0]['scene']) if pending and 'scene' in pending[0] else {}
+    (run.directory / 'scene.json').write_text(json.dumps(scene, indent=2))
+    entry = next((c for c in scene.get('creatures', []) if c.get('id') == other), {})
+    after = (asked - ends['until_ms']) if asked else None
+    run.note(f'asked {after} ms after the rest ended; the other in the scene: {json.dumps(entry)}')
+    assert asked is not None and 0 <= after <= 900, f'the scene was written {after} ms after the rest ended, not in the window a gap would show'
+    assert (entry.get('visibly') or {}).get('is') == 'rest', f'the other is seen resting just after a rest ended: {entry}'
+    assert entry.get('doing') == 'rest', f"the other's activity is a rest: {entry}"
+    run.start(models, [eye])
+    run.wait(lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'think'] or None, 'the think prompt', 60)
+    reqs = [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'think']
+    sent = '\n'.join(str(m.get('content', '')) for m in reqs[0]['body'].get('messages', []))
+    (run.directory / 'sent-prompts.txt').write_text(sent)
+    assert re.search(r'"visibly":\s*\{[^}]*"is":\s*"rest"', sent), 'the model is sent that the other is resting'
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    return {'status': 'pass', 'asked_after_end_ms': after, 'entry': entry}
+
+
 
 def dodge_wall(run):
     """A walkable tile, the next one along an axis walkable and the one after it wall or rock, the
@@ -1476,7 +1539,7 @@ def watch_fight_case(run):
     for who in (a, c):
         run.admin('set_behavior', who, json.dumps({'wait': 120}))
     # The law in force: the world's own value, else the installed script's.
-    own = [r['value'] for r in run.private('SELECT * FROM world_law', 'laws') if r['name'] == 'witness_fold_ms']
+    own = [v for k, v in own_laws(lambda q: run.private(q, 'laws')).items() if k == 'witness_fold_ms']
     src = run.private("SELECT source FROM script WHERE name = 'skills'", 'script')[0]['source']
     fold = float(own[0]) if own else float(re.search(r'\bwitness_fold_ms: ([0-9.]+)', src).group(1))
     # Blows still in flight land first, then every onlooker's window holding them ends.
@@ -1722,7 +1785,7 @@ def first_sight_case(run):
     # (no gap: M's opening thought may itself be a first sight of someone else in view)
     run.admin('set_world_law', 'first_sight_gap_s', '0')
     try:
-        laws = {w['name']: w['value'] for w in run.sql('SELECT * FROM world_law', 'world-law')}
+        laws = own_laws(lambda q: run.sql(q, 'world-law'))
         assert laws.get('first_sight_thinks') == 'true', laws
         script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
         run.start(model(run, script), [m])
@@ -2022,7 +2085,7 @@ def think_framing_case(run):
         run.request(m, 'framing off')
         off = run.wait(lambda: asked('framing off'), 'the think request with the law off', 90)[0]
         run.admin('set_world_law', 'think_framing', 'true')
-        laws = {w['name']: w['value'] for w in run.sql('SELECT * FROM world_law', 'world-law')}
+        laws = own_laws(lambda q: run.sql(q, 'world-law'))
         assert laws.get('think_framing') == 'true', laws
         time.sleep(3.0)
         run.request(m, 'framing on')

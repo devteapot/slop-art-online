@@ -71,6 +71,12 @@ struct Toon {
     hand_ink: vec4<f32>,
     // x ink_range (UV), y ink_fade_px, z 1 when ink is drawn.
     hand_ink_range: vec4<f32>,
+    // A material's general ink (contract v1.2, toon.wesl `ink_map`): rgb linear colour, w px
+    // (width "px") or min_px (width "uv").
+    ink: vec4<f32>,
+    // x range (UV), y fade_px, z mode (0 none, 1 "px", 2 "px" with taper, 3 "uv", 4 "uv" through the derivatives: PERF inkfw), w metres
+    // per UV unit (0 unknown).
+    ink_shape: vec4<f32>,
     // Per surface (style.rs `Surface`): x 1 / tile size (1/m), y strength, z mapping (0
     // triplanar, 1 planar per face).
     layers: array<vec4<f32>, 18>,

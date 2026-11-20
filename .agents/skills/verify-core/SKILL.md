@@ -23,6 +23,8 @@ python3 "$V" launch --run "$R" > "$E/launch.txt" 2>&1
 python3 "$V" doctor --run "$R" > "$E/doctor.txt" 2>&1
 ```
 
+`scenes.py`, `town.py` and the other drivers call the authority directly, so they do not renew the harness's 10-minute lease (verify SKILL.md, "Launch"). For a batch of scenes or the town run, launch with `VERIFY_LEASE_SECONDS=2700`. Otherwise the world is paused partway and later scenes fail on a frozen world (a `sleeper` timeout, morning checks at 0).
+
 Stop driving if launch or doctor fails. Run cleanup and retain the error. The scenes use the in-container admin CLI. Do not mix a remote `LIVING_STDB_URL` with `stdb -s local`.
 
 ## Drive the baseline
@@ -44,6 +46,8 @@ python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
 # What someone is visibly doing: the `doing` condition and the scene's `visibly`, by sight, field
 # and far label (features/doing.md, about 2 min).
 python3 "$C/scenes.py" doing_seen --run "$R" > "$E/doing_seen.txt" 2>&1
+# A continuous activity's row held to its renewal: no blink of doing nothing between two rests, the pacing unchanged, a real change still at once, the renew_in_place law (features/doing.md, about 2 min).
+python3 "$C/scenes.py" doing_renew --run "$R" > "$E/doing_renew.txt" 2>&1
 # Committed moves end early only by a wall or death (features/combat.md, about 30 s).
 python3 "$C/scenes.py" committed --run "$R" > "$E/committed.txt" 2>&1
 # A dodge over before the blow came, and a cooldown's refusals told once (features/combat.md, about 20 s).
@@ -69,6 +73,9 @@ python3 "$C/scenes.py" witness_fold --run "$R" > "$E/witness_fold.txt" 2>&1
 python3 "$C/scenes.py" cheap_check_ctx --run "$R" > "$E/cheap_check_ctx.txt" 2>&1
 python3 "$C/scenes.py" cheap_alarms --run "$R" > "$E/cheap_alarms.txt" 2>&1
 python3 "$C/scenes.py" cheap_warmth --run "$R" > "$E/cheap_warmth.txt" 2>&1
+# The body's statuses by their parts equal the whole law over every status, and off ask it whole
+# (features/battle.md, about 2.5 min). It moves the world to its night: run it on its own world, or last.
+python3 "$C/scenes.py" status_parts --run "$R" > "$E/status_parts.txt" 2>&1
 # The lazy scene gives the whole scene's answers, all round and by facing; off, the old path (features/battle.md, about 2.5 min).
 python3 "$C/scenes.py" scene_lazy --run "$R" > "$E/scene_lazy.txt" 2>&1
 # The chronicle's repeat check read newest first, and noticing read in place, give the full reads' answers; off, the old paths (features/battle.md, about 2 min each).
@@ -201,6 +208,16 @@ mkdir -p ".local/living/verify/$L"
 python3 "$V" launch --run "$L" --seed island > ".local/living/verify/$L/launch.txt" 2>&1
 python3 "$C/lives.py" --run "$L" --minutes 24 > ".local/living/verify/$L/lives.txt" 2>&1
 python3 "$V" cleanup --run "$L" > ".local/living/verify/$L/cleanup.txt" 2>&1
+
+# Value-only law changes (about 3 min): the `law_override` row, law revision and audit, the script
+# kept, refusals rolled back, a client's first result, and the reducer's time (features/law-override.md,
+# docs/LAW_OVERRIDE.md). Needs the verify-client probe built (its SKILL.md).
+W=client-law-$(date +%H%M%S)   # a client-* name: its first-result checks drive verify-client's drive.py
+mkdir -p ".local/living/verify/$W"
+python3 "$V" launch --run "$W" --seed island > ".local/living/verify/$W/launch.txt" 2>&1
+python3 "$C/law_override.py" checks --run "$W" > ".local/living/verify/$W/law-checks.txt" 2>&1
+python3 "$C/law_override.py" time --run "$W" > ".local/living/verify/$W/law-time.txt" 2>&1
+python3 "$V" cleanup --run "$W" > ".local/living/verify/$W/cleanup.txt" 2>&1
 
 # Goods, fires that eat fuel and recipes over Cullet's goods (about 11 min), and a seeded
 # fishing ground's shared stock (features/goods.md, docs/WORLD_RULES.md).

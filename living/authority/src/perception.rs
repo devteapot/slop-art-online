@@ -803,8 +803,15 @@ pub fn doing_of(ctx: &ReducerContext, id: u32, observer: (u32, &str, (f32, f32))
                 None => moving_label(run, (x, y), heading, std::iter::empty()),
             })
         }
-        _ => a.map(|a| a.label),
+        _ => a.map(|a| a.label).or_else(|| held_doing(ctx, id)),
     }
+}
+
+/// The skill a body's `doing` row was held for between two uses of one continuous activity
+/// (`town::hold`): what it is still seen doing while no activity runs (the caller found none).
+fn held_doing(ctx: &ReducerContext, id: u32) -> Option<String> {
+    let d = ctx.db.doing().id().find(id)?;
+    common::scripts(ctx).shows().iter().find(|(_, s)| s.code == d.code).map(|(skill, _)| skill.to_string())
 }
 
 /// Whom someone is going to, as `observer` perceives them: "you", their label (a name it knows,
@@ -861,7 +868,10 @@ pub fn visibly(ctx: &ReducerContext, sc: &Scripts, id: u32, now: u64) -> Option<
         }
     }
     let d = ctx.db.doing().id().find(id).filter(|d| !d.indoors)?;
-    let phase = doing::act_phase(d.since_ms, d.until_ms, now)?;
+    // A row held between two uses of one continuous activity (`town::hold`: no activity runs)
+    // is still under way past its end.
+    let until = if d.until_ms <= now && ctx.db.activity().id().find(id).is_none() { 0 } else { d.until_ms };
+    let phase = doing::act_phase(d.since_ms, until, now)?;
     let skill = sc.shows().iter().find(|(_, s)| s.code == d.code)?.0.to_string();
     Some(Visibly { skill, phase, target: d.target, aim: (0.0, 0.0), combat: false })
 }
@@ -1075,9 +1085,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     for p in &rows {
         if !seen.contains(&p.body) {
             ctx.db.perceived().id().delete(p.id);
-            ctx.db.motion_seen().id().delete(crate::frame::key(id, p.body));
-            ctx.db.fighter_seen().id().delete(crate::frame::key(id, p.body));
-            ctx.db.doing_seen().id().delete(crate::frame::key(id, p.body));
+            crate::frame::drop_copies(ctx, id, p.body);
         }
     }
     let entered: Vec<u32> = seen.difference(&had).copied().collect();
@@ -1090,6 +1098,8 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         // How it moves, as it is now; frames keep it current (`frame.rs`).
         if let Some(b) = ctx.db.body().id().find(*body) {
             let row = MotionSeen::of(crate::frame::key(id, *body), viewer, &b);
+            // In the far tier; the frames' scene moves it to the near tier when it is near.
+            ctx.db.motion_near().id().delete(row.id);
             if ctx.db.motion_seen().id().find(row.id).is_some() {
                 ctx.db.motion_seen().id().update(row);
             } else {
@@ -1097,7 +1107,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
             }
         }
     }
-    crate::frame::scene(id, viewer, &seen);
+    crate::frame::scene(ctx, id, viewer, &seen, &near, now);
     // The projections follow: a row per creature in the scene (itself included), projected
     // when it comes into sight, and again only when an input of the law changed: whom the
     // viewer knows (its knowledge epoch, or this instance has not projected it yet), a reveal
@@ -1170,8 +1180,9 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     }
     // The move of each newcomer that has fought, with the band its projection grants.
     for body in &entered {
-        crate::frame::show_fighter(ctx, id, viewer, *body, true, now);
-        crate::frame::show_doing(ctx, id, viewer, *body);
+        let near = crate::frame::is_near(id, *body);
+        crate::frame::show_fighter(ctx, id, viewer, *body, near, true, now);
+        crate::frame::show_doing(ctx, id, viewer, *body, near);
     }
 }
 
@@ -1514,8 +1525,9 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
     }
     // The move of each newcomer that has fought, with the band its projection grants.
     for body in s.entered {
-        crate::frame::show_fighter(ctx, id, viewer, *body, true, now);
-        crate::frame::show_doing(ctx, id, viewer, *body);
+        let near = crate::frame::is_near(id, *body);
+        crate::frame::show_fighter(ctx, id, viewer, *body, near, true, now);
+        crate::frame::show_doing(ctx, id, viewer, *body, near);
     }
     if common::laws(ctx).regard_cache_check {
         check_rows(ctx, me, viewer, s.seen, now);
@@ -1656,6 +1668,15 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
     for p in ctx.db.doing_seen().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.doing_seen().id().delete(p);
     }
+    for p in ctx.db.motion_near().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
+        ctx.db.motion_near().id().delete(p);
+    }
+    for p in ctx.db.fighter_near().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
+        ctx.db.fighter_near().id().delete(p);
+    }
+    for p in ctx.db.doing_near().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
+        ctx.db.doing_near().id().delete(p);
+    }
     for p in ctx.db.projected().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.projected().id().delete(p);
     }
@@ -1670,6 +1691,8 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
 /// A character is no longer seen by anyone (it died): its rows in others' sets go, its motion
 /// in the same update (a body leaves `seen_bodies` with its death's feed row).
 pub fn gone(ctx: &ReducerContext, id: u32) {
+    // What the frames keep of it in memory goes too.
+    crate::frame::creature_gone(id);
     // Their look goes with them (docs/LOOK.md §4).
     ctx.db.look().id().delete(id);
     // What it remembered of others' bodies goes with it (sex-1).
@@ -1681,9 +1704,7 @@ pub fn gone(ctx: &ReducerContext, id: u32) {
     let players: HashMap<Identity, u32> = crate::combat::humans(ctx).into_iter().map(|(c, who)| (who, c)).collect();
     for p in rows {
         if let Some(viewer) = players.get(&p.viewer) {
-            ctx.db.motion_seen().id().delete(crate::frame::key(*viewer, id));
-            ctx.db.fighter_seen().id().delete(crate::frame::key(*viewer, id));
-            ctx.db.doing_seen().id().delete(crate::frame::key(*viewer, id));
+            crate::frame::drop_copies(ctx, *viewer, id);
         }
         row_touched(p.viewer, id);
         ctx.db.projected().id().delete(p.id);
@@ -1842,6 +1863,25 @@ pub fn my_known_names(ctx: &ViewContext) -> Vec<KnownName> {
 
 #[spacetimedb::view(accessor = seen_bodies, public, primary_key = id)]
 pub fn seen_bodies(ctx: &ViewContext) -> Vec<Moving> {
+    let far = ctx.db.motion_seen().viewer().filter(ctx.sender()).map(|m| m.moving());
+    far.chain(ctx.db.motion_near().viewer().filter(ctx.sender()).map(|m| m.copy.moving())).collect()
+}
+
+// The two tiers of `seen_bodies`, `seen_fighters` and `seen_doing` (frame-views, docs/PERCEPTION.md
+// "Cues and tiers"): each reads one table's `viewer` key (the near tier `*_near`, the far tier the
+// old `*_seen` copies), so a write to a far copy re-runs only the far view and a write to a near
+// copy only the near one. Their union is the untiered view's rows, which reads both. The near tier's copies follow at most every `frame::NEAR_COPY_MS`; a
+// client that also reads the cue event tables shows each near creature's cue until its next row.
+
+/// The others within `frame::NEAR_M` of me at my last sweep, as `seen_bodies` shows them.
+#[spacetimedb::view(accessor = seen_bodies_near, public, primary_key = id)]
+pub fn seen_bodies_near(ctx: &ViewContext) -> Vec<Moving> {
+    ctx.db.motion_near().viewer().filter(ctx.sender()).map(|m| m.copy.moving()).collect()
+}
+
+/// The rest of the others I perceive, as `seen_bodies` shows them.
+#[spacetimedb::view(accessor = seen_bodies_far, public, primary_key = id)]
+pub fn seen_bodies_far(ctx: &ViewContext) -> Vec<Moving> {
     ctx.db.motion_seen().viewer().filter(ctx.sender()).map(|m| m.moving()).collect()
 }
 
@@ -1866,6 +1906,19 @@ pub fn seen_characters(ctx: &ViewContext) -> Vec<SeenCharacter> {
 /// `frame.rs`). Mine is `my_fighter`.
 #[spacetimedb::view(accessor = seen_fighters, public, primary_key = id)]
 pub fn seen_fighters(ctx: &ViewContext) -> Vec<Fighter> {
+    let far = ctx.db.fighter_seen().viewer().filter(ctx.sender()).map(|f| f.fighter);
+    far.chain(ctx.db.fighter_near().viewer().filter(ctx.sender()).map(|f| f.copy.fighter)).collect()
+}
+
+/// The near tier of `seen_fighters` (see `seen_bodies_near`).
+#[spacetimedb::view(accessor = seen_fighters_near, public, primary_key = id)]
+pub fn seen_fighters_near(ctx: &ViewContext) -> Vec<Fighter> {
+    ctx.db.fighter_near().viewer().filter(ctx.sender()).map(|f| f.copy.fighter).collect()
+}
+
+/// The far tier of `seen_fighters`.
+#[spacetimedb::view(accessor = seen_fighters_far, public, primary_key = id)]
+pub fn seen_fighters_far(ctx: &ViewContext) -> Vec<Fighter> {
     ctx.db.fighter_seen().viewer().filter(ctx.sender()).map(|f| f.fighter).collect()
 }
 
@@ -1879,6 +1932,19 @@ pub fn my_fighter(ctx: &ViewContext) -> Vec<Fighter> {
 /// (`doing_seen`, `frame.rs`). Mine is `my_doing`.
 #[spacetimedb::view(accessor = seen_doing, public, primary_key = id)]
 pub fn seen_doing(ctx: &ViewContext) -> Vec<Doing> {
+    let far = ctx.db.doing_seen().viewer().filter(ctx.sender()).map(|d| d.doing);
+    far.chain(ctx.db.doing_near().viewer().filter(ctx.sender()).map(|d| d.copy.doing)).collect()
+}
+
+/// The near tier of `seen_doing` (see `seen_bodies_near`).
+#[spacetimedb::view(accessor = seen_doing_near, public, primary_key = id)]
+pub fn seen_doing_near(ctx: &ViewContext) -> Vec<Doing> {
+    ctx.db.doing_near().viewer().filter(ctx.sender()).map(|d| d.copy.doing).collect()
+}
+
+/// The far tier of `seen_doing`.
+#[spacetimedb::view(accessor = seen_doing_far, public, primary_key = id)]
+pub fn seen_doing_far(ctx: &ViewContext) -> Vec<Doing> {
     ctx.db.doing_seen().viewer().filter(ctx.sender()).map(|d| d.doing).collect()
 }
 

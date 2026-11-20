@@ -1,7 +1,7 @@
 {
  "about": "Cullet's looks: keys and words for the authority (docs/LOOK.md §5). Written by living/tools/characters/look_lines.py with the client's book of the same generation; not edited by hand, and never shipped to a client.",
  "looks": {
-  "generation": "c4-5d64f53e",
+  "generation": "c4-cbcc40bf",
   "people": {
    "lp_0138ab60b1a8a325": {
     "0": "lk_823d173e18fc0e4d",
@@ -13,13 +13,6 @@
    "lp_01ac48225ee17534": {
     "3": "lk_e66b63127b12c730",
     "4": "lk_39e0baf5b3507263"
-   },
-   "lp_021101fd81469e82": {
-    "0": "lk_097face82212a275",
-    "1": "lk_08fac0f18619a9f8",
-    "2": "lk_369b4ecb968cbd77",
-    "3": "lk_8499044017ac99bd",
-    "4": "lk_6ad4df89aa5d229c"
    },
    "lp_04654ce2b42de0e1": {
     "0": "lk_4343fba70c841161",
@@ -55,13 +48,6 @@
     "3": "lk_6f00e01db2616208",
     "4": "lk_da3b2131a36ef090"
    },
-   "lp_0fb63202caaddc07": {
-    "0": "lk_e0649a99ba4ff838",
-    "1": "lk_e9b29619debf485e",
-    "2": "lk_91daffd3c96b5096",
-    "3": "lk_4bb8b114ba89fb1a",
-    "4": "lk_4675cc060dce6964"
-   },
    "lp_11e1a97ed48944ff": {
     "0": "lk_5303621a68c1c260",
     "1": "lk_d470663873fdf652",
@@ -79,6 +65,13 @@
     "2": "lk_009798d6178024a0",
     "3": "lk_535e14ed88bb7591",
     "4": "lk_b740c52f644c8e13"
+   },
+   "lp_138afd444770d429": {
+    "0": "lk_4367901cc266e42e",
+    "1": "lk_719c6c589bead003",
+    "2": "lk_8ea9e2744a881b59",
+    "3": "lk_3a68cfe86e8427e3",
+    "4": "lk_a8a4a84d4708759e"
    },
    "lp_15264231e01877e1": {
     "3": "lk_0f3f9c0d59a78ae9",
@@ -200,13 +193,6 @@
     "2": "lk_aaa5f48da0007cbb",
     "3": "lk_b6fa2ba40af67e7f",
     "4": "lk_451d87ece68047d4"
-   },
-   "lp_309c43652fe33fce": {
-    "0": "lk_a0420e8673ca7743",
-    "1": "lk_7ca214d535fedef7",
-    "2": "lk_984ab7c8680244b1",
-    "3": "lk_d52f707a341a313f",
-    "4": "lk_a499f3cb92dff622"
    },
    "lp_31327fadbc47dd99": {
     "0": "lk_2a7e607f9d924020",
@@ -370,6 +356,13 @@
     "3": "lk_b7d09d0ca620ef14",
     "4": "lk_9a2a5bdcb5363ee1"
    },
+   "lp_586518a028d3c77f": {
+    "0": "lk_097face82212a275",
+    "1": "lk_438712822ffcb230",
+    "2": "lk_369b4ecb968cbd77",
+    "3": "lk_8499044017ac99bd",
+    "4": "lk_6ad4df89aa5d229c"
+   },
    "lp_598863d20bcb4fe8": {
     "0": "lk_3be00b0653116ab4",
     "1": "lk_31eb5a0badc6147b",
@@ -441,6 +434,13 @@
     "2": "lk_fcdf5b38b1b279de",
     "3": "lk_4c07b9cc43039b12",
     "4": "lk_1a1edfd2cd75d147"
+   },
+   "lp_6358d15f1d5beb40": {
+    "0": "lk_010c527cf7b8c632",
+    "1": "lk_45e60c7c28f343f2",
+    "2": "lk_c77cc5776bd03ff0",
+    "3": "lk_f02321501bf9a9d0",
+    "4": "lk_a0b56534a1f753d0"
    },
    "lp_64370536817d3715": {
     "0": "lk_1b0c14b025943c01",
@@ -767,6 +767,13 @@
     "3": "lk_11f444c8f9c93049",
     "4": "lk_8e026f1509042b62"
    },
+   "lp_aefa5bcac1ddcd56": {
+    "0": "lk_e0649a99ba4ff838",
+    "1": "lk_9aac19b61f829005",
+    "2": "lk_91daffd3c96b5096",
+    "3": "lk_4bb8b114ba89fb1a",
+    "4": "lk_4675cc060dce6964"
+   },
    "lp_b099c919ea9a8568": {
     "0": "lk_4ada876b9fca6944",
     "1": "lk_90c5124bdfde3463",
@@ -804,6 +811,13 @@
    "lp_b62d3234bf4dd1dc": {
     "3": "lk_d423463d51caeaad",
     "4": "lk_6283c3b77424ddae"
+   },
+   "lp_b754c620897a1028": {
+    "0": "lk_5049d2a2324d6e2d",
+    "1": "lk_6eba0b55076bf2b4",
+    "2": "lk_e09557875b33f572",
+    "3": "lk_befbaa069bab9fbb",
+    "4": "lk_7416feea4b5ad4f6"
    },
    "lp_bbb61909737c706b": {
     "0": "lk_9c7b9fe4cf8c7cf6",
@@ -885,6 +899,13 @@
     "3": "lk_3714aa4b6a393582",
     "4": "lk_aa6b5dd4b4f2adf4"
    },
+   "lp_ccc4c77f3f8b6d31": {
+    "0": "lk_a0420e8673ca7743",
+    "1": "lk_61e6b72b85a67b66",
+    "2": "lk_984ab7c8680244b1",
+    "3": "lk_d52f707a341a313f",
+    "4": "lk_a499f3cb92dff622"
+   },
    "lp_cd0eba5320defbe5": {
     "3": "lk_7add9dfec6dd7fc9",
     "4": "lk_52ebfd82e6f0fa08"
@@ -920,13 +941,6 @@
    "lp_d659961faa30b452": {
     "3": "lk_7a63902f699371a9",
     "4": "lk_fdb257aad82e74cf"
-   },
-   "lp_d670fde28d1f29ab": {
-    "0": "lk_5049d2a2324d6e2d",
-    "1": "lk_717086478fbe40ea",
-    "2": "lk_e09557875b33f572",
-    "3": "lk_befbaa069bab9fbb",
-    "4": "lk_7416feea4b5ad4f6"
    },
    "lp_d695c5ac6c0124c8": {
     "0": "lk_ace425b24edf27a4",
@@ -1044,13 +1058,6 @@
     "3": "lk_54bd09fd6379b209",
     "4": "lk_1bbe5ed0ed46b4b8"
    },
-   "lp_e969c5b954972aab": {
-    "0": "lk_4367901cc266e42e",
-    "1": "lk_2c347785db73e2a2",
-    "2": "lk_8ea9e2744a881b59",
-    "3": "lk_3a68cfe86e8427e3",
-    "4": "lk_a8a4a84d4708759e"
-   },
    "lp_e997a7f7c9dd354b": {
     "0": "lk_9473194994d9bee2",
     "1": "lk_18583cf350925739",
@@ -1163,13 +1170,6 @@
    "lp_f9cb04785f74d624": {
     "3": "lk_837b632adff8f614",
     "4": "lk_f4a2490cf6e5fc40"
-   },
-   "lp_fbe54dee2521d6a9": {
-    "0": "lk_010c527cf7b8c632",
-    "1": "lk_4312b6d87d577690",
-    "2": "lk_c77cc5776bd03ff0",
-    "3": "lk_f02321501bf9a9d0",
-    "4": "lk_a0b56534a1f753d0"
    },
    "lp_ffa84330cdc4983d": {
     "0": "lk_c7b773f5afbfb934",
@@ -1479,16 +1479,6 @@
     "bottom": "dark trousers",
     "head": "",
     "beard": "stubble"
-   },
-   "lk_08fac0f18619a9f8": {
-    "form": "boy",
-    "girth": 1,
-    "height": 1,
-    "hair": "fair-haired",
-    "top": "a yellow coat",
-    "bottom": "dark trousers",
-    "head": "",
-    "beard": ""
    },
    "lk_08fd8f7dd546f487": {
     "form": "old woman",
@@ -2350,16 +2340,6 @@
     "head": "",
     "beard": ""
    },
-   "lk_2c347785db73e2a2": {
-    "form": "boy",
-    "girth": 1,
-    "height": 1,
-    "hair": "brown-haired",
-    "top": "a black coat",
-    "bottom": "dark trousers",
-    "head": "",
-    "beard": ""
-   },
    "lk_2cecc077b0bdc869": {
     "form": "man",
     "girth": 1,
@@ -3060,16 +3040,6 @@
     "head": "",
     "beard": ""
    },
-   "lk_4312b6d87d577690": {
-    "form": "girl",
-    "girth": 1,
-    "height": 1,
-    "hair": "brown-haired",
-    "top": "a red coat",
-    "bottom": "dark trousers",
-    "head": "",
-    "beard": ""
-   },
    "lk_4343fba70c841161": {
     "form": "baby",
     "girth": 0,
@@ -3109,6 +3079,16 @@
     "bottom": "dark trousers",
     "head": "",
     "beard": "stubble"
+   },
+   "lk_438712822ffcb230": {
+    "form": "boy",
+    "girth": 1,
+    "height": 1,
+    "hair": "fair-haired",
+    "top": "a yellow coat",
+    "bottom": "dark trousers",
+    "head": "",
+    "beard": ""
    },
    "lk_43a7774f930b559f": {
     "form": "woman",
@@ -3189,6 +3169,16 @@
     "bottom": "dark trousers",
     "head": "",
     "beard": "stubble"
+   },
+   "lk_45e60c7c28f343f2": {
+    "form": "girl",
+    "girth": 1,
+    "height": 1,
+    "hair": "brown-haired",
+    "top": "a red coat",
+    "bottom": "dark trousers",
+    "head": "",
+    "beard": ""
    },
    "lk_4632c8c384232b78": {
     "form": "boy",
@@ -4170,6 +4160,16 @@
     "head": "a kerchief",
     "beard": ""
    },
+   "lk_61e6b72b85a67b66": {
+    "form": "girl",
+    "girth": 2,
+    "height": 1,
+    "hair": "fair-haired",
+    "top": "a red coat",
+    "bottom": "dark trousers",
+    "head": "",
+    "beard": ""
+   },
    "lk_622434c0b4d2aa13": {
     "form": "young man",
     "girth": 0,
@@ -4560,6 +4560,16 @@
     "head": "",
     "beard": ""
    },
+   "lk_6eba0b55076bf2b4": {
+    "form": "boy",
+    "girth": 2,
+    "height": 2,
+    "hair": "dark-haired",
+    "top": "a navy coat",
+    "bottom": "dark trousers",
+    "head": "",
+    "beard": ""
+   },
    "lk_6ec8f6f2becc0e2b": {
     "form": "woman",
     "girth": 1,
@@ -4670,12 +4680,12 @@
     "head": "",
     "beard": "a brown beard"
    },
-   "lk_717086478fbe40ea": {
+   "lk_719c6c589bead003": {
     "form": "boy",
-    "girth": 2,
-    "height": 2,
-    "hair": "dark-haired",
-    "top": "a navy coat",
+    "girth": 1,
+    "height": 1,
+    "hair": "brown-haired",
+    "top": "a black coat",
     "bottom": "dark trousers",
     "head": "",
     "beard": ""
@@ -4969,16 +4979,6 @@
     "bottom": "dark trousers",
     "head": "",
     "beard": "a brown beard"
-   },
-   "lk_7ca214d535fedef7": {
-    "form": "girl",
-    "girth": 2,
-    "height": 1,
-    "hair": "fair-haired",
-    "top": "a red coat",
-    "bottom": "dark trousers",
-    "head": "",
-    "beard": ""
    },
    "lk_7d27371ab2a8a995": {
     "form": "baby",
@@ -6009,6 +6009,16 @@
     "bottom": "dark trousers",
     "head": "a cap",
     "beard": "a grey beard"
+   },
+   "lk_9aac19b61f829005": {
+    "form": "girl",
+    "girth": 0,
+    "height": 1,
+    "hair": "brown-haired",
+    "top": "a green coat",
+    "bottom": "dark trousers",
+    "head": "",
+    "beard": ""
    },
    "lk_9ad52950e2520f56": {
     "form": "young woman",
@@ -8410,16 +8420,6 @@
     "head": "",
     "beard": ""
    },
-   "lk_e9b29619debf485e": {
-    "form": "girl",
-    "girth": 0,
-    "height": 1,
-    "hair": "brown-haired",
-    "top": "a green coat",
-    "bottom": "dark trousers",
-    "head": "",
-    "beard": ""
-   },
    "lk_ea17fc9bb5ccfb76": {
     "form": "young woman",
     "girth": 1,
@@ -9096,7 +9096,7 @@
    "lp_4baa1872200e9a2c",
    "lp_5dcb63dabc9dcfd3",
    "lp_198883626fd25976",
-   "lp_309c43652fe33fce",
+   "lp_ccc4c77f3f8b6d31",
    "lp_a73a8e17b87a9143",
    "lp_c6e516f4009d729a",
    "lp_a95084922c78b92c",
@@ -9108,7 +9108,7 @@
    "lp_dd18b0b28b56417b",
    "lp_e4d9506a6099972f",
    "lp_3ea671cf6cd7fdd6",
-   "lp_fbe54dee2521d6a9",
+   "lp_6358d15f1d5beb40",
    "lp_85987de05c0fed61",
    "lp_31327fadbc47dd99",
    "lp_9b8a24ec0c57d3b3",
@@ -9129,10 +9129,10 @@
    "lp_4003341c2e655525",
    "lp_64370536817d3715",
    "lp_9aa95222e7d53788",
-   "lp_d670fde28d1f29ab",
+   "lp_b754c620897a1028",
    "lp_d6f1123aa2d76067",
    "lp_ef045ff5deca1838",
-   "lp_0fb63202caaddc07",
+   "lp_aefa5bcac1ddcd56",
    "lp_43419fc289578f1e",
    "lp_93b6db6ab72b7cb8",
    "lp_abad6848be02b53c",
@@ -9159,7 +9159,7 @@
    "lp_34a4f38d5a57610d",
    "lp_11e1a97ed48944ff",
    "lp_30239d3a8fc8469f",
-   "lp_e969c5b954972aab",
+   "lp_138afd444770d429",
    "lp_e0a52434226ecc3f",
    "lp_31b7965d09e26438",
    "lp_efd9292d8b104c45",
@@ -9195,7 +9195,7 @@
    "lp_7d383b696bd9b50b",
    "lp_ffa84330cdc4983d",
    "lp_17853e4066c5b617",
-   "lp_021101fd81469e82",
+   "lp_586518a028d3c77f",
    "lp_66b0385cf36732c2",
    "lp_f3dcfc0a8bd7c208",
    "lp_ceef293f1d111d57",
