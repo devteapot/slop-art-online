@@ -1,0 +1,20 @@
+{
+ "about": "char-port-2 features (docs/char-port-2/PLAN.md), each off unless named in SLOP_PORT (comma-separated). face_types.load() merges a feature's per-class values into each type's records; a class is the type id without its line letter. With SLOP_PORT unset every type and file is built exactly as before.",
+ "features": {
+  "jaw": {
+   "about": "S1: the lower face's taper toward the drawing (chin over jaw 0.507, jaw 0.952 of the pupil-to-chin span; docs/char-port-2/s1). cage_head's jaw_taper and chin_taper: fractional offsets of the local half-width, the chin's below 0.095 H, the jaw's from 0.15 to 0.27 H. Per-person spread stays with the identity bones J_Id_Jaw (jaw_width) and J_Id_Chin (chin_width).",
+   "classes": {
+    "adult-f": {"jaw": {"jaw_taper": -0.05, "chin_taper": -0.18}},
+    "youth-f": {"jaw": {"jaw_taper": -0.04, "chin_taper": -0.145}},
+    "elder-f": {"jaw": {"jaw_taper": -0.02, "chin_taper": -0.16}},
+    "adult-m": {"jaw": {"jaw_taper": 0.0, "chin_taper": -0.06}},
+    "youth-m": {"jaw": {"jaw_taper": 0.0, "chin_taper": -0.05}},
+    "elder-m": {"jaw": {"jaw_taper": 0.0, "chin_taper": -0.05}},
+    "child-u": {"jaw": {"jaw_taper": 0.0, "chin_taper": -0.10}}
+   }
+  },
+  "jaw_shell": {
+   "about": "S1: the inside-out jaw line over the whole underside, from the jaw line to the neck's ring (cage_head.CageFace._underside_shell), in place of the first ring under the jaw, whose copy faces away at portrait height and draws nothing in front (docs/char-port-2/s0)."
+  }
+ }
+}

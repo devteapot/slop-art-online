@@ -1,0 +1,473 @@
+{
+ "about": "Each pair: main, then SLOP_PORT=jaw,jaw_shell. Widths over the pupil-to-chin span (face_measure.py); cage_accept worst width difference from the type record, in H.",
+ "drawing": {
+  "jaw": 0.952,
+  "chin": 0.483,
+  "chin_over_jaw": 0.507
+ },
+ "brow_check": "21 types, every brow there and at least 0.3 mm before the skin in every pose (port)",
+ "types": {
+  "adult-f-a": {
+   "triangles": [
+    14036,
+    14816
+   ],
+   "jaw": [
+    1.208,
+    1.129
+   ],
+   "chin": [
+    0.785,
+    0.682
+   ],
+   "chin_over_jaw": [
+    0.65,
+    0.604
+   ],
+   "cage_accept_worst_width_H": [
+    0.047,
+    0.053
+   ]
+  },
+  "adult-f-b": {
+   "triangles": [
+    13956,
+    14728
+   ],
+   "jaw": [
+    1.04,
+    1.022
+   ],
+   "chin": [
+    0.616,
+    0.578
+   ],
+   "chin_over_jaw": [
+    0.592,
+    0.566
+   ],
+   "cage_accept_worst_width_H": [
+    0.044,
+    0.04
+   ]
+  },
+  "adult-f-c": {
+   "triangles": [
+    13852,
+    14628
+   ],
+   "jaw": [
+    0.984,
+    0.97
+   ],
+   "chin": [
+    0.535,
+    0.509
+   ],
+   "chin_over_jaw": [
+    0.544,
+    0.525
+   ],
+   "cage_accept_worst_width_H": [
+    0.069,
+    0.058
+   ]
+  },
+  "adult-m-a": {
+   "triangles": [
+    13734,
+    14520
+   ],
+   "jaw": [
+    1.143,
+    1.142
+   ],
+   "chin": [
+    0.835,
+    0.792
+   ],
+   "chin_over_jaw": [
+    0.731,
+    0.694
+   ],
+   "cage_accept_worst_width_H": [
+    0.054,
+    0.036
+   ]
+  },
+  "adult-m-b": {
+   "triangles": [
+    13674,
+    14452
+   ],
+   "jaw": [
+    0.999,
+    0.998
+   ],
+   "chin": [
+    0.691,
+    0.674
+   ],
+   "chin_over_jaw": [
+    0.692,
+    0.675
+   ],
+   "cage_accept_worst_width_H": [
+    0.043,
+    0.035
+   ]
+  },
+  "adult-m-c": {
+   "triangles": [
+    13532,
+    14320
+   ],
+   "jaw": [
+    0.974,
+    0.973
+   ],
+   "chin": [
+    0.624,
+    0.609
+   ],
+   "chin_over_jaw": [
+    0.641,
+    0.626
+   ],
+   "cage_accept_worst_width_H": [
+    0.033,
+    0.026
+   ]
+  },
+  "child-u-a": {
+   "triangles": [
+    13998,
+    14778
+   ],
+   "jaw": [
+    1.365,
+    1.351
+   ],
+   "chin": [
+    0.935,
+    0.881
+   ],
+   "chin_over_jaw": [
+    0.685,
+    0.652
+   ],
+   "cage_accept_worst_width_H": [
+    0.056,
+    0.035
+   ]
+  },
+  "child-u-b": {
+   "triangles": [
+    13918,
+    14698
+   ],
+   "jaw": [
+    1.168,
+    1.158
+   ],
+   "chin": [
+    0.736,
+    0.696
+   ],
+   "chin_over_jaw": [
+    0.63,
+    0.601
+   ],
+   "cage_accept_worst_width_H": [
+    0.048,
+    0.031
+   ]
+  },
+  "child-u-c": {
+   "triangles": [
+    13902,
+    14698
+   ],
+   "jaw": [
+    1.036,
+    1.037
+   ],
+   "chin": [
+    0.603,
+    0.588
+   ],
+   "chin_over_jaw": [
+    0.582,
+    0.567
+   ],
+   "cage_accept_worst_width_H": [
+    0.043,
+    0.035
+   ]
+  },
+  "elder-f-a": {
+   "triangles": [
+    13980,
+    14752
+   ],
+   "jaw": [
+    1.197,
+    1.158
+   ],
+   "chin": [
+    0.797,
+    0.714
+   ],
+   "chin_over_jaw": [
+    0.666,
+    0.617
+   ],
+   "cage_accept_worst_width_H": [
+    0.044,
+    0.045
+   ]
+  },
+  "elder-f-b": {
+   "triangles": [
+    13916,
+    14700
+   ],
+   "jaw": [
+    1.05,
+    1.041
+   ],
+   "chin": [
+    0.634,
+    0.59
+   ],
+   "chin_over_jaw": [
+    0.604,
+    0.567
+   ],
+   "cage_accept_worst_width_H": [
+    0.042,
+    0.032
+   ]
+  },
+  "elder-f-c": {
+   "triangles": [
+    13780,
+    14576
+   ],
+   "jaw": [
+    1.007,
+    1.003
+   ],
+   "chin": [
+    0.546,
+    0.525
+   ],
+   "chin_over_jaw": [
+    0.542,
+    0.523
+   ],
+   "cage_accept_worst_width_H": [
+    0.061,
+    0.05
+   ]
+  },
+  "elder-m-a": {
+   "triangles": [
+    13666,
+    14440
+   ],
+   "jaw": [
+    1.156,
+    1.155
+   ],
+   "chin": [
+    0.856,
+    0.818
+   ],
+   "chin_over_jaw": [
+    0.74,
+    0.708
+   ],
+   "cage_accept_worst_width_H": [
+    0.058,
+    0.041
+   ]
+  },
+  "elder-m-b": {
+   "triangles": [
+    13600,
+    14380
+   ],
+   "jaw": [
+    1.004,
+    0.992
+   ],
+   "chin": [
+    0.681,
+    0.687
+   ],
+   "chin_over_jaw": [
+    0.678,
+    0.693
+   ],
+   "cage_accept_worst_width_H": [
+    0.045,
+    0.034
+   ]
+  },
+  "elder-m-c": {
+   "triangles": [
+    13476,
+    14256
+   ],
+   "jaw": [
+    0.97,
+    0.969
+   ],
+   "chin": [
+    0.635,
+    0.622
+   ],
+   "chin_over_jaw": [
+    0.655,
+    0.642
+   ],
+   "cage_accept_worst_width_H": [
+    0.03,
+    0.024
+   ]
+  },
+  "youth-f-a": {
+   "triangles": [
+    13988,
+    14756
+   ],
+   "jaw": [
+    1.214,
+    1.151
+   ],
+   "chin": [
+    0.793,
+    0.709
+   ],
+   "chin_over_jaw": [
+    0.653,
+    0.616
+   ],
+   "cage_accept_worst_width_H": [
+    0.048,
+    0.047
+   ]
+  },
+  "youth-f-b": {
+   "triangles": [
+    13908,
+    14696
+   ],
+   "jaw": [
+    1.046,
+    1.031
+   ],
+   "chin": [
+    0.62,
+    0.588
+   ],
+   "chin_over_jaw": [
+    0.593,
+    0.57
+   ],
+   "cage_accept_worst_width_H": [
+    0.044,
+    0.031
+   ]
+  },
+  "youth-f-c": {
+   "triangles": [
+    13824,
+    14620
+   ],
+   "jaw": [
+    0.967,
+    0.975
+   ],
+   "chin": [
+    0.538,
+    0.517
+   ],
+   "chin_over_jaw": [
+    0.556,
+    0.53
+   ],
+   "cage_accept_worst_width_H": [
+    0.068,
+    0.059
+   ]
+  },
+  "youth-m-a": {
+   "triangles": [
+    13772,
+    14558
+   ],
+   "jaw": [
+    1.19,
+    1.188
+   ],
+   "chin": [
+    0.867,
+    0.83
+   ],
+   "chin_over_jaw": [
+    0.729,
+    0.699
+   ],
+   "cage_accept_worst_width_H": [
+    0.058,
+    0.042
+   ]
+  },
+  "youth-m-b": {
+   "triangles": [
+    13750,
+    14534
+   ],
+   "jaw": [
+    1.02,
+    1.008
+   ],
+   "chin": [
+    0.682,
+    0.683
+   ],
+   "chin_over_jaw": [
+    0.669,
+    0.678
+   ],
+   "cage_accept_worst_width_H": [
+    0.046,
+    0.033
+   ]
+  },
+  "youth-m-c": {
+   "triangles": [
+    13584,
+    14364
+   ],
+   "jaw": [
+    0.978,
+    0.976
+   ],
+   "chin": [
+    0.629,
+    0.617
+   ],
+   "chin_over_jaw": [
+    0.643,
+    0.632
+   ],
+   "cage_accept_worst_width_H": [
+    0.029,
+    0.024
+   ]
+  }
+ }
+}

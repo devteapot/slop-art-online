@@ -33,6 +33,7 @@ character's left at -X. A head is H_FILE high in a character file (a rest figure
 
 import copy
 import math
+import os
 
 import numpy as np
 
@@ -958,6 +959,11 @@ def far_jaw_line(m, hf, look):
     m.add(pos + out * w[:, None], line_colour(look), [head_mesh.SWATCH_UV] * len(used), [tuple(reversed([index[i] for i in f])) for f in pick], "face")
 
 
+# char-port-2 features on in this process (`SLOP_PORT=jaw_shell,…`, face_types.port_features).
+PORT = {f.strip() for f in os.environ.get("SLOP_PORT", "").split(",") if f.strip()}
+JAW_SHELL = "jaw_shell" in PORT
+
+
 def _smooth(a, b, x):
     t = np.clip((np.asarray(x, float) - a) / (b - a), 0.0, 1.0)
     return t * t * (3 - 2 * t)
@@ -1029,6 +1035,10 @@ class CageFace(head_mesh.Face):
         # own faces, coloured and shaded as body skin, as the reference's face mask ends at the jaw.
         jaw_row = cage.R["under_jaw"]
         self.under_faces = [f for f, fi in zip(faces, parent) if cage.face_row[fi] >= jaw_row]
+        # From the jaw line itself down (the jaw's underside, then the skin under it to the neck's
+        # ring), and the jaw line's vertices: the whole-underside shell's faces (port `jaw_shell`).
+        self.below_jaw = [f for f, fi in zip(faces, parent) if cage.face_row[fi] >= cage.R["jaw"]]
+        self.jaw_edge = {v for f in self.below_jaw for v in f} & {v for f, fi in zip(faces, parent) if cage.face_row[fi] < cage.R["jaw"] for v in f}
         self.neck_ring = {new[v] for v in cage.neck_ring} | {new[edge_row[e]] for e in edge_row if e[0] in set(cage.neck_ring) and e[1] in set(cage.neck_ring)}
         out = []
         for f, fi in zip(faces, parent):
@@ -1086,6 +1096,10 @@ class CageFace(head_mesh.Face):
     # Widths are metres on the file's head; the heaviest is under the chin.
     LINES = True
     LINE_CHIN, LINE_JAW, LINE_EAR, LINE_MOUTH = 0.0019, 0.0010, 0.0007, 0.00032
+    # The whole-underside shell's (port `jaw_shell`): nearer even, as the drawing's jaw stroke is
+    # from the ear to the chin (docs/char-port-2/s1: 1.9 mm under the chin drew it 1.7 times the
+    # drawing's weight there).
+    LINE_CHIN_UNDER, LINE_JAW_UNDER = 0.0013, 0.0011
 
     def _ears(self, m):
         first = len(m.f)
@@ -1095,6 +1109,50 @@ class CageFace(head_mesh.Face):
     def _shell_lines(self, m, skin):
         colour = line_colour(self.look)
         scale = self.hf.H / H_FILE
+        if JAW_SHELL:
+            self._underside_shell(m, skin, colour, scale)
+        else:
+            self._first_ring_shell(m, skin, colour, scale)
+        self._ear_and_mouth_lines(m, skin, colour, scale)
+
+    def _underside_shell(self, m, skin, colour, scale):
+        """The jaw and chin (port `jaw_shell`, docs/char-port-2/s0): the whole underside, from the
+        jaw line down to the neck's ring, pushed out and turned inside out. An inside-out copy
+        shows only where the surface it copies turns away from the eye, so this one draws the
+        jaw's silhouette wherever it falls: over the neck in front and at three-quarter, where
+        the first ring alone (`_first_ring_shell`) faces the camera and is culled. Widths are
+        the jaw line's (heaviest under the chin, gone before the ear), carried down the
+        underside and thinning to nothing at the neck's ring."""
+        faces = self.below_jaw
+        used = sorted({v for f in faces for v in f})
+        index = {v: i for i, v in enumerate(used)}
+        edge = self.jaw_edge
+        reach = max(abs(float(skin[v][0])) for v in edge)
+        # Each underside vertex takes the width of the jaw-line vertex nearest it along the
+        # surface, scaled down by how far down it is (edges walked) over the deepest walk.
+        nbr = {v: set() for v in used}
+        for f in faces:
+            for a, b in zip(f, f[1:] + f[:1]):
+                nbr[a].add(b)
+                nbr[b].add(a)
+        depth, src, todo = {v: 0 for v in edge}, {v: v for v in edge}, sorted(edge)
+        while todo:
+            nxt = []
+            for v in todo:
+                for w in sorted(nbr[v]):
+                    if w not in depth:
+                        depth[w], src[w] = depth[v] + 1, src[v]
+                        nxt.append(w)
+            todo = nxt
+        deepest = max(depth.values()) or 1
+        t = np.array([abs(float(skin[src[v]][0])) / max(reach, 1e-6) for v in used])
+        width = (self.LINE_CHIN_UNDER + (self.LINE_JAW_UNDER - self.LINE_CHIN_UNDER) * _smooth(0.0, 0.55, t)) * _smooth(1.0, 0.82, t) * scale
+        width *= 1.0 - _smooth(0.0, 1.0, np.array([depth[v] / deepest for v in used]))
+        width = np.where([v in self.neck_ring for v in used], 0.0, width)
+        pos = skin[used]
+        m.add(pos + self.skin_normals[used] * width[:, None], colour, None, [tuple(reversed([index[v] for v in f])) for f in faces], "shell")
+
+    def _first_ring_shell(self, m, skin, colour, scale):
         # 1. The jaw and chin. The skin under the jaw turns away from anyone looking at the face,
         # so its first ring of faces, pushed out along the jaw line and turned inside out, shows
         # as a dark edge exactly where the jaw stands over the neck: nothing from below, where
@@ -1112,6 +1170,8 @@ class CageFace(head_mesh.Face):
         width = (self.LINE_CHIN + (self.LINE_JAW - self.LINE_CHIN) * _smooth(0.0, 0.55, t)) * _smooth(1.0, 0.82, t) * scale
         width = np.where([v in jaw for v in used], width, 0.0)
         m.add(pos + self.skin_normals[used] * width[:, None], colour, None, [tuple(reversed([index[v] for v in f])) for f in ring], "shell")
+
+    def _ear_and_mouth_lines(self, m, skin, colour, scale):
         # 2. The ears: the whole ear inside out, a hair's width larger, so its rim has a line
         # against the head from every side.
         first, last = self._ear_faces

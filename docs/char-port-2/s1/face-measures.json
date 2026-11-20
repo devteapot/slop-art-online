@@ -1,0 +1,64 @@
+{
+ "drawing": {
+  "cheek": 1.232,
+  "jaw": 0.952,
+  "chin": 0.483,
+  "chin_over_cheek": 0.392,
+  "jaw_over_cheek": 0.773,
+  "iris_over_eye": 0.5
+ },
+ "files": [
+  {
+   "file": "living/game/assets/lookdev/own-cp2p-woman.glb",
+   "pupil_to_chin_mm": 101.5,
+   "cheek": 1.973,
+   "jaw": 1.022,
+   "chin": 0.578,
+   "chin_over_cheek": 0.293,
+   "jaw_over_cheek": 0.518,
+   "iris_over_eye": [
+    0.569,
+    0.569
+   ]
+  },
+  {
+   "file": "living/game/assets/lookdev/own-cp2p-man.glb",
+   "pupil_to_chin_mm": 133.1,
+   "cheek": 1.447,
+   "jaw": 0.86,
+   "chin": 0.574,
+   "chin_over_cheek": 0.397,
+   "jaw_over_cheek": 0.594,
+   "iris_over_eye": [
+    0.629,
+    0.629
+   ]
+  },
+  {
+   "file": "living/game/assets/lookdev/own-cp2p-elder.glb",
+   "pupil_to_chin_mm": 118.8,
+   "cheek": 1.629,
+   "jaw": 1.012,
+   "chin": 0.698,
+   "chin_over_cheek": 0.428,
+   "jaw_over_cheek": 0.621,
+   "iris_over_eye": [
+    0.559,
+    0.559
+   ]
+  },
+  {
+   "file": "living/game/assets/lookdev/own-cp2p-girl.glb",
+   "pupil_to_chin_mm": 91.8,
+   "cheek": 2.262,
+   "jaw": 1.351,
+   "chin": 0.881,
+   "chin_over_cheek": 0.389,
+   "jaw_over_cheek": 0.597,
+   "iris_over_eye": [
+    0.613,
+    0.613
+   ]
+  }
+ ]
+}
