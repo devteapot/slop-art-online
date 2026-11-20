@@ -129,6 +129,8 @@ fn laws() {
         sweep_keep_memory: false, sweep_keep_check: false,
         // A diagnostic: while profiling, also time the parts of a graph's evaluation.
         profile_detail: false,
+        latency_nav_from: 0,
+        latency_fast: false,
         // How a fighter's work is done (docs/BATTLE_SCALE.md, battle-cheap), none of it changing what
         // anyone perceives or does: a move's check before it starts given only the fields it reads;
         // the body's alarms answered from the last answer while no field crosses one of their
@@ -3242,6 +3244,8 @@ fn law_about(l, name) {
         "notice_delta_check" => "a diagnostic: what a look passes over is checked to be already familiar",
         "seen_ranges" => "remember which structures were seen in ranges of ids by block",
         "seen_ranges_check" => "a diagnostic: compare structure newness with familiarity",
+        "latency_nav_from" => if l.latency_nav_from == 0 { "navigation latency logging is off" } else { "navigation latency logging starts at the chosen character id" },
+        "latency_fast" => if l.latency_fast { "the fast lane's authority stages are logged" } else { "fast lane latency logging is off" },
         "profile_detail" => if l.profile_detail { "while profiling, the parts of each behaviour's evaluation are timed" } else { "profiling times each behaviour's evaluation whole" },
         "sweep_keep_memory" => "a diagnostic: what each player hears and how others' health stands are remembered from one moment to the next",
         "sweep_keep_check" => "a diagnostic: each remembered sound and health is checked against the record",

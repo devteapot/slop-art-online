@@ -219,6 +219,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     let played = !ev.me.ai;
     let result = {
         let _span = common::span("brain.graph");
+        crate::latency::nav(ctx, id, "graph_eval", u64::from(ev.st.revision), format_args!(""));
         ev.run(&root.root, 0)
     };
     common::diag(|| "eval:all", 1);

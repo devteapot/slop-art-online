@@ -89,6 +89,7 @@ fn submit_inner(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str,
             continue;
         }
         let queued = ctx.db.act_queue().insert(PlannedAct { id: 0, actor, node: rules::to_json(&a), source: source.chars().take(32).collect(), at_ms: now });
+        crate::latency::nav(ctx, actor, "act_queued", queued.id, format_args!("{source} {}", a.skill));
         results.push((Some(queued.id), None));
     }
     if !checked {
@@ -156,6 +157,7 @@ fn next_reporting(ctx: &ReducerContext, actor: u32, now: u64, mut report_refusal
         let want = (a.want.clone().unwrap_or_default(), a.want_qty.unwrap_or(0));
         match act::begin(ctx, actor, ACT, revision, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), a.text.as_deref().unwrap_or(""), a.topic.as_deref().unwrap_or(""), (&want.0, want.1), (a.offer.unwrap_or(0), a.record.unwrap_or(0)), a.run, a.spacing(), now) {
             Ok(()) => {
+                crate::latency::nav(ctx, actor, "act_started", p.id, format_args!("{}", a.skill));
                 common::wake(ctx, actor);
                 return;
             }

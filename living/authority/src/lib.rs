@@ -38,6 +38,7 @@ mod earshot;
 mod fold;
 mod fast;
 mod known;
+mod latency;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table, ViewContext};
 use std::time::Duration;
@@ -836,6 +837,7 @@ fn my_character(ctx: &ReducerContext) -> Result<Character, String> {
 pub fn human_act(ctx: &ReducerContext, node: String) -> Result<(), String> {
     crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
+    latency::nav(ctx, me.id, "human_act", 0, format_args!(""));
     let g = living_rules::graph::parse(&node)?;
     if let living_rules::graph::Node::Do(a) = &g.root {
         if living_rules::acts::not_an_act(&a.skill, common::scripts(ctx).shapes()).is_none() {
@@ -903,6 +905,7 @@ pub fn human_gaze(ctx: &ReducerContext, band: u8) -> Result<(), String> {
 pub fn human_move(ctx: &ReducerContext, dx: f32, dy: f32, run: bool) -> Result<(), String> {
     crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
+    latency::nav(ctx, me.id, "human_move", 0, format_args!(""));
     if !dx.is_finite() || !dy.is_finite() {
         return Err("direction must be finite".into());
     }

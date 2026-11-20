@@ -667,6 +667,8 @@ pub struct Laws {
     /// evaluation (its conditions, targets, act starts, alerts), docs/BATTLE_SCALE.md. Off by
     /// default: those spans are many and would weigh on what an ordinary profile measures.
     pub profile_detail: bool,
+    pub latency_nav_from: u32,
+    pub latency_fast: bool,
     /// A move's check before it starts is given a context of the fields the check reads alone
     /// (its plan; docs/BATTLE_SCALE.md, battle-cheap path 1): the same answer, without gathering
     /// what it never reads (kin near, practice, community and home, warmth). Off: the whole context.
@@ -889,6 +891,8 @@ impl Default for Laws {
             sweep_keep_memory: false,
             sweep_keep_check: false,
             profile_detail: false,
+            latency_nav_from: 0,
+            latency_fast: false,
             check_ctx_plan: true,
             check_ctx_check: false,
             alarm_cells: true,
@@ -3248,6 +3252,8 @@ impl Scripts {
             sweep_keep_memory: flag("sweep_keep_memory", l.sweep_keep_memory),
             sweep_keep_check: flag("sweep_keep_check", l.sweep_keep_check),
             profile_detail: flag("profile_detail", l.profile_detail),
+            latency_nav_from: g("latency_nav_from", l.latency_nav_from as f32) as u32,
+            latency_fast: flag("latency_fast", l.latency_fast),
             check_ctx_plan: flag("check_ctx_plan", l.check_ctx_plan),
             check_ctx_check: flag("check_ctx_check", l.check_ctx_check),
             alarm_cells: flag("alarm_cells", l.alarm_cells),

@@ -1593,10 +1593,9 @@ struct TalkCtx<'a> {
     missed: Option<&'a str>,
 }
 
-/// About how long a line takes to say aloud (people speak ~3 words a second).
-fn saying_ms(text: &str) -> u64 {
-    (text.split_whitespace().count() as u64 * 330).clamp(1_500, 8_000)
-}
+// About how long a line takes to say aloud: the one shared rule (living_rules::saying), which
+// the game client also paces a reply's bubble by.
+use living_rules::saying::saying_ms;
 
 /// When a reply turn's line is said, and its place in the exchange's rhythm (reply-timing).
 ///

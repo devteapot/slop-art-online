@@ -437,9 +437,10 @@ impl Minds {
     /// id, which is a real islander's); its nodes and edges are dropped, with a note.
     fn perceived_people_only(&self, actor: u32, batch: &[Experience], patch: &mut memory::Patch) -> Vec<String> {
         let mut known: std::collections::HashSet<u32> = self.conn.db.relation().iter().filter(|r| r.actor == actor).map(|r| r.other).collect();
+        let mut people = super::recall::People::default();
         for e in batch {
             known.extend([e.subject, e.object]);
-            known.extend(self.named_people(actor, &e.text));
+            known.extend(self.named_people_among(actor, &e.text, &mut people));
         }
         known.insert(actor);
         let stranger = |k: &str| k.strip_prefix("person:").and_then(|x| x.parse::<u32>().ok()).is_some_and(|id| !known.contains(&id));

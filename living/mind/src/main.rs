@@ -6,6 +6,7 @@
 mod llm;
 mod memory;
 mod mind;
+mod prof;
 mod prices;
 mod prompts;
 
@@ -115,6 +116,9 @@ async fn main() -> Result<()> {
     };
 
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let (fast_tx, fast_rx) = tokio::sync::mpsc::unbounded_channel();
+    // Deliberation requests have their own channel too (`Minds::run`).
+    let (delib_tx, delib_rx) = tokio::sync::mpsc::unbounded_channel();
     let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<()>();
     let ready = Arc::new(Mutex::new(Some(ready_tx)));
     // Whether the `genesis` subscription applied (true) or failed (false: a module without the table).
@@ -244,12 +248,35 @@ async fn main() -> Result<()> {
         .build()
         .with_context(|| format!("connect to {server}/{db}"))?;
     let lod = mind::lod::enabled();
+    // Keys of each character's own rows, kept here as the SDK applies them (mind.rs `Index`).
+    let index = Arc::new(mind::Index::default());
+    {
+        let out = index.clone();
+        conn.db.experience().on_delete(move |_, e| out.experience_out(e));
+        let moved = index.clone();
+        conn.db.experience().on_update(move |_, old, e| {
+            moved.experience_out(old);
+            moved.experience_in(e);
+        });
+    }
     {
         let tx = tx.clone();
+        let index = index.clone();
+        let trace = std::env::var("LIVING_INPUT_LATENCY").is_ok_and(|v| v == "1");
+        let last = std::sync::atomic::AtomicU64::new(0);
         conn.db.experience().on_insert(move |ctx, e| {
+            let _cb = prof::span("sdk.cb.experience");
+            index.experience_in(e);
+            if trace {
+                let at = llm::now_ms();
+                let second = at / 1000;
+                if last.fetch_max(second, std::sync::atomic::Ordering::Relaxed) < second {
+                    log::info!("input_latency_experience {at}");
+                }
+            }
             // Another controller's character (a person's): memory only, never a turn.
             if e.controller != ctx.identity() {
-                let _ = tx.send(mind::Event::Lived(e.clone()));
+                let _ = tx.send((std::time::Instant::now(), mind::Event::Lived(e.clone())));
                 return;
             }
             // A human player in what a character experiences puts it on stage.
@@ -257,51 +284,72 @@ async fn main() -> Result<()> {
                 let me = ctx.identity();
                 let player = |id: u32| ctx.db.character().id().find(&id).is_some_and(|c| mind::lod::is_player(&c, me));
                 if player(e.subject) || player(e.object) {
-                    let _ = tx.send(mind::Event::Contact(e.observer));
+                    let _ = tx.send((std::time::Instant::now(), mind::Event::Contact(e.observer)));
                 }
             }
             if rethink {
-                let _ = tx.send(mind::Event::Percept(e.clone()));
+                let _ = tx.send((std::time::Instant::now(), mind::Event::Percept(e.clone())));
             }
             // A line of mine whose #ids were said as words (`spoken_as`): journaled as evidence.
             if e.kind == "spoken_as" {
-                let _ = tx.send(mind::Event::SpokenAs(e.clone()));
+                let _ = tx.send((std::time::Instant::now(), mind::Event::SpokenAs(e.clone())));
             }
             // A whisper to me carries words too; noticing one (`whispered`) does not.
             if e.kind == "speech" || e.kind == "whisper" || e.kind == "silence" {
-                let _ = tx.send(mind::Event::Speech(e.clone()));
+                let _ = tx.send((std::time::Instant::now(), mind::Event::Speech(e.clone())));
             }
         });
     }
     {
         // A fast-lane request issued (mind/fast.rs): on insert or when a waiting row is issued.
-        let tx_insert = tx.clone();
+        // Its own channel, read on the fast lane's own runtime (`Minds::run`): never behind the
+        // shared event queue's work.
+        let trace = std::env::var("LIVING_INPUT_LATENCY").is_ok_and(|v| v == "1");
+        let tx_insert = fast_tx.clone();
         conn.db.fast_ask().on_insert(move |_, a| {
+            let _cb = prof::span("sdk.cb.fast_ask");
             if a.issued_ms != 0 {
-                let _ = tx_insert.send(mind::Event::Fast(a.clone()));
+                let callback = trace.then(llm::now_ms);
+                if let Some(at) = callback {
+                    log::info!("input_latency_callback {at} {} {}", a.actor, a.issued_ms);
+                }
+                let _ = tx_insert.send((std::time::Instant::now(), a.clone(), callback));
             }
         });
-        let tx_update = tx.clone();
+        let tx_update = fast_tx.clone();
         conn.db.fast_ask().on_update(move |_, old, a| {
+            let _cb = prof::span("sdk.cb.fast_ask");
             if a.issued_ms != 0 && a.issued_ms != old.issued_ms {
-                let _ = tx_update.send(mind::Event::Fast(a.clone()));
+                let callback = trace.then(llm::now_ms);
+                if let Some(at) = callback {
+                    log::info!("input_latency_callback {at} {} {}", a.actor, a.issued_ms);
+                }
+                let _ = tx_update.send((std::time::Instant::now(), a.clone(), callback));
             }
         });
     }
     {
-        let tx = tx.clone();
+        let tx = delib_tx.clone();
+        let index = index.clone();
         // This view has no primary key: SDK 2.10.1 delivers replacements as insert/delete.
         conn.db.my_deliberations().on_insert(move |_, d| {
+            let _cb = prof::span("sdk.cb.deliberation");
+            index.request_in(d);
             if lod {
-                let _ = tx.send(mind::Event::Pending(d.clone()));
+                let _ = tx.send((std::time::Instant::now(), mind::Event::Pending(d.clone())));
             }
-            let _ = tx.send(mind::Event::Deliberation(d.actor));
+            let _ = tx.send((std::time::Instant::now(), mind::Event::Deliberation(d.actor)));
         });
     }
-    if lod {
-        let tx = tx.clone();
+    {
+        let tx = delib_tx.clone();
+        let index = index.clone();
         conn.db.my_deliberations().on_delete(move |_, d| {
-            let _ = tx.send(mind::Event::PendingGone(d.clone()));
+            let _cb = prof::span("sdk.cb.deliberation_gone");
+            index.request_out(d);
+            if lod {
+                let _ = tx.send((std::time::Instant::now(), mind::Event::PendingGone(d.clone())));
+            }
         });
     }
     conn.run_threaded();
@@ -327,7 +375,18 @@ async fn main() -> Result<()> {
     // (277 people) keeps about 100 in flight; at 64 its deliberations queued for up to a
     // minute (docs/SEEDED_LIVES.md, "Every person a mind").
     let concurrency = std::env::var("LIVING_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(192);
-    let minds = mind::Minds::new(conn, llm, store, seed, concurrency)?;
+    // The fast lane's own workers (mind/fast.rs): its requests are dispatched, prepared and
+    // sent there, so CPU-heavy work on the shared workers cannot hold them up. It lives as long
+    // as the process.
+    let workers = |key: &str, default: usize| std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(default).max(1);
+    let runtime = |name: &str, n: usize| -> Result<&'static tokio::runtime::Runtime> {
+        Ok(Box::leak(Box::new(tokio::runtime::Builder::new_multi_thread().worker_threads(n).thread_name(name).enable_all().build()?)))
+    };
+    let fast_rt = runtime("mind-fast", workers("LIVING_FAST_WORKERS", 2))?;
+    // The deliberations' own workers: requests are scheduled, prepared and sent there, at most
+    // this many preparing at once (prompt building is CPU work that reads the SDK cache).
+    let delib_rt = runtime("mind-deliberate", workers("LIVING_DELIBERATION_WORKERS", 4))?;
+    let minds = mind::Minds::new(conn, index, llm, store, seed, concurrency)?;
     minds.bootstrap().await?;
-    minds.run(rx).await
+    minds.run(rx, delib_rx, fast_rx, delib_rt.handle().clone(), fast_rt.handle().clone()).await
 }

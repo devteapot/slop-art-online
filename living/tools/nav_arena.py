@@ -34,12 +34,14 @@ import random
 import re
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / ".agents/skills/verify-core/scripts"))
 sys.path.insert(0, str(ROOT / "living/tools"))
+import input_latency  # noqa: E402
 import scenes  # noqa: E402
 import walk_times  # noqa: E402
 from nav_report import path_crosses  # noqa: E402
@@ -63,6 +65,7 @@ class World:
         self.owner = walk_times.owner_token()
         self.s.token = self.owner
         self.run = run
+        self.input_latency = False
         w = self.s.rows("SELECT width, height FROM world")[0]
         self.W, self.H = w["width"], w["height"]
         self.tiles = bytearray(self.W * self.H)
@@ -222,14 +225,37 @@ class Phase:
         if gates:
             queries.extend(f"SELECT * FROM remembered WHERE observer = {actor} AND target = {gate}"
                            for actor in known_ids for gate in gates)
-        self.sub = subprocess.Popen([STDB, "subscribe", "-s", "local", world.s.db, *queries, "-t", str(int(seconds)), "--print-initial-update"],
-                                    stdout=(self.dir / "bodies.jsonl").open("w"), stderr=(self.dir / "subscribe.log").open("w"))
+        self.started_ms = time.time_ns() // 1_000_000
+        with (self.dir / "bodies.jsonl").open("w") as output, (self.dir / "subscribe.log").open("w") as errors:
+            self.sub = subprocess.Popen(
+                [STDB, "subscribe", "-s", "local", world.s.db, *queries, "-t", str(int(seconds)), "--print-initial-update"],
+                stdout=subprocess.PIPE if world.input_latency else output, stderr=errors, text=world.input_latency,
+            )
+        self.reader = None
+        if world.input_latency:
+            self.reader = threading.Thread(target=self.record_updates)
+            self.reader.start()
         self.bench = None
         if bench:
             # A fixed window from the phase's start (its busiest walking), left to finish.
             self.bench = subprocess.Popen([sys.executable, str(ROOT / "living/tools/bench.py"), "--db", world.s.db, "--seconds", str(bench_seconds), "--body-writes"],
                                           stdout=(self.dir / "bench.txt").open("w"), stderr=subprocess.STDOUT, env={**os.environ, "LIVING_STDB": STDB})
         time.sleep(1.5)
+
+    def record_updates(self):
+        # This is after CLI decode, SDK apply and printing. It is a receipt upper bound.
+        with self.sub.stdout as pipe, (self.dir / "bodies.jsonl").open("w") as output:
+            for line in pipe:
+                at = input_latency.epoch_ms()
+                if line.startswith("{"):
+                    try:
+                        update = json.loads(line)
+                    except ValueError:
+                        pass
+                    else:
+                        update["input_latency_read_ms"] = at
+                        line = json.dumps(update) + "\n"
+                output.write(line)
 
     def mark(self, what, **kw):
         t0 = self.w.now()
@@ -251,6 +277,11 @@ class Phase:
                     p.wait(10)
                 except subprocess.TimeoutExpired:
                     p.kill()
+                    p.wait(timeout=10)
+        if self.reader:
+            self.reader.join()
+            input_latency.capture_authority(walk_times.URL, self.w.s.db, self.w.owner,
+                                            self.dir / "input-latency-authority.jsonl", self.started_ms)
 
 
 def route_exits(world, folder, walks):
@@ -342,7 +373,13 @@ def walks_to(world, phase, subs, legs, law, timeout_x=3.0, extra_s=20.0, run=Fal
         opt = world.optimal([{"start": list(here), "goal": list(goal)}], shut)[0]
         snapf = phase.dir / f"belief-{sub.id}-{st['k']}.json"
         world.snapshot(sub.id, snapf)
-        t0 = world.now()
+        order_trace = {}
+        if world.input_latency:
+            clock = world.s.http_rows("SELECT tick, last_ms FROM clock")[0]
+            t0 = clock["last_ms"]
+            order_trace = {"stimulus_tick": clock["tick"]}
+        else:
+            t0 = world.now()
         send_ms = time.time_ns() / 1_000_000
         sub.go(pts[0], run)
         ack_ms = time.time_ns() / 1_000_000
@@ -350,7 +387,7 @@ def walks_to(world, phase, subs, legs, law, timeout_x=3.0, extra_s=20.0, run=Fal
         true_s = (opt["true"]["time_m"] / 1.3) if opt.get("true") else None
         st["rec"] = {"subject": sub.id, "kind": sub.kind, "law": law, "walk": st["k"], "start": [round(here[0], 2), round(here[1], 2)], "goal": [round(goal[0], 2), round(goal[1], 2)], "shut_tiles": shut,
                      "order_send_wall_ms": send_ms, "order_ack_wall_ms": ack_ms,
-                     "waypoints": [[round(p[0], 2), round(p[1], 2)] for p in pts[:-1]], "order_ms": [t0, t1], "true": opt.get("true"), "belief_file": snapf.name,
+                     "waypoints": [[round(p[0], 2), round(p[1], 2)] for p in pts[:-1]], "order_ms": [t0, t1], **order_trace, "true": opt.get("true"), "belief_file": snapf.name,
                      "prior_cells_in_box": world.cells_in_box(sub.id, box) if box else None, "deadline_s": (timeout_x * true_s + extra_s) if true_s else 240.0}
         phase.mark("order", subject=sub.id, walk=st["k"], to=pts[0], goal=goal, kind=sub.kind)
 
@@ -497,6 +534,8 @@ def n1(world, out, variant, law, kind, reps):
                 break
     world.law("nav_belief", law == "on")
     subs = subjects(world, kind, reps, f"n1{variant}{law}")
+    if world.input_latency:
+        world.law("latency_nav_from", min(sub.id for sub in subs))
     d = math.dist(start, centre) or 1.0
     across = (-(centre[1] - start[1]) / d, (centre[0] - start[0]) / d)
     starts = spread(world, start, reps, across)
@@ -618,6 +657,8 @@ def n2(world, out, variant, law, kind, reps):
             raise RuntimeError("N2 mid-close needs a reachable alternative with the channel shut")
     world.law("nav_belief", law == "on")
     subs = subjects(world, kind, reps, f"n2{variant}{law}")
+    if world.input_latency:
+        world.law("latency_nav_from", min(sub.id for sub in subs))
     across = (-u[1], u[0])
     starts = spread(world, start, reps, across, step=2 if mid_close else 6.0)
     for sub, p in zip(subs, starts):
@@ -637,6 +678,7 @@ def n2(world, out, variant, law, kind, reps):
     for sub, p in zip(subs, fars):
         world.call("place_at", sub.id, p[0], p[1])
     time.sleep(2.0)
+    gate_trace_start = time.time_ns() // 1_000_000
     ok = None if mid_close else set_gate(world, keeper, a, False, subs)
     shut_ms = None if mid_close else world.now()
     reopened = None
@@ -663,6 +705,7 @@ def n2(world, out, variant, law, kind, reps):
     phase = Phase(world, folder, [s.id for s in subs] + [keeper], 1800,
                   known_ids=[s.id for s in subs], record_acts=True,
                   gates=a["ids"] if mid_close else ())
+    phase.started_ms = gate_trace_start
     if not mid_close:
         phase.mark("gate shut", gate=a["ids"], tiles=a["tiles"], all_shut=ok, completed_ms=shut_ms)
     if variant == "c":
@@ -1026,11 +1069,15 @@ def main():
     ap.add_argument("--reps", type=int, default=5)
     ap.add_argument("--light", choices=["day", "night"], help="N4 only: select one light condition (default: both)")
     ap.add_argument("--out")
+    ap.add_argument("--input-latency", action="store_true", help="record N1/N2 authority and observer timings")
     a = ap.parse_args()
     if a.light and a.arena != "n4":
         ap.error("--light is only available for N4")
+    if a.input_latency and a.arena not in ("n1", "n2"):
+        ap.error("--input-latency supports N1 and N2")
     fn, variants = ARENAS[a.arena]
     world = World(a.run)
+    world.input_latency = a.input_latency
     world.road = float(world.law_value("road_speed") or 1.4)
     world.unknown = float(world.law_value("unknown_cost") or 1.5)
     out = Path(a.out or ROOT / ".local/living/nav" / a.run)
@@ -1050,6 +1097,8 @@ def main():
                         arrived = sum(r.get("outcome") == "arrived" for r in recs)
                         log(f"  {arrived}/{len(recs)} arrived")
     world.law("nav_belief", False)
+    if a.input_latency:
+        world.law("latency_nav_from", 0)
 
 
 if __name__ == "__main__":

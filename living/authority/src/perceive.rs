@@ -79,6 +79,7 @@ fn told(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subjec
         text,
         salience,
     });
+    crate::latency::nav(ctx, observer.id, "experience_written", row.id, format_args!("{kind} {subject} {object}"));
     common::count(|k| k.percepts += 1);
     // A player's line reaches its client at the character's next frame (`frame.rs`).
     if crate::combat::human(ctx, observer.id).is_some() {

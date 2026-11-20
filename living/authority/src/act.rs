@@ -839,6 +839,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
 /// transaction with nothing written since: a graph leaf's; docs/COMBAT_PHASE.md step 3).
 #[allow(clippy::too_many_arguments)]
 pub fn begin_with(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), run: Option<bool>, spacing: Spacing, now: u64, cur: Option<Activity>) -> Result<(), String> {
+    crate::latency::nav(ctx, id, "act_attempt", u64::from(revision), format_args!("{node} {skill}"));
     // A movement that can no longer end holds nothing (`unstick`).
     let cur = cur.filter(|a| !unstick(ctx, a, now));
     refuse(living_rules::outcome::act::REFUSED);
@@ -1744,6 +1745,7 @@ pub fn on_motion(ctx: &ReducerContext, id: u32, ev: Event, now: u64) {
     }
     match ev {
         Event::Lost(why) => {
+            crate::latency::nav(ctx, id, "motion_lost", u64::from(a.revision), format_args!("{}", a.skill));
             let why = match a.skill.as_str() {
                 "follow" => "lost them".to_string(),
                 "goto" | "wander" if why == "the way is blocked" => "could not get there".to_string(),
@@ -2285,6 +2287,7 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 g.changed_by = me;
                 let p = (g.x as f32 + 0.5, g.y as f32 + 0.5);
                 ctx.db.gate().id().update(g);
+                crate::latency::nav(ctx, 0, "gate_changed", u64::from(a.target.id), format_args!("{me} {}", u8::from(open)));
                 common::invalidate_gates(ctx);
                 if !open {
                     motion::resteer_near(ctx, p, 6.0, now);
