@@ -125,6 +125,10 @@ It deletes `verify-<run>`; the evidence stays in `.local/living/verify/<run>/`. 
 
 `ik::spots::uneven_ground_spots` is `#[ignore]`d in the source: a tool that lists photo spots (`-- --ignored uneven_ground_spots --nocapture`), not a check.
 
+## In the scene gate
+
+The merge's scene gate runs `looks`, `hair`, `seat`, `camera-faces`, `camera-lod` and `far` when a merge changes how the client draws, on dev-box's pinned render asset set (`living/tools/render_set.py`), and `render-smoke` on a host without one ([verify's "Scene gate"](../verify/SKILL.md#scene-gate), docs/TOOLING.md "The render group"). Its runs are `gate-*` on `verify-gate-*` worlds, which `check.py` and `drive.py` accept beside `ui-*`. A change to these scenarios' names, worlds or what they need changes the gate: keep `CASES` in `scene_gate.py` in step. A case's client logs fail it on shader, pipeline, `bevy_asset` or panic ERROR lines, so a scenario that provokes one on purpose must say so there.
+
 ## What this skill does not prove
 
 - A real window, trackpad or system cursor: runs are headless, so the cursor is the script's. The capture, Esc giving the system cursor back and how winit reports a real two-finger pan or pinch need hardware (a play-test); `turns` drives what the pointer does with them.

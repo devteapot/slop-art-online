@@ -12,6 +12,7 @@ Usage: scene_gate_selftest.py
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -426,6 +427,256 @@ def check_staged_genesis():
                and "progress is on stderr" in (root / "genesis-island.log").read_text(), result)
 
 
+def check_render_selection():
+    """Drawing paths select the render cases (all, or by class with the split); others select none."""
+    sel = scene_gate.render_selection
+    char, cam = ["looks", "hair", "seat"], ["camera-faces", "camera-lod", "far"]
+    for path, split_want in (
+            ("living/game/src/toon.wesl", char), ("living/game/src/toon_light.wesl", char), ("living/game/src/edges.wesl", char),
+            ("living/game/src/handmade.rs", char), ("living/game/src/characters/compose.rs", char),
+            ("living/game/src/characters/palette.rs", char), ("living/game/src/lookdev.rs", char), ("living/game/src/post.rs", char),
+            ("living/game/src/camera.rs", cam), ("living/game/src/perf.rs", cam), ("living/game/src/terrain.wesl", cam),
+            ("living/game/src/sightfield.rs", cam), ("living/game/src/envs.rs", cam),
+            ("living/game/src/record_frames.wesl", char + cam), ("living/game/Cargo.toml", char + cam),
+            (".agents/skills/verify-ui/scripts/check.py", char + cam)):
+        whole = sel([path])
+        split = sel([path], split=True)
+        expect(f"render selection: {path} -> all six, split {len(split_want)}",
+               set(whole) == set(char + cam) and set(split) == set(split_want), f"{whole} / {split}")
+    for path in ("living/game/src/ui/win.rs", "living/game/src/net.rs", "living/game/src/characters.rs.orig",
+                 "living/game/src/sub/toon.wesl", "docs/CHARACTERS.md", "living/authority/src/frame.rs",
+                 ".agents/skills/verify-ui/SKILL.md", "living/game/assets/envs/cullet.json"):
+        expect(f"render selection: {path} draws nothing", sel([path]) == [] and sel([path], split=True) == [], str(sel([path])))
+    both = sel(["living/game/src/camera.rs", "living/game/src/handmade.rs"], split=True)
+    expect("render selection: a character and a camera path together select all six with the split", set(both) == set(char + cam), str(both))
+    expect("render selection: the render cases run in the render group on their seeds",
+           all(scene_gate.CASES[c]["group"] == "render" and scene_gate.CASES[c]["world"] in scene_gate.RENDER_SEEDS for c in char + cam)
+           and scene_gate.CASES["looks"]["world"] == "cullet")
+
+    class A:
+        cases, force, render_only = None, False, False
+    expect("plan: a client-only drawing diff runs the render cases alone (no scenes, no genesis)",
+           scene_gate.plan_cases(A, ["living/game/src/toon.wesl"], [], False) == ([], scene_gate.RENDER_CASES))
+    scenes, render = scene_gate.plan_cases(A, ["living/authority/src/lib.rs"], ["living/authority/src/lib.rs"], False)
+    expect("plan: a behavioural diff runs the scenes, no render case and no smoke",
+           render == [] and "tick" in scenes and not set(scenes) & {"render-smoke", *scene_gate.RENDER_CASES}, str(scenes))
+    expect("plan: a diff that touches neither runs nothing", scene_gate.plan_cases(A, ["docs/TOOLING.md"], [], False) == ([], []))
+    A.render_only, A.force = True, True
+    expect("plan: --render-only --force runs every render case and no scene",
+           scene_gate.plan_cases(A, ["living/authority/src/lib.rs"], ["living/authority/src/lib.rs"], False) == ([], scene_gate.RENDER_CASES))
+    A.render_only, A.force, A.cases = False, False, "tick,hair,render-smoke"
+    expect("plan: --cases names them exactly", scene_gate.plan_cases(A, [], [], False) == (["tick", "render-smoke"], ["hair"]))
+
+
+def check_render_logs():
+    """The client log's verdicts: shader/pipeline, asset, set stale and panics; WARN never fails."""
+    t = "2026-11-20T20:01:16.183575Z"
+    lines = {
+        "shader": [f"{t} ERROR wgpu_core::device::global: Device::create_render_pipeline error: Validation Error",
+                   f"{t} ERROR naga::front::wgsl: expected expression",
+                   f"\x1b[2m{t}\x1b[0m \x1b[31mERROR\x1b[0m \x1b[2mbevy_render::render_resource::pipeline_cache\x1b[0m\x1b[2m:\x1b[0m failed to process shader",
+                   f"{t} ERROR bevy_pbr::material: something",
+                   f"{t} ERROR living_game::style: the toon pipeline could not be made"],
+        "asset": [f"{t} ERROR bevy_asset::server: Asset path \"/x/strands.png\" is unapproved",
+                  f"{t} ERROR bevy_asset::server: Path not found: /x/lookdev/vroid-Vivi.glb"],
+        "stale": [f"{t}  WARN living_game::characters::book: looks: lk_0123456789abcdef is not in the look book; drawn as a VRoid base",
+                  f"{t}  WARN living_game::characters::seen: looks: the world was made with look generation c4-x, which the look book (c4-y) does not hold; people it lacks are drawn as VRoid bases"],
+        "panic": ["thread 'main' panicked at living/game/src/live.rs:12:5:"],
+    }
+    quiet = [f"{t}  WARN bevy_light::cascade: ShadowLodOrigin", f"{t}  WARN wgpu_hal::vulkan: something benign",
+             f"{t}  WARN bevy_egui: bindless", f"{t}  WARN winit: Destroyed", f"{t}  INFO bevy_render::renderer: AdapterInfo",
+             f"{t}  WARN living_game::view: no clip or view", f"{t}  WARN living_game::live: no UI node",
+             f"{t}  WARN bevy_asset::server: a warning only", "TU: error: ../src/freedreno/vulkan/tu_knl.cc:387: failed to open device"]
+    for verdict, ls in lines.items():
+        for line in ls:
+            got = scene_gate.scan_log(line)
+            expect(f"log: {verdict}: {line[-60:]!r}", got[verdict] and sum(map(len, got.values())) == 1, str(got))
+    for line in quiet:
+        got = scene_gate.scan_log(line)
+        expect(f"log: never fails: {line[-50:]!r}", not any(got.values()), str(got))
+    got = scene_gate.scan_log("\n".join(lines["stale"]), stale_exempt=True)
+    expect("log: a drive that leaves a key out on purpose is not stale", not any(got.values()), str(got))
+    with tempfile.TemporaryDirectory() as t2:
+        for drive, text in (("looks", lines["stale"][0]), ("hair", lines["stale"][0]), ("far", lines["shader"][0])):
+            d = Path(t2, "ui", drive)
+            d.mkdir(parents=True)
+            (d / "client.log").write_text(text + "\n")
+        got = scene_gate.scan_logs(list(scene_gate.client_logs(t2)))
+        expect("logs: stale only outside the exempt drives, each line named by its drive",
+               [x.split(":")[0] for x in got["stale"]] == ["hair"] and [x.split(":")[0] for x in got["shader"]] == ["far"], str(got))
+
+
+def make_glb(path, animations):
+    doc = json.dumps({"asset": {"version": "2.0"}, "animations": [{"channels": []}] * animations}).encode()
+    doc += b" " * (-len(doc) % 4)
+    import struct
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_bytes(struct.pack("<4sII", b"glTF", 2, 12 + 8 + len(doc)) + struct.pack("<II", len(doc), 0x4E4F534A) + doc)
+
+
+def make_render_set(t, repo, book_generations=("c4-a", "c4-b")):
+    """A synthetic render asset set built by the real render_set.py from `repo` (a checkout whose
+    HEAD the bundle names) and a stand-in bundle; returns the set's root (sets/current)."""
+    import tarfile
+    a = Path(repo) / "living/game/assets"
+    make_glb(a / "lookdev/vroid-Fake.glb", 0)
+    make_glb(a / "lookdev/anim/vroid-Fake.glb", 2)
+    for d, f in (("view", "v.glb"), ("textures", "ground.png"), ("envs/cullet", "quay.glb")):
+        (a / d).mkdir(parents=True, exist_ok=True)
+        (a / d / f).write_bytes(d.encode())
+    commit = sh("git rev-parse HEAD", repo).strip()
+    trees = " ".join(f"{d}={sh(f'git rev-parse HEAD:living/tools/{d}', repo).strip()}" for d in ("blender", "characters", "textures"))
+    b = Path(t, "bundle")
+    make_glb(b / "living/game/assets/lookdev/anim/own-clips.glb", 3)
+    (b / "living/game/assets/lookdev/types").mkdir(parents=True)
+    (b / "living/game/assets/lookdev/types/adult-f.glb").write_bytes(b"type")
+    (b / "living/game/assets/characters").mkdir(parents=True)
+    (b / "living/game/assets/characters/looks.json").write_text(json.dumps({"generation": book_generations[-1], "generations": list(book_generations)}))
+    (b / "MANIFEST.txt").write_text(f"commit {commit}\nport: off\npictures: ktx2\ngenerator trees: {trees}\n\n")
+    tar = Path(t, "bundle-fake-ktx2.tar.gz")
+    with tarfile.open(tar, "w:gz") as out:
+        for f in sorted(b.rglob("*")):
+            if f.is_file():
+                out.add(f, arcname=str(f.relative_to(b)))
+    r = subprocess.run([sys.executable, os.path.join(os.path.dirname(GATE), "render_set.py"), "build", "--bundle", str(tar),
+                        "--repo", str(repo), "--root", str(Path(t, "sets")), "--pin"], capture_output=True, text=True)
+    if r.returncode:
+        raise RuntimeError(f"render_set.py build: {r.stdout}{r.stderr}")
+    return Path(t, "sets/current")
+
+
+def writable(root):
+    for p in [Path(root), *Path(root).rglob("*")]:
+        if p.is_dir() and not p.is_symlink():
+            os.chmod(p, 0o755)
+
+
+def check_render_set():
+    """The gate's setup on render_set.py: a set it built checks ok and links; corrupt, stale and
+    absent sets are named as such, never a silent pass."""
+    tools = os.path.dirname(GATE)
+    real = str(Path(tools).parents[1])
+    t = tempfile.mkdtemp(prefix="gate-render-set-")
+    try:
+        repo = os.path.join(t, "repo")
+        sh(f"git init -q -b main {repo}", t)
+        for d in ("blender", "characters", "textures"):
+            os.makedirs(os.path.join(repo, "living/tools", d))
+            Path(repo, "living/tools", d, "x.py").write_text(d)
+        for w, g in (("cullet", "c4-b"), ("island", "c4-a")):
+            os.makedirs(os.path.join(repo, "living/seeds/worlds", w))
+            Path(repo, "living/seeds/worlds", w, "looks.json").write_text(json.dumps({"looks": {"generation": g}}))
+        sh("git add -A && git -c user.name=t -c user.email=t@t commit -q -m one", repo)
+        cur = make_render_set(t, repo)
+        shutil.rmtree(os.path.join(repo, "living/game/assets"))  # a gate's checkout holds no generated assets of its own
+        verdict, meta, why = scene_gate.render_set_check(repo, cur, tool_repo=real)
+        expect("render set: one render_set.py built checks ok, read through `current`",
+               verdict == "ok" and meta and meta.get("dir") == str(cur.resolve()) and meta.get("id"), f"{verdict} {why}")
+        ok, said = scene_gate.render_set_link(real, repo, meta["dir"])
+        a = Path(repo, "living/game/assets")
+        expect("render set: linked into the checkout by render_set.py link",
+               ok and (a / "lookdev").is_symlink() and (a / "characters/looks.json").is_symlink() and (a / "envs/cullet").is_symlink(), said)
+        ignored = subprocess.run(["git", "check-ignore", "--no-index", "living/game/assets/lookdev", "living/game/assets/envs/cullet",
+                                  "living/game/assets/textures", "living/game/assets/view", "living/game/assets/characters/looks.json"], cwd=real, capture_output=True, text=True)
+        expect("render set: the links are ignored in this repository (no untracked noise after a gate)",
+               ignored.returncode == 0 and len(ignored.stdout.split()) == 5, ignored.stdout + ignored.stderr)
+        # stale: the tree under test changed a generator, or a world wears a generation the book lacks
+        Path(repo, "living/tools/blender/x.py").write_text("changed")
+        sh("git -c user.name=t -c user.email=t@t commit -q -am gen", repo)
+        verdict, _, why = scene_gate.render_set_check(repo, cur, tool_repo=real)
+        expect("render set: a changed generator tree is stale", verdict == "stale" and any("generator tree" in w for w in why), f"{verdict} {why}")
+        sh("git reset -q --hard HEAD~1", repo)
+        Path(repo, "living/seeds/worlds/island/looks.json").write_text(json.dumps({"looks": {"generation": "c4-z"}}))
+        verdict, _, why = scene_gate.render_set_check(repo, cur, tool_repo=real)
+        expect("render set: a world at a generation the book lacks is stale", verdict == "stale" and any("c4-z" in w for w in why), f"{verdict} {why}")
+        sh("git checkout -q -- living/seeds", repo)
+        # corrupt: a file changed, added or removed
+        f = cur.resolve() / "assets/textures/ground.png"
+        os.chmod(f.parent, 0o755)
+        os.chmod(f, 0o644)
+        f.write_bytes(b"other")
+        verdict, _, why = scene_gate.render_set_check(repo, cur, tool_repo=real)
+        expect("render set: a changed file is corrupt", verdict == "corrupt" and any("ground.png" in w for w in why), f"{verdict} {why}")
+        f.unlink()
+        verdict, _, why = scene_gate.render_set_check(repo, cur, tool_repo=real)
+        expect("render set: a missing file is corrupt", verdict == "corrupt" and any("missing textures/ground.png" in w for w in why), f"{verdict} {why}")
+        os.chmod(cur.resolve(), 0o755)
+        os.rename(cur.resolve() / "set.json", cur.resolve() / "set.json.away")
+        verdict, _, why = scene_gate.render_set_check(repo, cur, tool_repo=real)
+        expect("render set: a set without its set.json is corrupt (the check could not run)", verdict == "corrupt" and why, f"{verdict} {why}")
+        expect("render set: no set is absent, a dangling `current` is present (and then corrupt)",
+               not scene_gate.render_set_present(os.path.join(t, "nothing/current")) and scene_gate.render_set_present(cur))
+        os.symlink(os.path.join(t, "gone"), os.path.join(t, "dangling"))
+        expect("render set: a dangling link is present", scene_gate.render_set_present(os.path.join(t, "dangling")))
+    finally:
+        writable(t)
+        shutil.rmtree(t, ignore_errors=True)
+
+
+def check_smoke_links():
+    """render-smoke's own lookdev link goes in and out; a real folder is never replaced."""
+    with tempfile.TemporaryDirectory() as t:
+        src = Path(t, "smoke/lookdev")
+        src.mkdir(parents=True)
+        game = Path(t, "wt")
+        a = game / "living/game/assets"
+        (a / "characters").mkdir(parents=True)
+        (a / "characters/recipes.json").write_text("{}")
+        made = scene_gate.link_set(game, src.parent, ["lookdev"])
+        expect("smoke links: lookdev points at the smoke's folder", os.readlink(a / "lookdev") == str(src), str(made))
+        scene_gate.unlink_set(made)
+        expect("smoke links: removed afterwards, the worktree's own files kept", not (a / "lookdev").exists() and (a / "characters/recipes.json").exists())
+        (a / "lookdev").mkdir()
+        try:
+            scene_gate.link_set(game, src.parent, ["lookdev"])
+            refused = False
+        except RuntimeError as e:
+            refused = "exists and is not a link" in str(e)
+        expect("smoke links: a real folder is never replaced", refused and (a / "lookdev").is_dir() and not (a / "lookdev").is_symlink())
+
+
+def check_render_passes(t):
+    """Recorded render passes: shared through their own branch like the red-on-main list; a pass
+    covers the cases it names; a merge's content key ignores everything outside living/ and the skills."""
+    expect("passes: a pass covers its cases", scene_gate.pass_covers({"cases": {"hair": "pass", "looks": "flaky-pass", "far": "red-on-main"}}, ["hair", "looks", "far"]))
+    expect("passes: a missing or failed case is not covered",
+           not scene_gate.pass_covers({"cases": {"hair": "pass"}}, ["hair", "looks"])
+           and not scene_gate.pass_covers({"cases": {"hair": "fail"}}, ["hair"]) and not scene_gate.pass_covers(None, ["hair"]))
+    repo = os.path.join(t, "keys")
+    sh(f"git init -q -b main {repo}", t)
+    for d in ("living/game/src", ".agents/skills/verify/scripts", ".agents/skills/verify-ui/scripts", "docs"):
+        os.makedirs(os.path.join(repo, d), exist_ok=True)
+        Path(repo, d, "f").write_text(d)
+    sh("git add -A && git commit -q -m one", repo)
+    k1 = scene_gate.render_key("HEAD", cwd=repo)
+    Path(repo, "docs/f").write_text("other")
+    sh("git commit -q -am docs", repo)
+    k2 = scene_gate.render_key("HEAD", cwd=repo)
+    Path(repo, "living/game/src/f").write_text("other")
+    sh("git commit -q -am game", repo)
+    k3 = scene_gate.render_key("HEAD", cwd=repo)
+    expect("passes: the key keeps through a docs commit and changes with the client", k1 == k2 != k3, f"{k1} {k2} {k3}")
+    # the list on its own branch, written from one clone and read from the other
+    code = ("import json,sys,scene_gate as g\n"
+            "def ch(p):\n    p['k'] = {'cases': {'hair': 'pass'}, 'host': 'devbox'}\n    return True\n"
+            "g.update_reds(sys.argv[1], ch, 'render pass: k', branch='render-passes', file='render-passes.json')\n"
+            "print(json.dumps(g.fetch_reds('render-passes', 'render-passes.json')[0]))")
+    tools = os.path.dirname(GATE)
+    env = {**os.environ, "LIVING_GATE_REDS_REPO": os.path.join(t, "devbox"), "PYTHONPATH": tools}
+    r = subprocess.run([sys.executable, "-c", code, os.path.join(t, "devbox-passes.json")], env=env, capture_output=True, text=True, cwd=tools)
+    env["LIVING_GATE_REDS_REPO"] = os.path.join(t, "spark")
+    r2 = subprocess.run([sys.executable, "-c", "import json,scene_gate as g;print(json.dumps([g.fetch_reds('render-passes','render-passes.json')[0], g.fetch_reds()[0]]))"],
+                        env=env, capture_output=True, text=True, cwd=tools)
+    try:
+        passes, reds = json.loads(r2.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        passes, reds = None, None
+    expect("passes: written on one clone's render-passes branch, read on the other, the red-on-main list untouched",
+           r.returncode == 0 and passes and passes.get("k", {}).get("host") == "devbox" and "k" not in (reds or {}), r.stderr + r2.stderr + r2.stdout)
+    files = sh("git ls-tree --name-only origin/render-passes", os.path.join(t, "spark")).split()
+    expect("passes: the branch holds its one file", files == ["render-passes.json"], str(files))
+
+
 def main():
     check_run_part()
     check_genesis()
@@ -434,6 +685,10 @@ def main():
     check_seed_fresh()
     check_generation_group()
     check_staged_genesis()
+    check_render_selection()
+    check_render_logs()
+    check_render_set()
+    check_smoke_links()
     with tempfile.TemporaryDirectory(prefix="gate-reds-selftest-") as t:
         os.environ.update({"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
         origin = os.path.join(t, "origin.git")
@@ -534,6 +789,7 @@ def main():
         sh(f"git remote set-url origin {origin}", b)
         reds, out = listed(b, cb)
         expect("reachable again: the remote's list, without the offline change", "offline" not in reds and "late" in reds, out)
+        check_render_passes(t)
     print("scene_gate_selftest:", "FAILED " + ", ".join(failures) if failures else "all passed")
     return 1 if failures else 0
 
