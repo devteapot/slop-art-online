@@ -6,7 +6,7 @@
            [--client PATH] [--player NAME] [--token FILE] [--expect 'regex' ...]
 
 - RUN is the verify run (`verify.py launch --run RUN --seed island`); the world is
-  `verify-RUN`, which must start with `verify-ui-`.
+  `verify-RUN`, which must start with `verify-ui-` (or `verify-gate-`, the scene gate's render group).
 - The client is the release build from this checkout's CARGO_TARGET_DIR (default
   `.local/target/release/living-game`), or --client. It joins as "Verifier" with its own token
   under the evidence directory (`--token FILE` plays another character, e.g. verify.py's player
@@ -185,8 +185,9 @@ def main():
     if any(value is None for value in (a.run, a.name, a.plan)):
         ap.error("--run, --name and --plan are required for a client drive")
     db = f"verify-{a.run}"
-    if not db.startswith("verify-ui-"):
-        sys.exit(f"refusing {db}: verify-ui runs use verify-ui-* worlds (run names ui-*)")
+    # The scene gate's render group drives its own verify-gate-* worlds (living/tools/scene_gate.py).
+    if not db.startswith(("verify-ui-", "verify-gate-")):
+        sys.exit(f"refusing {db}: verify-ui runs use verify-ui-* worlds (run names ui-*), or the scene gate's verify-gate-*")
     st = load(a.run)
     owner = admin_token()
     # A world still being made does not tick yet (staged genesis): `check.py preparing` starts its
