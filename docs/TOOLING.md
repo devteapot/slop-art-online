@@ -337,6 +337,13 @@ On Linux the timer runs without a login when lingering is on (`loginctl enable-l
 
 It refuses, before writing anything, the repository's main worktree, anything under `~/dev/slop-art-online`, a path that is not a worktree root, the worktree it runs in, and a worktree a process is working in (cwd inside it; `/proc` on Linux, `lsof` on macOS). `--dry-run` prints what it would archive. Standard library only, so the same file runs on the dev-box, the Spark and the laptop. Install: `install -m 755 living/tools/wt_remove.py ~/.local/share/slop-tools/wt-remove`.
 
+### Starting a container from a script or an agent
+
+Two rules for any script, queue or agent shell that starts or restarts a SpacetimeDB (or other) container with `podman start` or `podman run`:
+
+- **Its own systemd scope:** `systemd-run --user --scope --quiet podman start NAME`. Rootless podman's `conmon` and `fuse-overlayfs` otherwise join the caller's cgroup: started from an agent's shell, the overlay helper is lost within minutes (`podman exec` then fails with "transport endpoint is not connected"), and started from a systemd unit (the dev-box merge queue), stopping that unit kills the container's processes with it, a forced stop (dev-box, 2026-11-20). `~/.local/state/devbox-queue/run.sh` starts `coord-stdb` this way.
+- **No lock fd:** close the gate lock's descriptor in the command that starts the container, e.g. `systemd-run --user --scope --quiet podman start NAME 9>&-` for a lock held on fd 9 (`exec 9>~/.local/state/slop-build/gate.lock; flock -x 9`). A container started while a shell holds the lock inherits the descriptor in `conmon` and `fuse-overlayfs` and keeps the lock after the script exits: on 2026-11-20 a scratch server recycled inside a locked measurement held `gate.lock` for 70 minutes, stalling a merge gate for two hours and Blender's `flock -s` pause. Python's `subprocess` does not pass descriptors on by default (`close_fds=True`). To see who holds the lock: `fuser ~/.local/state/slop-build/gate.lock`, then `ps` on each pid; a container's `conmon` among them is this case, and stopping the (idle) container with `podman kill -s INT` releases it.
+
 ## Measurements (dev-box, 2026-11-11)
 
 All runs used `CARGO_BUILD_JOBS=12` on the 32-core dev-box while other workers were building. The load average at each run's start (and the range during it) is given because it moved the numbers more than anything else. Before/after arms on the same change are interleaved A B B A. The runs used a scratch clone of the repository and private target folders; reflink snapshots gave each warm arm the same starting state. The raw records are in each run's JSON (`check.py --json`) and the step logs.
