@@ -1,0 +1,41 @@
+{
+ "threshold": 8,
+ "changed_pixels": {
+  "woman": {
+   "front": 115,
+   "three_quarter": 3,
+   "profile": 3,
+   "front_close": 378,
+   "three_quarter_close": 40,
+   "near": 0,
+   "middle": 0
+  },
+  "man": {
+   "front": 155,
+   "three_quarter": 48,
+   "profile": 79,
+   "front_close": 527,
+   "three_quarter_close": 170,
+   "near": 0,
+   "middle": 0
+  },
+  "elder": {
+   "front": 184,
+   "three_quarter": 43,
+   "profile": 90,
+   "front_close": 549,
+   "three_quarter_close": 184,
+   "near": 0,
+   "middle": 0
+  },
+  "girl": {
+   "front": 22,
+   "three_quarter": 22,
+   "profile": 53,
+   "front_close": 162,
+   "three_quarter_close": 79,
+   "near": 0,
+   "middle": 0
+  }
+ }
+}

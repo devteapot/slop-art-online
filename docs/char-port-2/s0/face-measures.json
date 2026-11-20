@@ -1,0 +1,77 @@
+{
+ "drawing": {
+  "cheek": 1.232,
+  "jaw": 0.952,
+  "chin": 0.483,
+  "chin_over_cheek": 0.392,
+  "jaw_over_cheek": 0.773,
+  "iris_over_eye": 0.5
+ },
+ "files": [
+  {
+   "file": "living/game/assets/lookdev/own-cp2-woman.glb",
+   "pupil_to_chin_mm": 101.5,
+   "cheek": 1.973,
+   "jaw": 1.04,
+   "chin": 0.616,
+   "chin_over_cheek": 0.312,
+   "jaw_over_cheek": 0.527,
+   "iris_over_eye": [
+    0.569,
+    0.569
+   ]
+  },
+  {
+   "file": "living/game/assets/lookdev/own-cp2-man.glb",
+   "pupil_to_chin_mm": 132.9,
+   "cheek": 1.449,
+   "jaw": 0.872,
+   "chin": 0.605,
+   "chin_over_cheek": 0.418,
+   "jaw_over_cheek": 0.602,
+   "iris_over_eye": [
+    0.629,
+    0.629
+   ]
+  },
+  {
+   "file": "living/game/assets/lookdev/own-cp2-elder.glb",
+   "pupil_to_chin_mm": 118.7,
+   "cheek": 1.63,
+   "jaw": 1.016,
+   "chin": 0.697,
+   "chin_over_cheek": 0.428,
+   "jaw_over_cheek": 0.623,
+   "iris_over_eye": [
+    0.559,
+    0.559
+   ]
+  },
+  {
+   "file": "living/game/assets/lookdev/own-cp2-girl.glb",
+   "pupil_to_chin_mm": 91.8,
+   "cheek": 2.262,
+   "jaw": 1.365,
+   "chin": 0.935,
+   "chin_over_cheek": 0.413,
+   "jaw_over_cheek": 0.603,
+   "iris_over_eye": [
+    0.613,
+    0.613
+   ]
+  },
+  {
+   "file": "docs/char-live-3/ink-batch-2/own-cora-live.glb",
+   "pupil_to_chin_mm": 89.0,
+   "cheek": 1.535,
+   "jaw": 1.031,
+   "chin": 0.552,
+   "chin_over_cheek": 0.36,
+   "jaw_over_cheek": 0.672,
+   "iris_over_eye": [
+    0.496,
+    0.496
+   ]
+  }
+ ]
+}
