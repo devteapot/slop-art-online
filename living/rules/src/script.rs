@@ -612,6 +612,20 @@ pub struct Laws {
     /// once per this many ms (docs/BATTLE_SCALE.md, fix 3); the percept is written at once and in
     /// full. 0: woken by each, as before.
     pub witness_wake_ms: f32,
+    /// Battle laws (docs/BATTLE_LAWS.md, prototypes, 0 = off in play). (a) At most this many
+    /// creatures a player sees at once: the nearest, and whoever is engaged with it first.
+    pub far_cap: f32,
+    /// (b) Above this many creatures in sight, a player's sweep comes less often, in proportion
+    /// (at most three times the period).
+    pub crowd_sweep_n: f32,
+    /// (b) The longest interval between a player's frames in a crowd (ms; 0: `frame::FRAME_MAX_MS`).
+    pub crowd_frame_max_ms: f32,
+    /// (c) Whether a fighter already on the combat cadence is woken by what it sees as a bystander
+    /// (true in play; false leaves it to the cadence).
+    pub fighter_bystander_wakes: bool,
+    /// (e) A far creature's motion copy is rewritten only when the client's extrapolation of the old
+    /// one would be this many metres off within half a second (0: on every change).
+    pub far_motion_tol_m: f32,
     /// A diagnostic, 0 in play (docs/PERCEPTION.md, "Module memory and rollback"): a step the
     /// world fails on purpose, to prove that nothing kept in module memory outlives a
     /// transaction that rolled back (1 the tick after its sweep, 2 the tick by a panic, 3
@@ -839,6 +853,11 @@ impl Default for Laws {
             think_framing: false,
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
+            far_cap: 0.0,
+            crowd_sweep_n: 0.0,
+            crowd_frame_max_ms: 0.0,
+            fighter_bystander_wakes: true,
+            far_motion_tol_m: 0.0,
             memory_test: 0.0,
             det_clock: false,
             det_stop: 0.0,
@@ -3190,6 +3209,11 @@ impl Scripts {
             think_framing: flag("think_framing", l.think_framing),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
+            far_cap: g("far_cap", l.far_cap).clamp(0.0, 10_000.0),
+            crowd_sweep_n: g("crowd_sweep_n", l.crowd_sweep_n).clamp(0.0, 10_000.0),
+            crowd_frame_max_ms: g("crowd_frame_max_ms", l.crowd_frame_max_ms).clamp(0.0, 2_000.0),
+            fighter_bystander_wakes: flag("fighter_bystander_wakes", l.fighter_bystander_wakes),
+            far_motion_tol_m: g("far_motion_tol_m", l.far_motion_tol_m).clamp(0.0, 50.0),
             memory_test: g("memory_test", l.memory_test).round().clamp(0.0, 9.0),
             det_clock: flag("det_clock", l.det_clock),
             det_stop: g("det_stop", l.det_stop).round().clamp(0.0, 16_000_000.0),
@@ -3441,7 +3465,8 @@ fn decode_senses(d: Dynamic, reach: &Reach, dark: f32, band: Option<(crate::sigh
 /// What a value-only law's value reaches beyond the laws in force (see [`VALUE_ONLY`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ValueOnly {
-    /// Read by the authority's frames alone (`frame.rs`): nothing derived, the next tick reads it.
+    /// Read live by the authority each tick (its frames, sweeps and wakes): nothing derived, the
+    /// next tick reads it. The delivery laws, and the battle laws' prototypes (docs/BATTLE_LAWS.md).
     Delivery,
     /// The cover policy: the authority's `cover_law` row and its cover mask (`living_rules::cover`).
     Cover,
@@ -3456,7 +3481,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 12] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 17] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3467,6 +3492,14 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 12] = [
     ("fighter_tables_on", ValueOnly::Delivery),
     // views step 2: a player's combat feed as event rows (`combat.rs`, `combat_feed`).
     ("combat_feed_on", ValueOnly::Delivery),
+    // The battle laws' prototypes (docs/BATTLE_LAWS.md), live-tunable: the sweeps read `far_cap`
+    // and `crowd_sweep_n`, the frames `crowd_frame_max_ms` and `far_motion_tol_m`, the wakes
+    // `fighter_bystander_wakes`, each at its next tick.
+    ("far_cap", ValueOnly::Delivery),
+    ("crowd_sweep_n", ValueOnly::Delivery),
+    ("crowd_frame_max_ms", ValueOnly::Delivery),
+    ("fighter_bystander_wakes", ValueOnly::Delivery),
+    ("far_motion_tol_m", ValueOnly::Delivery),
     ("cover_sight_on", ValueOnly::Cover),
     ("cover_eye_height_m", ValueOnly::Cover),
     ("cover_brush_on", ValueOnly::Cover),

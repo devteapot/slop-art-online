@@ -1082,6 +1082,9 @@ thread_local! {
     /// When each player's character was last swept (module cache; a fresh instance sweeps
     /// everyone once, staggered).
     static LAST: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
+    /// (b) battle law `crowd_sweep_n`: how many each player saw at its last sweep (module memory;
+    /// a fresh instance sweeps at the ordinary period until it knows).
+    static SEEN_N: RefCell<HashMap<u32, usize>> = RefCell::new(HashMap::new());
     /// The knowledge epochs each player's rows were last projected at, and the targets a
     /// reveal held for it then.
     static PROJECTED: RefCell<HashMap<u32, ((u64, u64), HashSet<u32>)>> = RefCell::new(HashMap::new());
@@ -1123,6 +1126,7 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Swept {
     if humans.is_empty() {
         return Swept { ids: Vec::new(), health: HashMap::new() };
     }
+    let crowd_n = common::laws(ctx).crowd_sweep_n;
     let due: Vec<(u32, Identity)> = LAST.with(|l| {
         let mut l = l.borrow_mut();
         let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
@@ -1136,11 +1140,19 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Swept {
             .filter(|(id, _)| {
                 // A character first seen by this instance starts on its own phase.
                 let last = *l.entry(*id).or_insert_with(|| turn_before(*id, now));
-                if now.saturating_sub(last) >= SWEEP_MS {
+                // (b) `crowd_sweep_n`: in a crowd larger than n, the period grows with it (at most 3x).
+                let period = match crowd_n {
+                    n if n > 0.0 => {
+                        let seen = SEEN_N.with(|s| s.borrow().get(id).copied().unwrap_or(0)) as f32;
+                        (SWEEP_MS as f32 * (seen / n).clamp(1.0, 3.0)) as u64
+                    }
+                    _ => SWEEP_MS,
+                };
+                if now.saturating_sub(last) >= period {
                     // It keeps its own phase: its turn is a whole number of periods after the
                     // last. Taking `now` would put everyone due in a late tick on one phase, and
                     // then their sweeps would land in one tick ever after.
-                    l.insert(*id, last + (now - last) / SWEEP_MS * SWEEP_MS);
+                    l.insert(*id, last + (now - last) / period * period);
                     true
                 } else {
                     false
@@ -1282,6 +1294,23 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         }
     }
     drop(sight_span);
+    // (a) battle law `far_cap` (docs/BATTLE_LAWS.md): at most this many seen, whoever is engaged
+    // with the player first, then the nearest; the rest are neither seen nor heard this sweep.
+    let mut capped: HashSet<u32> = HashSet::new();
+    let cap = common::laws(ctx).far_cap as usize;
+    if cap > 0 && seen.len() > cap {
+        let engaged = crate::frame::engaged_with(id);
+        let keep_engaged = seen.iter().filter(|b| engaged.contains(b)).count();
+        let mut rest: Vec<(f32, u32)> = seen.iter().filter(|b| !engaged.contains(b)).map(|b| (near.get(b).copied().unwrap_or(f32::MAX), *b)).collect();
+        rest.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
+        for (_, b) in rest.into_iter().skip(cap.saturating_sub(keep_engaged)) {
+            seen.remove(&b);
+            near.remove(&b);
+            capped.insert(b);
+        }
+        common::diag(|| "far_cap:dropped", capped.len() as u64);
+    }
+    SEEN_N.with(|s| s.borrow_mut().insert(id, seen.len()));
     common::diag(|| "sweep:candidates", candidates);
     common::diag(|| "sweep:seen", seen.len() as u64);
     if scheduled && senses.gaze.is_some() {
@@ -1293,7 +1322,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         let hear_chunks = (hearing_r < reach).then(|| living_rules::map::chunks_around(here.0, here.1, hearing_r));
         let mut v: Vec<NearCreature> = crowd
             .iter()
-            .filter(|(c, chunk)| c.id != id && c.dist <= hearing_r && !seen.contains(&c.id) && hear_chunks.as_ref().is_none_or(|k| k.contains(chunk)))
+            .filter(|(c, chunk)| c.id != id && c.dist <= hearing_r && !seen.contains(&c.id) && !capped.contains(&c.id) && hear_chunks.as_ref().is_none_or(|k| k.contains(chunk)))
             .map(|(c, _)| c.clone())
             .collect();
         v.sort_by(|a, b| a.dist.total_cmp(&b.dist));

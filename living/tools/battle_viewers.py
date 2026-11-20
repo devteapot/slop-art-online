@@ -360,6 +360,41 @@ def privacy_final(pr, done, out, n):
     (out / f"privacy-v{n}.json").write_text(json.dumps(pr, indent=1) + "\n")
 
 
+CLOG = "/home/spacetime/.local/share/spacetime/data/replicas/{}/clog"
+
+
+def clog_state(replica):
+    """A replica's commitlog on disk: its bytes (du -sb) and its segment files (`*.stdb.log`)."""
+    r = subprocess.run(["docker", "exec", lc.CONTAINER, "sh", "-c", f"du -sb {CLOG.format(replica)}; ls {CLOG.format(replica)}"], capture_output=True, text=True)
+    lines = r.stdout.split("\n")
+    return {"bytes": int(lines[0].split()[0]), "segments": sum(1 for x in lines[1:] if x.endswith(".stdb.log")), "files": sum(1 for x in lines[1:] if x.strip())}
+
+
+def clog_zstd(replica):
+    """The commitlog's segments (`*.stdb.log`) compressed: bytes raw, at zstd -3 (the level 2.14.1
+    uses for sealed segments behind a snapshot) and zstd -6 (as trial_archive.py keeps them), or
+    None. Read after the world is deleted: a deleted database's files stay and no longer change."""
+    cat = ["docker", "exec", lc.CONTAINER, "sh", "-c", f"cat {CLOG.format(replica)}/*.stdb.log"]
+    out = {}
+    for name, cmd in (("raw", ["wc", "-c"]), ("zstd3", ["sh", "-c", "zstd -3 -q -c -T0 | wc -c"]), ("zstd6", ["sh", "-c", "zstd -6 -q -c -T0 | wc -c"])):
+        src = subprocess.Popen(cat, stdout=subprocess.PIPE)
+        r = subprocess.run(cmd, stdin=src.stdout, capture_output=True, text=True)
+        src.stdout.close()
+        if src.wait() != 0 or r.returncode != 0:
+            return None
+        out[name] = int(r.stdout.split()[0])
+    return out
+
+
+def spawn(db, token, a):
+    """The battle: `spawn_battle`, or with `--sides N` the fixture `spawn_battle_sides` (fighters in
+    N sides that fight each other and leave bystanders be; docs/BATTLE_LAWS.md)."""
+    if a.sides:
+        lc.call(db, "spawn_battle_sides", [a.fighters, a.sides], token)
+    else:
+        lc.call(db, "spawn_battle", [a.fighters], token)
+
+
 def one(a, n, out):
     stamp = time.strftime("%Y%m%d-%H%M%S")
     db = f"verify-lookcost-{a.label}-v{n}-{stamp}"
@@ -382,7 +417,7 @@ def one(a, n, out):
         # battle here too: the 0-viewer arm is the same battle, the subtraction baseline (before
         # 2026-11-20 it had none).
         if not a.battle_after_placing or not n:
-            lc.call(db, "spawn_battle", [a.fighters], token)
+            spawn(db, token, a)
         land = lc.sql(db, "SELECT * FROM land", token)[0]
         site = tuple(float(x) for x in a.site.split(",")) if a.site else (land["arrive_x"], land["arrive_y"] - 20.0)
         res["site"], res["arrival"] = list(site), [land["arrive_x"], land["arrive_y"]]
@@ -412,7 +447,7 @@ def one(a, n, out):
             if a.battle_after_placing:
                 # The viewers stand on their ring before the fighters appear (none is killed at the
                 # arrival point, 20 m from the battle, while it waits to be placed).
-                lc.call(db, "spawn_battle", [a.fighters], token)
+                spawn(db, token, a)
             load.send("placed")
             ready = load.expect("ready", 900)
             res["held_at_ready"] = ready.get("held")
@@ -436,12 +471,22 @@ def one(a, n, out):
             m0, th0, p0 = tc.scrape(ident), tc.thread_cpu(pid), tc.proc_cpu(pid)
         if a.privacy and n:
             priv = Privacy(db, token, out, n, players, a.seconds, a.fighter_tables, a.combat_feed)
+        clog0 = clog_state(res["replica"]) if a.clog else None
         c0, t0 = tick_count(ident), time.time()
         k0 = (keep.calls, keep.restored) if keep else None
         if load:
             load.send("fresh on")
         time.sleep(a.seconds)
         c1, t1 = tick_count(ident), time.time()
+        if a.clog:
+            # Commitlog growth over the window: the replica's `clog/` on disk (segments and their
+            # offset indexes), not what a snapshot would let go (docs/TRIAL_DISK.md).
+            clog1 = clog_state(res["replica"])
+            dt = t1 - t0
+            grew = clog1["bytes"] - clog0["bytes"]
+            res["clog"] = {"start": clog0, "end": clog1, "seconds": round(dt, 2), "bytes": grew,
+                           "bytes_per_s": round(grew / dt, 1), "bytes_per_hour": round(grew / dt * 3600),
+                           "segments_added": clog1["segments"] - clog0["segments"]}
         if keep:
             res["keep_alive_window"] = {"calls": keep.calls - k0[0], "hp_restored": round(keep.restored - k0[1], 1),
                                         "calls_per_s": round((keep.calls - k0[0]) / (t1 - t0), 2)}
@@ -609,6 +654,14 @@ def one(a, n, out):
         if load and load.p.poll() is None:
             load.p.terminate()
         lc.delete_world(db)
+        if a.clog and "clog" in res:
+            # The whole commitlog compressed, as the server keeps sealed segments behind a snapshot
+            # (zstd -3) and as an archive keeps it (zstd -6).
+            z = clog_zstd(res["replica"])
+            res["clog"]["zstd"] = z
+            if z and z["raw"]:
+                res["clog"]["zstd3_ratio"] = round(z["zstd3"] / z["raw"], 4)
+                res["clog"]["zstd6_ratio"] = round(z["zstd6"] / z["raw"], 4)
     return res
 
 
@@ -638,6 +691,8 @@ def main():
     ap.add_argument("--flip-off", action="store_true", help="after the window, turn motion_tables_on off and time the kill switch's tick")
     ap.add_argument("--fighter-tables", action="store_true", help="the viewers subscribe seen_fighter_copy in place of the fighter views (views step 3; set fighter_tables_on=true)")
     ap.add_argument("--combat-feed", action="store_true", help="the viewers subscribe combat_feed in place of my_combat (views step 2; set combat_feed_on=true)")
+    ap.add_argument("--clog", action="store_true", help="record the replica's commitlog growth on disk over the window, and its compressed size after the world is deleted, zstd -3 and -6 (result clog)")
+    ap.add_argument("--sides", type=int, default=0, help="the fighters in this many sides (2-4) that fight each other, not bystanders (spawn_battle_sides)")
     ap.add_argument("--privacy", action="store_true", help="copy-privacy: prove each viewer receives only its own copy rows (needs --motion-tables --character-tables and both laws on); <out>/privacy-v<count>.json, exit 1 on a failed check")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()

@@ -271,9 +271,11 @@ impl Palettes {
 /// `ToonExt::tints` (binding 105).
 ///
 /// [`Palettes`] is reached only through commands, made on first use, and is in no system's
-/// parameters: a resource registered when the app is built shifts every later component id, and
-/// that reordered which mesh a shared type material takes its recolour source from (`recolor`'s
-/// first mesh), so people without `slop` drew differently. This way they don't.
+/// parameters: a resource registered when the app is built shifts every later component id. That
+/// once reordered which mesh a shared type material took its recolour source from, so people
+/// without `slop` drew differently. `recolor` now chooses that mesh by a stable rule
+/// (`characters::Sources`), so the order no longer matters there; the layout is kept so the
+/// schedule stays as it was.
 pub fn register(commands: &mut Commands, toon: AssetId<crate::style::Toon>, spec: Spec) {
     commands.queue(move |world: &mut World| {
         let img = image(&mut world.resource_mut::<Assets<Image>>());

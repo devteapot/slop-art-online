@@ -936,3 +936,24 @@ Read on 2026-11-20 (docs 2.0.0; the pinned server and crates are 2.14.1):
   - the A/B series (each run's `result.json`, `metrics.json`, `threads.json`, `load.log`, `placement.json` and L2 `module.log`; `rollup.md` and `rollup.json`);
   - the gate's evidence directories and log;
   - the wasm builds compared and measured.
+
+## Wake order: rotating the held-back bystander wakes (Spark, branch `battle-laws`, Part D)
+
+Status: built and proven, 2026-11-20, commit on `battle-laws` from `origin/main` 1511d5e8. A deliberate change of behaviour, not a law.
+
+**Why.** Step 3 delivered the bystander wakes held back by `witness_wake_ms` in id order, so that the order no longer depended on the build. The order of these wakes is the order the woken are evaluated in the tick, and the first evaluated acts first. In id order alone the same low ids went first in every tick: a small but systematic advantage in a fight.
+
+**The change** (`common::due_bystander_wakes`). The due ids are still sorted, and the delivery starts at `tick mod n` (n due), wrapping round. The start depends on the tick count alone, so every build delivers the same order. Under `det_clock` each tick with wakes due logs `det wakes tick=N due=[…] start=k`. A build compiled with `LIVING_DET_NOROTATE` set starts at 0, the control below. Nothing else changed: no table, reducer, view, subscription or law.
+
+**Proof** (`living/tools/det_compare.py`, the Cullet battle of 200 fighters from one template, ticks 1–3,600, 113 tables, no viewers, no minds; private servers on the A725 cores):
+
+| Comparison | Result |
+| --- | --- |
+| main 1511d5e8 against this commit built with `LIVING_DET_NOROTATE` (the logging and the refactor, no rotation) | identical: 3,600 ticks, 45,027 rows at the stop |
+| no-rotation control against the rotated build | identical up to tick 75. Every one of the 387 ticks with wakes due up to the first difference had the same due set in both. The first difference is tick 76, the first tick the rotation reordered anything: 21 due, start 13 |
+| main against main with every hash map's keys moved (`LIVING_DET_PERTURB=7`) | identical: 3,600 ticks |
+| the rotated build against itself with moved hash keys | the per-tick hashes differ in `deliberation` alone from tick 1,564 for 141 ticks; every table at the stop is identical. The difference is not the build's: a far handle's id in a deliberation scene's JSON (`"id":1000008249` on one server, `1000006804` on the other) is the same row on both (the 2,326th far handle, observer 39, target 19, the same `first_ms`), numbered apart by SpacetimeDB 2.14.1's random sequence skip. The comparator renamed far handles only in `#…` text; its at-stop check now renames them in scene JSON too, and the rows then compare identical. The per-tick hash (`det.rs`) does not rename them yet |
+
+**Cost.** 2.4 wakes are due a tick on average (at most 21) when any are; the rotation is one `rotate_left` of that list. Part A's 0-viewer arms below run on this build.
+
+**What a fighter notices.** Among bystanders woken in the same tick, which one is evaluated first now changes from tick to tick instead of always being the lowest id.
