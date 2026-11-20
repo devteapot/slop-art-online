@@ -83,7 +83,7 @@ def build_stepping(seed):
 
 def wasm_mount():
     """The host directory the server's container serves as /wasm (verify.py's rule)."""
-    r = subprocess.run(["podman", "inspect", lc.CONTAINER, "--format", '{{range .Mounts}}{{if eq .Destination "/wasm"}}{{.Source}}{{end}}{{end}}'],
+    r = subprocess.run(["docker", "inspect", lc.CONTAINER, "--format", '{{range .Mounts}}{{if eq .Destination "/wasm"}}{{.Source}}{{end}}{{end}}'],
                        capture_output=True, text=True)
     src = r.stdout.strip().removeprefix("/host_mnt")
     if not src:
