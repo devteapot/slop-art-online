@@ -180,6 +180,9 @@ def run(a):
         sys.exit("only verify-* scratch databases")
     if not a.db:
         s.stdb("publish", "-s", "local", "-b", a.wasm, db, "--delete-data", "-y")
+        # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+        import genesis_wait
+        genesis_wait.wait_ready(s.url, db, s.admin_token())
         s.stdb("call", "-s", "local", db, "install_script", json.dumps((ROOT / "living/scripts/skills.rhai").read_text()))
     token = s.admin_token()
     git = os.environ.get("LAT_GIT") or sh("git", "-C", str(ROOT), "rev-parse", "HEAD", check=False).strip()

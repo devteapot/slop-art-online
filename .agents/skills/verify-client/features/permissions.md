@@ -15,6 +15,8 @@ A client invokes reducers with its own identity. `require_admin` (`living/author
 
 `join`, the `human_*` reducers (`lib.rs`) and `use_skill`/`release_skill` (`combat.rs`) are public. They require the sender's living non-AI character, found through the private `player` row (`perception::player_character`; a person with no row yet is found by its controller and the row is written). `tick` and `housekeeping` (`tick.rs`) and `genesis_step` (`floor.rs`) allow only the database identity, and this version does not expose scheduled reducers through the external call endpoint (HTTP 404).
 
+While a world is being made (staged genesis, docs/STAGED_GENESIS.md §4: the public `genesis` row not `done`), `join`, `join_as`, the `human_*` reducers, `use_skill`, `release_skill`, every `mind_*` reducer and the `mind_act_checked` and `mind_reach` procedures refuse with the stable code `world_preparing: the world is still being made (step <step> of <steps>: <label>)` (`floor::ready`); a client matches the prefix. A world made before staged genesis has no `genesis` row and is always ready.
+
 ## Driving it with drive.py
 
 ```bash
