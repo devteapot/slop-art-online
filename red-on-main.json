@@ -22,5 +22,17 @@
     "reason": "publish refused: init runs out of energy (FLOORS.md had ~60% when floors landed). Found by law-compose 2026-11-20; cover ground derivation (island::host -> cover::ground, unconditional) suspected part of it, Spark checking. Not a gate case: the full verify-generation suite aborts here",
     "skill": "verify-generation",
     "times": 0
+  },
+  "generation:floor-megacity-4k": {
+    "case": "generation:floor-megacity-4k",
+    "first_main": "16f50c0c12b96d0860e2b433f9ec4d4abadb3376",
+    "first_seen": "2026-11-20T02:47:54+01:00",
+    "last_evidence": "~/slop-evidence/law-compose-20261120.tar.zst (Spark): generation-lc-020112-1-floor-megacity-4k + scratchpad/server.log",
+    "last_main": "16f50c0c12b96d0860e2b433f9ec4d4abadb3376",
+    "last_seen": "2026-11-20T02:47:54+01:00",
+    "owner": "dev-box (staged genesis)",
+    "reason": "genesis stalls after step 130 of 141: the hosting step (island::host) runs ~7.5 s and traps in cover::ground (whole-map cubic height sample, computed even with cover_sight_on off). Found by law-compose 2026-11-20; Spark checking the cover share",
+    "skill": "verify-generation",
+    "times": 0
   }
 }
