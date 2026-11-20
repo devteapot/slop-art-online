@@ -177,6 +177,31 @@ The row is the 64 B `Moving` plus the copy key (8 B), the viewer's identity (32 
 
 So the honest answer to "cut the 40 B" is: about 8 B can go without a cost; the 32 B identity is what row-level security in 2.14.1 needs on each row to stay per-row cheap. Before the law goes on: build the 97 B row, and report kB per player against main on Cullet 216, as asked.
 
+## Addendum 3: the copy tables' privacy at battle density (copy-privacy, built 2026-11-20)
+
+The table arms' privacy proofs that the Spark's diagnosis listed as still to run (docs/COMBAT_PHASE.md, "Evidence and coverage"), required by the GC before the default-on flip (Rollout, part 2). `motion_tables.py` proves isolation in a small scene (three players, a stranger); this proves it where the tables will run: a battle, hundreds of viewers, thousands of copy rows a second, copies moving between tiers, viewers dying and joining again. Tooling only: no table, law, reducer or rule changes, so `RLS_TABLES`, the owner guard, the pin list and the laws are unchanged.
+
+- **Every row a viewer receives** (`gate-load`): each `seen_body_copy` and `seen_character_copy` row a viewer's connection receives, its initial rows and every insert and update, is checked against the connection's own identity, from the connection on, across deaths and rejoins. Each player reports the rows received and the foreign ones (`privacy`), and on stdin `held` prints the copies each holds now.
+- **`battle_viewers.py --privacy`** (with `--motion-tables --character-tables` and both laws on) adds, during the measured window, through the verify-client probe:
+  - (a) an anonymous connection on both tables;
+  - (b) a spectator player (its own identity, joined, not a viewer) subscribing every public table by name, `SELECT * FROM *`, and the SDK's own `subscribe_to_all_tables` (the GC's addition). That helper names every table of the generated bindings, private ones included, so the server refuses it whole for a player (`no such table: acquaintance … may be marked private`): the check requires that refusal (or, were it accepted, no foreign row);
+  - (c) a viewer subscribing another viewer's rows by identity, and viewers' own SQL (only their rows, one that sees bodies now) and their SQL for another's (none).
+
+  After the window, (d) paused, eight sampled viewers (those that died and joined again first; with the keep-alive none died in these arms, so the sample is spread over the ring) compare, each through its own connection, `seen_body_copy` with `seen_bodies`, its `near` flags with the tier split, and `seen_character_copy` with `seen_characters`; (e) the kill switch with every viewer connected: both laws off by row, both tables empty to the owner and in every viewer's cache; on again, the owner's counts every 0.5 s for 10 s, then paused, the same comparison. Last, every viewer's run-long count: no foreign row, and rows of both tables received (not vacuous). 14 checks; `<out>/privacy-v<count>.json`, exit 1 on a failed one.
+- **The negatives** (one-off proofs, GC): the same 16-viewer arm on Cullet modules built without `SEEN_BODY_COPY_FILTER`, then without `SEEN_CHARACTER_COPY_FILTER`, fails 8 and 9 of the 14 checks: every isolation check, the viewers' own counts and both snapshots; the refused SDK helper stays refused. They are not gate cases.
+- **The gate case `copy_privacy`** runs `--privacy` at 16 viewers round a 60-fighter battle (26–32 m ring, keep-alive, 30 s window) on the island module the case's own run launched, only when a merge touches `frame.rs`, `perception.rs`, `tables.rs` or the drivers (`COPY_PRIVACY_PATHS` in `scene_gate.py`; named with `--cases`, always).
+
+**Results** (dev-box, `sg-stdb` v2.14.1, Cullet modules built from `origin/main` `8031d785d`, 200 fighters, keep-alive 0.5 s, paused placement, the battle after placing, every third viewer sampled for freshness; host load at each start below 4):
+
+| Arm | Checks | Copy rows the viewers checked (body / character) | Foreign | Ticks/s | Viewer deaths (window) |
+|---|---|---:|---:|---:|---:|
+| 16 viewers, 10 m ring, 60 s | 14 / 14 | 156,144 / 55,043 | 0 | 58.2 | 0 |
+| 216 viewers, 26–32 m ring, 60 s | 14 / 14 | 517,488 / 521,565 | 0 | 16.4 | 0 |
+| 16 viewers, no body-copy rule | 6 / 14 (fails as it must) | | > 0 | | |
+| 16 viewers, no mirror rule | 5 / 14 (fails as it must) | | > 0 | | |
+
+Evidence: `.local/cp/runs/` on the dev-box (worktree, archived with the branch). Not covered: real game clients (the laptop's client switch has its own verify-ui proofs), reconnect storms, the 30-minute gate.
+
 ## Rollout: one change set, one play-test window (decided 2026-11-20; merged, defaults on)
 
 **Where it stands.** Merged, defaults on: `bv-defaults-on` (dev-box) on the laptop's client switch (`battle-views-client`), gated as one change set after the copy tables' privacy proofs passed at battle density (Addendum 3, the GC's condition). `motion_tables_on` and `characters_table_on` are **on** in both default sets (`living/scripts/skills.rhai`'s law block and `Laws::default`); a world turns either off by its `law_override` row (the kill switch), and with both off the authority and the client take main's old path (`frame::tests::both_delivery_laws_off_take_main_s_path`, through overrides; `law_override_check` turns `motion_tables_on` off and back). Both copy tables were on main since `a407be01a` (battle-views), behind the two laws, off by default until this change. The laws are measured on (216 battle with keep-alive, 0 deaths: ticks 9.56 → 14.12/s; Cullet 216: far pairs p90 250–367 → 67 ms, `seen_characters` view 67.7 → 0 ms/s, kB/player +36% and +10%; the kill switch by override row 51 ms against a 2,333 ms reinstall; evidence `~/archive/worktree-evidence-20261120/battle-views-local.tar.gz` on the dev-box). No separate laws-on window is run before the client reads the tables: with no client on them, laws-on only costs bytes.
