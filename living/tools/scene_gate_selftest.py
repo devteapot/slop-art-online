@@ -21,7 +21,7 @@ from urllib.error import HTTPError
 import scene_gate
 from scene_gate import (
     GENESIS_BUDGET, GENESIS_FUEL, GENESIS_RUNS, Runner, genesis_metrics, genesis_policy,
-    genesis_result_line, genesis_threshold, staged_genesis_report,
+    genesis_baseline, genesis_result_line, genesis_threshold, load_genesis_baselines, staged_genesis_report,
 )
 
 GATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scene_gate.py")
@@ -117,6 +117,48 @@ def check_genesis():
             expect(f"genesis: missing {name} fails loudly", name in str(error), error)
         else:
             expect(f"genesis: missing {name} fails loudly", False)
+
+
+def check_genesis_baselines():
+    """Baselines are per seed and per rustc: another toolchain's module counts other fuel."""
+    ours, theirs = "rustc 1.99.1 (58cf8f9c3 2026-10-13)", "rustc 1.97.1 (aaaaaaaaa 2026-08-01)"
+    with tempfile.TemporaryDirectory(prefix="genesis-baselines-selftest-") as t:
+        path = Path(t) / "baselines.json"
+        path.write_text(json.dumps({"island": {theirs: {"init_fuel": 118_900_000_000, "commit": "c" * 40}}}))
+        baselines = load_genesis_baselines(path)
+        baseline, missing = genesis_baseline(baselines, "island", ours)
+        expect("baselines: another rustc's baseline is not used, and the note names it",
+               baseline is None and theirs in missing, missing)
+        result = genesis_policy(dict(init_fuel=118_000_000_000, init_runs=2, steps=[]), 10, baseline, missing)
+        expect("baselines: an over-90% seed with a baseline only for another rustc fails and says which",
+               not result["passed"] and "recorded for rustc 1.97.1" in result["failures"][0], result)
+        expect("baselines: the recorded rustc's baseline is used",
+               genesis_baseline(baselines, "island", theirs) == (118_900_000_000, ""))
+        for bad in ({"island": 118e9}, {"nowhere": {ours: {"init_fuel": 1}}}, {"island": {ours: {"init_fuel": 121e9}}},
+                    {"island": {"gcc": {"init_fuel": 1}}}, []):
+            path.write_text(json.dumps(bad))
+            try:
+                load_genesis_baselines(path)
+            except ValueError:
+                expect(f"baselines: refuses {json.dumps(bad)[:40]}", True)
+            else:
+                expect(f"baselines: refuses {json.dumps(bad)[:40]}", False)
+        # genesis-baseline records from a gate's genesis.json, for that record's rustc, and refuses a broken one
+        record = Path(t) / "genesis.json"
+        island = dict(seed="island", commit="c" * 40, toolchain=ours, init_fuel=117_812_345_678.0, init_runs=2, passed=False)
+        world = dict(seed="world", commit="c" * 40, toolchain=ours, init_runs=1, error="missing metric", passed=False)
+        record.write_text(json.dumps(dict(seeds=[island, world])))
+        path.write_text(json.dumps({"island": {theirs: {"init_fuel": 118_900_000_000}}}))
+        r = subprocess.run([sys.executable, GATE, "genesis-baseline", str(record), "island", "--file", str(path)],
+                           capture_output=True, text=True)
+        saved = load_genesis_baselines(path)
+        expect("genesis-baseline: records the seed for the record's rustc, keeping the other rustc's",
+               r.returncode == 0 and saved["island"][ours]["init_fuel"] == 117_812_345_678.0
+               and saved["island"][theirs]["init_fuel"] == 118_900_000_000, r.stdout + r.stderr)
+        r = subprocess.run([sys.executable, GATE, "genesis-baseline", str(record), "world", "--file", str(path)],
+                           capture_output=True, text=True)
+        expect("genesis-baseline: refuses a seed without a clean two-run measurement",
+               r.returncode == 1 and "world" not in load_genesis_baselines(path), r.stdout + r.stderr)
 
 
 def check_genesis_live():
@@ -241,6 +283,7 @@ def check_staged_genesis():
 
 def main():
     check_genesis()
+    check_genesis_baselines()
     check_genesis_live()
     check_staged_genesis()
     with tempfile.TemporaryDirectory(prefix="gate-reds-selftest-") as t:

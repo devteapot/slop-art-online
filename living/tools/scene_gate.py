@@ -27,6 +27,13 @@ own checkout and build (twice at most). Red on main too: the case is reported an
 block, and the persistent red-on-main list records it until it passes on main. Red only on the
 branch: the gate fails.
 
+Before the scenes, genesis fuel (docs/TOOLING.md, "Genesis fuel"): each seed in GENESIS_SEEDS is
+published fresh and its `init` fuel per run read from the server's metrics (or, once
+living/tools/genesis_fuel.py exists, from its report, steps included). Over 90% of the reducer
+budget fails (SLOP_GATE_GENESIS_HEADROOM), except a seed with a baseline for this rustc in
+genesis_fuel_baselines.json, which may not rise more than 0.1% above it. A missing metric fails.
+Every seed's fuel is printed (`scene-gate: genesis SEED: …`) and kept in genesis.json and gate.json.
+
 Usage:
   scene_gate.py run [--base REF] [--head REF] [--force] [--cases a,b] [--no-main-check]
                     [--stdb-container NAME] [--stdb-url URL] [--reds PATH] [--main-dir DIR]
@@ -35,6 +42,10 @@ Usage:
                   else origin/main); the run and the main check use its commit
       --head REF  the tree under test; must be the checked-out HEAD (default HEAD)
       --force     run even when no behavioural path changed
+      --genesis-only  the genesis fuel publishes alone: no scenes, no red-on-main list
+      --genesis-fuel-report JSON  a staged genesis_fuel.py report for its seed (repeatable)
+  scene_gate.py genesis-baseline RECORD SEED... [--note TEXT]   record SEEDs' init fuel from a
+                  gate's genesis.json or gate.json as their baselines for its rustc
   scene_gate.py touches --base A --head B   exit 0 when A..B touches behaviour, 1 when not
   scene_gate.py reds [--reds PATH] [--json] [--owner CASE WHO] [--drop CASE]
                   [--add CASE --skill S --who OWNER --reason WHY [--main SHA] [--evidence PATH]]
@@ -197,7 +208,40 @@ def valid_fuel(fuel):
     return type(fuel) in (int, float) and 0 < fuel < 2**64
 
 
-def genesis_policy(measurement, threshold, baseline):
+def genesis_toolchain(env, root):
+    """`rustc --version` for the module build: fuel counts wasm instructions, so a module built by
+    another rustc counts differently (the island: 118.735e9 on rustc 1.99.1 aarch64, 119.79e9 on
+    rustc 1.97.1 x86_64 with the same seed and source)."""
+    got = subprocess.run(["rustc", "--version"], cwd=Path(root) / "living", env=env, capture_output=True, text=True)
+    if got.returncode or not got.stdout.strip():
+        raise ValueError(f"rustc --version failed: {got.stderr.strip()[-300:]}")
+    return got.stdout.strip()
+
+
+def load_genesis_baselines(path):
+    """{seed: {toolchain: {"init_fuel": per-run fuel, "commit": …, "recorded": …}}}; checked."""
+    baselines = json.loads(Path(path).read_text())
+    if not isinstance(baselines, dict):
+        raise ValueError(f"{path} must hold an object of seeds")
+    for seed, by_toolchain in baselines.items():
+        if seed not in GENESIS_SEEDS or not isinstance(by_toolchain, dict):
+            raise ValueError(f"{path}: {seed!r} is not a gate seed with baselines by toolchain")
+        for toolchain, entry in by_toolchain.items():
+            if (not toolchain.startswith("rustc ") or not isinstance(entry, dict) or not valid_fuel(entry.get("init_fuel"))
+                    or entry["init_fuel"] > GENESIS_BUDGET):
+                raise ValueError(f"{path}: {seed} / {toolchain!r} needs a positive init_fuel within the budget")
+    return baselines
+
+
+def genesis_baseline(baselines, seed, toolchain):
+    """(baseline fuel or None, a note when the seed has baselines only for other toolchains)."""
+    by_toolchain = baselines.get(seed) or {}
+    if toolchain in by_toolchain:
+        return by_toolchain[toolchain]["init_fuel"], ""
+    return None, (f" for {toolchain} (recorded for {', '.join(sorted(by_toolchain))})" if by_toolchain else "")
+
+
+def genesis_policy(measurement, threshold, baseline, missing=""):
     fuel = measurement["init_fuel"]
     headroom = 100 * (GENESIS_BUDGET - fuel) / GENESIS_BUDGET
     # The interim rule (docs/TOOLING.md, "Genesis fuel"): a seed with a recorded baseline that is
@@ -209,7 +253,7 @@ def genesis_policy(measurement, threshold, baseline):
     if not init_passed:
         why = ("more than 0.1% above its recorded baseline" if use_baseline else
                f"under {threshold:g}% headroom" + ("" if baseline is not None else
-                                                    f" and no recorded baseline in {GENESIS_BASELINE_FILE.name}"))
+                                                    f" and no recorded baseline in {GENESIS_BASELINE_FILE.name}{missing}"))
         failures.append(f"init {fuel / 1e9:.3f}e9 is over its limit {limit / 1e9:.3f}e9: {why}")
     if fuel > GENESIS_BUDGET / 2:
         warnings.append(f"init uses {fuel / 1e9:.3f}e9 fuel, over 50% of its budget")
@@ -499,12 +543,12 @@ class Runner:
             return False
         return self.sh([sys.executable, V, "doctor", "--run", run], root, log, 300) == 0
 
-    def genesis(self, root, seed, commit, threshold, baseline, report=None):
+    def genesis(self, root, seed, commit, threshold, baseline, report=None, toolchain=None, missing=""):
         tool = Path(root) / "living/tools/genesis_fuel.py"
         if report is None and not tool.is_file():
-            result = self.genesis_live(root, seed, commit, threshold, baseline)
+            result = self.genesis_live(root, seed, commit, threshold, baseline, toolchain, missing)
         else:
-            result = dict(seed=seed, commit=commit, budget=GENESIS_BUDGET, passed=False)
+            result = dict(seed=seed, commit=commit, budget=GENESIS_BUDGET, toolchain=toolchain, passed=False)
             try:
                 if report is None:
                     report = self.out / f"genesis-{seed}-staged.json"
@@ -516,7 +560,7 @@ class Runner:
                         raise ValueError(f"{tool.name} exited {code}; see {log}")
                 result["staged_report"] = str(report)
                 result.update(staged_genesis_report(json.loads(report.read_text()), seed, commit))
-                result.update(genesis_policy(result, threshold, baseline))
+                result.update(genesis_policy(result, threshold, baseline, missing))
             except (OSError, ValueError) as error:
                 result["error"] = str(error)
         # scene-gate: lines are what the merge queue forwards, on a pass and on a failure.
@@ -525,13 +569,13 @@ class Runner:
             say(f"WARNING genesis {seed}: {warning}")
         return result
 
-    def genesis_live(self, root, seed, commit, threshold, baseline):
+    def genesis_live(self, root, seed, commit, threshold, baseline, toolchain=None, missing=""):
         run = f"gate-{self.stamp}-fuel-{seed}"
         db = f"verify-{run}"
         log = self.out / f"genesis-{seed}.log"
         run_dir = Path(root) / ".local/living/verify" / run
         self.runs.append((root, run))
-        result = dict(seed=seed, commit=commit, database=db, budget=GENESIS_BUDGET, passed=False, log=str(log),
+        result = dict(seed=seed, commit=commit, database=db, budget=GENESIS_BUDGET, toolchain=toolchain, passed=False, log=str(log),
                       world_guard_log=str(run_dir / "world-guard.log"))
         url = self.env["LIVING_STDB_URL"].rstrip("/")
         identity_url = f"{url}/v1/database/{db}/identity"
@@ -561,7 +605,7 @@ class Runner:
                                           and f'db="{identity}"' in line and 'reducer="init"' in line))
                 result.update(database_identity=identity, metrics=str(series))
                 result.update(genesis_metrics(series.read_text(), identity))
-                result.update(genesis_policy(result, threshold, baseline))
+                result.update(genesis_policy(result, threshold, baseline, missing))
                 if result["init_runs"] != 2 and published:
                     raise ValueError(f"expected two init runs for a fresh publish, got {result['init_runs']}")
             except (OSError, ValueError) as e:
@@ -829,7 +873,8 @@ def cmd_run(a):
     try:
         try:
             threshold = genesis_threshold(env)
-            baselines = json.loads(GENESIS_BASELINE_FILE.read_text()) if threshold is not None else {}
+            baselines = load_genesis_baselines(GENESIS_BASELINE_FILE) if threshold is not None else {}
+            toolchain = genesis_toolchain(env, repo) if threshold is not None else None
             reports = {}
             for report_path in report_paths if threshold is not None else []:
                 data = json.loads(report_path.read_text())
@@ -837,11 +882,6 @@ def cmd_run(a):
                 if seed not in GENESIS_SEEDS or seed in reports:
                     raise ValueError(f"unknown or duplicate seed in {report_path}")
                 reports[seed] = report_path
-            if not isinstance(baselines, dict) or any(
-                seed not in GENESIS_SEEDS or type(fuel) not in (int, float) or not 0 < fuel <= GENESIS_BUDGET
-                for seed, fuel in baselines.items()
-            ):
-                raise ValueError(f"invalid seed or fuel in {GENESIS_BASELINE_FILE}")
         except (OSError, ValueError) as e:
             say(f"genesis setup error: {e}")
             record.update(result="genesis setup error", genesis_error=str(e))
@@ -854,11 +894,12 @@ def cmd_run(a):
                 return finish(a, record, 2)
         if threshold is None:
             say("WARNING genesis fuel check disabled by SLOP_GATE_GENESIS_CHECK=0: init fuel is not measured")
-        measurements = [] if threshold is None else [
-            runner.genesis(repo, seed, head, threshold, baselines.get(seed), reports.get(seed)) for seed in GENESIS_SEEDS
-        ]
+        measurements = []
+        for seed in GENESIS_SEEDS if threshold is not None else ():
+            baseline, missing = genesis_baseline(baselines, seed, toolchain)
+            measurements.append(runner.genesis(repo, seed, head, threshold, baseline, reports.get(seed), toolchain, missing))
         record.update(genesis=measurements, genesis_disabled=threshold is None)
-        save_json(out / "genesis.json", dict(head=head, base=base, disabled=threshold is None,
+        save_json(out / "genesis.json", dict(head=head, base=base, disabled=threshold is None, toolchain=toolchain,
                                             minimum_headroom_pct=threshold, seeds=measurements))
         failed_seeds = [item["seed"] for item in measurements if not item["passed"]]
         if failed_seeds:
@@ -924,6 +965,27 @@ def finish(a, record, code):
     if record.get("evidence"):
         save_json(Path(record["evidence"]) / "gate.json", record)
     return code
+
+
+def cmd_genesis_baseline(a):
+    """Record seeds' measured init fuel from a gate record as their baselines for its toolchain."""
+    record = load_json(a.record, {})
+    measured = {g.get("seed"): g for g in record.get("seeds") or record.get("genesis") or []}
+    path = Path(a.file)
+    baselines = load_genesis_baselines(path) if path.exists() else {}
+    for seed in a.seeds:
+        g = measured.get(seed)
+        if not g or g.get("error") or g.get("init_runs") != 2 or not valid_fuel(g.get("init_fuel")) or not g.get("toolchain"):
+            say(f"genesis-baseline: {a.record} has no clean two-run measurement of {seed}; nothing recorded")
+            return 1
+        entry = dict(init_fuel=g["init_fuel"], commit=g.get("commit"), recorded=datetime.date.today().isoformat())
+        if a.note:
+            entry["note"] = a.note
+        baselines.setdefault(seed, {})[g["toolchain"]] = entry
+        say(f"genesis-baseline: {seed} {g['init_fuel'] / 1e9:.3f}e9 for {g['toolchain']} (commit {str(g.get('commit'))[:10]})")
+    path.write_text(json.dumps(baselines, indent=2, sort_keys=True) + "\n")
+    load_genesis_baselines(path)
+    return 0
 
 
 def cmd_touches(a):
@@ -1063,7 +1125,13 @@ def main(argv):
     st.add_argument("--record", required=True)
     st.add_argument("--main", required=True)
     st.set_defaults(f=cmd_settle)
-    for p in (r, t, s, st, rc):  # --reds is accepted after the command too
+    gb = sub.add_parser("genesis-baseline", help="record seeds' init fuel from a gate record (genesis.json or gate.json)")
+    gb.add_argument("record")
+    gb.add_argument("seeds", nargs="+")
+    gb.add_argument("--file", default=str(GENESIS_BASELINE_FILE))
+    gb.add_argument("--note")
+    gb.set_defaults(f=cmd_genesis_baseline)
+    for p in (r, t, s, st, rc, gb):  # --reds is accepted after the command too
         p.add_argument("--reds", default=argparse.SUPPRESS)
     a = ap.parse_args(argv or ["run"])
     if not getattr(a, "f", None):
