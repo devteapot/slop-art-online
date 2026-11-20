@@ -1080,7 +1080,9 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
     }
     let w = common::world(ctx);
     let map = common::map(ctx);
-    let mut shared = Shared { check: common::laws(ctx).regard_cache_check, ..Shared::default() };
+    // The memos pay only when two or more viewers sweep in the tick (a lone sweep would fill them
+    // for no one).
+    let mut shared = Shared { check: common::laws(ctx).regard_cache_check, memo: due.len() > 1, ..Shared::default() };
     let mut swept = Vec::with_capacity(due.len());
     for (id, viewer) in due {
         // While profiling with detail: each viewer's sweep whole (docs/COMBAT_PHASE.md).
@@ -1125,12 +1127,14 @@ struct Shared {
     characters: IdMap<u32, Option<Rc<Character>>>,
     /// `regard_cache_check`: each projection given from the memo is compared with a fresh one.
     check: bool,
+    /// Projections and records are kept for the next viewer (more than one sweeps this tick).
+    memo: bool,
 }
 
 /// `target`'s projection under the law's answer `r` now: from the tick's memo when there is one
 /// (`Shared`), else worked out.
 fn project_shared(ctx: &ReducerContext, shared: Option<&mut Shared>, r: Regard, target: &Character, now: u64) -> Projection {
-    let Some(sh) = shared else { return project_as(ctx, r, target, now) };
+    let Some(sh) = shared.filter(|sh| sh.memo) else { return project_as(ctx, r, target, now) };
     if let Some(p) = sh.projections.get(&(target.id, r)) {
         exact_count(3, 1);
         if sh.check {
@@ -1150,6 +1154,9 @@ fn project_shared(ctx: &ReducerContext, shared: Option<&mut Shared>, r: Regard, 
 
 impl Shared {
     fn character(&mut self, ctx: &ReducerContext, id: u32) -> Option<Rc<Character>> {
+        if !self.memo {
+            return ctx.db.character().id().find(id).map(Rc::new);
+        }
         self.characters.entry(id).or_insert_with(|| ctx.db.character().id().find(id).map(Rc::new)).clone()
     }
 }
