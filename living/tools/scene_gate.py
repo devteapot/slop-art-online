@@ -25,6 +25,15 @@ touches behaviour, these cases with the fake model only:
                  its per-world checks, the seed's laws composed over the shipped script among them,
                  on the world, island, cullet and cullet-laws genesis worlds; a failing check is a
                  part `<case>:<seed>:<check>` the red-on-main list can hold)
+  verify-ui      the render group, only when a merge changes how the client draws (RENDER_CHARACTER,
+                 RENDER_CAMERA, RENDER_BOTH; docs/TOOLING.md, "The render group"): looks (Cullet),
+                 hair, seat, camera-faces, camera-lod, far (island), check.py one at a time after
+                 every other group, on the pinned render asset set (render_set.py check, then link;
+                 corrupt or stale fail setup, exit 2). A case fails on check.py's exit and on
+                 shader/pipeline, asset (bevy_asset) or panic ERROR lines in its client logs; a log
+                 saying the book lacks a key or generation is "asset set stale" (exit 2). A host
+                 without a set runs render-smoke and refuses the merge unless the render host
+                 recorded a pass for the same content (the `render-passes` branch).
 
 The world groups and the tests run at once. A case whose only failures are parts on the red-on-main
 list (a mind test `living-mind::<test>`, a combat scene `combat:<scene>`) passes and says which. Flakes: a failing case runs again once, alone, on a fresh scratch
@@ -52,12 +61,16 @@ Usage:
       --force     run even when no behavioural path changed
       --genesis-only  the genesis fuel publishes alone: no scenes, no red-on-main list
       --genesis-fuel-report JSON  a staged genesis_fuel.py report for its seed (repeatable)
+      --render-only  only the render cases the diff selects (all with --force), on this host's set;
+                  records the pass (for a merge another host refused)
+      --render-split  character paths run looks, hair and seat; camera paths camera-faces,
+                  camera-lod and far (LIVING_GATE_RENDER_SPLIT=1)
   scene_gate.py seeds [--json PATH]   compiled seeds against their living/seeds/worlds/ sources
                   (seed_fresh.py, files only); a stale block listed red on main as
                   `seeds:<seed>:<block>` does not fail. living-merge runs it before the check
   scene_gate.py genesis-baseline RECORD SEED... [--note TEXT]   record SEEDs' init fuel from a
                   gate's genesis.json or gate.json as their baselines for its rustc
-  scene_gate.py touches --base A --head B   exit 0 when A..B touches behaviour, 1 when not
+  scene_gate.py touches --base A --head B   exit 0 when A..B touches behaviour or drawing, 1 when not
   scene_gate.py reds [--reds PATH] [--json] [--owner CASE WHO] [--drop CASE]
                   [--add CASE --skill S --who OWNER --reason WHY [--main SHA] [--evidence PATH]]
                   the red-on-main list (for the daily digest); --add lists a case known red
@@ -77,9 +90,15 @@ SLOP_GATE_GENESIS_CHECK=0 (disable with a warning), LIVING_GATE_REDS (the list's
 ~/slop-mq/red-on-main.json when ~/slop-mq exists, else the state folder below),
 LIVING_GATE_REDS_REMOTE / _BRANCH (origin, red-on-main), LIVING_GATE_REDS_REPO (the repository that
 reaches it; default this file's), LIVING_GATE_REDS_GIT=0 (the cache alone, no git), LIVING_GATE_MAIN_DIR (main's checkout for
-the main check; its build folder is <dir>-target). State: ~/.local/state/slop-merge/scene-gate/.
+the main check; its build folder is <dir>-target), LIVING_GATE_RENDER_ASSETS (the pinned render asset
+set; default ~/slop-assets/current), LIVING_GATE_RENDER_HOST (named in a refusal; default dev-box),
+LIVING_GATE_RENDER_SPLIT=1, LIVING_GATE_PASSES (the recorded render passes' cache; default
+~/slop-mq/render-passes.json when ~/slop-mq exists), LIVING_GATE_PASSES_BRANCH (render-passes),
+LIVING_GATE_SMOKE_ASSETS (render-smoke's cache; default ~/.cache/slop-render-smoke).
+State: ~/.local/state/slop-merge/scene-gate/.
 Exit: 0 passed, skipped, or scenes failed only where main fails too; 1 genesis failed, or a
-scene failed only on the branch (or could not be judged on main); 2 usage or setup error.
+scene failed only on the branch (or could not be judged on main), or render cases needed here
+without a set or a recorded pass; 2 usage or setup error, the render asset set corrupt or stale.
 No case uses Neo4j (the minds cases run LIVING_NEO4J=off). It never touches a database outside
 verify-gate-<this run>-*: not the paid verify-trial-* batches, nor sao-living_*.
 """
@@ -1443,8 +1462,8 @@ def cmd_run(a):
                 parents = git("rev-list", "--parents", "-n", "1", "HEAD").split()[1:]
                 say(f"render: not run here; needs a pinned asset set ({RENDER_HOST}): none at {RENDER_ASSETS}, and no render pass "
                     f"recorded for this content (key {key[:12]}). "
-                    f"There: make the same tree ({'merge ' + parents[1][:10] + ' into ' if len(parents) > 1 else 'check out '}"
-                    f"{parents[0][:10] if parents else head[:10]}) and run `just living-scene-gate run --render-only"
+                    f"There: make the same tree ({'merge ' + parents[1][:10] + ' into ' + parents[0][:10] if len(parents) > 1 else 'check out ' + head[:10]}"
+                    f") and run `just living-scene-gate run --render-only"
                     f"{' --render-split' if split else ''} --base {base[:10]}`; the merge here is refused until then")
             cases = cases + ["render-smoke"]
             render = []
