@@ -1,0 +1,66 @@
+{
+ "generation": "c4-cbcc40bf",
+ "levels": 1,
+ "differences": [
+  {
+   "person": "lp_f599bc83446f7604",
+   "resident": null,
+   "band": "3",
+   "line": "lk_52d2a6de7c51ccd8",
+   "field": "colors.outfit.cap",
+   "shipped": "#534e30",
+   "rebuilt": "#534e32",
+   "levels": 2
+  },
+  {
+   "person": "lp_445cf54910b69ef2",
+   "resident": "Wick Marl",
+   "band": "1",
+   "line": "lk_6d21bc5f9af8f4bd",
+   "field": "colors.outfit.jersey_smock-m",
+   "shipped": "#b2afa1",
+   "rebuilt": "#837e73",
+   "levels": 49
+  },
+  {
+   "person": "lp_445cf54910b69ef2",
+   "resident": "Wick Marl",
+   "band": "1",
+   "line": "lk_6d21bc5f9af8f4bd",
+   "field": "colors.outfit.trousers-m",
+   "shipped": "#33363e",
+   "rebuilt": "#2d2f35",
+   "levels": 9
+  },
+  {
+   "person": "lp_f599bc83446f7604",
+   "resident": null,
+   "band": "4",
+   "line": "lk_796813f8386eec61",
+   "field": "colors.outfit.cap",
+   "shipped": "#534e30",
+   "rebuilt": "#534e32",
+   "levels": 2
+  },
+  {
+   "person": "lp_79ad5b013920c6c0",
+   "resident": null,
+   "band": "0",
+   "line": "lk_a20f60fd4b47929c",
+   "field": "colors.outfit.jersey_smock-m",
+   "shipped": "#431514",
+   "rebuilt": "#431714",
+   "levels": 2
+  },
+  {
+   "person": "lp_38e9cfdb7e3b6c8b",
+   "resident": "Zeke Okoro",
+   "band": "2",
+   "line": "lk_b238664f628f716e",
+   "field": "colors.outfit.jersey_smock-m",
+   "shipped": "#431514",
+   "rebuilt": "#431714",
+   "levels": 2
+  }
+ ]
+}
