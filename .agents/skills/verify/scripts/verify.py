@@ -607,15 +607,24 @@ def cleanup(a):
     if "published" not in st and st.get("publish_attempted") and not st.get("started_container"):
         # A publish the server refused: nothing to delete, provided the database does not exist.
         code, body = http(f"/v1/database/{db}/sql", "SELECT * FROM world", admin_token(), raw=True)
-        if code != 404:
+        identity = world_guard.lookup(URL, db, admin_token()) if code == 200 else None
+        if code == 200 and identity:
+            # The publish went through but the launch stopped before recording it (the orphan
+            # guard failed to arm, say): this run's own scratch world, so pause, confirm and delete
+            # it like any published one rather than leave it ticking.
+            st.update(published=True, database_identity=identity, server_url=URL)
+            log(st, f"publish of {db} was not recorded but the database exists ({identity}): cleaning it up")
+            save(st)
+        elif code != 404:
             sys.exit(f"refusing cleanup of {db}: its publish was not recorded, but SQL answers {code}")
-        world_guard.stop(run_dir(a.run))
-        if st.get("wasm", "").startswith("living_authority_verify_"):
-            (wasm_mount() / st["wasm"]).unlink(missing_ok=True)
-            log(st, f"removed module copy {st['wasm']}")
-        log(st, f"no database {db} (its publish was refused; SQL 404)")
-        save(st)
-        return
+        if not st.get("published"):
+            world_guard.stop(run_dir(a.run))
+            if st.get("wasm", "").startswith("living_authority_verify_"):
+                (wasm_mount() / st["wasm"]).unlink(missing_ok=True)
+                log(st, f"removed module copy {st['wasm']}")
+            log(st, f"no database {db} (its publish was refused; SQL 404)")
+            save(st)
+            return
     if "published" not in st and not st.get("started_container"):
         sys.exit(f"refusing cleanup of {db}: no launch record")
     if st.get("published"):
