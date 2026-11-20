@@ -17,7 +17,7 @@
     "last_evidence": "/home/carlid/.local/state/slop-merge/scene-gate/main/.local/living/verify/gate-1121003721-recheck-seat-render-isl/ui/checks-seat.json [check.py exit 1]",
     "last_main": "7499c2707a57e408f00b8c6feca559c381763345",
     "last_seen": "2026-11-21T00:42:35+01:00",
-    "owner": "dev-box until the laptop takes it (intermittent client seated-cloth contact: 1 pass / 5 fails incl. load 2.99 on 7499c2707; NOT load-made)",
+    "owner": "laptop (coat chains v2 hem against ground: tails up to -25 mm vs the pre-chains 5 mm bound; release waits on ground_seat(); folded into the laptop's hem-against-ground constraint)",
     "reason": null,
     "skill": "verify-ui",
     "times": 2
