@@ -672,6 +672,9 @@ def _run(a, procs, token_file):
     start_neo4j(r, neo_pw)
     stdb("publish", "-s", "local", "-b", "/wasm/living_authority.wasm", db, "--delete-data", "-y")
     token = admin_token()
+    # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+    import genesis_wait
+    genesis_wait.wait_ready(URL, db, token)
     # Over HTTP: the script is past the 128 KiB one command-line argument may hold.
     code, body = http(f"/v1/database/{db}/call/install_script", [(ROOT / "living/scripts/skills.rhai").read_text()], token, timeout=180)
     if code != 200:

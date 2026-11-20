@@ -70,6 +70,9 @@ def main():
     a = ap.parse_args()
     if a.fresh:
         stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", a.db, "--delete-data", "-y")
+        # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+        import genesis_wait
+        genesis_wait.wait_ready_cli(stdb, a.db)
     for law in a.law:
         name, value = law.split("=", 1)
         stdb("call", "-s", "local", a.db, "set_world_law", json.dumps(name), json.dumps(value))

@@ -703,6 +703,7 @@ fn my_character(ctx: &ReducerContext) -> Result<Character, String> {
 /// told back through `my_combat` (`REFUSED`), so the reducer itself succeeds.
 #[spacetimedb::reducer]
 pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f32) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     let sc = common::scripts(ctx);
     let Some(shape) = sc.combat(&skill).filter(|_| sc.shapes().on_bar(&skill)) else {
@@ -775,6 +776,7 @@ pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f3
 /// Let go of a held skill (the guard).
 #[spacetimedb::reducer]
 pub fn release_skill(ctx: &ReducerContext, skill: String) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     let now = common::now_ms(ctx);
     if let Some(a) = ctx.db.activity().id().find(me.id).filter(|a| a.skill == skill && a.node == act::PLAYER) {

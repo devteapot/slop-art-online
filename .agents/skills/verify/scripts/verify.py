@@ -269,6 +269,18 @@ def launch(a):
     st["published"] = True
     st["lease_seconds"] = idle_seconds
     save(st)
+    # Staged genesis: the world is made by scheduled steps after the publish returns; nothing
+    # calls it (install_script below, the scenes) before it is ready (genesis_wait.py).
+    import genesis_wait
+    try:
+        made = genesis_wait.wait_ready(URL, st["db"], owner, timeout_s=float(os.environ.get("LIVING_GENESIS_TIMEOUT_S", "900")),
+                                       log=lambda m: log(st, m))
+    except genesis_wait.GenesisNotReady as e:
+        save(st)
+        sys.exit(str(e))
+    if made:
+        st["genesis_steps"] = made.get("step")
+        log(st, f"world made in {made.get('step')} genesis steps")
     # A seed with its own laws (`laws` or `laws_file`, a Rhai overlay) had them composed over the
     # shipped script and installed when its world was created; installing the plain script now
     # would drop them. Every other world gets the working tree's script, as before. `none` (a
@@ -316,6 +328,9 @@ def doctor(a):
     code, _ = http(f"/v1/database/{st['db']}/sql", "SELECT paused FROM world", raw=True)
     checks[f"database {st['db']} exists"] = code == 200
     if code == 200:
+        # Staged genesis: a world still being made is not "not ticking" (docs/STAGED_GENESIS.md).
+        g = next(iter(q("SELECT done, step, steps, label FROM genesis")), None)
+        checks[f"world is made (genesis {'absent' if g is None else ('done' if g[0] else f'step {g[1]} of {g[2]}: {g[3]}')})"] = g is None or bool(g[0])
         paused = q("SELECT paused FROM world")[0][0]
         # Housekeeping writes the single `stats` row a few seconds after publishing and then
         # rewrites it periodically, so wait for it and sample it over a window.
