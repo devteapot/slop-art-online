@@ -278,6 +278,8 @@ struct Privacy {
     character_rows: u64,
     /// `seen_fighter_copy` rows (views step 3), checked the same way.
     fighter_rows: u64,
+    /// `combat_feed` event rows (views step 2), checked the same way.
+    combat_rows: u64,
     foreign_rows: u64,
     /// Up to 8 foreign viewers' identities (hex), for the report.
     foreign_viewers: BTreeSet<String>,
@@ -290,6 +292,15 @@ impl Privacy {
         } else {
             self.character_rows += 1;
         }
+        self.foreign(own, viewer);
+    }
+
+    fn check_combat(&mut self, own: Identity, viewer: Identity) {
+        self.combat_rows += 1;
+        self.foreign(own, viewer);
+    }
+
+    fn foreign(&mut self, own: Identity, viewer: Identity) {
         if viewer != own {
             self.foreign_rows += 1;
             if self.foreign_viewers.len() < 8 {
@@ -309,7 +320,7 @@ impl Privacy {
     }
 
     fn json(&self) -> Value {
-        json!({"body_rows": self.body_rows, "character_rows": self.character_rows, "fighter_rows": self.fighter_rows, "foreign_rows": self.foreign_rows, "foreign_viewers": self.foreign_viewers})
+        json!({"body_rows": self.body_rows, "character_rows": self.character_rows, "fighter_rows": self.fighter_rows, "combat_rows": self.combat_rows, "foreign_rows": self.foreign_rows, "foreign_viewers": self.foreign_viewers})
     }
 }
 
@@ -454,6 +465,12 @@ fn hook(p: &Player, log: &Log, own: Identity) {
         conn.db.seen_fighter_copy().on_insert(move |_, c| pv.lock().unwrap().check_fighter(own, c.viewer));
         let pv = p.privacy.clone();
         conn.db.seen_fighter_copy().on_update(move |_, _, c| pv.lock().unwrap().check_fighter(own, c.viewer));
+        // A player's combat feed as event rows (views step 2): counted as `combat_feed` inserts.
+        let (pv, cnt) = (p.privacy.clone(), p.counts.clone());
+        EventTable::on_insert(&conn.db.combat_feed(), move |_, c| {
+            pv.lock().unwrap().check_combat(own, c.viewer);
+            cnt.lock().unwrap().entry("combat_feed").or_default()[0] += 1;
+        });
     }
     count!(conn, p.counts, seen_bodies);
     count!(conn, p.counts, seen_characters);
@@ -920,6 +937,9 @@ fn players_mode() {
     // The public fighter copies (views step 3, `fighter_tables_on`): `seen_fighter_copy` in place of
     // the fighter views (both tiers, or the untiered one).
     let fighter_tables = req["fighter_tables"].as_bool().unwrap_or(false);
+    // A player's combat feed as event rows (views step 2, `combat_feed_on`): `combat_feed` in
+    // place of the `my_combat` view.
+    let combat_feed = req["combat_feed"].as_bool().unwrap_or(false);
     let fresh_every = req["fresh_every"].as_u64().unwrap_or(0) as usize;
     let started = Instant::now();
     let mut players = Vec::new();
@@ -958,6 +978,10 @@ fn players_mode() {
         if fighter_tables {
             queries.retain(|q| !["SELECT * FROM seen_fighters", "SELECT * FROM seen_fighters_near", "SELECT * FROM seen_fighters_far"].contains(&q.as_str()));
             queries.push("SELECT * FROM seen_fighter_copy".to_string());
+        }
+        if combat_feed {
+            queries.retain(|q| q.as_str() != "SELECT * FROM my_combat");
+            queries.push("SELECT * FROM combat_feed".to_string());
         }
         subscribe(&pl, queries);
         players.push(pl);

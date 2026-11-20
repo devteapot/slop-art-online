@@ -172,15 +172,15 @@ pub fn trace(ctx: &ReducerContext, tick: u64) {
         cover_law, cover_ground, land_plan, settlement, lot, body, steer, walk_route, vitals, activity,
         brain, mind_state, wake, infant_cry, speech_card, slumber, deliberation, persona, standing,
         rearing, genome, pasture, skill_card, fighter, readiness, character_senses, character_earshot,
-        act_outcome, weather, skill_code, act_card, doing, heard, knowledge_epoch, hear_salt,
-        fighter_seen, player, motion_seen, line_seen, doing_seen, motion_near, fighter_near, doing_near,
-        seen_body_copy, copy_state, seen_character_copy, rhythm, attention, applied_gaze, record_clock,
+        weather, skill_code, act_card, doing, heard, knowledge_epoch, hear_salt,
+        fighter_seen, player, motion_seen, doing_seen, motion_near, fighter_near, doing_near,
+        seen_body_copy, copy_state, rhythm, attention, applied_gaze, record_clock,
         genesis, last_look, fast_ask, mind_cursor,
     );
     hash_ranked!(ctx, r, out;
         acquaintance, act_queue, artifact, audience, belief, bond_offer, character, chronicle, combat_seen,
         community, cue, expecting, ground_edit, guest, heard_asleep, join_request, judged, judgment,
-        know_how, known_ground, law_change, look_line, membership, perceived, place, practice, projected,
+        know_how, known_ground, law_change, look_line, membership, place, practice,
         record_party, record, relation, remembered, reveal, routine, seen_stock, seen_structures,
         sex_seen, skill_use, thought, trade_offer, far_handle, fight_seen,
     );
@@ -218,6 +218,37 @@ pub fn trace(ctx: &ReducerContext, tick: u64) {
         x
     }))));
     out.push(("resource_node", table_hash(r, ctx.db.resource_node().iter())));
+    // Players' rows (det_compare with players). A sweep inserts a viewer's `perceived` and
+    // `projected` rows in a hash set's order, which a module instance's history decides, so two
+    // copies give the same rows other ids, and other ranks. These tables, and the rows that name
+    // their ids (the mirror of projections by `projected` id; act outcomes and released lines by
+    // `experience` id, whose deletes follow the same lines), are hashed by content with the id
+    // columns left out; their row counts stay in the hash. (The gaps between their ids cannot be
+    // compared: 2.14.1's random sequence skips put them anywhere, which ranks absorb only when
+    // the order of inserts is the same.)
+    out.push(("perceived", table_hash(r, ctx.db.perceived().iter().map(|mut x| {
+        x.id = 0;
+        x
+    }))));
+    out.push(("projected", table_hash(r, ctx.db.projected().iter().map(|mut x| {
+        x.id = 0;
+        x
+    }))));
+    out.push(("act_outcome", table_hash(r, ctx.db.act_outcome().iter().map(|mut x| {
+        x.id = 0;
+        x
+    }))));
+    out.push(("line_seen", table_hash(r, ctx.db.line_seen().iter().map(|mut l| {
+        l.id = 0;
+        l.line.id = 0;
+        l.line.subject = r.far(l.line.subject);
+        l.line.object = r.far(l.line.object);
+        l
+    }))));
+    out.push(("seen_character_copy", table_hash(r, ctx.db.seen_character_copy().iter().map(|mut c| {
+        c.id = 0;
+        c
+    }))));
     let all = out.iter().fold(0u64, |a, (_, (h, _))| a.rotate_left(5) ^ h);
     let tables: Vec<String> = out.iter().map(|(t, (h, n))| format!("{t}={h:016x}/{n}")).collect();
     log::info!("det tick {tick} all={all:016x} {}", tables.join(" "));

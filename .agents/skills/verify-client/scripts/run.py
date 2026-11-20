@@ -69,6 +69,9 @@ def main():
         # The public motion copies reach only their viewer, and the law off empties them at once
         # (battle-views; motion_tables.py).
         command('motion-tables', [str(SKILL / 'scripts/motion_tables.py'), '--run', args.run])
+        # A player's combat feed as event rows reaches only its viewer and equals my_combat, its
+        # death screen included (views step 2; combat_feed.py).
+        command('combat-feed', [str(SKILL / 'scripts/combat_feed.py'), '--run', args.run])
         exit_code = 0
     except (RuntimeError, subprocess.SubprocessError, OSError) as error:
         print(str(error), file=sys.stderr)

@@ -1481,6 +1481,9 @@ const SEEN_CHARACTER_COPY_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql
 // Row-level security for the public fighter copies (views step 3, `fighter_tables_on`).
 #[spacetimedb::client_visibility_filter]
 const SEEN_FIGHTER_COPY_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT * FROM seen_fighter_copy WHERE viewer = :sender");
+// Row-level security for a player's combat feed as events (views step 2, `combat_feed_on`).
+#[spacetimedb::client_visibility_filter]
+const COMBAT_FEED_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT * FROM combat_feed WHERE viewer = :sender");
 
 /// A creature's band as this viewer perceives it now (255 while its projection hides health),
 /// with its projection row.

@@ -2,8 +2,10 @@
 """`just living-check` with step stamps and a shared compile cache (docs/TOOLING.md).
 
 The check is the Justfile's steps: the authority (wasm), the mind and the native viewer,
-the game in release and its unit tests (release too, on the same tree), the browser viewer
-(wasm), the rules tests, the seed-laws test and the script fuel (living/tools/script_bench, its own cargo workspace and target folder). Each step's
+the game in release and its unit tests (release too, on the same tree), the authority's native
+unit tests (release, the same tree; known-red ones listed in AUTHORITY_TEST_XFAIL must still
+fail), the browser viewer (wasm), the rules tests and the script fuel (living/tools/script_bench,
+its own cargo workspace and target folder). Each step's
 inputs are the files of the packages it builds (its path-dependency closure, from `cargo
 metadata`), the shared inputs below and its own, the toolchain, the step's command and the
 build environment. After a step passes, its stamp is written under that digest in a store shared
@@ -90,6 +92,19 @@ STEPS = [
     # name in GAME_TEST_SKIPS, with its reason, and listed in the verify-ui skill to run by hand.
     {"name": "game-tests", "lane": "release", "packages": ["living-game"], "dirs": ["release"],
      "cmd": ["cargo", "test", "--release", "--manifest-path", "living/Cargo.toml", "-p", "living-game", "--", "--color", "never"]},
+    # The authority's native unit tests, all of them (`--lib`; the crate has no other targets).
+    # Until check-authority-tests the check ran two of them, seed-laws
+    # (seed::tests::a_seeds_laws_are_in_force_after_init) and frame-tests (frame::tests), and
+    # look::tests::the_island_wears_the_pool went red on main unseen (07f37b927). In release, on
+    # the release lane's tree after the game: on the Spark, 2026-11-20, the suite takes ~10 s in
+    # release and ~72 s in debug (a_plan_naming_kinds_the_world_lacks_is_refused composes Cullet's
+    # world six times), and the debug lane (mind+viewer, rules-tests) is the check's longest while
+    # the release lane has room. None needs a server or is slow enough to leave out. They read
+    # only include_str! fixtures and, at run time, living/seeds (a_seeds_laws_are_in_force_after_init),
+    # a shared input. Names in AUTHORITY_TEST_XFAIL are skipped in the suite, then each is run
+    # alone and must fail; one that passes or is gone fails the step.
+    {"name": "authority-tests", "lane": "release", "packages": ["living-authority"], "dirs": ["release"],
+     "cmd": ["cargo", "test", "--release", "--manifest-path", "living/Cargo.toml", "-p", "living-authority", "--lib", "--", "--color", "never"]},
     {"name": "viewer-wasm", "lane": "wasm-dev", "packages": ["living-viewer"], "dirs": ["wasm32-unknown-unknown/wasm-dev", "debug"],
      "cmd": ["cargo", "build", "--manifest-path", "living/viewer/Cargo.toml", "--target", "wasm32-unknown-unknown", "--profile", "wasm-dev", "--bin", "living-viewer"]},
     # `inputs`: the rules' ratchet `ui::tests::the_game_client_names_no_new_skills` reads the
@@ -98,14 +113,6 @@ STEPS = [
     {"name": "rules-tests", "lane": "debug", "packages": ["living-rules"], "dirs": ["debug"],
      "inputs": ["living/game/src"],
      "cmd": ["cargo", "test", "--manifest-path", "living/Cargo.toml", "-p", "living-rules"]},
-    # A seed's own laws are in force after `init` (the authority's path, natively): what a
-    # harness installing another script over them would take away (fix-laws).
-    {"name": "seed-laws", "lane": "debug", "packages": ["living-authority"], "dirs": ["debug"],
-     "cmd": ["cargo", "test", "--manifest-path", "living/Cargo.toml", "-p", "living-authority", "--lib", "seed::tests::a_seeds_laws_are_in_force_after_init"]},
-    # The frames' delivery (frame-views): with both delivery laws off the frames take main's path,
-    # and the cue budget keeps every engaged pair first (frame.rs, docs/PERCEPTION.md).
-    {"name": "frame-tests", "lane": "debug", "packages": ["living-authority"], "dirs": ["debug"],
-     "cmd": ["cargo", "test", "--manifest-path", "living/Cargo.toml", "-p", "living-authority", "--lib", "frame::tests"]},
     # The fuel budget gate (docs/LIVING_CORE.md, "Fuel budgets"): the Rhai bench module and
     # sb-host, then gate.py over budgets.json. Its packages' closure is the bench and its
     # fixtures (bench), the module, sb-host with wasmtime's configuration (host/src/main.rs)
@@ -134,6 +141,52 @@ for _s in STEPS:
     if _s["name"] == "game-tests":
         _s["cmd"] = _s["cmd"] + (["--exact"] if GAME_TEST_SKIPS else []) + [x for name in sorted(GAME_TEST_SKIPS) for x in ("--skip", name)]
 
+# Authority tests known red on main, owned and fixed elsewhere: expected failures, so a known
+# data issue does not block every merge while the step still runs the rest of the suite. Each is
+# skipped in the suite (`--exact --skip`, so its name is in the step's digest), then run alone
+# (`--exact NAME`), and the step passes only if it still fails. One that passes (fixed: take it
+# out here in the same change) or matches no test (renamed or removed) fails the step. Every
+# check prints each entry with its owner and date, whether the step runs or is skipped, and its
+# last line names them. Keep an entry only while its owner is on it; it is also on the scene
+# gate's red-on-main list.
+AUTHORITY_TEST_XFAIL: dict[str, dict[str, str]] = {
+    "look::tests::the_island_wears_the_pool": {
+        "owner": "dev-box (char-4 track; parked until 2026-11-25)",
+        "since": "2026-11-20",
+        "reason": "the island's look data is generation c4-e61b01c0 (living/seeds/island.json, worlds/island/looks.json) while "
+                  "Cullet's looks.json is c4-cbcc40bf; fix: regenerate the island's looks (look_lines.py), recompile "
+                  "(author_world.py island --compile-only)",
+    },
+}
+for _s in STEPS:
+    if _s["name"] == "authority-tests":
+        _s["xfail"] = AUTHORITY_TEST_XFAIL
+        _s["cmd"] = _s["cmd"] + (["--exact"] if AUTHORITY_TEST_XFAIL else []) + [x for name in sorted(AUTHORITY_TEST_XFAIL) for x in ("--skip", name)]
+
+
+def xfail_cmd(step, name):
+    """The command that runs one expected failure of a step alone: the step's cargo test, its
+    libtest arguments replaced by that name, exactly."""
+    cmd = step["cmd"]
+    return cmd[:cmd.index("--")] + ["--", "--exact", name, "--color", "never"]
+
+
+def judge_xfail(name, lines, code):
+    """(ok, what happened) for an expected failure run alone, from libtest's output lines."""
+    if any(l.startswith(f"test {name} ... FAILED") for l in lines):
+        return True, "still fails, as expected"
+    if any(l.startswith(f"test {name} ... ok") for l in lines):
+        return False, "now PASSES: take it out of AUTHORITY_TEST_XFAIL in living/tools/check.py (and its red-on-main entry)"
+    if any(l.startswith("running 0 tests") for l in lines):
+        return False, "matches no test (renamed or removed?): update AUTHORITY_TEST_XFAIL in living/tools/check.py"
+    return False, f"did not run (exit {code}; see the step's log)"
+
+
+def xfail_banner(step):
+    """The lines every check prints for a step's expected failures."""
+    return [f"{step['name']}: KNOWN RED, expected to fail: {name} (owner {x['owner']}, since {x['since']}): {x['reason']}"
+            for name, x in sorted(step.get("xfail", {}).items())]
+
 # The cargo workspaces whose packages the steps build: the living core's, and the script
 # bench's (standalone, not a member of living/Cargo.toml).
 WORKSPACES = ["living/Cargo.toml", "living/tools/script_bench/Cargo.toml"]
@@ -142,6 +195,12 @@ WORKSPACES = ["living/Cargo.toml", "living/tools/script_bench/Cargo.toml"]
 def cmds_of(step):
     """A step's cargo commands, in order."""
     return step["cmd"] if isinstance(step["cmd"][0], list) else [step["cmd"]]
+
+
+def described(step):
+    """What a step runs, as printed."""
+    return (" && ".join(" ".join(c) for c in cmds_of(step)) + (" && gate" if step.get("gate") else "")
+            + "".join(f" && (expected to fail) {' '.join(xfail_cmd(step, n))}" for n in sorted(step.get("xfail", {}))))
 
 # Inputs of every step besides its packages' own directories: the workspace manifest and
 # lock, the seeds and scripts the crates include (include_str!, the authority's build
@@ -689,9 +748,10 @@ def stop(p):
             continue
 
 
-def run_step(cmd, root, env, log=None, cargo=True):
+def run_step(cmd, root, env, log=None, cargo=True, lines=None):
     """Run a cargo step (or, cargo=False, another command); cargo's JSON messages are
-    collected, everything else goes to the terminal (serial) or to the step's log (parallel)."""
+    collected, everything else goes to the terminal (serial) or to the step's log (parallel),
+    and also to `lines` when given."""
     full = cmd[:2] + ["--message-format=json-render-diagnostics"] + cmd[2:] if cargo else cmd
     sink = log or sys.stdout
     # its own process group, so stopping the check stops rustc and test binaries too
@@ -714,6 +774,8 @@ def run_step(cmd, root, env, log=None, cargo=True):
                 continue
             sink.write(line)
             sink.flush()
+            if lines is not None:
+                lines.append(line.rstrip("\n"))
         rc = p.wait()
     except BaseException:
         stop(p)
@@ -936,6 +998,8 @@ def main(argv):
             say(f"{s['name']}: run, and no stamp: {files}")
         else:
             say(f"{s['name']}: run{' (--full)' if full else ''} [{d[:12]}]")
+        for line in xfail_banner(s):
+            say(line)
     if plan_only:
         if json_out:
             write_json(json_out, {"plan": [{"name": s["name"], "digest": d, "skip": bool(st), "inputs": inputs, "why": None if d else files}
@@ -977,6 +1041,17 @@ def main(argv):
             messages += m
             if code != 0:
                 break
+        xfails = {}
+        if code == 0:
+            for name in sorted(s.get("xfail", {})):  # each expected failure alone, after the suite
+                out = []
+                c, _ = run_step(xfail_cmd(s, name), root, env, log, lines=out)
+                ok, what = judge_xfail(name, out, c)
+                xfails[name] = what
+                with lock:
+                    say(f"{s['name']}: KNOWN RED {name} {what}" if ok else f"{s['name']}: expected failure {name} {what}")
+                if not ok:
+                    code = 1
         verdict = None
         if code == 0 and s.get("gate"):
             code, verdict = run_gate(s["gate"], root, env, step_target, log)
@@ -985,6 +1060,8 @@ def main(argv):
                  "load1": os.getloadavg()[0], "units": len(messages), "fresh": sum(1 for m in messages if m.get("fresh"))}
         if verdict:
             entry["gate"] = verdict
+        if xfails:
+            entry["xfail"] = xfails
         by_name[s["name"]] = entry
         if code != 0:
             with lock:
@@ -996,6 +1073,8 @@ def main(argv):
                             if v["budget"] is not None else f"  {v['law']} has no budget in budgets.json")
                 for law in (verdict or {}).get("missing", []):
                     say(f"  {law} has a budget but was not measured")
+                for name, what in xfails.items():
+                    say(f"  expected failure {name}: {what}")
                 if log:
                     log.flush()
                     show_log(log.name)
@@ -1030,11 +1109,11 @@ def main(argv):
                 if parallel:
                     path = os.path.join(logs, s["name"] + ".log")
                     with lock:
-                        say(f"{s['name']}: {' && '.join(' '.join(c) for c in cmds_of(s))}{' && gate' if s.get('gate') else ''}  (log {path})")
+                        say(f"{s['name']}: {described(s)}  (log {path})")
                     with open(path, "w") as log:
                         run_one(s, d, files, log)
                 else:
-                    say(f"{s['name']}: {' && '.join(' '.join(c) for c in cmds_of(s))}{' && gate' if s.get('gate') else ''}")
+                    say(f"{s['name']}: {described(s)}")
                     run_one(s, d, files, None)
             except BaseException as e:  # a crash in the check is a failed step, never a pass
                 with lock:
@@ -1113,7 +1192,8 @@ def main(argv):
         f"{x['name']} {'skipped' if x['skipped'] else 'not run' if x.get('not_run') else 'FAILED' if x.get('rc') else str(round(x['secs'])) + ' s'}" for x in record["steps"])
         + (f"; sccache {record['sccache_stats']}" if record["sccache_stats"] and ran else "")
         + ("; the failed compiles of a passing check are build scripts' feature probes (docs/TOOLING.md)"
-           if not rc and (record["sccache_stats"] or {}).get("failed") else ""))
+           if not rc and (record["sccache_stats"] or {}).get("failed") else "")
+        + "".join(f"; KNOWN RED (expected failure, owner {x['owner']}): {s['name']} {name}" for s in steps for name, x in sorted(s.get("xfail", {}).items())))
     return rc
 
 

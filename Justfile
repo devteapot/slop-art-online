@@ -101,8 +101,9 @@ living-test:
 living-goods:
     cargo test --manifest-path living/Cargo.toml -p living-rules --lib goods_audit::tests::write_goods_audit -- --ignored --exact
 
-# Everything that must keep compiling after any change: authority (wasm), mind, the native
-# and browser observer, the game client and its unit tests, and the rules tests. Run before every
+# Everything that must keep compiling after any change: authority (wasm) and its native unit
+# tests, mind, the native and browser observer, the game client and its unit tests, and the
+# rules tests. Run before every
 # commit. living/tools/check.py runs these steps (docs/TOOLING.md): the cargo steps and the
 # script fuel gate (living/tools/script_bench: fails when a hot law is over budgets.json). Its
 # four cargo build directories at once under one jobserver; a step skipped when it already passed on this

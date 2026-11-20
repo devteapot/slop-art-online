@@ -1886,7 +1886,9 @@ fn hear_salt(ctx: &ReducerContext) -> u64 {
     if let Some(s) = ctx.db.hear_salt().id().find(0) {
         return s.salt;
     }
-    let salt: u64 = ctx.rng().gen();
+    // Under the `det_clock` diagnostic the salt is a constant, so two copies of a world key their
+    // `heard` rows alike (det_compare with players); in play it is drawn, secret, as before.
+    let salt: u64 = if common::laws(ctx).det_clock { crate::det::SEED ^ 0x4EA2_5A17 } else { ctx.rng().gen() };
     ctx.db.hear_salt().insert(HearSalt { id: 0, salt });
     salt
 }

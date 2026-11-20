@@ -16,7 +16,15 @@ does not; and gate.py, over a stand-in bench, passes laws within budget and fail
 or not measured, naming the law, its fuel and its budget. With --gate it also runs the real
 step there (builds the bench, a few minutes cold): it passes and is stamped, is skipped on a
 second run, fails the check under a lowered budget with that message, and runs again after an
-edit to the script. Otherwise builds nothing; touches nothing outside the temporary directory.
+edit to the script.
+
+The authority's tests step (`authority-tests`): the whole lib suite in release, on the release
+lane after the game (no test filter, so seed-laws' and frame-tests' tests are in it); each
+expected failure in AUTHORITY_TEST_XFAIL has an owner, a date and a reason, is skipped exactly
+in the suite and run alone; judge_xfail passes one that still fails and fails one that passes,
+matches no test or did not run; in the clone, the plan prints every expected failure whether the
+step runs or is skipped, and an edited authority source or seed runs the step again, an edited
+doc does not. Otherwise builds nothing; touches nothing outside the temporary directory.
 Usage: check_selftest.py [--gate]   (CHECK_SELFTEST_TARGET: the --gate build's target folder)
 """
 import json
@@ -131,9 +139,9 @@ def check_env(home, **extra):
     return env
 
 
-def gate_plan(repo, home):
+def gate_plan(repo, home, step="script-gate"):
     out = os.path.join(home, "plan.json")
-    r = subprocess.run([sys.executable, os.path.join(repo, "living/tools/check.py"), "--plan", "--steps", "script-gate", "--json", out], cwd=repo,
+    r = subprocess.run([sys.executable, os.path.join(repo, "living/tools/check.py"), "--plan", "--steps", step, "--json", out], cwd=repo,
                        env=check_env(home), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     try:
         return json.load(open(out))["plan"][0], r.stdout
@@ -218,6 +226,7 @@ def gate_cases(home, build):
         ok = (not p.get("skip") and p.get("digest") not in (None, d)) if runs else (p.get("skip") is True and p.get("digest") == d)
         expect(f"script-gate: {what} {'runs it again' if runs else 'still skips it'}", ok, out)
     gate_judge_cases(home, repo)
+    authority_plan_cases(home, repo)
     if not build:
         return
     shutil.rmtree(os.path.join(home, "store"))
@@ -309,6 +318,70 @@ def game_tests_case():
            and ("--exact" in t["cmd"]) == bool(check.GAME_TEST_SKIPS), t["cmd"])
 
 
+def authority_tests_case():
+    """The authority's native lib tests: the whole suite in release on the release lane after the
+    game (subsuming seed-laws and frame-tests), and the expected failures' handling."""
+    sys.path.insert(0, TOOLS)
+    import check
+    names = [s["name"] for s in check.STEPS]
+    expect("authority-tests: seed-laws and frame-tests are folded into it", "seed-laws" not in names and "frame-tests" not in names, names)
+    a = check.STEPS[names.index("authority-tests")]
+    lane = [s["name"] for s in check.STEPS if s["lane"] == "release"]
+    expect("authority-tests: release lane, after the game and its tests", a["lane"] == "release" and lane.index("authority-tests") > lane.index("game-tests"), lane)
+    cmd = a["cmd"]
+    expect("authority-tests: cargo test --release -p living-authority --lib, no test filter (the whole suite)",
+           cmd[:3] == ["cargo", "test", "--release"] and "--lib" in cmd and cmd[cmd.index("-p") + 1] == "living-authority"
+           and cmd[cmd.index("--lib") + 1] == "--" and a["packages"] == ["living-authority"] and a["dirs"] == ["release"], cmd)
+    lib_args = cmd[cmd.index("--") + 1:]
+    positional = [x for i, x in enumerate(lib_args) if not x.startswith("-") and lib_args[i - 1] not in ("--skip", "--color")]
+    expect("authority-tests: libtest gets no positional filter", positional == [], lib_args)
+    x = check.AUTHORITY_TEST_XFAIL
+    expect("authority-tests: each expected failure has an owner, a date (YYYY-MM-DD) and a reason",
+           all(v.get("owner") and v.get("reason") and len(v.get("since", "")) == 10 and v["since"][4] == v["since"][7] == "-" for v in x.values()), x)
+    expect("authority-tests: each expected failure is skipped exactly in the suite",
+           a.get("xfail") is x and all(["--skip", n] == cmd[cmd.index(n) - 1:cmd.index(n) + 1] for n in x) and ("--exact" in cmd) == bool(x), cmd)
+    expect("authority-tests: an expected failure runs alone, exactly",
+           all(check.xfail_cmd(a, n)[-4:] == ["--exact", n, "--color", "never"] and "--skip" not in check.xfail_cmd(a, n) for n in x),
+           [check.xfail_cmd(a, n) for n in x])
+    n = "look::tests::an_example"
+    failed = ["running 1 test", f"test {n} ... FAILED", "", "test result: FAILED. 0 passed; 1 failed"]
+    passed = ["running 1 test", f"test {n} ... ok", "", "test result: ok. 1 passed; 0 failed"]
+    for what, lines, code, ok, says in (("still failing passes the step", failed, 101, True, "as expected"),
+                                         ("passing fails the step, saying to take it out", passed, 0, False, "now PASSES"),
+                                         ("matching no test fails the step", ["running 0 tests", "test result: ok. 0 passed"], 0, False, "matches no test"),
+                                         ("a run that never reached the test fails the step", ["error: could not compile"], 101, False, "did not run")):
+        got = check.judge_xfail(n, lines, code)
+        expect(f"judge_xfail: {what}", got[0] is ok and says in got[1], got)
+    other = ["running 1 test", "test look::tests::an_example_too ... FAILED"]
+    expect("judge_xfail: another test's failure is not this one's", check.judge_xfail(n, other, 101)[0] is False, other)
+
+
+def authority_plan_cases(home, repo):
+    """In the clone: the plan names every expected failure, run or skipped; what reruns the step."""
+    import check
+    p, out = gate_plan(repo, home, "authority-tests")
+    banner = all(f"KNOWN RED, expected to fail: {n} (owner {v['owner']}, since {v['since']})" in out for n, v in check.AUTHORITY_TEST_XFAIL.items())
+    expect("authority-tests: an empty stamp store runs it, and the plan names each expected failure", p.get("digest") and not p.get("skip") and banner, out)
+    expect("authority-tests: its inputs hold the authority, the rules crate and the seeds",
+           {"living/authority", "living/rules", "living/seeds", "living/scripts"} <= set(p.get("inputs", [])), p.get("inputs"))
+    d = p.get("digest") or "0" * 64
+    stamp = os.path.join(home, "store", "stamps", d[:2], d + ".json")
+    os.makedirs(os.path.dirname(stamp), exist_ok=True)
+    with open(stamp, "w") as f:
+        json.dump({"step": "authority-tests", "at": "selftest", "worktree": repo, "commit": "0" * 40}, f)
+    p, out = gate_plan(repo, home, "authority-tests")
+    banner = all(f"KNOWN RED, expected to fail: {n}" in out for n in check.AUTHORITY_TEST_XFAIL)
+    expect("authority-tests: a stamp at its digest skips it, and the plan still names each expected failure", p.get("skip") is True and banner, out)
+    for what, rel, text, runs in (("an edited authority source", "living/authority/src/look.rs", "\n// check_selftest\n", True),
+                                   ("an edited seed (a test reads living/seeds at run time)", "living/seeds/island.json", "\n", True),
+                                   ("an edited doc", "docs/TOOLING.md", "\ncheck_selftest\n", False)):
+        undo = edited(os.path.join(repo, rel), text)
+        p, out = gate_plan(repo, home, "authority-tests")
+        undo()
+        ok = (not p.get("skip") and p.get("digest") not in (None, d)) if runs else (p.get("skip") is True and p.get("digest") == d)
+        expect(f"authority-tests: {what} {'runs it again' if runs else 'still skips it'}", ok, out)
+
+
 def disk_cases(home):
     import check
 
@@ -346,6 +419,7 @@ def disk_cases(home):
 
 def main(argv):
     game_tests_case()
+    authority_tests_case()
     with tempfile.TemporaryDirectory(prefix="check-selftest-") as home:
         wrapper_cases(home)
         watchdog_case(home)

@@ -168,11 +168,12 @@ class Privacy:
     every public table by name, `SELECT * FROM *`, and the SDK's `subscribe_to_all_tables`; (c) one
     viewer asking for another's rows by identity, by subscription and by SQL."""
 
-    def __init__(self, db, token, out, n, players, seconds, fighter_tables=False):
+    def __init__(self, db, token, out, n, players, seconds, fighter_tables=False, combat_feed=False):
         cues, _ = _vc()
         self.db, self.out, self.n, self.players = db, out, n, players
-        # With `--fighter-tables`, the public fighter copies too (views step 3).
-        self.tables = COPY + (("seen_fighter_copy",) if fighter_tables else ())
+        # With `--fighter-tables` the public fighter copies (views step 3), with `--combat-feed` the
+        # combat feed's event rows (views step 2), are checked with the copy tables.
+        self.tables = COPY + (("seen_fighter_copy",) if fighter_tables else ()) + (("combat_feed",) if combat_feed else ())
         ids = {}
         for l in open(out / f"events-v{n}.jsonl"):
             e = json.loads(l)
@@ -285,6 +286,7 @@ def privacy_after_window(a, db, token, priv, load, out, n):
     views; then the kill switch with every viewer still connected (both laws off by row: the
     tables empty to the owner and in every viewer's cache; on again: the rows return)."""
     checks, info = priv.window_checks()
+    combat = "combat_feed" in priv.tables
     lc.call(db, "set_paused", [True], token)
     time.sleep(2)
     sample = privacy_sample(out, n)
@@ -335,7 +337,7 @@ def privacy_after_window(a, db, token, priv, load, out, n):
     if fighters:
         checks["fighter table, law off: empty to the owner and in every viewer's cache; on again: paused, equal to the views"] = off["seen_fighter_copy"] == 0 \
             and all(p["held"].get("fighter", 0) == 0 for p in held_off) and fok(snap_on)
-    return {"checks": checks, "info": info, "fighters": fighters, "sample": {str(k): v for k, v in snap.items()}, "sample_on": {str(k): v for k, v in snap_on.items()},
+    return {"checks": checks, "info": info, "fighters": fighters, "combat_feed": combat, "sample": {str(k): v for k, v in snap.items()}, "sample_on": {str(k): v for k, v in snap_on.items()},
             "owner_rows": {"before": before, "off": off, "on": on, "on_series": series},
             "held_on_alive": len(alive_on), "held_on_with_bodies": sum(1 for p in alive_on if p["held"]["body"] > 0)}
 
@@ -343,7 +345,7 @@ def privacy_after_window(a, db, token, priv, load, out, n):
 def privacy_final(pr, done, out, n):
     """From gate-load's `done`: every copy row each viewer received, over the whole run, was its own."""
     ps = [p for p in done.get("players", []) if p.get("privacy")]
-    tot = {k: sum(p["privacy"].get(k, 0) for p in ps) for k in ("body_rows", "character_rows", "fighter_rows", "foreign_rows")}
+    tot = {k: sum(p["privacy"].get(k, 0) for p in ps) for k in ("body_rows", "character_rows", "fighter_rows", "combat_rows", "foreign_rows")}
     pr["viewer_rows"] = {**tot, "players": len(ps), "without_body_rows": sum(1 for p in ps if not p["privacy"]["body_rows"]),
                          "without_character_rows": sum(1 for p in ps if not p["privacy"]["character_rows"]),
                          "foreign_viewers": sorted({v for p in ps for v in p["privacy"]["foreign_viewers"]})[:8]}
@@ -353,6 +355,8 @@ def privacy_final(pr, done, out, n):
     })
     if pr.get("fighters"):
         pr["checks"]["the viewers received seen_fighter_copy rows, all their own (counted with the copies above)"] = tot["fighter_rows"] > 0 and tot["foreign_rows"] == 0
+    if pr.get("combat_feed"):
+        pr["checks"]["the viewers received combat_feed event rows, all their own (counted with the copies above)"] = tot["combat_rows"] > 0 and tot["foreign_rows"] == 0
     (out / f"privacy-v{n}.json").write_text(json.dumps(pr, indent=1) + "\n")
 
 
@@ -390,7 +394,8 @@ def one(a, n, out):
             load = lc.Proc([a.load, "players"], out / f"players-v{n}.stderr")
             load.send(json.dumps({"uri": lc.URL, "db": db, "events": str(out / f"events-v{n}.jsonl"), "battle": list(site),
                                   "behaviour": {"walk_period_ms": 1500, "rejoin_s": 3}, "players": players, "client": "gate",
-                                  "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables, "character_tables": a.character_tables, "fighter_tables": a.fighter_tables, "fresh_every": a.fresh_every}))
+                                  "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables, "character_tables": a.character_tables, "fighter_tables": a.fighter_tables,
+                                  "combat_feed": a.combat_feed, "fresh_every": a.fresh_every}))
             joined = load.expect("joined", 900)
             lo, hi = (float(x) for x in a.ring.split(",")) if a.ring else (0.0, 6.0)
             for i, p in enumerate(sorted(joined["players"], key=lambda p: p["p"])):
@@ -430,7 +435,7 @@ def one(a, n, out):
             loadlog.start()
             m0, th0, p0 = tc.scrape(ident), tc.thread_cpu(pid), tc.proc_cpu(pid)
         if a.privacy and n:
-            priv = Privacy(db, token, out, n, players, a.seconds, a.fighter_tables)
+            priv = Privacy(db, token, out, n, players, a.seconds, a.fighter_tables, a.combat_feed)
         c0, t0 = tick_count(ident), time.time()
         k0 = (keep.calls, keep.restored) if keep else None
         if load:
@@ -632,6 +637,7 @@ def main():
     ap.add_argument("--full-log", action="store_true", help="with --detail: read the replica's whole module log from the server's data directory")
     ap.add_argument("--flip-off", action="store_true", help="after the window, turn motion_tables_on off and time the kill switch's tick")
     ap.add_argument("--fighter-tables", action="store_true", help="the viewers subscribe seen_fighter_copy in place of the fighter views (views step 3; set fighter_tables_on=true)")
+    ap.add_argument("--combat-feed", action="store_true", help="the viewers subscribe combat_feed in place of my_combat (views step 2; set combat_feed_on=true)")
     ap.add_argument("--privacy", action="store_true", help="copy-privacy: prove each viewer receives only its own copy rows (needs --motion-tables --character-tables and both laws on); <out>/privacy-v<count>.json, exit 1 on a failed check")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
