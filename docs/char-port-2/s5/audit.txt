@@ -85,6 +85,6 @@ tousled.3     audit: 0 error(s), 0 warning(s)
 tousled.cap     audit: 0 error(s), 0 warning(s)
 tousled     audit: 0 error(s), 0 warning(s)
 calibrate: pages of lookdev
-  hair_page: [{'page': 'lookdev/styles/hair/hair-masks.png', 'files': 33, 'cells_used': 33}, {'page': 'lookdev/styles/hair/hair-masks-1.png', 'files': 21, 'cells_used': 21}, {'page': 'lookdev/styles/hair/hair-masks-2.png', 'files': 32, 'cells_used': 32}]
+  hair_page: [{'page': 'lookdev/styles/hair/hair-masks.png', 'files': 33, 'cells_used': 33, 'strands': True}, {'page': 'lookdev/styles/hair/hair-masks-1.png', 'files': 21, 'cells_used': 21, 'strands': True}, {'page': 'lookdev/styles/hair/hair-masks-2.png', 'files': 32, 'cells_used': 32, 'strands': True}]
   ink_page: {'pages': {'eyes': 'lookdev/types/types.eyes.ink.png'}, 'classes': {'adult-f': True, 'adult-m': True, 'child-u': True, 'elder-f': True, 'elder-m': True, 'youth-f': True, 'youth-m': True}, 'carrier_materials': ['M00_000_00_FaceBrowInk_00_FACE', 'M00_000_00_LidInk_00_FACE']}
   pages audit: 0 error(s), 0 warning(s)

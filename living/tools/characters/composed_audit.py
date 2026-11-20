@@ -265,7 +265,22 @@ def pages(cal, lookdev):
                     if ra[0] < rb[0] + rb[2] and rb[0] < ra[0] + ra[2] and ra[1] < rb[1] + rb[3] and rb[1] < ra[1] + ra[3]:
                         if uvs[a] != uvs[b]:
                             errors.append(f"hair page: {a} and {b} overlap and their hair differs")
-            facts["hair_page"].append({"page": man.get("page"), "files": len(rects), "cells_used": len({rects[k] for k in rects})})
+            # v1.3.1 `strands`: a boolean; when on, the page's B is the strands, 0.5 (128)
+            # neutral, so no texel may be 0 (a dark fringe at every island's edge).
+            strands = (profile or {}).get("strands", False)
+            if not isinstance(strands, bool):
+                errors.append(f"hair page {man.get('page')!r}: strands {strands!r} is not true or false (no strands are drawn)")
+            elif strands:
+                try:
+                    from PIL import Image
+                    import numpy as np
+                    bch = np.asarray(Image.open(cal.ASSETS / man.get("page", "")).convert("RGB"))[..., 2]
+                    zero = int((bch == 0).sum())
+                    if zero:
+                        errors.append(f"hair page {man.get('page')!r}: strands on, but {zero} texels of B are 0 (2 x B blacks them out; fill 128 where there are no strands)")
+                except (OSError, ImportError) as e:
+                    warns.append(f"hair page {man.get('page')!r}: strands on, B not read ({e})")
+            facts["hair_page"].append({"page": man.get("page"), "files": len(rects), "cells_used": len({rects[k] for k in rects}), "strands": strands})
     else:
         facts["hair_page"] = "no hair-masks.json"
     # The ink page.

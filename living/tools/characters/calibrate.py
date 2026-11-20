@@ -56,7 +56,7 @@ SLOTS = {"hair", "skin", "face", "eyes", "tint", "cloth"}
 SWATCHES = ("shade", "mid", "light", "highlight")
 INK_KEYS = ("ink", "ink_px", "ink_range", "ink_fade_px")
 # v1.3 (docs/HANDMADE_COMPOSED.md): the relative palette and the declared lock-ink density.
-HAIR_KEYS = set(SWATCHES) | {"t1", "t2", "edge", "highlight_feather", "highlight_map"} | set(INK_KEYS) | {"palette", "ref", "anchors", "ink_m_uv"}
+HAIR_KEYS = set(SWATCHES) | {"t1", "t2", "edge", "highlight_feather", "highlight_map"} | set(INK_KEYS) | {"palette", "ref", "anchors", "ink_m_uv", "strands"}
 SHOTS = ("portrait", "near", "portrait45")
 FLOAT, SCALAR = 5126, "SCALAR"
 INK_FIELDS = {"color", "width", "px", "min_px", "range", "fade_px", "map", "taper", "ref", "m_uv"}
@@ -242,6 +242,8 @@ def audit(glb):
                 errors.append(f"material {name!r}: hair.t2 {t2} is not above t1 {t1} (the profile is ignored)")
             for k in sorted(set(h) - HAIR_KEYS):
                 warns.append(f"material {name!r}: hair.{k} is not a contract key (ignored)")
+            if "strands" in h and not isinstance(h["strands"], bool):
+                errors.append(f"material {name!r}: hair.strands is {h['strands']!r}, not true or false (no strands are drawn)")
             facts.setdefault("profiles", {})[name] = h
             facts.setdefault("hair_materials", []).append(i)
         if s == "tint" and m.get("alphaMode", "OPAQUE") == "OPAQUE":

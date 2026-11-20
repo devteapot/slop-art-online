@@ -45,9 +45,9 @@ def font(size):
         return ImageFont.load_default()
 
 
-def render(out, binary, style, tag):
+def render(out, binary, style, tag, colours=COLOURS):
     lines, keys = {}, {}
-    for c in COLOURS:
+    for c in colours:
         line = dict(type='adult-f-b', height=1.64, colors=dict(hair=palette.HAIR_COLOURS[c], skin='#e8bca3', eyes='#4f7a4f'),
                     styles=dict(hair=style, outfit=['jersey-f', 'trousers-f', 'boots-f'], overlays=[]))
         k = look_lines.key_of(line)
@@ -126,9 +126,10 @@ if __name__ == '__main__':
     ap.add_argument('--style', default='bob')
     ap.add_argument('--tag', default='port')
     ap.add_argument('--tags', default='port,main')
+    ap.add_argument('--colours', help='render only these colours (comma-separated)')
     a = ap.parse_args()
     if a.cmd == 'render':
-        render(a.out, a.binary, a.style, a.tag)
+        render(a.out, a.binary, a.style, a.tag, a.colours.split(',') if a.colours else COLOURS)
     elif a.cmd == 'compare':
         compare(a.out, a.dest, a.tags.split(','))
     elif a.cmd == 'luma':

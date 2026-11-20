@@ -796,7 +796,8 @@ Pass 3's fifth step (2026-11-12). A figure's outline today is its silhouette: th
   - **S5's feature:** `SLOP_PORT=hair` lays every hair style out for the handmade-hair profile on the shared hair-mask pages (`hair.page_layout`, each piece its own island at 1 mm a texel). It gives the hair:
     - a highlight (`_HIGHLIGHT`) and a pale parting;
     - lock lines grouped into locks from the notches between a sheet's points;
-    - main's strands under the bands at low contrast (the page's B; `SLOP_HAIR_LOOK=b1` builds lock-wise band breaks instead).
+    - lock lines in a darker shade of the hair's own colour;
+    - main's strands under the bands at low contrast (the page's B, behind the profile's `strands` flag, HANDMADE_COMPOSED v1.3.1; `SLOP_HAIR_LOOK=b1` builds lock-wise band breaks instead).
 
     `hair_page.py` then puts the files on the pages (three for the 86 files) with one tag-relative profile, anchored for black, brown, blond and grey. [S5](char-port-2/s5/README.md)
   - **All off by default.** With `SLOP_PORT` unset, every file builds as before.

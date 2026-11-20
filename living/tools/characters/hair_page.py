@@ -28,9 +28,12 @@ with the flag: the file's hair laid out at 1 mm a texel in a rectangle, and its 
   written again (with `--profile`, the profile's own swatches; with `--anchors`, the anchors), as
   the calibration (docs/char-port-2/s5/calibrate_bins.py) does each round.
 
-**The profile:** Cora's accepted swatches at their hair colour, auburn (`ref`), thresholds and lock
-ink, relative to the tag (`palette: "tag"`), with an anchor for each other colour bin (`--anchors`,
-or this file's ANCHORS: dark, light and grey), as calibrated in docs/char-port-2/s5.
+**The profile:** Cora's accepted swatches at their hair colour, auburn (`ref`), and thresholds,
+relative to the tag (`palette: "tag"`), with an anchor for each other colour bin (`--anchors`, or
+this file's ANCHORS: black, brown, blond and grey; HANDMADE_COMPOSED v1.3.1 allows 4), as
+calibrated in docs/char-port-2/s5. The lock lines' `ink`, on the profile and on every anchor, is a
+darker shade of its own mid swatch (INK_RULE). A page with strands gives every file on it
+`strands: true` (v1.3.1).
 Plain Python, numpy and Pillow.
 """
 import argparse
@@ -47,20 +50,44 @@ from PIL import Image
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from merge_primitives import read_glb, write_glb  # noqa: E402
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import palette  # noqa: E402
+
 PAGE, CELL = 4096, 512
 GRID = PAGE // CELL
 DENSITY_MM = 1.0
 PAGE_PATH = "lookdev/styles/hair/hair-masks.png"
 STRANDS = 0.9  # main's strands under the bands, at this share of their own contrast (B; char-port-2 S5's B2)
+STRANDS_RANGE = (0.35, 0.65)  # B's range: the contract's low-contrast range (the bands x 0.7 to 1.3)
 AUBURN = [102, 46, 26]
 # At auburn: Cora's accepted hair (docs/char-live-3/ink-batch-2/own-cora-live.glb) as calibrated on a
 # composed person against the drawing's hair patches, with the strands under the bands
 # (docs/char-port-2/s5/calibrate_bins.py).
 PROFILE = dict(palette="tag", ref=AUBURN, shade=[35, 1, 0], mid=[92, 30, 5], light=[108, 39, 4], highlight=[138, 53, 3],
-               t1=-0.2, t2=0.4, edge=0.02, highlight_feather=0.08, ink=[4, 0, 0], ink_px=1.05, ink_fade_px=2.0)
+               t1=-0.2, t2=0.4, edge=0.02, highlight_feather=0.08, ink_px=1.05, ink_fade_px=2.0)
 # One anchor a colour bin besides auburn (HANDMADE_COMPOSED "Several anchors"): black, brown, blond
 # and grey, calibrated in docs/char-port-2/s5 (calibrate_bins.py; the second pass's bins.json).
-ANCHORS = [{"ref": [19, 17, 17], "shade": [0, 0, 4], "mid": [5, 7, 16], "light": [19, 18, 24], "highlight": [47, 47, 54]}, {"ref": [51, 34, 23], "shade": [5, 4, 1], "mid": [40, 24, 17], "light": [50, 34, 24], "highlight": [68, 48, 38]}, {"ref": [158, 125, 71], "shade": [76, 59, 26], "mid": [151, 116, 51], "light": [185, 152, 96], "highlight": [223, 218, 211]}, {"ref": [133, 133, 133], "shade": [56, 61, 73], "mid": [113, 119, 131], "light": [143, 150, 165], "highlight": [206, 215, 235]}]
+ANCHORS = [{"ref": [19, 17, 17], "shade": [0, 0, 0], "mid": [6, 5, 5], "light": [20, 18, 17], "highlight": [51, 46, 46]}, {"ref": [51, 34, 23], "shade": [6, 2, 1], "mid": [39, 25, 15], "light": [51, 34, 24], "highlight": [67, 49, 36]}, {"ref": [158, 125, 71], "shade": [79, 58, 29], "mid": [151, 116, 52], "light": [181, 151, 96], "highlight": [238, 198, 121]}, {"ref": [133, 133, 133], "shade": [61, 61, 61], "mid": [118, 118, 118], "light": [150, 150, 150], "highlight": [193, 193, 193]}]
+
+
+# The lock lines' colour (the second pass, 2026-11-20): a darker shade of the hair's own mid swatch,
+# never near-black on hair that is not: OKLab lightness `lightness` x the mid's, and at least
+# `contrast` below it (which keeps a line on black hair, whose mid is near black, at black), the
+# mid's own a and b. Set on the profile (its `ink`) and on every anchor, so the palette moves it
+# with the hair like a swatch.
+INK_RULE = dict(lightness=0.65, contrast=0.12)
+
+
+def line_ink(mid):
+    L, a, b = palette.oklab(tuple(mid))
+    Li = max(0.0, min(INK_RULE["lightness"] * L, L - INK_RULE["contrast"]))
+    return [palette.enc(x) for x in palette.from_oklab(Li, a, b)]
+
+
+def with_inks(profile, anchors):
+    """The profile's and each anchor's `ink` by INK_RULE."""
+    profile = dict(profile, ink=line_ink(profile["mid"]))
+    return profile, [dict(x, ink=line_ink(x["mid"])) for x in anchors]
 
 
 def accessor(j, binary, i):
@@ -208,7 +235,7 @@ def strands_bake(B, uv_px, tris, su, sv, sk, picture, contrast):
         g = lambda yy, xx: picture[yy % H, xx % W]
         val = (g(y0, x0) * (1 - fx) * (1 - fy) + g(y0, x0 + 1) * fx * (1 - fy) + g(y0 + 1, x0) * (1 - fx) * fy + g(y0 + 1, x0 + 1) * fx * fy) / mean
         m = np.clip(val * v["k"][:, 0], 0.4, 1.6)
-        b = np.clip(0.5 * (1 + contrast * (m - 1)), 0.05, 0.95)
+        b = np.clip(0.5 * (1 + contrast * (m - 1)), *STRANDS_RANGE)
         B[Y, X] = np.maximum(B[Y, X], b)
 
 
@@ -241,6 +268,15 @@ def main():
         PROFILE.update(json.load(open(a.profile)))
     if a.profile_only:
         n = 0
+        seen = {}
+
+        def strands_on(page):
+            """Whether a page carries strands (its B not 0): a file on it takes `strands`."""
+            if page not in seen:
+                f = os.path.join(a.folder, os.path.basename(page)) if page else ""
+                seen[page] = bool(f and os.path.exists(f) and np.asarray(Image.open(f).convert("RGB"))[..., 2].max() > 0)
+            return seen[page]
+
         for g in sorted(glob.glob(os.path.join(a.folder, "*.glb"))):
             j, binary = read_glb(g)
             done = False
@@ -249,11 +285,14 @@ def main():
                 if h is None:
                     continue
                 for k in list(h):
-                    if k in PROFILE or k == "anchors":
+                    if k in PROFILE or k in ("anchors", "ink"):
                         h.pop(k)
-                h.update(PROFILE)
-                if anchors:
-                    h["anchors"] = anchors
+                prof, anc = with_inks(PROFILE, anchors)
+                h.update(prof)
+                if anc:
+                    h["anchors"] = anc
+                if strands_on(h.get("highlight_map")):
+                    h["strands"] = True
                 done = True
             if done:
                 write_glb(g, j, binary)
@@ -279,7 +318,7 @@ def main():
     if B is not None:
         picture = np.asarray(Image.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../game/assets/lookdev/strands.png")).convert("L"), np.float64) / 255.0
         for b in B:
-            b[:] = 0.5  # neutral wherever no hair is, so the filter never reads a strand's edge as dark
+            b[:] = -1.0  # unwritten: 0.5 (neutral) once every file is baked
     parted = 0
     D = [np.full((PAGE, PAGE), float(rng), np.float32) for _ in range(n_pages)]
     page_path = lambda k: PAGE_PATH if k == 0 else PAGE_PATH.replace(".png", f"-{k}.png")
@@ -288,9 +327,12 @@ def main():
         off = np.array([c * CELL, r * CELL], float)
         path = os.path.join(a.folder, name)
         j, binary = read_glb(path)
-        profile = dict(PROFILE, ink_range=rng / PAGE, ink_m_uv=PAGE * DENSITY_MM / 1000, highlight_map=page_path(k))
-        if anchors:
-            profile["anchors"] = anchors
+        prof, anc = with_inks(PROFILE, anchors)
+        profile = dict(prof, ink_range=rng / PAGE, ink_m_uv=PAGE * DENSITY_MM / 1000, highlight_map=page_path(k))
+        if anc:
+            profile["anchors"] = anc
+        if B is not None:
+            profile["strands"] = True  # v1.3.1: the page's B is the strands
         moved = set()
         for mesh_name, p in hair_prims(j):
             ai = p["attributes"]["TEXCOORD_0"]
@@ -327,7 +369,9 @@ def main():
         img[..., 0] = np.round(np.clip(R[k], 0, 1) * 255)
         img[..., 1] = np.round(np.clip(D[k] / rng, 0, 1) * 255)
         if B is not None:
-            img[..., 2] = np.round(np.clip(B[k], 0, 1) * 255)
+            # Neutral (0.5, 128) in every texel without strands, cell padding included, so the
+            # filter and the mips never read an island's edge as dark (v1.3.1).
+            img[..., 2] = np.round(np.clip(np.where(B[k] < 0, 0.5, B[k]), 0, 1) * 255)
         Image.fromarray(img, "RGB").save(os.path.join(a.folder, os.path.basename(page_path(k))))
     manifest = dict(page=PAGE_PATH, size=PAGE, cell=CELL, density_mm=DENSITY_MM, files={n: v[1:] for n, v in cells.items() if v[0] == 0})
     if n_pages > 1:

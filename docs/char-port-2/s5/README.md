@@ -2,17 +2,14 @@
 
 The generator now lays every hair style out for the handmade-hair profile on the shared hair-mask pages, behind a flag: `SLOP_PORT=hair`. A composed person's hair is then drawn by the profile: bands, a highlight, lock lines, a parting, and main's strands under the bands at low contrast. It takes one palette relative to the person's hair tag, with anchors for black, brown, blond and grey. With the flag off, nothing changes.
 
-This follows the laptop's contract, [HANDMADE_COMPOSED.md](../../HANDMADE_COMPOSED.md) v1.3 ("The hair-mask page", "The palette") and [HANDMADE_HAIR.md](../../HANDMADE_HAIR.md) v1.1, with **two proposed amendments**, below. [Plan](../PLAN.md) §3, §7.
+This follows the laptop's contract, [HANDMADE_COMPOSED.md](../../HANDMADE_COMPOSED.md) **v1.3.1** ("The hair-mask page", "The palette") and [HANDMADE_HAIR.md](../../HANDMADE_HAIR.md) v1.1. v1.3.1 holds the two amendments S5 needed: up to 4 anchors, and the `strands` flag. [Plan](../PLAN.md) §3, §7.
 
-**Two passes.** The first (`e73de3751`) built the profile output. The GC's answer then set four things:
-- three pages at 1 mm;
-- lock lines close-up only;
-- a parting;
-- one more pass on the dark palette, the structure at play distance and the fringe's lines.
+**Three passes:**
+1. **The first** (`e73de3751`) built the profile output.
+2. **The second** (`f0be41c37`) did the dark palette, the structure at play distance (B1 and B2 side by side; the GC took B2), the parting and the fringe's lines.
+3. **The third** (this commit) set the line colour relative to the hair, took the band off light hair's hairline, made grey's shading neutral, and wrote the two amendments to the laptop's terms. [The third pass](#the-third-pass).
 
-This README is the result of the second pass.
-
-[Rows: every colour, S5 beside main](rows.png) · [B1, B2 and main at Near and Middle](compare.png) · [Middle luma](luma.json) · [Lock-line close-ups](closeups.png) ([numbers](closeups.json)) · [Page 0](page0.png) · [bob's cells at 1:1](page-bob.png) · [Calibration](bins.json) ([check on the final build](bins-check.json)) · [Shimmer](shimmer/) · [Surface flicker](flicker.json) · [Audit](audit.txt)
+[Rows: every colour, S5 beside main](rows.png) · [Lines on light hair, before and now](lines.png) · [Before, now and main at Near and Middle](compare.png) · [The strands across a cell border](border.png) ([numbers](border.json)) · [Middle luma](luma.json) · [Lock-line close-ups](closeups.png) ([numbers](closeups.json)) · [Page 0](page0.png) · [bob's cells at 1:1](page-bob.png) · [Calibration](bins.json) ([check on the final build](bins-check.json)) · [Shimmer](shimmer/) · [Surface flicker](flicker.json) · [Audit](audit.txt)
 
 ![Rows](rows.png)
 
@@ -21,6 +18,110 @@ This README is the result of the second pass.
 1. **Capacity:** three pages at 1 mm a texel, no contract change.
 2. **Lock lines:** close-up only, like Cora's face ink. Fading before Near is accepted.
 3. **Parting:** added, as one more source of lines in the generator. Structure at play distance comes from the bands and the parting.
+
+## The third pass
+
+**Before** is the second pass (`f0be41c37`), **now** is this one. Every number here is on the final build.
+
+### 1. Line colour: a darker shade of the hair's own
+
+**The problem:** on blond, grey and white the lock lines were near-black strokes, (59, 45, 18), (41, 41, 41) and (55, 55, 53). They read as scratches on pale hair. The line colour was one ink, Cora's (4, 0, 0) at auburn, moved to each colour by the palette.
+
+**The rule** (`hair_page.INK_RULE`, `line_ink`), on the profile and on every anchor, so the palette moves it between them like a swatch:
+- the line is **the mid swatch's own colour**, its OKLab a and b, **at 0.65 times its lightness**;
+- **and at least 0.12 below it** (the minimum contrast). On black hair, whose mid is near black (L 0.12), that holds the line at black.
+
+| Mid swatch → line | auburn | black | brown | blond | grey | white (moved) | chestnut (moved) |
+|---|---|---|---|---|---|---|---|
+| mid | (92, 30, 5) | (6, 5, 5) | (39, 25, 15) | (151, 116, 52) | (118, 118, 118) | (175, 175, 172) | (59, 32, 16) |
+| line | (56, 0, 0) | (0, 0, 0) | (11, 2, 0) | (91, 58, 0) | (63, 63, 63) | (90, 90, 88) | (25, 4, 0) |
+| OKLab L, mid → line | 0.33 → 0.21 | 0.12 → 0 | 0.23 → 0.11 | 0.58 → 0.38 | 0.57 → 0.37 | | |
+
+[lines.png](lines.png) shows black, blond, grey and white at portrait and three-quarter, before and now. The lines on blond are golden brown, on grey and white a mid grey, on black still black.
+
+**Up close** (close-ups at zoom 0.36–0.10), the line darkens the pixel by:
+- **42–52 levels on black** (unchanged: the minimum contrast holds);
+- **58–77 on auburn,** where it was 68–86 with Cora's near-black ink.
+
+### 2. The band at the hairline: the highlight, lowered on light hair
+
+**Which it was:** rendered with the page's R zeroed (no highlight texture, no parting), and again with B at 128 (no strands), the band stayed both times. It is the **highlight band**, which the per-vertex `_HIGHLIGHT` also carries.
+
+On light hair the highlight was near white and grey: blond's drew (223, 218, 211). Moved from the drawing by ratio and held under the lightness ceiling, it lost the hair's chroma and stood 0.07 above the light band. That read as a hairband.
+
+**The fix** (`calibrate_bins.targets`): for bins whose light band is above the drawing's (light hair), the highlight target is **a small step over the bin's own light band** (the drawing's step at auburn, 0.04 in OKLab lightness), **in the light band's chroma**. Blond's highlight target is now (229, 194, 138) where it was near white. Dark and auburn hair keep their targets.
+
+[compare.png](compare.png): blond and grey at Near and Middle, before, now and main. The white band is gone; the highlight reads as a lighter part of the hair.
+
+### 3. Grey: neutral, fixed in the anchor
+
+**Which it was:** with the grey anchor's swatches replaced by neutral ones of the same luminance, the shadow side at three-quarter went neutral. So the blue was **the anchor**, not the toon shade's fill. The anchor was (56, 61, 73) shade, (113, 119, 131) mid, and so on: the calibration had corrected it **channel by channel** toward a neutral target as seen in the calibration frame's warm 11:00 light. That pushed blue into the swatch, which showed wherever the light wasn't the frame's.
+
+**The fix, for every anchor** (`calibrate_bins.py`; not grey alone):
+- **Lightness** is tuned (all channels by the luminance's target / measured).
+- **The size of its chroma** is tuned where the target has one (target chroma above 0.03).
+- **Its hue is never tuned:** it stays the palette's own, Cora's swatches moved to the bin.
+- **Near-neutral targets** (black, grey) keep the palette's neutral swatches.
+- **Auburn,** Cora's own, is still calibrated channel by channel, as her calibration was.
+
+The grey anchor is now (61, 61, 61), (118, 118, 118), (150, 150, 150), (193, 193, 193).
+
+**The calibration check,** re-measured on the final build ([bins-check.json](bins-check.json)):
+
+| Bin | shade | mid | light | highlight |
+|---|---|---|---|---|
+| auburn | (1, **15, 17**) | (0, 0, 2) | (0, 0, 2) | (0, 0, 3) |
+| black | (1, 1, 0) | (5, 2, −7) | (2, 1, −6) | (5, −1, −9) |
+| brown | (4, 2, 0) | (−1, 1, −2) | 0 | (−1, 1, −2) |
+| blond | (4, −1, 2) | (1, 0, 1) | (0, 1, −1) | (−2, 2, 0) |
+| grey | (5, −1, **−13**) | (6, −1, **−13**) | (6, 0, **−12**) | (6, 0, **−12**) |
+
+- **Chromatic bins** are within ±5 per channel.
+- **Auburn's shade** is the sky-floor exception, as before.
+- **Black and grey** keep neutral swatches. Per channel they now show the scene's warm light: the screen is warmer than a neutral target, R up to +6 and B down to −13. That is the same warmth main's neutral grey has in the sun. Their luminance is within 2 levels (grey −0.6 to +0.4, black up to +2.0).
+
+**I propose checking near-neutral bins by luminance (±8) and a neutral swatch, not per channel.** Holding ±8 per channel there means correcting the swatch toward blue, which is what made the shadow blue.
+
+### 4. The contract: v1.3.1, the laptop's terms
+
+**(a) 4 anchors, as written:**
+- `handmade.rs` reads the profile's own plus 4, with its cap of 5 entries and its warning text.
+- The audit reports a 5th anchor as an error.
+- The contract says that a v1.3 client drops the 4th.
+- The unit test is `strands_and_four_anchors`.
+
+**(b) The strands are a material flag:**
+- **The flag:** `slop.hair.strands` (boolean, default false, page-wide), in `hand[0].w`.
+- **The shader:** `level *= select(1.0, 2.0 * tex.b, toon.hand[0].w > 0.5)`. The `B > 0.004` test is gone.
+- **The generator:**
+  - writes 128 in every texel of a strand page's B that has no strands, cell padding included;
+  - keeps B in 0.35–0.65 (`STRANDS_RANGE`);
+  - sets `strands: true` on every file of a page that has strands.
+- **The audit** reports a non-boolean `strands`, and a strand page with any B texel at 0, as errors.
+- **A bug the flag work found:** the second pass baked B with `max` over a page already filled with 0.5, so the strands could only lighten. B ran 128–196. It now fills 0.5 only where nothing was baked, and B runs 89–166 (mean 139–150).
+
+**The proof:**
+
+- **No dark fringe across a cell border** ([border.png](border.png), [border.json](border.json), [border_proof.py](border_proof.py)). A page holds bob with strands at cells [0, 0, 2, 1], beside short without them at [2, 0, 2, 1]. A woman in auburn wears each, at Far and Middle. The mean hair luma and the hair's rim luma, against the same page with `strands` off:
+
+  | | bob, Far | bob, Middle | short, Far | short, Middle |
+  |---|---|---|---|---|
+  | `strands` on: hair / rim | +4.6 / +3.8 | +5.1 / +4.5 | **+0.1 / +0.1** | **+0.1 / +0.1** |
+  | control (B 0 where no strands): hair / rim | +4.3 / +3.8 | +5.1 / +4.5 | −25.9 / −20.5 | −32.1 / −21.4 |
+
+  - **The strand-less cut is unchanged** (128 multiplies by 1.004).
+  - **The strand cut's rim moves with its hair, not darker.**
+  - **The control shows the fringe the 128 fill prevents:** without it, the strand-less cut goes dark.
+- **Shimmer on a strand cut at the three stops:** the lock lines fade before Near (the GC's decision), so the three stops have no ink to score. What can shimmer there is the strands, so they are measured as the surface's own flicker ([surface_flicker.py](surface_flicker.py), [flicker.json](flicker.json)). That is bob in auburn, `strands` on against off, and main:
+
+  | F | Near pan | Near zoom | Middle pan | Middle zoom | Far pan | Far zoom |
+  |---|---|---|---|---|---|---|
+  | strands on | 0.0037 | 0.0162 | 0.0026 | 0.0132 | 0.0031 | 0.0129 |
+  | strands off | 0.0034 | 0.0112 | 0.0032 | 0.0108 | 0.0029 | 0.0092 |
+  | main | 0.0069 | 0.0321 | 0.0064 | 0.0301 | 0.0057 | 0.0279 |
+
+  The strands add up to 0.005 to the zooms, and the result stays 2–2.5 times under main's flicker. The PNG page is read without mips; the game's KTX2 copy has them.
+- **Main's files, flag off, under both clients:** main's bob in seven colours, drawn by main's client and by this one, measures the same hair luma at Middle to the decimal (black 66.9, brown 80.0, … white 196.6; [luma.json](luma.json), `main-old` against `main-new`).
 
 ## The second pass
 
@@ -41,16 +142,19 @@ This README is the result of the second pass.
 
 | Middle, mean hair luma | black | brown | chestnut | auburn | blond | grey | white |
 |---|---|---|---|---|---|---|---|
-| **S5, second pass (B2)** | **70.6** | **84.5** | 98.7 | 104.6 | 184.4 | **185.7** | 213.2 |
+| **S5, third pass (final)** | **70.0** | **84.5** | 98.3 | 104.2 | 182.0 | **183.4** | 213.0 |
+| S5, second pass (B2) | 70.6 | 84.5 | 98.7 | 104.6 | 184.4 | 185.7 | 213.2 |
 | B1, the other variant | 70.8 | 84.8 | 98.7 | 104.6 | 183.2 | 184.8 | 212.7 |
 | S5, first pass | 94.2 | 115.1 | 106.1 | 104.8 | 184.0 | 185.6 | 215.5 |
 | main | 66.9 | 80.0 | 91.0 | 100.2 | 157.0 | 162.5 | 196.6 |
 
-On the second pass:
-- **Black is 70.6**, 3.7 levels above main's black (the margin allows 8).
-- **Brown − black is 13.9** (≥ 12; main's is 13.1).
-- **Grey − brown is 101** (≥ 40; main's is 82).
-- **The order holds:** black < brown < chestnut < auburn. Black sits 115 below grey and brown 101 below, so black is further below grey than brown is.
+On the final build:
+- **Black is 70.0**, 3.1 levels above main's black (the margin allows 8).
+- **Brown − black is 14.5** (≥ 12; main's is 13.1).
+- **Grey − brown is 98.9** (≥ 40; main's is 82).
+- **The order holds:** black < brown < chestnut < auburn. Black sits 113 below grey and brown 99 below, so black is further below grey than brown is.
+
+The second pass met all four margins too (black 70.6, brown − black 13.9).
 
 The first pass failed two of these: black was 27 above main's, and brown sat above auburn.
 
@@ -61,19 +165,7 @@ The first pass failed two of these: black was 27 above main's, and brown sat abo
 - **Grey − brown ≥ 40.** Grey must read as grey-haired, not as light brown.
 - **Black below brown,** so black sits further below grey than brown does. Brown also stays below chestnut and auburn.
 
-**Calibration** stays within its limits: every bin within ±4, with auburn's shade the exception S5 noted. That shade is held light by the sky's fill (G and B +15 and +17; the swatch is already (35, 1, 0)).
-- **Rounds:** [bins.json](bins.json).
-- **Check:** re-measured on the final build in [bins-check.json](bins-check.json).
-
-| Bin (final build, round 0 of the check) | shade | mid | light | highlight |
-|---|---|---|---|---|
-| auburn | (1, **15, 17**) | (0, 0, 2) | (0, 0, 2) | (0, 0, 3) |
-| black | (1, 1, 2) | (4, 3, 1) | (1, 1, 0) | (1, 0, 0) |
-| brown (new) | (3, 4, 0) | (−1, 0, 0) | (−1, 0, 0) | 0 |
-| blond | (0, 0, 1) | (1, 0, 0) | (2, 1, 0) | 0 |
-| grey | (0, −1, 0) | (1, 1, 0) | (1, 1, 1) | 0 |
-
-**Calibrated with the strands under the bands:** B2 lifted each band's median by 6–11 levels until the swatches were tuned again.
+**Calibration:** the second pass held every bin within ±4, with the anchors corrected channel by channel. The third pass changed that for the reasons in [3. Grey](#3-grey-neutral-fixed-in-the-anchor); its table is there.
 
 ### (b) Structure at play distance: B1 and B2, side by side
 
@@ -161,16 +253,12 @@ The lines are bilinear on the sheet's grid, in page texels. There are 1,772 over
 | `palette` | `"tag"`, `ref` auburn (102, 46, 26), Cora's hair |
 | swatches at `ref` | shade (35, 1, 0), mid (92, 30, 5), light (108, 39, 4), highlight (138, 53, 3): calibrated with the strands under them |
 | thresholds | `t1` −0.2, `t2` 0.4, `edge` 0.02, `highlight_feather` 0.08 (Cora's) |
-| lock ink | `ink` (4, 0, 0), `ink_px` 1.05, `ink_fade_px` 2.0 (Cora's), `ink_range` 6/4096, `ink_m_uv` 4.096 |
+| lock ink | `ink` (56, 0, 0) by the line rule (each anchor has its own), `ink_px` 1.05, `ink_fade_px` 2.0 (Cora's), `ink_range` 6/4096, `ink_m_uv` 4.096 |
 | `anchors` | black (19, 17, 17), brown (51, 34, 23), blond (158, 125, 71), grey (133, 133, 133) |
+| `strands` | true: the page's B is the strands (v1.3.1) |
 | `highlight_map` | the file's page |
 
-## Two proposed amendments, for the laptop
-
-1. **Up to 4 anchors** (was 3): HANDMADE_COMPOSED's table and audit, `handmade.rs` (one constant) and `composed_audit.py`. The reason is under (a).
-2. **The page's B as strands** (was 0): HANDMADE_COMPOSED "The hair-mask page" and `toon.wesl` `hand_hair`. The client multiplies the bands by 2 B; B 0 is none, so a page without strands, or any older file, draws exactly as before.
-
-The release client these renders use (`living-game-b2`) is main's client with both steps. Its build tree was deleted after the build.
+**The client** these renders use (`living-game-s5c`) is main's client with v1.3.1. Its build tree was deleted after the build. Its tests: `cargo test -p living-game handmade::` gives 18 of 18, including `strands_and_four_anchors`.
 
 ## Acceptance
 
@@ -183,7 +271,10 @@ The release client these renders use (`living-game-b2`) is main's client with bo
 - no overlap;
 - density within 10%.
 
-The audit now reads a manifest's `pages`, and allows 4 anchors.
+The audit now:
+- reads a manifest's `pages`;
+- allows 4 anchors and reports a 5th as an error;
+- checks `strands` and a strand page's B.
 
 ### The rows
 
@@ -198,34 +289,36 @@ The audit now reads a manifest's `pages`, and allows 4 anchors.
 
 | | lines (≥ 6 px) | width, median / p90 (px) | gaps | darkest |
 |---|---|---|---|---|
-| bob, auburn, 0.36 → 0.10 | 9–14 | 5–6 / 7–10 | 0 | 68–86 |
+| bob, auburn, 0.36 → 0.10 | 7–14 | 5–6 / 7–10 | 0 | 61–77 (one shot 136, likely a blink) |
 | bob, black, 0.36 → 0.10 | 6–10 | 5 / 7–12 | 0 | 42–52 |
-| long, auburn, 0.36 → 0.10 | 7–23 | 5–7 / 9–13 | 0 | 66–88 |
+| long, auburn, 0.36 → 0.10 | 7–18 | 5.5–7 / 8–13 | 0 | 58–74 (one shot 148, likely a blink) |
 
 - **The lines hold at the 1 mm page:** the same width in pixels across a 3.6× zoom, and no breaks.
 - **More lines than the first pass's 3–6,** grouped. The wider p90 is likely where a companion runs close beside its notch line; I haven't traced it line by line.
-- **On black hair the line darkens the pixel by 42–52 levels** (on auburn, 68–86). The line is near black on dark grey, which is what keeps black hair readable up close without lifting it.
+- **On black hair the line darkens the pixel by 42–52 levels;** on auburn by 58–77, now that the line is a darker red-brown rather than near black. The line holds black on black hair (the rule's minimum contrast), which is what keeps black hair readable up close without lifting it.
 
 ### Shimmer at fade 2.0, on the final build
 
-Shimmer on the final build, which is B2 with the recalibrated palette. The results are in [shimmer/](shimmer/); the `side-by-side-*` files are the variants' runs.
+Shimmer on the final build: the third pass's line colours, strands and palette. The results are in [shimmer/](shimmer/); the `side-by-side-*` files are the second pass's variant runs.
 
 | | Near, Middle, Far | portrait pan | portrait zoom |
 |---|---|---|---|
-| bob, auburn | faded | **0.26** (1396 px) | 0.22 (1425) |
-| bob, black | faded | **0.32** (1011) | 0.21 (1023) |
-| long, auburn | faded | **0.28** (2385) | 0.29 (2429) |
+| bob, auburn | faded | **0.19** (1356 px) | 0.21 (1380) |
+| bob, black | faded | **0.68** (1009) | 0.16 (1022) |
+| bob, blond | faded | **0.18** (1387) | 0.23 (1371) |
+| bob, grey | faded | **0.21** (1341) | 0.27 (1368) |
+| long, auburn | faded | **0.26** (2141) | 0.29 (2242) |
 
-Every sequence passes (≤ 1.5).
-- **The lines are faded at the game stops,** as the GC decided.
-- **Why the side-by-side B2 differs:** its bob measured 0.79 before the recalibration, against 0.26 now. The difference is the palette (the strands then 6–11 levels lighter), but I haven't isolated why it moves the ratio that much. Both are under 1.5.
+Every sequence passes (≤ 1.5). The lines are faded at the game stops, as the GC decided.
+
+**The blink guard is now 10 px** (`ink_shimmer.GUARD`; it was 3). Bob in black first scored 3.84 on its portrait pan. All of that was one frame in which one render caught a blink: the eye's lighter pixels were left out, but the open eye's darker lashes and iris beside them were not. Re-scored from the same stills with the whole eye left out, it is 0.68. The others went down too (auburn 0.33 → 0.19, long 0.57 → 0.26), since part of their flicker had also been eye pixels the 3 px guard missed.
 
 ### Flag off: byte-identical
 
-Ten styles were built with main's generator (`origin/main` with S4, `0e263aacc`, its `living/tools`) and with this branch without `SLOP_PORT`:
+Ten styles were built with main's generator (`origin/main` at `d05d01b9f`, its `living/tools`) and with this branch without `SLOP_PORT`:
 - bob, long.2.collar, braid.3.collar.full, braids, balding.3, crop.cap, bun, tail.m, kerchief and shag.2.
 
-**Every GLB binary chunk is identical,** and the JSON is identical but for the strand picture's relative URI. No `.hairpage.json` is written without the flag.
+**Every GLB binary chunk is identical,** and the JSON is identical but for the strand picture's relative URI. No `.hairpage.json` is written without the flag. Main's own files also draw the same under the new client (above).
 
 The `ink_shimmer.py` fixes from the first pass stay:
 - the clock blink is left out;

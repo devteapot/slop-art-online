@@ -330,9 +330,15 @@ The GC approved a minimal hero mechanism (2026-11-20). This is the proposed shap
 - **Highlight:** `_HIGHLIGHT` per vertex and the page's R, a scalloped band on the upper hair.
 - **Lock ink:** grouped into locks: a curving line of its own length up each notch, and shorter companions inside the lock (`hair.LOCK_LINES`). They are rasterised into G by `hair_page.py`, not `ink_field.py --seams-as-lines`, and island borders aren't drawn as lines. `ink_range` is 6 texels, so the lines fade before Near: close-up only, as the GC decided.
 - **Parting:** a pale strip in R where the hair parts (over-sheet styles, curtain fringes, braids): the structure that holds in play, with the bands.
-- **The strands (B2):** main's strand picture under the bands at low contrast, in the page's B. This is a proposed contract amendment with a client step in `toon.wesl`. The other variant, B1 (lock-wise band breaks), was built beside it; the GC takes the one that reads better (s5/README.md).
-- **Palette:** the contract's `palette: "tag"` with `ref` and anchors replaces the per-channel multipliers in step 5 above. There are four anchors (black, brown, blond, grey); the contract allowed 3, the other proposed amendment.
-- **Calibration:** run once per bin on a composed woman, not on the four bodies. Every band is within ±4, except auburn's shade, which the sky fill holds 15–17 levels light in G and B. Black and brown are floored to what play distance needs: at Middle black is within 4 of main's luma, and brown is 14 above it.
+- **The strands (B2, the GC's choice over B1's lock-wise band breaks):** main's strand picture under the bands at low contrast, in the page's B, behind the profile's `strands` flag (HANDMADE_COMPOSED v1.3.1).
+- **Lock-line colour:** a darker shade of each anchor's own mid swatch (0.65 × its lightness, at least 0.12 below it), never near-black on hair that isn't.
+- **Palette:** the contract's `palette: "tag"` with `ref` and anchors replaces the per-channel multipliers in step 5 above. There are four anchors (black, brown, blond, grey); v1.3.1 allows 4.
+- **Calibration:** run once per bin on a composed woman, not on the four bodies.
+  - **Cora's profile:** channel by channel.
+  - **The anchors:** lightness and chroma size only. Their hue is the palette's own, so no anchor carries a correction for the calibration frame's light; grey's had turned its shadow side blue.
+  - **Light hair's highlight:** a small step over its light band, in its chroma.
+  - **Black and brown:** floored to what play distance needs. At Middle black is within 4 of main's luma, and brown is 14 above it.
+  - **Result:** chromatic bins within ±5. Auburn's shade is held 15–17 light by the sky fill. Black and grey are neutral, showing the scene's warm light per channel.
 - **Capacity:** the generator's 86 style files need three pages, at 1 mm (the GC's decision).
 
 ## 4. The client step this needs (summary of §0.3, §2.6, §3)

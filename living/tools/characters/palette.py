@@ -102,7 +102,7 @@ def shade_ink(shade):
 def anchors_of(h):
     """The profile's anchors (its own first) as (ref, [shade, mid, light, highlight], ink or None)."""
     own = (tuple(h["ref"]), [tuple(h[k]) for k in ROWS[:4]], tuple(h["ink"]) if isinstance(h.get("ink"), list) else None)
-    return [own] + [(tuple(a["ref"]), [tuple(a[k]) for k in ROWS[:4]], tuple(a["ink"]) if isinstance(a.get("ink"), list) else None) for a in h.get("anchors", [])[:3]]
+    return [own] + [(tuple(a["ref"]), [tuple(a[k]) for k in ROWS[:4]], tuple(a["ink"]) if isinstance(a.get("ink"), list) else None) for a in h.get("anchors", [])[:4]]
 
 
 def entry(anchors, tag):

@@ -28,14 +28,18 @@ each band: the median colour.
 - **every bin:** with a ceiling (shade 0.55, mid 0.72, light 0.79, highlight 0.86), since light
   hair's moved targets run past what the grade shows (grey's highlight 249).
 
-**A round:** each bin's swatches are scaled per channel in linear light by target / measured
-(the auburn bin's are the profile's own; the others are its anchors), written to every file
+**A round:** the auburn bin's swatches (the profile's own) are scaled per channel in linear light
+by target / measured, as Cora's calibration was; an anchor's only in lightness (all channels by
+the luminance's target / measured), its chroma the palette's own rule from Cora's swatches, so
+that it carries no correction for the calibration frame's light (the second pass found grey's,
+corrected channel by channel, blue on its shadow side); written to every file
 (`hair_page.py --profile-only`), and drawn again. Pass: every band within 8 levels of its target.
 Writes OUT/bins.json (the swatches, targets, measured and deltas a round), OUT/anchors.json and
 OUT/profile.json.
 """
 import argparse
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -78,6 +82,10 @@ def lin(c):
     return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
 
 
+def Y(c):
+    return float(np.dot(c, [0.2126, 0.7152, 0.0722]))
+
+
 def enc(x):
     x = np.clip(x, 0, 1)
     return [int(v) for v in np.floor(255 * np.where(x <= 0.0031308, x * 12.92, 1.055 * x ** (1 / 2.4) - 0.055) + 0.5)]
@@ -98,6 +106,16 @@ def targets():
             if L > CEIL[b]:
                 k = CEIL[b] / L  # keep the chroma's share of the lightness
                 t[b] = [palette.enc(x) for x in palette.from_oklab(CEIL[b], a_ * k, b_ * k)]
+        Ll, al, bl = palette.oklab(tuple(t['light']))
+        Ld, ad, bd = palette.oklab(DRAWING['light'])
+        if name != 'auburn' and Ll > Ld:
+            # Light hair (its light band above the drawing's): the highlight a small step over
+            # the bin's own light band, in its chroma, as the drawing's is over its light. Moved
+            # by ratio and held under the ceiling, it came out near white, a band like a hairband
+            # across the hairline.
+            Lh, ah, bh = palette.oklab(DRAWING['highlight'])
+            kc = math.hypot(ah, bh) / max(math.hypot(ad, bd), 1e-9)
+            t['highlight'] = [palette.enc(x) for x in palette.from_oklab(min(Ll + (Lh - Ld), CEIL['highlight']), al * kc, bl * kc)]
         out[name] = t
     return out
 
@@ -173,6 +191,7 @@ def main():
     ap.add_argument('--rounds', type=int, default=2)
     ap.add_argument('--start', help='a bins.json to start from (its last round\'s swatches)')
     ap.add_argument('--measure-only', action='store_true')
+    ap.add_argument('--palette-chroma', action='store_true', help="reset the anchors' chroma to the palette's own before tuning")
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     tgt = targets()
@@ -186,11 +205,18 @@ def main():
     for name, tag in BINS.items():
         if name == 'auburn':
             continue
+        # The seed's swatches (the last calibration's, or the page tool's); with
+        # --palette-chroma, an anchor's chroma is reset to the palette's own (Cora's swatches
+        # moved to the bin) at the seed's lightness, then tuned.
+        rows, _ = palette.entry(palette.anchors_of(dict(hair_page.PROFILE)), tag)
+        sw[name] = {b: list(rows[i]) for i, b in enumerate(BANDS)}
         if tuple(tag) in seed:
-            sw[name] = {b: list(seed[tuple(tag)][b]) for b in BANDS}
-        else:
-            rows, _ = palette.entry(palette.anchors_of(dict(hair_page.PROFILE)), tag)
-            sw[name] = {b: list(rows[i]) for i, b in enumerate(BANDS)}
+            for b in BANDS:
+                if a.palette_chroma:
+                    k = Y(lin(seed[tuple(tag)][b])) / max(Y(lin(sw[name][b])), 1e-6)
+                    sw[name][b] = enc(lin(sw[name][b]) * k)
+                else:
+                    sw[name][b] = list(seed[tuple(tag)][b])
     dbg = HAIR/f'zzcal-{a.style}.glb'
     shutil.copyfile(HAIR/f'{a.style}.glb', dbg)
     set_profile(dbg)
@@ -219,7 +245,27 @@ def main():
                 for b in BANDS:
                     m = got[n][b]['rgb']
                     if m:
-                        ratio = lin(tgt[n][b]) / np.maximum(lin(m), 1e-4)
+                        if n == 'auburn':
+                            # Cora's own swatches: channel by channel, as her calibration was.
+                            ratio = lin(tgt[n][b]) / np.maximum(lin(m), 1e-4)
+                        else:
+                            # An anchor: its lightness, and the size of its chroma where the target
+                            # has one, never its hue. Its hue stays the palette's own (moved from
+                            # Cora's), so it carries no correction for the calibration frame's
+                            # light: a grey corrected channel by channel came out blue wherever the
+                            # light was not the frame's (the shadow side). A near-neutral target
+                            # (chroma under 0.03) keeps the palette's chroma too.
+                            ratio = Y(lin(tgt[n][b])) / max(Y(lin(m)), 1e-4)
+                            s2 = enc(lin(sw[n][b]) * ratio)
+                            Lt, at_, bt = palette.oklab(tuple(tgt[n][b]))
+                            Lm, am, bm = palette.oklab(tuple(m))
+                            ct, cm = math.hypot(at_, bt), math.hypot(am, bm)
+                            if ct > 0.03 and cm > 0.01:
+                                Ls, as_, bs = palette.oklab(tuple(s2))
+                                k = min(max(ct / cm, 0.5), 2.0)
+                                s2 = [palette.enc(x) for x in palette.from_oklab(Ls, as_ * k, bs * k)]
+                            sw[n][b] = s2
+                            continue
                         sw[n][b] = enc(lin(sw[n][b]) * ratio)
     finally:
         dbg.unlink(missing_ok=True)

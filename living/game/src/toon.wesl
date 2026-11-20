@@ -410,10 +410,10 @@ fn hand_hair(N: vec3<f32>, L: vec3<f32>, vis: f32, in: VertexOutput, duv: vec4<f
         // One tap for all: R the highlight, G the ink field, B the strands.
         let tex = textureSampleGrad(face_map, face_sampler, in.uv, duv.xy, duv.zw);
         mask = max(mask, tex.r);
-        // The strands (char-port-2 S5's B2, proposed for the contract): a low-contrast
-        // modulation of the three bands, 2 x B round 1 (B 0, a mask without strands: none). It
-        // shades within a band, under the highlight and the ink, and adds no gloss.
-        level = level * select(1.0, 2.0 * tex.b, tex.b > 0.004);
+        // The strands (contract v1.3.1, the profile's `strands`, hand[0].w): a low-contrast
+        // modulation of the three bands, 2 x B (0.5 none). It shades within a band, under the
+        // highlight and the ink, and adds no gloss. Off, B is ignored.
+        level = level * select(1.0, 2.0 * tex.b, toon.hand[0].w > 0.5);
         if (toon.hand_ink_range.z > 0.5) {
             // The v1.1 lock lines: full width, the texel density measured from the mesh.
             cov = ink_cover(tex.g, 1.0, toon.hand_ink_range.x, 1.0, toon.hand_ink.w, toon.hand_ink_range.y, toon.hand_ink_range.w, duv, view_z);

@@ -40,7 +40,8 @@ with half again for a line having two edges to an edge's one. A sequence whose i
 than 1 pixel a frame by more than 8 levels is not scored (the ink has faded out there): it is
 listed as `faded`. **Not ink:** ink only darkens, so where an inked frame is lighter than its
 reference by more than 8 levels (the client's blink runs on the clock and one render can catch a
-blink the other doesn't), those pixels, dilated by 3 px, are left out of the region and the count.
+blink the other doesn't), those pixels, dilated by `GUARD` (10) px to take the whole eye, are left
+out of the region and the count.
 
 **Deciding a fade:** `--fade A,B,...` scores the file once for each `fade_px` (an ink copy per
 value, the value set on every targeted ink; the reference is rendered once). `--stills` writes,
@@ -73,6 +74,7 @@ from calibrate import ASSETS, REPO, clips_of, read_glb  # noqa: E402
 from merge_primitives import write_glb  # noqa: E402  (living/tools)
 
 INK_KEYS = ("ink", "ink_px", "ink_range", "ink_fade_px")
+GUARD = 10  # px round a pixel the ink can't have made (a blink), left out of the scoring
 STOPS = (("near", 8.0, 42.0), ("middle", 12.0, 44.0), ("far", 19.0, 46.0))
 FRAMES = 16
 VIEWS = {"portrait": "0:8:0.36:0.88"}
@@ -267,7 +269,7 @@ def score(plain_files, ink_files, hair=True, also=()):
             # Ink only darkens. Where an inked frame is lighter than its reference by more than 8
             # levels the two renders differ for another reason (the client's blink runs on the
             # clock, so one render can catch a blink the other doesn't): those pixels, dilated by
-            # 3 px, are not scored.
+            # GUARD px (the whole eye: an open eye's lashes and iris darken it too), are not scored.
             ny, nx = len(Lp[0]), len(Lp[0][0])
             other = [[False] * nx for _ in range(ny)]
             for k in range(FRAMES):
@@ -275,8 +277,8 @@ def score(plain_files, ink_files, hair=True, also=()):
                     rp, ri = Lp[k][yy], Li[k][yy]
                     for xx in range(nx):
                         if ri[xx] - rp[xx] > 8:
-                            for dy in range(max(0, yy - 3), min(ny, yy + 4)):
-                                for dx in range(max(0, xx - 3), min(nx, xx + 4)):
+                            for dy in range(max(0, yy - GUARD), min(ny, yy + GUARD + 1)):
+                                for dx in range(max(0, xx - GUARD), min(nx, xx + GUARD + 1)):
                                     other[dy][dx] = True
             ink_px = sum(1 for k in range(FRAMES) for yy, (r_p, r_i) in enumerate(zip(Lp[k], Li[k])) for xx, (a, b) in enumerate(zip(r_p, r_i)) if a - b > 8 and not other[yy][xx]) / FRAMES
             if ink_px < 1:

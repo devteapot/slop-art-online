@@ -234,6 +234,9 @@ pub struct HairProfile {
     /// `palette: "tag"` (v1.3, docs/HANDMADE_COMPOSED.md): the swatches follow the mesh's tag
     /// colour from `ref` (the first anchor) and the `anchors`; None is v1's fixed palette.
     pub relative: Option<Vec<crate::characters::palette::Anchor>>,
+    /// `strands` (v1.3.1, docs/HANDMADE_COMPOSED.md "The strands"): the mask's B is the strands
+    /// under the bands, which multiply by 2 x B (0.5 none). Off, B is ignored.
+    pub strands: bool,
 }
 
 pub const INK_PX: f32 = 1.25;
@@ -528,6 +531,13 @@ pub fn hair_of(h: &serde_json::Value) -> Result<HairProfile, String> {
         ink_fade_px: num("ink_fade_px", INK_FADE_PX)?.max(0.0),
         ink_m_uv: h.get("ink_m_uv").and_then(|x| x.as_f64()).map(|x| x as f32).filter(|x| x.is_finite() && *x > 0.0),
         relative: None,
+        strands: match h.get("strands") {
+            None => false,
+            Some(v) => v.as_bool().unwrap_or_else(|| {
+                warn_once(format!("handmade: hair profile: strands {v} is not true or false; no strands"));
+                false
+            }),
+        },
     };
     let mut p = p;
     let own = [p.shade, p.mid, p.light, p.highlight];
@@ -566,7 +576,9 @@ fn linear(c: [u8; 3]) -> Vec3 {
 impl HairProfile {
     /// Put the profile into a material's parameters (`mask`: the mask texture's path, if any).
     pub fn apply(&self, p: &mut ToonParams, mask: Option<&str>) {
-        p.hand = [linear(self.shade).extend(0.0), linear(self.mid).extend(0.0), linear(self.light).extend(0.0), linear(self.highlight).extend(if mask.is_some() { 1.0 } else { 0.0 })];
+        // hand[0].w: the strands (B) are read, only with a mask to read them from.
+        let strands = if self.strands && mask.is_some() { 1.0 } else { 0.0 };
+        p.hand = [linear(self.shade).extend(strands), linear(self.mid).extend(0.0), linear(self.light).extend(0.0), linear(self.highlight).extend(if mask.is_some() { 1.0 } else { 0.0 })];
         p.hand_bands = Vec4::new(self.t1, self.t2, self.edge, self.feather);
         let ink = self.inked && mask.is_some_and(has_green);
         if self.inked && !ink {
@@ -863,6 +875,26 @@ mod tests {
         assert!(!pack_highlight(&mut bare));
         let Some(bevy::mesh::VertexAttributeValues::Float32x2(uv)) = bare.attribute(Mesh::ATTRIBUTE_UV_1) else { panic!() };
         assert_eq!(uv, &vec![[0.0, 0.0]; 2]);
+    }
+
+    /// v1.3.1: `strands` is the profile's flag, off by default; four anchors are read, a fifth
+    /// is dropped.
+    #[test]
+    fn strands_and_four_anchors() {
+        assert!(!hair_of(&profile()).unwrap().strands, "off by default: B is ignored");
+        let mut h = profile();
+        h["strands"] = json!(true);
+        assert!(hair_of(&h).unwrap().strands);
+        h["strands"] = json!(1);
+        assert!(!hair_of(&h).unwrap().strands, "not a boolean: no strands");
+        let mut tag = profile();
+        tag["palette"] = json!("tag");
+        tag["ref"] = json!([102, 46, 26]);
+        let a = |r: u8| json!({"ref": [r, r, r], "shade": [10, 10, 10], "mid": [30, 30, 30], "light": [40, 40, 40], "highlight": [50, 50, 50]});
+        tag["anchors"] = json!([a(20), a(60), a(100), a(140)]);
+        assert_eq!(hair_of(&tag).unwrap().relative.unwrap().len(), 5, "four anchors and the profile's own");
+        tag["anchors"] = json!([a(20), a(60), a(100), a(140), a(180)]);
+        assert_eq!(hair_of(&tag).unwrap().relative.unwrap().len(), 5, "a fifth is dropped");
     }
 
     /// v1.3: `palette: "tag"` with its `ref` and anchors; bad values fall back to the fixed
