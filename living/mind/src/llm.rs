@@ -729,7 +729,7 @@ impl Queue {
 pub const FAST_SLOTS_DEFAULT: usize = 4;
 
 struct Scheduler {
-    queue: std::sync::Mutex<Queue>,
+    queue: crate::prof::Mx<Queue>,
     changed: tokio::sync::Notify,
     trace_latency: bool,
 }
@@ -768,7 +768,7 @@ impl Scheduler {
     fn new(models: &ModelsFile, concurrency: usize, global_rpm: f64) -> Self {
         let now = Instant::now();
         Self {
-            queue: std::sync::Mutex::new(Queue {
+            queue: crate::prof::Mx::new("llm_queue", Queue {
                 rates: models.profiles.iter().map(|(name, p)| (name.clone(), Rate::new(p, now))).collect(),
                 hosts: models.profiles.iter().map(|(name, p)| (name.clone(), p.base_url.clone())).collect(),
                 gates: HashMap::new(),
@@ -889,7 +889,8 @@ pub struct Reply {
     pub model: String,
     /// The picked profile failed and its overflow (or the default) answered.
     pub overflowed: bool,
-    pub admission_trace: Option<(u64, u64)>,
+    /// Dispatch profile: (admission id, queue entry ms, grant ms).
+    pub admission_trace: Option<(u64, u64, u64)>,
 }
 
 pub struct Msg {
@@ -1110,9 +1111,13 @@ impl Llm {
         let queued = Instant::now();
         let queue_enter_ms = self.scheduler.trace_latency.then(now_ms);
         let permit = self.scheduler.admit(profile, lane, cost).await?;
-        let admission_trace = queue_enter_ms.map(|at| (permit.id, at));
+        let admission_trace = queue_enter_ms.map(|at| (permit.id, at, now_ms()));
         let queue_wait_ms = queued.elapsed().as_millis() as u64;
         let granted = Instant::now();
+        if let Some(at) = queue_enter_ms {
+            crate::prof::mark_at("enqueue", at);
+            crate::prof::mark("grant");
+        }
         let started = Instant::now();
         let url = format!("{}/chat/completions", p.base_url.trim_end_matches('/'));
         let mut unreachable = false;
@@ -1184,6 +1189,7 @@ impl Llm {
             "tokens": result.as_ref().map(|(_, t, ..)| *t).ok(),
             "error": result.as_ref().err().map(|e| format!("{e:#}")),
         });
+        crate::prof::mark("reply");
         self.journal(actor, &entry).await;
         let (content, tokens, ..) = result?;
         Ok(Reply { content, tokens, latency_ms, model: p.model.clone(), overflowed: false, admission_trace })

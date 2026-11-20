@@ -147,9 +147,10 @@ impl Minds {
         };
         if let Some(trace) = trace.as_deref_mut() {
             trace["model_reply_ms"] = json!(llm::now_ms());
-            if let Some((id, at)) = reply.admission_trace {
+            if let Some((id, at, granted)) = reply.admission_trace {
                 trace["admission_id"] = json!(id);
                 trace["queue_enter_ms"] = json!(at);
+                trace["grant_ms"] = json!(granted);
             }
         }
         let v = llm::parse_json(&reply.content).unwrap_or(Value::Null);

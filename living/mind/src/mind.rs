@@ -17,7 +17,7 @@ use living_bindings::*;
 use serde_json::{json, Value};
 use spacetimedb_sdk::{DbContext, Identity, Table};
 use std::collections::{BTreeSet, HashMap};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{oneshot, Semaphore};
 
@@ -60,6 +60,39 @@ pub enum Event {
     SpokenAs(Experience),
 }
 
+/// The profile's name for an event kind (prof.rs), with `suffix` (`.wait` or `.handle`).
+fn stage_name(stage: &str) -> &'static str {
+    match stage {
+        "lane" => "delib.lane",
+        "character" => "delib.character",
+        "recall" => "delib.recall",
+        "experiences" => "delib.experiences",
+        "context" => "delib.context",
+        "prompt" => "delib.prompt",
+        "enqueue" => "delib.to_enqueue",
+        "grant" => "delib.queue_to_grant",
+        "reply" => "delib.grant_to_reply",
+        _ => "delib.other",
+    }
+}
+
+fn event_name(e: &Event, suffix: &str) -> &'static str {
+    let kind = match e {
+        Event::Speech(_) => 0,
+        Event::Deliberation(_) => 1,
+        Event::Pending(_) => 2,
+        Event::PendingGone(_) => 3,
+        Event::Contact(_) => 4,
+        Event::Lived(_) => 5,
+        Event::Percept(_) => 6,
+        Event::Fast(..) => 7,
+        Event::SpokenAs(_) => 8,
+    };
+    const WAIT: [&str; 9] = ["event.speech.wait", "event.deliberation.wait", "event.pending.wait", "event.pending_gone.wait", "event.contact.wait", "event.lived.wait", "event.percept.wait", "event.fast.wait", "event.spoken_as.wait"];
+    const HANDLE: [&str; 9] = ["event.speech.handle", "event.deliberation.handle", "event.pending.handle", "event.pending_gone.handle", "event.contact.handle", "event.lived.handle", "event.percept.handle", "event.fast.handle", "event.spoken_as.handle"];
+    if suffix == ".wait" { WAIT[kind] } else { HANDLE[kind] }
+}
+
 pub use lived::enabled as player_memory;
 
 /// Whether the conversation switches read who heard each line (`LIVING_GREET`; the
@@ -70,6 +103,9 @@ pub fn greet_audience() -> bool {
 
 #[derive(Default)]
 struct ActorMind {
+    /// Dispatch profile: the first deliberation request's SDK callback and loop dispatch
+    /// (epoch ms) since this character's last deliberation began (prof.rs).
+    callback_ms: Option<(u64, u64)>,
     /// The last fast-lane request (`fast_ask.issued_ms`) taken up (mind/fast.rs).
     fast_issued: u64,
     consolidating: bool,
@@ -213,10 +249,10 @@ pub struct Minds {
     seed: Value,
     species: std::collections::BTreeMap<String, living_rules::species::Species>,
     me: Identity,
-    actors: Mutex<HashMap<u32, ActorMind>>,
+    actors: crate::prof::Mx<HashMap<u32, ActorMind>>,
     /// Bound concurrent background memory work independently of network admission.
     slow: Semaphore,
-    talk: Mutex<talk::Talks>,
+    talk: crate::prof::Mx<talk::Talks>,
     /// Conversation switches (`LIVING_GREET`, `LIVING_PARK`; talk.rs).
     talk_cfg: talk::Config,
     only: Option<std::collections::HashSet<u32>>,
@@ -225,34 +261,34 @@ pub struct Minds {
     lod: lod::Lod,
     /// Pending deliberations by actor (kept only with the level of detail on, when many
     /// requests wait at once and scanning the view for each would be costly).
-    pending: Mutex<HashMap<u32, lod::PendingRequest>>,
+    pending: crate::prof::Mx<HashMap<u32, lod::PendingRequest>>,
     /// Each person's model group (see `llm::group_of`; it never changes) and the profile
     /// last logged for each character.
-    groups: Mutex<HashMap<u32, Option<String>>>,
-    routed: Mutex<HashMap<u32, String>>,
+    groups: crate::prof::Mx<HashMap<u32, Option<String>>>,
+    routed: crate::prof::Mx<HashMap<u32, String>>,
     /// What human-played characters live, waiting to be internalized (see lived.rs).
     lived_cfg: lived::Config,
-    lived: Mutex<lived::Lived>,
+    lived: crate::prof::Mx<lived::Lived>,
     /// When minds reorganize (sleep.rs), and when the last night batch went out.
     sleep_cfg: sleep::Config,
-    sleep_batch_at: Mutex<Option<Instant>>,
+    sleep_batch_at: crate::prof::Mx<Option<Instant>>,
     /// Cheaper animal minds (animal.rs): the switches, each animal's last salient signature
     /// and the pack decisions shared with members.
     animal_cfg: animal::Config,
-    animal_sigs: Mutex<HashMap<u32, animal::Signature>>,
+    animal_sigs: crate::prof::Mx<HashMap<u32, animal::Signature>>,
     /// Typed judgments refreshed in the background (judge.rs; `LIVING_JEV=1`).
     jev: Option<judge::Jev>,
-    asked: Mutex<HashMap<u32, judge::Asked>>,
+    asked: crate::prof::Mx<HashMap<u32, judge::Asked>>,
     /// Each character's body as it last perceived it (its latest deliberation scene's `you`),
     /// for judgments between thoughts.
-    felt: Mutex<HashMap<u32, (Instant, Value)>>,
+    felt: crate::prof::Mx<HashMap<u32, (Instant, Value)>>,
     /// The rethink gate in front of non-urgent deliberations (rethink.rs; `LIVING_RETHINK`).
     rethink: Option<rethink::Gate>,
     /// The fast lane's route and limits (`rethink.json` `fast`; mind/fast.rs).
     fast: fast::Config,
-    rethink_track: Mutex<HashMap<u32, rethink::Track>>,
-    rethink_stats: Mutex<rethink::Stats>,
-    rethink_logged: Mutex<Option<Instant>>,
+    rethink_track: crate::prof::Mx<HashMap<u32, rethink::Track>>,
+    rethink_stats: crate::prof::Mx<rethink::Stats>,
+    rethink_logged: crate::prof::Mx<Option<Instant>>,
 }
 
 fn flatten<E: std::fmt::Debug>(r: Result<Result<(), String>, E>) -> Result<(), String> {
@@ -445,12 +481,13 @@ impl Minds {
                 llm.warn_effort_gaps("LIVING_PLAYER_MEMORY_MODEL", route, &["internalize"]);
             }
         }
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: Mutex::new(HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: Mutex::new(talk::Talks::default()), talk_cfg, only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), layout: Default::default(), lod: lod::Lod::from_env(), pending: Mutex::new(HashMap::new()), groups: Mutex::new(HashMap::new()), routed: Mutex::new(HashMap::new()), lived_cfg, lived: Mutex::new(lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: Mutex::new(None), animal_cfg: animal::Config::from_env(), animal_sigs: Mutex::new(HashMap::new()), jev, asked: Mutex::new(HashMap::new()), felt: Mutex::new(HashMap::new()), rethink, fast: fast::Config::load(&crate::root()), rethink_track: Mutex::new(HashMap::new()), rethink_stats: Mutex::new(rethink::Stats::default()), rethink_logged: Mutex::new(None) }))
+        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: crate::prof::Mx::new("actors", HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: crate::prof::Mx::new("talk", talk::Talks::default()), talk_cfg, only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), layout: Default::default(), lod: lod::Lod::from_env(), pending: crate::prof::Mx::new("pending", HashMap::new()), groups: crate::prof::Mx::new("groups", HashMap::new()), routed: crate::prof::Mx::new("routed", HashMap::new()), lived_cfg, lived: crate::prof::Mx::new("lived", lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: crate::prof::Mx::new("sleep_batch_at", None), animal_cfg: animal::Config::from_env(), animal_sigs: crate::prof::Mx::new("animal_sigs", HashMap::new()), jev, asked: crate::prof::Mx::new("asked", HashMap::new()), felt: crate::prof::Mx::new("felt", HashMap::new()), rethink, fast: fast::Config::load(&crate::root()), rethink_track: crate::prof::Mx::new("rethink_track", HashMap::new()), rethink_stats: crate::prof::Mx::new("rethink_stats", rethink::Stats::default()), rethink_logged: crate::prof::Mx::new("rethink_logged", None) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
     /// run on their instincts until they become children).
     fn mine(&self) -> Vec<Character> {
+        let _s = crate::prof::span("scan.character.mine");
         self.conn.db.character().iter().filter(|c| c.ai && c.alive && c.stage != 0 && c.controller == self.me && self.allowed(c.id)).collect()
     }
 
@@ -886,6 +923,7 @@ impl Minds {
     }
 
     fn experiences(&self, actor: u32) -> Vec<Experience> {
+        let _s = crate::prof::span("scan.experience.own");
         let mut v: Vec<Experience> = self.conn.db.experience().iter().filter(|e| e.observer == actor).collect();
         v.sort_by_key(|e| e.id);
         v
@@ -1394,8 +1432,20 @@ impl Minds {
 
     // ---- event loop -------------------------------------------------------------
 
-    pub async fn run(self: Arc<Self>, mut rx: tokio::sync::mpsc::UnboundedReceiver<Event>) -> Result<()> {
+    pub async fn run(self: Arc<Self>, mut rx: tokio::sync::mpsc::UnboundedReceiver<(Instant, Event)>) -> Result<()> {
         let mut tick = tokio::time::interval(Duration::from_millis(2000));
+        crate::prof::start(tokio::runtime::Handle::current());
+        if crate::prof::on() {
+            // How long a read of the SDK's client cache waits for its one lock (held while the
+            // SDK applies an update and while any task reads or clones a table).
+            let me = self.clone();
+            std::thread::Builder::new().name("prof-cache".into()).spawn(move || loop {
+                let t = Instant::now();
+                let _ = me.conn.db.world().count();
+                crate::prof::time("sdk.cache_lock_probe", t.elapsed());
+                std::thread::sleep(Duration::from_millis(2));
+            })?;
+        }
         if self.lod.on {
             log::info!("level of detail on: {:?}", self.lod);
         }
@@ -1426,7 +1476,23 @@ impl Minds {
         self.refresh_rules();
         loop {
             tokio::select! {
-                ev = rx.recv() => match ev {
+                ev = rx.recv() => {
+                let ev = match ev {
+                    Some((at, ev)) => {
+                        if crate::prof::on() {
+                            crate::prof::time(event_name(&ev, ".wait"), at.elapsed());
+                            crate::prof::value("event.depth.n", rx.len() as u64);
+                            if let Event::Deliberation(actor) = &ev {
+                                let callback_ms = llm::now_ms().saturating_sub(at.elapsed().as_millis() as u64);
+                                self.actors.lock().unwrap().entry(*actor).or_default().callback_ms.get_or_insert((callback_ms, llm::now_ms()));
+                            }
+                        }
+                        Some((Instant::now(), ev))
+                    }
+                    None => None,
+                };
+                let handled = ev.as_ref().map(|(t, ev)| (*t, event_name(ev, ".handle")));
+                match ev.map(|(_, ev)| ev) {
                     Some(Event::Speech(e)) => self.clone().on_speech(e),
                     Some(Event::Deliberation(actor)) => self.clone().schedule(actor),
                     Some(Event::Pending(d)) => {
@@ -1467,14 +1533,30 @@ impl Minds {
                         });
                     }
                     None => return Err(anyhow!("event channel closed")),
+                }
+                if let Some((t, name)) = handled {
+                    crate::prof::time(name, t.elapsed());
+                }
                 },
                 _ = tick.tick() => {
+                    let t = Instant::now();
                     self.refresh_rules();
+                    crate::prof::time("tick.refresh_rules", t.elapsed());
+                    let t = Instant::now();
                     self.clone().check_consolidation();
+                    crate::prof::time("tick.check_consolidation", t.elapsed());
+                    let t = Instant::now();
                     self.clone().check_sleep();
+                    crate::prof::time("tick.check_sleep", t.elapsed());
+                    let t = Instant::now();
                     self.clone().check_judgments();
+                    crate::prof::time("tick.check_judgments", t.elapsed());
+                    let t = Instant::now();
                     self.clone().check_rethink();
+                    crate::prof::time("tick.check_rethink", t.elapsed());
+                    let t = Instant::now();
                     self.clone().check_lived();
+                    crate::prof::time("tick.check_lived", t.elapsed());
                 }
             }
         }
@@ -1506,7 +1588,9 @@ impl Minds {
             m.deliberating = true;
         }
         tokio::spawn(async move {
+            let spawned_ms = llm::now_ms();
             tokio::time::sleep(Duration::from_millis(400)).await;
+            let slept_ms = llm::now_ms();
             // A character the minds just took over thinks with its own past: what its person
             // lived is internalized first (bounded by `LIVING_TAKEOVER_WAIT_S`).
             let started = Instant::now();
@@ -1518,9 +1602,11 @@ impl Minds {
                 let pending = if self.lod.on {
                     self.pending.lock().unwrap().get(&actor).map(|p| &p.row).filter(|d| d.updated_ms > seen).cloned()
                 } else {
+                    let _s = crate::prof::span("scan.deliberations.find");
                     self.conn.db.my_deliberations().iter().find(|d| d.actor == actor && d.updated_ms > seen)
                 };
                 let Some(d) = pending else { break };
+                let found_ms = llm::now_ms();
                 // Off stage, routine reasons wait (and gather) until the mind is due again.
                 let wait = self.lod_wait(&d);
                 if self.lod.on {
@@ -1552,7 +1638,28 @@ impl Minds {
                     continue;
                 }
                 self.actors.lock().unwrap().entry(actor).or_default().running = true;
-                let result = llm::DELIBERATION_STARTED_MS.scope(llm::now_ms(), self.deliberate(&d)).await;
+                let callback = self.actors.lock().unwrap().entry(actor).or_default().callback_ms.take();
+                let mut stages = crate::prof::Stages::default();
+                stages.marks.extend([("spawned", spawned_ms), ("slept", slept_ms), ("found", found_ms), ("gated", llm::now_ms())]);
+                let stages = std::cell::RefCell::new(stages);
+                let (result, stages) = crate::prof::STAGES.scope(stages, async {
+                    let r = llm::DELIBERATION_STARTED_MS.scope(llm::now_ms(), self.deliberate(&d)).await;
+                    (r, crate::prof::STAGES.with(|s| std::mem::take(&mut *s.borrow_mut())))
+                }).await;
+                if crate::prof::on() {
+                    let marks: serde_json::Map<String, Value> = stages.marks.iter().map(|(n, at)| (n.to_string(), json!(at))).collect();
+                    let first = marks.get("start").and_then(|v| v.as_u64()).unwrap_or(0);
+                    for w in stages.marks.windows(2) {
+                        if w[0].1 >= first && w[1].1 >= w[0].1 {
+                            crate::prof::value(stage_name(w[1].0), (w[1].1 - w[0].1) * 1000);
+                        }
+                    }
+                    self.llm.outcome("input_latency_deliberation", &json!({
+                        "actor": actor, "requested_ms": d.requested_ms, "updated_ms": d.updated_ms,
+                        "callback_ms": callback.map(|c| c.0), "dispatch_ms": callback.map(|c| c.1),
+                        "marks": marks, "ok": result.is_ok(),
+                    })).await;
+                }
                 self.actors.lock().unwrap().entry(actor).or_default().running = false;
                 self.clone().deliberation_ended(actor);
                 match result {
@@ -1618,6 +1725,7 @@ impl Minds {
     }
 
     fn deliberation_lane(&self, d: &Deliberation) -> Lane {
+        let _s = crate::prof::span("scan.experience.lane");
         let player_act = self.conn.db.experience().iter().filter(|e| e.observer == d.actor).any(|e| {
             if e.at_ms < d.requested_ms.saturating_sub(1000) || e.at_ms > d.updated_ms {
                 return false;
@@ -2008,7 +2116,9 @@ impl Minds {
 
     async fn deliberate(self: &Arc<Self>, d: &Deliberation) -> Result<()> {
         let actor = d.actor;
+        crate::prof::mark("start");
         let lane = self.deliberation_lane(d);
+        crate::prof::mark("lane");
         let Some(c) = self.conn.db.character().id().find(&actor) else { return Ok(()) };
         if !c.alive {
             return Ok(());
@@ -2036,14 +2146,17 @@ impl Minds {
         let at = self.attention(actor, Some(&d.scene));
         self.felt.lock().unwrap().insert(actor, (Instant::now(), scene["you"].clone()));
         let missed = self.weaken_missed(actor).await;
+        crate::prof::mark("character");
         // What this moment brings to mind (see recall.rs).
         let recalled = self.recall_for(actor, &self.scene_cues(actor, &scene, &d.reason), 18, 5, "decide").await;
+        crate::prof::mark("recall");
         let (mind, memories) = (recalled.mind, recalled.memories);
         let brain = self.conn.db.brain().id().find(&actor);
         let outline = brain.as_ref().and_then(|b| living_rules::graph::parse(&b.graph).ok()).map(|g| living_rules::graph::outline(&g.root)).unwrap_or_default();
         let plan = brain.as_ref().map(|b| b.plan.clone()).unwrap_or_default();
         let fmt = self.fmt_time();
         let experiences: Vec<String> = self.experiences_upto(actor, d.updated_ms, 16).iter().map(|e| self.exp_line(e, &fmt, false)).collect();
+        crate::prof::mark("experiences");
         // Lines heard from now on are not in this prompt (`LIVING_PARK=concurrent`).
         self.deliberation_prompt(actor);
         let pruned = self.actors.lock().unwrap().entry(actor).or_default().pruned.clone();
@@ -2069,6 +2182,7 @@ impl Minds {
             cues: self.cue_lines(actor),
         };
         let repertoire = self.repertoire_text(actor);
+        crate::prof::mark("context");
         // Think first, as the person and without the grammar; then compile the decision.
         let habits: String = self.conn.db.routine().iter().filter(|r| r.actor == actor).map(|r| r.name).collect::<Vec<_>>().join(", ");
         let open = self.open_projects(actor).await;
@@ -2076,6 +2190,7 @@ impl Minds {
             Msg { role: "system", content: prompts::think_system() },
             Msg { role: "user", content: prompts::think_user(&ctx, &d.scene, &plan, &reason, &habits, &self.projects_text(&open)) },
         ];
+        crate::prof::mark("prompt");
         let mut decision = Value::Null;
         let (mut think_latency, mut think_tokens) = (0u32, 0u32);
         for p in [profile.clone(), self.llm.default_profile()] {

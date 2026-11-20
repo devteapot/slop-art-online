@@ -6,6 +6,7 @@
 mod llm;
 mod memory;
 mod mind;
+mod prof;
 mod prices;
 mod prompts;
 
@@ -249,6 +250,7 @@ async fn main() -> Result<()> {
         let trace = std::env::var("LIVING_INPUT_LATENCY").is_ok_and(|v| v == "1");
         let last = std::sync::atomic::AtomicU64::new(0);
         conn.db.experience().on_insert(move |ctx, e| {
+            let _cb = prof::span("sdk.cb.experience");
             if trace {
                 let at = llm::now_ms();
                 let second = at / 1000;
@@ -258,7 +260,7 @@ async fn main() -> Result<()> {
             }
             // Another controller's character (a person's): memory only, never a turn.
             if e.controller != ctx.identity() {
-                let _ = tx.send(mind::Event::Lived(e.clone()));
+                let _ = tx.send((std::time::Instant::now(), mind::Event::Lived(e.clone())));
                 return;
             }
             // A human player in what a character experiences puts it on stage.
@@ -266,19 +268,19 @@ async fn main() -> Result<()> {
                 let me = ctx.identity();
                 let player = |id: u32| ctx.db.character().id().find(&id).is_some_and(|c| mind::lod::is_player(&c, me));
                 if player(e.subject) || player(e.object) {
-                    let _ = tx.send(mind::Event::Contact(e.observer));
+                    let _ = tx.send((std::time::Instant::now(), mind::Event::Contact(e.observer)));
                 }
             }
             if rethink {
-                let _ = tx.send(mind::Event::Percept(e.clone()));
+                let _ = tx.send((std::time::Instant::now(), mind::Event::Percept(e.clone())));
             }
             // A line of mine whose #ids were said as words (`spoken_as`): journaled as evidence.
             if e.kind == "spoken_as" {
-                let _ = tx.send(mind::Event::SpokenAs(e.clone()));
+                let _ = tx.send((std::time::Instant::now(), mind::Event::SpokenAs(e.clone())));
             }
             // A whisper to me carries words too; noticing one (`whispered`) does not.
             if e.kind == "speech" || e.kind == "whisper" || e.kind == "silence" {
-                let _ = tx.send(mind::Event::Speech(e.clone()));
+                let _ = tx.send((std::time::Instant::now(), mind::Event::Speech(e.clone())));
             }
         });
     }
@@ -287,22 +289,24 @@ async fn main() -> Result<()> {
         let trace = std::env::var("LIVING_INPUT_LATENCY").is_ok_and(|v| v == "1");
         let tx_insert = tx.clone();
         conn.db.fast_ask().on_insert(move |_, a| {
+            let _cb = prof::span("sdk.cb.fast_ask");
             if a.issued_ms != 0 {
                 let callback = trace.then(llm::now_ms);
                 if let Some(at) = callback {
                     log::info!("input_latency_callback {at} {} {}", a.actor, a.issued_ms);
                 }
-                let _ = tx_insert.send(mind::Event::Fast(a.clone(), callback));
+                let _ = tx_insert.send((std::time::Instant::now(), mind::Event::Fast(a.clone(), callback)));
             }
         });
         let tx_update = tx.clone();
         conn.db.fast_ask().on_update(move |_, old, a| {
+            let _cb = prof::span("sdk.cb.fast_ask");
             if a.issued_ms != 0 && a.issued_ms != old.issued_ms {
                 let callback = trace.then(llm::now_ms);
                 if let Some(at) = callback {
                     log::info!("input_latency_callback {at} {} {}", a.actor, a.issued_ms);
                 }
-                let _ = tx_update.send(mind::Event::Fast(a.clone(), callback));
+                let _ = tx_update.send((std::time::Instant::now(), mind::Event::Fast(a.clone(), callback)));
             }
         });
     }
@@ -310,16 +314,18 @@ async fn main() -> Result<()> {
         let tx = tx.clone();
         // This view has no primary key: SDK 2.10.1 delivers replacements as insert/delete.
         conn.db.my_deliberations().on_insert(move |_, d| {
+            let _cb = prof::span("sdk.cb.deliberation");
             if lod {
-                let _ = tx.send(mind::Event::Pending(d.clone()));
+                let _ = tx.send((std::time::Instant::now(), mind::Event::Pending(d.clone())));
             }
-            let _ = tx.send(mind::Event::Deliberation(d.actor));
+            let _ = tx.send((std::time::Instant::now(), mind::Event::Deliberation(d.actor)));
         });
     }
     if lod {
         let tx = tx.clone();
         conn.db.my_deliberations().on_delete(move |_, d| {
-            let _ = tx.send(mind::Event::PendingGone(d.clone()));
+            let _cb = prof::span("sdk.cb.deliberation_gone");
+            let _ = tx.send((std::time::Instant::now(), mind::Event::PendingGone(d.clone())));
         });
     }
     conn.run_threaded();
