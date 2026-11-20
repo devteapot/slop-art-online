@@ -133,6 +133,7 @@ pub fn mark(ctx: &ReducerContext, id: u32, at: (f32, f32), heading: f32, now: u6
             }
         });
     }
+    crate::latency::nav(ctx, id, "ground_look", 0, format_args!(""));
     let changed = remember_gates(ctx, id, at, heading, &senses, &map, now) || !found.is_empty();
     if changed {
         REVISION.with(|r| *r.borrow_mut().entry(id).or_default() += 1);
@@ -190,10 +191,12 @@ fn remember_gates(ctx: &ReducerContext, id: u32, at: (f32, f32), heading: f32, s
                 r.state = state;
                 r.seen_ms = now;
                 ctx.db.remembered().id().update(r);
+                crate::latency::nav(ctx, id, "gate_remembered", u64::from(s.id), format_args!("{state} {}", g.changed_ms));
             }
             None => {
                 changed = true;
                 ctx.db.remembered().insert(Remembered { id: 0, observer: id, target: s.id, kind: REMEMBER_GATE, x: s.x, y: s.y, state, seen_ms: now });
+                crate::latency::nav(ctx, id, "gate_remembered", u64::from(s.id), format_args!("{state} {}", g.changed_ms));
                 let rows: Vec<(u64, u64)> = ctx.db.remembered().observer().filter(id).map(|r| (r.seen_ms, r.id)).collect();
                 if rows.len() > REMEMBER_LIMIT {
                     let mut rows = rows;

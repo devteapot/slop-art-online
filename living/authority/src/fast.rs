@@ -93,6 +93,7 @@ fn trigger(ctx: &ReducerContext, actor: u32, reason: &str, now: u64) {
         Some(mut r) => {
             if r.issued_ms == 0 && r.first_ms == 0 {
                 r.first_ms = now;
+                crate::latency::fast(ctx, actor, "fast_trigger", now, format_args!(""));
             } else {
                 // A trigger while one waits or is being served: merged into that row.
                 common::diag(|| "fast:merged", 1);
@@ -103,6 +104,7 @@ fn trigger(ctx: &ReducerContext, actor: u32, reason: &str, now: u64) {
         }
         None => {
             ctx.db.fast_ask().insert(FastAsk { actor, reason, trigger_ms: now, first_ms: now, issued_ms: 0, last_issued_ms: 0, base_ms: 0 });
+            crate::latency::fast(ctx, actor, "fast_trigger", now, format_args!(""));
         }
     }
     WAITING.with(|w| w.set(true));
@@ -139,6 +141,7 @@ pub fn pump(ctx: &ReducerContext, now: u64) {
     for r in rows {
         if r.issued_ms != 0 {
             if now.saturating_sub(r.issued_ms) > stale * ISSUED_WINDOWS {
+                crate::latency::fast(ctx, r.actor, "fast_expired", r.issued_ms, format_args!(""));
                 common::diag(|| "fast:expired", 1);
                 idle(ctx, r);
             } else {
@@ -186,7 +189,10 @@ pub fn pump(ctx: &ReducerContext, now: u64) {
         r.issued_ms = now;
         r.last_issued_ms = now;
         r.base_ms = ctx.db.brain().id().find(c.id).map_or(0, |b| b.installed_ms);
+        let trigger_ms = r.trigger_ms;
+        let first_ms = r.first_ms;
         ctx.db.fast_ask().actor().update(r);
+        crate::latency::fast(ctx, c.id, "fast_written", now, format_args!("{trigger_ms} {first_ms}"));
         common::diag(|| "fast:issued", 1);
         inflight += 1;
         tokens -= 1.0;

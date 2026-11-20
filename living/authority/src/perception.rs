@@ -1160,6 +1160,7 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Swept {
     for (id, viewer) in due {
         // While profiling with detail: each viewer's sweep whole (docs/COMBAT_PHASE.md).
         let _detail = common::detail_span("sweep.one");
+        crate::latency::nav(ctx, id, "player_sweep", tick, format_args!(""));
         sweep_one(ctx, id, viewer, &w, &map, now, Some(&mut shared));
         swept.push(id);
     }

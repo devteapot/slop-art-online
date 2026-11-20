@@ -54,7 +54,7 @@ pub enum Event {
     /// With the rethink gate on: a percept of one of this service's characters.
     Percept(Experience),
     /// A fast-lane request issued for one of this service's characters (mind/fast.rs).
-    Fast(FastAsk),
+    Fast(FastAsk, Option<u64>),
     /// A line of one of this service's characters whose `#<id>` handles the world said as words
     /// (`spoken_as`, speech.rs): journaled in `outcomes/spoken_as.jsonl`.
     SpokenAs(Experience),
@@ -1456,7 +1456,7 @@ impl Minds {
                     }
                     Some(Event::Lived(e)) => self.lived_add(e),
                     Some(Event::Percept(e)) => self.rethink_percept(&e),
-                    Some(Event::Fast(a)) => self.clone().fast_issued(a),
+                    Some(Event::Fast(a, callback_ms)) => self.clone().fast_issued(a, callback_ms),
                     Some(Event::SpokenAs(e)) => {
                         // What the model wrote and what was said, beside the actor's calls: if
                         // these are many, the prompt's sentence on ids is not doing its work.

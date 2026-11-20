@@ -246,7 +246,16 @@ async fn main() -> Result<()> {
     let lod = mind::lod::enabled();
     {
         let tx = tx.clone();
+        let trace = std::env::var("LIVING_INPUT_LATENCY").is_ok_and(|v| v == "1");
+        let last = std::sync::atomic::AtomicU64::new(0);
         conn.db.experience().on_insert(move |ctx, e| {
+            if trace {
+                let at = llm::now_ms();
+                let second = at / 1000;
+                if last.fetch_max(second, std::sync::atomic::Ordering::Relaxed) < second {
+                    log::info!("input_latency_experience {at}");
+                }
+            }
             // Another controller's character (a person's): memory only, never a turn.
             if e.controller != ctx.identity() {
                 let _ = tx.send(mind::Event::Lived(e.clone()));
@@ -275,16 +284,25 @@ async fn main() -> Result<()> {
     }
     {
         // A fast-lane request issued (mind/fast.rs): on insert or when a waiting row is issued.
+        let trace = std::env::var("LIVING_INPUT_LATENCY").is_ok_and(|v| v == "1");
         let tx_insert = tx.clone();
         conn.db.fast_ask().on_insert(move |_, a| {
             if a.issued_ms != 0 {
-                let _ = tx_insert.send(mind::Event::Fast(a.clone()));
+                let callback = trace.then(llm::now_ms);
+                if let Some(at) = callback {
+                    log::info!("input_latency_callback {at} {} {}", a.actor, a.issued_ms);
+                }
+                let _ = tx_insert.send(mind::Event::Fast(a.clone(), callback));
             }
         });
         let tx_update = tx.clone();
         conn.db.fast_ask().on_update(move |_, old, a| {
             if a.issued_ms != 0 && a.issued_ms != old.issued_ms {
-                let _ = tx_update.send(mind::Event::Fast(a.clone()));
+                let callback = trace.then(llm::now_ms);
+                if let Some(at) = callback {
+                    log::info!("input_latency_callback {at} {} {}", a.actor, a.issued_ms);
+                }
+                let _ = tx_update.send(mind::Event::Fast(a.clone(), callback));
             }
         });
     }

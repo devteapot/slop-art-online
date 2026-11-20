@@ -740,6 +740,7 @@ def phase_report(folder, response_only=False):
                     no_resp += 1
                 else:
                     lat.append(l)
+            r["stimulus_ms"] = stims
             r["latency_ms"] = [latency(tr, s) for s in stims]
             if ph["arena"] != "n1":
                 r["responses"] = [{"first_write_ms": None, "physical_effect_ms": None,

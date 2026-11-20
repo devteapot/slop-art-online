@@ -167,6 +167,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
         crate::det::trace(ctx, k_tick);
         crate::det::stop_at(ctx, k_tick, common::laws(ctx).det_stop);
     }
+    crate::latency::end_tick(ctx, k_tick, now);
     Ok(())
 }
 

@@ -353,6 +353,7 @@ pub fn set_graph(ctx: &ReducerContext, actor: u32, graph: &str, plan: &str, sour
         ctx.db.activity().id().update(a);
     }
     common::wake(ctx, actor);
+    crate::latency::nav(ctx, actor, "graph_installed", u64::from(revision), format_args!("{source}"));
     Ok(revision)
 }
 
@@ -416,6 +417,7 @@ fn keep_fast_branch(ctx: &ReducerContext, actor: u32, graph: String, seen_ms: u6
 pub fn mind_patch(ctx: &ReducerContext, actor: u32, target: String, graph: String, asked_ms: u64, thought: ThoughtIn) -> Result<(), String> {
     crate::floor::ready(ctx)?;
     let c = authorize(ctx, actor)?;
+    crate::latency::fast(ctx, actor, "patch_enter", asked_ms, format_args!(""));
     if !c.alive {
         return Err("character is dead".into());
     }
@@ -424,6 +426,7 @@ pub fn mind_patch(ctx: &ReducerContext, actor: u32, target: String, graph: Strin
         return Err("no fast re-plan was asked of this character".into());
     };
     let refuse = |why: String| {
+        crate::latency::fast(ctx, actor, "patch_refused", asked_ms, format_args!(""));
         common::diag(|| "fast:refused", 1);
         add_thought(ctx, actor, ThoughtIn { kind: "fast".into(), summary: format!("refused: {why}"), ..thought.clone() }, now);
         crate::fast::answered(ctx, actor, asked_ms, now);
@@ -473,6 +476,7 @@ pub fn mind_patch(ctx: &ReducerContext, actor: u32, target: String, graph: Strin
         st.marks.push(crate::tables::Mark { node: FAST_MARK, at_ms: now });
         ctx.db.mind_state().id().update(st);
     }
+    crate::latency::fast(ctx, actor, "patch_installed", asked_ms, format_args!(""));
     common::diag(|| "fast:installed", 1);
     add_thought(ctx, actor, ThoughtIn { kind: "fast".into(), ..thought }, now);
     crate::fast::answered(ctx, actor, asked_ms, now);
@@ -490,6 +494,7 @@ pub fn mind_fast_done(ctx: &ReducerContext, actor: u32, asked_ms: u64, thought: 
         return Err("no fast re-plan was asked of this character".into());
     }
     let now = common::now_ms(ctx);
+    crate::latency::fast(ctx, actor, "fast_done", asked_ms, format_args!(""));
     common::diag(|| "fast:kept", 1);
     if !thought.kind.is_empty() {
         add_thought(ctx, actor, thought, now);
@@ -617,6 +622,7 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, way:
 pub fn mind_act(ctx: &ReducerContext, actor: u32, acts: Vec<String>, source: String) -> Result<(), String> {
     crate::floor::ready(ctx)?;
     require_live_controller(ctx, actor)?;
+    crate::latency::nav(ctx, actor, "mind_act", 0, format_args!(""));
     crate::acts::submit(ctx, actor, &acts, &source, false, common::now_ms(ctx));
     Ok(())
 }

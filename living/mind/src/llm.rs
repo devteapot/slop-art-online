@@ -562,6 +562,7 @@ struct Queue {
     concurrency: usize,
     global_rpm: f64,
     global_next: Instant,
+    last_trace_probe: Option<Instant>,
 }
 
 impl Queue {
@@ -592,6 +593,10 @@ impl Queue {
         if self.in_flight >= self.concurrency {
             return None;
         }
+        self.ready_in(self.shared_lane()?, now)
+    }
+
+    fn shared_lane(&self) -> Option<Lane> {
         let lane = if self.waiting.iter().any(|w| w.lane == Lane::Interactive) {
             Lane::Interactive
         } else {
@@ -603,7 +608,50 @@ impl Queue {
         if lane != Lane::Interactive && self.lower_in_flight >= lower_limit {
             return None;
         }
-        self.ready_in(lane, now)
+        Some(lane)
+    }
+
+    /// Conservative diagnostic: the caller is first in an eligible lane, no request
+    /// was selected on this pass, and its only known profile gate is the RPM deadline.
+    fn spacing_deadline(&self, id: u64, lane: Lane, profile: &str, now: Instant) -> Option<Instant> {
+        let has_slot = if lane == Lane::Fast {
+            self.fast_in_flight < self.fast_slots
+        } else {
+            self.in_flight < self.concurrency && self.shared_lane() == Some(lane)
+        };
+        let rate = &self.rates[profile];
+        if !has_slot || now < self.global_next || rate.tpm.is_some() || rate.blocked_until > now
+            || self.gates.get(&self.hosts[profile]).is_some_and(|gate| gate.retry_at.is_some())
+            || self.waiting.iter().find(|w| w.lane == lane).is_none_or(|w| w.id != id)
+        {
+            return None;
+        }
+        (rate.next > now).then_some(rate.next)
+    }
+
+    /// Count model-ready requests with a free lane slot, ignoring lane ordering.
+    /// This read-only snapshot is used at most once a second during a trace.
+    fn ready_for_trace(&self, now: Instant) -> usize {
+        if now < self.global_next {
+            return 0;
+        }
+        let lower_limit = self.concurrency.saturating_sub((self.concurrency / 4).max(1)).max(1);
+        self.waiting.iter().filter(|w| {
+            let has_slot = match w.lane {
+                Lane::Fast => self.fast_in_flight < self.fast_slots,
+                Lane::Interactive => self.in_flight < self.concurrency,
+                _ => self.in_flight < self.concurrency && self.lower_in_flight < lower_limit,
+            };
+            let rate = &self.rates[&w.profile];
+            has_slot && rate.next <= now && rate.blocked_until <= now
+                && self.gates.get(&self.hosts[&w.profile]).is_none_or(|g| {
+                    g.retry_at.is_none_or(|at| g.probing.is_none() && at <= now)
+                })
+                && rate.tpm.is_none_or(|limit| {
+                    let used: u64 = rate.tokens.iter().filter(|(_, at, _)| now.duration_since(*at) < Duration::from_secs(60)).map(|(_, _, n)| n).sum();
+                    used.saturating_add(w.cost) <= limit
+                })
+        }).count()
     }
 
     fn start(&mut self, id: u64, now: Instant) -> (Lane, Option<String>) {
@@ -647,6 +695,7 @@ pub const FAST_SLOTS_DEFAULT: usize = 4;
 struct Scheduler {
     queue: std::sync::Mutex<Queue>,
     changed: tokio::sync::Notify,
+    trace_latency: bool,
 }
 
 struct Admission<'a> {
@@ -697,8 +746,10 @@ impl Scheduler {
                 concurrency,
                 global_rpm,
                 global_next: now,
+                last_trace_probe: None,
             }),
             changed: tokio::sync::Notify::new(),
+            trace_latency: std::env::var("LIVING_INPUT_LATENCY").is_ok_and(|v| v == "1"),
         }
     }
 
@@ -715,7 +766,10 @@ impl Scheduler {
             id
         };
         let mut admission = Admission { scheduler: self, id, lane: None, probe: None };
+        let mut spacing_overrun_us = 0;
+        let mut spacing_poll_us = 0;
         loop {
+            let mut deadline = None;
             let changed = self.changed.notified();
             tokio::pin!(changed);
             changed.as_mut().enable();
@@ -725,15 +779,45 @@ impl Scheduler {
                     return Err(anyhow!("estimated request tokens {cost} exceed {profile} tokens_per_minute"));
                 }
                 let now = Instant::now();
-                if q.candidate(now) == Some(id) {
+                let candidate = q.candidate(now);
+                if candidate == Some(id) {
                     let (lane, probe) = q.start(id, now);
                     admission.lane = Some(lane);
                     admission.probe = probe;
                     self.changed.notify_waiters();
+                    let grant = self.trace_latency.then(|| (now_ms(), q.waiting.len(), q.in_flight, q.fast_in_flight));
+                    drop(q);
+                    if let Some((at, waiting, busy, fast_busy)) = grant {
+                        log::info!("input_latency_grant {at} {id} {lane:?} {waiting} {busy} {fast_busy} {spacing_poll_us} {spacing_overrun_us}");
+                    }
                     return Ok(admission);
                 }
+                if self.trace_latency {
+                    if candidate.is_none() {
+                        deadline = q.spacing_deadline(id, lane, profile, now);
+                    }
+                    if q.last_trace_probe.is_none_or(|last| now.duration_since(last) >= Duration::from_secs(1)) {
+                        q.last_trace_probe = Some(now);
+                        let at = now_ms();
+                        let (waiting, busy, fast_busy) = (q.waiting.len(), q.in_flight, q.fast_in_flight);
+                        let (limit, fast_limit) = (q.concurrency, q.fast_slots);
+                        let ready = q.ready_for_trace(now);
+                        drop(q);
+                        log::info!("input_latency_probe {at} {waiting} {busy} {limit} {fast_busy} {fast_limit} {ready} {}", u8::from(candidate.is_some()));
+                    }
+                }
             }
-            tokio::select! { _ = changed => {}, _ = tokio::time::sleep(Duration::from_millis(50)) => {} }
+            let poll = Duration::from_millis(50);
+            tokio::select! {
+                _ = changed => {},
+                _ = tokio::time::sleep(poll) => {
+                    if let Some(deadline) = deadline {
+                        let late = deadline.elapsed().as_micros();
+                        spacing_poll_us += late.min(poll.as_micros());
+                        spacing_overrun_us += late.saturating_sub(poll.as_micros());
+                    }
+                }
+            }
         }
     }
 
@@ -767,6 +851,7 @@ pub struct Reply {
     pub model: String,
     /// The picked profile failed and its overflow (or the default) answered.
     pub overflowed: bool,
+    pub admission_trace: Option<(u64, u64)>,
 }
 
 pub struct Msg {
@@ -985,7 +1070,9 @@ impl Llm {
         let cost = messages.iter().map(|m| (m.content.len() as u64).div_ceil(3) + 8).sum::<u64>() + u64::from(p.max_tokens_for(purpose).unwrap_or(8000));
         let host = p.base_url.clone();
         let queued = Instant::now();
+        let queue_enter_ms = self.scheduler.trace_latency.then(now_ms);
         let permit = self.scheduler.admit(profile, lane, cost).await?;
+        let admission_trace = queue_enter_ms.map(|at| (permit.id, at));
         let queue_wait_ms = queued.elapsed().as_millis() as u64;
         let started = Instant::now();
         let url = format!("{}/chat/completions", p.base_url.trim_end_matches('/'));
@@ -1043,7 +1130,7 @@ impl Llm {
         });
         self.journal(actor, &entry).await;
         let (content, tokens, ..) = result?;
-        Ok(Reply { content, tokens, latency_ms, model: p.model.clone(), overflowed: false })
+        Ok(Reply { content, tokens, latency_ms, model: p.model.clone(), overflowed: false, admission_trace })
     }
 
     fn gate_leave(&self, host: &str, unreachable: bool) {
@@ -1388,7 +1475,7 @@ impl Llm {
                 entry["after_restart"] = json!(true);
             }
             self.journal(&item.actor, &entry).await;
-            out.push((item.id.clone(), item.meta.clone(), result.map(|(content, tokens, ..)| Reply { content, tokens, latency_ms, model: p.model.clone(), overflowed: false })));
+            out.push((item.id.clone(), item.meta.clone(), result.map(|(content, tokens, ..)| Reply { content, tokens, latency_ms, model: p.model.clone(), overflowed: false, admission_trace: None })));
         }
         let _ = std::fs::remove_file(self.pending_path(id));
         log::info!("batch job {id} {} in {:.0} s{}", done["status"], latency_ms as f64 / 1000.0, if after_restart { " (collected after a restart)" } else { "" });
@@ -1491,6 +1578,22 @@ mod tests {
     fn complete(q: &mut Queue, lane: Lane) {
         q.in_flight -= 1;
         q.lower_in_flight -= usize::from(lane != Lane::Interactive);
+    }
+
+    #[test]
+    fn admission_trace_distinguishes_profile_spacing_from_slot_capacity() {
+        let scheduler = test_scheduler();
+        let mut q = scheduler.queue.lock().unwrap();
+        let now = q.global_next;
+        let id = enqueue(&mut q, Lane::Fast, 10);
+        let deadline = now + Duration::from_millis(10);
+        q.rates.get_mut("p").unwrap().next = deadline;
+        assert_eq!(q.spacing_deadline(id, Lane::Fast, "p", now), Some(deadline));
+        assert_eq!(q.ready_for_trace(now), 0);
+        assert_eq!(q.ready_for_trace(deadline), 1);
+        q.fast_in_flight = q.fast_slots;
+        assert_eq!(q.spacing_deadline(id, Lane::Fast, "p", now), None);
+        assert_eq!(q.ready_for_trace(deadline), 0);
     }
 
     #[test]
