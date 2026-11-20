@@ -39,6 +39,7 @@ mod live;
 mod loading;
 mod lookdev;
 mod mouth;
+mod genesis;
 mod net;
 mod perf;
 mod phase;

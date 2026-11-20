@@ -1322,6 +1322,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   writes the game UI's state to `<dir>/NAME.json` (`ui::dump`);
 ///   `type:TEXT` puts words in it, `tab` speaks to the next person within earshot, and `enter`
 ///   says the words to whom it addresses (`talk.rs`), as Tab and Enter do;
+/// - `preparing[:S]`: until the client shows the world as still being made (staged genesis,
+///   `genesis.rs`), at most S s (60), for a photograph of the preparing cover;
 /// - `dead`: until the death screen shows; `rejoin`: its "arrive again" button; `joined`:
 ///   until a new character is mine;
 /// - `quit`.
@@ -1852,6 +1854,8 @@ fn script(
             true
         }
         "joined" => net.my_id.is_some_and(|id| Some(id) != s.started) && mine.is_some() || s.since > 60.0,
+        // Until the world shows as still being made (staged genesis), or ARG s (default 60).
+        "preparing" => net.genesis.preparing() || s.since > arg.parse::<f32>().unwrap_or(60.0),
         // A second for the last photograph to be written.
         "quit" => {
             if s.since > 1.0 {
@@ -1865,7 +1869,7 @@ fn script(
         }
     };
     if done {
-        if verb == "ready" || verb == "dead" || verb == "joined" {
+        if verb == "ready" || verb == "dead" || verb == "joined" || verb == "preparing" {
             info!("live script: {verb} after {:.1} s (me {:?} at {:?})", s.since, net.my_id, mine.map(|m| m.1));
         }
         s.at += 1;
