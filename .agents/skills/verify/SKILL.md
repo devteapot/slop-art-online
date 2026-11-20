@@ -133,6 +133,12 @@ may not rise more than 0.1% above it. When the staged-genesis reporter `living/t
 exists, each scheduled step is also checked against its own budget. Each seed prints a
 `scene-gate: genesis <seed>: …` line and gets a record in `genesis.json` and `gate.json`. Genesis
 failures block before the scenes, with no retry or red-on-main exception.
+The verify-generation cases `generation-default`, `generation-island` and `generation-cullet`
+(`generation.py --smoke`) read the world, island, cullet and cullet-laws genesis worlds before
+they are deleted; a failing check is a part `<case>:<seed>:<check>` the red-on-main list can hold.
+`just living-scene-gate seeds` (and `living-merge`, before the check) compares every compiled seed
+with its `living/seeds/worlds/<world>/` sources, files only; see [seed
+freshness](../../../docs/TOOLING.md#seed-freshness).
 `just living-scene-gate run --genesis-only` measures without scenes; `just living-scene-gate
 genesis-baseline <genesis.json> <seed>` records a baseline. See [genesis fuel in the tooling
 guide](../../../docs/TOOLING.md#genesis-fuel) for the rules, toolchains and overrides.

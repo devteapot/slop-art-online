@@ -91,6 +91,7 @@ set -o pipefail; just living-merge plan-3 -m "Merge plan-3: what it brings"
 1. Refuses a dirty worktree (untracked files included), an unfinished merge or rebase, `main` checked out here, the owner's checkout, and commits that `origin/main` lacks. Before fetching, it checks free space on the worktree and Cargo target filesystems ([disk policy](#disk)). It checks again before retrying a merge. A disk refusal names the path, free space, required space, and how much allocated target space it subtracted (exit 12).
 2. Fetches `main` and the branch, and pins the branch to the commit it has now. It prefers `origin/<branch>` and otherwise takes a local branch, saying so.
 3. Moves HEAD to `origin/main` (`git reset --keep`) and runs `git merge --no-ff`. On a conflict it aborts the merge, restores HEAD and stops (exit 4).
+3a. **Checks that the compiled seeds are fresh** ([seed freshness](#seed-freshness)) on every merge, with or without `--scenes`: `scene_gate.py seeds`, files only, a fraction of a second. A stale seed that the red-on-main list does not hold restores HEAD and stops before the check (exit 13), naming the seed, the block and the command that recompiles it. `LIVING_MERGE_SEEDS=off` skips it, saying so.
 4. Runs the check (`check.py`). If the check fails, HEAD is restored and nothing is pushed (exit 5). If the check changes the worktree (a rewritten `Cargo.lock`, say), it stops (exit 6).
 4a. **Checks that the bindings were regenerated.** This runs when the merge touches the module's shape: `living/authority`, `living/rules`, `living/bindings`, or the workspace's `Cargo.toml` or `Cargo.lock`.
     - **What it does:** runs `just living-generate` on the checked tree and fails the merge when `git status --porcelain living/bindings` then shows a change. The check already built the module, so cargo rebuilds nothing when it is current.
@@ -106,7 +107,8 @@ set -o pipefail; just living-merge plan-3 -m "Merge plan-3: what it brings"
 
 - fake `df` and `du` for cold and warm targets, the 2 GB minimum, a retry at 48.8 GB free, separate target and trial filesystems, and the overrides;
 - the dirty-worktree, local-commit, conflict, failing-check and dirtying-check refusals;
-- a failing and a passing scene gate (a stand-in command);
+- a failing and a passing scene gate (a stand-in command), and a failed gate's genesis fuel per seed in the summary;
+- a stale seed stopping the merge before the check (a stand-in command);
 - a `main` that moves during the check, and one rewound during the check;
 - a branch merged by someone else meanwhile, an unknown branch, and a clean merge;
 - the bindings check with a stand-in generator: bindings that change fail and are named, a failing generator fails, unchanged bindings pass, and a docs-only merge skips it.
@@ -164,6 +166,30 @@ Measured on the Spark (rustc 1.99.1, aarch64) on 2026-11-20, main `3ed22a74` (it
 | world | 17,614,179,252 | 14.68% | 85.32% | passes |
 
 TODO (Spark): record the island's baseline for rustc 1.99.1 from a `--genesis-only` run on main once the status-parts revert is on main. Until then, every gated merge on the Spark fails on the island. Dev-box records its own for its rustc.
+
+#### Generation smoke
+
+The cases `generation-default` (`world`), `generation-island` (`island`) and `generation-cullet` (`cullet` and `cullet-laws`) run verify-generation's per-world checks (`generation.py --run RUN --smoke`): the world's day, **the seed's laws composed over the shipped script** (or the shipped script alone), dimensions and terrain chunks, settlements, residents and their sheets, bands, animals and resources, rhythms, land and plans, looks and body sex, and no sheet secret in a public table. The smoke pauses the world and reads its tables. It runs no native digest comparison, repeatability, floors or build: those stay in the full skill. In the first pass the smoke reads the genesis fuel worlds before they are deleted, so it publishes nothing of its own and adds seconds. A retry, or main's run of it, launches its own world. A passing world keeps `checks.json` and `smoke.json` (an island's table snapshots are about 60 MB). A failing one also keeps the snapshots.
+
+A failing check is a part, `<case>:<seed>:<check>`, that the red-on-main list can hold like `combat:<scene>`. The case passes when every failing check is listed, and says which. `recheck` cannot run a part, so drop it by hand (`just living-scene-gate reds --drop '<key>'`) once it is green. Listed on 2026-11-20 against main `bfbbc079`: `generation-cullet:cullet-laws:the seed's laws are composed over the shipped script` (red on both cullet-laws seeds; fixed separately after status-parts-genesis), and Cullet's two look checks `generation-cullet:cullet:the cases are of the world's generation` and `generation-cullet:cullet:each band case's resident wears its entry, in its band, with its line, at its stage (11 cases)` (the stale compiled seed below; dev-box's `cullet-looks-seed`).
+
+### Seed freshness
+
+[`seed_fresh.py`](../living/tools/seed_fresh.py) compares every compiled seed with the sources it is compiled from, files only (no publish, no build, about 0.2 s). Each `living/seeds/worlds/<world>/` compiles into `living/seeds/<into>.json` through `author_world.py <world> --compile-only` (`into` from `cast.json` or `world.json`, else the world's name). Cullet's land, plan, ways and town life come from `cullet_plan.py`. The compilers stamp nothing but the look data's own `generation`, so the check compares each block as its compiler copies it:
+
+- `looks`: the seed's `looks.generation` against `looks.json`'s, then the whole block, then each resident's `look`;
+- `ways`: `ways.json`'s `top`, `common` and `occupations` entries in the seed's `ways`, its `town_life`, and its `work` within the seed's `town_life.work`;
+- `residents`: the residents against the drafted sheets in `sheets/*.json` by name, and each sheet's narrative;
+- `plan`: Cullet's `cullet_plan.py --check`, which rebuilds the plan, the land seed and the game's ground map in memory and compares them byte for byte.
+
+`just living-scene-gate seeds` runs it with the red-on-main list, and `living-merge` runs that before the check. A stale block prints, for example:
+
+```text
+scene-gate: seeds: stale cullet looks: look generation c4-e61b01c0 in the seed, c4-cbcc40bf in living/seeds/worlds/cullet/looks.json; recompile: python3 living/tools/cullet_plan.py && python3 living/tools/author_world.py cullet --compile-only
+```
+
+A block listed red on main as `seeds:<seed>:<block>` is reported and does not fail. On 2026-11-20 `aske-coast` and `island` are fresh. `cullet` is stale: look generation `c4-e61b01c0` against `c4-cbcc40bf`, and 55 residents' looks. It is listed as `seeds:cullet:looks` until dev-box's `cullet-looks-seed` lands. Seeds that are hand-written, such as `plan-test` with its look fixture, or that read a source at build time, such as the `laws_file` of `cullet-laws`, have nothing to go stale.
+
 
 ## Disk
 

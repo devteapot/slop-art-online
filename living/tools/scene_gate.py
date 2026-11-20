@@ -17,6 +17,10 @@ touches behaviour, these cases with the fake model only:
                  public copy tables, motion and projections, reach only their viewer under row-level
                  security, and each law off empties its table at once); one default-seed world, the SDK probe
   living-mind    mind-unit: its cargo tests (`just living-check` builds the mind, tests only the rules)
+  verify-generation  generation-default, generation-island, generation-cullet (generation.py --smoke:
+                 its per-world checks, the seed's laws composed over the shipped script among them,
+                 on the world, island, cullet and cullet-laws genesis worlds; a failing check is a
+                 part `<case>:<seed>:<check>` the red-on-main list can hold)
 
 The world groups and the tests run at once. A case whose only failures are parts on the red-on-main
 list (a mind test `living-mind::<test>`, a combat scene `combat:<scene>`) passes and says which. Flakes: a failing case runs again once, alone, on a fresh scratch
@@ -44,6 +48,9 @@ Usage:
       --force     run even when no behavioural path changed
       --genesis-only  the genesis fuel publishes alone: no scenes, no red-on-main list
       --genesis-fuel-report JSON  a staged genesis_fuel.py report for its seed (repeatable)
+  scene_gate.py seeds [--json PATH]   compiled seeds against their living/seeds/worlds/ sources
+                  (seed_fresh.py, files only); a stale block listed red on main as
+                  `seeds:<seed>:<block>` does not fail. living-merge runs it before the check
   scene_gate.py genesis-baseline RECORD SEED... [--note TEXT]   record SEEDs' init fuel from a
                   gate's genesis.json or gate.json as their baselines for its rustc
   scene_gate.py touches --base A --head B   exit 0 when A..B touches behaviour, 1 when not
@@ -128,6 +135,13 @@ CASES = {
     "cues":         {"skill": "verify-client", "group": "client"},
     # The same for the public motion copies (battle-views, `seen_body_copy`).
     "motion_tables": {"skill": "verify-client", "group": "client"},
+    # verify-generation's light smoke (generation.py --smoke): its per-world checks, the seed's laws
+    # composed over the shipped script among them, one case per seed family. The first pass reads
+    # the genesis fuel worlds before they are deleted; a retry or main's run launches its own.
+    # A failing check is a part, `<case>:<seed>:<check>`, that the red-on-main list can hold.
+    "generation-default": {"skill": "verify-generation", "group": "generation", "seeds": ("world",)},
+    "generation-island":  {"skill": "verify-generation", "group": "generation", "seeds": ("island",)},
+    "generation-cullet":  {"skill": "verify-generation", "group": "generation", "seeds": ("cullet", "cullet-laws")},
     # living-mind's own cargo tests: `just living-check` builds the mind but tests only living-rules.
     "mind-unit":    {"skill": "living-mind", "group": "unit",
                      "flaky": "timing bounds under load: llm::tests::unreachable_provider_holds_calls (1.97 s against 2 s), "
@@ -139,6 +153,7 @@ CASES = {
 # The skills name no owners; the surface is the owner until `reds --owner` names one.
 ORDER = list(CASES)
 V = ".agents/skills/verify/scripts/verify.py"
+GEN = ".agents/skills/verify-generation/scripts/generation.py"
 LOCK = threading.RLock()  # say() inside the list updates takes it again
 
 
@@ -509,6 +524,9 @@ class Runner:
         self.runs = []  # every gate run name launched, for the final sweep
         self.procs = set()
         self.notes = {}  # (tag, case) -> what a passing run with listed failures failed
+        self.smoke_seeds = set()  # seeds whose genesis world the generation smoke reads first
+        self.smoke = {}  # (root, seed) -> (failed checks or None when it did not run, evidence)
+        self.fresh = 0  # numbers the generation cases' own worlds
 
     def sh(self, cmd, root, log, timeout, stdout=None):
         """Run one command in its own process group, output appended to log; return its code."""
@@ -613,6 +631,9 @@ class Runner:
             if not published:
                 detail = f"fresh publish not confirmed (launch exit {code}; see {log} and {result['world_guard_log']})"
                 result.update(passed=False, error="; ".join(filter(None, (detail, result.get("error")))))
+            elif seed in self.smoke_seeds:
+                # The generation cases' first pass, on this world before it is deleted.
+                self.smoke[(str(root), seed)] = self.generation_smoke(root, run)
         except (OSError, ValueError) as e:
             result.update(passed=False, error=str(e))
         finally:
@@ -620,6 +641,15 @@ class Runner:
             if state.get("published") and self.cleanup(root, run, log):
                 result.update(passed=False, error=f"pause-confirm-delete failed; see {log}")
         return result
+
+    def generation_smoke(self, root, run):
+        """generation.py --smoke on a launched run: (failed check names, or None when it did not run; evidence)."""
+        ev = Path(root) / ".local/living/verify" / run
+        code = self.sh([sys.executable, GEN, "--run", run, "--smoke"], root, ev / "generation-smoke.log", 600)
+        got = load_json(ev / "smoke.json", {})
+        if code and not got.get("failed"):
+            return None, f"{ev / 'generation-smoke.log'} (exit {code}; no result)"
+        return list(got.get("failed", [])), str(ev / "checks.json")
 
     def cleanup(self, root, run, log):
         return self.sh([sys.executable, V, "cleanup", "--run", run], root, log, 300)
@@ -640,6 +670,30 @@ class Runner:
             elif code and failed:
                 self.notes[(tag, "mind-unit")] = f"failed: {', '.join(failed)}" + (f" (listed: {', '.join(sorted(set(failed) & listed))})" if set(failed) & listed else "")
             return {"mind-unit": (ok, str(log), time.time() - t0)}
+        if group == "generation":
+            for c in cases:
+                failed, evidence = [], []
+                for seed in CASES[c]["seeds"]:
+                    got = self.smoke.pop((str(root), seed), None) if tag.startswith("a-") else None
+                    if got is None:  # a retry, main's run, or no genesis world: a world of its own
+                        with LOCK:
+                            self.fresh += 1
+                            run = f"gate-{self.stamp}-g{self.fresh}-{seed}"
+                        log = self.out / f"{tag}-{seed}.log"
+                        try:
+                            got = self.generation_smoke(root, run) if self.world(root, run, seed, log) else \
+                                (None, f"{log} (launch or doctor failed)")
+                        finally:
+                            if load_json(Path(root) / ".local/living/verify" / run / "state.json", {}).get("published"):
+                                self.cleanup(root, run, log)
+                    evidence.append(got[1])
+                    failed += [f"{seed}:{name}" for name in got[0]] if got[0] is not None else [f"{seed}:(did not run)"]
+                listed = listed_parts(self.reds_path, f"{c}:")
+                ok = not failed or (set(failed) <= listed and not any(f.endswith(":(did not run)") for f in failed))
+                if failed:
+                    self.notes[(tag, c)] = ("only listed red checks failed: " if ok else "failed: ") + "; ".join(failed)
+                res[c] = (ok, ", ".join(evidence), time.time() - t0)
+            return res
         if group == "minds":
             suite = f"gate-{self.stamp}-{tag}"
             ev = Path(root) / ".local/living/verify" / suite
@@ -894,6 +948,8 @@ def cmd_run(a):
                 return finish(a, record, 2)
         if threshold is None:
             say("WARNING genesis fuel check disabled by SLOP_GATE_GENESIS_CHECK=0: init fuel is not measured")
+        if not a.genesis_only:
+            runner.smoke_seeds = {seed for c in cases if CASES[c]["group"] == "generation" for seed in CASES[c]["seeds"]}
         measurements = []
         for seed in GENESIS_SEEDS if threshold is not None else ():
             baseline, missing = genesis_baseline(baselines, seed, toolchain)
@@ -985,6 +1041,38 @@ def cmd_genesis_baseline(a):
         say(f"genesis-baseline: {seed} {g['init_fuel'] / 1e9:.3f}e9 for {g['toolchain']} (commit {str(g.get('commit'))[:10]})")
     path.write_text(json.dumps(baselines, indent=2, sort_keys=True) + "\n")
     load_genesis_baselines(path)
+    return 0
+
+
+def cmd_seeds(a):
+    """Seed freshness (living/tools/seed_fresh.py, files only), with the red-on-main list: a stale
+    block listed as `seeds:<seed>:<block>` is reported and does not fail."""
+    repo = git("rev-parse", "--show-toplevel")
+    tool = Path(repo) / "living/tools/seed_fresh.py"
+    if not tool.is_file():
+        say("seeds: no living/tools/seed_fresh.py in this tree; skipped")
+        return 0
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="seed-fresh-") as t:
+        record = Path(a.json).resolve() if a.json else Path(t) / "seeds.json"
+        got = subprocess.run([sys.executable, str(tool), "--json", str(record)], cwd=repo, capture_output=True, text=True, timeout=300)
+        report = load_json(record, None)
+    for line in got.stdout.splitlines() + got.stderr.splitlines():
+        say(f"seeds: {line}")
+    if got.returncode not in (0, 1) or report is None:
+        say(f"seeds: the freshness check could not run (exit {got.returncode})")
+        return 2
+    stale = sorted(f"{seed}:{block}" for seed, r in report.get("stale", {}).items() for block in r.get("stale", {}))
+    reds = load_json(a.reds, {})
+    listed = sorted(p for p in stale if f"seeds:{p}" in reds)
+    blocking = [p for p in stale if p not in listed]
+    for p in listed:
+        e = reds[f"seeds:{p}"]
+        say(f"seeds: {p} is stale and listed red on main (owner {e.get('owner') or '-'}; {e.get('reason') or 'no reason'}); not blocking")
+    if blocking:
+        say(f"seeds: FAILED, stale: {', '.join(blocking)}")
+        return 1
+    say("seeds: passed" + (f" (listed red on main: {', '.join(listed)})" if listed else ""))
     return 0
 
 
@@ -1125,19 +1213,22 @@ def main(argv):
     st.add_argument("--record", required=True)
     st.add_argument("--main", required=True)
     st.set_defaults(f=cmd_settle)
+    sd = sub.add_parser("seeds", help="seed freshness against living/seeds/worlds/ (files only), with the red-on-main list")
+    sd.add_argument("--json")
+    sd.set_defaults(f=cmd_seeds)
     gb = sub.add_parser("genesis-baseline", help="record seeds' init fuel from a gate record (genesis.json or gate.json)")
     gb.add_argument("record")
     gb.add_argument("seeds", nargs="+")
     gb.add_argument("--file", default=str(GENESIS_BASELINE_FILE))
     gb.add_argument("--note")
     gb.set_defaults(f=cmd_genesis_baseline)
-    for p in (r, t, s, st, rc, gb):  # --reds is accepted after the command too
+    for p in (r, t, s, st, rc, gb, sd):  # --reds is accepted after the command too
         p.add_argument("--reds", default=argparse.SUPPRESS)
     a = ap.parse_args(argv or ["run"])
     if not getattr(a, "f", None):
         ap.print_help()
         return 2
-    if (a.f is cmd_run and not a.genesis_only) or a.f is cmd_recheck or (a.f is cmd_reds and not (a.add or a.drop or a.owner)):
+    if (a.f is cmd_run and not a.genesis_only) or a.f in (cmd_recheck, cmd_seeds) or (a.f is cmd_reds and not (a.add or a.drop or a.owner)):
         refresh_reds(a.reds)  # the shared list from git into the cache (or the cache, said so)
     return a.f(a)
 

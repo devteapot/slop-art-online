@@ -292,6 +292,10 @@ def main():
         code, o = merge(coord, ["fifth", "--scenes"], env_extra={"LIVING_MERGE_SCENES_CMD": "echo scene-gate: FAILED dealings; exit 1"})
         expect("failing scene gate stops (exit 10), nothing pushed", code == 10 and "scene gate failed" in o
                and sh(f"git --git-dir={origin} rev-parse main", t).strip() == before, o)
+        # a stale compiled seed stops the merge before the check (exit 13), nothing pushed
+        code, o = merge(coord, ["fifth", "--scenes"], env_extra={"LIVING_MERGE_SEEDS_CMD": "echo 'scene-gate: seeds: stale cullet looks: …'; exit 1"})
+        expect("a stale seed stops before the check (exit 13), nothing pushed", code == 13 and "compiled seeds STALE" in o
+               and "check passed" not in o and sh(f"git --git-dir={origin} rev-parse main", t).strip() == before, o)
         # the gate's genesis fuel per seed is in the summary on a failure and on a pass
         record = json.dumps({"result": "failed genesis: island", "genesis": [
             {"seed": "island", "budget": 120000000000, "init_fuel": 118522397261.0, "passed": False},

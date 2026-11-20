@@ -19,6 +19,7 @@ from pathlib import Path
 from urllib.error import HTTPError
 
 import scene_gate
+import seed_fresh
 from scene_gate import (
     GENESIS_BUDGET, GENESIS_FUEL, GENESIS_RUNS, Runner, genesis_metrics, genesis_policy,
     genesis_baseline, genesis_result_line, genesis_threshold, load_genesis_baselines, staged_genesis_report,
@@ -238,6 +239,108 @@ def check_genesis_live():
         scene_gate.genesis_http = original
 
 
+def check_seed_fresh():
+    """seed_fresh.py on a throwaway worlds tree: each block stale and fresh, by name."""
+    original = seed_fresh.ROOT, seed_fresh.WORLDS, dict(seed_fresh.PLAN_CHECKS)
+    with tempfile.TemporaryDirectory(prefix="seed-fresh-selftest-") as t:
+        root = Path(t)
+        wd = root / "living/seeds/worlds/town"
+        (wd / "sheets").mkdir(parents=True)
+        looks = {"looks": {"generation": "c4-new", "pool": [1]}, "residents": {"Ann": "a-1", "Bo": "b-1"}}
+        ways = {"common": {"eat": 1}, "occupations": {"smith": 2}, "work": {"smith": ["forge"]}}
+        sheets = {"Ann": {"narrative": "Ann's story"}, "Bo": {"narrative": "Bo's story"}}
+        seed = {"looks": dict(looks["looks"]), "ways": {"common": {"eat": 1, "old": 0}, "occupations": {"smith": 2}},
+                "town_life": {"work": {"smith": ["forge"], "baker": ["oven"]}},
+                "towns": [{"name": "T", "residents": [{"name": n, "look": looks["residents"][n], "sheet": sheets[n]} for n in sheets]}]}
+        (wd / "cast.json").write_text(json.dumps({"into": "town"}))
+        (wd / "looks.json").write_text(json.dumps(looks))
+        (wd / "ways.json").write_text(json.dumps(ways))
+        (wd / "sheets/house.json").write_text(json.dumps(sheets))
+        seed_path = root / "living/seeds/town.json"
+
+        def stale(change=None):
+            s = json.loads(json.dumps(seed))
+            if change:
+                change(s)
+            seed_path.write_text(json.dumps(s))
+            return seed_fresh.check_world(wd)
+
+        seed_fresh.ROOT, seed_fresh.WORLDS = root, root / "living/seeds/worlds"
+        try:
+            expect("seed freshness: a seed as compiled from its sources is fresh", stale() == ("town", []), stale())
+            cases = [
+                ("an older look generation", lambda s: s["looks"].update(generation="c4-old"), "looks", "look generation c4-old in the seed, c4-new"),
+                ("the same generation with another pool", lambda s: s["looks"].update(pool=[2]), "looks", "same generation c4-new"),
+                ("a resident's look", lambda s: s["towns"][0]["residents"][1].update(look="b-0"), "looks", "1 residents' look differ"),
+                ("a way", lambda s: s["ways"]["occupations"].update(smith=3), "ways", "ways.occupations.smith"),
+                ("a workplace", lambda s: s["town_life"]["work"].update(smith=["mill"]), "ways", "town_life.work.smith"),
+                ("a resident without a drafted sheet", lambda s: s["towns"][0]["residents"].append({"name": "Cy", "sheet": {}}), "residents", "1 residents have no drafted sheet"),
+                ("a drafted sheet with no resident", lambda s: s["towns"][0]["residents"].pop(), "residents", "1 drafted sheets have no resident"),
+                ("a sheet's narrative", lambda s: s["towns"][0]["residents"][0]["sheet"].update(narrative="old"), "residents", "sheet narratives differ"),
+            ]
+            for name, change, block, words in cases:
+                got = stale(change)[1]
+                expect(f"seed freshness: {name} is a stale {block} block, and says so",
+                       len(got) == 1 and got[0][0] == block and words in got[0][1], got)
+            tool = root / "plan_check.py"
+            tool.write_text("import sys; print('differs: plan.json'); sys.exit(1)")
+            seed_fresh.PLAN_CHECKS["town"] = [str(tool), "--check"]
+            got = stale()[1]
+            expect("seed freshness: a plan compiler's failing --check is a stale plan block",
+                   len(got) == 1 and got[0][0] == "plan" and "differs: plan.json" in got[0][1], got)
+            expect("seed freshness: the recompile command names the plan compiler and the seed compiler",
+                   seed_fresh.recompile("town") == f"python3 {tool} && python3 living/tools/author_world.py town --compile-only")
+        finally:
+            seed_fresh.ROOT, seed_fresh.WORLDS = original[:2]
+            seed_fresh.PLAN_CHECKS.clear()
+            seed_fresh.PLAN_CHECKS.update(original[2])
+
+
+def check_generation_group():
+    """The generation cases: the genesis worlds' smoke first, a world of their own otherwise; a
+    failing check passes only when the red-on-main list holds it as a part."""
+    with tempfile.TemporaryDirectory(prefix="generation-selftest-") as t:
+        root = Path(t)
+        reds = root / "reds.json"
+        reds.write_text(json.dumps({"generation-cullet:cullet-laws:laws composed": {"case": "generation-cullet:cullet-laws:laws composed"}}))
+
+        class Fake(Runner):
+            def __init__(self, smokes):
+                super().__init__("fixture", dict(os.environ), root, reds)
+                self.smokes, self.launched = smokes, []
+
+            def world(self, root, run, seed, log, *args):
+                self.launched.append(seed)
+                return True
+
+            def generation_smoke(self, root, run):
+                return self.smokes[run.rsplit("-", 1)[-1] if not run.endswith("cullet-laws") else "cullet-laws"]
+
+            def cleanup(self, root, run, log):
+                return 0
+
+        smokes = {"world": ([], "w"), "island": ([], "i"), "cullet": ([], "c"), "laws": ([], "l"),
+                  "cullet-laws": (["laws composed"], "cl")}
+        runner = Fake(smokes)
+        runner.smoke = {(str(root), "world"): ([], "w"), (str(root), "cullet"): ([], "c"), (str(root), "cullet-laws"): (["laws composed"], "cl")}
+        got = runner.group(root, "generation", ["generation-default", "generation-island", "generation-cullet"], "a-generation")
+        expect("generation: the first pass reads the genesis worlds' smoke, launching only for a seed without one",
+               runner.launched == ["island"] and got["generation-default"][0] and got["generation-island"][0], (runner.launched, got))
+        expect("generation: a failing check listed red on main as a part passes, and the note names it",
+               got["generation-cullet"][0] and "only listed red checks failed: cullet-laws:laws composed"
+               in runner.notes[("a-generation", "generation-cullet")], runner.notes)
+        smokes["cullet"] = (["the cases are of the world's generation"], "c")
+        runner = Fake(smokes)
+        got = runner.group(root, "generation", ["generation-cullet"], "b-generation-cullet-generation")
+        expect("generation: a retry launches its own worlds, and an unlisted failing check fails the case",
+               runner.launched == ["cullet", "cullet-laws"] and not got["generation-cullet"][0]
+               and "cullet:the cases are of the world's generation" in runner.notes[("b-generation-cullet-generation", "generation-cullet")],
+               (runner.launched, got, runner.notes))
+        smokes["world"] = (None, "no result")
+        got = Fake(smokes).group(root, "generation", ["generation-default"], "b-x")
+        expect("generation: a smoke that did not run fails the case", not got["generation-default"][0], got)
+
+
 def check_staged_genesis():
     commit = "c" * 40
     step = dict(phase="terrain", label="generate 1", reducer="genesis_step", fuel=108_000_000_000)
@@ -285,6 +388,8 @@ def main():
     check_genesis()
     check_genesis_baselines()
     check_genesis_live()
+    check_seed_fresh()
+    check_generation_group()
     check_staged_genesis()
     with tempfile.TemporaryDirectory(prefix="gate-reds-selftest-") as t:
         os.environ.update({"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
@@ -341,6 +446,22 @@ def main():
         gate(b, cb, "reds", "--add", "late", "--skill", "verify-minds", "--who", "y", "--reason", "seen by the run")
         code, out = gate(a, ca, "run", "--base", "HEAD", "--head", "HEAD")
         expect("a gate run (skipped) prints the list as on the remote", code == 0 and "skipped" in out and "late (verify-minds; owner y)" in out, out)
+
+        # seed freshness through the CLI: a stale block fails unless the list holds it as a part
+        tool = Path(a, "living/tools/seed_fresh.py")
+        tool.parent.mkdir(parents=True, exist_ok=True)
+        tool.write_text("import json, sys\n"
+                        "report = {'fresh': [], 'stale': {'cullet': {'world': 'cullet', 'recompile': 'x', 'stale': {'looks': ['gen']}}}}\n"
+                        "open(sys.argv[sys.argv.index('--json') + 1], 'w').write(json.dumps(report))\n"
+                        "print('stale cullet looks: gen; recompile: x'); sys.exit(1)\n")
+        code, out = gate(a, ca, "seeds")
+        expect("seeds: a stale block fails (exit 1) and the line names the seed, block and command",
+               code == 1 and "stale cullet looks: gen; recompile: x" in out and "FAILED, stale: cullet:looks" in out, out)
+        gate(b, cb, "reds", "--add", "seeds:cullet:looks", "--skill", "seed-freshness", "--who", "dev-box", "--reason", "recompiling")
+        code, out = gate(a, ca, "seeds")
+        expect("seeds: a stale block listed red on main is reported and does not fail",
+               code == 0 and "cullet:looks is stale and listed red on main (owner dev-box; recompiling)" in out, out)
+        tool.unlink()
 
         # the genesis overrides through the real CLI (no server needed for either)
         code, out = gate(a, ca, "run", "--base", "HEAD", "--head", "HEAD", "--genesis-only",
