@@ -770,6 +770,12 @@ class Runner:
                 self.cleanup(root, run, self.out / "sweep.log")
 
 
+def run_part(name):
+    """A case or group name as part of a run name: verify.py takes lowercase letters, digits and
+    single hyphens only, so `motion_tables` runs as `motion-tables` (its retry was refused, 2026-11-20)."""
+    return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]", "-", name.lower())).strip("-") or "case"
+
+
 def run_cases(runner, root, cases, tag):
     """All `cases` at once, one task per world group; {case: (ok, evidence, seconds)}."""
     groups = {}
@@ -777,7 +783,7 @@ def run_cases(runner, root, cases, tag):
         groups.setdefault(spec(c)["group"], []).append(c)
     out = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(groups))) as ex:
-        futs = {ex.submit(runner.group, root, g, cs, f"{tag}-{g}"): g for g, cs in groups.items()}
+        futs = {ex.submit(runner.group, root, g, cs, f"{tag}-{run_part(g)}"): g for g, cs in groups.items()}
         for f in concurrent.futures.as_completed(futs):
             try:
                 got = f.result()
@@ -785,7 +791,7 @@ def run_cases(runner, root, cases, tag):
                 got = {c: (False, f"gate error: {type(e).__name__}: {e}", 0.0) for c in groups[futs[f]]}
             for c, (ok, ev, secs) in got.items():
                 # a note (listed red parts that failed, or which parts failed) travels with the evidence
-                note = runner.notes.get((f"{tag}-{futs[f]}", c))
+                note = runner.notes.get((f"{tag}-{run_part(futs[f])}", c))
                 ev = f"{ev} [{note}]" if note else ev
                 say(f"{tag}: {c} {'passed' if ok else 'FAILED'} in {secs:.0f} s ({ev})")
                 out[c] = (ok, ev, secs)
@@ -796,7 +802,7 @@ def retry_each(runner, root, cases, tag):
     """Each case alone on its own fresh world, all at once."""
     out = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(cases))) as ex:
-        futs = {ex.submit(run_cases, runner, root, [c], f"{tag}-{c}"): c for c in cases}
+        futs = {ex.submit(run_cases, runner, root, [c], f"{tag}-{run_part(c)}"): c for c in cases}
         for f in concurrent.futures.as_completed(futs):
             out.update(f.result())
     return out
