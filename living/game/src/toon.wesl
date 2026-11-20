@@ -136,6 +136,21 @@ fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
     return select(pow((c + 0.055) / 1.055, vec3(2.4)), c / 12.92, c <= vec3(0.04045));
 }
 
+// A palette tag (contract v1.3, characters/palette.rs `tag`): a character's colour (bit 24, not
+// a plant's sway, bit 25) whose bits name columns of the material's palette image (bit 27).
+fn is_palette(tag: u32) -> bool {
+    return (tag & ((1u << 24u) | (1u << 25u) | (1u << 27u))) == ((1u << 24u) | (1u << 27u));
+}
+
+// Row `row` of a palette tag's entry, linear: the natural column's and the silver's sRGB values
+// mixed by clamp(grey x _GREY), as `recolor` greys hair (rows: shade, mid, light, highlight, ink).
+fn palette_row(tag: u32, row: i32, grey_v: f32) -> vec3<f32> {
+    let natural = textureLoad(hair_tints, vec2<i32>(i32(tag & 255u), row), 0).rgb;
+    let silver = textureLoad(hair_tints, vec2<i32>(i32((tag >> 8u) & 255u), row), 0).rgb;
+    let t = clamp(f32((tag >> 16u) & 255u) / 255.0 * grey_v, 0.0, 1.0);
+    return srgb_to_linear(mix(natural, silver, t));
+}
+
 // A character's own colours on a shared texture: the mean texture colour moves to the recipe's,
 // keeping the texture's detail. Characters share their base's materials (so they batch); each
 // mesh's tag carries its recipe colour as sRGB bytes with bit 24 set (characters.rs `recolor`).
@@ -145,6 +160,10 @@ fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
 // colour is then mix(natural, silver, clamp(grey x _GREY, 0, 1)) in sRGB values
 // (docs/CHARACTERS.md, "Long hair, short hair and the hair's shading").
 fn recolor(c: vec3<f32>, tag: u32, grey_v: f32) -> vec3<f32> {
+    // A palette tag names columns of the material's palette, not a colour (`hand_colours`).
+    if (is_palette(tag)) {
+        return c;
+    }
     var mode = toon.recolor.w;
     var goal = toon.recolor.xyz;
     var mean_hue = toon.recolor_from.xy;
@@ -304,6 +323,23 @@ fn aa(t: f32, w: f32, x: f32, fw: f32) -> f32 {
 // texture's R) passes 0.5, only where the sun reaches; and, v1.1, the lock ink lines from the
 // texture's G (a distance field in UV, "Lock ink lines"). `duv` is the UV's screen derivatives,
 // taken in uniform control flow; `view_z` the point's view depth.
+struct HandColours {
+    shade: vec3<f32>,
+    mid: vec3<f32>,
+    light: vec3<f32>,
+    highlight: vec3<f32>,
+    ink: vec3<f32>,
+}
+
+// A profile's colours (linear): its own (`toon.hand`, `toon.hand_ink`), or, on a palette material
+// (contract v1.3) whose mesh carries a palette tag, its entry for the person's hair colour.
+fn hand_colours(tag: u32, grey_v: f32) -> HandColours {
+    if (toon.palette.x > 0.5 && is_palette(tag)) {
+        return HandColours(palette_row(tag, 0, grey_v), palette_row(tag, 1, grey_v), palette_row(tag, 2, grey_v), palette_row(tag, 3, grey_v), palette_row(tag, 4, grey_v));
+    }
+    return HandColours(toon.hand[0].rgb, toon.hand[1].rgb, toon.hand[2].rgb, toon.hand[3].rgb, toon.hand_ink.rgb);
+}
+
 struct HandHair {
     // The base colour, before the light.
     base: vec3<f32>,
@@ -357,13 +393,13 @@ fn ink_cover(g: f32, r: f32, range: f32, mode: f32, w: f32, fade: f32, m_uv: f32
     return cov;
 }
 
-fn hand_hair(N: vec3<f32>, L: vec3<f32>, vis: f32, in: VertexOutput, duv: vec4<f32>, view_z: f32) -> HandHair {
+fn hand_hair(N: vec3<f32>, L: vec3<f32>, vis: f32, in: VertexOutput, duv: vec4<f32>, view_z: f32, hc: HandColours) -> HandHair {
     let ndl = dot(N, L);
     let fw = fwidth(ndl);
     let t = toon.hand_bands;
     let s1 = aa(t.x, t.z, ndl, fw) * vis;
     let s2 = aa(t.y, t.z, ndl, fw);
-    let level = mix(toon.hand[0].rgb, mix(toon.hand[1].rgb, toon.hand[2].rgb, s2), s1);
+    let level = mix(hc.shade, mix(hc.mid, hc.light, s2), s1);
     var mask = -1.0;
 @if(VERTEX_UVS_B) {
     mask = in.uv_b.y - 1.0;
@@ -382,7 +418,7 @@ fn hand_hair(N: vec3<f32>, L: vec3<f32>, vis: f32, in: VertexOutput, duv: vec4<f
 }
     let fm = fwidth(mask);
     let h = select(0.0, aa(0.5, t.w, mask, fm), mask >= 0.0) * s1;
-    return HandHair(mix(level, toon.hand[3].rgb, h), s1, cov);
+    return HandHair(mix(level, hc.highlight, h), s1, cov);
 }
 
 @fragment
@@ -477,10 +513,11 @@ fn fragment(
         let hand = is_kind(5.0);
         var lit_albedo = albedo.rgb;
         if (hand) {
-            let hh = hand_hair(N, L, shadow, in, duv, view_z);
+            let hc = hand_colours(tag, grey_v);
+            let hh = hand_hair(N, L, shadow, in, duv, view_z, hc);
             color = hh.base * sun + hh.base * sc.fill * mix(1.0, 0.45, hh.s1);
             // The ink takes the shade band's light wherever it falls.
-            let ink = toon.hand_ink.rgb;
+            let ink = hc.ink;
             color = mix(color, ink * sun + ink * sc.fill, hh.ink);
             lit_albedo = mix(hh.base, ink, hh.ink);
         }
@@ -497,7 +534,11 @@ fn fragment(
         }
 }
         if (ink_cov > 0.0) {
-            let ink = toon.ink.rgb;
+            // A relative ink (v1.3) takes its colour from the mesh's palette entry.
+            var ink = toon.ink.rgb;
+            if (toon.palette.y > 0.5 && is_palette(tag)) {
+                ink = palette_row(tag, 4, grey_v);
+            }
             let ink_lit = select(banded(ink, sun, lit, value, sc), ink * sun + ink * sc.fill, hand);
             let a = albedo.a;
             out_a = ink_cov + a * (1.0 - ink_cov);
@@ -522,7 +563,7 @@ fn fragment(
         color = color + emission(pbr_input.material.emissive.rgb, sc);
         out.color = vec4<f32>(color, out_a);
     } else {
-        out.color = vec4<f32>(select(albedo.rgb, toon.hand[0].rgb, is_kind(5.0)) * toon.extra.y, albedo.a);
+        out.color = vec4<f32>(select(albedo.rgb, hand_colours(tag, grey_v).shade, is_kind(5.0)) * toon.extra.y, albedo.a);
     }
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
 }

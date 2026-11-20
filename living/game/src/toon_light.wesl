@@ -77,6 +77,10 @@ struct Toon {
     // x range (UV), y fade_px, z mode (0 none, 1 "px", 2 "px" with taper, 3 "uv", 4 "uv" through the derivatives: PERF inkfw), w metres
     // per UV unit (0 unknown).
     ink_shape: vec4<f32>,
+    // A palette material (contract v1.3, characters/palette.rs): x 1 when a hair profile's
+    // swatches and ink come from the mesh's palette entry (hair_tints, tag bit 27), y 1 when the
+    // general ink's colour does (row 4).
+    palette: vec4<f32>,
     // Per surface (style.rs `Surface`): x 1 / tile size (1/m), y strength, z mapping (0
     // triplanar, 1 planar per face).
     layers: array<vec4<f32>, 18>,

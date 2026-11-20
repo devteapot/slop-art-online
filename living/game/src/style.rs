@@ -270,6 +270,10 @@ pub struct ToonParams {
     /// through the screen derivatives, `LIVING_GAME_PERF=inkfw`),
     /// w the material's texel density (metres per UV unit; 0 unknown).
     pub ink_shape: Vec4,
+    /// A palette material (contract v1.3, `characters/palette.rs`): x 1 when the hair profile's
+    /// swatches and ink come from the mesh's palette entry ([`ToonExt::tints`], tag bit 27), y 1
+    /// when the general ink's colour does (row 4). The material's own.
+    pub palette: Vec4,
     /// Per [`Surface`]: x 1 / tile size (1/m), y strength, z mapping (0 triplanar, 1 planar).
     pub layers: [Vec4; SURFACES],
 }
@@ -586,6 +590,7 @@ impl Style {
             hand_ink_range: Vec4::ZERO,
             ink: Vec4::ZERO,
             ink_shape: Vec4::ZERO,
+            palette: Vec4::ZERO,
             layers: surface_layers(),
         }
     }
@@ -726,6 +731,7 @@ fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query
         m.extension.params.hand_ink_range = old.hand_ink_range;
         m.extension.params.ink = old.ink;
         m.extension.params.ink_shape = old.ink_shape;
+        m.extension.params.palette = old.palette;
         m.extension.params.recolor = old.recolor;
         m.extension.params.recolor_from = old.recolor_from;
         m.extension.params.detail.x = old.detail.x;

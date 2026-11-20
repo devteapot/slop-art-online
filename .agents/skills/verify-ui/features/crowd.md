@@ -112,6 +112,14 @@ python3 $C … --runs x:town,x:composed,x:composed,x:town --repeat 3 --game-env 
 | `--perf matnames`: `view materials: <material name> ×N, …` | people's distinct materials in view by name: composed `M00_000_00_EyeIris_00_EYE ×1` and `M00_000_00_FaceBrow_00_FACE ×1` (one each, shared by every type), whole files ×64 an iris |
 | `assets: N meshes M MiB (… morph targets …)` and `batches: … textures … MiB` | composed far below whole: mesh data and morph targets, and GPU textures |
 
+### The cost of composed `slop` (contract v1.3)
+
+Windowed and uncapped, so a frame interval is a frame's cost: `LIVING_GAME_WINDOW=1 LIVING_GAME_VSYNC=0 LIVING_GAME_FPS_CAP=0`. `LIVING_GAME_VSYNC=0|immediate|mailbox` (main.rs) sets the present mode and updates the window continuously without focus: Bevy's game settings update an unfocused window at 60 Hz, so a background run read 16.7 ms whatever it cost. Arms on the same client: `on` (the opted-in tree), `off` (the same tree under `LIVING_GAME_COMPOSED_SLOP=off`: the carriers still draw, invisibly) and `main` (main's own files, the lookdev link switched): `on` against `main` is what v1.3's files add.
+
+- **8 near, live:** `live_crowd.py --run <cullet run> --arm NAME=BINARY:LIVING_GAME_WINDOW=1,LIVING_GAME_VSYNC=0[,…] --settings near.json`, where `near.json` is `{"camera_tuning": {"stops": [{"height": 19, …}, {"height": 8, "pitch": 58, "fov": 42}, …], …}}`: the Middle stop set to Near's view. A window without focus takes no wheel or pinch zoom (`pointer.rs` resets it), so `--pre "notches:…"` doesn't reach Near in a window; the settings do. The eight-model cap gives about 8 people on full models at the arrival.
+- **64 crowd, look-dev:** the meadow's `LIVING_GAME_CROWD=64:1` with a temporary `crowd` list of 64 recipes carrying person lines in the worktree's `recipes.json` (crowd.py's way; restore it after), at the game camera, and again with `LIVING_GAME_FAR=1000`.
+- **A world generation the bundle lacks:** a Cullet world made from a newer seed than the laptop's bundle draws its people as VRoid bases. A test book that maps the world's keys (`SELECT * FROM look`) to the bundle's lines of the same band and form, passed by `LIVING_GAME_LOOK_BOOK` (or copied over the worktree's `characters/looks.json` for `check.py looks`), stands in.
+
 ## Gotchas
 
 - Run each binary once before measuring: Metal's shader cache is per binary, and a cold one gives a first run of 5 s frames.

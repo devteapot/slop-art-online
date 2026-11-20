@@ -540,14 +540,23 @@ pub fn convert(
         // `…Face_00_SKIN`.
         let n = name.map_or("", |n| n.0.as_str());
         let skin = n.ends_with("_SKIN") || n.contains("Skin") || n.contains("skin");
-        let slop = handmade.as_ref().map(|_| crate::handmade::material_of(extras.map(|x| x.value.as_str()), &format!("{} material {n:?}", owner.file))).unwrap_or_default();
+        // A composed type file that opts in (contract v1.3, docs/HANDMADE_COMPOSED.md): its
+        // materials' `slop` (a profile, ink) without the slots deciding kinds.
+        let composed = handmade.is_none() && crate::handmade::composed_of(&owner.file);
+        let slop = match () {
+            _ if handmade.is_some() => crate::handmade::material_of(extras.map(|x| x.value.as_str()), &format!("{} material {n:?}", owner.file)),
+            _ if composed => crate::handmade::composed_material(&owner.file, n),
+            _ => Default::default(),
+        };
+        // Slots decide kinds and face parts on hand-made files only.
+        let slot = slop.slot.filter(|_| handmade.is_some());
         if handmade.is_some() && slop.slot.is_none() {
             crate::handmade::warn_once(format!("handmade: {}: material {n:?} has no slot; classed by its name", owner.file));
         }
         let kind = match () {
-            _ if slop.slot == Some(crate::handmade::Slot::Hair) => Kind::Hair,
-            _ if slop.slot == Some(crate::handmade::Slot::Face) => Kind::Face,
-            _ if slop.slot.is_some() => crate::handmade::kind_of(slop.slot.unwrap(), false, false),
+            _ if slot == Some(crate::handmade::Slot::Hair) => Kind::Hair,
+            _ if slot == Some(crate::handmade::Slot::Face) => Kind::Face,
+            _ if slot.is_some() => crate::handmade::kind_of(slot.unwrap(), false, false),
             _ if character && n.contains("_HAIR") => Kind::Hair,
             _ if character && skin && n.contains("Face") => Kind::Face,
             _ if skin => Kind::Skin,
@@ -590,7 +599,7 @@ pub fn convert(
         // Face parts (eyes, lashes, brows, mouth, the face itself) are many small morphing
         // meshes whose shadows never read: they never cast one. A hand-made file names them by
         // slot.
-        let part = match slop.slot {
+        let part = match slot {
             Some(s) => matches!(s, crate::handmade::Slot::Face | crate::handmade::Slot::Eyes | crate::handmade::Slot::Tint),
             None => character && name.is_some_and(|n| n.0.contains("_FACE") || n.0.contains("_EYE") || n.0.contains("Face")),
         };
@@ -650,24 +659,38 @@ pub fn convert(
                     let mut toon = style.kind(b, kind, map);
                     if let Some(p) = profile {
                         p.apply(&mut toon.extension.params, hair_map.as_deref());
-                        // The ink's fade reads the hair's texel density, from its mesh.
-                        toon.extension.params.hand_ink_range.w = meshes.get(&mesh.0).and_then(|m| crate::handmade::metres_per_uv(&m)).unwrap_or(0.0);
+                        // The ink's fade reads the hair's texel density: declared (v1.3), else
+                        // measured from its mesh.
+                        toon.extension.params.hand_ink_range.w = p.ink_m_uv.or_else(|| meshes.get(&mesh.0).and_then(|m| crate::handmade::metres_per_uv(&m))).unwrap_or(0.0);
                     }
+                    let mut relative_ink = None;
                     if let Some(f) = file_forward {
                         toon.extension.params.file = f.extend(1.0);
                     }
                     if let (Some(p), Some(map)) = (ink, ink_map.as_ref()) {
-                        let m_uv = meshes.get(&mesh.0).and_then(|m| crate::handmade::metres_per_uv(&m));
+                        let m_uv = p.m_uv.or_else(|| meshes.get(&mesh.0).and_then(|m| crate::handmade::metres_per_uv(&m)));
                         if p.apply(&mut toon.extension.params, crate::handmade::has_green(map), m_uv, &format!("{} material {n:?}", owner.file)) {
                             toon.extension.ink = Some(assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(map.clone()));
                             // slop.ink wins over a hair profile's own (v1.1) ink.
                             toon.extension.params.hand_ink_range.z = 0.0;
+                            relative_ink = p.reference.map(|r| (r, p.color));
                         }
                     }
+                    // v1.3: a palette material's entries per hair colour, in its own image (made
+                    // by a command, so this system's access, and so the schedule, are as before).
+                    let anchors = profile.and_then(|p| p.relative.clone()).unwrap_or_default();
+                    let book = (!anchors.is_empty() || relative_ink.is_some()).then(|| {
+                        toon.extension.params.palette = Vec4::new(if anchors.is_empty() { 0.0 } else { 1.0 }, if relative_ink.is_some() { 1.0 } else { 0.0 }, 0.0, 0.0);
+                        crate::characters::palette::Spec { anchors, ink: relative_ink }
+                    });
                     if let Some(layers) = painted {
                         crate::style::with_detail(&mut toon, layers);
                     }
-                    toons.add(toon)
+                    let h = toons.add(toon);
+                    if let Some(spec) = book {
+                        crate::characters::palette::register(&mut commands, h.id(), spec);
+                    }
+                    h
                 });
                 by_content.insert(content, h.id());
                 by_source.insert((mat.0.id(), glow_key), h.id());

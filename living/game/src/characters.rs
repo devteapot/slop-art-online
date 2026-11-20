@@ -69,6 +69,7 @@ pub mod compose;
 pub mod seen;
 pub mod identity;
 pub mod outfit;
+pub mod palette;
 
 use crate::lookdev::{Converted, Fitted, Model};
 use crate::style::Toon;
@@ -1038,6 +1039,22 @@ fn grey_tag(c: &Character, mesh: &Mesh, toon: &Toon, tints: &mut compose::HairTi
     Some(n | s << 8 | g << 16 | 1 << 24 | 1 << 26)
 }
 
+/// What a mesh's palette tag is made from (contract v1.3, `palette::tag_later`): the colour
+/// `srgb` and, for a greying person's hair (`hair`, with `hair_natural`, `hair_silver` and
+/// `grey`), the natural colour and the silver.
+fn palette_source(c: &Character, hair: bool, srgb: Srgba) -> palette::TagSource {
+    let bytes = |c: Srgba| {
+        let b = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+        [b(c.red), b(c.green), b(c.blue)]
+    };
+    let greying = c.recipe.person.as_ref().filter(|p| hair && p.grey > 0.0).and_then(|p| {
+        let n = Srgba::hex(p.colors.hair_natural.as_ref()?).ok()?;
+        let s = Srgba::hex(p.colors.hair_silver.as_ref()?).ok()?;
+        Some((bytes(n), bytes(s), p.grey))
+    });
+    palette::TagSource { colour: bytes(srgb), greying }
+}
+
 /// A recipe colour packed for a mesh's tag: sRGB bytes, bit 24 marks it set (`toon.wesl`
 /// `recolor`).
 fn tag_color(c: Srgba) -> u32 {
@@ -1307,6 +1324,17 @@ pub fn recolor(
             commands.entity(e).insert(Recolored);
             continue;
         };
+        // A palette material (contract v1.3, `palette.rs`; its parameters say so): the mesh's
+        // tag names its entries for this colour (a greying person's hair, the natural colour's
+        // and the silver's), placed by a command so this system's access is as before.
+        if toons.get(&mat.0).is_some_and(|t| t.extension.params.palette != Vec4::ZERO) {
+            if let Some(c) = owner {
+                let hair = piece.is_none() && name.is_some_and(|n| n.0.contains("_HAIR") && !n.0.contains("Overlay"));
+                palette::tag_later(&mut commands, e, mat.0.id(), palette_source(c, hair, srgb));
+            }
+            commands.entity(e).insert(Recolored);
+            continue;
+        }
         if !ready.contains(&mat.0.id()) {
             let Some(toon) = toons.get(&mat.0) else { continue };
             // A material given its source colour when it was made (a composed person's style
@@ -1342,6 +1370,7 @@ pub fn recolor(
             let _ = toons.get_mut(id);
         }
     }
+
 }
 
 /// `LIVING_GAME_PERF=frames`: frame times every 2 s outside the island, with the number of

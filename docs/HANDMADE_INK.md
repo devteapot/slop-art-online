@@ -330,7 +330,7 @@ python3 living/tools/characters/ink_field.py LINES.png|STROKES.json STEM.SLOT.in
 
 - **A file or material without `slop.ink` draws exactly as today:** composed people, VRoid bases, scenery, and hand-made files of v1 and v1.1. Checked by pixel comparison against the base commit ([the proof](#the-proof-laptop-2026-11-20)).
 - **An older client reading a v1.2 file** ignores `slop.ink` (an unknown key) and draws it without ink.
-- **Composed characters are not affected:** `characters/compose.rs` reads no `slop`.
+- **Composed characters are not affected:** `characters/compose.rs` reads no `slop`. The v1.3 draft ([the composed contract](HANDMADE_COMPOSED.md)) proposes an opt-in for them: class ink maps, `ink.ref` and `ink.m_uv`.
 
 ## What the client keeps per material
 

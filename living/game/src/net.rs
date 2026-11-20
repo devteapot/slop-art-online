@@ -1692,6 +1692,9 @@ mod cue_tests {
 
     const TIERED: Feed = Feed { tiered: true, motion_table: false, characters_table: false };
     const UNTIERED: Feed = Feed { tiered: false, motion_table: false, characters_table: false };
+    // The shipped laws since bv-defaults-on: both copy tables on (motion_tables_on, characters_table_on).
+    const SHIPPED_TIERED: Feed = Feed { tiered: true, motion_table: true, characters_table: true };
+    const SHIPPED_UNTIERED: Feed = Feed { tiered: false, motion_table: true, characters_table: true };
 
     fn feed_of(cues: bool, tiers: bool, motion_tables: bool, characters_table: bool) -> Feed {
         Delivery { cues, tiers, motion_tables, characters_table }.feed()
@@ -1878,7 +1881,7 @@ mod cue_tests {
         let mut rules = crate::verbs::Rules::default();
         rules.take(7, SHIPPED, living_rules::DEFAULT_DAY_MS, &[], 1);
         assert_eq!((rules.revision, rules.applied.as_ref()), (7, None), "a compile");
-        assert_eq!(set_of(&rules), TIERED);
+        assert_eq!(set_of(&rules), SHIPPED_TIERED);
         let key = rules.laws_key;
         // Both delivery laws off by `law_override` alone, the script row unchanged.
         let off = crate::verbs::overrides_of_rows(&rows(&[("cue_transport_on", "false"), ("near_tier_on", "false")]));
@@ -1888,14 +1891,14 @@ mod cue_tests {
         assert_eq!(a.changed, ["cue_transport_on", "near_tier_on"]);
         assert_eq!(rules.revision, 7);
         assert!(rules.laws_key > key, "the laws' readers see a change");
-        assert_eq!(set_of(&rules), UNTIERED, "both off: main's untiered set");
+        assert_eq!(set_of(&rules), SHIPPED_UNTIERED, "both tier laws off: the untiered set, the copy tables still on");
         // One back on: the tiers again.
         let one = crate::verbs::overrides_of_rows(&rows(&[("cue_transport_on", "false"), ("near_tier_on", "true")]));
         let key = rules.laws_key;
         rules.take(7, SHIPPED, living_rules::DEFAULT_DAY_MS, &one, 3);
         assert_eq!(rules.applied.as_ref().map(|a| a.changed.clone()), Some(vec!["near_tier_on".to_string()]));
         assert!(rules.laws_key > key);
-        assert_eq!(set_of(&rules), TIERED);
+        assert_eq!(set_of(&rules), SHIPPED_TIERED);
         // The same rows again (a row rewritten with its value): nothing in force changed, so
         // nothing that reads the laws reads them again.
         let key = rules.laws_key;
@@ -1989,7 +1992,7 @@ mod cue_tests {
         let mut rules = crate::verbs::Rules::default();
         rules.take(9, SHIPPED, living_rules::DEFAULT_DAY_MS, &off, 1);
         assert!(rules.applied.is_none(), "compiled with them");
-        assert_eq!(set_of(&rules), UNTIERED);
+        assert_eq!(set_of(&rules), SHIPPED_UNTIERED);
         assert_eq!(rules.scripts.as_ref().unwrap().law_value("walk_base"), Some(serde_json::json!(2.8)));
         // A reconnect to the same world, the rows as they were: nothing changed in force.
         let key = rules.laws_key;
@@ -2000,7 +2003,7 @@ mod cue_tests {
         let rest = crate::verbs::overrides_of_rows(&rows(&[("walk_base", "2.8")]));
         rules.take(9, SHIPPED, living_rules::DEFAULT_DAY_MS, &rest, 3);
         assert!(rules.applied.as_ref().is_some_and(|a| a.delivery));
-        assert_eq!(set_of(&rules), TIERED);
+        assert_eq!(set_of(&rules), SHIPPED_TIERED);
     }
 
     #[test]
