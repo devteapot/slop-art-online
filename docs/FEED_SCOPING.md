@@ -2,6 +2,26 @@
 
 Design for coordinator review, 2026-11-19. The production change follows approval and the cost gate below. Audited against `origin/main` at `5ccbeacf`, including R1/R2 from merge `0bd9c490`. See [camera §4–§5](CAMERA.md), [cover sight](COVER_SIGHT.md), [seen structures and counted remains](SEEN_REMAINS.md#composition-with-cover-sight-and-gaze), and [perception](PERCEPTION.md).
 
+## Status: parked, 2026-11-20
+
+The general coordinator parked feed scoping after four build iterations, none of which met the [cost gate](#cost-gate) on Cullet 216 Middle. Nothing is merged and the law stays absent from main. Public feeds stay as they are, and the survey work behind them stays blocked.
+
+- **Branches kept, unmerged:** authority `feed-scope` at `1655d7ee`, and the laptop's client half `feed-scope-client` at `4a7aba48`.
+- **What passed on the last build:** verify-core body 26/26 and gate 18/18, verify-client feed scope 40/40, verify-player 9/9, verify-minds `chest`, `just living-check`, and the scene gate with the law off. Under the diagnostic law `feed_scope_loop_check`, 22,231 sweeps of iteration 4's per-viewer candidate list matched iteration 3's full walk with 0 differences.
+- **Measured cost, Cullet 216 Middle, sight against the off mean (allowed +15%):**
+
+  | Iteration | Head | Change | Sight on vs off | Feature's own spans vs allowance |
+  | --- | --- | --- | --- | --- |
+  | 1 | `0a15453b` | first build | +46% to +80% | — |
+  | 2 | `427df63c` | four cost fixes; minds store presence only | +49.5% | — |
+  | 3 | `5f2d4b41` | full cadence for things seen and unseen within `feed_scope_near_m` (10 m); unseen beyond tested once every `feed_scope_far_s` (1 s) | +20.8%, +52.6% (one run noisy) | +4.6 to +6.1 ms/s vs 3.2 |
+  | 4 | `1655d7ee` | per-viewer candidate list; far candidates skipped before the lookup | +28.2%, +35.4% | +5.8 to +6.3 ms/s vs 3.13 |
+
+  Iterations 3 and 4 ran pinned to the Spark's fast cores (CPUs 5-9,15-19), two runs per arm; tick rate and late share passed. The cost is the per-sweep loop, not the ray tests: one world-wide revision counter, bumped by any structure write or harvest, forced every viewer to walk its cells again on 43% of sweeps, and the fixed work around the rays stayed most of the thing sweep.
+- **Pop-in of option (a), measured** (152 walking clients, 40 s): things first seen beyond 10 m (median 39 m) arrive late by p50 400 ms and p90 800 ms, at most about 1 s apart from one edge-of-sight case; about 24% are shown at first sighting; 650 to 720 far things in sight only briefly (p50 400 ms) are never shown.
+- **Revisit when** `battle-laws` part C makes cross-transaction module memory the pattern for per-viewer state: a per-viewer candidate list kept across sweeps, with per-cell revision counters instead of the global one, is the remaining exact route. Alternatives the coordinator did not take: a higher sight budget for this feature (about +30%, an owner-level trade with the pop-in above), or narrower candidates, which change what can be noticed.
+- **Evidence:** `~/slop-evidence/feed-scope-2026-11-19.tar.zst`, `feed-scope-2026-11-20.tar.zst`, `feed-scope-2026-11-20-it3.tar.zst` and `feed-scope-2026-11-20-it4.tar.zst` on the Spark, each with its `.sha256`.
+
 ## Inventory and disclosure
 
 | Authority source | Current game subscription | Proposed disclosure |
