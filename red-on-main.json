@@ -1,4 +1,16 @@
 {
+  "combat": {
+    "case": "combat",
+    "first_main": "0e310415cc4b203b5f84c240d7856302240a0fc6",
+    "first_seen": "2026-11-20T02:16:34+01:00",
+    "last_evidence": "/home/carlid/.local/state/slop-merge/scene-gate/main/.local/living/verify/gate-1120020811-main2-combat-player/gate.log (launch or doctor failed)",
+    "last_main": "0e310415cc4b203b5f84c240d7856302240a0fc6",
+    "last_seen": "2026-11-20T02:16:34+01:00",
+    "owner": null,
+    "reason": null,
+    "skill": "verify-player",
+    "times": 1
+  },
   "generation-cullet:cullet-laws:the seed's laws are composed over the shipped script": {
     "case": "generation-cullet:cullet-laws:the seed's laws are composed over the shipped script",
     "first_main": "bfbbc0796f633169b306c7eca0f9a8132ed919c2",
