@@ -27,11 +27,14 @@ __pycache__/
 /.local/ref/
 /.local/ref-1.tar.gz
 /living/viewer/dist/
-/living/game/assets/lookdev/
-/living/game/assets/view/
-/living/game/assets/envs/*/
+# Generated assets: folders, or links to a pinned render asset set (living/tools/render_set.py
+# link), which a pattern ending in / would not match.
+/living/game/assets/lookdev
+/living/game/assets/view
+/living/game/assets/envs/*
+!/living/game/assets/envs/*.json
 # Painted textures (living/tools/textures/paint.py; `just living-game-textures`)
-/living/game/assets/textures/
+/living/game/assets/textures
 
 # The look book: a client asset written by living/tools/characters/look_lines.py (docs/LOOK.md).
 /living/game/assets/characters/looks.json
