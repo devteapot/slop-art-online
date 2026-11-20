@@ -112,6 +112,13 @@ def stage(eye, other, who):
 
 
 actor = sql("SELECT id FROM my_characters", player)[0]["id"]
+# A land made with cover off, its overlay installed after (the play-test world), derives its cover
+# geometry in steps first (docs/COVER_SIGHT.md, "Cover geometry"): cover is in force once
+# `cover_law` says so. A world made with cover on has it from creation.
+t_geometry = time.time()
+while time.time() - t_geometry < 300 and not any(r["cover_sight_on"] for r in sql("SELECT cover_sight_on FROM cover_law", player)):
+    time.sleep(1)
+record("cover in force (its geometry complete) before the checks", True, {"waited_s": round(time.time() - t_geometry, 1)})
 law = sql("SELECT * FROM cover_law", player)
 want = dict(id=0, cover_sight_on=True, cover_eye_height_m=1.6, cover_brush_on=a.brush == "true",
             cover_brush_min_fill=0.6, cover_cliff_step_m=2.0)
