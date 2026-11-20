@@ -249,7 +249,22 @@ Players read it through the per-sender view `my_combat`. In 2.14.1 a view is re-
 - **`RLS_TABLES` and the owner guard** in `drive.py`, and the pin list (docs/TICK_RATE.md).
 - **At battle density:** `gate-load` checks every `combat_feed` row against its viewer, and `battle_viewers.py --combat-feed --privacy` runs it with the side probes.
 
-**Measurement.** CF_RESULTS
+**Measurement.** Dev-box, `sg-stdb` v2.14.1 (no core pinning: the dev-box has one core type). Cullet module `cf-cullet` from `03cc00683` (rustc 1.99.1, no sccache). 200 fighters, keep-alive every 0.5 s, paused placement, the battle after placing, tiers and cues, both copy tables on (the new defaults) with the viewers on them. 20 s warm-up, 60 s window, L0 (`--detail --no-profile`: server metrics, no spans). Two runs per arm, alternating base and feed; the 1-minute load was below 4 at each start (2.3–4.4 within the windows). No viewer died in any window.
+- **base:** `combat_feed_on` off, viewers on `my_combat`.
+- **feed:** on, viewers on `combat_feed`.
+
+| Arm | Ticks/s | Views ms/s (of which `my_combat`) | Tick WASM ms/s | Whole tick call ms/s | DB thread CPU ms/s |
+|---|---|---|---|---|---|
+| base, 16 viewers, 10 m ring | 58.8 / 58.8 | 79.3 / 77.4 (42.6 / 41.5) | 369 / 364 | 490 / 482 | 498 / 491 |
+| feed, 16 viewers, 10 m ring | 59.3 / 59.8 | 44.4 / 43.1 (0) | 381 / 369 | 470 / 456 | 476 / 462 |
+| base, 216 viewers, 26–32 m ring | 19.9 / 21.1 | 78.0 / 75.1 (18.0 / 17.0) | 570 / 552 | 798 / 777 | 832 / 812 |
+| feed, 216 viewers, 26–32 m ring | 19.6 / 22.2 | 64.5 / 62.2 (0) | 582 / 573 | 795 / 782 | 822 / 810 |
+
+- **16 viewers, the dense case:** views fall by about 35 ms/s (`my_combat` 42 → 0) and tick WASM rises about 8 ms/s (the event inserts), so the database thread does about 26 ms/s less (about 1.6 ms/s per viewer, near the Spark's expected −37 ms/s of views).
+- **216 viewers on the wider ring:** `my_combat` cost only 17–18 ms/s (145–150 re-runs a second at about 20 ticks a second: it is re-run only for viewers whose rows changed). The feed wrote 5,208 event rows a second (one per `combat_seen` row), about 3.3 µs of tick WASM each (+17 ms/s). The database thread is within the runs' spread (−6 ms/s), and ticks/s too.
+- **So the step pays at battle density close in, and is about neutral where the tick rate is already low.** The insert per row (one indexed event row with a string per feed row) is the remaining cost.
+- **Not measured:** the commitlog. Event inserts are recorded there (the event-tables docs), so the feed roughly doubles the combat feed's share of written WAL at 216 (5,208 more inserts a second); `battle_viewers.py` does not measure WAL.
+- **Privacy at density with the feed:** `--privacy --combat-feed` (16 viewers, 10 m ring) passed 15 of 15. The viewers checked 97,354 `combat_feed` rows besides 172,076 body and 60,410 character copies, 0 foreign.
 
 ## Rollout: one change set, one play-test window (decided 2026-11-20; merged, defaults on)
 
