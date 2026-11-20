@@ -379,3 +379,43 @@ Left:
   - pinning and the merge wait in `one()`;
   - the arm loop with the stop at Cullet Middle above +15%.
 - **Not run:** the genesis fuel guard, the scenes, the series.
+
+## Iteration 3 measurement, 2026-11-20 (series `s4`; stopped at Cullet Middle as briefed)
+
+Build `5a3e6e8e` (merged with `origin/main` `9314f859`): the cadence of the GC's option (a). Things in sight, and not-yet-seen things within `feed_scope_near_m` = 10 m, are tested at every sweep; not-yet-seen things beyond that are tested every `feed_scope_far_s` = 1 s.
+
+How it ran:
+- private server `slop-feedscope-bench`, pinned to the fast cores (`--cpuset-cpus 5-9,15-19`, recorded in each run);
+- `~/slop-mq/battle.lock` taken at 08:10 CET (ai-trims measured before and after); no merge held `~/slop-mq/lock`;
+- one-minute load 2.3–4.8 at each run's start;
+- interleaved off/on, 30 s windows, the game client's shipped set in both arms (tiers, cues, `seen_body_copy`, `seen_character_copy`).
+
+| Run | Sight ms/s | `sight.player_candidates` | `sight.player_things` | Notice + list | Thing tests/s | Ticks/s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| off 1 | 21.18 | 19.15 | – | 0.91 | – | 60.00 |
+| off 2 | 21.27 | 19.18 | – | 0.93 | – | 59.98 |
+| on 1 | 32.39 | 23.99 | 5.18 | 1.85 | 2,634 | 60.00 |
+| on 2 | 25.64 | 18.98 | 4.08 | 1.47 | 3,257 | 60.00 |
+| probe 1 (not a cost arm) | 27.15 | 19.46 | 5.02 | 1.55 | 6,643 | 60.00 |
+
+**Verdict: Middle fails.**
+- The worst on run is +52.6% sight over the off mean of 21.22 (the other +20.8%). Ticks and late ticks pass.
+- Part of on 1's excess is the people pass, 24.0 against about 19 in every other run, which feed scoping does not touch.
+- Taking the feature's own spans alone: things (4.1–5.2) plus the extra noticing and list time (0.5–0.9) is +4.6 to +6.1 ms/s, against +3.2 allowed.
+
+**Where it goes now.** The cadence cut thing tests from about 7,500/s (iteration 2) to 2,600–3,300/s. Yet `sight.player_things` fell only from 5.4–7.3 to 4.1–5.2 ms/s, and the probe arm, with twice the tests, cost the same. The rays are no longer the cost: the per-sweep candidate pass round them is. Every candidate in the 3 × 3 cells is visited at every sweep (its distance, a payload lookup in the transaction's map, the previous-copy lookup) before the cadence skips it.
+
+A next step within option (a), not yet built:
+- make the far-skip decision before the payload lookup;
+- keep a per-viewer list of candidates that need testing this sweep (seen, or within the radius) instead of walking every candidate in the cells;
+- re-walk the cells only when a far test is due or the cell list changes.
+
+Option (b) was not tried.
+
+**Pop-in, from the probe arm** (Middle, 152 walking clients, 40 s from the workload's start):
+- First sightings beyond 10 m: n = 3,233, at 39 m (p50) to 48 m (max) from the viewer.
+- The extra delay: p50 400 ms, p90 800 ms, max 1,017 ms. 23.6% were taken at their first sighting (0 ms).
+- Missed: 651 far things passed the sight test at a sweep that did not take them, and left sight before a due sweep. They were in sight p50 400 ms, p90 799 ms, max 25.6 s; the longest was likely a thing at the edge of sight passing and failing the test at alternate sweeps.
+- The probe's own log lines (about 100 a second) make its cost a little higher than an on arm's.
+
+Not run: Cullet Round and the wooded battle (the stop rule). Evidence: `~/slop-evidence/feed-scope-2026-11-20-it3.tar.zst` (`fc-s4-*`, `feedcost-s4.jsonl`).
