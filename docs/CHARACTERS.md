@@ -792,6 +792,7 @@ Pass 3's fifth step (2026-11-12). A figure's outline today is its silhouette: th
   - **Behind a flag:** `SLOP_PORT=jaw_shell` builds the jaw's hull over the whole underside, from the jaw line to the neck's ring (`_underside_shell`, 0.8 mm under the chin, 0.7 mm along the jaw: about the drawing's weight in a close-up). That draws the jaw's outline in front and at three-quarter. [S1](char-port-2/s1/README.md)
   - **The flag's other feature:** `SLOP_PORT=jaw` sets per-class jaw and chin tapers from `living/tools/characters/port.json`.
   - **S2's features:** `SLOP_PORT=paint` paints Cora's blush, mouth, nose band, glint and nostrils on the generator's landmarks (`face_paint.PAINT`). `SLOP_PORT=neck` shades the skin under the jaw and the neck below it as hers was (`cage_head.NECK_SHADE`). [S2](char-port-2/s2/README.md)
+  - **S4's feature:** `SLOP_PORT=ink` draws the lid, wing, flicks, fringe, outer lower lid and brow as ink on carriers (`ink_carriers.py`), on the types' shared ink page, in place of the lid band, lash cards, lower line and brow strip. `type_ink.py` opts the file in and writes the page. [S4](char-port-2/s4/README.md)
   - **All off by default.** With `SLOP_PORT` unset, every file builds as before.
 - **The colour** is the skin's own line colour taken halfway to a dark brown (`cage_head.line_colour`), so it reads on every skin tone.
 - **Widths are metres, not pixels.** That is the limit of a line made of geometry: 1.9 mm is a few pixels in a close-up and a tenth of a pixel at the game camera, where a face is a dozen pixels across.

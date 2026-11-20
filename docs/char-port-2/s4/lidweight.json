@@ -1,0 +1,106 @@
+{
+ "drawing": {
+  "band_mean": 7.3,
+  "band_56": 6.7,
+  "band_max": 9.2,
+  "darkness": 0.59
+ },
+ "stills": [
+  {
+   "file": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s4/shots/cp2i-woman/own-cp2i-woman/03-clip-idle@0-0_8_0.18_0.86.png",
+   "eye_px": 59,
+   "canthi_x": [
+    847,
+    906
+   ],
+   "band_mean": 6.82,
+   "band_56": 7.37,
+   "band_max": 10.47,
+   "darkness": 0.809
+  },
+  {
+   "file": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s4/shots/cp2i-woman/own-cp2i-woman/03-clip-idle@0-0_8_0.18_0.86.png",
+   "eye_px": 50,
+   "canthi_x": [
+    743,
+    693
+   ],
+   "band_mean": 7.48,
+   "band_56": 9.54,
+   "band_max": 10.57,
+   "darkness": 0.813
+  },
+  {
+   "file": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s4/shots/cp2i-man/own-cp2i-man/03-clip-idle@0-0_8_0.18_0.86.png",
+   "eye_px": 48,
+   "canthi_x": [
+    848,
+    896
+   ],
+   "band_mean": 4.3,
+   "band_56": 4.93,
+   "band_max": 5.95,
+   "darkness": 0.643
+  },
+  {
+   "file": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s4/shots/cp2i-man/own-cp2i-man/03-clip-idle@0-0_8_0.18_0.86.png",
+   "eye_px": 47,
+   "canthi_x": [
+    750,
+    703
+   ],
+   "band_mean": 4.42,
+   "band_56": 5.44,
+   "band_max": 5.99,
+   "darkness": 0.654
+  },
+  {
+   "file": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s4/shots/cp2i-elder/own-cp2i-elder/03-clip-idle@0-0_8_0.18_0.86.png",
+   "eye_px": 44,
+   "canthi_x": [
+    850,
+    894
+   ],
+   "band_mean": 3.42,
+   "band_56": 3.55,
+   "band_max": 5.32,
+   "darkness": 0.566
+  },
+  {
+   "file": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s4/shots/cp2i-elder/own-cp2i-elder/03-clip-idle@0-0_8_0.18_0.86.png",
+   "eye_px": 23,
+   "canthi_x": [
+    739,
+    716
+   ],
+   "band_mean": 5.58,
+   "band_56": 4.7,
+   "band_max": 6.78,
+   "darkness": 0.79
+  },
+  {
+   "file": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s4/shots/cp2i-girl/own-cp2i-girl/03-clip-idle@0-0_8_0.18_0.86.png",
+   "eye_px": 62,
+   "canthi_x": [
+    847,
+    909
+   ],
+   "band_mean": 4.64,
+   "band_56": 6.08,
+   "band_max": 8.96,
+   "darkness": 0.636
+  },
+  {
+   "file": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s4/shots/cp2i-girl/own-cp2i-girl/03-clip-idle@0-0_8_0.18_0.86.png",
+   "eye_px": 62,
+   "canthi_x": [
+    752,
+    690
+   ],
+   "band_mean": 4.39,
+   "band_56": 6.1,
+   "band_max": 7.55,
+   "darkness": 0.631
+  }
+ ]
+}

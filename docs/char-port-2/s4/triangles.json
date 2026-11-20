@@ -1,0 +1,269 @@
+{
+ "about": "Triangles: types on main, with S1-S2, and with S4 (SLOP_PORT=jaw,jaw_shell,paint,neck,ink); the eye-line, brow and carrier primitives with S4; the four bodies with S2 and S4.",
+ "types": {
+  "adult-f-a": {
+   "main": 14036,
+   "s2": 15000,
+   "s4": 15378,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "adult-f-b": {
+   "main": 13956,
+   "s2": 14952,
+   "s4": 15330,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "adult-f-c": {
+   "main": 13852,
+   "s2": 14896,
+   "s4": 15274,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "adult-m-a": {
+   "main": 13734,
+   "s2": 14712,
+   "s4": 15204,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "adult-m-b": {
+   "main": 13674,
+   "s2": 14676,
+   "s4": 15168,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "adult-m-c": {
+   "main": 13532,
+   "s2": 14608,
+   "s4": 15100,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "child-u-a": {
+   "main": 13998,
+   "s2": 15018,
+   "s4": 15450,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "child-u-b": {
+   "main": 13918,
+   "s2": 14966,
+   "s4": 15434,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "child-u-c": {
+   "main": 13902,
+   "s2": 14946,
+   "s4": 15378,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "elder-f-a": {
+   "main": 13980,
+   "s2": 15008,
+   "s4": 15386,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "elder-f-b": {
+   "main": 13916,
+   "s2": 14932,
+   "s4": 15310,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "elder-f-c": {
+   "main": 13780,
+   "s2": 14860,
+   "s4": 15238,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "elder-m-a": {
+   "main": 13666,
+   "s2": 14684,
+   "s4": 15176,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "elder-m-b": {
+   "main": 13600,
+   "s2": 14620,
+   "s4": 15112,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "elder-m-c": {
+   "main": 13476,
+   "s2": 14512,
+   "s4": 15004,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "youth-f-a": {
+   "main": 13988,
+   "s2": 14980,
+   "s4": 15382,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "youth-f-b": {
+   "main": 13908,
+   "s2": 14920,
+   "s4": 15322,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "youth-f-c": {
+   "main": 13824,
+   "s2": 14864,
+   "s4": 15266,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "youth-m-a": {
+   "main": 13772,
+   "s2": 14754,
+   "s4": 15246,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "youth-m-b": {
+   "main": 13750,
+   "s2": 14706,
+   "s4": 15198,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  },
+  "youth-m-c": {
+   "main": 13584,
+   "s2": 14624,
+   "s4": 15116,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   }
+  }
+ },
+ "bodies": {
+  "woman": {
+   "s2": 30756,
+   "s4": 31134,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   },
+   "s2_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 1200,
+    "M00_000_00_FaceBrow_00_FACE": 80
+   }
+  },
+  "man": {
+   "s2": 31902,
+   "s4": 32394,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   },
+   "s2_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 1086,
+    "M00_000_00_FaceBrow_00_FACE": 80
+   }
+  },
+  "elder": {
+   "s2": 28710,
+   "s4": 29202,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   },
+   "s2_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 1086,
+    "M00_000_00_FaceBrow_00_FACE": 80
+   }
+  },
+  "girl": {
+   "s2": 27144,
+   "s4": 27570,
+   "s4_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 954,
+    "M00_000_00_LidInk_00_FACE": 448,
+    "M00_000_00_FaceBrowInk_00_FACE": 256
+   },
+   "s2_parts": {
+    "M00_000_00_FaceEyeline_00_FACE": 1152,
+    "M00_000_00_FaceBrow_00_FACE": 80
+   }
+  }
+ }
+}

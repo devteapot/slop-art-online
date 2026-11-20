@@ -199,6 +199,12 @@ The carrier code (`carriers.py`: lift, harmonic fill, isometric flatten, binding
 
 **Morphs:** carriers are primitives of the type's `Face` mesh. They are built on each expression's cage, as `_shell_lines` already are (`cage_head.py:1095`), rather than bound after export. They follow the 15 keys and the identity bones by construction. The clearance pass runs per key, as Cora's did.
 
+**As built in S4** ([s4/README.md](s4/README.md)), to the laptop's final contract (HANDMADE_COMPOSED v1.3):
+- **The page:** one shared ink page, `lookdev/types/types.eyes.ink.png`, 4096² with a 1024 cell per class at 0.25 mm a texel, replaces "one map per class" above.
+- **Strokes:** in eye units, one stroke set and one carrier topology per class; per-person variation stays with the face's own shape and the identity bones.
+- **Colours:** `ink.color` is Cora's for every class.
+- **Materials:** lid and brow (`LidInk`, `FaceBrowInk`) for everyone.
+
 ### 2.7 Hair: see §3.
 
 ### 2.8 The profiles as generator outputs

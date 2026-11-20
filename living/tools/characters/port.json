@@ -56,6 +56,9 @@
   },
   "neck": {
    "about": "S2: the neck shade as Cora's (cage_head.NECK_SHADE): a multiply of the skin, whole under the jaw, full to 8 mm below the chin and clear by 45 mm, its edge rising toward the sides and fading round the back (docs/char-port-2/s2)."
+  },
+  "ink": {
+   "about": "S4: the lid, its wing, flicks and fringe, the outer lower lid and the brow as ink on carriers (living/tools/blender/ink_carriers.py), on the types' shared ink page (lookdev/types/types.eyes.ink.png, docs/HANDMADE_COMPOSED.md), in place of the lid band, lash cards, lower line and brow strip; an opaque lid core keeps the lid at play distance (docs/char-port-2/s4)."
   }
  }
 }
