@@ -374,7 +374,10 @@ def one(a, n, out):
         for law in a.law:
             name, value = law.split("=", 1)
             lc.call(db, "set_world_law", [name, value], token)
-        if not a.battle_after_placing:
+        # With no viewers there is no placement to wait for, so `--battle-after-placing` spawns the
+        # battle here too: the 0-viewer arm is the same battle, the subtraction baseline (before
+        # 2026-11-20 it had none).
+        if not a.battle_after_placing or not n:
             lc.call(db, "spawn_battle", [a.fighters], token)
         land = lc.sql(db, "SELECT * FROM land", token)[0]
         site = tuple(float(x) for x in a.site.split(",")) if a.site else (land["arrive_x"], land["arrive_y"] - 20.0)
