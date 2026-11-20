@@ -298,10 +298,11 @@ The same rollout as step 1, in two change sets:
 |---|---|---|
 | 1. The authority | `combat_feed`, its rule and the `combat_feed_on` law, **off** by default (`combat-feed`). With the law off nothing changes: no event row is written, and clients read `my_combat` as now. The gate's `combat_feed` case, and `copy_privacy` (it touches `combat.rs`). | dev-box |
 | 2. The client switch | The game client subscribes to `combat_feed` while the law is on (read from the law, as the copy tables are), reads `my_combat` once on connect or reconnect (subscribe, take the rows, unsubscribe), merges both by `id` (`combat::ingest`'s `seen_ids`), and switches make-before-break both ways. | laptop, when its slot allows |
-| 3. The default | `combat_feed_on: true` in `skills.rhai`'s law block and `Laws::default`, in one change set with part 2. The script and law-override tests follow, as for step 1. | dev-box, with the laptop's part 2 |
+| 3. The default | `combat_feed_on: true` in `skills.rhai`'s law block and `Laws::default`, in one change set with part 2. The script and law-override tests follow, as for step 1, and `cargo test -p living-game` (a default flip reaches the client's own tests: `bv-defaults-on`'s first gate). **Before it (the GC, 2026-11-20): the commitlog growth at 216 viewers**, law on against off, measured alongside part 2: event inserts are written to the commitlog (about 5,200 a second at 216 on the 26–32 m ring), and the 216 arm measured CPU only. | dev-box, with the laptop's part 2 |
 
 **The window's checklist** for part 3 (whoever stages the play-test):
 
+0. Before the flip is merged: the commitlog growth at 216 viewers measured (the replica's commitlog bytes over a window, `combat_feed_on` on against off, the same fixture as Addendum 4's 216 arm), and recorded here beside the CPU numbers.
 1. The owner is not in a session.
 2. Main contains parts 1–3, and the gate's `combat_feed` and `copy_privacy` cases passed on that merge.
 3. In the world, `combat_feed_on` reads on (the default, or its `law_override` row), and the client subscribes to `combat_feed`: `combat_feed.py` against the world, or a verify-client probe.
