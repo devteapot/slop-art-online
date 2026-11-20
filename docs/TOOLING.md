@@ -375,9 +375,10 @@ The scene gate's verify-ui `render` group draws with the game client's generated
 
 The test is content-addressed, so a main commit outside those three folders never makes a set stale. Any edit inside them does, even one that changes no output: rebuild and pin again after it lands.
 
-**Rebuild and pin** (dev-box, about 41 minutes beside other Blender work at `JOBS=2`; 2026-11-20: 2,768 files, 407 MB). Work in a worktree at main, with no tracked changes. Use the full clip library, `KIMODO_DIR=~/archive/clip-library`.
+**Rebuild and pin** (dev-box, about 41 minutes beside other Blender work at `JOBS=2`; 2026-11-20: 2,768 files, 407 MB). Work in a worktree at main, with no tracked changes. Use the full clip library, `~/archive/clip-library`. `animate.py` and `gen_person.sh` read it from `.local/kimodo/library` first. The coordinator's `.local/kimodo/outputs/library` is partial.
 
 ```bash
+mkdir -p .local/kimodo && ln -sfn ~/archive/clip-library .local/kimodo/library   # the full clip library, where the bakes look first
 just living-game-assets                                 # 1-2: bases, textures, scenery, the bases' clip bake (under assets_guard.py)
 living/tools/blender/gen_types.sh                       # 3: the 21 types and their pages
 living/tools/blender/gen_styles.sh                      # 3: hair, outfit and overlay styles, strands.png
@@ -409,6 +410,10 @@ python3 living/tools/render_set.py check ~/slop-assets/branches/<branch>/<id> &&
 **Generated assets never change tracked files.** `just living-game-assets` runs under [`assets_guard.py`](../living/tools/assets_guard.py), which fails the run, naming them, if it changed any tracked file. The rules' footprint table (`living/rules/data/buildings.json`) is tracked because the authority and the client compile it in. It changes on purpose:
 - `just living-rules-table` gathers it from the generated models' sidecars under `envs/`, Cullet's lots included, and prints the diff to review;
 - the change merges as a rules change, through the gate with scenes.
+
+**Follow-up: the table writers' opt-in.**
+- **Today.** `gen_buildings.sh`, `gen_city.sh` and `gen_cullet.sh` still write the table on every full run. Their output equals the committed table, so the guard passes: on 2026-11-20 a full recipe run left every tracked file as it was.
+- **The opt-in.** Making the write opt-in (`RULES_TABLE=1`) touches the hashed `blender` tree. It therefore goes in with the next change to the generator trees that rebuilds its own set (char-port-2's S6 or S8). The patch is `~/.t3/worktrees/slop-art-online/t3-b749c655-2e53274b9e364084/.local/rs/blender-optin.patch` on the dev-box.
 
 **Known on main** (2026-11-20, `error-lines.txt` of the build). `gen_anim.sh`'s own `marker_check.py` exits 1: `strafe_run_left_v48` has "no contact window" for a foot on both VRoid bases, and so does `run_diag_br_v48` on Vivi. These are clip-library takes. The bake is written anyway, and the set records 84 clips a base.
 
