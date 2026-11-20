@@ -35,6 +35,8 @@
   the player with nothing opaque between (chosen from the terrain and the bodies, so where it
   lands is known: `scene.json` `free_spots`); `--sync NAME=refree` puts them back there.
 - `--expect REGEX` (repeatable) must match client.log, else the run fails (exit 1).
+- `--preparing` skips the start's tick check: the world is still being made (staged genesis) and
+  the client is meant to join while it is (`check.py preparing`).
 
 Exit code: the client's, or 1 when an expectation fails or the client never joined.
 """
@@ -175,6 +177,7 @@ def main():
     ap.add_argument("--expect", action="append", default=[])
     ap.add_argument("--admin-link", action="store_true")
     ap.add_argument("--timeout", type=float, default=600)
+    ap.add_argument("--preparing", action="store_true", help="the world is still being made (staged genesis): skip the start's tick check (check.py preparing)")
     a = ap.parse_args()
     if a.self_test:
         self_test()
@@ -186,7 +189,10 @@ def main():
         sys.exit(f"refusing {db}: verify-ui runs use verify-ui-* worlds (run names ui-*)")
     st = load(a.run)
     owner = admin_token()
-    require_running(st, owner)
+    # A world still being made does not tick yet (staged genesis): `check.py preparing` starts its
+    # client before the world is ready, on purpose.
+    if not a.preparing:
+        require_running(st, owner)
     out = os.path.join(ROOT, ".local/living/verify", a.run, "ui", a.name)
     os.makedirs(out, exist_ok=True)
     for f in os.listdir(out):

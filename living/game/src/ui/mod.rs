@@ -380,6 +380,19 @@ fn dump(
             "cells": g.cells.iter().map(|c| serde_json::json!({"product": c.product, "item": c.item, "label": c.label, "allowed": c.allowed, "reason": c.reason, "detail": c.detail, "rows": c.rows})).collect::<Vec<_>>()})),
         "tags": ui.tags.iter().map(|(k, v)| (k.clone(), serde_json::json!([v.x, v.y]))).collect::<serde_json::Map<_, _>>(),
         "looks": extra.looks_json(),
+        // Staged genesis (`genesis.rs`): whether the world is made, how far, and what the first
+        // load's cover says (its title, detail and bar share; the bar shows while preparing).
+        "genesis": {
+            "gate": format!("{:?}", extra.net.genesis.gate),
+            "progress": extra.net.genesis.progress.as_ref().map(|p| serde_json::json!({"step": p.step, "steps": p.steps, "label": p.label, "line": p.line(), "share": p.share()})),
+            "since": extra.net.genesis.since,
+            "status": format!("{:?}", extra.net.status),
+            "cover": extra.loading.as_ref().filter(|l| !l.done).map(|l| serde_json::json!({"title": l.cover.0, "detail": l.cover.1, "bar": l.cover.2})),
+            "link": model.link,
+            // The refusals and failures this connection holds (the F1 panel's last line): a
+            // `world_preparing` never lands here.
+            "errors": extra.net.errors.lock().unwrap().iter().rev().take(12).rev().cloned().collect::<Vec<_>>(),
+        },
     });
     match std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap_or_default()) {
         Ok(()) => info!("ui: state written to {}", path.display()),
@@ -466,6 +479,7 @@ pub struct DumpExtra<'w, 's> {
     live: Option<Res<'w, crate::live::Live>>,
     shine: Res<'w, crate::style::HairShine>,
     town: Option<Res<'w, crate::town::Town>>,
+    loading: Option<Res<'w, crate::loading::Loading>>,
 }
 
 impl DumpExtra<'_, '_> {

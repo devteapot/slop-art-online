@@ -8,7 +8,10 @@
 //! state come from per-sender views on the authority, which enforces the perception boundary
 //! (docs/PERCEPTION.md): nothing of a creature beyond my sight or behind a wall reaches me.
 //!
-//! 1. On connect: `world`, `land` and `settlement` (1, 1 and about 6 rows).
+//! 1. On connect: `world`, `land` and `settlement` (1, 1 and about 6 rows), and beside them, as
+//!    a subscription of its own, the one `genesis` row (staged genesis, `genesis.rs`): a world
+//!    still being made holds what follows, `join` among it, until the row says `done`. A module
+//!    without the table fails only that subscription, and its world counts as ready.
 //! 2. Then, for the connection's lifetime (so the death screen keeps its rows):
 //!    - what I perceive: `seen_characters` (mine too), and the others' motion, fighter and
 //!      doing rows as a set of their own, chosen by the world's delivery laws once the installed
@@ -138,6 +141,14 @@ enum Signal {
     Identity(Identity, String),
     Static,
     Base,
+    /// The `genesis` subscription is in (its row, if any, is in the cache).
+    GenesisApplied,
+    /// The `genesis` subscription failed: a module from before staged genesis.
+    GenesisMissing(String),
+    /// A call refused with `world_preparing` (`join` or `join_as` when `join`).
+    Preparing { join: bool, err: String },
+    /// The `genesis` subscription's handle, kept for the connection's lifetime.
+    GenesisSub(SubscriptionHandle),
     GazeReply(GazeBand, GazeReply),
     Disconnected(String),
     Error(String),
@@ -281,6 +292,12 @@ pub struct Net {
     pub attempts: u32,
     pub ever_live: bool,
     join_sent: bool,
+    /// Whether the world is made yet, and the join retry while it is not (`genesis.rs`).
+    pub genesis: crate::genesis::Wait,
+    genesis_sub: Option<SubscriptionHandle>,
+    genesis_applied: bool,
+    /// The static set is in; the base waits for the world to be ready.
+    static_in: bool,
     /// The call `on_reply` just logged, for `report` (`actions.rs`).
     last_call: std::cell::Cell<Option<crate::actions::Sent>>,
     base: Option<SubscriptionHandle>,
@@ -322,6 +339,10 @@ impl Default for Net {
             attempts: 0,
             ever_live: false,
             join_sent: false,
+            genesis: Default::default(),
+            genesis_sub: None,
+            genesis_applied: false,
+            static_in: false,
             last_call: Default::default(),
             base: None,
             gaze_view: None,
@@ -837,6 +858,7 @@ impl Net {
         args: impl FnOnce() -> serde_json::Value,
     ) -> impl FnOnce(&ReducerEventContext, Result<Result<(), String>, spacetimedb_sdk::__codegen::InternalError>) + Send + 'static {
         let errors = self.errors.clone();
+        let inbox = self.inbox.clone();
         let sent = crate::actions::sent(reducer, what, args);
         self.last_call.set(sent);
         move |ctx, r| {
@@ -853,6 +875,13 @@ impl Net {
             }
             let msg = match r {
                 Ok(Ok(())) => return,
+                // The world is still being made: never a failure the player sees; `pump` holds
+                // it and sends `join` again when the world is ready (`genesis.rs`).
+                Ok(Err(e)) if crate::genesis::is_preparing(&e) => {
+                    debug!("{what} held: {e}");
+                    inbox.lock().unwrap().push(Signal::Preparing { join: matches!(reducer, "join" | "join_as"), err: e });
+                    return;
+                }
                 Ok(Err(e)) => format!("{what} refused: {e}"),
                 Err(e) => format!("{what} failed: {e}"),
             };
@@ -889,6 +918,15 @@ impl Net {
                 conn.db.law_override().on_insert(|_, _| law_rows_moved());
                 conn.db.law_override().on_update(|_, _, _| law_rows_moved());
                 conn.db.law_override().on_delete(|_, _| law_rows_moved());
+                // Whether the world is made yet: its own subscription, so a module without the
+                // table fails only this one (`genesis.rs`). Asked first, so it answers first.
+                let (g_ok, g_err) = (applied.clone(), applied.clone());
+                let genesis = conn
+                    .subscription_builder()
+                    .on_applied(move |_| g_ok.lock().unwrap().push(Signal::GenesisApplied))
+                    .on_error(move |_, e| g_err.lock().unwrap().push(Signal::GenesisMissing(e.to_string())))
+                    .subscribe(["SELECT * FROM genesis"]);
+                applied.lock().unwrap().push(Signal::GenesisSub(genesis));
                 let ok = applied.clone();
                 let err = applied.clone();
                 conn.subscription_builder()
@@ -1020,7 +1058,7 @@ impl Net {
     }
 
     /// Keep my own rows and the chunk window around me subscribed.
-    fn maintain(&mut self) {
+    fn maintain(&mut self, now: f64) {
         if self.status != Status::Live {
             return;
         }
@@ -1040,6 +1078,9 @@ impl Net {
             self.far = Window::default();
             if let Some(id) = found {
                 info!("playing character #{id}");
+                if let Some(done) = self.genesis.done_at.take() {
+                    info!("genesis: joined {:.2} s after the world was ready", now - done);
+                }
             }
         }
         let Some(body) = self.my_body() else { return };
@@ -1112,6 +1153,37 @@ impl Net {
         Some((vec![chunk_id(cx as u32, cy as u32)], q))
     }
 
+    /// Staged genesis (`genesis.rs`): read the `genesis` row, subscribe the base once the world is
+    /// ready, and send a held `join` again when it turns ready or its backoff runs out.
+    fn watch_genesis(&mut self, now: f64) {
+        if self.genesis_applied {
+            let row = self.conn.as_ref().and_then(|c| c.db.genesis().id().find(&0));
+            let was = self.genesis.gate;
+            let before = self.genesis.progress.clone();
+            self.genesis.row(row.as_ref().map(crate::genesis::Progress::of_row), row.as_ref().is_some_and(|g| g.done), now);
+            match (was, self.genesis.gate) {
+                (crate::genesis::Gate::Preparing, crate::genesis::Gate::Ready) => {
+                    info!("genesis: the world is ready after {:.1} s preparing", now - self.genesis.since.unwrap_or(now));
+                }
+                (_, crate::genesis::Gate::Preparing) if self.genesis.progress != before => {
+                    info!("genesis: preparing {}", self.genesis.progress.as_ref().map(|p| p.line()).unwrap_or_default());
+                }
+                _ => {}
+            }
+        }
+        if self.genesis.long(now) && !self.genesis.told_long {
+            self.genesis.told_long = true;
+            warn!("genesis: still preparing after {:.0} s; waiting on", crate::genesis::TIMEOUT_S);
+        }
+        if self.static_in && self.base.is_none() && self.genesis.ready() {
+            self.subscribe_base();
+        }
+        if self.genesis.poll(now) == crate::genesis::Retry::Join && self.my_id.is_none() {
+            info!("genesis: joining again ({})", if self.genesis.ready() { "the world is ready" } else { "after a wait" });
+            self.join_sent = false;
+        }
+    }
+
     /// Ask for a new character after my death (the death screen's "Arrive as a new stranger"):
     /// the next `maintain` joins again.
     pub fn rejoin(&mut self) {
@@ -1163,7 +1235,22 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 }
                 info!("connected as {identity}");
             }
-            Signal::Static => net.subscribe_base(),
+            // The base waits for the world to be made (below).
+            Signal::Static => net.static_in = true,
+            Signal::GenesisSub(h) => net.genesis_sub = Some(h),
+            Signal::GenesisApplied => net.genesis_applied = true,
+            Signal::GenesisMissing(e) => {
+                // A module from before staged genesis: its worlds are made inline, so ready.
+                info!("genesis: no `genesis` table on this world ({e}); it counts as ready");
+                net.genesis.no_table(now);
+            }
+            Signal::Preparing { join, err } => {
+                let was = net.genesis.gate;
+                net.genesis.refused(&err, join, now);
+                if was != crate::genesis::Gate::Preparing {
+                    info!("genesis: the world is being made: {}", net.genesis.progress.as_ref().map(|p| p.line()).unwrap_or_default());
+                }
+            }
             Signal::Base => {
                 info!("world subscribed after {now:.1} s ({} law overrides)", net.conn.as_ref().map_or(0, |c| c.db.law_override().count()));
                 // The rows are this connection's now: laid over before a law is read this frame
@@ -1199,6 +1286,10 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 net.perception = Window::default();
                 net.my_id = None;
                 net.join_sent = false;
+                net.genesis = Default::default();
+                net.genesis_sub = None;
+                net.genesis_applied = false;
+                net.static_in = false;
                 net.connecting = false;
                 net.status = Status::Offline;
                 net.detail = e;
@@ -1215,7 +1306,8 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
     if net.conn.is_none() && !net.connecting && now >= net.retry_at {
         net.connect();
     }
-    net.maintain();
+    net.watch_genesis(now);
+    net.maintain(now);
 }
 
 #[cfg(test)]
