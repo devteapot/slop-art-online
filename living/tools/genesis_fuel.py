@@ -61,6 +61,7 @@ def main():
     ap.add_argument("--wasm", required=True, help="a stepping build of that seed, relative to the server's /wasm")
     ap.add_argument("--out")
     ap.add_argument("--max-steps", type=int, default=500)
+    ap.add_argument("--floor-seed", help="a floor module (built with LIVING_SEED=none): give it this seed JSON with create_floor after the publish; its fuel is reported as create_floor_fuel")
     a = ap.parse_args()
     db = f"verify-lookcost-gfuel-{a.seed}-{time.strftime('%H%M%S')}"[:60]
     commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
@@ -71,6 +72,13 @@ def main():
         fuel, calls = counters(ident)
         runs = int(calls.get("init", 0)) or 1
         out = {"seed": a.seed, "commit": commit, "budget": BUDGET, "init_fuel": round(fuel.get("init", 0) / runs), "init_runs": runs, "steps": []}
+        if a.floor_seed:
+            # A floor: the seed's check and rules run in create_floor (what init does for a compiled seed).
+            seed_json = json.loads(Path(a.floor_seed).read_text())
+            if seed_json.get("laws_file") and not str(seed_json.get("laws") or "").strip():
+                seed_json["laws"] = (Path(__file__).resolve().parents[1] / "seeds" / seed_json["laws_file"]).read_text()
+            lc.call(db, "create_floor", [json.dumps(seed_json)], token)
+            out["create_floor_fuel"] = round(counters(ident)[0].get("create_floor", 0))
         for _ in range(a.max_steps):
             row = genesis_wait.genesis_row(lc.URL, db, token)
             if row is None or row.get("done"):
@@ -78,15 +86,25 @@ def main():
             if str(row.get("label", "")).startswith("stopped"):
                 raise SystemExit(f"{db}: genesis stopped: {row['label']}")
             before_step, label = row["step"], str(row["label"])
-            f0 = counters(ident)[0].get("genesis_step", 0)
+            f0, c0 = (lambda fc: (fc[0].get("genesis_step", 0), fc[1].get("genesis_step", 0)))(counters(ident))
             lc.call(db, "resume_genesis", [], token)
+            # The step has run when the server counts one more `genesis_step` call: a step that
+            # traps (out of energy) rolls everything back, so its row never moves.
             end = time.time() + 600
+            now = None
             while time.time() < end:
-                now = genesis_wait.genesis_row(lc.URL, db, token)
-                if now and (now["step"] != before_step or now.get("done") or str(now.get("label", "")).startswith("stopped")):
+                fc = counters(ident)
+                if fc[1].get("genesis_step", 0) > c0:
+                    now = genesis_wait.genesis_row(lc.URL, db, token)
                     break
                 time.sleep(0.05)
             f1 = counters(ident)[0].get("genesis_step", 0)
+            if now is None or (now["step"] == before_step and not now.get("done")):
+                logs = lc.stdb("logs", "-s", "local", db, "-n", "200")
+                trap = [l for l in logs.splitlines() if "genesis" in l.lower() or "energy" in l.lower() or "trap" in l.lower() or "panic" in l.lower()][-6:]
+                out["steps"].append({"phase": "trapped", "label": f"after: {label}", "fuel": round(f1 - f0), "reducer": "genesis_step", "trapped": True, "log": trap})
+                out["trapped_at_step"] = before_step + 1
+                break
             # The row's label names the step just done; the last step's is "done" (a land's last
             # step is always populate; a seed without a land is made in its one `world` step).
             after = str((now or {}).get("label", ""))
