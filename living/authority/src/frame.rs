@@ -267,6 +267,9 @@ struct Sources {
     fighter: HashMap<u32, Option<Fighter>>,
     health: HashMap<u32, Option<(f32, f32)>>,
     doing: HashMap<u32, Option<Doing>>,
+    /// The ids whose `health` came from the tick's sweeps (`perception::Swept`) and is not yet
+    /// used: the first use of each is counted (`frames:health_seeded`).
+    seeded: HashSet<u32>,
 }
 
 fn cached<V: Clone>(pick: impl FnOnce(&mut Sources) -> &mut HashMap<u32, V>, id: u32, read: impl FnOnce() -> V) -> V {
@@ -285,6 +288,11 @@ fn fighter_now(ctx: &ReducerContext, id: u32) -> Option<Fighter> {
 }
 
 fn health_now(ctx: &ReducerContext, id: u32, now: u64) -> Option<(f32, f32)> {
+    NOW.with(|n| {
+        if n.borrow_mut().as_mut().is_some_and(|s| s.seeded.remove(&id)) {
+            common::diag(|| "frames:health_seeded", 1);
+        }
+    });
     cached(|s| &mut s.health, id, || ctx.db.vitals().id().find(id).map(|v| (common::needs(&v, now).hp, v.max_hp)))
 }
 
@@ -396,7 +404,7 @@ pub fn scene(ctx: &ReducerContext, id: u32, who: Identity, seen: &HashSet<u32>, 
     let public = if flips.is_empty() { false } else { public_of(ctx, who) };
     for (body, near) in flips {
         show_motion(ctx, id, who, body, near, public);
-        show_fighter(ctx, id, who, body, near, true, now);
+        show_fighter(ctx, id, who, body, near, true, now, None);
         show_doing(ctx, id, who, body, near);
     }
 }
@@ -498,9 +506,31 @@ pub fn interval(n: usize) -> u64 {
 
 /// The players whose frame is due get it (every tick, after the perception sweep), stalest
 /// first, within the step's budget of scene rows less those of the players `swept` in it.
-pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
+pub fn deliver(ctx: &ReducerContext, now: u64, swept: crate::perception::Swept) {
     let budget = budget(ctx.timestamp.to_micros_since_unix_epoch());
-    NOW.with(|n| *n.borrow_mut() = Some(Sources::default()));
+    // The sweeps' health readings seed this step's (exact items, docs/COMBAT_PHASE.md): the same
+    // formula (`common::needs(&v, now).hp`, `max_hp`) at the same `now`, and nothing writes
+    // `vitals` between them. In `tick::tick` the perception sweep runs right before this, after
+    // every phase that damages or heals (activity completions, missiles, the combat cadence's
+    // begins); between the two only the `memory_test` diagnostic runs, which writes no `vitals`;
+    // the sweeps themselves write `projected`, `perceived`, `heard` and copies, never `vitals`.
+    // Another reducer (`admin_set_vitals`, a player's move) is its own transaction, before or
+    // after this whole tick. Under `regard_cache_check` each seeded reading is compared with a
+    // fresh read (`frames:health_seed_differed`, which must stay 0). Like the rest of `Sources`,
+    // the seed lives only in this call (set here, dropped at the end).
+    let crate::perception::Swept { ids: swept, health } = swept;
+    if common::laws(ctx).regard_cache_check {
+        for (id, h) in &health {
+            let fresh = ctx.db.vitals().id().find(*id).map(|v| (common::needs(&v, now).hp, v.max_hp));
+            if fresh != *h {
+                common::diag(|| "frames:health_seed_differed", 1);
+                log::error!("exact items: #{id}'s seeded health {h:?} differs from a fresh read {fresh:?}");
+            }
+        }
+    }
+    let seeded: HashSet<u32> = health.keys().copied().collect();
+    NOW.with(|n| *n.borrow_mut() = Some(Sources { health, seeded, ..Sources::default() }));
+    let swept = swept.as_slice();
     let humans = crate::combat::humans(ctx);
     // The `cue_transport_on` law: off, no cue is written and near copies follow at every frame.
     // With `near_tier_on` off too, frames are scheduled as before frame-views.
@@ -721,7 +751,7 @@ fn engaged_tiers(ctx: &ReducerContext, now: u64, engaged: &HashMap<u32, Vec<u32>
     for (vid, who, b) in flips {
         let public = public_of(ctx, who);
         show_motion(ctx, vid, who, b, true, public);
-        show_fighter(ctx, vid, who, b, true, true, now);
+        show_fighter(ctx, vid, who, b, true, true, now, None);
         show_doing(ctx, vid, who, b, true);
     }
     ENGAGED.with(|e| *e.borrow_mut() = by_viewer);
@@ -941,7 +971,7 @@ fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, on: bool, mut 
                 wrote |= MOTION;
             }
             let hurt = full || changed(&HURT, body, since);
-            if (hurt || changed(&FOUGHT, body, since)) && show_fighter(ctx, id, v.who, body, near, hurt, now) {
+            if (hurt || changed(&FOUGHT, body, since)) && show_fighter(ctx, id, v.who, body, near, hurt, now, None) {
                 wrote |= FIGHTER;
             }
             if (full || changed(&DID, body, since)) && show_doing(ctx, id, v.who, body, near) {
@@ -1119,7 +1149,7 @@ fn put_motion(ctx: &ReducerContext, row: MotionSeen, was_near: bool, near: bool)
 /// when `near`, else `fighter_seen`): its move as it is now; its band as the viewer perceives it
 /// (255 while its projection hides health) when `hurt`, else as last shown. A creature with no
 /// fighter row has none. Returns whether a copy was written.
-pub fn show_fighter(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, near: bool, hurt: bool, now: u64) -> bool {
+pub fn show_fighter(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, near: bool, hurt: bool, now: u64, known_band: Option<u8>) -> bool {
     let k = key(viewer, body);
     let (was_near, row) = if near {
         match ctx.db.fighter_near().id().find(k) {
@@ -1145,7 +1175,19 @@ pub fn show_fighter(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32,
     };
     let band = match row.as_ref() {
         Some(r) if !hurt => r.fighter.band,
-        _ => perceived_band(ctx, who, body, now).0,
+        // The sweep passes the band of the projection it has just written for this newcomer, from
+        // the same health reading in the same transaction: what `perceived_band` would read back.
+        _ => match known_band {
+            Some(b) => {
+                common::diag(|| "frames:band_passed", 1);
+                if common::laws(ctx).regard_cache_check && perceived_band(ctx, who, body, now).0 != b {
+                    common::diag(|| "frames:band_passed_differed", 1);
+                    log::error!("exact items: #{body}'s passed band {b} for {who} differs from perceived_band");
+                }
+                b
+            }
+            None => perceived_band(ctx, who, body, now).0,
+        },
     };
     let new = FighterSeen { id: k, viewer: who, fighter: Fighter { band, ..f } };
     if row.as_ref() == Some(&new) && was_near == near {

@@ -1087,10 +1087,19 @@ thread_local! {
     static PROJECTED: RefCell<HashMap<u32, ((u64, u64), HashSet<u32>)>> = RefCell::new(HashMap::new());
 }
 
+/// What a tick's sweeps hand to its frames (`frame::deliver`): the players swept, and every
+/// health reading the sweeps made this tick (`Shared.health`: `common::needs(&v, now).hp` and
+/// `max_hp` at this `now`, or none for a body without `vitals`). A local value of the one tick
+/// call, never kept across calls.
+pub struct Swept {
+    pub ids: Vec<u32>,
+    pub health: HashMap<u32, Option<(f32, f32)>>,
+}
+
 /// Sweep the players whose turn it is (every tick, numbered `tick`; each player every
 /// [`SWEEP_MS`]). Returns the players swept, whose sweeps share the step with frames
-/// (`frame::deliver`).
-pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
+/// (`frame::deliver`), and the sweeps' health readings.
+pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Swept {
     // What the sweep keeps across ticks was worked out from rows as this instance saw them in
     // its last tick. `tick` is the committed clock's tick plus one, so it follows that tick only
     // if that tick committed and no other ran since. A tick rolled back (its number comes again)
@@ -1112,7 +1121,7 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
     }
     let humans = crate::combat::humans(ctx);
     if humans.is_empty() {
-        return Vec::new();
+        return Swept { ids: Vec::new(), health: HashMap::new() };
     }
     let due: Vec<(u32, Identity)> = LAST.with(|l| {
         let mut l = l.borrow_mut();
@@ -1140,7 +1149,7 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
             .collect()
     });
     if due.is_empty() {
-        return Vec::new();
+        return Swept { ids: Vec::new(), health: HashMap::new() };
     }
     let w = common::world(ctx);
     let map = common::map(ctx);
@@ -1155,7 +1164,7 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
         swept.push(id);
     }
     common::diag(|| "sweep:viewers", swept.len() as u64);
-    swept
+    Swept { ids: swept, health: shared.health.into_iter().collect() }
 }
 
 /// The latest moment at or before `now` on character `id`'s phase: each player's turns fall
@@ -1394,15 +1403,19 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
             }
         }
     }
+    // Each newcomer's band as the projection just written grants it (`show_fighter` would read
+    // that row and the health back).
+    let mut bands: IdMap<u32, u8> = IdMap::default();
     for body in seen.difference(&have) {
         let Some(t) = ctx.db.character().id().find(*body) else { continue };
         let pr = project_shared(ctx, shared.as_deref_mut(), regard(ctx, &me, &t, now), &t, now);
+        bands.insert(*body, pr.band);
         proj_insert(ctx, pr.into_row(viewer, *body, *body == id, 0));
     }
     // The move of each newcomer that has fought, with the band its projection grants.
     for body in &entered {
         let near = crate::frame::is_near(id, *body);
-        crate::frame::show_fighter(ctx, id, viewer, *body, near, true, now);
+        crate::frame::show_fighter(ctx, id, viewer, *body, near, true, now, bands.get(body).copied());
         crate::frame::show_doing(ctx, id, viewer, *body, near);
     }
 }
@@ -1771,8 +1784,11 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
     }
     drop(as_span);
     let writing = common::detail_span("project.write");
+    // Each body's band as the projection written here grants it, for `show_fighter` below.
+    let mut bands: IdMap<u32, u8> = IdMap::default();
     for (body, pr) in projected {
         let own = body == id;
+        bands.insert(body, pr.band);
         let rows: Vec<Projected> = ctx.db.projected().by_viewer_body().filter((viewer, body)).collect();
         match rows.as_slice() {
             [p] if p.own == own => {
@@ -1797,7 +1813,7 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
     let showing = common::detail_span("project.show");
     for body in s.entered {
         let near = crate::frame::is_near(id, *body);
-        crate::frame::show_fighter(ctx, id, viewer, *body, near, true, now);
+        crate::frame::show_fighter(ctx, id, viewer, *body, near, true, now, bands.get(body).copied());
         crate::frame::show_doing(ctx, id, viewer, *body, near);
     }
     drop(showing);
