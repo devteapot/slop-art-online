@@ -604,8 +604,34 @@ def faults(t):
     return out
 
 
-def load():
-    return json.load(open(DATA))
+PORT = os.path.join(HERE, "port.json")
+
+
+def port_features():
+    """The char-port-2 features switched on for this process: `SLOP_PORT=jaw,jaw_shell,…`
+    (docs/char-port-2/PLAN.md). Empty by default, so every type and file is built as before."""
+    return {f.strip() for f in os.environ.get("SLOP_PORT", "").split(",") if f.strip()}
+
+
+def class_of(tid):
+    """A type's class, its id without the line letter: `adult-f-b` -> `adult-f`."""
+    return tid.rsplit("-", 1)[0]
+
+
+def load(raw=False):
+    """types.json, with the switched-on port features' values (port.json) merged into each
+    type's records. `raw` reads the file alone, as the commands that write it back must."""
+    data = json.load(open(DATA))
+    on = set() if raw else port_features()
+    if on:
+        port = json.load(open(PORT))
+        for f in sorted(on):
+            if f not in port["features"]:
+                raise ValueError(f"SLOP_PORT names {f!r}; port.json has {sorted(port['features'])}")
+            for tid, t in data["types"].items():
+                for record, values in port["features"][f].get("classes", {}).get(class_of(tid), {}).items():
+                    t.setdefault(record, {}).update(values)
+    return data
 
 
 # ---------------------------------------------------------------------------------------------
@@ -924,12 +950,12 @@ def main():
     sub_.add_parser("rig")
     a = ap.parse_args()
     if a.cmd == "measure":
-        data = load() if os.path.exists(DATA) else {}
+        data = load(raw=True) if os.path.exists(DATA) else {}
         data["measured"] = measure(a.ref)
         json.dump(data, open(DATA, "w"), indent=1)
         print(f"measured {len(data['measured'])} anchors into {DATA}")
     elif a.cmd == "build":
-        data = load()
+        data = load(raw=True)
         data = dict(about="Face types, the identity rig and the anchors they were set from (living/tools/characters/face_types.py; docs/CHARACTERS.md). Lengths are in units of the head's height H, chin to crown, unless a name says otherwise.",
                     version=1, file=dict(head_height_m=HEAD_IN_FILE, chin_m=1.535, about="a character file's own size: every head is this high in the file, the chin at this height; the recipe's height and head multiplier size the person"), bands=[dict(band=b, ages=[lo, min(hi, 99)]) for b, lo, hi in BANDS], lines=LINES, rig=rig_json(), measured=data["measured"], types=compose(data["measured"]))
         json.dump(data, open(DATA, "w"), indent=1)

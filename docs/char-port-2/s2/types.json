@@ -1,0 +1,152 @@
+{
+ "about": "Triangles per type: main, S1 (jaw, jaw_shell) and S2 (jaw, jaw_shell, paint, neck); the lip and blush layer (FaceTint) on main and with S2. share.py types put all 21 on the shared pages; brow_check and eye_colours pass.",
+ "types": {
+  "adult-f-a": {
+   "triangles_main": 14036,
+   "triangles_s1": 14816,
+   "triangles_s2": 15000,
+   "tint_main": 960,
+   "tint_s2": 1164
+  },
+  "adult-f-b": {
+   "triangles_main": 13956,
+   "triangles_s1": 14728,
+   "triangles_s2": 14952,
+   "tint_main": 908,
+   "tint_s2": 1132
+  },
+  "adult-f-c": {
+   "triangles_main": 13852,
+   "triangles_s1": 14628,
+   "triangles_s2": 14896,
+   "tint_main": 820,
+   "tint_s2": 1088
+  },
+  "adult-m-a": {
+   "triangles_main": 13734,
+   "triangles_s1": 14520,
+   "triangles_s2": 14712,
+   "tint_main": 788,
+   "tint_s2": 984
+  },
+  "adult-m-b": {
+   "triangles_main": 13674,
+   "triangles_s1": 14452,
+   "triangles_s2": 14676,
+   "tint_main": 748,
+   "tint_s2": 972
+  },
+  "adult-m-c": {
+   "triangles_main": 13532,
+   "triangles_s1": 14320,
+   "triangles_s2": 14608,
+   "tint_main": 624,
+   "tint_s2": 920
+  },
+  "child-u-a": {
+   "triangles_main": 13998,
+   "triangles_s1": 14778,
+   "triangles_s2": 15018,
+   "tint_main": 976,
+   "tint_s2": 1216
+  },
+  "child-u-b": {
+   "triangles_main": 13918,
+   "triangles_s1": 14698,
+   "triangles_s2": 14966,
+   "tint_main": 944,
+   "tint_s2": 1212
+  },
+  "child-u-c": {
+   "triangles_main": 13902,
+   "triangles_s1": 14698,
+   "triangles_s2": 14946,
+   "tint_main": 912,
+   "tint_s2": 1172
+  },
+  "elder-f-a": {
+   "triangles_main": 13980,
+   "triangles_s1": 14752,
+   "triangles_s2": 15008,
+   "tint_main": 904,
+   "tint_s2": 1160
+  },
+  "elder-f-b": {
+   "triangles_main": 13916,
+   "triangles_s1": 14700,
+   "triangles_s2": 14932,
+   "tint_main": 864,
+   "tint_s2": 1100
+  },
+  "elder-f-c": {
+   "triangles_main": 13780,
+   "triangles_s1": 14576,
+   "triangles_s2": 14860,
+   "tint_main": 752,
+   "tint_s2": 1052
+  },
+  "elder-m-a": {
+   "triangles_main": 13666,
+   "triangles_s1": 14440,
+   "triangles_s2": 14684,
+   "tint_main": 724,
+   "tint_s2": 964
+  },
+  "elder-m-b": {
+   "triangles_main": 13600,
+   "triangles_s1": 14380,
+   "triangles_s2": 14620,
+   "tint_main": 676,
+   "tint_s2": 912
+  },
+  "elder-m-c": {
+   "triangles_main": 13476,
+   "triangles_s1": 14256,
+   "triangles_s2": 14512,
+   "tint_main": 564,
+   "tint_s2": 820
+  },
+  "youth-f-a": {
+   "triangles_main": 13988,
+   "triangles_s1": 14756,
+   "triangles_s2": 14980,
+   "tint_main": 936,
+   "tint_s2": 1160
+  },
+  "youth-f-b": {
+   "triangles_main": 13908,
+   "triangles_s1": 14696,
+   "triangles_s2": 14920,
+   "tint_main": 888,
+   "tint_s2": 1116
+  },
+  "youth-f-c": {
+   "triangles_main": 13824,
+   "triangles_s1": 14620,
+   "triangles_s2": 14864,
+   "tint_main": 816,
+   "tint_s2": 1076
+  },
+  "youth-m-a": {
+   "triangles_main": 13772,
+   "triangles_s1": 14558,
+   "triangles_s2": 14754,
+   "tint_main": 824,
+   "tint_s2": 1020
+  },
+  "youth-m-b": {
+   "triangles_main": 13750,
+   "triangles_s1": 14534,
+   "triangles_s2": 14706,
+   "tint_main": 824,
+   "tint_s2": 996
+  },
+  "youth-m-c": {
+   "triangles_main": 13584,
+   "triangles_s1": 14364,
+   "triangles_s2": 14624,
+   "tint_main": 664,
+   "tint_s2": 924
+  }
+ }
+}
