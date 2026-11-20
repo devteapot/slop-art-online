@@ -11,6 +11,12 @@
 Both wasm files sit in `DIR` (mounted at `/wasm`), and both builds carry the `det_clock` law
 (living/authority/src/det.rs).
 
+With players (`prepare --players N --ring LO,HI`: joined with no connection, placed round the
+battle), the sweeps and frames run too. Their rows are hashed by content with ids by rank
+(det.rs: `act_outcome`, `line_seen`, `seen_character_copy`), and the hearing salt is a constant
+under `det_clock`, so main against itself is identical. `run --cpus ""` runs the copies unpinned
+(the dev-box's rootless podman has no cpuset controller); the output records `pinned`.
+
 `prepare` publishes the base build fresh on server A as `verify-det-<stamp>`, waits for genesis,
 pauses, stages the battle (`spawn_battle`) and sets the laws `det_clock` (the clock, the random
 draws and housekeeping follow the tick count alone) and `det_stop` (pause after `--ticks` ticks).
@@ -146,6 +152,11 @@ community cue expecting experience familiar far_handle fight_seen ground_edit gu
 inventory join_request judged judgment know_how known_ground law_change look_line membership missile
 perceived place practice projected record_party record relation remembered reveal routine seen_stock
 seen_structures sex_seen skill_use structure thought trade_offer""".split()
+# Players' tables (det.rs): rows inserted in a hash set's order, which a module instance's history
+# decides, so two copies give the same rows other ids. Compared by content, the id columns left out
+# (and the ids naming them: the mirror's `projected` id, act outcomes' and released lines'
+# `experience` id).
+CONTENT = ("perceived", "projected", "seen_character_copy", "act_outcome", "line_seen")
 FAR_BASE = 1_000_000_000
 STRUCTURE_BIT, FAM_STRUCTURE, KIND_MASK = 1 << 40, 3 << 40, 7 << 40
 
@@ -182,7 +193,17 @@ def normalized(rows):
         new = []
         for r in rs:
             r = deep(dict(r))
-            if t in AUTO_INC:
+            if t in CONTENT:
+                r["id"] = 0
+                # A released line's copy of its experience row comes as a product (a list in
+                # column order: id, observer, controller, at_ms, kind, subject, object, ...).
+                if t == "line_seen" and isinstance(r.get("line"), list) and len(r["line"]) > 6:
+                    line = list(r["line"])
+                    line[0], line[5], line[6] = 0, far(line[5]), far(line[6])
+                    r["line"] = line
+                elif t == "line_seen" and isinstance(r.get("line"), dict):
+                    r["line"] = {**r["line"], "id": 0, "subject": far(r["line"].get("subject")), "object": far(r["line"].get("object"))}
+            elif t in AUTO_INC:
                 r["id"] = rank(t, r["id"])
             if t == "experience":
                 r["subject"], r["object"] = far(r["subject"]), far(r["object"])
@@ -233,10 +254,32 @@ def prepare(a):
             time.sleep(5)
     A.call(db, "set_paused", [True])
     A.call(db, "spawn_battle", [a.fighters])
+    if a.players:
+        # Players watching (exact items): `a.players` fresh identities joined over HTTP (no
+        # connection: their characters are human by controller, so the sweeps and frames run for
+        # them) and placed over the ring `--ring LO,HI` m round the battle's centre (the arrival
+        # less 20 m, as spawn_battle and battle_viewers.py take it). Without a connection a
+        # character is taken over by a mind after `takeover_s` (30 s): keep `--ticks` under it.
+        import math
+        land = A.sql(db, "SELECT * FROM land")
+        site = (land[0]["arrive_x"], land[0]["arrive_y"] - 20.0) if land else (55.0, 60.0)
+        lo, hi = (float(x) for x in a.ring.split(","))
+        before = {r["id"] for r in A.sql(db, "SELECT id FROM character")}
+        for i in range(a.players):
+            token = json.loads(urllib.request.urlopen(urllib.request.Request(f"{A.url}/v1/identity", data=b"", method="POST"), timeout=60).read())["token"]
+            req = urllib.request.Request(f"{A.url}/v1/database/{db}/call/join", data=json.dumps([f"Watch{i}"]).encode(), method="POST",
+                                         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=60).read()
+        joined = sorted(r["id"] for r in A.sql(db, "SELECT id FROM character") if r["id"] not in before and r["id"])
+        n = len(joined)
+        for i, cid in enumerate(joined):
+            ang, rr = i * 2.399963, (lo * lo + (hi * hi - lo * lo) * ((i + 0.5) / max(1, n))) ** 0.5
+            A.call(db, "place_at", [cid, site[0] + rr * math.cos(ang), site[1] + rr * math.sin(ang)])
+        print(f"det_compare: {n} players joined and placed on the {lo:g}-{hi:g} m ring", flush=True)
     t0 = A.sql(db, "SELECT tick FROM clock")[0]["tick"]
     A.call(db, "set_world_law", ["det_clock", "true"])
     A.call(db, "set_world_law", ["det_stop", str(float(t0 + a.ticks))])
-    meta = {"db": db, "start_tick": t0, "stop_tick": t0 + a.ticks, "fighters": a.fighters, "ticks": a.ticks, "replica": A.newest_replica(), "made_with": a.base}
+    meta = {"db": db, "start_tick": t0, "stop_tick": t0 + a.ticks, "fighters": a.fighters, "players": a.players, "ring": a.ring, "ticks": a.ticks, "replica": A.newest_replica(), "made_with": a.base}
     print(f"det_compare: {db} paused at tick {t0}, battle of {a.fighters}, stop at {t0 + a.ticks}", flush=True)
     subprocess.run(["docker", "kill", "-s", "INT", a.container], check=True, capture_output=True)
     subprocess.run(["docker", "wait", a.container], check=True, capture_output=True, timeout=300)
@@ -253,14 +296,19 @@ def run(a):
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     db, t0, ticks, replica = meta["db"], meta["start_tick"], meta["ticks"], meta["replica"]
-    res = {**meta, "base": a.base, "candidate": a.candidate}
+    # Whether the copies were pinned to cores (`--cpus ""`: unpinned, as on a host whose rootless
+    # cgroups have no cpuset controller); the hashes do not depend on it, the run time does.
+    res = {**meta, "base": a.base, "candidate": a.candidate, "pinned": bool(a.cpus), "cpus": a.cpus or None}
     ports = [int(p) for p in a.ports.split(",")]
     names = [f"{a.template}-x{a.tag}", f"{a.template}-y{a.tag}"]
     try:
         servers = []
         for name, port in zip(names, ports):
             copy_volume(a.template, name)
-            subprocess.run(["docker", "run", "-d", "--name", name, "--cpuset-cpus", a.cpus, "--ulimit", "nofile=65536:524288", "-p", f"127.0.0.1:{port}:3000",
+            # `--cpus ""` leaves the copies unpinned (a host whose rootless cgroups have no cpuset
+            # controller delegated, as the dev-box's podman).
+            pin = ["--cpuset-cpus", a.cpus] if a.cpus else []
+            subprocess.run(["docker", "run", "-d", "--name", name, *pin, "--ulimit", "nofile=65536:524288", "-p", f"127.0.0.1:{port}:3000",
                             "-v", f"{a.wasm_dir}:/wasm", "-v", f"{name}:/home/spacetime", IMAGE, "start", "--listen-addr", "0.0.0.0:3000"], check=True, capture_output=True)
             servers.append(Server(name, f"http://127.0.0.1:{port}"))
         for s in servers:
@@ -355,6 +403,8 @@ def main():
     ap.add_argument("--candidate")
     ap.add_argument("--fighters", type=int, default=200)
     ap.add_argument("--ticks", type=int, default=3600)
+    ap.add_argument("--players", type=int, default=0, help="prepare: players joined (no connection) and placed on --ring round the battle (exact items)")
+    ap.add_argument("--ring", default="10,10", help="prepare: the players' ring LO,HI m from the battle's centre")
     ap.add_argument("--ports", default=None, help="run: the two copies' ports, PX,PY")
     ap.add_argument("--out")
     ap.add_argument("--keep-copies", action="store_true")
