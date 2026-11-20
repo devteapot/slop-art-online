@@ -29,6 +29,9 @@ import look_lines  # noqa: E402
 
 SHOTS = [("Near, back", "near@180", (730, 360, 870, 500)), ("Middle, back", "middle@180", (755, 385, 845, 475)),
          ("back portrait", "180:8:0.36:0.88", (560, 60, 1040, 860)), ("back three-quarter", "145:8:0.36:0.88", (560, 60, 1040, 860))]
+# The front set (step 2): the silhouette and the tips, as char-live-2 counted them.
+FRONT = [("front portrait", "0:8:0.36:0.88", (600, 160, 1000, 620)), ("three-quarter", "-35:8:0.36:0.88", (600, 160, 1000, 620)),
+         ("profile", "90:8:0.36:0.88", (600, 160, 1000, 620)), ("back portrait", "180:8:0.36:0.88", (600, 160, 1000, 620))]
 WINDOW = {"near@180": 17, "middle@180": 10}
 DRAWN = {"near@180": 7.4, "middle@180": 4.6}
 FONT = "/usr/share/fonts/rsms-inter-fonts/Inter-Regular.ttf"
@@ -38,7 +41,8 @@ def frame(out, tag, shot):
     return next(p for p in sorted((out / tag).rglob("*.png")) if p.name.endswith(shot.replace(":", "_").replace("@", "_") + ".png"))
 
 
-def render(out, binary, style, tag):
+def render(out, binary, style, tag, shots=None):
+    shots = shots or SHOTS
     line = dict(type="adult-f-b", height=1.64, colors=dict(hair="#662e1a", skin="#e8bca3", eyes="#4f7a4f"),
                 styles=dict(hair=style, outfit=["jersey-f", "trousers-f", "boots-f"], overlays=[]))
     k = look_lines.key_of(line)
@@ -46,7 +50,7 @@ def render(out, binary, style, tag):
     d.mkdir(parents=True, exist_ok=True)
     (d / "book.json").write_text(json.dumps(dict(generation="c4-s6back01", generations=[], lines={k: dict(person=line, words={})}, decor=[])))
     env = {x: v for x, v in os.environ.items() if not x.startswith("LIVING_GAME_")}
-    env.update(LIVING_GAME_VIEW=f"look:{k}", LIVING_GAME_LOOK_BOOK=str(d / "book.json"), LIVING_GAME_VIEW_SHOTS=",".join(f"idle@0/{s}" for _, s, _ in SHOTS),
+    env.update(LIVING_GAME_VIEW=f"look:{k}", LIVING_GAME_LOOK_BOOK=str(d / "book.json"), LIVING_GAME_VIEW_SHOTS=",".join(f"idle@0/{s}" for _, s, _ in shots),
                LIVING_GAME_VIEW_OUT=str(d), LIVING_GAME_HOUR="11", LIVING_GAME_DAY_MINUTES="0", LIVING_GAME_FILM="soft",
                LIVING_GAME_SETTINGS=str(d / "settings.json"), LIVING_GAME_SIZE="1600x900", LIVING_GAME_VIEW_CLIP="idle", LIVING_GAME_SPRINGS="0", RUST_LOG="warn")
     with (d / "client.log").open("w") as log:
@@ -79,19 +83,20 @@ def measure(out, tag, idtag):
     return res
 
 
-def sheet(out, path, tags):
+def sheet(out, path, tags, shots=None):
+    SHOTS_ = shots or SHOTS
     try:
         f = ImageFont.truetype(FONT, 14)
     except OSError:
         f = ImageFont.load_default()
     cell = 260
-    S = Image.new("RGB", (150 + len(SHOTS) * (cell + 6), 40 + len(tags) * (cell + 6)), (244, 241, 236))
+    S = Image.new("RGB", (150 + len(SHOTS_) * (cell + 6), 40 + len(tags) * (cell + 6)), (244, 241, 236))
     d = ImageDraw.Draw(S)
-    for i, (name, _, _) in enumerate(SHOTS):
+    for i, (name, _, _) in enumerate(SHOTS_):
         d.text((150 + i * (cell + 6), 12), name, fill=(40, 40, 40), font=f)
     for r, tag in enumerate(tags):
         d.text((10, 40 + r * (cell + 6) + cell // 2), tag, fill=(40, 40, 40), font=f)
-        for i, (name, shot, box) in enumerate(SHOTS):
+        for i, (name, shot, box) in enumerate(SHOTS_):
             im = Image.open(frame(out, tag, shot)).convert("RGB").crop(box)
             w, h = im.size
             k = min(cell / w, cell / h)
@@ -110,10 +115,11 @@ if __name__ == "__main__":
     ap.add_argument("--tag")
     ap.add_argument("--id")
     ap.add_argument("--tags")
+    ap.add_argument("--front", action="store_true", help="the front set (portrait, three-quarter, profile, back portrait)")
     a = ap.parse_args()
     if a.cmd == "render":
-        render(a.out, a.binary, a.style, a.tag)
+        render(a.out, a.binary, a.style, a.tag, FRONT if a.front else None)
     elif a.cmd == "measure":
         measure(a.out, a.tag, a.id)
     else:
-        sheet(a.out, a.dest, a.tags.split(","))
+        sheet(a.out, a.dest, a.tags.split(","), FRONT if a.front else None)

@@ -169,17 +169,34 @@ MASTERS = dict(swept_braid=dict(
     },
     part_asymmetry=0.065, side_tuck=(0.035, -0.018),  # Cora's part offset and the sides' tuck
     over=0.011,  # how far the layers lie off the scalp: over the hair mass drawn to the plait
+    mass_in=0.0,  # how far inside the plait's start the mass under it is drawn
+    volume=0.95,  # the cut's volume (the sheets' swell): Cora's crown lift
     lift=(0.004, 0.0012),  # and each layer's own swell over its length (Cora's)
     companions=(3, 4),  # the layers with a narrower companion beside the wide lock (her secondary folds)
     companion=dict(width=0.45, side=0.22, start=0.14, end=0.09),  # its width, where it lies across, the share of the lock it leaves out
-    rings=14,  # sections along a layer's lock
+    rings=12,  # sections along a layer's lock
+    # The front (char-live-2's swept forelocks, returning hooks, jaw strands and side groups), in
+    # the generator's terms. Angles round the head from the front, + toward the far side of the
+    # part; heights above the chin in head heights.
+    front=dict(
+        part=0.55,  # how far off centre the part is (the seed decides the side)
+        flare=0.014,  # how far the front sections' points turn out from the head: the spread Cora's silhouette has
+        sweep=dict(points=7, depth=0.045, el=(58.0, 112.0), drop=0.40, lean=1.8, thick=0.004, lift=0.020),  # the big section: roots up the part (elevation from the hairline to the crown), its hem from the brow at the front to `drop` head heights lower behind
+        near=dict(points=4, depth=0.036, el=(60.0, 104.0), end_h=0.10, lean=1.8, thick=0.0035),  # the near section: up the part too, falling to the near temple and down beside the face to the jaw
+        hooks=[dict(az=62.0, h=0.90, length=0.100, width=0.022, out=0.062, rise=0.055), dict(az=80.0, h=0.76, length=0.090, width=0.020, out=0.054, rise=0.045)],  # returning hooks off the sweep's outer edge
+        jaw=dict(n=2, end_h=-0.03, width=0.022),  # long strands before the ears, to below the jaw
+        sides=dict(n=2, width=0.016),  # side groups: over the ear and round behind it to the nape
+    ),
     plait=dict(
-        root_h=0.60,  # the plait's start, head heights above the chin: behind the crown, where the upper layers meet
-        root_lift=0.018,  # lifted over the hair mass, so the start shows to the 58° camera
-        scale=1.25,  # its radius over the styles' braid (0.085 of the head's width): the drawn rear's width at Near and Middle
-        turns=2.9, taper=0.63, gain=0.44, gain_span=(0.15, 0.92),  # Cora's pitch, its narrowing, the upper lobes' widening
+        root_h=0.56,  # the plait's start, head heights above the chin: behind the crown, where the upper layers meet
+        root_lift=0.002,  # lifted over the hair mass, so the start shows to the 58° camera, seated (Cora's rear depth)
+        length_h=2.3,  # root to tie, in head heights: down the back to below the shoulder blades, as the drawing
+        depth=(0.55, 0.40),  # its strands' depth over their width, and their over-and-under's: Cora's flatter section (.0078 deep for .0125 wide, the orbit .0068 deep for .0185 across)
+        seat=0.15,  # how far its spine stands off the hair under it, in its own radii (the styles' braid: 1.55)
+        scale=1.6,  # its radius over the styles' braid (0.085 of the head's width): the drawn rear's width at Near and Middle
+        turns=3.9, taper=0.63, gain=0.55, gain_span=(0.15, 0.92), full_from=0.0,  # crossings root to tie (0.59 head heights each: Near and Middle luma closest to the drawn rear), its narrowing, the upper lobes' widening
         crest=__import__("os").environ.get("SLOP_MASTER_CREST", "1") != "0",
-        crest_up=(-0.25, 0.55), crest_lit=(0.65, 0.65),  # a lobe's normals: down below, up on its upper face (base, by facing); where its crest highlight starts (over, facing)
+        crest_up=(-0.30, 0.55), crest_lit=(0.70, 0.60),  # a lobe's normals: down below, up on its upper face (base, by facing); where its crest highlight starts (over, facing)
     ),
     # SLOP_MASTER_PLAIT=0 builds the cut without its plait: the visibility control (the plait's
     # pixels are where the two differ).
@@ -382,6 +399,7 @@ class Hair:
         self.paths = []  # (S6 masters) locks laid on explicit paths: dict(pts, widths, ...)
         self.hl_marks = {}  # vertex -> highlight (0..1) a master asks for (the plait's crests)
         self.part_tris = {}  # triangles by part, for the budget
+        self.part_verts = []  # (part, first vertex, end) as built
         style = spec["style"]
         if style not in STYLES and not (MASTERS_ON and style in MASTERS):
             raise SystemExit(f"hair.style: {style!r} is not one of {STYLES}")
@@ -894,16 +912,50 @@ class Hair:
         lifted so its start shows to the game camera."""
         m = MASTERS["swept_braid"]
         H = self.hf.top_z - self.hf.chin_z
+        self.volume = max(self.volume, m["volume"])  # Cora's crown stands up off the scalp
         z0 = self.hf.chin_z + m["plait"]["root_h"] * H
         g = self.point(180, z0)
-        self._tag("mass", lambda: self.gather(g, n_mid=16))
+        # The mass is drawn a little inside the plait's start, so it thins there and the plait's
+        # first lobes lie on it rather than in it.
+        self._tag("mass", lambda: self.gather(g - unit(np.array([0.0, g[1], 0.0])) * m["mass_in"], n_mid=16))
         self._tag("rear layers", lambda: self.rear_layers(m))
         width = np.linalg.norm(self.comb.surface(90, 0) - self.comb.surface(-90, 0))
         back_length = g[2] - self.comb.b.get("belt_z", -0.55)
-        self.braid = [dict(p=g, d=np.array([0.0, -0.5, -1.0]), length=back_length * (0.58 + 0.30 * self.length), radius=0.085 * width * m["plait"]["scale"], master=m["plait"])] if m["plait_on"] else []
-        # The front until step 2 brings Cora's: the generator's swept fringe and temple locks.
-        self._tag("front", lambda: self.bangs("swept", points=6, reach=1.0))
-        self._tag("jaw strands", lambda: self.temples(-0.085, n=2, width=0.024))
+        self.braid = [dict(p=g, d=np.array([0.0, -0.5, -1.0]), length=m["plait"]["length_h"] * H, radius=0.085 * width * m["plait"]["scale"], master=m["plait"])] if m["plait_on"] else []
+        self._tag("front", lambda: self.front_master(m))
+        f = m["front"]
+        self._tag("jaw strands", lambda: self.temples(self.hf.chin_z + f["jaw"]["end_h"] * H, n=f["jaw"]["n"], width=f["jaw"]["width"]))
+        self.side_groups(m)
+
+    def measures(self):
+        """The silhouette's measures as Cora's fit was held to (docs/char-live-2/hair/README.md),
+        in this head's own frame: the hair's outer spread in cheek widths, its lift over the skull's
+        top in head heights, and its depth behind the pinna, over the pinna's base, in head heights.
+        The cheek is Cora's, 0.5076 head heights (her fit's units, the stations' too): this head's
+        own face, across its cheekbones, is wider for its height, and its ratio is given beside
+        (`spread_face`)."""
+        V = np.asarray(self.v, float).reshape(-1, 3)
+        if not len(V):
+            return {}
+        H = self.hf.top_z - self.hf.chin_z
+        ear = self.point(90.0, self.hf.eye_z - 0.010)
+        base = self.hf.eye_z - 0.035  # the pinna's base, about
+        part = np.array([""] * len(V), dtype=object)
+        for name, a, b in self.part_verts:
+            part[a:b] = name
+        above = np.nonzero(V[:, 2] > base)[0]
+        head = np.nonzero(V[:, 2] > self.hf.chin_z)[0]  # the head's hair, not the plait down the back
+        hx = V[head, 0]
+        # This face's own cheek width: across the head's surface at the cheekbones, in front of the ears.
+        z = self.hf.eye_z - 0.030
+        xs = np.linspace(0.0, 0.12, 241)
+        cheek = 2.0 * max((x for x in xs if self.comb.head(np.array([[x, 0.035, z]]))[0] < 0), default=0.5076 * H / 2)
+        out = dict(spread=round(float((hx.max() - hx.min()) / (0.5076 * H)), 3), spread_face=round(float((hx.max() - hx.min()) / cheek), 3), crown_lift=round(float((V[:, 2].max() - self.hf.top_z) / H), 3),
+                   rear_depth=round(float((ear[1] - V[above, 1].min()) / H), 3) if len(above) else None)
+        # Which part sets each (for tuning): the widest on each side, the highest, the furthest back.
+        out["by"] = dict(left=str(part[head[np.argmin(hx)]]), right=str(part[head[np.argmax(hx)]]), top=str(part[int(np.argmax(V[:, 2]))]),
+                         back=str(part[above[np.argmin(V[above, 1])]]) if len(above) else None)
+        return out
 
     def _tag(self, part, make):
         """Run `make` and tag the locks and sheets it adds with `part` (the triangle budget)."""
@@ -954,11 +1006,87 @@ class Hair:
                     Q = P + across * (side * c["side"] * W * 2)[:, None] + nrm * 0.0015
                     self.paths.append(dict(pts=Q[keep], widths=W[keep] * c["width"], layer=g, side=side, part="rear layers", companion=True, tone=self.u(-1, 1), grey=self.rng.random()))
 
+    def front_master(self, m):
+        """A master's front (Cora's): a side part; from it the big swept section across the
+        forehead to the far temple, short at the part (above the brow) and long at the far side
+        (to the cheek), ending in points; the near side's section from the part to the near
+        temple, down beside the face to the jaw; returning hooks off the sweep's outer edge.
+        Angles round the head: + toward the far side, the side the sweep goes to."""
+        f = m["front"]
+        H = self.hf.top_z - self.hf.chin_z
+        s = -1.0 if self.parting < 0 else 1.0  # the far side: + the character's left (az +, -X)
+        self.parting = -s * max(abs(self.parting), f["part"])  # the part on the near side
+        part_az = -s * 22.0 * f["part"]
+        ts = np.linspace(0, 1, 13)
+        # Both sections root along the part, from the hairline over the top toward the crown, and
+        # fall away from it: the sweep forward and across the forehead to the far side, the near
+        # section down to the near temple.
+        sw = f["sweep"]
+        el = lerp(sw["el"][0], sw["el"][1], ts)
+        roots = self.comb.surface(np.full(len(ts), part_az + s * 3.0), el)
+        dirs = np.stack([-s * sw["lean"] * (0.75 + 0.25 * ts), 0.55 - 0.75 * ts, -0.35 - 0.20 * ts], axis=1)
+        brow = self.hf.eye_z + self.hf.eye_up + self.hf.brow_up + 0.006
+        hem = lambda u: -sw["drop"] * H * smooth((u - 0.10) / 0.90)
+        self.sheet(roots, dirs, z_end=brow, points=sw["points"], depth=sw["depth"], hem=hem, lift=sw["lift"], g=30.0, shade=0.04, tip_out=f["flare"],
+                   edges=(0.3, 0.3), thick=sw["thick"], check=True, uneven=0.45, sharp=0.55)
+        nr = f["near"]
+        el = lerp(nr["el"][0], nr["el"][1], ts)
+        roots = self.comb.surface(np.full(len(ts), part_az - s * 3.0), el)
+        dirs = np.stack([s * nr["lean"] * np.ones(len(ts)), 0.25 - 0.45 * ts, -0.55 - 0.15 * ts], axis=1)
+        self.sheet(roots, dirs, z_end=self.hf.chin_z + nr["end_h"] * H, points=nr["points"], depth=nr["depth"], hem=lambda u: 0.03 * u, lift=0.009, g=40.0, shade=0.03, tip_out=f["flare"],
+                   edges=(0.3, 0.5), thick=nr["thick"], check=True, uneven=0.4, sharp=0.55)
+        for hk in f["hooks"]:
+            az = part_az + s * hk["az"]
+            z = self.hf.chin_z + hk["h"] * H
+            p0 = self.point(az, z)
+            outw = unit(np.array([p0[0], p0[1] + 0.01, 0.0]))
+            p0 = p0 + outw * 0.012
+            ctrl = [p0, p0 + outw * hk["out"] * 0.6 + np.array([0, 0, -hk["length"] * 0.45]), p0 + outw * hk["out"] + np.array([0, 0, -hk["length"] * 0.55]),
+                    p0 + outw * hk["out"] * 1.25 + np.array([0, 0, -hk["length"] * 0.55 + hk["rise"]])]
+            self.explicit_lock(ctrl, hk["width"], part="front")
+
+    def side_groups(self, m):
+        """A master's side groups: from over the ear, round behind it and down to the nape,
+        toward the plait (Cora's combed side locks, which follow the skull round the pinna)."""
+        sg = m["front"]["sides"]
+        H = self.hf.top_z - self.hf.chin_z
+        for side in (-1, 1):
+            for k in range(sg["n"]):
+                z0 = self.hf.chin_z + (0.62 - 0.08 * k) * H
+                a0 = side * (92 + 6 * k)
+                p0 = self.point(a0, z0)
+                ctrl = [p0, self.point(side * (118 + 4 * k), self.hf.chin_z + (0.46 - 0.06 * k) * H), self.point(side * (150 + 3 * k), self.hf.chin_z + (0.30 - 0.05 * k) * H),
+                        self.point(side * 168, self.hf.chin_z + (0.20 - 0.04 * k) * H)]
+                ctrl = [c + unit(np.array([c[0], c[1] + 0.012, 0.0])) * (m["over"] + 0.004) for c in ctrl]
+                self.explicit_lock(ctrl, sg["width"] * (1 - 0.15 * k), part="side groups")
+
+    def explicit_lock(self, ctrl, width, part, n=12):
+        """A lock through control points (Catmull-Rom), tapering from `width` at the root to a
+        point, laid as a path lock (`_path_ribbon`)."""
+        C = np.array(ctrl, float)
+        pts = []
+        for t in np.linspace(0, 1, n + 1):
+            q = t * (len(C) - 1)
+            j = min(int(q), len(C) - 2)
+            u = q - j
+            a, b, c, d = (C[int(np.clip(i, 0, len(C) - 1))] for i in (j - 1, j, j + 1, j + 2))
+            pts.append(0.5 * (2 * b + (-a + c) * u + (2 * a - 5 * b + 4 * c - d) * u * u + (-a + 3 * b - 3 * c + d) * u ** 3))
+        t = np.linspace(0, 1, n + 1)
+        widths = width * (0.55 + 0.45 * smooth(t / 0.2)) * np.maximum(1 - t ** 2.2, 0.04)
+        self.paths.append(dict(pts=np.array(pts), widths=widths, layer=0, side=0, part=part, tone=self.u(-1, 1), grey=self.rng.random()))
+
     def _back_point(self, x, z, off):
         """The point behind the head (or neck) at side x and height z, `off` out from what the hair
-        lies on."""
-        lo, hi = -0.30, 0.05  # y: far behind, and inside
-        for _ in range(28):
+        lies on: the first, coming from behind, that close. A station wider than this head (Cora's
+        were measured on hers) has none: it takes the point of the line nearest the head, at the
+        side."""
+        ys = np.linspace(-0.30, 0.10, 81)
+        d = self.comb.dist(np.stack([np.full(len(ys), x), ys, np.full(len(ys), z)], axis=1))
+        hit = np.nonzero(d <= off)[0]
+        if not len(hit):
+            return np.array([x, ys[int(np.argmin(d))], z])
+        lo, hi = ys[max(hit[0] - 1, 0)], ys[hit[0]]
+        for _ in range(20):
             mid = 0.5 * (lo + hi)
             if self.comb.dist(np.array([[x, mid, z]]))[0] > off:
                 lo = mid
@@ -1154,29 +1282,33 @@ class Hair:
             first = len(self.v)
             self._ribbon(pts, on, s, k, col)
             self.part_tris[k.get("part", "locks")] = self.part_tris.get(k.get("part", "locks"), 0) + tris(f0)
+            self.part_verts.append((k.get("part", "locks"), first, len(self.v)))
             if k["chain"] >= 0:
                 # Free from where it last touches the head.
                 head_on = on & (pts[:, 2] > -0.11)
                 free_from = s[np.nonzero(head_on)[0].max()] if head_on.any() else 0.0
                 chain_pts.setdefault(k["chain"], []).append((pts, s, free_from, first, len(self.v)))
         for sid in sorted(sheets):
-            f0 = len(self.f)
+            f0, v0 = len(self.f), len(self.v)
             self._sheet_mesh(self.sheets[sid], sheets[sid], base, tipc, silver, grey, chain_pts)
             part = self.sheets[sid].get("part", "sheets")
             self.part_tris[part] = self.part_tris.get(part, 0) + tris(f0)
+            self.part_verts.append((part, v0, len(self.v)))
         for k in self.paths:
-            f0 = len(self.f)
+            f0, v0 = len(self.f), len(self.v)
             self._path_ribbon(k, base, tipc, silver, grey)
             self.part_tris[k["part"]] = self.part_tris.get(k["part"], 0) + tris(f0)
+            self.part_verts.append((k["part"], v0, len(self.v)))
         self._springs(chain_pts)
         if hasattr(self, "bun"):
             f0 = len(self.f)
             self._bun_mesh(base, tipc, silver, grey)
             self.part_tris["bun"] = tris(f0)
         for b in getattr(self, "braid", []):
-            f0 = len(self.f)
+            f0, v0 = len(self.f), len(self.v)
             self._braid_mesh(b, base, tipc, silver, grey)
             self.part_tris["plait"] = self.part_tris.get("plait", 0) + tris(f0)
+            self.part_verts.append(("plait", v0, len(self.v)))
         # The grey mask of every vertex, from the marks set as locks and columns were written.
         self.grey = np.full(len(self.v), person_params.grey_mask(0.5))
         for (a, m), (b, _) in zip(self.marks, self.marks[1:] + [(len(self.v), 0.0)]):
@@ -1598,7 +1730,8 @@ class Hair:
         keep = self.locks
         self.locks = []
         mp = b.get("master")  # a master's plait (MASTERS[...]["plait"]); None for the styles' own
-        self.lock(0, 0, b["d"], root=b["p"], length=b["length"], width=0.03, lift=max(.016, b.get("radius", 0) * 1.55) + (mp["root_lift"] if mp else 0.0), g=30.0)
+        lift = b.get("radius", 0) * mp["seat"] + mp["root_lift"] if mp else max(.016, b.get("radius", 0) * 1.55)
+        self.lock(0, 0, b["d"], root=b["p"], length=b["length"], width=0.03, lift=lift, g=30.0)
         (path,), (touch,) = self._walk()
         self.locks = keep
         if "radius" in b:
@@ -1621,7 +1754,7 @@ class Hair:
             if mp:
                 # Cora's plait (plait/fit.py): narrowing to the tie, fuller over its first few
                 # centimetres, the upper lobes widened by `gain`, falling to none before the tie.
-                r = radius * (1 - mp["taper"] * u) * (0.60 + 0.40 * smooth(u / 0.14))
+                r = radius * (1 - mp["taper"] * u) * (0.60 + 0.40 * smooth(u / 0.14) if mp.get("full_from", 0.14) > 0 else 1.0)
                 wide = 1 + mp["gain"] * (1 - smooth((u - mp["gain_span"][0]) / (mp["gain_span"][1] - mp["gain_span"][0])))
             else:
                 r = radius * (1 - 0.59 * u)
@@ -1630,10 +1763,10 @@ class Hair:
             for strand in range(3):
                 phase = math.tau * (turns * u + strand / 3)
                 centres = (points + across * (r * (wide if wide is not None else 1) * np.sin(phase))[:, None]
-                           + outward * (0.68 * r * np.sin(2 * phase))[:, None])
+                           + outward * ((mp["depth"][1] if mp else 0.68) * r * np.sin(2 * phase))[:, None])
                 colours = self._lock_colour(dict(tone=strand-1, shade=0, grey=self.rng.random()),
                                             base, tipc, silver, grey)
-                self._plait_tube(centres, across, outward, r, along, ci, colours, wide=wide, crest=np.sin(2 * phase) if (mp and mp.get("crest")) else None,
+                self._plait_tube(centres, across, outward, r, along, ci, colours, wide=wide, crest=np.sin(2 * phase) if (mp and mp.get("crest")) else None, deep=mp["depth"][0] if mp else 0.72,
                                  crest_shape=(mp["crest_up"], mp["crest_lit"]) if mp else ((0.52, 0.32), (0.35, 0.35)))
             # The binding and brush share the plait's material and last joint.
             offsets = radius * np.array([0, .25, .50, .65, 1.30, 1.85, 2.55])
@@ -1680,7 +1813,7 @@ class Hair:
             for z in range(a, len(self.v)):
                 self.along[z] = s[-1]
 
-    def _plait_tube(self, centres, across, outward, radii, along, chain, colours, wide=None, crest=None, crest_shape=((0.52, 0.32), (0.35, 0.35))):
+    def _plait_tube(self, centres, across, outward, radii, along, chain, colours, wide=None, crest=None, crest_shape=((0.52, 0.32), (0.35, 0.35)), deep=0.72):
         """A plait's strand as a tube. `wide` widens it across (a master's upper lobes); `crest`
         (how far the strand is over its neighbours, per ring: sin 2 phase) lights the top of each
         crossing: normals up the lobe as Cora's (plait/fit.py), and a highlight on its crest
@@ -1693,7 +1826,7 @@ class Hair:
             for j in range(sides):
                 angle = math.tau * j / sides
                 a, b = math.cos(angle), math.sin(angle)
-                self.v.append(centre + radii[i] * (.81 * a * w * across[i] + .72 * b * outward[i]))
+                self.v.append(centre + radii[i] * (.81 * a * w * across[i] + deep * b * outward[i]))
                 if crest is None:
                     self.nrm.append(unit(a * across[i] + b * outward[i]))
                 else:
