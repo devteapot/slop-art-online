@@ -154,7 +154,7 @@ That gives roughly 300–450 ms/s of tick work against 1,000 available: 60 Hz wi
 3. **Bystanders woken at most once per `witness_wake_ms`** (a law, default 500; 0 means woken by each sight, as before):
    - **Written in full.** A witnessed event's percept is written at once and in full to every onlooker (`perceive::witnessed`, `witnessed_shot` → `percept_seen`).
    - **Parties at once.** Its subject, and the one it was done to or aimed at, are woken at once.
-   - **Bystanders coalesced.** A bystander is woken at most once per window (`common::wake_bystander`). A wake held back is delivered when the window ends, each tick before the wakes (`due_bystander_wakes`).
+   - **Bystanders coalesced.** A bystander is woken at most once per window (`common::wake_bystander`). A wake held back is delivered when the window ends, each tick before the wakes (`due_bystander_wakes`), in id order starting at the tick count modulo the number due (docs/COMBAT_PHASE.md, "Wake order"), so no one is always woken first.
    - **Remains.** A remains noticed is a bystander's sight of a death.
 4. **Deleting a busy world.** The verify harness's cleanup and `trials.py` pause a world and read the pause back before deleting it (fix-sleep-talk, fix-trials-pause). `living/tools/world_delete.py` does the same for the tools that delete scratch databases outside both: `verify_mechanics.py` and `verify_steering.py` (verify-core's Cargo checks), `gate.py`, `latency.py` and `play.py`.
 

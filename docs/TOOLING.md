@@ -327,6 +327,16 @@ On Linux the timer runs without a login when lingering is on (`loginctl enable-l
 
 [`disk_report.sh`](../living/tools/disk_report.sh) still reports free space and big folders across the machines; it deletes nothing.
 
+### Removing a worktree
+
+`git worktree remove --force` deletes a worktree's untracked and git-ignored files with it, and in this project those are evidence: `.local/` verification runs, stills, measurement series, uncommitted edits. Evidence was lost this way more than once (the dev-box's eight `mechanics-flake` proof runs on 2026-11-20 among them). Remove worktrees with `living/tools/wt_remove.py PATH` (installed on each machine as `~/.local/share/slop-tools/wt-remove`), never with `git worktree remove --force` directly. It:
+
+- archives every untracked and ignored file (`git ls-files --others`), plus `tracked.patch` (`git diff HEAD --binary`), `status.txt` and a `manifest.json` (branch, HEAD, whether HEAD is on `origin/main` or any remote branch, host, time, counts), to `~/archive/worktree-evidence-<YYYYMMDD>/<name>-<HHMMSS>.tar.gz` with a `.sha256` beside it;
+- leaves out build caches, the folders holding a `CACHEDIR.TAG` (Cargo targets, sccache), listing them with their sizes (`--keep-caches` archives them too);
+- reads the archive back (every member present at its size, the digest recomputed) and only then runs `git worktree remove --force` from another worktree of the repository. The branch is kept.
+
+It refuses, before writing anything, the repository's main worktree, anything under `~/dev/slop-art-online`, a path that is not a worktree root, the worktree it runs in, and a worktree a process is working in (cwd inside it; `/proc` on Linux, `lsof` on macOS). `--dry-run` prints what it would archive. Standard library only, so the same file runs on the dev-box, the Spark and the laptop. Install: `install -m 755 living/tools/wt_remove.py ~/.local/share/slop-tools/wt-remove`.
+
 ## Measurements (dev-box, 2026-11-11)
 
 All runs used `CARGO_BUILD_JOBS=12` on the 32-core dev-box while other workers were building. The load average at each run's start (and the range during it) is given because it moved the numbers more than anything else. Before/after arms on the same change are interleaved A B B A. The runs used a scratch clone of the repository and private target folders; reflink snapshots gave each warm arm the same starting state. The raw records are in each run's JSON (`check.py --json`) and the step logs.
