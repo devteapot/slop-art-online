@@ -62,7 +62,7 @@ pub fn draw(
     if keys.just_pressed(KeyCode::F1) {
         hud.tuning = !hud.tuning;
     }
-    let names: HashMap<u32, String> = net.conn.as_ref().map(|c| c.db.seen_characters().iter().map(|ch| (ch.id, ch.label)).chain(c.db.my_characters().iter().map(|ch| (ch.id, ch.name))).collect()).unwrap_or_default();
+    let names: HashMap<u32, String> = net.conn.as_ref().map(|c| crate::net::characters(c).into_iter().map(|ch| (ch.id, ch.label)).chain(c.db.my_characters().iter().map(|ch| (ch.id, ch.name))).collect()).unwrap_or_default();
 
     // Status.
     if hud.tuning {
