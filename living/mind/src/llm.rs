@@ -307,6 +307,11 @@ pub fn group_of(id: u32, of: &dyn Fn(u32) -> Option<(Option<String>, u32, u32)>,
 
 pub struct Llm {
     http: reqwest::Client,
+    /// The fast lane's own client (its own connection pool, driven on the fast lane's runtime:
+    /// mind/fast.rs), so a fast call never waits on a connection task of a busy worker.
+    fast_http: reqwest::Client,
+    /// The deliberations' client (urgent and routine calls, sent from their own runtime).
+    deliberation_http: reqwest::Client,
     models: ModelsFile,
     keys: HashMap<String, String>,
     journal: PathBuf,
@@ -613,8 +618,9 @@ impl Queue {
         Some(lane)
     }
 
-    /// Conservative diagnostic: the caller is first in an eligible lane, no request
-    /// was selected on this pass, and its only known profile gate is the RPM deadline.
+    /// The caller is first in an eligible lane, no request was selected on this pass, and its
+    /// only known profile gate is the RPM deadline: when that deadline is. The caller wakes then
+    /// (`admit`), and the dispatch profile counts the poll delay past it.
     fn spacing_deadline(&self, id: u64, lane: Lane, profile: &str, now: Instant) -> Option<Instant> {
         let has_slot = if lane == Lane::Fast {
             self.fast_in_flight < self.fast_slots
@@ -830,10 +836,13 @@ impl Scheduler {
                     }
                     return Ok(admission);
                 }
+                // The head of an eligible lane held only by its profile's pacing wakes at that
+                // deadline rather than at the next poll (at 6,000/min the pacing is 10 ms, and a
+                // 50 ms poll added up to 40 ms to each grant of a backlog).
+                if candidate.is_none() {
+                    deadline = q.spacing_deadline(id, lane, profile, now);
+                }
                 if self.trace_latency {
-                    if candidate.is_none() {
-                        deadline = q.spacing_deadline(id, lane, profile, now);
-                    }
                     if q.last_trace_probe.is_none_or(|last| now.duration_since(last) >= Duration::from_secs(1)) {
                         q.last_trace_probe = Some(now);
                         let at = now_ms();
@@ -846,9 +855,10 @@ impl Scheduler {
                 }
             }
             let poll = Duration::from_millis(50);
+            let wake = deadline.map_or(poll, |d| d.saturating_duration_since(Instant::now()).min(poll));
             tokio::select! {
                 _ = changed => {},
-                _ = tokio::time::sleep(poll) => {
+                _ = tokio::time::sleep(wake) => {
                     if let Some(deadline) = deadline {
                         let late = deadline.elapsed().as_micros();
                         spacing_poll_us += late.min(poll.as_micros());
@@ -928,6 +938,8 @@ impl Llm {
         }
         std::fs::create_dir_all(&journal)?;
         let http = reqwest::Client::builder().timeout(Duration::from_secs(180)).user_agent("sao-living-mind/0.1").build()?;
+        let fast_http = reqwest::Client::builder().timeout(Duration::from_secs(180)).user_agent("sao-living-mind/0.1").build()?;
+        let deliberation_http = reqwest::Client::builder().timeout(Duration::from_secs(180)).user_agent("sao-living-mind/0.1").build()?;
         let per_min: f64 = std::env::var("LIVING_LLM_PER_MIN").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0);
         for (name, p) in &models.profiles {
             if p.requests_per_minute.is_some_and(|rpm| !rpm.is_finite() || !(0.01..=60000.0).contains(&rpm)) || p.tokens_per_minute == Some(0) {
@@ -939,7 +951,7 @@ impl Llm {
         }
         let concurrency = std::env::var("LIVING_CONCURRENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(192).max(1);
         let scheduler = Scheduler::new(&models, concurrency, per_min);
-        Ok(Self { http, models, keys, journal, scheduler, systems: Default::default() })
+        Ok(Self { http, fast_http, deliberation_http, models, keys, journal, scheduler, systems: Default::default() })
     }
 
     /// Profile for a character: explicit assignment, then rotation, then default.
@@ -1122,7 +1134,14 @@ impl Llm {
         let url = format!("{}/chat/completions", p.base_url.trim_end_matches('/'));
         let mut unreachable = false;
         let result = async {
-            let mut request = self.http.post(&url).bearer_auth(key).json(&body);
+            // One connection pool for each runtime that sends (a pooled connection is driven by
+            // a task on the runtime that opened it).
+            let http = match lane {
+                Lane::Fast => &self.fast_http,
+                Lane::Urgent | Lane::Routine => &self.deliberation_http,
+                Lane::Interactive | Lane::Background => &self.http,
+            };
+            let mut request = http.post(&url).bearer_auth(key).json(&body);
             // Control-arm timing for the fixed-site battle (the urgent-merge A/B): the same header
             // as the branch, only for the battle driver's loopback fake provider.
             if p.key_env == "LIVING_VERIFY_FAKE_KEY"
@@ -1645,6 +1664,22 @@ mod tests {
     fn complete(q: &mut Queue, lane: Lane) {
         q.in_flight -= 1;
         q.lower_in_flight -= usize::from(lane != Lane::Interactive);
+    }
+
+    #[tokio::test]
+    async fn a_lane_head_held_by_pacing_is_granted_at_its_deadline_not_the_next_poll() {
+        // 6,000 a minute: 10 ms between grants. Before 2026-11-20 the second call waited for
+        // the 50 ms poll.
+        let models: ModelsFile = serde_json::from_value(json!({"default": "p", "profiles": {
+            "p": {"base_url": "x", "model": "m", "key_env": "unused", "requests_per_minute": 6000}
+        }}))
+        .unwrap();
+        let scheduler = Scheduler::new(&models, 4, 0.0);
+        let _first = scheduler.admit("p", Lane::Urgent, 10).await.unwrap();
+        let t = Instant::now();
+        let _second = scheduler.admit("p", Lane::Urgent, 10).await.unwrap();
+        let waited = t.elapsed();
+        assert!(waited >= Duration::from_millis(5) && waited < Duration::from_millis(35), "second grant after {waited:?}");
     }
 
     #[test]

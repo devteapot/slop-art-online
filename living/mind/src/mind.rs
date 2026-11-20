@@ -53,8 +53,6 @@ pub enum Event {
     Lived(Experience),
     /// With the rethink gate on: a percept of one of this service's characters.
     Percept(Experience),
-    /// A fast-lane request issued for one of this service's characters (mind/fast.rs).
-    Fast(FastAsk, Option<u64>),
     /// A line of one of this service's characters whose `#<id>` handles the world said as words
     /// (`spoken_as`, speech.rs): journaled in `outcomes/spoken_as.jsonl`.
     SpokenAs(Experience),
@@ -85,15 +83,76 @@ fn event_name(e: &Event, suffix: &str) -> &'static str {
         Event::Contact(_) => 4,
         Event::Lived(_) => 5,
         Event::Percept(_) => 6,
-        Event::Fast(..) => 7,
-        Event::SpokenAs(_) => 8,
+        Event::SpokenAs(_) => 7,
     };
-    const WAIT: [&str; 9] = ["event.speech.wait", "event.deliberation.wait", "event.pending.wait", "event.pending_gone.wait", "event.contact.wait", "event.lived.wait", "event.percept.wait", "event.fast.wait", "event.spoken_as.wait"];
-    const HANDLE: [&str; 9] = ["event.speech.handle", "event.deliberation.handle", "event.pending.handle", "event.pending_gone.handle", "event.contact.handle", "event.lived.handle", "event.percept.handle", "event.fast.handle", "event.spoken_as.handle"];
+    const WAIT: [&str; 8] = ["event.speech.wait", "event.deliberation.wait", "event.pending.wait", "event.pending_gone.wait", "event.contact.wait", "event.lived.wait", "event.percept.wait", "event.spoken_as.wait"];
+    const HANDLE: [&str; 8] = ["event.speech.handle", "event.deliberation.handle", "event.pending.handle", "event.pending_gone.handle", "event.contact.handle", "event.lived.handle", "event.percept.handle", "event.spoken_as.handle"];
     if suffix == ".wait" { WAIT[kind] } else { HANDLE[kind] }
 }
 
 pub use lived::enabled as player_memory;
+
+/// Mind-side indexes kept by the SDK's row callbacks (main.rs), so that a character's own rows
+/// are found without cloning a whole cached table under the SDK's one cache lock: every read of
+/// the client cache (and every update the SDK applies) takes that lock, and `iter()` clones the
+/// whole table while holding it (docs/INPUT_LATENCY.md, "Mind dispatch profile"). The cache
+/// stays the source of truth: the index holds keys, and rows are read from the cache by them.
+pub struct Index {
+    /// Experience ids by observer.
+    exp: crate::prof::Mx<HashMap<u32, BTreeSet<u64>>>,
+    /// Each character's pending deliberation request as `my_deliberations` holds it now (one
+    /// row a character; the view delivers a replacement as an insert and a delete).
+    requests: crate::prof::Mx<HashMap<u32, Deliberation>>,
+}
+
+impl Default for Index {
+    fn default() -> Self {
+        Index { exp: crate::prof::Mx::new("index_exp", HashMap::new()), requests: crate::prof::Mx::new("index_requests", HashMap::new()) }
+    }
+}
+
+impl Index {
+    pub fn experience_in(&self, e: &Experience) {
+        self.exp.lock().unwrap().entry(e.observer).or_default().insert(e.id);
+    }
+
+    pub fn experience_out(&self, e: &Experience) {
+        let mut exp = self.exp.lock().unwrap();
+        if let Some(ids) = exp.get_mut(&e.observer) {
+            ids.remove(&e.id);
+            if ids.is_empty() {
+                exp.remove(&e.observer);
+            }
+        }
+    }
+
+    /// `observer`'s experience ids above `after` (all of them for 0), in order.
+    fn experience_ids(&self, observer: u32, after: u64) -> Vec<u64> {
+        let exp = self.exp.lock().unwrap();
+        let Some(ids) = exp.get(&observer) else { return Vec::new() };
+        if after == 0 {
+            ids.iter().copied().collect()
+        } else {
+            ids.range(after.saturating_add(1)..).copied().collect()
+        }
+    }
+
+    pub fn request_in(&self, d: &Deliberation) {
+        self.requests.lock().unwrap().insert(d.actor, d.clone());
+    }
+
+    /// The exact old row is gone (a replacement's new row may already be in).
+    pub fn request_out(&self, d: &Deliberation) {
+        let mut r = self.requests.lock().unwrap();
+        if r.get(&d.actor).is_some_and(|x| x == d) {
+            r.remove(&d.actor);
+        }
+    }
+
+    fn request(&self, actor: u32) -> Option<Deliberation> {
+        self.requests.lock().unwrap().get(&actor).cloned()
+    }
+}
 
 /// Whether the conversation switches read who heard each line (`LIVING_GREET`; the
 /// `audience` table, subscribed only then).
@@ -244,6 +303,7 @@ fn model_backoff(failures: u32) -> Duration {
 
 pub struct Minds {
     pub conn: DbConnection,
+    index: Arc<Index>,
     llm: Llm,
     store: Option<Store>,
     seed: Value,
@@ -462,7 +522,7 @@ fn reference(actor: u32, kind: &str) -> String {
 }
 
 impl Minds {
-    pub fn new(conn: DbConnection, llm: Llm, store: Option<Store>, seed: Value, concurrency: usize) -> Result<Arc<Self>> {
+    pub fn new(conn: DbConnection, index: Arc<Index>, llm: Llm, store: Option<Store>, seed: Value, concurrency: usize) -> Result<Arc<Self>> {
         let me = conn.try_identity().ok_or_else(|| anyhow!("not connected"))?;
         let species = living_rules::species::parse(&std::fs::read_to_string(crate::root().join("living/seeds/species.json"))?).map_err(|e| anyhow!(e))?;
         let jev = judge::Jev::from_env(&crate::root())?;
@@ -481,7 +541,7 @@ impl Minds {
                 llm.warn_effort_gaps("LIVING_PLAYER_MEMORY_MODEL", route, &["internalize"]);
             }
         }
-        Ok(Arc::new(Self { conn, llm, store, seed, species, me, actors: crate::prof::Mx::new("actors", HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: crate::prof::Mx::new("talk", talk::Talks::default()), talk_cfg, only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), layout: Default::default(), lod: lod::Lod::from_env(), pending: crate::prof::Mx::new("pending", HashMap::new()), groups: crate::prof::Mx::new("groups", HashMap::new()), routed: crate::prof::Mx::new("routed", HashMap::new()), lived_cfg, lived: crate::prof::Mx::new("lived", lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: crate::prof::Mx::new("sleep_batch_at", None), animal_cfg: animal::Config::from_env(), animal_sigs: crate::prof::Mx::new("animal_sigs", HashMap::new()), jev, asked: crate::prof::Mx::new("asked", HashMap::new()), felt: crate::prof::Mx::new("felt", HashMap::new()), rethink, fast: fast::Config::load(&crate::root()), rethink_track: crate::prof::Mx::new("rethink_track", HashMap::new()), rethink_stats: crate::prof::Mx::new("rethink_stats", rethink::Stats::default()), rethink_logged: crate::prof::Mx::new("rethink_logged", None) }))
+        Ok(Arc::new(Self { conn, index, llm, store, seed, species, me, actors: crate::prof::Mx::new("actors", HashMap::new()), slow: Semaphore::new((concurrency / 2).max(1)), talk: crate::prof::Mx::new("talk", talk::Talks::default()), talk_cfg, only: only_env.map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()), layout: Default::default(), lod: lod::Lod::from_env(), pending: crate::prof::Mx::new("pending", HashMap::new()), groups: crate::prof::Mx::new("groups", HashMap::new()), routed: crate::prof::Mx::new("routed", HashMap::new()), lived_cfg, lived: crate::prof::Mx::new("lived", lived::Lived::default()), sleep_cfg: sleep::Config::from_env(), sleep_batch_at: crate::prof::Mx::new("sleep_batch_at", None), animal_cfg: animal::Config::from_env(), animal_sigs: crate::prof::Mx::new("animal_sigs", HashMap::new()), jev, asked: crate::prof::Mx::new("asked", HashMap::new()), felt: crate::prof::Mx::new("felt", HashMap::new()), rethink, fast: fast::Config::load(&crate::root()), rethink_track: crate::prof::Mx::new("rethink_track", HashMap::new()), rethink_stats: crate::prof::Mx::new("rethink_stats", rethink::Stats::default()), rethink_logged: crate::prof::Mx::new("rethink_logged", None) }))
     }
 
     /// Characters this service thinks for: alive, AI-controlled, and past infancy (infants
@@ -922,11 +982,17 @@ impl Minds {
         weakened
     }
 
+    /// What `actor` has experienced that the cache still holds, oldest first (by the index:
+    /// its own rows only, each read from the cache by id).
     fn experiences(&self, actor: u32) -> Vec<Experience> {
+        self.experiences_after(actor, 0)
+    }
+
+    /// `experiences`, only those with ids above `after`.
+    fn experiences_after(&self, actor: u32, after: u64) -> Vec<Experience> {
         let _s = crate::prof::span("scan.experience.own");
-        let mut v: Vec<Experience> = self.conn.db.experience().iter().filter(|e| e.observer == actor).collect();
-        v.sort_by_key(|e| e.id);
-        v
+        let table = self.conn.db.experience();
+        self.index.experience_ids(actor, after).into_iter().filter_map(|id| table.id().find(&id)).filter(|e| e.observer == actor).collect()
     }
 
     /// The last `n` experiences a deliberation's prompt lists beside its scene: none later than
@@ -1257,6 +1323,17 @@ impl Minds {
         Origin::of(c.kind == "person", self.authored(c).is_some(), self.conn.db.background().id().find(&c.id).is_some(), c.stage, c.parent_a != 0, seeded)
     }
 
+    /// Whether `first_identity` writes a persona for `c` from `origin`: everything but a person
+    /// whose sheet or seed entry is missing (a seed's people and animals' species nature are
+    /// written; see `seed_persona`).
+    fn writes_identity(&self, c: &Character, origin: Origin) -> bool {
+        match origin {
+            Origin::Sheet => self.authored(c).is_some(),
+            Origin::Seed if c.kind == "person" => self.seed["people"].as_array().is_some_and(|ps| ps.iter().any(|p| p["name"] == c.name.as_str())),
+            _ => true,
+        }
+    }
+
     async fn first_identity(&self, c: &Character, origin: Origin) -> Result<()> {
         match origin {
             Origin::Sheet => match self.authored(c) {
@@ -1432,8 +1509,32 @@ impl Minds {
 
     // ---- event loop -------------------------------------------------------------
 
-    pub async fn run(self: Arc<Self>, mut rx: tokio::sync::mpsc::UnboundedReceiver<(Instant, Event)>) -> Result<()> {
-        let mut tick = tokio::time::interval(Duration::from_millis(2000));
+    /// The service's loops. Each kind of work reads its own channel, so none waits behind
+    /// another's (docs/INPUT_LATENCY.md, "Mind dispatch profile"):
+    /// - fast-lane requests on the fast lane's own runtime (`fast_rt`; mind/fast.rs);
+    /// - deliberation requests (`Deliberation`, and `Pending`/`PendingGone` with the level of
+    ///   detail) on the deliberations' own runtime (`delib_rt`), where they are also prepared and
+    ///   sent: consolidation and conversation work on the shared workers cannot hold them up;
+    /// - everything else (speech, player memory, percepts) on this task;
+    /// - the 2 s checks (consolidation, sleep, judgments, rethink, player memory) on a thread of
+    ///   their own: a slow pass no longer stops the event loop.
+    pub async fn run(
+        self: Arc<Self>,
+        mut rx: tokio::sync::mpsc::UnboundedReceiver<(Instant, Event)>,
+        mut delib_rx: tokio::sync::mpsc::UnboundedReceiver<(Instant, Event)>,
+        mut fast_rx: tokio::sync::mpsc::UnboundedReceiver<(Instant, FastAsk, Option<u64>)>,
+        delib_rt: tokio::runtime::Handle,
+        fast_rt: tokio::runtime::Handle,
+    ) -> Result<()> {
+        {
+            let me = self.clone();
+            fast_rt.spawn(async move {
+                while let Some((at, ask, callback_ms)) = fast_rx.recv().await {
+                    crate::prof::time("event.fast.wait", at.elapsed());
+                    me.clone().fast_issued(ask, callback_ms);
+                }
+            });
+        }
         crate::prof::start(tokio::runtime::Handle::current());
         if crate::prof::on() {
             // How long a read of the SDK's client cache waits for its one lock (held while the
@@ -1449,12 +1550,23 @@ impl Minds {
         if self.lod.on {
             log::info!("level of detail on: {:?}", self.lod);
         }
-        for d in self.conn.db.my_deliberations().iter() {
-            let actor = d.actor;
-            if self.lod.on {
-                self.pending.lock().unwrap().insert(actor, lod::PendingRequest::new(d));
+        {
+            let _on = delib_rt.enter();
+            for d in self.conn.db.my_deliberations().iter() {
+                let actor = d.actor;
+                if self.lod.on {
+                    self.pending.lock().unwrap().insert(actor, lod::PendingRequest::new(d));
+                }
+                self.clone().schedule(actor);
             }
-            self.clone().schedule(actor);
+        }
+        {
+            let me = self.clone();
+            delib_rt.spawn(async move {
+                while let Some(ev) = delib_rx.recv().await {
+                    me.handle(ev, delib_rx.len());
+                }
+            });
         }
         log::info!("reorganization: {:?}", self.sleep_cfg);
         tokio::spawn(self.clone().collect_left_batches());
@@ -1474,92 +1586,101 @@ impl Minds {
             }
         }
         self.refresh_rules();
-        loop {
-            tokio::select! {
-                ev = rx.recv() => {
-                let ev = match ev {
-                    Some((at, ev)) => {
-                        if crate::prof::on() {
-                            crate::prof::time(event_name(&ev, ".wait"), at.elapsed());
-                            crate::prof::value("event.depth.n", rx.len() as u64);
-                            if let Event::Deliberation(actor) = &ev {
-                                let callback_ms = llm::now_ms().saturating_sub(at.elapsed().as_millis() as u64);
-                                self.actors.lock().unwrap().entry(*actor).or_default().callback_ms.get_or_insert((callback_ms, llm::now_ms()));
-                            }
-                        }
-                        Some((Instant::now(), ev))
-                    }
-                    None => None,
-                };
-                let handled = ev.as_ref().map(|(t, ev)| (*t, event_name(ev, ".handle")));
-                match ev.map(|(_, ev)| ev) {
-                    Some(Event::Speech(e)) => self.clone().on_speech(e),
-                    Some(Event::Deliberation(actor)) => self.clone().schedule(actor),
-                    Some(Event::Pending(d)) => {
-                        let mut p = self.pending.lock().unwrap();
-                        if let Some(request) = p.get_mut(&d.actor) {
-                            request.refresh(d);
-                        } else {
-                            p.insert(d.actor, lod::PendingRequest::new(d));
-                        }
-                    }
-                    Some(Event::PendingGone(d)) => {
-                        let mut p = self.pending.lock().unwrap();
-                        if p.get(&d.actor).is_some_and(|request| request.row == d) {
-                            if let Some(request) = p.remove(&d.actor) {
-                                request.changed.notify_one();
-                            }
-                        }
-                    }
-                    Some(Event::Contact(actor)) => {
-                        {
-                            let mut actors = self.actors.lock().unwrap();
-                            actors.entry(actor).or_default().onstage_until = Some(Instant::now() + self.lod.sticky);
-                        }
-                        if let Some(request) = self.pending.lock().unwrap().get(&actor) {
-                            request.changed.notify_one();
-                        }
-                    }
-                    Some(Event::Lived(e)) => self.lived_add(e),
-                    Some(Event::Percept(e)) => self.rethink_percept(&e),
-                    Some(Event::Fast(a, callback_ms)) => self.clone().fast_issued(a, callback_ms),
-                    Some(Event::SpokenAs(e)) => {
-                        // What the model wrote and what was said, beside the actor's calls: if
-                        // these are many, the prompt's sentence on ids is not doing its work.
-                        let me = self.clone();
-                        tokio::spawn(async move {
-                            let name = me.conn.db.character().id().find(&e.observer).map(|c| c.name).unwrap_or_default();
-                            me.llm.outcome("spoken_as", &json!({"at_ms": e.at_ms, "actor": e.observer, "name": name, "to": e.object, "line": e.text})).await;
-                        });
-                    }
-                    None => return Err(anyhow!("event channel closed")),
+        {
+            let me = self.clone();
+            let shared = tokio::runtime::Handle::current();
+            std::thread::Builder::new().name("mind-checks".into()).spawn(move || {
+                // The checks start their work as tasks on the shared runtime.
+                let _on = shared.enter();
+                let mut next = Instant::now();
+                loop {
+                    next += Duration::from_millis(2000);
+                    std::thread::sleep(next.saturating_duration_since(Instant::now()));
+                    me.checks();
                 }
-                if let Some((t, name)) = handled {
-                    crate::prof::time(name, t.elapsed());
-                }
-                },
-                _ = tick.tick() => {
-                    let t = Instant::now();
-                    self.refresh_rules();
-                    crate::prof::time("tick.refresh_rules", t.elapsed());
-                    let t = Instant::now();
-                    self.clone().check_consolidation();
-                    crate::prof::time("tick.check_consolidation", t.elapsed());
-                    let t = Instant::now();
-                    self.clone().check_sleep();
-                    crate::prof::time("tick.check_sleep", t.elapsed());
-                    let t = Instant::now();
-                    self.clone().check_judgments();
-                    crate::prof::time("tick.check_judgments", t.elapsed());
-                    let t = Instant::now();
-                    self.clone().check_rethink();
-                    crate::prof::time("tick.check_rethink", t.elapsed());
-                    let t = Instant::now();
-                    self.clone().check_lived();
-                    crate::prof::time("tick.check_lived", t.elapsed());
-                }
+            })?;
+        }
+        while let Some(ev) = rx.recv().await {
+            self.handle(ev, rx.len());
+        }
+        Err(anyhow!("event channel closed"))
+    }
+
+    /// The 2 s checks (run on their own thread, `run`).
+    fn checks(self: &Arc<Self>) {
+        let t = Instant::now();
+        self.refresh_rules();
+        crate::prof::time("tick.refresh_rules", t.elapsed());
+        let t = Instant::now();
+        self.clone().check_consolidation();
+        crate::prof::time("tick.check_consolidation", t.elapsed());
+        let t = Instant::now();
+        self.clone().check_sleep();
+        crate::prof::time("tick.check_sleep", t.elapsed());
+        let t = Instant::now();
+        self.clone().check_judgments();
+        crate::prof::time("tick.check_judgments", t.elapsed());
+        let t = Instant::now();
+        self.clone().check_rethink();
+        crate::prof::time("tick.check_rethink", t.elapsed());
+        let t = Instant::now();
+        self.clone().check_lived();
+        crate::prof::time("tick.check_lived", t.elapsed());
+    }
+
+    /// One event from a loop's channel (`run`); `depth` is what still waits behind it.
+    fn handle(self: &Arc<Self>, (at, ev): (Instant, Event), depth: usize) {
+        if crate::prof::on() {
+            crate::prof::time(event_name(&ev, ".wait"), at.elapsed());
+            crate::prof::value("event.depth.n", depth as u64);
+            if let Event::Deliberation(actor) = &ev {
+                let callback_ms = llm::now_ms().saturating_sub(at.elapsed().as_millis() as u64);
+                self.actors.lock().unwrap().entry(*actor).or_default().callback_ms.get_or_insert((callback_ms, llm::now_ms()));
             }
         }
+        let t = Instant::now();
+        let name = event_name(&ev, ".handle");
+        match ev {
+            Event::Speech(e) => self.clone().on_speech(e),
+            Event::Deliberation(actor) => self.clone().schedule(actor),
+            Event::Pending(d) => {
+                let mut p = self.pending.lock().unwrap();
+                if let Some(request) = p.get_mut(&d.actor) {
+                    request.refresh(d);
+                } else {
+                    p.insert(d.actor, lod::PendingRequest::new(d));
+                }
+            }
+            Event::PendingGone(d) => {
+                let mut p = self.pending.lock().unwrap();
+                if p.get(&d.actor).is_some_and(|request| request.row == d) {
+                    if let Some(request) = p.remove(&d.actor) {
+                        request.changed.notify_one();
+                    }
+                }
+            }
+            Event::Contact(actor) => {
+                {
+                    let mut actors = self.actors.lock().unwrap();
+                    actors.entry(actor).or_default().onstage_until = Some(Instant::now() + self.lod.sticky);
+                }
+                if let Some(request) = self.pending.lock().unwrap().get(&actor) {
+                    request.changed.notify_one();
+                }
+            }
+            Event::Lived(e) => self.lived_add(e),
+            Event::Percept(e) => self.rethink_percept(&e),
+            Event::SpokenAs(e) => {
+                // What the model wrote and what was said, beside the actor's calls: if
+                // these are many, the prompt's sentence on ids is not doing its work.
+                let me = self.clone();
+                tokio::spawn(async move {
+                    let name = me.conn.db.character().id().find(&e.observer).map(|c| c.name).unwrap_or_default();
+                    me.llm.outcome("spoken_as", &json!({"at_ms": e.at_ms, "actor": e.observer, "name": name, "to": e.object, "line": e.text})).await;
+                });
+            }
+        }
+        crate::prof::time(name, t.elapsed());
     }
 
     /// Keep the skills' takes and gives in prompts in step with the world's rule script.
@@ -1602,8 +1723,7 @@ impl Minds {
                 let pending = if self.lod.on {
                     self.pending.lock().unwrap().get(&actor).map(|p| &p.row).filter(|d| d.updated_ms > seen).cloned()
                 } else {
-                    let _s = crate::prof::span("scan.deliberations.find");
-                    self.conn.db.my_deliberations().iter().find(|d| d.actor == actor && d.updated_ms > seen)
+                    self.index.request(actor).filter(|d| d.updated_ms > seen)
                 };
                 let Some(d) = pending else { break };
                 let found_ms = llm::now_ms();
@@ -1726,7 +1846,7 @@ impl Minds {
 
     fn deliberation_lane(&self, d: &Deliberation) -> Lane {
         let _s = crate::prof::span("scan.experience.lane");
-        let player_act = self.conn.db.experience().iter().filter(|e| e.observer == d.actor).any(|e| {
+        let player_act = self.experiences(d.actor).into_iter().any(|e| {
             if e.at_ms < d.requested_ms.saturating_sub(1000) || e.at_ms > d.updated_ms {
                 return false;
             }
@@ -1802,19 +1922,14 @@ impl Minds {
 
     /// Start consolidation for characters whose unintegrated experiences matter enough.
     fn check_consolidation(self: Arc<Self>) {
-        // One pass over the experience inbox for everyone (a scan per character would cost
-        // characters × experiences every two seconds).
-        // Only what a character lived under this service's minds: rows its person lived while
-        // playing it are internalized as theirs (lived.rs).
-        let mut inbox: HashMap<u32, Vec<Experience>> = HashMap::new();
-        for e in self.conn.db.experience().iter().filter(|e| e.controller == self.me) {
-            inbox.entry(e.observer).or_default().push(e);
-        }
         for c in self.mine() {
             // Off stage, a person integrates experience less often (see lod.rs).
             let offstage = self.lod.on && c.kind == "person" && !self.onstage(c.id, None);
             let cursor = self.cursor(c.id);
-            let pending: Vec<Experience> = inbox.remove(&c.id).unwrap_or_default().into_iter().filter(|e| e.id > cursor).collect();
+            // Each character's own rows by the index (no clone of the whole table). Only what a
+            // character lived under this service's minds: rows its person lived while playing it
+            // are internalized as theirs (lived.rs).
+            let pending: Vec<Experience> = self.experiences_after(c.id, cursor).into_iter().filter(|e| e.controller == self.me).collect();
             let meaningful: Vec<&Experience> = pending.iter().filter(|e| e.salience >= 0.2).collect();
             let salience: f32 = meaningful.iter().map(|e| e.salience).sum();
             let due = {
@@ -2127,8 +2242,13 @@ impl Minds {
             if let Some(store) = &self.store {
                 store.ensure_self(c.id, &c.name).await?;
             }
-            self.first_identity(&c, self.origin(&c)).await?;
-            for _ in 0..20 {
+            let origin = self.origin(&c);
+            let writes = self.writes_identity(&c, origin);
+            self.first_identity(&c, origin).await?;
+            // Wait for the persona row only when one was written: a person with nothing to start
+            // from (no sheet, background, parents or seed entry: a spawned or taken-over body)
+            // has none, and every one of its deliberations waited the whole 2 s for it.
+            for _ in 0..if writes { 20 } else { 0 } {
                 if self.conn.db.persona().id().find(&actor).is_some() {
                     break;
                 }
@@ -2860,6 +2980,42 @@ fn cue_in(for_key: String, c: &Value, source: String) -> CueIn {
 
 #[cfg(test)]
 mod tests {
+    fn exp(id: u64, observer: u32) -> Experience {
+        Experience { id, observer, controller: Identity::ZERO, at_ms: id, kind: "seen".into(), subject: 0, object: 0, x: 0.0, y: 0.0, text: String::new(), salience: 0.0 }
+    }
+
+    fn request(actor: u32, updated_ms: u64) -> Deliberation {
+        Deliberation { actor, controller: Identity::ZERO, reason: String::new(), requested_ms: 1, updated_ms, scene: String::new(), revision: 0, arrived: String::new() }
+    }
+
+    #[test]
+    fn the_index_keeps_each_observers_experience_ids_in_order_and_after_a_cursor() {
+        let index = Index::default();
+        for (id, observer) in [(5, 1), (2, 1), (9, 2), (7, 1)] {
+            index.experience_in(&exp(id, observer));
+        }
+        assert_eq!(index.experience_ids(1, 0), vec![2, 5, 7]);
+        assert_eq!(index.experience_ids(1, 5), vec![7]);
+        index.experience_out(&exp(5, 1));
+        assert_eq!(index.experience_ids(1, 0), vec![2, 7]);
+        assert_eq!(index.experience_ids(3, 0), Vec::<u64>::new());
+    }
+
+    #[test]
+    fn a_replaced_request_stays_whichever_order_the_view_delivers_insert_and_delete() {
+        let index = Index::default();
+        // Insert of the new row, then delete of the old one.
+        index.request_in(&request(4, 10));
+        index.request_in(&request(4, 20));
+        index.request_out(&request(4, 10));
+        assert_eq!(index.request(4).map(|d| d.updated_ms), Some(20));
+        // Delete of the old row, then insert of the new one.
+        index.request_out(&request(4, 20));
+        assert!(index.request(4).is_none());
+        index.request_in(&request(4, 30));
+        assert_eq!(index.request(4).map(|d| d.updated_ms), Some(30));
+    }
+
 
     /// Gwil in fs1n (docs/PERCEPTION.md, "One moment per prompt"): his first-sight prompt's scene
     /// was taken about 125 s after the join with the stranger 1.2 m south, and listed his hail at 134.0 s of a far
