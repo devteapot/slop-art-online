@@ -830,6 +830,12 @@ fn cues(ctx: &ReducerContext, now: u64, served: &HashSet<u32>, engaged: &HashMap
                 if !scene.contains(&body) {
                     continue;
                 }
+                // A cue goes to a creature near the viewer (its tier as its last sweep left it) or
+                // engaged with it; anything else is a delivery fault, logged with how it came.
+                if !e.near.contains(&body) && !urgent {
+                    common::diag(|| "cues:not_near", 1);
+                    log::warn!("cue fault: viewer #{viewer} cued #{body} (bits {bits}) neither near nor engaged (far path {far})");
+                }
                 let sent = cue(ctx, e.who, body, bits, now);
                 if sent == 0 {
                     continue;
