@@ -1142,7 +1142,7 @@ pub fn show_fighter(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32,
     // Views step 3: a viewer's fighter copies are all public (`seen_fighter_copy`) or all private.
     let public = fighters_public(ctx, who);
     let (was_near, row) = if public {
-        match ctx.db.seen_fighter_copy().viewer_body().filter((who, body)).next() {
+        match ctx.db.seen_fighter_copy().id().find(k) {
             Some(r) => (r.near, Some(FighterSeen { id: k, viewer: who, fighter: r.fighter })),
             None => (false, None),
         }
@@ -1163,7 +1163,7 @@ pub fn show_fighter(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32,
     let Some(f) = fighter_now(ctx, body) else {
         if row.is_some() {
             if public {
-                drop_public_fighter(ctx, who, body);
+                ctx.db.seen_fighter_copy().id().delete(k);
             } else {
                 ctx.db.fighter_seen().id().delete(k);
                 ctx.db.fighter_near().id().delete(k);
@@ -1181,8 +1181,12 @@ pub fn show_fighter(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32,
         return false;
     }
     if public {
-        drop_public_fighter(ctx, who, body);
-        ctx.db.seen_fighter_copy().insert(SeenFighterCopy { viewer: who, body, near, fighter: new.fighter });
+        let copy = SeenFighterCopy { id: k, viewer: who, body, near, fighter: new.fighter };
+        if row.is_some() {
+            ctx.db.seen_fighter_copy().id().update(copy);
+        } else {
+            ctx.db.seen_fighter_copy().insert(copy);
+        }
         return true;
     }
     match (row.is_some() && was_near, row.is_some() && !was_near, near) {
@@ -1274,20 +1278,13 @@ pub fn drop_copies(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32) 
         ctx.db.motion_near().id().delete(k);
     }
     if fighters_public(ctx, who) {
-        drop_public_fighter(ctx, who, body);
+        ctx.db.seen_fighter_copy().id().delete(k);
     } else {
         ctx.db.fighter_seen().id().delete(k);
         ctx.db.fighter_near().id().delete(k);
     }
     ctx.db.doing_seen().id().delete(k);
     ctx.db.doing_near().id().delete(k);
-}
-
-/// Delete viewer `who`'s public fighter copy of `body`, if there is one (views step 3).
-fn drop_public_fighter(ctx: &ReducerContext, who: Identity, body: u32) {
-    for r in ctx.db.seen_fighter_copy().viewer_body().filter((who, body)).collect::<Vec<_>>() {
-        ctx.db.seen_fighter_copy().delete(r);
-    }
 }
 
 /// Whether viewer `who`'s fighter copies are in `seen_fighter_copy` (views step 3).
@@ -1301,15 +1298,16 @@ fn fighters_to_public(ctx: &ReducerContext, who: Identity) -> usize {
     let far: Vec<FighterSeen> = ctx.db.fighter_seen().viewer().filter(who).collect();
     let near: Vec<FighterNear> = ctx.db.fighter_near().viewer().filter(who).collect();
     let n = far.len() + near.len();
+    // A row already there (module memory that missed a rollback) is replaced, not a duplicate key.
     for r in far {
         ctx.db.fighter_seen().id().delete(r.id);
-        drop_public_fighter(ctx, who, r.fighter.id);
-        ctx.db.seen_fighter_copy().insert(SeenFighterCopy { viewer: who, body: r.fighter.id, near: false, fighter: r.fighter });
+        ctx.db.seen_fighter_copy().id().delete(r.id);
+        ctx.db.seen_fighter_copy().insert(SeenFighterCopy { id: r.id, viewer: who, body: r.fighter.id, near: false, fighter: r.fighter });
     }
     for r in near {
         ctx.db.fighter_near().id().delete(r.id);
-        drop_public_fighter(ctx, who, r.copy.fighter.id);
-        ctx.db.seen_fighter_copy().insert(SeenFighterCopy { viewer: who, body: r.copy.fighter.id, near: true, fighter: r.copy.fighter });
+        ctx.db.seen_fighter_copy().id().delete(r.id);
+        ctx.db.seen_fighter_copy().insert(SeenFighterCopy { id: r.id, viewer: who, body: r.copy.fighter.id, near: true, fighter: r.copy.fighter });
     }
     set_copy_state(ctx, CopyState { fighters: true, ..copy_state(ctx, who) });
     n
@@ -1319,11 +1317,10 @@ fn fighters_to_public(ctx: &ReducerContext, who: Identity) -> usize {
 /// private tables of its tier, in this transaction (as `all_private` for the motion copies).
 fn all_private_fighters(ctx: &ReducerContext) -> usize {
     let rows: Vec<SeenFighterCopy> = ctx.db.seen_fighter_copy().iter().collect();
-    let mut chars: HashMap<Identity, Option<u32>> = HashMap::new();
     for r in &rows {
-        ctx.db.seen_fighter_copy().delete(r.clone());
-        let Some(viewer) = *chars.entry(r.viewer).or_insert_with(|| ctx.db.player().identity().find(r.viewer).map(|p| p.character)) else { continue };
-        let k = key(viewer, r.body);
+        ctx.db.seen_fighter_copy().id().delete(r.id);
+        // The public row's key is the private copy's (the viewer's character and the creature).
+        let k = r.id;
         ctx.db.fighter_seen().id().delete(k);
         ctx.db.fighter_near().id().delete(k);
         let copy = FighterSeen { id: k, viewer: r.viewer, fighter: r.fighter.clone() };

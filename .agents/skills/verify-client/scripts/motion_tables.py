@@ -66,7 +66,7 @@ def final(events, table):
     """A table's rows at the end of a probe's stream (its initial rows, then each change), by `id`;
     `seen_body_copy` (no primary key: a change is a delete and an insert, in either order) by its
     `body`, as the set of rows the stream leaves."""
-    if table in ("seen_body_copy", "seen_fighter_copy"):
+    if table == "seen_body_copy":
         # A set of rows: the probe streams from the connection on, so the initial rows arrive both
         # as inserts and in the `initial` snapshot; a change's delete and insert carry different rows.
         rows = set()
@@ -185,8 +185,9 @@ def main():
         sql(rid, f"SELECT COUNT(*) AS n FROM motion_near WHERE viewer = 0x{ident['a']}")[0]["n"]
     foreign_c = lambda evs: [r for t in ("seen_body_copy", "seen_character_copy", "seen_fighter_copy") for r in copies(evs, t) if norm(r["viewer"]) != ident["c"]]
     gotf = {w: copies(e, "seen_fighter_copy") for w, e in ev.items()}
+    # Keyed by `id` (views step 3): a change is an update.
     a_ftable = final(ev["a"], "seen_fighter_copy")
-    f_by_body = {bd: r for (v, bd), r in a_ftable.items() if v == ident["a"]}
+    f_by_body = {r["body"]: r for r in a_ftable.values() if norm(r["viewer"]) == ident["a"]}
     a_fview = final(ev["a"], "seen_fighters")
     a_fnear, a_ffar = final(ev["a"], "seen_fighters_near"), final(ev["a"], "seen_fighters_far")
     private_fa = sql(rid, f"SELECT COUNT(*) AS n FROM fighter_seen WHERE viewer = 0x{ident['a']}")[0]["n"] + \

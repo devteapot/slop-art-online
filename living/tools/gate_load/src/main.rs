@@ -452,6 +452,8 @@ fn hook(p: &Player, log: &Log, own: Identity) {
         conn.db.seen_character_copy().on_update(move |_, _, c| pv.lock().unwrap().check(own, c.viewer, false));
         let pv = p.privacy.clone();
         conn.db.seen_fighter_copy().on_insert(move |_, c| pv.lock().unwrap().check_fighter(own, c.viewer));
+        let pv = p.privacy.clone();
+        conn.db.seen_fighter_copy().on_update(move |_, _, c| pv.lock().unwrap().check_fighter(own, c.viewer));
     }
     count!(conn, p.counts, seen_bodies);
     count!(conn, p.counts, seen_characters);
@@ -463,7 +465,7 @@ fn hook(p: &Player, log: &Log, own: Identity) {
     count!(conn, p.counts, seen_character_copy);
     count!(conn, p.counts, seen_fighters_near);
     count!(conn, p.counts, seen_fighters_far);
-    count_plain!(conn, p.counts, seen_fighter_copy);
+    count!(conn, p.counts, seen_fighter_copy);
     count!(conn, p.counts, seen_doing_near);
     count!(conn, p.counts, seen_doing_far);
     count!(conn, p.counts, my_vitals);
@@ -588,9 +590,15 @@ fn hook(p: &Player, log: &Log, own: Identity) {
         windups!(seen_fighters);
         windups!(seen_fighters_near);
         windups!(seen_fighters_far);
-        // The public fighter copies (views step 3): a change is a delete and an insert.
+        // The public fighter copies (views step 3), keyed: a change is an update.
         let inserted = fighter.clone();
         conn.db.seen_fighter_copy().on_insert(move |_, c| inserted(&c.fighter, "view"));
+        let updated = fighter.clone();
+        conn.db.seen_fighter_copy().on_update(move |_, a, c| {
+            if a.fighter.act != c.fighter.act || a.fighter.act_ms != c.fighter.act_ms {
+                updated(&c.fighter, "view");
+            }
+        });
         EventTable::on_insert(&conn.db.seen_fighter_cue(), move |_, c| {
             if let Some(f) = &c.fighter {
                 fighter(f, "cue");

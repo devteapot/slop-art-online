@@ -1939,8 +1939,8 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
     for p in ctx.db.fighter_near().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.fighter_near().id().delete(p);
     }
-    for p in ctx.db.seen_fighter_copy().viewer().filter(viewer).collect::<Vec<_>>() {
-        ctx.db.seen_fighter_copy().delete(p);
+    for p in ctx.db.seen_fighter_copy().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
+        ctx.db.seen_fighter_copy().id().delete(p);
     }
     for p in ctx.db.doing_near().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.doing_near().id().delete(p);

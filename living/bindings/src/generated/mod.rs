@@ -2389,7 +2389,8 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.seen_doing_cue = self.seen_doing_cue.into_event_diff();
         diff.seen_fighter_copy = cache
-            .apply_diff_to_table::<SeenFighterCopy>("seen_fighter_copy", &self.seen_fighter_copy);
+            .apply_diff_to_table::<SeenFighterCopy>("seen_fighter_copy", &self.seen_fighter_copy)
+            .with_updates_by_pk(|row| &row.id);
         diff.seen_fighter_cue = self.seen_fighter_cue.into_event_diff();
         diff.seen_stock = cache
             .apply_diff_to_table::<SeenStock>("seen_stock", &self.seen_stock)

@@ -133,9 +133,72 @@ impl<'ctx> __sdk::WithDelete for SeenFighterCopyTableHandle<'ctx> {
     }
 }
 
+pub struct SeenFighterCopyUpdateCallbackId(__sdk::CallbackId);
+
+impl<'ctx> __sdk::TableWithPrimaryKey for SeenFighterCopyTableHandle<'ctx> {
+    type UpdateCallbackId = SeenFighterCopyUpdateCallbackId;
+
+    fn on_update(
+        &self,
+        callback: impl FnMut(&Self::EventContext, &Self::Row, &Self::Row) + Send + 'static,
+    ) -> SeenFighterCopyUpdateCallbackId {
+        SeenFighterCopyUpdateCallbackId(self.imp.on_update(Box::new(callback)))
+    }
+
+    fn remove_on_update(&self, callback: SeenFighterCopyUpdateCallbackId) {
+        self.imp.remove_on_update(callback.0)
+    }
+}
+
+impl<'ctx> __sdk::WithUpdate for SeenFighterCopyTableHandle<'ctx> {
+    type UpdateCallbackId = SeenFighterCopyUpdateCallbackId;
+
+    fn on_update(
+        &self,
+        callback: impl FnMut(&Self::EventContext, &Self::Row, &Self::Row) + Send + 'static,
+    ) -> SeenFighterCopyUpdateCallbackId {
+        SeenFighterCopyUpdateCallbackId(self.imp.on_update(Box::new(callback)))
+    }
+
+    fn remove_on_update(&self, callback: SeenFighterCopyUpdateCallbackId) {
+        self.imp.remove_on_update(callback.0)
+    }
+}
+
+/// Access to the `id` unique index on the table `seen_fighter_copy`,
+/// which allows point queries on the field of the same name
+/// via the [`SeenFighterCopyIdUnique::find`] method.
+///
+/// Users are encouraged not to explicitly reference this type,
+/// but to directly chain method calls,
+/// like `ctx.db.seen_fighter_copy().id().find(...)`.
+pub struct SeenFighterCopyIdUnique<'ctx> {
+    imp: __sdk::UniqueConstraintHandle<SeenFighterCopy, u64>,
+    phantom: std::marker::PhantomData<&'ctx super::RemoteTables>,
+}
+
+impl<'ctx> SeenFighterCopyTableHandle<'ctx> {
+    /// Get a handle on the `id` unique index on the table `seen_fighter_copy`.
+    pub fn id(&self) -> SeenFighterCopyIdUnique<'ctx> {
+        SeenFighterCopyIdUnique {
+            imp: self.imp.get_unique_constraint::<u64>("id"),
+            phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<'ctx> SeenFighterCopyIdUnique<'ctx> {
+    /// Find the subscribed row whose `id` column value is equal to `col_val`,
+    /// if such a row is present in the client cache.
+    pub fn find(&self, col_val: &u64) -> Option<SeenFighterCopy> {
+        self.imp.find(col_val)
+    }
+}
+
 #[doc(hidden)]
 pub(super) fn register_table(client_cache: &mut __sdk::ClientCache<super::RemoteModule>) {
     let _table = client_cache.get_or_make_table::<SeenFighterCopy>("seen_fighter_copy");
+    _table.add_unique_constraint::<u64>("id", |row| &row.id);
 }
 
 #[doc(hidden)]

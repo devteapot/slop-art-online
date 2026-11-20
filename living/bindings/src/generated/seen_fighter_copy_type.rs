@@ -9,6 +9,7 @@ use super::fighter_type::Fighter;
 #[derive(__lib::ser::Serialize, __lib::de::Deserialize, Clone, PartialEq, Debug)]
 #[sats(crate = __lib)]
 pub struct SeenFighterCopy {
+    pub id: u64,
     pub viewer: __sdk::Identity,
     pub body: u32,
     pub near: bool,
@@ -23,6 +24,7 @@ impl __sdk::InModule for SeenFighterCopy {
 ///
 /// Provides typed access to columns for query building.
 pub struct SeenFighterCopyCols {
+    pub id: __sdk::__query_builder::Col<SeenFighterCopy, u64>,
     pub viewer: __sdk::__query_builder::Col<SeenFighterCopy, __sdk::Identity>,
     pub body: __sdk::__query_builder::Col<SeenFighterCopy, u32>,
     pub near: __sdk::__query_builder::Col<SeenFighterCopy, bool>,
@@ -33,6 +35,7 @@ impl __sdk::__query_builder::HasCols for SeenFighterCopy {
     type Cols = SeenFighterCopyCols;
     fn cols(table_name: &'static str) -> Self::Cols {
         SeenFighterCopyCols {
+            id: __sdk::__query_builder::Col::new(table_name, "id"),
             viewer: __sdk::__query_builder::Col::new(table_name, "viewer"),
             body: __sdk::__query_builder::Col::new(table_name, "body"),
             near: __sdk::__query_builder::Col::new(table_name, "near"),
@@ -45,6 +48,7 @@ impl __sdk::__query_builder::HasCols for SeenFighterCopy {
 ///
 /// Provides typed access to indexed columns for query building.
 pub struct SeenFighterCopyIxCols {
+    pub id: __sdk::__query_builder::IxCol<SeenFighterCopy, u64>,
     pub viewer: __sdk::__query_builder::IxCol<SeenFighterCopy, __sdk::Identity>,
 }
 
@@ -52,6 +56,7 @@ impl __sdk::__query_builder::HasIxCols for SeenFighterCopy {
     type IxCols = SeenFighterCopyIxCols;
     fn ix_cols(table_name: &'static str) -> Self::IxCols {
         SeenFighterCopyIxCols {
+            id: __sdk::__query_builder::IxCol::new(table_name, "id"),
             viewer: __sdk::__query_builder::IxCol::new(table_name, "viewer"),
         }
     }

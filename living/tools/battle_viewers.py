@@ -259,7 +259,7 @@ class Privacy:
                       "bodies": len(view), "characters": len(chars)}
             if "seen_fighter_copy" in self.tables:
                 ftable = mt.final(ev, "seen_fighter_copy")
-                fmine = {b: r for (v, b), r in ftable.items() if v == own}
+                fmine = {r["body"]: r for r in ftable.values() if cues.norm(r["viewer"]) == own}
                 fview = mt.final(ev, "seen_fighters")
                 fnear, ffar = mt.final(ev, "seen_fighters_near"), mt.final(ev, "seen_fighters_far")
                 per[i].update({"fighters_foreign": len(ftable) - len(fmine), "fighters": len(fview),

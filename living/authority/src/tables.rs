@@ -2338,15 +2338,18 @@ impl Default for CopyState {
 }
 
 /// A perceived creature's `fighter` row as the viewer's frames last wrote it (public, row-level
-/// security `viewer = :sender`; views step 3, the `fighter_tables_on` law): `body` the creature,
+/// security `viewer = :sender`; views step 3, the `fighter_tables_on` law): `id` the private
+/// copy's key (`frame::key`: the viewer's character and the creature), `body` the creature,
 /// `near` the tier, `fighter` the row `seen_fighters` returns for it (its band as this viewer
-/// perceives it). No primary key, as `seen_body_copy`: a viewer's row of a creature is found by
-/// `(viewer, body)`, and a change is a delete and an insert.
+/// perceives it). A primary key, unlike `seen_body_copy`: fighter copies change often (a move, a
+/// band), and a change is then one in-place update, not a delete and an insert on every index
+/// (measured: the keyless table cost 24-43 ms/s more tick WASM at 16-216 viewers).
 #[derive(Clone, Debug, PartialEq)]
 #[spacetimedb::table(accessor = seen_fighter_copy, public,
-    index(accessor = viewer_near, btree(columns = [viewer, near])),
-    index(accessor = viewer_body, btree(columns = [viewer, body])))]
+    index(accessor = viewer_near, btree(columns = [viewer, near])))]
 pub struct SeenFighterCopy {
+    #[primary_key]
+    pub id: u64,
     #[index(btree)]
     pub viewer: Identity,
     pub body: u32,
