@@ -570,6 +570,19 @@ pub fn convert(
         let profile = slop.hair.as_ref().filter(|_| kind == Kind::Hair);
         let kind = if profile.is_some() { Kind::HandHair } else { kind };
         let hair_map = profile.and_then(|p| crate::handmade::highlight_map(&owner.file, p));
+        // Ink (contract v1.2, docs/HANDMADE_INK.md) and its map. A carrier (BLEND, its own colour
+        // fully transparent) exists only to draw its ink: it takes no outline and draws after the
+        // character's other transparent parts.
+        let ink = slop.ink.as_ref().filter(|_| kind != Kind::Tint);
+        let ink_map = ink.and_then(|p| {
+            let m = crate::handmade::ink_map(&owner.file, slop.slot, p);
+            if m.is_none() {
+                crate::handmade::warn_once(format!("handmade: {}: material {n:?}: no ink map found (map {:?}, or the slot's <stem>.<slot>.ink.png): no ink is drawn", owner.file, p.map));
+            }
+            m
+        });
+        let ink = ink.filter(|_| ink_map.is_some());
+        let carrier = ink.is_some() && matches!(base.alpha_mode, AlphaMode::Blend) && base.base_color.alpha() == 0.0 && base.base_color_texture.is_none();
         let file_forward = handmade.as_ref().map(|h| {
             chain.reverse();
             crate::handmade::local_forward(h, turned, &chain)
@@ -610,6 +623,11 @@ pub fn convert(
                 if kind == Kind::Tint {
                     b.alpha_mode = AlphaMode::Multiply;
                 }
+                // A carrier sorts after the face parts it lies on (Bevy adds `depth_bias` to the
+                // transparent sort distance; below 1 it adds no rasterizer offset).
+                if carrier {
+                    b.depth_bias = CARRIER_SORT_BIAS;
+                }
                 if let Some([r, g, bl]) = glow {
                     let c = b.base_color.to_linear();
                     b.emissive = LinearRgba::new(c.red * r, c.green * g, c.blue * bl, 1.0) * 8.0 + LinearRgba::new(r, g, bl, 1.0) * 2.0;
@@ -625,7 +643,7 @@ pub fn convert(
                 // People's light is its own material: its glow follows the daylight.
                 let night = night && b.emissive != LinearRgba::BLACK;
                 let authored = b.emissive;
-                let content = format!("{kind:?} {face_map:?} {} {night} {b:?} {profile:?} {hair_map:?} {file_forward:?}", painted.is_some());
+                let content = format!("{kind:?} {face_map:?} {} {night} {b:?} {profile:?} {hair_map:?} {file_forward:?} {ink:?} {ink_map:?}", painted.is_some());
                 let h = by_content.get(&content).and_then(|id| toons.get_strong_handle(*id)).unwrap_or_else(|| {
                     // A face's shadow map, or a profile hair's mask texture, in the same slot.
                     let map = face_map.as_ref().or(hair_map.as_ref()).map(|f| assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(f.clone()));
@@ -637,6 +655,14 @@ pub fn convert(
                     }
                     if let Some(f) = file_forward {
                         toon.extension.params.file = f.extend(1.0);
+                    }
+                    if let (Some(p), Some(map)) = (ink, ink_map.as_ref()) {
+                        let m_uv = meshes.get(&mesh.0).and_then(|m| crate::handmade::metres_per_uv(&m));
+                        if p.apply(&mut toon.extension.params, crate::handmade::has_green(map), m_uv, &format!("{} material {n:?}", owner.file)) {
+                            toon.extension.ink = Some(assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(map.clone()));
+                            // slop.ink wins over a hair profile's own (v1.1) ink.
+                            toon.extension.params.hand_ink_range.z = 0.0;
+                        }
                     }
                     if let Some(layers) = painted {
                         crate::style::with_detail(&mut toon, layers);
@@ -656,7 +682,7 @@ pub fn convert(
         // stencil at zero offset, which never reads them; generating them anyway rewrote every
         // new scenery mesh (another attribute, so another upload in another vertex layout), and a
         // first-seen model's meshes made a 150 ms frame on the development Mac.
-        let volume = character || owner.file.starts_with("lookdev/") || owner.file.starts_with("view/");
+        let volume = !carrier && (character || owner.file.starts_with("lookdev/") || owner.file.starts_with("view/"));
         if volume && done.1.insert(mesh.0.id()) {
             if let Some(mut m) = meshes.get_mut(&mesh.0) {
                 crate::style::outline_normals(&mut m);
@@ -670,7 +696,10 @@ pub fn convert(
             ec.insert(Visibility::Hidden);
         }
         ec.remove::<MeshMaterial3d<StandardMaterial>>().insert((MeshMaterial3d(toon), Converted));
-        if character {
+        if carrier {
+            // Its line is the drawing: no shell round the strip, and no stencil cutting the
+            // character's outline where the strip reaches past the head.
+        } else if character {
             ec.insert(outline(Outlined::Person, &style));
         } else if owner.file.starts_with("lookdev/") || owner.file.starts_with("view/") {
             ec.insert(outline(Outlined::Thing, &style));
@@ -679,6 +708,10 @@ pub fn convert(
         }
     }
 }
+
+/// The transparent sort distance an ink carrier adds (m): enough to draw after the face parts
+/// it lies on, a few centimetres from it, and far less than the space between two people.
+const CARRIER_SORT_BIAS: f32 = 0.05;
 
 /// A face shadow map's files, the first there wins: its block-compressed copy (`.face.ktx2`,
 /// BC7 with mips, looks-tex-1), then the PNG it was made from.

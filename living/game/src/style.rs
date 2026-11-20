@@ -42,6 +42,12 @@ pub struct ToonExt {
     /// composed people share has it; none elsewhere.
     #[texture(105)]
     pub tints: Option<Handle<Image>>,
+    /// A hand-made material's ink map (contract v1.2, docs/HANDMADE_INK.md; `handmade.rs`
+    /// `InkProfile`): G the distance to the nearest stroke, R its width. Texture only: it is
+    /// sampled through binding 102's sampler, so the sampler count stays as it was. None (the
+    /// shared fallback, never read) on every material without ink.
+    #[texture(106)]
+    pub ink: Option<Handle<Image>>,
 }
 
 /// The painted surfaces of models, in the order of `living/tools/textures/surfaces.py` (layer k
@@ -257,6 +263,13 @@ pub struct ToonParams {
     /// x `ink_range` (UV), y `ink_fade_px`, z 1 when ink is drawn (an ink field set and the mask
     /// texture has G).
     pub hand_ink_range: Vec4,
+    /// A material's general ink (contract v1.2, [`ToonExt::ink`]): rgb the line's linear colour,
+    /// w `px` (width "px") or `min_px` (width "uv").
+    pub ink: Vec4,
+    /// x `range` (UV), y `fade_px`, z the mode (0 none, 1 "px", 2 "px" with taper, 3 "uv", 4 "uv"
+    /// through the screen derivatives, `LIVING_GAME_PERF=inkfw`),
+    /// w the material's texel density (metres per UV unit; 0 unknown).
+    pub ink_shape: Vec4,
     /// Per [`Surface`]: x 1 / tile size (1/m), y strength, z mapping (0 triplanar, 1 planar).
     pub layers: [Vec4; SURFACES],
 }
@@ -571,6 +584,8 @@ impl Style {
             file: Vec4::ZERO,
             hand_ink: Vec4::ZERO,
             hand_ink_range: Vec4::ZERO,
+            ink: Vec4::ZERO,
+            ink_shape: Vec4::ZERO,
             layers: surface_layers(),
         }
     }
@@ -583,7 +598,7 @@ impl Style {
     pub fn kind(&self, base: StandardMaterial, kind: Kind, face: Option<Handle<Image>>) -> Toon {
         let mut params = self.params();
         params.shade.w = kind as u8 as f32;
-        Toon { base, extension: ToonExt { params, face, detail: None, tints: None } }
+        Toon { base, extension: ToonExt { params, face, detail: None, tints: None, ink: None } }
     }
 }
 
@@ -709,6 +724,8 @@ fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query
         m.extension.params.file = old.file;
         m.extension.params.hand_ink = old.hand_ink;
         m.extension.params.hand_ink_range = old.hand_ink_range;
+        m.extension.params.ink = old.ink;
+        m.extension.params.ink_shape = old.ink_shape;
         m.extension.params.recolor = old.recolor;
         m.extension.params.recolor_from = old.recolor_from;
         m.extension.params.detail.x = old.detail.x;
