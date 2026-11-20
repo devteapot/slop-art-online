@@ -368,3 +368,14 @@ Left:
 - the feed-scope scenes on a private server;
 - the cost driver's probe arm and pop-in parsing;
 - the series (Cullet Round and Middle, 2 runs per arm; woods, 4 runs per arm), with a stop-and-report if Middle is still above +15%.
+
+### Iteration 3, second pause (2026-11-20 04:2x)
+
+- **Merge:** `origin/main` at `b6aa7489` (staged genesis, with gate-run-names and law-compose in) is merged without conflicts. No main-only file is reverted, and no new code writes the canonical tables directly.
+- **Check:** `just living-check` was stopped at the pause: script-gate had passed, the other lanes had not finished.
+- **Cost driver, half done:** the pop-in log parsing and quantiles, the pin to the fast cores (`docker update --cpuset-cpus 5-9,15-19`, with a check), the merge-lock wait (`merge_running`) and a `probe` arm's stage set-up are written. Still to wire:
+  - the probe arm's feed set and `feed_scope_popin_probe` law;
+  - pop-in parsing from `go` to the window's end;
+  - pinning and the merge wait in `one()`;
+  - the arm loop with the stop at Cullet Middle above +15%.
+- **Not run:** the genesis fuel guard, the scenes, the series.

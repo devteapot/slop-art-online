@@ -44,7 +44,11 @@ VERIFY = ROOT / ".agents/skills/verify/scripts/verify.py"
 REPLICAS = "/home/spacetime/.local/share/spacetime/data/replicas"
 SPAN = re.compile(r'^Timing span "([^"]+)": ([\d.]+)(µs|ms|s)\b')
 UNITS = {"µs": 0.001, "ms": 1, "s": 1000}
-NEEDLES = (b'Timing span \\"tick\\"', b'Timing span \\"sight.', b'Timing span \\"scene.sensed\\"', b'"message":"diag: ')
+NEEDLES = (b'Timing span \\"tick\\"', b'Timing span \\"sight.', b'Timing span \\"scene.sensed\\"', b'"message":"diag: ', b'feed scope pop-in')
+POPIN = re.compile(r"^feed scope pop-in: (\d+) ms at ([\d.]+) m")
+POPIN_MISSED = re.compile(r"^feed scope pop-in missed: in sight (\d+) ms at ([\d.]+) m")
+# The Spark's fast cores (X925; docs/COMBAT_PHASE.md on combat-phase): every arm's server is pinned.
+FAST_CPUS = "5-9,15-19"
 COMMON = ["cover_law", "feed_scope", "my_offers", "my_known_names", "my_earshot", "speech_card", "my_records", "heard_sounds", "my_senses", "my_act_outcomes"]
 FEEDS = {"off": ["gate"], "on": ["my_things", "my_remembered_things", "my_owners", "my_stock", "my_fuel_seen", "my_contents_seen"]}
 
@@ -86,7 +90,7 @@ def wait_load(limit, most_s):
     return {"waited_s": round(time.time() - t0), "load": os.getloadavg(), "under": True}
 
 
-def parse_log(path, start, end):
+def parse_log(path, start, end, popin=None):
     spans, diags, periods = defaultdict(list), Counter(), 0
     with path.open("rb") as source:
         for line in source:
@@ -104,7 +108,48 @@ def parse_log(path, start, end):
             if m:
                 name, duration, unit = m.groups()
                 spans[name].append(float(duration) * UNITS[unit])
+                continue
+            if popin is not None:
+                m = POPIN.match(message)
+                if m:
+                    popin["delays_ms"].append(int(m.group(1)))
+                    popin["dist_m"].append(float(m.group(2)))
+                    continue
+                m = POPIN_MISSED.match(message)
+                if m:
+                    popin["missed_in_sight_ms"].append(int(m.group(1)))
     return spans, diags, periods
+
+
+def quantiles(v):
+    if not v:
+        return {"n": 0}
+    v = sorted(v)
+    q = lambda f: v[min(len(v) - 1, int(f * len(v)))]
+    return {"n": len(v), "p50": q(0.5), "p90": q(0.9), "max": v[-1], "zero_share": sum(x == 0 for x in v) / len(v)}
+
+
+def pin(container):
+    """Pin the private measurement server to the fast cores and say where it runs."""
+    subprocess.run(["docker", "update", "--cpuset-cpus", FAST_CPUS, container], check=True, capture_output=True)
+    got = subprocess.run(["docker", "inspect", "-f", "{{.HostConfig.CpusetCpus}}", container], text=True, capture_output=True, check=True).stdout.strip()
+    if got != FAST_CPUS:
+        raise RuntimeError(f"{container} is on CPUs {got!r}, not {FAST_CPUS}")
+    return got
+
+
+def merge_running():
+    """A merge holds ~/slop-mq/lock: no measuring meanwhile."""
+    path = Path.home() / "slop-mq/lock"
+    if not path.exists():
+        return False
+    with path.open("r") as f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        fcntl.flock(f, fcntl.LOCK_UN)
+    return False
 
 
 def module_log(ident, dest):
@@ -149,7 +194,7 @@ def one(name, workload, arm, seconds, woods_seed, max_load):
         laws = {"profile_detail": True, "cover_sight_on": True, "fov_on": workload != "round", "gaze_on": workload != "round"}
         for key, value in laws.items():
             call("set_world_law", key, json.dumps(value))
-        if arm == "on":
+        if arm in ("on", "probe"):
             call("set_world_law", "feed_scope_grace_s", "1")
             call("set_world_law", "feed_scope_on", "true")
             t0 = time.time()
