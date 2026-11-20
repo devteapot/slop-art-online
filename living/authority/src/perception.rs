@@ -1105,7 +1105,10 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     drop(setup);
     let sight_span = common::detail_span("sight.player_candidates");
     let mut candidates = 0u64;
-    for c in common::creatures_near(ctx, here, gather, now) {
+    let gathering = common::detail_span("sight.gather");
+    let crowd = common::creatures_near(ctx, here, gather, now);
+    drop(gathering);
+    for c in crowd {
         if c.id == id {
             continue;
         }
@@ -1130,17 +1133,20 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     // What it remembers of resources here (talk-places): the look a mind takes at its noticing.
     crate::stock::look(ctx, &me, here, || sight, now);
     let sight_rows = common::detail_span("sweep.rows");
+    let rows_out = common::detail_span("rows.out");
     for p in &rows {
         if !seen.contains(&p.body) {
             ctx.db.perceived().id().delete(p.id);
             crate::frame::drop_copies(ctx, id, viewer, p.body);
         }
     }
+    drop(rows_out);
     let entered: Vec<u32> = seen.difference(&had).copied().collect();
     let gone_from_sight: Vec<u32> = had.difference(&seen).copied().collect();
     common::diag(|| "visible:add", entered.len() as u64);
     common::diag(|| "visible:drop", gone_from_sight.len() as u64);
     let left = !gone_from_sight.is_empty();
+    let _rows_in = common::detail_span("rows.in");
     for body in &entered {
         ctx.db.perceived().insert(Perceived { id: 0, viewer, body: *body, since_ms: now });
         // How it moves, as it is now; frames keep it current (`frame.rs`).
@@ -1448,9 +1454,10 @@ fn health_from(precision: Precision, hp: Option<(f32, f32)>) -> (u8, f32, f32) {
     })
 }
 
-/// `target`'s projection for `me` now at `d` metres, and what it was projected from.
+/// The law's answer for `me` looking at `target` now at `d` metres: the answer, its band round
+/// `d` and whether `me` knows the target's name.
 #[allow(clippy::too_many_arguments)]
-fn project_kept(ctx: &ReducerContext, sc: &Rc<Scripts>, me: &Character, knows: &[String], night: bool, target: &Character, d: u16, now: u64) -> (Projection, Kept) {
+fn regard_kept(ctx: &ReducerContext, sc: &Rc<Scripts>, me: &Character, knows: &[String], night: bool, target: &Character, d: u16, now: u64) -> (Regard, u16, u16, bool) {
     let known = knows_name(ctx, me, target);
     let input = RegardIn {
         observer_kind: me.kind.clone(),
@@ -1463,9 +1470,7 @@ fn project_kept(ctx: &ReducerContext, sc: &Rc<Scripts>, me: &Character, knows: &
         dist: 0,
     };
     let (r, lo, hi) = law_band_of(sc, &input, d);
-    let pr = project_as(ctx, r, target, now);
-    let kept = Kept { lo, hi, known, precision: r.health, health: (pr.band, pr.hp, pr.max_hp), mark: MARKS.with(|m| m.get()) };
-    (pr, kept)
+    (r, lo, hi, known)
 }
 
 /// The sweep of one player's projections under a law that reads distance (see above).
@@ -1500,6 +1505,7 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
     v.epoch = epoch;
     let dist = |body: u32| if body == id { 0 } else { dist_for_law(ctx, s.here, body, s.near.get(&body).copied(), now) };
     let mut again: Vec<u32> = Vec::new();
+    let testing = common::detail_span("project.test");
     if full {
         count(2, 1);
         // Every row afresh: the rows not of what is seen now go, and each seen gets one.
@@ -1543,16 +1549,34 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
         }
         count(0, held);
     }
+    drop(testing);
     count(1, again.len() as u64);
     v.revealing = s.revealing.clone();
     let knows = v.knows.clone();
+    // Projected first, then written: a projection reads none of the rows the writes touch
+    // (`projected`, its mirror), so the order of writes and their ids are as before.
+    let law = common::detail_span("project.regard");
+    let mut regards: Vec<(Character, Regard, u16, u16, bool)> = Vec::with_capacity(again.len());
     for body in again {
         let Some(t) = ctx.db.character().id().find(body) else {
             v.rows.remove(&body);
             continue;
         };
-        let (pr, k) = project_kept(ctx, &sc, me, &knows, night, &t, dist(body), now);
-        v.rows.insert(body, k);
+        let (r, lo, hi, known) = regard_kept(ctx, &sc, me, &knows, night, &t, dist(body), now);
+        regards.push((t, r, lo, hi, known));
+    }
+    drop(law);
+    let as_span = common::detail_span("project.as");
+    let mark = MARKS.with(|m| m.get());
+    let mut projected: Vec<(u32, Projection)> = Vec::with_capacity(regards.len());
+    for (t, r, lo, hi, known) in regards {
+        let pr = project_as(ctx, r, &t, now);
+        v.rows.insert(t.id, Kept { lo, hi, known, precision: r.health, health: (pr.band, pr.hp, pr.max_hp), mark });
+        projected.push((t.id, pr));
+    }
+    drop(as_span);
+    let writing = common::detail_span("project.write");
+    for (body, pr) in projected {
         let own = body == id;
         let rows: Vec<Projected> = ctx.db.projected().by_viewer_body().filter((viewer, body)).collect();
         match rows.as_slice() {
@@ -1569,12 +1593,15 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
             }
         }
     }
+    drop(writing);
     // The move of each newcomer that has fought, with the band its projection grants.
+    let showing = common::detail_span("project.show");
     for body in s.entered {
         let near = crate::frame::is_near(id, *body);
         crate::frame::show_fighter(ctx, id, viewer, *body, near, true, now);
         crate::frame::show_doing(ctx, id, viewer, *body, near);
     }
+    drop(showing);
     if common::laws(ctx).regard_cache_check {
         check_rows(ctx, me, viewer, s.seen, now);
     }
@@ -1638,7 +1665,9 @@ fn heard_key(salt: u64, listener: u32, target: u32, now: u64) -> u64 {
 /// written when a sound starts or its bearing or band changes; gone when the creature comes into
 /// sight, or `heard_linger_s` after it was last heard. Nothing while its senses have no field.
 fn hear(ctx: &ReducerContext, id: u32, viewer: Identity, here: (f32, f32), seen: &HashSet<u32>, now: u64) {
+    let gathering = common::detail_span("hear.gather");
     let now_heard = heard(ctx, id, here, seen, now);
+    drop(gathering);
     let rows: Vec<Heard> = ctx.db.heard().viewer().filter(viewer).collect();
     if now_heard.is_empty() && rows.is_empty() {
         return;
