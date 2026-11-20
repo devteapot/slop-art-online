@@ -23,6 +23,18 @@
     "skill": "verify-generation",
     "times": 0
   },
+  "generation-cullet:cullet:each band case's resident wears its entry, in its band, with its line, at its stage (11 cases)": {
+    "case": "generation-cullet:cullet:each band case's resident wears its entry, in its band, with its line, at its stage (11 cases)",
+    "first_main": "bfbbc0796f633169b306c7eca0f9a8132ed919c2",
+    "first_seen": "2026-11-20T01:29:23+01:00",
+    "last_evidence": ".local/living/verify/gate-1120012132-5bacae-fuel-cullet/checks.json (Spark)",
+    "last_main": "bfbbc0796f633169b306c7eca0f9a8132ed919c2",
+    "last_seen": "2026-11-20T01:29:23+01:00",
+    "owner": "dev-box (cullet-looks-seed)",
+    "reason": "the same stale Cullet look generation (c4-e61b01c0 against c4-cbcc40bf); dev-box recompiles it on cullet-looks-seed. Drop by hand when it lands",
+    "skill": "verify-generation",
+    "times": 0
+  },
   "generation-cullet:cullet:the cases are of the world's generation": {
     "case": "generation-cullet:cullet:the cases are of the world's generation",
     "first_main": "bfbbc0796f633169b306c7eca0f9a8132ed919c2",
