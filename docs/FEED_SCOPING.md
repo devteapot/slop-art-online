@@ -419,3 +419,39 @@ Option (b) was not tried.
 - The probe's own log lines (about 100 a second) make its cost a little higher than an on arm's.
 
 Not run: Cullet Round and the wooded battle (the stop rule). Evidence: `~/slop-evidence/feed-scope-2026-11-20-it3.tar.zst` (`fc-s4-*`, `feedcost-s4.jsonl`).
+
+## Iteration 4: the far-candidate loop, 2026-11-20 (series `s5`; stopped at Cullet Middle as briefed)
+
+**Change.** At a far-due sweep (every `feed_scope_far_s`, and always under the pop-in probe), the sweep walks the 3 × 3 cells exactly as in iteration 3, and from the same walk it makes the viewer's local list: every candidate within its gather radius + 8 m, a near band within `feed_scope_near_m` + 8 m, and a lookup by key. Between far-due sweeps, it tests the near band and what the viewer sees now from that list. A far candidate is passed over before its payload is read. The list is made again when the viewer has moved 8 m or more, when any candidate cell was invalidated (a global generation), or when its gather radius or the near radius grew. It goes with the sweep's module memory, and is never kept from a sweep outside the tick.
+
+**Exactness.** Under the diagnostic law `feed_scope_loop_check` (off by default) each sweep also walks the cells as iteration 3 did, on the same state and without side effects, and compares the things it shows and their payloads. In the check run (Middle, 152 walking clients) 22,231 sweeps were compared: 0 differed (`scope:loop_checked` 22,231, `scope:loop_differed` 0). verify-core body 26/26, verify-client feed scope 40/40 and verify-player 9/9 passed on this build.
+
+**Measurement.**
+- Build: `d76730eb`, with sweep-exact.
+- Server: private `slop-feedscope-bench`, pinned to CPUs 5-9,15-19.
+- Lock and load: `battle.lock` from 08:40 CET; one-minute load 2.0–5.8 at each start.
+- Discarded: one probe run, which a merge's `~/slop-mq/lock` overlapped.
+- Correction: sight is the sum of the non-overlapping spans. sweep-exact's `sight.gather` (10.7–11.4 ms/s) runs inside `sight.player_candidates`; the driver first counted it twice, and now keeps nested spans apart.
+
+| Run | Sight ms/s | vs off mean | `sight.player_things` | Feature's own spans | Thing tests/s | Local / walked sweeps | Ticks/s |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| off 1 | 21.36 | – | – | 1.04 | – | – | 59.97 |
+| off 2 | 20.43 | – | – | 0.94 | – | – | 60.00 |
+| on 1 | 28.28 | +35.4% | 5.53 | 7.24 | 3,197 | 12,960 / 9,536 | 59.97 |
+| on 2 | 26.78 | +28.2% | 5.18 | 6.77 | 3,173 | 12,960 / 9,762 | 59.97 |
+
+The feature's own spans are `sight.player_things`, `sight.structure_notice`, `sight.structure_brain_list` and `sight.structure_scene` (the last three are timed in both arms).
+
+**Verdict: Middle fails.**
+- The feature's own spans add **+5.8 to +6.3 ms/s** over the off arms (1.0 ms/s), against an allowance of **3.13 ms/s** (15% of the off mean, 20.89).
+- Late ticks pass (0%).
+- Ticks/s sit at the 60 Hz cap in every run: on 59.97, against a lowest off of 59.97.
+
+**Why the loop saved little.** Only 57% of sweeps used the local list, against the ~80% the 1 s cadence allows (4 sweeps in 5). Any invalidation of a candidate cell bumps one global generation, so every viewer walks again: a structure written anywhere (a fire fed, remains made) or a resource node harvested. Cullet's 64 residents do that often. And a local-list sweep still costs a few µs of fixed work: moving the copies map, building the shown things' payload rows, and the lookups. That work, not the rays (about 3,200 a second), is most of `sight.player_things`. For the record, untried and outside this brief: per-cell generations instead of a global one, and less per-sweep allocation. Rays alone at about 0.7 µs would be about 2.2 ms/s, plus the 0.5–0.9 ms/s of noticing, which is close to the allowance either way.
+
+**Pop-in** (probe arm on this build; the probe always walks, and the loop check shows the local pass gives the same things):
+- First sightings beyond 10 m: n = 3,123, at 39 m (p50) to 48 m.
+- Extra delay: p50 400 ms, p90 800 ms, max 18.6 s (one thing passing and failing the test at alternate sweeps at the edge of sight). 23.5% were taken at once (0 ms).
+- Missed: 716. p50 and p90 are as in iteration 3.
+
+Option (b) was not tried. Not run: Cullet Round and the wooded battle (the stop rule). Evidence: `~/slop-evidence/feed-scope-2026-11-20-it4.tar.zst`.

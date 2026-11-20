@@ -49,6 +49,8 @@ POPIN = re.compile(r"^feed scope pop-in: (\d+) ms at ([\d.]+) m")
 POPIN_MISSED = re.compile(r"^feed scope pop-in missed: in sight (\d+) ms at ([\d.]+) m")
 # The Spark's fast cores (X925; docs/COMBAT_PHASE.md on combat-phase): every arm's server is pinned.
 FAST_CPUS = "5-9,15-19"
+# Spans timed inside another sight span (not summed).
+NESTED = {"sight.gather"}
 COMMON = ["cover_law", "feed_scope", "my_offers", "my_known_names", "my_earshot", "speech_card", "my_records", "heard_sounds", "my_senses", "my_act_outcomes"]
 FEEDS = {"off": ["gate"], "on": ["my_things", "my_remembered_things", "my_owners", "my_stock", "my_fuel_seen", "my_contents_seen"]}
 # The probe arm: on, with `feed_scope_popin_probe` (it tests more than on does; its cost is not the
@@ -333,7 +335,10 @@ def one(name, workload, arm, seconds, woods_seed, max_load):
             raise RuntimeError(f"{len(ticks)} tick spans vs {ticks_s * elapsed:.0f} ticks: the module log is incomplete")
         (evidence / "window.json").write_text(json.dumps({"unix_s": [start, end], "stats": [first_stats, last_stats], "metrics": [m0, m1], "host": [host_before, host()]}, indent=2) + "\n")
         actions = sql(f"SELECT COUNT(*) AS n FROM skill_use WHERE accepted_ms >= {int(start * 1000)} AND accepted_ms < {int(end * 1000)}")[0]["n"]
-        sight = {k: sum(v) / elapsed for k, v in spans.items() if k.startswith(("sight.", "scene.sensed"))}
+        # Non-overlapping sight spans only: `sight.gather` (sweep-exact) runs inside
+        # `sight.player_candidates` and is kept apart, not summed.
+        sight = {k: sum(v) / elapsed for k, v in spans.items() if k.startswith(("sight.", "scene.sensed")) and k not in NESTED}
+        nested = {k: sum(v) / elapsed for k, v in spans.items() if k in NESTED}
         bytes_key, memory_key = "spacetime_num_bytes_sent_to_clients_total", "spacetime_worker_wasm_memory_bytes"
         if any(key not in data for data in (m0, m1) for key in (bytes_key, memory_key)):
             raise RuntimeError("missing required DB metrics")
@@ -346,7 +351,7 @@ def one(name, workload, arm, seconds, woods_seed, max_load):
                       clients=count, ambient=ambient, census=[len(start_census), len(end_census)],
                       fighters=[sum(f in c for f in fighters) for c in (start_census, end_census)],
                       local_fighters_in_16m=fighter_counts, accepted_skill_uses_s=actions / elapsed,
-                      sight_ms_s=sum(sight.values()), sight_spans_ms_s=sight,
+                      sight_ms_s=sum(sight.values()), sight_spans_ms_s=sight, nested_spans_ms_s=nested,
                       tick_ms=statistics.mean(ticks), tick_samples=len(ticks), ticks_s=ticks_s,
                       late_share=sum(t > 16.7 for t in ticks) / len(ticks),
                       copy_writes_s=sum(v for k, v in diags.items() if k.startswith("scope:copy_")) / per,
