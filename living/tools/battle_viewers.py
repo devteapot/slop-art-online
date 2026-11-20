@@ -371,11 +371,19 @@ def clog_state(replica):
 
 
 def clog_zstd(replica):
-    """The whole commitlog as a zstd -6 tar stream (bytes), or None."""
-    tar = subprocess.Popen(["docker", "exec", lc.CONTAINER, "tar", "-C", CLOG.format(replica), "-cf", "-", "."], stdout=subprocess.PIPE)
-    z = subprocess.run(["zstd", "-6", "-q", "-c"], stdin=tar.stdout, capture_output=True)
-    tar.wait()
-    return len(z.stdout) if z.returncode == 0 and tar.returncode == 0 else None
+    """The commitlog's segments (`*.stdb.log`) compressed: bytes raw, at zstd -3 (the level 2.14.1
+    uses for sealed segments behind a snapshot) and zstd -6 (as trial_archive.py keeps them), or
+    None. Read after the world is deleted: a deleted database's files stay and no longer change."""
+    cat = ["docker", "exec", lc.CONTAINER, "sh", "-c", f"cat {CLOG.format(replica)}/*.stdb.log"]
+    out = {}
+    for name, cmd in (("raw", ["wc", "-c"]), ("zstd3", ["sh", "-c", "zstd -3 -q -c -T0 | wc -c"]), ("zstd6", ["sh", "-c", "zstd -6 -q -c -T0 | wc -c"])):
+        src = subprocess.Popen(cat, stdout=subprocess.PIPE)
+        r = subprocess.run(cmd, stdin=src.stdout, capture_output=True, text=True)
+        src.stdout.close()
+        if src.wait() != 0 or r.returncode != 0:
+            return None
+        out[name] = int(r.stdout.split()[0])
+    return out
 
 
 def spawn(db, token, a):
@@ -645,12 +653,15 @@ def one(a, n, out):
     finally:
         if load and load.p.poll() is None:
             load.p.terminate()
-        if a.clog and "clog" in res:
-            # What an archive of the whole commitlog costs (zstd -6, as trial_archive.py keeps it).
-            res["clog"]["zstd"] = clog_zstd(res["replica"])
-            if res["clog"]["zstd"] and res["clog"]["end"]["bytes"]:
-                res["clog"]["zstd_ratio"] = round(res["clog"]["zstd"] / res["clog"]["end"]["bytes"], 4)
         lc.delete_world(db)
+        if a.clog and "clog" in res:
+            # The whole commitlog compressed, as the server keeps sealed segments behind a snapshot
+            # (zstd -3) and as an archive keeps it (zstd -6).
+            z = clog_zstd(res["replica"])
+            res["clog"]["zstd"] = z
+            if z and z["raw"]:
+                res["clog"]["zstd3_ratio"] = round(z["zstd3"] / z["raw"], 4)
+                res["clog"]["zstd6_ratio"] = round(z["zstd6"] / z["raw"], 4)
     return res
 
 
@@ -680,7 +691,7 @@ def main():
     ap.add_argument("--flip-off", action="store_true", help="after the window, turn motion_tables_on off and time the kill switch's tick")
     ap.add_argument("--fighter-tables", action="store_true", help="the viewers subscribe seen_fighter_copy in place of the fighter views (views step 3; set fighter_tables_on=true)")
     ap.add_argument("--combat-feed", action="store_true", help="the viewers subscribe combat_feed in place of my_combat (views step 2; set combat_feed_on=true)")
-    ap.add_argument("--clog", action="store_true", help="record the replica's commitlog growth on disk over the window, and its zstd -6 size at the end (result clog)")
+    ap.add_argument("--clog", action="store_true", help="record the replica's commitlog growth on disk over the window, and its compressed size after the world is deleted, zstd -3 and -6 (result clog)")
     ap.add_argument("--sides", type=int, default=0, help="the fighters in this many sides (2-4) that fight each other, not bystanders (spawn_battle_sides)")
     ap.add_argument("--privacy", action="store_true", help="copy-privacy: prove each viewer receives only its own copy rows (needs --motion-tables --character-tables and both laws on); <out>/privacy-v<count>.json, exit 1 on a failed check")
     ap.add_argument("--out", required=True)
