@@ -58,17 +58,5 @@
     "reason": "stale compiled seed: living/seeds/cullet.json looks generation c4-e61b01c0 and 55 residents' looks, against worlds/cullet/looks.json c4-cbcc40bf; dev-box recompiles it on cullet-looks-seed. Drop by hand when it lands",
     "skill": "seed-freshness",
     "times": 0
-  },
-  "skirmish": {
-    "case": "skirmish",
-    "first_main": "3b24a6ba1ac1900ff63b4e656f3f15dcf0b1992b",
-    "first_seen": "2026-11-20T00:34:00+01:00",
-    "last_evidence": "/home/carlid/.local/state/slop-merge/scene-gate/main/.local/living/verify/gate-1120005720-recheck-skirmish-island/gate.log (launch or doctor failed)",
-    "last_main": "7fff6a61db7f57a8231f07d239f7170f5a674af0",
-    "last_seen": "2026-11-20T01:24:36+01:00",
-    "owner": null,
-    "reason": null,
-    "skill": "verify-core",
-    "times": 4
   }
 }
