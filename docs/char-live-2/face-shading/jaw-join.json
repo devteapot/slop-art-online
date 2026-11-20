@@ -1,0 +1,41 @@
+{
+  "identified_by": "Under-jaw, neck and face assigned distinct colours in a diagnostic copy. Same 3/4 framing. Closest interior pixels within three rows at each column, avoiding antialias transition pixels. Luma is weighted display RGB in 0\u2013255.",
+  "measurements": {
+    "face3-high1": {
+      "jaw_to_underside": {
+        "sample_columns": 38,
+        "median_abs_display_luma_step": 40.36,
+        "p90": 57.34
+      },
+      "underside_to_neck": {
+        "sample_columns": 38,
+        "median_abs_display_luma_step": 17.5,
+        "p90": 26.65
+      }
+    },
+    "face3-high2": {
+      "jaw_to_underside": {
+        "sample_columns": 38,
+        "median_abs_display_luma_step": 22.54,
+        "p90": 40.31
+      },
+      "underside_to_neck": {
+        "sample_columns": 38,
+        "median_abs_display_luma_step": 6.43,
+        "p90": 12.4
+      }
+    },
+    "face3-xhigh": {
+      "jaw_to_underside": {
+        "sample_columns": 38,
+        "median_abs_display_luma_step": 2.59,
+        "p90": 11.66
+      },
+      "underside_to_neck": {
+        "sample_columns": 38,
+        "median_abs_display_luma_step": 11.44,
+        "p90": 17.45
+      }
+    }
+  }
+}

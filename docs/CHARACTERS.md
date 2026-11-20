@@ -205,7 +205,7 @@ A pass is also published through the asset board, the record of which version th
 
 `just living-town .local/town` runs `town.py`; `just living-people` runs `gen_person.sh`. A pass's own report page is written by `living/tools/characters/report.py` from the board's media and a notes file.
 
-`gen_person.sh` needs Blender and, for clips, the Kimodo library's takes. The library is `KIMODO_DIR` when set, else its home `.local/kimodo/library`, else `.local/kimodo/outputs/library` (a machine's own renders, which may be behind); the batch log says which was used ("gen_person: the clip library is …"). It bakes the whole library unless `ONLY` names clips. `ONLY=present` bakes every entry whose take is there, for a machine whose copy of the library is behind `clips.json`. The bake reads one take an entry, the picked one (`pick`, a seed) and the neutral pose's; an entry's other seeds are the candidates it was picked from. The log names every entry whose picked take is missing, with a count, and counts the candidates that are not there without naming them: a warning, not a failure. Until 2026-11-13 `present` asked for every seed of an entry, so a library holding only the picks lost entries without an error: the dev-box's two copies hold the picked take of every entry, and every candidate of only 30 of the 86 entries (`outputs/library`) or 67 (`~/archive/clip-library`), and its clip file had 29 clips, with none for backing, strafing, the diagonals or turning. With the rule as it is now the same libraries give 84. The photographs need the game's release build; `view_assets.sh` honours a private `CARGO_TARGET_DIR`. A person takes about 6 s to generate; adding two clips takes about 6 s more and 30 clips about 15 s. 64 people with `idle` and `walk` and their photographs took 5 minutes with six jobs on a loaded dev-box (pass 2, 2026-11-11; hair adds under a second a person). With the far models as well (pass 3), the 64 took 6 minutes to build and page, and their photographs 7 more.
+`gen_person.sh` needs Blender and, for clips, the Kimodo library's takes. The library is `KIMODO_DIR` when set, else its home `.local/kimodo/library`, else `.local/kimodo/outputs/library` (a machine's own renders, which may be behind); the batch log says which was used ("gen_person: the clip library is …"). It bakes the whole library unless `ONLY` names clips. `ONLY=present` bakes every entry whose take is there, for a machine whose copy of the library is behind `clips.json`. The bake reads each entry's picked take (`pick`, a seed), the neutral pose and, for the three ground seats, their shared `ground_seat` pose (`sit_ground_pose_s1.npz`, frame 45); an entry's other seeds are the candidates it was picked from. The log names every entry whose picked take is missing, with a count, and counts the candidates that are not there without naming them: a warning, not a failure. Until 2026-11-13 `present` asked for every seed of an entry, so a library holding only the picks lost entries without an error: the dev-box's two copies hold the picked take of every entry, and every candidate of only 30 of the 86 entries (`outputs/library`) or 67 (`~/archive/clip-library`), and its clip file had 29 clips, with none for backing, strafing, the diagonals or turning. With the rule as it is now the same libraries give 84. The photographs need the game's release build; `view_assets.sh` honours a private `CARGO_TARGET_DIR`. A person takes about 6 s to generate; adding two clips takes about 6 s more and 30 clips about 15 s. 64 people with `idle` and `walk` and their photographs took 5 minutes with six jobs on a loaded dev-box (pass 2, 2026-11-11; hair adds under a second a person). With the far models as well (pass 3), the 64 took 6 minutes to build and page, and their photographs 7 more.
 
 ## A person's parameters
 
@@ -788,6 +788,11 @@ Pass 3's fifth step (2026-11-12). A figure's outline today is its silhouette: th
 | Jaw, far head | the far head's down-facing skin between chin and neck, inside out (`cage_head.far_jaw_line`) | 16 mm |
 
 - **Why inside out.** A hull's faces are seen only where the surface they copy faces away from the viewer. The skin under the jaw faces away from anyone looking at the face, so its hull shows as a dark edge exactly where the jaw stands over the neck, and not from below, where the skin itself is seen.
+- **At portrait height the jaw's line draws nothing in front** (char-port-2 S0, 2026-11-20). The first ring under the jaw faces the camera there, so its hull is culled. The line shows only as a stub under the ear, and the silhouette of the chin over the neck lies further down the underside. [The jaw sheet](char-port-2/s0/README.md)
+  - **Behind a flag:** `SLOP_PORT=jaw_shell` builds the jaw's hull over the whole underside, from the jaw line to the neck's ring (`_underside_shell`, 0.8 mm under the chin, 0.7 mm along the jaw: about the drawing's weight in a close-up). That draws the jaw's outline in front and at three-quarter. [S1](char-port-2/s1/README.md)
+  - **The flag's other feature:** `SLOP_PORT=jaw` sets per-class jaw and chin tapers from `living/tools/characters/port.json`.
+  - **S2's features:** `SLOP_PORT=paint` paints Cora's blush, mouth, nose band, glint and nostrils on the generator's landmarks (`face_paint.PAINT`). `SLOP_PORT=neck` shades the skin under the jaw and the neck below it as hers was (`cage_head.NECK_SHADE`). [S2](char-port-2/s2/README.md)
+  - **All off by default.** With `SLOP_PORT` unset, every file builds as before.
 - **The colour** is the skin's own line colour taken halfway to a dark brown (`cage_head.line_colour`), so it reads on every skin tone.
 - **Widths are metres, not pixels.** That is the limit of a line made of geometry: 1.9 mm is a few pixels in a close-up and a tenth of a pixel at the game camera, where a face is a dozen pixels across.
 - **The far head's line is sized for the game camera:** 16 mm is about a pixel at 22 m and two at the 10 m where the far model takes over. It reads as one darker pixel row under the chin, and under a beard not at all.
@@ -2530,6 +2535,19 @@ For composed people on char-4's bundle `9207d6a8` (main `42ca0b67`: the shared i
   - **Lines and freckles** are heavier composed on every age: a whole file paints age lines into its own atlas by age (none at 35, faint at 58), while a type's one `lines` overlay has one strength for 35 to 70. A graded overlay or a strength in the tag is char-4's to choose.
   - **Hair:** a whole file's hair is drawn from the person's own numbers, a composed person's is the shared cut (by design, [what a shared style gives up](#hair-as-shared-style-files)).
 
+
+### Composed files' `slop` (contract v1.3, 2026-11-20)
+
+**What changed:** composed type and style files can opt in to the hand-made contract's profiles and ink, through their scene's `{"slop": {"contract": 1}}` ([the composed contract](HANDMADE_COMPOSED.md)). The files that opt in can carry:
+
+- a hair palette relative to each person's hair tag (OKLCh ratios from a `ref`, with anchors per colour bin);
+- ink carriers on one shared ink page, every class a cell;
+- every hair cut's mask on one shared hair-mask page;
+- hero lines' `hero_file`.
+
+**Who writes the files:** S4 and S5 of char-port-2 write them. Until then `living/tools/characters/composed_fixture.py` makes a stand-in copy of a lookdev tree.
+
+**What stays the same:** files without the scene key draw as before, pixel for pixel. Profile hair is one material for every cut on a page, the lid and brow carriers are two, and a person's colours reach the palette through their mesh tag.
 
 ## Pictures as KTX2
 

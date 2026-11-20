@@ -101,8 +101,9 @@ living-test:
 living-goods:
     cargo test --manifest-path living/Cargo.toml -p living-rules --lib goods_audit::tests::write_goods_audit -- --ignored --exact
 
-# Everything that must keep compiling after any change: authority (wasm), mind, the native
-# and browser observer, the game client and its unit tests, and the rules tests. Run before every
+# Everything that must keep compiling after any change: authority (wasm) and its native unit
+# tests, mind, the native and browser observer, the game client and its unit tests, and the
+# rules tests. Run before every
 # commit. living/tools/check.py runs these steps (docs/TOOLING.md): the cargo steps and the
 # script fuel gate (living/tools/script_bench: fails when a hot law is over budgets.json). Its
 # four cargo build directories at once under one jobserver; a step skipped when it already passed on this
@@ -170,6 +171,15 @@ living-game-assets:
     living/tools/blender/gen_city.sh
     living/tools/blender/gen_cullet.sh
     living/tools/blender/gen_anim.sh
+
+# The calibration frame for a hand-made character (docs/HANDMADE_HAIR.md): the contract's audit,
+# three fixed daylight shots through the asset view, and each patch's colour against its target in
+# <stem>.calibration.json. `just living-game-calibrate view/own-cora-live.glb [--also middle@0]`.
+# Honours CARGO_TARGET_DIR. Free: no model calls, no world.
+[positional-arguments]
+living-game-calibrate file *args:
+    cargo build --release -q -p living-game --manifest-path living/Cargo.toml
+    python3 living/tools/characters/calibrate.py "$@"
 
 # The asset board (docs/ASSET_BOARD.md): every generated family photographed in the game's own
 # renderer beside the version the owner accepted, with decisions and history in

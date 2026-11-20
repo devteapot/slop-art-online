@@ -285,9 +285,11 @@ mod tests {
     #[test]
     fn cullet_s_sight_takes_the_field_when_the_law_is_on() {
         let c = SkillCtx { actor: ActorFacts { id: 1, kind: "person".into(), stage: "adult".into(), ..Default::default() }, dark: 0.0, ..Default::default() };
-        assert_eq!(cullet().senses(&c).unwrap().field, None, "off as shipped");
-        let src = crate::script::with_world_laws(&crate::floors::compose(BASE, CULLET).unwrap(), &[("fov_on".into(), serde_json::json!(true))]);
-        let on = Scripts::with_day(&src, CULLET_DAY_MS).unwrap();
+        // Cullet ships facing sight and gaze on (2026-11-19); off, its sight is all round.
+        let off = crate::script::with_world_laws(&crate::floors::compose(BASE, CULLET).unwrap(),
+            &[("fov_on".into(), serde_json::json!(false)), ("gaze_on".into(), serde_json::json!(false))]);
+        assert_eq!(Scripts::with_day(&off, CULLET_DAY_MS).unwrap().senses(&c).unwrap().field, None, "off");
+        let on = cullet();
         on.validate().unwrap();
         let s = on.senses(&c).unwrap();
         assert_eq!((s.sight, s.field.map(|f| (f.focal_deg, f.side_deg, f.near_m))), (48.0, Some((70.0, 110.0, 3.0))));

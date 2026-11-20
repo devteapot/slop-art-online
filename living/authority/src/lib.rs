@@ -4,6 +4,7 @@
 //! `mind_*` reducers; they read only their characters' experiences and deliberations.
 
 mod act;
+mod seen_structures;
 mod acts;
 mod attention;
 mod brain;
@@ -11,7 +12,9 @@ mod breath;
 mod codes;
 mod combat;
 mod floor;
+mod geometry;
 mod frame;
+mod frame_trace;
 mod island;
 mod look;
 mod mind;
@@ -29,6 +32,7 @@ mod tables;
 mod tick;
 mod town;
 mod common;
+mod det;
 mod far;
 mod earshot;
 mod fold;
@@ -102,9 +106,18 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
 
 /// The world's clocks: the 60 Hz tick and the 1 s housekeeping, once the world exists.
 pub(crate) fn start_ticking(ctx: &ReducerContext) {
+    // A measurement build (`LIVING_NO_TICK=1`: genesis compared by table hashes,
+    // docs/STAGED_GENESIS.md §5) makes the world and leaves it still.
+    if option_env!("LIVING_NO_TICK").is_some() {
+        return;
+    }
     ctx.db.tick_timer().insert(TickTimer { scheduled_id: 0, scheduled_at: ScheduleAt::Interval(Duration::from_micros(crate::frame::TICK_US as u64).into()) });
     ctx.db.slow_timer().insert(SlowTimer { scheduled_id: 0, scheduled_at: ScheduleAt::Interval(Duration::from_secs(1).into()) });
 }
+
+/// Why cover sight cannot go on: only a land has the ground its cover geometry is sampled from
+/// (a land without the geometry derives it: `geometry`).
+const NO_COVER_LAND: &str = "cover sight requires a land world (a seed whose map kind is \"land\"), once it is made";
 
 fn require_admin(ctx: &ReducerContext) -> Result<World, String> {
     let w = common::world(ctx);
@@ -136,24 +149,44 @@ pub fn install_script(ctx: &ReducerContext, source: String) -> Result<(), String
 /// Install a skill script: compiled and validated on the world's day, then written with a new
 /// revision. `install_script` (the admin) and a seed's laws overlay (`floor::begin`) go through it.
 pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(), String> {
-    // The world's own law values (`world_law`: a seed's `rules`, `set_world_law`) are written
-    // at the end of the installed source, so every client that compiles the `script` row reads
-    // the laws in force (`living_rules::script::with_world_laws`).
-    let source = installed_source(&source, &world_law_values(ctx));
+    install(ctx, source, false)
+}
+
+/// Install a seed's laws overlay that `floor::check` has just compiled and validated (on this
+/// world's day, which `floor::begin` set first): validated again only when the world already has
+/// values of its own (`law_override`), which make the installed source differ from the checked
+/// one. At genesis it has none, so the overlay is validated once (about 26 × 10⁹ fuel on Cullet;
+/// docs/STAGED_GENESIS.md §1).
+pub(crate) fn install_checked_source(ctx: &ReducerContext, source: String) -> Result<(), String> {
+    install(ctx, source, true)
+}
+
+fn install(ctx: &ReducerContext, source: String, checked: bool) -> Result<(), String> {
+    // The world's own law values (`law_override`: a seed's `rules`, `set_world_law`) are written
+    // at the end of the installed source, so a client that compiles the `script` row alone reads
+    // the values of an install (`living_rules::script::with_world_laws`), and laid over the
+    // compiled script, as the authority and every client lay the rows over (`with_overrides`).
+    let values = world_law_values(ctx);
+    let source = installed_source(&source, &values);
     let mut sc = {
         let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.compile");
-        living_rules::script::Scripts::with_day(&source, common::world(ctx).day_ms)?
+        living_rules::script::Scripts::with_overrides(&source, common::world(ctx).day_ms, &values)?
     };
-    if sc.laws().cover_sight_on && !common::world(ctx).run.is_empty()
-        && ctx.db.cover_ground().id().find(0).is_none() {
-        return Err("cover sight requires a land created with quantized cover geometry".into());
+    // A made world without cover geometry derives it once cover is on (`geometry::ensure`,
+    // below); only a world that is not a land cannot have it.
+    if sc.laws().cover_sight_on && !common::world(ctx).run.is_empty() && ctx.db.land().id().find(0).is_none() {
+        return Err(NO_COVER_LAND.into());
     }
-    // Installs are rare: always timed.
-    let checked = {
-        let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.validate");
-        sc.validate()?
-    };
-    log::info!("install_script: {}", checked.summary());
+    if checked && values.is_empty() {
+        log::info!("install_script: validated by the seed check");
+    } else {
+        // Installs are rare: always timed.
+        let checked = {
+            let _t = spacetimedb::log_stopwatch::LogStopwatch::new("install.validate");
+            sc.validate()?
+        };
+        log::info!("install_script: {}", checked.summary());
+    }
     // A world made before owner-known: its public land row loses its names, once.
     crate::island::scrub_land(ctx);
     // The body's meters name fields of this world's vitals row.
@@ -174,6 +207,8 @@ pub(crate) fn install_source(ctx: &ReducerContext, source: String) -> Result<(),
     k.scripts_rev = rev;
     ctx.db.clock().id().update(k);
     common::invalidate_scripts_rev();
+    // Cover on in a land without its geometry: derived in steps, in force once complete.
+    geometry::ensure(ctx, sc.laws().cover_sight_on);
     common::publish_cover_law(ctx, sc.laws());
     if !sc.gaze_enabled() {
         attention::clear_projection(ctx);
@@ -192,43 +227,84 @@ pub(crate) fn installed_source(source: &str, values: &[(String, serde_json::Valu
     living_rules::script::with_world_laws(living_rules::script::without_world_laws(source), values)
 }
 
-/// The world's own law values (`world_law` rows), by name.
+/// The world's own law values (`law_override` rows), by name.
 pub(crate) fn world_law_values(ctx: &ReducerContext) -> Vec<(String, serde_json::Value)> {
-    let mut v: Vec<(String, serde_json::Value)> = ctx.db.world_law().iter().filter_map(|w| serde_json::from_str(&w.value).ok().map(|v| (w.name, v))).collect();
-    v.sort_by(|a, b| a.0.cmp(&b.0));
-    v
+    // Copied from `world_law` first on a world from before `law_override`.
+    common::law_rev(ctx);
+    common::overrides(ctx)
 }
 
 /// Change a law on a running world (admin): `name` is any constant of the script's `laws()`
 /// (`fov_on`, `fire_warmth`, …), `value` its new value as JSON (`true`, `1.5`), of the law's
-/// own kind. The value is kept as the world's own (`world_law`, like a seed's `rules`) and
-/// written into the installed script (`world_law_values()`), which is installed again with a
-/// new revision: the authority's caches, the mind service and every client that compiles the
-/// `script` row take the law in force, so `senses(a)` returns the field at once when `fov_on`
-/// turns on. Every change is kept in `law_change` (name, old, new, when, who, the revision) and
-/// in the chronicle. Refused, with nothing written, for a name that is not a law, a value of
-/// another kind, or a script that then fails its install checks.
+/// own kind. The value is kept as the world's own in the public `law_override` row (with a new
+/// law revision), which the authority and every client lay over the compiled script
+/// (docs/LAW_OVERRIDE.md):
+/// - a value-only law (`living_rules::script::VALUE_ONLY`: the delivery, cover and gaze laws)
+///   takes effect from the next transaction with the compiled script kept: no compile, no
+///   validation, no new script revision; what it reaches is refreshed (the gaze ceilings and
+///   senses, the cover policy row and mask, the owner gaze projection when gaze goes off);
+/// - any other law installs the script again with the values written at its end
+///   (`world_law_values()`), validated in full, with a new script revision, as before.
+/// Every change is kept in `law_change` (name, old, new, when, who, the script revision in force
+/// after it) and in the chronicle. Refused, with nothing written, for a name that is not a law, a
+/// value of another kind, or a value the laws cannot run with (a gaze ceiling out of bounds, a
+/// script that fails its install checks).
 #[spacetimedb::reducer]
 pub fn set_world_law(ctx: &ReducerContext, name: String, value: String) -> Result<(), String> {
     require_admin(ctx)?;
+    let _t = spacetimedb::log_stopwatch::LogStopwatch::new("set_world_law");
     let v: serde_json::Value = serde_json::from_str(value.trim()).map_err(|_| format!("`{value}` is not a value: give a number or true or false"))?;
     let sc = common::scripts(ctx);
     sc.laws_with(&[(name.clone(), v.clone())])?;
-    if name == "cover_sight_on" && v == true && ctx.db.cover_ground().id().find(0).is_none() {
-        return Err("cover sight requires a land created with quantized cover geometry".into());
+    if name == "cover_sight_on" && v == true && ctx.db.land().id().find(0).is_none() {
+        return Err(NO_COVER_LAND.into());
     }
     let old = sc.law_value(&name).map(|o| o.to_string()).unwrap_or_default();
+    let class = sc.value_only(&name);
+    // The compiled script is laid over in place below: no reference is held across it.
+    drop(sc);
     let new = v.to_string();
-    ctx.db.world_law().name().delete(name.clone());
-    ctx.db.world_law().insert(WorldLaw { name: name.clone(), value: new.clone() });
-    let source = ctx.db.script().name().find("skills".to_string()).map(|s| s.source).ok_or("no script installed")?;
-    // Its install refuses a value the laws cannot run with; the reducer's error rolls the row back.
-    install_source(ctx, source)?;
+    if name == "seen_ranges" && old != new {
+        for look in ctx.db.last_look().iter().map(|look| look.id).collect::<Vec<_>>() {
+            ctx.db.last_look().id().delete(look);
+        }
+    }
+    let law_rev = common::set_law_override(ctx, &name, &new);
+    let how = match class {
+        Some(class) => {
+            let _v = spacetimedb::log_stopwatch::LogStopwatch::new("set_world_law.value_only");
+            // The values laid over the compiled script; a derived check refuses the value here
+            // and the reducer's error rolls every row back.
+            let sc = common::try_scripts(ctx)?;
+            match class {
+                living_rules::script::ValueOnly::Delivery => {}
+                living_rules::script::ValueOnly::Cover => {
+                    // A land without its cover geometry derives it (`geometry`): cover is in
+                    // force, for everyone at once, when every band is kept.
+                    let laws = common::laws(ctx);
+                    geometry::ensure(ctx, laws.cover_sight_on);
+                    common::publish_cover_law(ctx, laws);
+                }
+                living_rules::script::ValueOnly::Gaze => {
+                    if !sc.gaze_enabled() {
+                        attention::clear_projection(ctx);
+                    }
+                }
+            }
+            "value only"
+        }
+        None => {
+            let source = ctx.db.script().name().find("skills".to_string()).map(|s| s.source).ok_or("no script installed")?;
+            // Its install refuses a value the laws cannot run with; the reducer's error rolls the row back.
+            install_source(ctx, source)?;
+            "installed"
+        }
+    };
     let now = common::now_ms(ctx);
     let revision = ctx.db.script().name().find("skills".to_string()).map(|s| s.revision).unwrap_or(0);
     ctx.db.law_change().insert(LawChange { id: 0, name: name.clone(), old: old.clone(), new: new.clone(), at_ms: now, by: ctx.sender(), revision });
-    common::chronicle(ctx, now, "law", 0, 0, (0.0, 0.0), format!("the world's law {name} changed from {old} to {new} (script revision {revision})"));
-    log::info!("set_world_law: {name} {old} -> {new} (revision {revision})");
+    common::chronicle(ctx, now, "law", 0, 0, (0.0, 0.0), format!("the world's law {name} changed from {old} to {new} (law revision {law_rev}, {how}, script revision {revision})"));
+    log::info!("set_world_law: {name} {old} -> {new} (law revision {law_rev}, {how}, script revision {revision})");
     Ok(())
 }
 
@@ -624,6 +700,7 @@ pub fn my_deliberations(ctx: &ViewContext) -> Vec<Deliberation> {
 
 #[spacetimedb::reducer]
 pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     join_with(ctx, name, None)
 }
 
@@ -633,6 +710,7 @@ pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
 /// (changing an existing reducer's arguments is not a safe module update).
 #[spacetimedb::reducer]
 pub fn join_as(ctx: &ReducerContext, name: String, sex: String) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let Some(s) = living_rules::sex::Sex::parse(&sex) else {
         return Err(format!("sex must be \"f\" or \"m\", not {sex:?}"));
     };
@@ -696,6 +774,7 @@ fn my_character(ctx: &ReducerContext) -> Result<Character, String> {
 /// other node becomes the character's behavior.
 #[spacetimedb::reducer]
 pub fn human_act(ctx: &ReducerContext, node: String) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     let g = living_rules::graph::parse(&node)?;
     if let living_rules::graph::Node::Do(a) = &g.root {
@@ -738,6 +817,7 @@ pub(crate) fn command_done(ctx: &ReducerContext, id: u32, now: u64) {
 /// that follows the cursor sends looks freely and only changes write rows.
 #[spacetimedb::reducer]
 pub fn human_face(ctx: &ReducerContext, dx: f32, dy: f32) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     if !dx.is_finite() || !dy.is_finite() {
         return Err("direction must be finite".into());
@@ -749,6 +829,7 @@ pub fn human_face(ctx: &ReducerContext, dx: f32, dy: f32) -> Result<(), String> 
 /// Select Middle (0), Far (1) or Near (2). The scheduled sight sweep applies the new band.
 #[spacetimedb::reducer]
 pub fn human_gaze(ctx: &ReducerContext, band: u8) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     attention::set(ctx, me.id, living_rules::sight::GazeBand::try_from(band)?, common::now_ms(ctx))
 }
@@ -760,6 +841,7 @@ pub fn human_gaze(ctx: &ReducerContext, band: u8) -> Result<(), String> {
 /// changes are rate-limited by the `input_hz`/`input_burst` laws.
 #[spacetimedb::reducer]
 pub fn human_move(ctx: &ReducerContext, dx: f32, dy: f32, run: bool) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     if !dx.is_finite() || !dy.is_finite() {
         return Err("direction must be finite".into());
@@ -804,6 +886,7 @@ pub(crate) fn player_controls(ctx: &ReducerContext, id: u32, now: u64) -> Result
 /// before `human_speak`.
 #[spacetimedb::reducer]
 pub fn human_say(ctx: &ReducerContext, text: String, to: u32) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     speech::speak(ctx, me.id, &text, to, "say", common::now_ms(ctx))
 }
@@ -812,6 +895,7 @@ pub fn human_say(ctx: &ReducerContext, text: String, to: u32) -> Result<(), Stri
 /// with 0. A line the way refuses comes back as the reducer's error, in the world's words.
 #[spacetimedb::reducer]
 pub fn human_speak(ctx: &ReducerContext, text: String, to: u32, way: String) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     speech::speak(ctx, me.id, &text, to, &way, common::now_ms(ctx))
 }

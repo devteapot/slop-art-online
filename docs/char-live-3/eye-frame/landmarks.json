@@ -1,0 +1,308 @@
+{
+  "drawing_front": {
+    "source": "../../char-live-1/face.png",
+    "hairline": 128,
+    "chin": 484,
+    "eyes": [
+      {
+        "pupil": [
+          455,
+          277
+        ],
+        "inner_outer_x": [
+          489,
+          418
+        ],
+        "aperture_y": [
+          269,
+          294
+        ],
+        "outer_station": [
+          430,
+          270.5
+        ],
+        "iris_x": [
+          437,
+          473
+        ]
+      },
+      {
+        "pupil": [
+          594,
+          277
+        ],
+        "inner_outer_x": [
+          562,
+          632
+        ],
+        "aperture_y": [
+          269,
+          294
+        ],
+        "outer_station": [
+          620,
+          271
+        ],
+        "iris_x": [
+          577,
+          611.5
+        ]
+      }
+    ]
+  },
+  "approved_front": {
+    "source": "../back-hair/plait/stills/00-clip-idle@0-0_8_0.36_0.88.png",
+    "hairline": 277,
+    "chin": 497,
+    "eyes": [
+      {
+        "pupil": [
+          770,
+          378
+        ],
+        "inner_outer_x": [
+          789,
+          746
+        ],
+        "aperture_y": [
+          369.5,
+          387.5
+        ],
+        "outer_station": [
+          753,
+          371
+        ],
+        "iris_x": [
+          762,
+          777.5
+        ]
+      },
+      {
+        "pupil": [
+          852,
+          385
+        ],
+        "inner_outer_x": [
+          827,
+          877
+        ],
+        "aperture_y": [
+          377.5,
+          395.5
+        ],
+        "outer_station": [
+          869,
+          381
+        ],
+        "iris_x": [
+          843,
+          861.5
+        ]
+      }
+    ]
+  },
+  "drawing_three_quarter": {
+    "source": "../../char-live-1/face.png",
+    "hairline": 128,
+    "chin": 479,
+    "eyes": [
+      {
+        "pupil": [
+          1307,
+          275
+        ],
+        "inner_outer_x": [
+          1338,
+          1265
+        ],
+        "aperture_y": [
+          266,
+          292
+        ],
+        "outer_station": [
+          1277,
+          269.5
+        ],
+        "iris_x": [
+          1290,
+          1322.5
+        ]
+      },
+      {
+        "pupil": [
+          1417,
+          277
+        ],
+        "inner_outer_x": [
+          1395,
+          1441
+        ],
+        "aperture_y": [
+          269.5,
+          293
+        ],
+        "outer_station": [
+          1433,
+          270
+        ],
+        "iris_x": [
+          1405,
+          1430
+        ]
+      }
+    ]
+  },
+  "approved_three_quarter": {
+    "source": "../back-hair/plait/stills/10-clip-idle@0--35_8_0.36_0.88.png",
+    "hairline": 281,
+    "chin": 495,
+    "eyes": [
+      {
+        "pupil": [
+          804,
+          378
+        ],
+        "inner_outer_x": [
+          833,
+          779
+        ],
+        "aperture_y": [
+          370.5,
+          388
+        ],
+        "outer_station": [
+          788,
+          371.5
+        ],
+        "iris_x": [
+          794,
+          814.5
+        ]
+      },
+      {
+        "pupil": [
+          875,
+          382
+        ],
+        "inner_outer_x": [
+          867,
+          889
+        ],
+        "aperture_y": [
+          375.5,
+          390.5
+        ],
+        "outer_station": [
+          885,
+          373.5
+        ],
+        "iris_x": [
+          870.5,
+          881
+        ]
+      }
+    ]
+  },
+  "fit_front": {
+    "source": "stills/00-clip-idle@0-0_8_0.36_0.88.png",
+    "hairline": 277,
+    "chin": 497,
+    "eyes": [
+      {
+        "pupil": [
+          770,
+          378
+        ],
+        "inner_outer_x": [
+          789,
+          746
+        ],
+        "aperture_y": [
+          369.5,
+          387.5
+        ],
+        "outer_station": [
+          753,
+          369.5
+        ],
+        "iris_x": [
+          759.5,
+          779.5
+        ]
+      },
+      {
+        "pupil": [
+          852,
+          385
+        ],
+        "inner_outer_x": [
+          827,
+          877
+        ],
+        "aperture_y": [
+          377.5,
+          395.5
+        ],
+        "outer_station": [
+          869,
+          380
+        ],
+        "iris_x": [
+          840,
+          864.5
+        ]
+      }
+    ]
+  },
+  "fit_three_quarter": {
+    "source": "stills/10-clip-idle@0--35_8_0.36_0.88.png",
+    "hairline": 281,
+    "chin": 495,
+    "eyes": [
+      {
+        "pupil": [
+          804,
+          378
+        ],
+        "inner_outer_x": [
+          833,
+          779
+        ],
+        "aperture_y": [
+          370.5,
+          387.5
+        ],
+        "outer_station": [
+          788,
+          370.5
+        ],
+        "iris_x": [
+          791,
+          817.5
+        ]
+      },
+      {
+        "pupil": [
+          875,
+          382
+        ],
+        "inner_outer_x": [
+          867,
+          889
+        ],
+        "aperture_y": [
+          375.5,
+          390.5
+        ],
+        "outer_station": [
+          885,
+          373
+        ],
+        "iris_x": [
+          869.5,
+          881.5
+        ]
+      }
+    ]
+  }
+}

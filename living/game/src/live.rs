@@ -192,6 +192,9 @@ struct Shown {
     sitting: bool,
     /// Getting up: since when (display ms) and where it sat.
     rising: Option<(f64, Vec2)>,
+    /// Where it sits on the ground, for its cloth (`characters::SeatAnchor`): set as it sits,
+    /// kept through getting up until the clips have it off the ground.
+    seat: Option<crate::characters::SeatAnchor>,
     /// Its file has a startle ([`STARTLE`]); how long it has stood (s); a startle playing: since
     /// when (display ms) and where it stood.
     startles: bool,
@@ -248,6 +251,23 @@ pub struct DrawnLook<'a> {
 /// played at this rate). The authority moves the body at once, so the drawn body waits at its
 /// seat while the clip plays, then catches up at up to [`CATCH_UP`] m/s faster than the body.
 const STAND_UP: (&str, f32, f64) = ("stand_up_ground", 1.6, 2467.0 / 1.6);
+/// The ground clips' seat lies this far behind where the body is drawn (m): `sit_ground_down`
+/// ends with the hips 0.39 m back (clips.json `end_offset` [0, -0.4]), where `sit_ground` and
+/// `stand_up_ground` keep them.
+const SEAT_BEHIND: f32 = 0.39;
+/// The ground's slope at a seat is sampled this far either side of it (m).
+const SEAT_SLOPE_M: f32 = 0.25;
+
+/// A seat on the ground behind a body drawn at `p` facing `dir` (sim): the terrain there and its
+/// normal, in the world (x, height, sim y).
+fn seat_anchor(island: &Island, p: Vec2, dir: Vec2) -> crate::characters::SeatAnchor {
+    let at = p - dir * SEAT_BEHIND;
+    let e = SEAT_SLOPE_M;
+    let hx = (island.height(at.x + e, at.y) - island.height(at.x - e, at.y)) / (2.0 * e);
+    let hz = (island.height(at.x, at.y + e) - island.height(at.x, at.y - e)) / (2.0 * e);
+    let normal = Vec3::new(-hx, 1.0, -hz).try_normalize().unwrap_or(Vec3::Y);
+    crate::characters::SeatAnchor { point: Vec3::new(at.x, island.height(at.x, at.y), at.y), normal, weight: None }
+}
 const CATCH_UP: f32 = 1.2;
 /// A turn take turns the legs at most this fast (radians a second): its own curve stays under it.
 const TURN_MAX: f32 = 720.0 * PI / 180.0;
@@ -315,8 +335,8 @@ fn settled_offset(m: &living_bindings::Moving) -> f32 {
 #[derive(Resource, Default)]
 pub struct Live {
     building: Option<Arc<Mutex<Option<Result<Built, String>>>>>,
-    /// The laws' walk/run split ([`law_split`]) and the script revision it was read under.
-    walk_run: Option<(u32, Option<f32>)>,
+    /// The laws' walk/run split ([`law_split`]) and the laws it was read under (`Rules::laws_key`).
+    walk_run: Option<(u64, Option<f32>)>,
     /// Whether all three digests matched (None until compared).
     pub digests_ok: Option<bool>,
     /// The tiles as the authority hosted them at world creation, to find later edits.
@@ -561,6 +581,9 @@ fn swap_look(commands: &mut Commands, assets: &AssetServer, live: &mut Live, q: 
     let s = live.shown.get_mut(&id).unwrap();
     info!("looks: #{id} redrawn for a new look ({} → {})", if s.look.is_empty() { "none" } else { &s.look }, if now.look.is_empty() { "none" } else { &now.look });
     (s.entity, s.look, s.composed) = (new, now.look, recipe.person.is_some());
+    if let Some(seat) = s.seat {
+        commands.entity(new).try_insert(seat);
+    }
     live.heights.insert(id, recipe.height);
     live.swaps.push((old, new, id));
 }
@@ -647,11 +670,11 @@ fn bodies(
     }
     let dt = time.delta_secs().max(1e-4);
     let me = net.my_id;
-    // Walking or running clips: the laws' split, read again when the installed script changes.
-    if live.walk_run.map(|w| w.0) != Some(rules.revision) {
+    // Walking or running clips: the laws' split, read again when the laws in force change.
+    if live.walk_run.map(|w| w.0) != Some(rules.laws_key) {
         let split = rules.scripts.as_ref().and_then(law_split);
         info!("gait: walk/run split {split:?} m/s by the laws (script revision {})", rules.revision);
-        live.walk_run = Some((rules.revision, split));
+        live.walk_run = Some((rules.laws_key, split));
     }
     let split = live.walk_run.and_then(|w| w.1);
     // Bodies that left sight fade out where they were, then go.
@@ -766,9 +789,12 @@ fn bodies(
         let h = aimed.or(look).or(busy).or(standing.filter(|_| slow)).or(heading);
         if !live.shown.contains_key(&id) {
             let Some(body) = crate::net::find_body(conn, id) else { continue };
-            let character = conn.db.seen_characters().id().find(&id);
-            // Wait for a person's character row (folk, stage) before drawing them.
-            if body.kind == "person" && character.is_none() {
+            let character = crate::net::find_character(conn, id);
+            // Wait for a person's character row (folk, stage) before drawing them, and for any
+            // body's (its kind is the row's): my own body comes in the base set, a round trip
+            // before the characters in the perception set (`net::Feed`), and a body drawn
+            // without its kind would stay a placeholder.
+            if character.is_none() {
                 continue;
             }
             let h = h.unwrap_or(body.heading);
@@ -800,13 +826,13 @@ fn bodies(
                 commands.entity(entity).insert(crate::gait::Logged(id));
             }
             let look = character.as_ref().filter(|_| person).map(crate::characters::seen::of).unwrap_or_default();
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w: if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 }, look: look.look, composed });
+            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, seat: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w: if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 }, look: look.look, composed });
             live.heights.insert(id, height);
             continue;
         }
         // A new look key for someone drawn (a band change, a `relook`): redrawn in place.
         if live.shown.get(&id).is_some_and(|s| s.person) {
-            if let Some(c) = conn.db.seen_characters().id().find(&id) {
+            if let Some(c) = crate::net::find_character(conn, id) {
                 let now = crate::characters::seen::of(&c);
                 if live.shown.get(&id).is_some_and(|s| s.look != now.look) {
                     swap_look(&mut commands, &assets, &mut live, &mut q, (id, mine), &c, island.land.seed, now);
@@ -852,6 +878,7 @@ fn bodies(
         let sitting = show.idle == Some("sit_ground") && !show.hidden;
         if s.sitting && !sitting && s.rising.is_none() && action.is_none() && !mine {
             s.rising = Some((scene.now_ms, s.drawn));
+            info!("seat: #{id} gets up at ({:.2}, {:.2})", s.drawn.x, s.drawn.y);
         }
         s.sitting = sitting;
         // Taking flight from standing: startle where it stood first.
@@ -940,8 +967,11 @@ fn bodies(
         // A turn take playing: the legs follow its curve until it ends; walking or a move breaks
         // it off where it is.
         let mut turn_action = None;
+        // Seated on the ground or getting up: the ground clips hold the body, which a turn take
+        // (a standing clip) would lift to its feet.
+        let grounded = s.sitting || s.rising.is_some_and(|(t, _)| scene.now_ms - t < STAND_UP.2);
         if let (Some(tp), Some(g)) = (s.turn, gaits.as_ref()) {
-            if walking || action.is_some() || cursor_turn.is_some() {
+            if walking || action.is_some() || cursor_turn.is_some() || grounded {
                 s.turn = None;
             } else {
                 let (by, done) = crate::takes::turned(g, &tp, scene.now_ms);
@@ -958,9 +988,10 @@ fn bodies(
             }
         }
         // Standing, legs that would swivel past `takes::TURN_ON` turn by a take instead: toward the
-        // look, a standing body's own heading (where its segment's turn ends) or its activity.
-        let standing_to = row.as_ref().filter(|b| b.vx == 0.0 && b.vy == 0.0).map(|b| b.heading + if b.turn_s > 0.0 { b.turn } else { 0.0 });
-        let turn_to = if cursor_turn.is_some() { None } else { look_at.or(busy).or(standing_to.filter(|_| slow)) };
+        // look, a standing body's own heading (where its segment's turn ends: `turn` is a rate
+        // over `turn_s`, as `standing` above follows it) or its activity.
+        let standing_to = row.as_ref().filter(|b| b.vx == 0.0 && b.vy == 0.0).map(|b| b.heading + if b.turn_s > 0.0 { b.turn * b.turn_s } else { 0.0 });
+        let turn_to = if cursor_turn.is_some() || grounded { None } else { look_at.or(busy).or(standing_to.filter(|_| slow)) };
         if let (Some(g), Some(to), None, false, None, None) = (gaits.as_ref(), turn_to, s.turn, walking, action, s.stop) {
             if s.speed < crate::anim::STEP_OFF {
                 if let Some(clip) = crate::takes::turn_for(g, living_rules::steer::wrap(to - s.yaw)) {
@@ -992,6 +1023,9 @@ fn bodies(
                 None
             }
             _ if s.turn.is_some() => None,
+            // Seated on the ground or getting up, the body keeps the way it sat (its cloth's
+            // seat is fixed behind it); the head and chest still take a look.
+            _ if s.person && grounded && action.is_none() => Some(s.yaw),
             // Walking and looking: the legs ease toward the travel turned by what the head and
             // chest leave (or its reverse, looking back), and the takes for the travel from them
             // play; where the file has none there, the forward gaits along the travel (reversed
@@ -1062,7 +1096,7 @@ fn bodies(
         let dir = Vec2::new(yaw.cos(), yaw.sin());
         // A rigged creature is drawn at its file's size times its life stage's (it grows up), its
         // body lying on the ground under its paws.
-        let size = if beast { conn.db.seen_characters().id().find(&id).map_or(1.0, |c| stage_scale(c.stage)) } else { 1.0 };
+        let size = if beast { crate::net::find_character(conn, id).map_or(1.0, |c| stage_scale(c.stage)) } else { 1.0 };
         let (ground, tilt) = if beast {
             let (want, y) = crate::bodies::lie_on(&s.kind, |x, z| island.height(x, z), p, dir, size);
             s.tilt = s.tilt.slerp(want, 1.0 - (-dt * crate::bodies::TILT_RATE).exp());
@@ -1070,6 +1104,22 @@ fn bodies(
         } else {
             (ground, Quat::IDENTITY)
         };
+        // Seated on the ground (and getting up): the cloth's contact with it, fixed for the sit at
+        // the clips' seat, and let go once the clips have the body off the ground.
+        if s.person && (s.sitting || rising.is_some()) {
+            if s.seat.is_none() {
+                let seat = seat_anchor(&island, p, dir);
+                // The animation its seated loop plays (a variant's, `anim::variants`).
+                let plays = anims.get(s.entity).map_or("sit_ground", |a| a.played("sit_ground"));
+                info!("seat: #{id} sits on the ground at ({:.2}, {:.3}, {:.2}), normal ({:.3}, {:.3}, {:.3}), plays {plays}", seat.point.x, seat.point.y, seat.point.z, seat.normal.x, seat.normal.y, seat.normal.z);
+                s.seat = Some(seat);
+                commands.entity(s.entity).try_insert(seat);
+            }
+        } else if s.seat.is_some() && anims.get(s.entity).map_or(0.0, |a| a.ground_seat()) <= 0.0 {
+            s.seat = None;
+            info!("seat: #{id} is off the ground");
+            commands.entity(s.entity).try_remove::<crate::characters::SeatAnchor>();
+        }
         let Ok((mut tf, fitted, mut model, ch, mut motion, vis)) = q.get_mut(s.entity) else { continue };
         tf.translation.x = p.x;
         tf.translation.z = p.y;
@@ -1201,10 +1251,10 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
             .sum()
     });
     info!(
-        "live: cache body {} character {} doing {} act_card {} weather {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}",
-        conn.db.my_body().count() + conn.db.seen_bodies().count(),
-        conn.db.seen_characters().count(),
-        conn.db.my_doing().count() + conn.db.seen_doing().count(),
+        "live: cache body {} character {} doing {} act_card {} weather {} lot {} terrain_chunk {} ({} tiles edited) settlement {} experience {}; drawn {} characters, {} lots; window moves {}; digests {}; cue overlays {:?}",
+        conn.db.my_body().count() as usize + crate::net::motion_count(conn),
+        crate::net::character_count(conn),
+        conn.db.my_doing().count() + crate::net::activity::all(&conn.db).count() + crate::net::activity::near(&conn.db).count() + crate::net::activity::far(&conn.db).count(),
         conn.db.act_card().count(),
         conn.db.weather().iter().next().map_or("none", |w| if w.raining { "rain" } else { "dry" }),
         conn.db.lot().count(),
@@ -1219,7 +1269,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
             Some(true) => "match",
             Some(false) => "DIFFER",
             None => "pending",
-        }
+        },
+        conn.cue_counts()
     );
 }
 
@@ -1238,6 +1289,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   of the world (sim m, H m above the ground), `nudge:DX,DY` moves it by logical px
 ///   (an open wheel takes it as motion), `wheel:DIR` points the open wheel as the arrows do, and `pan:PX`, `drag:PX` and `pinch:F` turn the view or
 ///   zoom through the pointer's paths (`pointer.rs`: a two-finger pan, a left drag, a pinch);
+///   `motion:DX,DY` supplies one frame of mouse motion and `rotate:DEG` sends a clockwise
+///   rotation gesture; use `mouse:middle:down|up` around motion for a middle drag;
 ///   `frame:0` stops the view framing fights, talks and greetings (`frame:1` again);
 /// - `goto:X,Y`: click-to-move (`human_act` with `goto`); `yaw:DEG`: turn the view;
 ///   `view:PITCH:DISTANCE[:FOV]`: the game camera's pitch (deg), distance (m) and field of view
@@ -1272,6 +1325,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   writes the game UI's state to `<dir>/NAME.json` (`ui::dump`);
 ///   `type:TEXT` puts words in it, `tab` speaks to the next person within earshot, and `enter`
 ///   says the words to whom it addresses (`talk.rs`), as Tab and Enter do;
+/// - `preparing[:S]`: until the client shows the world as still being made (staged genesis,
+///   `genesis.rs`), at most S s (60), for a photograph of the preparing cover;
 /// - `dead`: until the death screen shows; `rejoin`: its "arrive again" button; `joined`:
 ///   until a new character is mine;
 /// - `quit`.
@@ -1359,7 +1414,10 @@ fn script(
     (mut skills, mut gestures, mut verbs, mut talk): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>, ResMut<crate::talk::Talk>),
     (hud, loading, mut pointer): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>, ResMut<crate::pointer::Pointer>),
     (target, mut sight, mut shine): (Option<Res<crate::capture::Target>>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<crate::style::HairShine>),
-    (mut keys, mut buttons): (ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>),
+    (mut keys, mut buttons, mut motion, mut rotation): (
+        ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>,
+        ResMut<bevy::input::mouse::AccumulatedMouseMotion>, MessageWriter<bevy::input::gestures::RotationGesture>,
+    ),
     (mut dump, mut taps, ui): (ResMut<crate::ui::Dump>, ResMut<crate::keys::DoubleTap>, Res<crate::ui::hit::UiPointer>),
     (time, mut exit, cams, mut weapon, mut lw, mut wheel): (Res<Time>, MessageWriter<AppExit>, Query<(&Camera, &GlobalTransform), With<Camera3d>>, ResMut<crate::weapon::Weapon>, ResMut<crate::twist::LookWalk>, MessageWriter<bevy::input::mouse::MouseWheel>),
 ) {
@@ -1615,6 +1673,18 @@ fn script(
             }
             true
         }
+        "motion" => {
+            if let Some((x, y)) = arg.split_once(',').and_then(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))) {
+                motion.delta += Vec2::new(x, y);
+            }
+            true
+        }
+        "rotate" => {
+            if let Ok(degrees) = arg.parse::<f32>() {
+                rotation.write(bevy::input::gestures::RotationGesture(-degrees));
+            }
+            true
+        }
         "notches" => {
             use bevy::input::{mouse::{MouseScrollUnit, MouseWheel}, touch::TouchPhase};
             if let Ok(y) = arg.parse() {
@@ -1787,6 +1857,8 @@ fn script(
             true
         }
         "joined" => net.my_id.is_some_and(|id| Some(id) != s.started) && mine.is_some() || s.since > 60.0,
+        // Until the world shows as still being made (staged genesis), or ARG s (default 60).
+        "preparing" => net.genesis.preparing() || s.since > arg.parse::<f32>().unwrap_or(60.0),
         // A second for the last photograph to be written.
         "quit" => {
             if s.since > 1.0 {
@@ -1800,7 +1872,7 @@ fn script(
         }
     };
     if done {
-        if verb == "ready" || verb == "dead" || verb == "joined" {
+        if verb == "ready" || verb == "dead" || verb == "joined" || verb == "preparing" {
             info!("live script: {verb} after {:.1} s (me {:?} at {:?})", s.since, net.my_id, mine.map(|m| m.1));
         }
         s.at += 1;

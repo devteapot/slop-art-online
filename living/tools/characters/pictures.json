@@ -1,5 +1,5 @@
 {
- "_doc": "pictures.py's classes (docs/CHARACTERS.md, 'Pictures as KTX2'). format: ktx2 or png (keep the class as the generator wrote it). mips: box (an area average in linear light) or coverage (alpha-coverage preservation for the marks, the texels whose alpha is above threshold: thin lines, freckles, the iris lights; the rest is averaged as by box). by_name: an overlay's own mips by its file's name (stubble is a haze: its look at distance is its mean). zstd: the level of each mip's zstd frame. Tint is box: with coverage the iris lights (alpha up to 0.78) glowed as yellow specks in the eyes at 7.5 m, where the 4x-supersampled reference keeps the eyes dark (docs/CHARACTERS.md, 'Pictures as KTX2'). Plain box everywhere was the nearest to that reference; overlays keep coverage so freckles and lines hold at distance.",
+ "_doc": "pictures.py's classes (docs/CHARACTERS.md, 'Pictures as KTX2'). format: ktx2 or png (keep the class as the generator wrote it). mips: box (an area average in linear light) or coverage (alpha-coverage preservation for the marks, the texels whose alpha is above threshold: thin lines, freckles, the iris lights; the rest is averaged as by box). by_name: an overlay's own mips by its file's name (stubble is a haze: its look at distance is its mean). zstd: the level of each mip's zstd frame. Tint is box: with coverage the iris lights (alpha up to 0.78) glowed as yellow specks in the eyes at 7.5 m, where the 4x-supersampled reference keeps the eyes dark (docs/CHARACTERS.md, 'Pictures as KTX2'). Plain box everywhere was the nearest to that reference; overlays keep coverage so freckles and lines hold at distance. ink and hairmask (contract v1.3, docs/HANDMADE_COMPOSED.md): the shared ink and hair-mask pages and a hero file's sidecars, linear distance fields and masks: box (a mipped distance field only thins far lines further).",
  "zstd": 19,
  "classes": {
   "atlas": {
@@ -33,6 +33,14 @@
    "mips": "box"
   },
   "strands": {
+   "format": "ktx2",
+   "mips": "box"
+  },
+  "ink": {
+   "format": "ktx2",
+   "mips": "box"
+  },
+  "hairmask": {
    "format": "ktx2",
    "mips": "box"
   }

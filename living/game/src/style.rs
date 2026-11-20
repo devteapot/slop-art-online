@@ -42,6 +42,12 @@ pub struct ToonExt {
     /// composed people share has it; none elsewhere.
     #[texture(105)]
     pub tints: Option<Handle<Image>>,
+    /// A hand-made material's ink map (contract v1.2, docs/HANDMADE_INK.md; `handmade.rs`
+    /// `InkProfile`): G the distance to the nearest stroke, R its width. Texture only: it is
+    /// sampled through binding 102's sampler, so the sampler count stays as it was. None (the
+    /// shared fallback, never read) on every material without ink.
+    #[texture(106)]
+    pub ink: Option<Handle<Image>>,
 }
 
 /// The painted surfaces of models, in the order of `living/tools/textures/surfaces.py` (layer k
@@ -199,6 +205,12 @@ pub enum Kind {
     FacePart = 3,
     /// Hair: an angel-ring highlight, a rim, and shadows toward the hair's own colour.
     Hair = 4,
+    /// A hand-made file's hair with its own profile (`handmade.rs`, docs/HANDMADE_HAIR.md): two
+    /// thresholds, three palette colours, one masked highlight; no rims, ring or core band.
+    HandHair = 5,
+    /// A layer multiplied over the lit skin under it (blush, freckles; a hand-made file's
+    /// `"tint"` slot): its colour is a factor, so it carries the skin's light and shadow.
+    Tint = 6,
 }
 
 #[derive(Clone, Copy, Debug, Default, Reflect, bevy::render::render_resource::ShaderType)]
@@ -237,6 +249,31 @@ pub struct ToonParams {
     /// Painted detail: x 1 on scenery whose vertex colours name surfaces ([`with_detail`]), z
     /// full detail until (m), w none from (m). The style sets z and w; x is the material's own.
     pub detail: Vec4,
+    /// A hand-made hair profile's palette ([`Kind::HandHair`], `handmade.rs`): shade, mid, light
+    /// and highlight as linear rgb; `hand[3].w` 1 when the highlight mask is a texture (bound as
+    /// [`ToonExt::face`]), else it comes from the second UVs. The material's own.
+    pub hand: [Vec4; 4],
+    /// The profile's numbers: x `t1`, y `t2` (N·L), z `edge`, w `highlight_feather`.
+    pub hand_bands: Vec4,
+    /// A hand-made file's forward in this mesh's own frame (xyz), w 1 when set; else the
+    /// character files' −Z (`toon.wesl` `facing`). The material's own.
+    pub file: Vec4,
+    /// A profile's lock ink (v1.1): rgb the line's linear colour, w `ink_px`.
+    pub hand_ink: Vec4,
+    /// x `ink_range` (UV), y `ink_fade_px`, z 1 when ink is drawn (an ink field set and the mask
+    /// texture has G).
+    pub hand_ink_range: Vec4,
+    /// A material's general ink (contract v1.2, [`ToonExt::ink`]): rgb the line's linear colour,
+    /// w `px` (width "px") or `min_px` (width "uv").
+    pub ink: Vec4,
+    /// x `range` (UV), y `fade_px`, z the mode (0 none, 1 "px", 2 "px" with taper, 3 "uv", 4 "uv"
+    /// through the screen derivatives, `LIVING_GAME_PERF=inkfw`),
+    /// w the material's texel density (metres per UV unit; 0 unknown).
+    pub ink_shape: Vec4,
+    /// A palette material (contract v1.3, `characters/palette.rs`): x 1 when the hair profile's
+    /// swatches and ink come from the mesh's palette entry ([`ToonExt::tints`], tag bit 27), y 1
+    /// when the general ink's colour does (row 4). The material's own.
+    pub palette: Vec4,
     /// Per [`Surface`]: x 1 / tile size (1/m), y strength, z mapping (0 triplanar, 1 planar).
     pub layers: [Vec4; SURFACES],
 }
@@ -546,6 +583,14 @@ impl Style {
             hair_place: Vec4::new(self.hair_ring_up, self.hair_ring_front, LOCK_BINS, self.hair_ring_width_other.max(0.01)),
             hair_lock: Vec4::new(self.hair_lock_drop.clamp(0.0, 1.0), self.hair_lock_shift, self.hair_ring_level.clamp(0.0, 1.0), self.hair_ring_at),
             detail: Vec4::new(0.0, 0.0, self.detail_fade[0], self.detail_fade[1].max(self.detail_fade[0] + 1.0)),
+            hand: [Vec4::ZERO; 4],
+            hand_bands: Vec4::ZERO,
+            file: Vec4::ZERO,
+            hand_ink: Vec4::ZERO,
+            hand_ink_range: Vec4::ZERO,
+            ink: Vec4::ZERO,
+            ink_shape: Vec4::ZERO,
+            palette: Vec4::ZERO,
             layers: surface_layers(),
         }
     }
@@ -558,7 +603,7 @@ impl Style {
     pub fn kind(&self, base: StandardMaterial, kind: Kind, face: Option<Handle<Image>>) -> Toon {
         let mut params = self.params();
         params.shade.w = kind as u8 as f32;
-        Toon { base, extension: ToonExt { params, face, detail: None, tints: None } }
+        Toon { base, extension: ToonExt { params, face, detail: None, tints: None, ink: None } }
     }
 }
 
@@ -674,10 +719,19 @@ fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query
         ToonParams { shadow: Vec4::new(1.0, 1.0, 1.0, 0.45), rim: Vec4::ZERO, band: Vec4::new(-0.2, 0.6, 0.0, 1.0), extra: Vec4::new(1.0, 0.0, 1.0, 1.0), shade: Vec4::new(0.0, 0.0, 1.0, 0.0), recolor: Vec4::ZERO, recolor_from: Vec4::ZERO, atmo: Vec4::new(style.wind, style.wet, 0.0, 0.0), face: Vec4::new(0.3, 1.0, 1.0, 0.0), hair: Vec4::new(0.0, 0.1, 0.0, 0.0), ..style.params() }
     };
     for (_, m) in toons.iter_mut() {
-        // Keep each material's own kind (skin, face, hair), recolouring and detail.
+        // Keep each material's own kind (skin, face, hair), recolouring, detail and hand-made
+        // profile.
         let old = m.extension.params;
         m.extension.params = p;
         m.extension.params.shade.w = old.shade.w;
+        m.extension.params.hand = old.hand;
+        m.extension.params.hand_bands = old.hand_bands;
+        m.extension.params.file = old.file;
+        m.extension.params.hand_ink = old.hand_ink;
+        m.extension.params.hand_ink_range = old.hand_ink_range;
+        m.extension.params.ink = old.ink;
+        m.extension.params.ink_shape = old.ink_shape;
+        m.extension.params.palette = old.palette;
         m.extension.params.recolor = old.recolor;
         m.extension.params.recolor_from = old.recolor_from;
         m.extension.params.detail.x = old.detail.x;

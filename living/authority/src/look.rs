@@ -364,7 +364,7 @@ pub fn reproject(ctx: &ReducerContext, id: u32, line: &str) {
     for mut p in ctx.db.projected().body().filter(id).collect::<Vec<_>>() {
         if p.look != line {
             p.look = line.to_string();
-            ctx.db.projected().id().update(p);
+            crate::perception::proj_update(ctx, p);
         }
     }
 }

@@ -1,0 +1,119 @@
+{
+ "jersey_coat-m|coat-m|rest": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 1
+ },
+ "jersey_coat-m|trousers-m|rest": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 1
+ },
+ "trousers-m|coat-m|rest": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 1
+ },
+ "jersey_coat-m|coat-m|idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-m|trousers-m|idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-m|coat-m|idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-m|coat-m|walk": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-m|trousers-m|walk": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-m|coat-m|walk": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-m|coat-m|run": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-m|trousers-m|run": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-m|coat-m|run": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-m|coat-m|sit_idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-m|trousers-m|sit_idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-m|coat-m|sit_idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_coat-m|coat-m|sit_ground": {
+  "most": 18.737412070746828,
+  "frames": 6,
+  "of": 12,
+  "at": 4.65,
+  "bone": "J_Fit_Belly",
+  "out": 6
+ },
+ "jersey_coat-m|trousers-m|sit_ground": {
+  "most": 11.436772740417673,
+  "frames": 4,
+  "of": 12,
+  "at": 4.65,
+  "bone": "J_Bip_C_Hips",
+  "out": 1
+ },
+ "trousers-m|coat-m|sit_ground": {
+  "most": 13.414678602003141,
+  "frames": 6,
+  "of": 12,
+  "at": 4.65,
+  "bone": "J_Fit_Belly",
+  "out": 4
+ },
+ "coat-m|chair|sit_idle": {
+  "most": 131.14678543807568,
+  "below": 84.87232621841478,
+  "behind": 131.14678543807568,
+  "vertices": 318
+ },
+ "coat-m|terrain|sit_ground": {
+  "most": 0.0,
+  "below": 0.0,
+  "behind": 0.0,
+  "vertices": 0
+ },
+ "coat-m|ground|sit_ground": {
+  "most": 0.0,
+  "below": 0.0,
+  "behind": 0.0,
+  "vertices": 0
+ }
+}

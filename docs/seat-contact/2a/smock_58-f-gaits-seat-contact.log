@@ -1,0 +1,18 @@
+jersey_smock-f   under smock_58-f       rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+jersey_smock-f   under smock_58-f       run    clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+jersey_smock-f   under smock_58-f       walk   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+jersey_smock-f   under smock_58-f       walk_brisk clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+smock_58-f       under apron_58-f       rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+smock_58-f       under apron_58-f       run    clear   by   -0.5 mm at most (t 0.15 s, on J_Bip_L_UpperLeg, 0 vertices); in 0 of 16 poses
+smock_58-f       under apron_58-f       walk   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+smock_58-f       under apron_58-f       walk_brisk clear   by   -0.4 mm at most (t 0.57 s, on J_Bip_L_UpperLeg, 0 vertices); in 0 of 16 poses
+trousers-f       under apron_58-f       rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+trousers-f       under apron_58-f       run    clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+trousers-f       under apron_58-f       walk   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+trousers-f       under apron_58-f       walk_brisk clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+trousers-f       under smock_58-f       rest   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 1 poses
+trousers-f       under smock_58-f       run    clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+trousers-f       under smock_58-f       walk   clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+trousers-f       under smock_58-f       walk_brisk clear   by   -1.0 mm at most (t 0.00 s, on -, 0 vertices); in 0 of 16 poses
+cloth_check: springs simulated; the cloth is carried at most 0 mm in rest, 33 mm in walk, 49 mm in walk_brisk, 69 mm in run from where it rides at rest
+cloth_check: 10 pairs of pieces over 49 poses: none comes through by more than 2.0 mm

@@ -214,6 +214,11 @@ fn tiles(mut field: Option<ResMut<SightField>>, live: Res<crate::live::Live>, is
         .map(|l| living_rules::cover::Policy { eye_height_m: l.cover_eye_height_m,
             brush_on: l.cover_brush_on, brush_min_fill: l.cover_brush_min_fill, cliff_step_m: l.cover_cliff_step_m });
     let changed = field.cover_policy != policy;
+    if changed {
+        // The authority republishes the row on a value-only cover edit (`set_world_law`, no
+        // install): the mask follows it here (docs/LAW_OVERRIDE.md).
+        info!("sight field: cover policy {policy:?} (the cover_law row)");
+    }
     if new_land || changed {
         field.cover_mask = policy.and_then(|p| {
             let recipe = live.cover_recipe()?;

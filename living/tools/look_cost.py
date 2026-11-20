@@ -53,7 +53,22 @@ def sh(*args, timeout=600, check=True):
 
 
 def stdb(*args, timeout=600):
-    return sh("podman", "exec", "-i", CONTAINER, "spacetime", *args, timeout=timeout)
+    return sh("docker", "exec", "-i", CONTAINER, "spacetime", *args, timeout=timeout)
+
+
+def delete_world(db):
+    """Delete a `verify-lookcost-*` database only after its world reads back paused
+    (`world_delete.py`: SpacetimeDB 2.14.1 can take the whole server down when a ticking world is
+    deleted). Its load's connections should be closed first. Raises when it was not deleted."""
+    if not db.startswith("verify-lookcost-"):
+        raise RuntimeError(f"refusing to delete {db}: not a verify-lookcost- database")
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import world_delete
+    cli = lambda *a: subprocess.run(["docker", "exec", "-i", CONTAINER, "spacetime", *a], capture_output=True, text=True, timeout=600)
+    deleted, why = world_delete.cli_pause_and_delete(cli, db)
+    print(f"delete {db}: {why}", file=sys.stderr, flush=True)
+    if not deleted:
+        raise RuntimeError(f"{db}: {why}")
 
 
 def http(path, body=None, token=None, raw=False):
@@ -167,7 +182,8 @@ class Proc:
 
 
 def spans(log, t0, t1):
-    rx = re.compile(r'^(\S+Z)\s.*Timing span "([^"]+)": ([\d.]+)(µs|ms|s)\b')
+    # A span under a microsecond is printed in ns.
+    rx = re.compile(r'^(\S+Z)\s.*Timing span "([^"]+)": ([\d.]+)(ns|µs|ms|s)\b')
     out = {}
     for line in log.splitlines():
         m = rx.match(line)
@@ -176,8 +192,22 @@ def spans(log, t0, t1):
         stamp = m.group(1).rstrip("Z")[:26]
         at = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%S.%f" if "." in stamp else "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
         if t0 <= at < t1:
-            out.setdefault(m.group(2), []).append(float(m.group(3)) * {"µs": 1e-3, "ms": 1.0, "s": 1e3}[m.group(4)])
+            out.setdefault(m.group(2), []).append(float(m.group(3)) * {"ns": 1e-6, "µs": 1e-3, "ms": 1.0, "s": 1e3}[m.group(4)])
     return out
+
+
+def clog_bytes(replica):
+    """The size of a replica's commitlog in the server container (bytes), or None."""
+    if replica is None:
+        return None
+    r = subprocess.run(["docker", "exec", CONTAINER, "du", "-sb", f"/home/spacetime/.local/share/spacetime/data/replicas/{replica}/clog"], capture_output=True, text=True)
+    return int(r.stdout.split()[0]) if r.returncode == 0 and r.stdout.strip() else None
+
+
+def newest_replica():
+    r = subprocess.run(["docker", "exec", CONTAINER, "ls", "/home/spacetime/.local/share/spacetime/data/replicas"], capture_output=True, text=True)
+    ids = [int(x) for x in r.stdout.split() if x.isdigit()]
+    return max(ids) if ids else None
 
 
 def main():
@@ -192,7 +222,17 @@ def main():
     ap.add_argument("--seconds", type=int, default=120)
     ap.add_argument("--sample", type=int, default=24)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--duel", action="store_true", help="stage the first two players as a stationary duel after warm-up")
+    ap.add_argument("--tiers", action="store_true", help="the players subscribe the near and far tier views in place of seen_bodies, seen_fighters, seen_doing (frame-views)")
+    ap.add_argument("--cues", action="store_true", help="the players also subscribe the cue event tables (a module with them; frame-views)")
+    ap.add_argument("--character-tables", action="store_true", help="the players subscribe seen_character_copy in place of seen_characters (battle-views; set characters_table_on with --law)")
+    ap.add_argument("--motion-tables", action="store_true", help="the players subscribe seen_body_copy in place of the motion views (battle-views; set the motion_tables_on law with --law)")
+    ap.add_argument("--law", action="append", default=[], metavar="NAME=VALUE", help="set a world law after publishing (admin set_world_law), e.g. cue_transport_on=true")
+    ap.add_argument("--battle", type=int, default=0, help="the first N players fight in one dense group (radius 9 m round the first cluster's centre) from the window's start; the rest walk")
+    ap.add_argument("--fresh-every", type=int, default=0, help="sample every Nth player's motion freshness (gate-load `fresh`; 0: none)")
     a = ap.parse_args()
+    if a.duel and a.players < 2:
+        ap.error("--duel needs at least two players")
     stamp = time.strftime("%Y%m%d-%H%M%S")
     db = f"verify-lookcost-{a.label}-{stamp}"
     out = Path(a.out or ROOT / ".local/look1/cost" / f"{a.label}-{stamp}")
@@ -201,20 +241,60 @@ def main():
     load = None
     try:
         stdb("publish", "-s", "local", "-b", str(Path("/wasm") / a.wasm), db, "--delete-data", "-y")
+        # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+        import genesis_wait
+        genesis_wait.wait_ready(URL, db, admin_token())
+        replica = newest_replica()
         token = admin_token()
         ident = json.loads(http(f"/v1/database/{db}")[1])["database_identity"]["__identity__"].removeprefix("0x")
         time.sleep(3)
         world = sql(db, "SELECT * FROM world", token)[0]
         res["world"] = {k: world.get(k) for k in ("run", "seed", "day_ms", "look_book")}
+        for law in a.law:
+            name, value = law.split("=", 1)
+            call(db, "set_world_law", [name, value], token)
+        res["laws"] = a.law
         tokens = [new_identity() for _ in range(a.players)]
-        players = [{"token": t, "name": f"Cost{i}", "role": "walk"} for i, t in enumerate(tokens)]
+        role = lambda i: "duel" if a.duel and i < 2 else "battle" if i < a.battle else "walk"
+        players = [{"token": t, "name": f"Cost{i}", "role": role(i)} for i, t in enumerate(tokens)]
+        site = None
+        if a.battle:
+            # Where the gate stages its battle (living/tools/gate.py): 30 m north of the arrival.
+            land = sql(db, "SELECT * FROM land", token)[0]
+            site = (land["arrive_x"], land["arrive_y"] - 30.0)
         load = Proc([a.load, "players"], out / "players.stderr")
-        load.send(json.dumps({"uri": URL, "db": db, "events": str(out / "events.jsonl"), "battle": [0.0, 0.0], "behaviour": {"walk_period_ms": 1500, "rejoin_s": 3}, "players": players, "client": "gate"}))
+        load.send(json.dumps({"uri": URL, "db": db, "events": str(out / "events.jsonl"), "battle": list(site or (0.0, 0.0)), "behaviour": {"walk_period_ms": 1500, "fight_period_ms": 250, "rejoin_s": 3}, "players": players, "client": "gate", "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables, "character_tables": a.character_tables, "fresh_every": a.fresh_every}))
         joined = load.expect("joined", 900)
         ids = [p["id"] for p in sorted(joined["players"], key=lambda p: p["p"])]
         per = -(-a.players // a.groups)
         centers, spots = clusters(sql(db, "SELECT * FROM lot", token), a.groups, a.radius, per)
-        for cid, (x, y) in zip(ids, spots):
+        if a.duel:
+            res["duelists"] = ids[:2]
+            call(db, "place_at", [ids[0], *spots[0]], token)
+            first = sql(db, f"SELECT x, y FROM body WHERE id = {ids[0]}", token)[0]
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1)):
+                call(db, "place_at", [ids[1], first["x"] + dx, first["y"] + dy], token)
+                second = sql(db, f"SELECT x, y FROM body WHERE id = {ids[1]}", token)[0]
+                if (second["x"] - first["x"]) ** 2 + (second["y"] - first["y"]) ** 2 < 1.6 ** 2:
+                    break
+            else:
+                raise RuntimeError("could not place both duelists within strike reach")
+            res["duel_positions"] = [first, second]
+        if a.battle:
+            res["battle"] = {"fighters": a.battle, "site": site, "radius_m": 9.0}
+            import math
+            missed = 0
+            for i, cid in enumerate(ids[:a.battle]):
+                ang, rr = i * 2.399963, 9.0 * ((i + 0.5) / a.battle) ** 0.5
+                try:
+                    call(db, "place_at", [cid, site[0] + rr * math.cos(ang), site[1] + rr * math.sin(ang)], token)
+                except RuntimeError:
+                    # Something stands there (a wall, water): beside the site's centre instead.
+                    missed += 1
+                    call(db, "place_at", [cid, site[0] + math.cos(ang), site[1] + math.sin(ang)], token)
+            res["battle"]["placed_beside"] = missed
+        start = 2 if a.duel else a.battle
+        for cid, (x, y) in zip(ids[start:], spots[start:]):
             call(db, "place_at", [cid, x, y], token)
         load.send("placed")
         ready = load.expect("ready", 900)
@@ -225,8 +305,16 @@ def main():
         time.sleep(a.warmup)
         call(db, "set_profile", [True], token)
         t0, b0 = time.time(), bytes_sent(ident)
+        clog0 = clog_bytes(replica)
+        load.send("fresh on")
+        if a.duel or a.battle:
+            load.send("battle")
         time.sleep(a.seconds)
         t1, b1 = time.time(), bytes_sent(ident)
+        clog1 = clog_bytes(replica)
+        res["commitlog"] = {"replica": replica, "bytes_t0": clog0, "bytes_t1": clog1,
+                            "bytes_per_s": round((clog1 - clog0) / (t1 - t0), 1) if clog0 is not None and clog1 is not None else None}
+        load.send("fresh off")
         call(db, "set_profile", [False], token)
         # What each sampled player holds now, as that player.
         sample = []
@@ -236,7 +324,21 @@ def main():
                            "people_with_key": sum(1 for r in rows if r.get("kind") == "person" and r.get("look", "").startswith("lk_"))})
         load.send("stop")
         try:
-            load.expect("done", 300)
+            done = load.expect("done", 300)
+            # Motion freshness over the window, pooled over the sampled players (gate-load `fresh`).
+            fresh = {"near": {}, "all": {}, "by_cue": 0, "by_view": 0, "players": 0}
+            for p in done.get("players", []):
+                f = p.get("fresh")
+                if not f:
+                    continue
+                fresh["players"] += 1
+                fresh["by_cue"] += f["by_cue"]
+                fresh["by_view"] += f["by_view"]
+                for group in ("near", "all"):
+                    for ms, n in f[group].items():
+                        fresh[group][ms] = fresh[group].get(ms, 0) + n
+            res["fresh"] = fresh
+            res["cue_rows"] = {t: sum((p.get("events") or {}).get(t, [0])[0] for p in done.get("players", [])) for t in ("seen_body_cue", "seen_fighter_cue", "seen_doing_cue")}
         except RuntimeError:
             pass
         res["counts"] = {"projected": sql(db, "SELECT COUNT(*) AS n FROM projected", token)[0]["n"], "character": sql(db, "SELECT COUNT(*) AS n FROM character", token)[0]["n"]}
@@ -260,8 +362,8 @@ def main():
     finally:
         if load and load.p.poll() is None:
             load.p.terminate()
-        stdb("delete", "-s", "local", db, "-y") if db.startswith("verify-lookcost-") else None
         (out / "result.json").write_text(json.dumps(res, indent=1) + "\n")
+        delete_world(db)
     print(json.dumps(res, indent=1))
 
 

@@ -41,7 +41,7 @@ CONTAINER = os.environ.get("LIVING_STDB_CONTAINER", "sao-living_spacetimedb_1")
 
 
 def stdb(*args, check=True):
-    r = subprocess.run(["podman", "exec", "-i", CONTAINER, "spacetime", *args], capture_output=True, text=True, timeout=600)
+    r = subprocess.run(["docker", "exec", "-i", CONTAINER, "spacetime", *args], capture_output=True, text=True, timeout=600)
     if check and r.returncode:
         raise RuntimeError(f"spacetime {' '.join(args[:3])}: {r.stderr[-600:]}")
     return r.stdout
@@ -81,7 +81,7 @@ def backfill(db, seed_name, path, relook):
         report["rows_before"] = one(db, "SELECT COUNT(*) AS n FROM sex", "n")
         calls = []
         for _ in range(2):
-            r = subprocess.run(["podman", "exec", "-i", CONTAINER, "spacetime", "call", "-s", "local", db, "backfill_sex"], capture_output=True, text=True, timeout=120)
+            r = subprocess.run(["docker", "exec", "-i", CONTAINER, "spacetime", "call", "-s", "local", db, "backfill_sex"], capture_output=True, text=True, timeout=120)
             time.sleep(1.5)
             calls.append(r.returncode)
         report["calls"] = calls
@@ -131,6 +131,11 @@ def main():
             seen = 0
             for i, m in enumerate(mods):
                 stdb("publish", "-s", "local", "-b", f"/wasm/{m}.wasm", db, *(["--delete-data"] if i == 0 else []), "-y")
+                if i == 0:
+                    # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+                    sys.path.insert(0, str(ROOT / "living/tools"))
+                    import genesis_wait
+                    genesis_wait.wait_ready_cli(lambda *x: stdb(*x, check=False), db)
                 time.sleep(a.settle)
                 if a.crowd and i == 0:
                     stdb("call", "-s", "local", db, "spawn_crowd", str(a.crowd), "true")
@@ -147,7 +152,7 @@ def main():
                 if a.backfill and i == len(mods) - 1 and i > 0:
                     steps[-1]["backfill"] = backfill(db, a.backfill, out / f"chain{n}-backfill.json", relook=None)
                 if a.relook and i == len(mods) - 1 and i > 0:
-                    r = subprocess.run(["podman", "exec", "-i", CONTAINER, "spacetime", "call", "-s", "local", db, "relook", json.dumps(a.relook)], capture_output=True, text=True, timeout=120)
+                    r = subprocess.run(["docker", "exec", "-i", CONTAINER, "spacetime", "call", "-s", "local", db, "relook", json.dumps(a.relook)], capture_output=True, text=True, timeout=120)
                     time.sleep(2)
                     steps[-1:] = []
                     s["relook"] = {"exit": r.returncode, "after": state(db)}
@@ -157,8 +162,12 @@ def main():
                     steps.append({"module": m, "kept_data": i > 0, "panics": panics, "guard_lines": guarded, **s})
                 print(f"chain {n} step {i} {m}: panics {len(panics)}, guard {len(guarded)}, ticking {s['ticking']}, looks {s['looks']}, characters {s['characters']}, timers {s['tick_timer']}/{s['slow_timer']}" + (f"; relook exit {s['relook']['exit']}, looks {s['relook']['after']['looks']}, ticking {s['relook']['after']['ticking']}, panics {len(s['relook']['panics_since'])}" if s.get("relook") else ""), flush=True)
         finally:
-            stdb("call", "-s", "local", db, "set_paused", "true", check=False)
-            stdb("delete", "-s", "local", db, "-y", check=False)
+            # The shared rule (living/tools/world_delete.py): delete only a world read back as paused.
+            sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "living/tools"))
+            import world_delete
+            cli = lambda *a: subprocess.run(["docker", "exec", "-i", CONTAINER, "spacetime", *a], capture_output=True, text=True, timeout=600)
+            deleted, why = world_delete.cli_pause_and_delete(cli, db)
+            print(f"delete {db}: {why}", flush=True)
         report["chains"].append({"chain": mods, "db": db, "steps": steps,
                                  "updates_without_panic": sum(1 for s in steps[1:] if not s["panics"]), "updates": len(steps) - 1})
     (out / "updates.json").write_text(json.dumps(report, indent=1) + "\n")

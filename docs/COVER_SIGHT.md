@@ -155,7 +155,7 @@ Authored Cullet live results and module logs are in `.local/cover-sight/cover-c-
 
 ## Phase 2 implementation
 
-Cover ships off in every seed and overlay. Cullet also overrides `cover_brush_on` to false. The common DDA in
+Cover ships off in the base law. Cullet's overlay turns it on, with brush, since the 2026-11-19 [switch-on](#switch-on-2026-11-19); every other seed keeps it off. The common DDA in
 [`Map::sight_clear`](../living/rules/src/map.rs) chooses the height-aware path only when it
 has a mask. The authority uses that same map for player, mind and animal sight. Missile
 collision reads the separate solid bit. Existing rocks, walls and gates retain their
@@ -163,12 +163,13 @@ original rules. Trunks and faces use a signed decimetre top. Brush has its own t
 patch index so occupants can see one another along rays within a patch. Overlooks are
 parsed and reserved.
 
-The land generator already has the elevation field at genesis. The authority samples
-it once at tile centres and writes quantized bands with the procedural cover candidates.
+The land generator already has the elevation field at genesis. In a world whose cover law is on
+when it is created, the authority samples it once at tile centres and writes quantized bands
+with the procedural cover candidates. In any other world it writes none, and switching cover
+on later derives them in steps ([cover geometry](#cover-geometry-only-where-cover-is-on-2026-11-20)).
 This lives privately in `cover_ground`, and the enabled module map compiles the sparse
 chunk mask from these bands once per map cache load. Cover-off map loads read no bands.
-Runtime mask compilation does not generate land. The sparse mask uses a chunk directory and occupied row bits. If a ray's bounding rectangle has no cover cells, it takes the legacy trace without eye interpolation. A land made before the new genesis
-data was available needs that data before it can accept the switch. The map uses static
+Runtime mask compilation does not generate land. The sparse mask uses a chunk directory and occupied row bits. If a ray's bounding rectangle has no cover cells, it takes the legacy trace without eye interpolation. The map uses static
 genesis cover geometry while live terrain edits and gate state apply through the
 existing terrain trace. [Shared cover compiler](../living/rules/src/cover.rs).
 
@@ -305,3 +306,132 @@ Phase 2's Cullet runs pass this budget (Middle: on 29.0–30.4 against an off me
 +13%; ticks and late ticks unchanged). The battle needs two more runs per arm before a verdict.
 When it passes, `cover_sight_on` and `cover_brush_on` go on in Cullet's overlay (its brush and
 hedge visuals are on main) and in the play-test world.
+
+## Switch-on (2026-11-19)
+
+Branch `sight-on`. The general coordinator let it merge ahead of the wooded battle runs once `living-check` and the two scenes below passed. The battle budget above stays the gate for any battle-scale world and for turning a law on by default.
+
+**Cullet is directional for everyone.** Its `fov_on` goes from false to true on main, for players and minds alike, as the owner approved: "woods hide people, with sight depending on which way you face". With gaze on, Middle is the shipped directional field, so a resident who never sets a gaze sees what `fov_on` alone gave.
+
+What is on where:
+
+| World | `cover_sight_on` | `cover_brush_on` | `gaze_on` | `fov_on` | Where it is set |
+| --- | --- | --- | --- | --- | --- |
+| Cullet (`cullet.json`) | true | true | true | true | `laws()` in [Cullet's overlay](../living/seeds/worlds/cullet/laws.rhai) |
+| `cullet-laws`, `hamlet`, `hamlet-6` (they share Cullet's overlay) | false | false | false | false | their seed `rules`, which keep the values they had before |
+| The play-test world (the island seed with the laptop's scene overlay, `.local` on the laptop) | true | shipped (true; the island has no authored brush, so it hides nothing) | true | true | `laws()` in the scene's overlay, by the laptop (the lines below) |
+| Every other seed | false | shipped | false | false | the base law |
+
+`fov_on` is set explicitly beside gaze: enabling gaze makes Middle directional even where `fov_on` is false ([camera §4](CAMERA.md#gaze-authority-implementation)), so the line states what the world does. The play-test scene's overlay is not in the repository; its `laws()` gains, beside play-test 9's `turn_rate` and `look_walk_deg`:
+
+```rhai
+fn laws() {
+    let policy = base_laws();
+    policy.turn_rate = 30.0;          // play-test 9
+    policy.look_walk_deg = 180.0;     // play-test 9
+    policy.cover_sight_on = true;
+    policy.gaze_on = true;
+    // Enabling gaze makes Middle directional even where fov_on is false (CAMERA.md §4); explicit.
+    policy.fov_on = true;
+    policy
+}
+```
+
+A world needs its cover bands (`cover_ground`) for the switch. Since `cover-genesis` (2026-11-20), a land made with its cover law off (the island) has none. When the overlay is installed, it derives them in steps, for about 6 s on the island, and cover is in force once they are complete ([cover geometry](#cover-geometry-only-where-cover-is-on-2026-11-20)). Before that, the play-test world had to be made fresh from a module at or after `7619ad71`.
+
+**Island creation and an overlay (found 2026-11-19).** A module with the island seed compiled in *and* the play-test scene's overlay as the seed's `laws` ran out of reducer energy in `init`, with or without the switch-on lines; the plain island seed created normally on the same server. The scratch proof therefore made a plain island world and installed the composed overlay with `living/tools/install_script.py <db> --seed <seed>`. A play scene that compiles the overlay into an island module may hit the same limit. Proof: verify-player `sight_on.py` ([cover in a player's projection](../.agents/skills/verify-player/features/cover.md)) on scratch worlds of Cullet and of the island with that overlay, with the laws as shipped and no admin override before the checks. Its validation record is in `.agents/skills/verify-player/references/validation/`.
+
+## Cover geometry only where cover is on (2026-11-20)
+
+Branch `cover-genesis` (Spark), measured on main `b6aa7489` (staged genesis: every seeded world is made by `genesis_step` after `init`) and checked again on `a4d4b2ab`, rustc 1.99.1, SpacetimeDB 2.14.1 on a private server. A creation's last, finishing `genesis_step` (`floor::finish`) publishes the cover in force; when the law went on during creation after hosting, it also starts the derivation.
+
+Before this branch, every land sampled its ground at every tile centre in its hosting step and kept it in `cover_ground`, whatever its cover law. That made `floor-megacity-4k`'s hosting step run out of energy, so the floor stalled at step 130 of 141. It was also most of every other land's hosting step. Now a world keeps cover geometry only when cover is on. The same rules apply to players and minds. Where cover is on, the bands are byte-identical to before.
+
+### What it cost
+
+Fuel from `living/tools/genesis_fuel.py --seed S` (a stepping build; `--floor-seed` for the megacity floors), main against the branch. The guard's rule is no step above 50 × 10⁹.
+
+| Seed | `init` main / branch | Hosting step main / branch | Cover band steps (branch) | Largest step main / branch | Steps main / branch |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| island | 11.56 / 11.56 × 10⁹ | 19.04 / **1.43** | — | 25.25 / 25.25 (populate) | 40 / 40 |
+| Cullet (cover on) | 37.27 / 37.36 | 4.08 / 0.51 | 1 step, 3.74 | 7.78 / 7.78 (populate) | 23 / 24 |
+| plan-test | 11.44 / 11.52 | 3.66 / 0.26 | — | 4.91 / 4.91 (land) | 25 / 25 |
+| cullet-laws, world (not lands) | 37.21, 11.47 / 37.21, 11.44 | — | — | 0.34, 5.96 / same | 1 / 1 |
+| floor-megacity-2k | 10.10 + `create_floor` 1.40 / 10.11 + 1.36 | **38.39** / 3.32 | — | 38.39 (hosting) / 27.40 (land) | 119 / 119 |
+| floor-megacity-4k | 10.10 + 1.40 / 10.11 + 1.36 | **out of energy at 120** (step 131) / **14.94** | — | 120 (trap) / 28.80 (land) | stalls at 130 / 142, done |
+| island with seed rule `cover_sight_on: true` (floor) | — / 10.11 + 1.44 | — / 1.48 | 4 steps, at most 4.65 | — / 24.06 | — / 44 |
+| floor-megacity-4k with `cover_sight_on: true` | (traps) / 10.11 + 1.37 | — / 15.29 | 16 steps, 4.23–11.25 | — / 28.80 | — / 158 |
+
+After the fix, no step needs splitting: the largest on any seed is a land-generation step (28.8 × 10⁹ at 4096 m). The first measurement, against `16f50c0c` before staged genesis, gave the same picture inside `init`. The island's `init` went from 118.32 to 100.65 × 10⁹; `floor-megacity-2k` went from out of energy to 90.91 × 10⁹; Cullet's bands were identical.
+
+Native split on `living/tools/land_fuel` (wasmtime configured as 2.14.1), with a temporary export that was not kept:
+
+| Land | `cover::ground` | `cover::candidates` | Hosting and digests |
+| --- | ---: | ---: | ---: |
+| island (2048 m) | 17.49 × 10⁹ | 0.12 × 10⁹ | 1.26 × 10⁹ |
+| plan-test, Cullet (1024 m) | 3.37, 3.58 | 0.03, 0.02 | 0.23, 0.22 |
+| megacity 2048 m | 34.98 | 0.09 | 3.23 |
+| megacity 4096 m | **129.9** (eight slices of 8.3–22.1) | 0.36 | 14.77 |
+
+Sampling is the cost: about 4 × 10³ WASM instructions a tile on the island and 8–10 × 10³ in the megacity, where every height evaluates the city's lots and roads. Persisting the bands is about 0.2 × 10⁹ on the island. On main the 4096 m floor's hosting step needed about 145 × 10⁹: 14.9 without cover, plus about 130 for sampling.
+
+### The design
+
+- **At creation, only when the effective law is on.** The law is the seed's overlay and `rules`, installed in `init` before the land (`floor::begin`). The staged creation keeps the generated land after hosting and samples it in band steps of 64 bands (1,048,576 tiles; `geometry::BANDS_PER_STEP`) after the terrain chunks. `cover::ground_range` gives exactly `ground`'s values for any range of tiles (Cargo `ground_in_bands_is_ground`). With cover off, nothing is sampled or kept.
+- **Derived when switched on.** `set_world_law cover_sight_on true` or an `install_script` whose laws turn cover on starts the derivation. So does the end of a staged creation whose law went on after hosting. This applies on a made land without complete geometry: `geometry::ensure`, in the same transaction as the law write. `cover_step` is a one-shot scheduled reducer that does one bounded step and schedules the next, 100 ms later, like `genesis_step`. First the land is generated again from the `land` row's seed and side and the full parameters (`land_plan`), in `Gen`'s steps. Then the hosted tiles are rebuilt and checked against the `land` row's tile and height digests; a module whose generator differs stops with that reason instead of keeping other heights. Then the bands are written 64 per step. The private `cover_derivation` row shows progress, restarts and `done`, or `stopped: …` with the reason. The instance's memory is a cache. A step that finds the cache is not this land's, or not as far as the row says, starts generation again. Kept bands are kept, since they are written in order and the next band is the count kept. Switching cover off stops the derivation, and switching it on again carries on.
+- **In force only when complete.** `common::cover_in_force` publishes `cover_law.cover_sight_on` as on only when every band is kept (`geometry::ready`, a `land` point lookup and the table's row count). The map compiles no mask before then, and Shade, which follows the `cover_law` row, builds none. Players, minds and clients therefore see the same thing during the derivation. The last step writes a law revision so every cached map compiles its mask on its next read (the tick right after), then publishes the row as on. The admin's own value stays in `law_override` throughout.
+- **Refusals.** `cover sight requires a land world (a seed whose map kind is "land"), once it is made` replaces "cover sight requires a land created with quantized cover geometry", which was no longer true. `set_world_law` and `install_script` refuse it on a world with no `land` row: a world that is not a land, or a floor before its land exists. A seed that is not a land is refused by `floor::begin` as before.
+
+Two new private tables: `cover_derivation`, one row, and `cover_timer`, its schedule. They add no columns to existing tables. The new scheduled reducer `cover_step` refuses any caller but the module itself, as `genesis_step` does. [Schedule tables](https://spacetimedb.com/docs/tables/schedule-tables/) say one-shot rows are deleted after the reducer runs. The [lifecycle](https://spacetimedb.com/docs/functions/reducers/lifecycle) page says scheduled calls carry the module's own identity. [Reducers](https://spacetimedb.com/docs/functions/reducers/), "Global and Static Variables Are Undefined Behavior", is why the in-memory land is only a cache. These are the 2.0 docs. The failure behaviour of one-shot rows was settled for floors against the `v2.14.1` source (docs/FLOORS.md, "A stopped chain"), and this chain relies on the same behaviour. [Tables](https://spacetimedb.com/docs/tables/): `count()` is the documented row count; the docs do not state its cost, and it is read once per step and per policy check, not per tick.
+
+### Data paths
+
+| Path | Reads | Writes | Recipients | Frequency |
+| --- | --- | --- | --- | --- |
+| Creation, cover off | nothing of cover | `cover_law` (off) | `cover_law` subscribers | once |
+| Creation, cover on | the land in memory | `cover_ground` bands (island 256 × 32 KiB; 4096 m 1,024), `cover_law` | none for the bands (private) | once |
+| Switch-on derivation step | `cover_derivation`, `land`, `land_plan` (point lookups), `cover_ground` count | one `cover_derivation` update, a `cover_timer` row; band steps 64 rows | none (private) until the last step's `cover_law` update | about 40 steps on the island, 147 at 4096 m, 100 ms apart |
+| Policy check (`map`, on a law or script revision) | `land` point lookup, `cover_ground` count | — | — | per revision, not per tick |
+
+The retained data is the same bands as before, and only in worlds that use cover. A derivation's land sits in module memory until its last step. It raises the instance's linear memory, which never shrinks, by the generation peak: about 60 MB on the island and 210 MB at 4096 m (`land_fuel`).
+
+### What a derivation costs a running world
+
+| World | Steps | Fuel in total | Largest step | Wall time |
+| --- | ---: | ---: | ---: | ---: |
+| island, live | 40 | 72.9 × 10⁹ | under 29 × 10⁹ (land generation, about 1.2 s) | 6.8 s |
+| megacity 4096 m, live | 147 | 450.8 × 10⁹ | 28.8 × 10⁹ (land tile rows, 1.0 s) | 31.4 s |
+
+Each step blocks the module while it runs, so ticks stop for up to about a second during the large land steps. Switching cover on is a rare admin act. Pause the world first if those stalls matter.
+
+### Staged creation with cover on (4096 m megacity, seed rule `cover_sight_on: true`)
+
+| | Main | Branch, cover off | Branch, cover on |
+| --- | --- | --- | --- |
+| Steps | stalls at step 130 of 141 (hosting traps) | 142, done | 158, done |
+| Hosting | traps at 120 × 10⁹ | 14.9 × 10⁹ | 15.3 × 10⁹ |
+| Cover band steps | (inside hosting) | — | 16, 4.2–11.3 × 10⁹ each |
+| Largest step | 120 (trap) | 28.8 × 10⁹ (land tile rows) | 28.8 × 10⁹ |
+| Fuel in total | — | 346.7 × 10⁹ | 481.6 × 10⁹ |
+| Made in (back to back, ordinary build) | — | about 40 s | about 40 s |
+
+### Proofs
+
+- **Identical bands.** sha256 over every `cover_ground` row (id, heights, candidates):
+  - island: main's genesis (cover off but sampled, at `16f50c0c` and at `b6aa7489`), the branch with the seed rule on, and the branch switched on after creation are all `e36c6426…` (256 rows).
+  - Cullet: main (`16f50c0c` and `b6aa7489`) and the branch (staged band step) are all `6c1e9b53…` (64 rows).
+  - 4096 m megacity: staged with cover on and switched on after creation are both `24ebfd97…` (1,024 rows). Main cannot make it.
+  - plan-test: a compiled seed switched on, a floor switched on, and a floor updated to another build mid-derivation (one restart) are all `278e39c1…` (64 rows).
+- **Behaviour.**
+  - `cover_law` reads false right after the switch and true after the last step.
+  - The tick compiles the mask in the next transaction: `cover: 1778144 mask bytes` on plan-test.
+  - Switching off mid-derivation stops it; switching on again finishes it.
+  - The refusal on the default world names the new reason.
+  - An update with the same module kept the instance (no restart). An update to another build restarted generation once and kept the bands.
+
+Evidence: `~/slop-evidence/cover-genesis-20261120.tar.zst`, with `results.jsonl`, the step traces, the band digests and the measurement patches.
+
+### Limits
+
+- The dead inline path (`seed::seed` for a land, used now only by a test) still samples the whole ground in its one call when cover is on.
+- A derivation generates the land again. Its cost is the land's generation plus sampling: island about 73 × 10⁹, 4096 m about 450 × 10⁹. Up to a second at a time, it runs on a world that may be ticking.

@@ -437,6 +437,10 @@ class World:
             target.unlink(missing_ok=True)     # the module is stored in the database once published
         if r.returncode:
             raise Refuse(f"publish of {db} failed; see {log_path}")
+        if not self.s.floor_seed:
+            # Staged genesis: a seeded world is made by scheduled steps after the publish; the
+            # laws read-back, the minds and the client wait until it is (docs/STAGED_GENESIS.md).
+            self.wait_ready(db)
         if self.s.floor_seed:
             seed = json.loads(self.s.floor_seed.read_text())
             if seed.get("laws_file") and not str(seed.get("laws") or "").strip():
@@ -446,14 +450,15 @@ class World:
                                    json.dumps([json.dumps(seed)]).encode(), timeout=600)
             if code != 200:
                 raise Refuse(f"create_floor on {db} failed (HTTP {code}): {body[:300]!r}")
-            end = time.time() + 1800
-            while time.time() < end:
-                code, rows = self.sql(db, "SELECT done, label FROM genesis")
-                if code == 200 and rows and rows[0][0]:
-                    break
-                time.sleep(3)
-            else:
-                raise Refuse(f"{db}: genesis not done after 30 minutes")
+            self.wait_ready(db)
+
+    def wait_ready(self, db, timeout_s=1800):
+        """Until the world is made (`genesis.done`; genesis_wait.py, the shared rule)."""
+        import genesis_wait
+        try:
+            genesis_wait.wait_ready(self.s.server, db, self.token(), timeout_s=timeout_s)
+        except genesis_wait.GenesisNotReady as e:
+            raise Refuse(str(e)) from e
 
     def delete(self, db):
         if not self.s.db_ok(db):

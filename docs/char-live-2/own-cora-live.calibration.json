@@ -1,0 +1,75 @@
+{
+  "drawing": "docs/char-live-1/face.png",
+  "patches": {
+    "hair shade": {
+      "drawing": [
+        553,
+        106
+      ],
+      "portrait": [
+        874,
+        497
+      ]
+    },
+    "hair mid": {
+      "drawing": [
+        474,
+        165
+      ],
+      "portrait": [
+        825,
+        264
+      ]
+    },
+    "hair light": {
+      "drawing": [
+        409,
+        97
+      ],
+      "portrait": [
+        0,
+        0
+      ]
+    },
+    "hair highlight": {
+      "drawing": [
+        472,
+        114
+      ],
+      "portrait": [
+        0,
+        0
+      ]
+    },
+    "skin cheek": {
+      "drawing": [
+        601,
+        336
+      ],
+      "portrait": [
+        873,
+        414
+      ]
+    },
+    "skin base": {
+      "drawing": [
+        536,
+        374
+      ],
+      "portrait": [
+        0,
+        0
+      ]
+    },
+    "skin shadow": {
+      "drawing": [
+        521,
+        510
+      ],
+      "portrait": [
+        0,
+        0
+      ]
+    }
+  }
+}

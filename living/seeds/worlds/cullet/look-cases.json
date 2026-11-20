@@ -1,6 +1,6 @@
 {
  "about": "Test cases for the look data (living/tools/characters/look_lines.py cases; docs/CHARACTERS.md, 'The look book'). Written with looks.json of the same generation.",
- "generation": "c4-e61b01c0",
+ "generation": "c4-cbcc40bf",
  "key_hash": {
   "rule": "lk_ + the first 16 hex digits of SHA-256 over the UTF-8 canonical JSON of the line's drawn fields: type, height, proportions, identity, colors, styles, belly, grey; keys sorted at every depth, separators ',' and ':', no spaces",
   "cases": [
@@ -202,8 +202,8 @@
     "age": 1.0,
     "stage": 0,
     "band": 0,
-    "look": "lp_3065dabe208a6201",
-    "line": "lk_120567af53642340",
+    "look": "lp_6a54ed7b9470d0b9",
+    "line": "lk_eafffba048fa1ef7",
     "bands": [
      0,
      1,
@@ -217,7 +217,7 @@
     "age": 4.0,
     "stage": 1,
     "band": 1,
-    "look": "lp_23ec2b40af13c7d6",
+    "look": "lp_894b4876929a0b36",
     "line": "lk_4632c8c384232b78",
     "bands": [
      1,
@@ -231,8 +231,8 @@
     "age": 11.0,
     "stage": 1,
     "band": 1,
-    "look": "lp_f3a7f61b2c083e8a",
-    "line": "lk_b689a9235631fe0f",
+    "look": "lp_38e9cfdb7e3b6c8b",
+    "line": "lk_bccc4d5b50bb59c4",
     "bands": [
      1,
      2,
@@ -245,7 +245,7 @@
     "age": 12.0,
     "stage": 1,
     "band": 2,
-    "look": "lp_0bc594473a415a89",
+    "look": "lp_944f7b31609cf21f",
     "line": "lk_436f798280bfba08",
     "bands": [
      2,
@@ -258,7 +258,7 @@
     "age": 14.0,
     "stage": 1,
     "band": 2,
-    "look": "lp_016d80a90c681f3f",
+    "look": "lp_a1eef8cca8d1a011",
     "line": "lk_f56a06e69454dcb0",
     "bands": [
      2,
@@ -271,7 +271,7 @@
     "age": 15.0,
     "stage": 2,
     "band": 2,
-    "look": "lp_767f3b33f5045d5c",
+    "look": "lp_5c8eaeb1f03bf958",
     "line": "lk_dd9728d2af89c072",
     "bands": [
      2,
@@ -284,8 +284,8 @@
     "age": 17.0,
     "stage": 2,
     "band": 2,
-    "look": "lp_b06496dd44b9a3c3",
-    "line": "lk_1111e9726fcead31",
+    "look": "lp_cc4e97c4c2622305",
+    "line": "lk_03227398c21eec83",
     "bands": [
      2,
      3,
@@ -297,8 +297,8 @@
     "age": 18.0,
     "stage": 2,
     "band": 3,
-    "look": "lp_ce662c1882b1d5a7",
-    "line": "lk_5212bebd8f5df2bf",
+    "look": "lp_c17ffd55c0d02957",
+    "line": "lk_4b9f30856bcd37e0",
     "bands": [
      3,
      4
@@ -321,8 +321,8 @@
     "age": 61.0,
     "stage": 3,
     "band": 4,
-    "look": "lp_8449e7c4c9ff47bd",
-    "line": "lk_56dfdef129f3ec4f",
+    "look": "lp_83a6864e460d7620",
+    "line": "lk_336a2c878c2d8589",
     "bands": [
      4
     ]
@@ -332,8 +332,8 @@
     "age": 70.0,
     "stage": 3,
     "band": 4,
-    "look": "lp_c68dd53ae0be7adf",
-    "line": "lk_5ec175213627ec13",
+    "look": "lp_78efdb48a1db9621",
+    "line": "lk_7ef777ee17cad6e3",
     "bands": [
      4
     ]

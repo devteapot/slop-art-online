@@ -1000,7 +1000,9 @@ pub fn seed(ctx: &ReducerContext, now: u64) {
             (r.to_map(), Some(r))
         }
         Some(m) if m.kind == "land" => {
-            let h = crate::island::generate(s.seed, m).expect("land seed");
+            // Cover geometry only for a world whose cover law is on (docs/COVER_SIGHT.md,
+            // "Cover geometry"): the seed's laws are installed before this (`floor::begin`).
+            let h = crate::island::generate(s.seed, m, common::laws(ctx).cover_sight_on).expect("land seed");
             let map = h.map.clone();
             hosted = Some(h);
             (map, None)
@@ -1647,6 +1649,14 @@ fn resource_number(sc: &living_rules::script::Scripts, kind: &str, t: &str, defa
 
 fn spawn_resources(ctx: &ReducerContext, map: &living_rules::map::Map, now: u64) {
     spawn_resources_in(ctx, map, 0..map.h, now);
+}
+
+/// Resources over the whole map, as a world made inline drew them (staged genesis of a land up to
+/// `floor::INLINE_MAX_M`): the same scale, draws and caps as [`seed`].
+pub fn spawn_resources_whole(ctx: &ReducerContext, map: &living_rules::map::Map, s: &Seed, now: u64) {
+    RESOURCE_SCALE.with(|r| *r.borrow_mut() = s.resource_scale.clone());
+    let _draws = Creating::start(s.seed, STEP_RESOURCES);
+    spawn_resources(ctx, map, now);
 }
 
 /// Resources in tile rows `rows` of a staged world: each band gets its share of every kind's
@@ -2466,7 +2476,7 @@ mod tests {
     fn the_cullet_seed_is_hosted() {
         let s: Seed = serde_json::from_str(include_str!("../../seeds/cullet.json")).expect("cullet seed");
         let m = s.map.as_ref().unwrap();
-        if let Err(e) = crate::island::generate(s.seed, m) {
+        if let Err(e) = crate::island::generate(s.seed, m, true) {
             panic!("cullet: {e}");
         }
     }

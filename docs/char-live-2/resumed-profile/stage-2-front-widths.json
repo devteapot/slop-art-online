@@ -1,0 +1,84 @@
+{
+  "method": "Inclusive visible central span in the front beauty at three registered heights; chin span evaluated against the face-only depth pass when the neck lies behind it.",
+  "drawing": {
+    "hairline": 128,
+    "chin": 484,
+    "face_height": 356,
+    "spans": {
+      "cheekbone": [
+        397,
+        651,
+        320
+      ],
+      "jaw": [
+        426,
+        622,
+        414
+      ],
+      "chin": [
+        476,
+        575,
+        458
+      ]
+    },
+    "ratios": [
+      0.7162921348314607,
+      0.5533707865168539,
+      0.39215686274509803
+    ]
+  },
+  "asset": {
+    "hairline": 133,
+    "chin": 377,
+    "face_height": 244,
+    "spans": {
+      "cheekbone": [
+        132,
+        310,
+        265
+      ],
+      "jaw": [
+        151,
+        287,
+        329
+      ],
+      "chin": [
+        184,
+        255,
+        359
+      ]
+    },
+    "ratios": [
+      0.7336065573770492,
+      0.5614754098360656,
+      0.4022346368715084
+    ],
+    "geometry_spans": {
+      "cheekbone": [
+        132,
+        310,
+        265
+      ],
+      "jaw": [
+        152,
+        287,
+        329
+      ],
+      "chin": [
+        184,
+        255,
+        359
+      ]
+    },
+    "geometry_ratios": [
+      0.7336065573770492,
+      0.5573770491803278,
+      0.4022346368715084
+    ]
+  },
+  "tolerances": [
+    0.025,
+    0.025,
+    0.03
+  ]
+}

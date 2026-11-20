@@ -1,0 +1,77 @@
+{"stage": "restart", "materials": 4, "images": ["Render Result"], "failures": ["unapproved image: Render Result"]}
+{"stage": "restart-cleaned", "materials": 4, "images": [], "failures": []}
+{"stage": "restart-cleaned", "materials": 4, "images": [], "failures": []}
+{"stage": "clothing", "materials": 14, "images": [], "failures": []}
+{"stage": "clothing-fit", "materials": 17, "images": [], "failures": []}
+{"stage": "clothing-xhigh", "materials": 17, "images": [], "failures": []}
+{"stage": "hair", "materials": 18, "images": [], "failures": []}
+{"stage": "hair-saved", "materials": 18, "images": [], "failures": []}
+{"stage": "hair-finish", "materials": 18, "images": [], "failures": []}
+{"stage": "hair-finish-saved", "materials": 18, "images": [], "failures": []}
+{"stage": "hair-final", "materials": 18, "images": [], "failures": []}
+{"stage": "face-generated", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png", "tint"], "failures": []}
+{"stage": "face-a", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png", "tint"], "failures": []}
+{"stage": "face-b", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "face-b-saved", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "face-c-fitted", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "face-c", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "face-c-saved", "materials": 25, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "shading", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "shading-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "hands", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "hands-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "hands-b", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "hands-b-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "expressions", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "expressions-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "expressions-b", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "expressions-b-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "rig", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "rig-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "game-export", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "game-export", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "rig-b", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "rig-b-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "final-export", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "game-shading", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "game-shading-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "colours-in-game", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "seat-xhigh-weights", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "seat-xhigh", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "seat-xhigh-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "seat-xhigh-export", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "seat-xhigh-inspection", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2-final", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2-expressions-original", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png", "Render Result"], "failures": ["unapproved image: Render Result"]}
+{"stage": "stage2-expressions", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2-final", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2-expressions", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2-final", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2-expressions", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2-final", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2-expressions", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2-final", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage2-expressions", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "hair4", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "hair4-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage4-authoring", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage4-xhigh-uv", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage4-xhigh-ink", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage4-gc-fade2", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "face3", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "face3-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage3-xhigh", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage3-expressions", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "cloth-final", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "cloth-final-checkpoint", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}
+{"stage": "stage5-cloth-final", "materials": 26, "images": ["cora.atlas.png", "cora.iris.png", "cora.tint.png"], "failures": []}

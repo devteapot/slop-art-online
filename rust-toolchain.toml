@@ -1,0 +1,10 @@
+# One Rust toolchain for every machine and deploy (general coordinator, 2026-11-20).
+# Wasmtime fuel at a module's `init` depends on the compiler that built it: the island seed
+# measured 118.73e9 on rustc 1.99.1 and 119.79e9 on 1.97.1 against SpacetimeDB 2.14.1's 120e9
+# budget, so genesis fuel baselines (living/tools/scene_gate.py) are per toolchain until this pin.
+# Change the version only as its own merge, re-recording the genesis baselines.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"

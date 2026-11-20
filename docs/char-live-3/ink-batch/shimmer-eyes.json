@@ -1,0 +1,96 @@
+{
+  "file": "view/own-cora-live.glb",
+  "slot": "eyes",
+  "material": null,
+  "ink": {
+    "Cora_LidInk_EYE": {
+      "color": [
+        14,
+        5,
+        4
+      ],
+      "width": "uv",
+      "min_px": 1.0,
+      "range": 0.021154
+    },
+    "Cora_BrowInk_EYE": {
+      "color": [
+        57,
+        32,
+        20
+      ],
+      "width": "uv",
+      "min_px": 1.0,
+      "range": 0.021154
+    }
+  },
+  "also": [
+    "portrait",
+    "0:8:0.16:0.91"
+  ],
+  "passed": true,
+  "sequences": [
+    {
+      "sequence": "near pan",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "near zoom",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "middle pan",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "middle zoom",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "far pan",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "far zoom",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "portrait pan",
+      "f_ink": 0.097,
+      "f_edge": 0.199,
+      "ratio": 0.49,
+      "ink_px": 1740.1,
+      "result": "pass"
+    },
+    {
+      "sequence": "portrait zoom",
+      "f_ink": 0.287,
+      "f_edge": 0.622,
+      "ratio": 0.46,
+      "ink_px": 1818.3,
+      "result": "pass"
+    },
+    {
+      "sequence": "0_8_0.16_0.91 pan",
+      "f_ink": 0.065,
+      "f_edge": 0.286,
+      "ratio": 0.23,
+      "ink_px": 8804.4,
+      "result": "pass"
+    },
+    {
+      "sequence": "0_8_0.16_0.91 zoom",
+      "f_ink": 0.111,
+      "f_edge": 0.739,
+      "ratio": 0.15,
+      "ink_px": 9258.4,
+      "result": "pass"
+    }
+  ]
+}

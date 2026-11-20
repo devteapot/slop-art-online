@@ -1,0 +1,25 @@
+{
+  "flank_u": 0.484,
+  "flank_half_u": 0.043,
+  "curve_v": 0.738,
+  "curve_bend": 0.012,
+  "curve_tilt": 0.004,
+  "below": 0.0035,
+  "above": 0.0045,
+  "pigment": [
+    0.38,
+    0.41,
+    0.42
+  ],
+  "glint_uv": [
+    0.502,
+    0.711
+  ],
+  "glint_ru": 0.0045,
+  "glint_rv": 0.0025,
+  "glint_rgb": [
+    255,
+    236,
+    211
+  ]
+}

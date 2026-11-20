@@ -1,0 +1,111 @@
+{
+  "tolerance": {
+    "hair": 8,
+    "other": 10
+  },
+  "patches": {
+    "hair shade": {
+      "target": [
+        88,
+        42,
+        27
+      ],
+      "drawing": [
+        553,
+        106
+      ],
+      "swatch": "shade",
+      "portrait45": [
+        911,
+        477
+      ],
+      "portrait": [
+        867,
+        478
+      ]
+    },
+    "hair mid": {
+      "target": [
+        152,
+        72,
+        43
+      ],
+      "drawing": [
+        474,
+        165
+      ],
+      "swatch": "mid",
+      "portrait": [
+        757,
+        302
+      ],
+      "portrait45": [
+        878,
+        378
+      ]
+    },
+    "hair light": {
+      "target": [
+        171,
+        88,
+        56
+      ],
+      "drawing": [
+        409,
+        97
+      ],
+      "swatch": "light",
+      "portrait": [
+        825,
+        271
+      ],
+      "portrait45": [
+        822,
+        272
+      ]
+    },
+    "hair highlight": {
+      "target": [
+        187,
+        99,
+        63
+      ],
+      "drawing": [
+        472,
+        114
+      ],
+      "swatch": "highlight",
+      "portrait45": [
+        880,
+        295
+      ],
+      "portrait": [
+        773,
+        267
+      ]
+    }
+  },
+  "calibration_host": "dev-box AMD Linux",
+  "calibrated_base_srgb": {
+    "shade": [
+      45,
+      7,
+      2
+    ],
+    "mid": [
+      101,
+      36,
+      7
+    ],
+    "light": [
+      119,
+      43,
+      6
+    ],
+    "highlight": [
+      135,
+      47,
+      3
+    ]
+  }
+}

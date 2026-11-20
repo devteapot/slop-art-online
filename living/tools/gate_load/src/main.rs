@@ -38,8 +38,8 @@ mod soak;
 
 use living_bindings::*;
 use serde_json::{json, Value};
-use spacetimedb_sdk::{DbContext, Event, Identity, Table, TableWithPrimaryKey};
-use std::collections::{BTreeMap, HashMap};
+use spacetimedb_sdk::{DbContext, Event, EventTable, Identity, Table, TableWithPrimaryKey};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::{BufRead, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -153,6 +153,7 @@ fn counts_json(c: &Counts) -> Value {
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Role {
     Battle,
+    Duel,
     Walk,
 }
 
@@ -175,6 +176,81 @@ struct St {
     release_block_at: Option<Instant>,
     /// Until when my own last move holds me, as my client knows it (no skill is tried before).
     held_until: Option<Instant>,
+    /// How fresh others' new motion segments are when they reach me (sampled players only).
+    fresh: Fresh,
+}
+
+/// For each other body, the newest motion segment start (`t_ms`) received, by its view or a cue;
+/// and, for each newer one received, how late it came (receipt less `t_ms`, ms), by distance from
+/// me then (within 8 m: near), with how it came first.
+#[derive(Default)]
+struct Fresh {
+    last_t: HashMap<u32, u64>,
+    /// `seen_body_copy` rows held per creature (no primary key: a change is an insert of the new
+    /// row, then the delete of the old one, in one transaction; the SDK fires inserts first).
+    held: HashMap<u32, u32>,
+    near: BTreeMap<u64, u32>,
+    all: BTreeMap<u64, u32>,
+    by_cue: u32,
+    by_view: u32,
+}
+
+const NEAR_M: f32 = 8.0;
+/// Freshness is recorded between a `fresh on` line and a `fresh off` line (the profiled window).
+static FRESH_ON: AtomicBool = AtomicBool::new(false);
+
+fn fresh_sample(ctx: &EventContext, st: &Mutex<St>, m: &Moving, cue: bool, first: bool) {
+    let now = now_ms();
+    let mut s = st.lock().unwrap();
+    let Some(me) = s.me else { return };
+    let newer = s.fresh.last_t.get(&m.id).is_none_or(|t| m.t_ms > *t);
+    if !newer {
+        return;
+    }
+    s.fresh.last_t.insert(m.id, m.t_ms);
+    if first || !FRESH_ON.load(Ordering::Relaxed) {
+        return;
+    }
+    let late = now.saturating_sub(m.t_ms);
+    let near = ctx.db.my_body().id().find(&me).is_some_and(|b| dist(pos(&b, now), pos(m, now)) <= NEAR_M);
+    *s.fresh.all.entry(late).or_default() += 1;
+    if near {
+        *s.fresh.near.entry(late).or_default() += 1;
+    }
+    if cue {
+        s.fresh.by_cue += 1;
+    } else {
+        s.fresh.by_view += 1;
+    }
+}
+
+/// A perceived body's motion row from whichever of `seen_bodies` or its two tiers
+/// (`seen_bodies_near`, `seen_bodies_far`; frame-views) the connection subscribed.
+fn seen_body(db: &RemoteTables, id: u32) -> Option<Moving> {
+    db.seen_bodies().id().find(&id).or_else(|| db.seen_bodies_near().id().find(&id)).or_else(|| db.seen_bodies_far().id().find(&id))
+        // The public copy table (battle-views): a client holds only its own rows, one per creature.
+        .or_else(|| db.seen_body_copy().iter().find(|c| c.body == id).map(|c| copy_moving(&c)))
+}
+
+/// The `Moving` a `seen_body_copy` row stands for (battle-views' slim row: `body` and its segment).
+fn copy_moving(c: &SeenBodyCopy) -> Moving {
+    let s = &c.seg;
+    Moving { id: c.body, x: s.x, y: s.y, t_ms: s.t_ms, vx: s.vx, vy: s.vy, heading: s.heading, turn: s.turn, turn_s: s.turn_s, next_ms: s.next_ms, speed: s.speed,
+             face_off: s.face_off, face_turn: s.face_turn, face_turn_s: s.face_turn_s, running: s.running }
+}
+
+/// The characters I perceive, from the `seen_characters` view or its mirror table (battle-views).
+fn seen_characters_of(db: &RemoteTables) -> Vec<SeenCharacter> {
+    db.seen_characters().iter().chain(db.seen_character_copy().iter().map(|c| c.row)).collect()
+}
+
+fn seen_body_count(db: &RemoteTables) -> u64 {
+    db.seen_bodies().count() + db.seen_bodies_near().count() + db.seen_bodies_far().count() + db.seen_body_copy().count()
+}
+
+fn fresh_json(f: &Fresh) -> Value {
+    let hist = |h: &BTreeMap<u64, u32>| h.iter().map(|(k, v)| (k.to_string(), json!(v))).collect::<serde_json::Map<_, _>>();
+    json!({"near": hist(&f.near), "all": hist(&f.all), "by_cue": f.by_cue, "by_view": f.by_view})
 }
 
 struct Player {
@@ -186,7 +262,52 @@ struct Player {
     st: Arc<Mutex<St>>,
     applied: Arc<Mutex<u32>>,
     errors: Arc<Mutex<Vec<String>>>,
+    /// Sampled for motion freshness (`Fresh`).
+    fresh: bool,
+    /// The copy rows this connection received and whose they were (copy-privacy).
+    privacy: Arc<Mutex<Privacy>>,
 }
+
+/// Every `seen_body_copy` and `seen_character_copy` row a viewer receives (its initial rows, then
+/// each insert and update), checked against the connection's own identity: row-level security
+/// (`viewer = :sender`) must give it only its own (copy-privacy, docs/BATTLE_VIEWERS.md). Counted
+/// from the connection on, across deaths and rejoins (the identity stays).
+#[derive(Default)]
+struct Privacy {
+    body_rows: u64,
+    character_rows: u64,
+    foreign_rows: u64,
+    /// Up to 8 foreign viewers' identities (hex), for the report.
+    foreign_viewers: BTreeSet<String>,
+}
+
+impl Privacy {
+    fn check(&mut self, own: Identity, viewer: Identity, body: bool) {
+        if body {
+            self.body_rows += 1;
+        } else {
+            self.character_rows += 1;
+        }
+        if viewer != own {
+            self.foreign_rows += 1;
+            if self.foreign_viewers.len() < 8 {
+                self.foreign_viewers.insert(viewer.to_hex().to_string());
+            }
+        }
+    }
+
+    fn json(&self) -> Value {
+        json!({"body_rows": self.body_rows, "character_rows": self.character_rows, "foreign_rows": self.foreign_rows, "foreign_viewers": self.foreign_viewers})
+    }
+}
+
+/// The copies a connection holds now (its client cache), by table.
+fn held_copies(db: &RemoteTables) -> Value {
+    json!({"body": db.seen_body_copy().count(), "character": db.seen_character_copy().count()})
+}
+
+/// `held` on stdin: print every player's copies held now and its privacy counts (copy-privacy).
+static HELD_REQ: AtomicBool = AtomicBool::new(false);
 
 fn status(res: &Result<Result<(), String>, spacetimedb_sdk::__codegen::InternalError>) -> String {
     match res {
@@ -308,12 +429,28 @@ fn connect(uri: &str, db: &str, token: &str, confirmed: Option<bool>) -> (DbConn
     (conn, identity)
 }
 
-fn hook(p: &Player, log: &Log) {
+fn hook(p: &Player, log: &Log, own: Identity) {
     let conn = &p.conn;
+    {
+        let pv = p.privacy.clone();
+        conn.db.seen_body_copy().on_insert(move |_, c| pv.lock().unwrap().check(own, c.viewer, true));
+        let pv = p.privacy.clone();
+        conn.db.seen_character_copy().on_insert(move |_, c| pv.lock().unwrap().check(own, c.viewer, false));
+        let pv = p.privacy.clone();
+        conn.db.seen_character_copy().on_update(move |_, _, c| pv.lock().unwrap().check(own, c.viewer, false));
+    }
     count!(conn, p.counts, seen_bodies);
     count!(conn, p.counts, seen_characters);
     count!(conn, p.counts, seen_fighters);
     count!(conn, p.counts, seen_doing);
+    count!(conn, p.counts, seen_bodies_near);
+    count!(conn, p.counts, seen_bodies_far);
+    count_plain!(conn, p.counts, seen_body_copy);
+    count!(conn, p.counts, seen_character_copy);
+    count!(conn, p.counts, seen_fighters_near);
+    count!(conn, p.counts, seen_fighters_far);
+    count!(conn, p.counts, seen_doing_near);
+    count!(conn, p.counts, seen_doing_far);
     count!(conn, p.counts, my_vitals);
     count!(conn, p.counts, my_experience);
     count!(conn, p.counts, my_characters);
@@ -353,6 +490,120 @@ fn hook(p: &Player, log: &Log) {
             lg.put(json!({"k": "alive", "p": idx, "id": c.id, "name": c.name, "ts": unix_us()}));
         }
     });
+    // The cue event tables (frame-views; docs/PERCEPTION.md, "Cues"), counted as inserts. They are
+    // subscribed only when the request says `cues` (a module without them refuses the query).
+    for (table, c) in [("seen_body_cue", p.counts.clone()), ("seen_fighter_cue", p.counts.clone()), ("seen_doing_cue", p.counts.clone())] {
+        let bump = move || c.lock().unwrap().entry(table).or_default()[0] += 1;
+        match table {
+            "seen_body_cue" => {
+                EventTable::on_insert(&conn.db.seen_body_cue(), move |_, _| bump());
+            }
+            "seen_fighter_cue" => {
+                EventTable::on_insert(&conn.db.seen_fighter_cue(), move |_, _| bump());
+            }
+            _ => {
+                EventTable::on_insert(&conn.db.seen_doing_cue(), move |_, _| bump());
+            }
+        }
+    }
+    if p.fresh {
+        macro_rules! sample_view {
+            ($table:ident) => {{
+                let st = p.st.clone();
+                conn.db.$table().on_insert(move |ctx, m| fresh_sample(ctx, &st, m, false, true));
+                let st = p.st.clone();
+                conn.db.$table().on_update(move |ctx, _, m| fresh_sample(ctx, &st, m, false, false));
+            }};
+        }
+        sample_view!(seen_bodies);
+        sample_view!(seen_bodies_near);
+        sample_view!(seen_bodies_far);
+        let st = p.st.clone();
+        // No primary key: a copy's change arrives as a delete and an insert in one update, so an
+        // insert of a creature already shown is a new segment (`fresh_sample` keeps the newest).
+        conn.db.seen_body_copy().on_insert(move |ctx, c| {
+            // A change if the creature's old row is still held (its delete follows); an entry or a
+            // re-entry into sight otherwise, which is not a fresh segment.
+            let first = {
+                let mut s = st.lock().unwrap();
+                let held = s.fresh.held.entry(c.body).or_default();
+                *held += 1;
+                *held == 1
+            };
+            fresh_sample(ctx, &st, &copy_moving(c), false, first);
+        });
+        let st = p.st.clone();
+        conn.db.seen_body_copy().on_delete(move |_, c| {
+            let mut s = st.lock().unwrap();
+            if let Some(h) = s.fresh.held.get_mut(&c.body) {
+                *h = h.saturating_sub(1);
+                if *h == 0 {
+                    s.fresh.held.remove(&c.body);
+                }
+            }
+        });
+        let st = p.st.clone();
+        EventTable::on_insert(&conn.db.seen_body_cue(), move |ctx, c| {
+            // A cue of a body not yet in my view is not a new segment of one I see.
+            if seen_body(&ctx.db, c.motion.id).is_some() {
+                fresh_sample(ctx, &st, &c.motion, true, false);
+            }
+        });
+    }
+    if p.role == Role::Duel {
+        let (lg, idx) = (log.clone(), p.idx);
+        let fighter = move |f: &Fighter, via: &str| {
+            if f.act != 0 && f.release_ms > f.act_ms {
+                lg.put(json!({"k": "seen_windup", "p": idx, "actor": f.id, "target": f.target,
+                              "start_ms": f.act_ms, "release_ms": f.release_ms, "via": via, "ts": unix_us()}));
+            }
+        };
+        macro_rules! windups {
+            ($table:ident) => {{
+                let inserted = fighter.clone();
+                conn.db.$table().on_insert(move |_, f| inserted(f, "view"));
+                let updated = fighter.clone();
+                conn.db.$table().on_update(move |_, a, b| {
+                    if a.act != b.act || a.act_ms != b.act_ms {
+                        updated(b, "view");
+                    }
+                });
+            }};
+        }
+        windups!(seen_fighters);
+        windups!(seen_fighters_near);
+        windups!(seen_fighters_far);
+        EventTable::on_insert(&conn.db.seen_fighter_cue(), move |_, c| {
+            if let Some(f) = &c.fighter {
+                fighter(f, "cue");
+            }
+        });
+        let (lg, idx) = (log.clone(), p.idx);
+        let doing = move |d: &Doing, via: &str| {
+            lg.put(json!({"k": "seen_doing", "p": idx, "actor": d.id, "target": d.target,
+                          "start_ms": d.since_ms, "via": via, "ts": unix_us()}));
+        };
+        macro_rules! acts {
+            ($table:ident) => {{
+                let inserted = doing.clone();
+                conn.db.$table().on_insert(move |_, d| inserted(d, "view"));
+                let updated = doing.clone();
+                conn.db.$table().on_update(move |_, a, b| {
+                    if a.code != b.code || a.since_ms != b.since_ms {
+                        updated(b, "view");
+                    }
+                });
+            }};
+        }
+        acts!(seen_doing);
+        acts!(seen_doing_near);
+        acts!(seen_doing_far);
+        EventTable::on_insert(&conn.db.seen_doing_cue(), move |_, c| {
+            if let Some(d) = &c.doing {
+                doing(d, "cue");
+            }
+        });
+    }
     // My own motion row changed by my own call.
     let st = p.st.clone();
     let mine = move |ctx: &EventContext, id: u32, st: &Arc<Mutex<St>>| {
@@ -521,11 +772,11 @@ fn fight(p: &Player, log: &Log, cards: &HashMap<String, Card>, center: (f32, f32
     let here = pos(&mb, now);
     let current = p.st.lock().unwrap().target;
     let mut best: Option<(u32, (f32, f32), f32)> = None;
-    for c in db.seen_characters().iter() {
+    for c in seen_characters_of(db) {
         if c.own || c.id == me || c.kind != "person" {
             continue;
         }
-        let Some(b) = db.seen_bodies().id().find(&c.id) else { continue };
+        let Some(b) = seen_body(db, c.id) else { continue };
         let at = pos(&b, now);
         let d = dist(here, at) * if c.id == current { 0.7 } else { 1.0 };
         if best.is_none_or(|(_, _, bd)| d < bd) {
@@ -630,22 +881,56 @@ fn players_mode() {
     let cfg = req["behaviour"].clone();
     let center = (req["battle"][0].as_f64().unwrap() as f32, req["battle"][1].as_f64().unwrap() as f32);
     let client = Client::from(&req["client"]);
+    // Subscribe the cue event tables (a module with them), and sample every Nth player's motion
+    // freshness (0: none).
+    let cues = req["cues"].as_bool().unwrap_or(false);
+    let tiers = req["tiers"].as_bool().unwrap_or(false);
+    // The public motion copies (battle-views, the `motion_tables_on` law): `seen_body_copy` in
+    // place of the motion views, as a client on the tables subscribes.
+    let motion_tables = req["motion_tables"].as_bool().unwrap_or(false);
+    // The mirror of a player's projections (battle-views addendum 2, `characters_table_on`):
+    // `seen_character_copy` in place of the `seen_characters` view.
+    let character_tables = req["character_tables"].as_bool().unwrap_or(false);
+    let fresh_every = req["fresh_every"].as_u64().unwrap_or(0) as usize;
     let started = Instant::now();
     let mut players = Vec::new();
     for (idx, p) in req["players"].as_array().unwrap().iter().enumerate() {
         let role = match p["role"].as_str() {
             Some("battle") => Role::Battle,
+            Some("duel") => Role::Duel,
             Some("walk") => Role::Walk,
             r => panic!("role {r:?}"),
         };
         let t = unix_us();
         let (conn, identity) = connect(&uri, &db, p["token"].as_str().unwrap(), client.confirmed());
         log.put(json!({"k": "conn", "p": idx, "role": format!("{role:?}"), "identity": identity.to_hex().to_string(), "ts": t, "connected": unix_us()}));
-        let pl = Player { idx, role, name: p["name"].as_str().unwrap().to_string(), conn, counts: Arc::default(), st: Arc::default(), applied: Arc::default(), errors: Arc::default() };
-        hook(&pl, &log);
-        subscribe(&pl, client.base());
+        let fresh = fresh_every > 0 && idx % fresh_every == 0;
+        let pl = Player { idx, role, name: p["name"].as_str().unwrap().to_string(), conn, counts: Arc::default(), st: Arc::default(), applied: Arc::default(), errors: Arc::default(), fresh, privacy: Arc::default() };
+        hook(&pl, &log, identity);
+        let mut queries = client.base();
+        // What the game client subscribes with the tiers (frame-views): the two tiers of each
+        // perception view in place of the view; with cues, also the three cue event tables.
+        // Separate switches, so the cue subscriptions' own cost can be measured.
+        if tiers {
+            queries.retain(|q| !["SELECT * FROM seen_bodies", "SELECT * FROM seen_fighters", "SELECT * FROM seen_doing"].contains(&q.as_str()));
+            queries.extend(["seen_bodies_near", "seen_bodies_far", "seen_fighters_near", "seen_fighters_far", "seen_doing_near", "seen_doing_far"].map(|t| format!("SELECT * FROM {t}")));
+        }
+        if cues {
+            queries.extend(["seen_body_cue", "seen_fighter_cue", "seen_doing_cue"].map(|t| format!("SELECT * FROM {t}")));
+        }
+        if motion_tables {
+            queries.retain(|q| !["SELECT * FROM seen_bodies", "SELECT * FROM seen_bodies_near", "SELECT * FROM seen_bodies_far"].contains(&q.as_str()));
+            queries.push("SELECT * FROM seen_body_copy".to_string());
+        }
+        if character_tables {
+            queries.retain(|q| q.as_str() != "SELECT * FROM seen_characters");
+            queries.push("SELECT * FROM seen_character_copy".to_string());
+        }
+        subscribe(&pl, queries);
         players.push(pl);
     }
+    let duel: Vec<_> = players.iter().filter(|p| p.role == Role::Duel).collect();
+    assert!(duel.is_empty() || duel.len() == 2, "a duel needs two players");
     wait_applied(&players, 1, "base", Duration::from_secs(120));
     for p in &players {
         if p.st.lock().unwrap().me.is_none() {
@@ -665,10 +950,22 @@ fn players_mode() {
     let size = players[0].conn.db.land().iter().next().map_or(2048, |l| l.size);
     let t = Instant::now();
     for p in &players {
-        let me = p.st.lock().unwrap().me.unwrap();
+        let mut asked: Option<Instant> = None;
         let at = loop {
-            if let Some(b) = p.conn.db.my_body().id().find(&me) {
-                break (b.x, b.y);
+            // A viewer killed before the window (a battle round it) joins again, as walkers do.
+            let me = p.st.lock().unwrap().me;
+            match me {
+                None => {
+                    if asked.is_none_or(|a| a.elapsed() > Duration::from_secs(3)) {
+                        send_join(p, &log, p.name.clone());
+                        asked = Some(Instant::now());
+                    }
+                }
+                Some(me) => {
+                    if let Some(b) = p.conn.db.my_body().id().find(&me) {
+                        break (b.x, b.y);
+                    }
+                }
             }
             assert!(t.elapsed() < Duration::from_secs(60), "no body for player {}", p.idx);
             std::thread::sleep(Duration::from_millis(10));
@@ -677,7 +974,7 @@ fn players_mode() {
     }
     wait_applied(&players, 2, "windows", Duration::from_secs(180));
     let cards: HashMap<String, Card> = players[0].conn.db.skill_card().iter().map(|c| (c.skill.clone(), Card { cost: c.cost, reach: c.reach, hold_ms: (c.windup_ms + c.recover_ms) as u64 })).collect();
-    let held: Vec<Value> = players.iter().map(|p| json!({"bodies": p.conn.db.seen_bodies().count(), "characters": p.conn.db.seen_characters().count()})).collect();
+    let held: Vec<Value> = players.iter().map(|p| json!({"bodies": seen_body_count(&p.conn.db), "characters": seen_characters_of(&p.conn.db).len()})).collect();
     println!("{}", json!({"event": "ready", "after_s": started.elapsed().as_secs_f32(), "cards": cards.keys().collect::<Vec<_>>(), "held": held}));
     let _ = std::io::stdout().flush();
     wait_for(&lines, "go");
@@ -697,7 +994,13 @@ fn players_mode() {
                 f2.store(l == "battle", Ordering::SeqCst);
                 lg.put(json!({"k": l, "ts": unix_us()}));
             }
+            "fresh on" | "fresh off" => {
+                FRESH_ON.store(l == "fresh on", Ordering::SeqCst);
+                lg.put(json!({"k": l, "ts": unix_us()}));
+            }
+            "held" => HELD_REQ.store(true, Ordering::SeqCst),
             "stop" | "eof" => {
+                FRESH_ON.store(false, Ordering::SeqCst);
                 s2.store(true, Ordering::SeqCst);
                 return;
             }
@@ -712,12 +1015,18 @@ fn players_mode() {
         .iter()
         .map(|p| Instant::now() + Duration::from_millis(match p.role {
             Role::Battle => fight_ms * p.idx as u64 / n as u64,
+            Role::Duel => 1_500 * u64::from(p.idx == duel[1].idx),
             Role::Walk => walk_ms * p.idx as u64 / n as u64,
         }))
         .collect();
     let mut rngs: Vec<Rng> = (0..n).map(|i| Rng(0x9E37_79B9_7F4A_7C15 ^ (i as u64 + 1).wrapping_mul(0xBF58_476D_1CE4_E5B9))).collect();
     let mut late = 0u64;
+    let mut duel_turns = [0; 2];
     while !stop.load(Ordering::SeqCst) {
+        if HELD_REQ.swap(false, Ordering::SeqCst) {
+            let held: Vec<Value> = players.iter().map(|p| json!({"p": p.idx, "alive": p.st.lock().unwrap().me.is_some(), "held": held_copies(&p.conn.db), "privacy": p.privacy.lock().unwrap().json()})).collect();
+            println!("{}", json!({"event": "held", "players": held}));
+        }
         let now = Instant::now();
         for (i, p) in players.iter().enumerate() {
             if next[i] > now {
@@ -730,6 +1039,23 @@ fn players_mode() {
                 Role::Battle if fighting.load(Ordering::Relaxed) => {
                     fight(p, &log, &cards, center, &mut rngs[i], &cfg);
                     fight_ms
+                }
+                Role::Duel => {
+                    if fighting.load(Ordering::Relaxed) {
+                        let side = usize::from(p.idx == duel[1].idx);
+                        let target = duel[1 - side].st.lock().unwrap().me;
+                        if let Some(b) = target.and_then(|id| seen_body(&p.conn.db, id)) {
+                            let (x, y) = pos(&b, now_ms());
+                            if duel_turns[side] % 2 == 0 {
+                                send_skill(p, &log, "strike", b.id, x, y, 0);
+                            } else {
+                                let node = json!({"do": {"skill": "wave", "target": {"id": b.id}}}).to_string();
+                                p.conn.reducers.human_act(node).expect("send duel wave");
+                            }
+                            duel_turns[side] += 1;
+                        }
+                    }
+                    3_000
                 }
                 Role::Battle | Role::Walk => {
                     walk(p, &log, &cfg);
@@ -749,7 +1075,8 @@ fn players_mode() {
         .map(|p| {
             let s = p.st.lock().unwrap();
             json!({"p": p.idx, "role": format!("{:?}", p.role), "lives": s.lives, "alive": s.me.is_some(), "calls": s.seq, "unanswered": s.pending,
-                   "events": counts_json(&p.counts), "held": {"bodies": p.conn.db.seen_bodies().count(), "characters": p.conn.db.seen_characters().count()},
+                   "events": counts_json(&p.counts), "fresh": p.fresh.then(|| fresh_json(&s.fresh)), "held": {"bodies": seen_body_count(&p.conn.db), "characters": seen_characters_of(&p.conn.db).len()},
+                   "copies": held_copies(&p.conn.db), "privacy": p.privacy.lock().unwrap().json(),
                    "errors": *p.errors.lock().unwrap()})
         })
         .collect();

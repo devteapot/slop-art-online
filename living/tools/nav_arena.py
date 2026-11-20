@@ -20,7 +20,7 @@ Writes, per phase, `<out>/<arena>-<variant>-<law>-<subject>/`:
                   optimal from `nav_optimal`, the belief snapshot file
   belief-*.json   the subject's known_ground, remembered gates and the world's ground edits at
                   the order (what `nav_optimal` reads for the known-map optimal)
-  bodies.jsonl    every body row update of the arena's characters (a subscription)
+  bodies.jsonl    transaction updates for the cast's body, queued acts, activity and steering
   stimuli.jsonl   what the driver did and when (authority time), with the clock's spread
   bench.json      `bench.py` over the phase: tick spans (`tick.motion`), body writes
   phase.json      the setup: sites, laws, cast, guards (known_ground rows and bytes)
@@ -31,6 +31,7 @@ import json
 import math
 import os
 import random
+import re
 import subprocess
 import sys
 import time
@@ -41,6 +42,7 @@ sys.path.insert(0, str(ROOT / ".agents/skills/verify-core/scripts"))
 sys.path.insert(0, str(ROOT / "living/tools"))
 import scenes  # noqa: E402
 import walk_times  # noqa: E402
+from nav_report import path_crosses  # noqa: E402
 
 STDB = str(ROOT / "living/tools/stdb")
 TARGET = Path(os.environ.get("CARGO_TARGET_DIR", str(ROOT / "living/target")))
@@ -190,7 +192,7 @@ class World:
 
     def optimal(self, walks, shut):
         """True-map optimal per walk (`nav_optimal`, no belief): time and length in metres."""
-        q = [{"start": w["start"], "goal": w["goal"], "shut": shut, "known": [], "edits": [], "gates_seen": [], "road_speed": self.road, "unknown_cost": self.unknown} for w in walks]
+        q = [{"start": w["start"], "goal": w["goal"], "shut": shut, "known": [], "edits": [], "gates_seen": [], "road_speed": self.road, "unknown_cost": self.unknown, "path": w.get("path", False)} for w in walks]
         f = self.s.out / f"nav-opt-{time.time_ns()}.json"
         f.write_text(json.dumps(q))
         out = subprocess.run([str(TARGET / "release/examples/nav_optimal"), str(self.tiles_file), str(self.W), str(self.H), str(f)], capture_output=True, text=True, timeout=600)
@@ -202,15 +204,24 @@ class World:
 class Phase:
     """One phase's recording: a body subscription, the stimulus log, bench alongside."""
 
-    def __init__(self, world, folder, ids, seconds, bench=True, known_ids=(), bench_seconds=90):
+    def __init__(self, world, folder, ids, seconds, bench=True, known_ids=(), bench_seconds=90, record_acts=False, gates=()):
         self.w, self.dir = world, Path(folder)
         self.dir.mkdir(parents=True, exist_ok=True)
         self.stim = (self.dir / "stimuli.jsonl").open("a")
         q = "SELECT * FROM body WHERE " + " OR ".join(f"id = {i}" for i in ids) if len(ids) <= 60 else "SELECT * FROM body"
         queries = [q]
+        if record_acts:
+            actors = " OR ".join(f"actor = {i}" for i in known_ids)
+            subjects = " OR ".join(f"id = {i}" for i in known_ids)
+            queries += [f"SELECT * FROM act_queue WHERE {actors}",
+                        f"SELECT * FROM activity WHERE {subjects}",
+                        f"SELECT * FROM steer WHERE {subjects}"]
         if known_ids:
             where = " OR ".join(f"actor = {i}" for i in known_ids)
             queries.append("SELECT * FROM known_ground WHERE " + where)
+        if gates:
+            queries.extend(f"SELECT * FROM remembered WHERE observer = {actor} AND target = {gate}"
+                           for actor in known_ids for gate in gates)
         self.sub = subprocess.Popen([STDB, "subscribe", "-s", "local", world.s.db, *queries, "-t", str(int(seconds)), "--print-initial-update"],
                                     stdout=(self.dir / "bodies.jsonl").open("w"), stderr=(self.dir / "subscribe.log").open("w"))
         self.bench = None
@@ -240,6 +251,28 @@ class Phase:
                     p.wait(10)
                 except subprocess.TimeoutExpired:
                     p.kill()
+
+
+def route_exits(world, folder, walks):
+    """Join terminal planner diagnostics to scored walks by actor and authority timestamp."""
+    pattern = re.compile(r"route_exit actor=(\d+) at_ms=(\d+) reason=(\w+)")
+    exits = []
+    log_path = folder / "route-exits.jsonl"
+    # Read after the phase so diagnostics include refusals before the bench begins.
+    with subprocess.Popen([STDB, "logs", "-s", "local", world.s.db],
+                          stdout=subprocess.PIPE, text=True) as logs:
+        for line in logs.stdout:
+            match = pattern.search(line)
+            if not match:
+                continue
+            actor, stamp, reason = match.groups()
+            actor, stamp = int(actor), int(stamp)
+            for walk in walks:
+                if actor == walk["subject"] and walk["order_ms"][0] <= stamp <= walk["end_ms"]:
+                    exits.append({"subject": actor, "walk": walk["walk"], "at_ms": stamp, "reason": reason})
+    if logs.returncode != 0:
+        raise RuntimeError(f"route diagnostics reader exited {logs.returncode}")
+    log_path.write_text("".join(json.dumps(row) + "\n" for row in exits))
 
 
 class Subject:
@@ -285,7 +318,7 @@ def spread(world, centre, n, across, step=6.0, shut=()):
     return out
 
 
-def walks_to(world, phase, subs, legs, law, timeout_x=3.0, extra_s=20.0, run=False, box=None, record=None):
+def walks_to(world, phase, subs, legs, law, timeout_x=3.0, extra_s=20.0, run=False, box=None, record=None, after_dispatch=None):
     """Walk every subject through its `legs` (a list per subject of lists of points: one walk's
     waypoints, the last its goal), all at once, each walk ordered when the last ended. Returns
     the walk records."""
@@ -310,10 +343,13 @@ def walks_to(world, phase, subs, legs, law, timeout_x=3.0, extra_s=20.0, run=Fal
         snapf = phase.dir / f"belief-{sub.id}-{st['k']}.json"
         world.snapshot(sub.id, snapf)
         t0 = world.now()
+        send_ms = time.time_ns() / 1_000_000
         sub.go(pts[0], run)
+        ack_ms = time.time_ns() / 1_000_000
         t1 = world.now()
         true_s = (opt["true"]["time_m"] / 1.3) if opt.get("true") else None
         st["rec"] = {"subject": sub.id, "kind": sub.kind, "law": law, "walk": st["k"], "start": [round(here[0], 2), round(here[1], 2)], "goal": [round(goal[0], 2), round(goal[1], 2)], "shut_tiles": shut,
+                     "order_send_wall_ms": send_ms, "order_ack_wall_ms": ack_ms,
                      "waypoints": [[round(p[0], 2), round(p[1], 2)] for p in pts[:-1]], "order_ms": [t0, t1], "true": opt.get("true"), "belief_file": snapf.name,
                      "prior_cells_in_box": world.cells_in_box(sub.id, box) if box else None, "deadline_s": (timeout_x * true_s + extra_s) if true_s else 240.0}
         phase.mark("order", subject=sub.id, walk=st["k"], to=pts[0], goal=goal, kind=sub.kind)
@@ -329,6 +365,9 @@ def walks_to(world, phase, subs, legs, law, timeout_x=3.0, extra_s=20.0, run=Fal
         live = [st for st in state if st["rec"]]
         bodies = world.bodies([st["sub"].id for st in live])
         t = time.time() * 1000
+        if after_dispatch and next_subject is None:
+            after_dispatch(bodies)
+            after_dispatch = None
         for st in live:
             sub, rec = st["sub"], st["rec"]
             sub.keepalive()
@@ -465,7 +504,7 @@ def n1(world, out, variant, law, kind, reps):
         world.call("place_at", sub.id, p[0], p[1])
     time.sleep(3.0)
     folder = Path(out) / f"n1-{variant}-{law}-{kind}"
-    phase = Phase(world, folder, [s.id for s in subs], 1500, known_ids=[s.id for s in subs])
+    phase = Phase(world, folder, [s.id for s in subs], 1500, known_ids=[s.id for s in subs], record_acts=True)
     shut = world.shut_tiles()
     legs = []
     for p in starts:
@@ -479,6 +518,7 @@ def n1(world, out, variant, law, kind, reps):
                                                    "subjects": [s.id for s in subs], **world.meta()}, indent=1))
     recs = walks_to(world, phase, subs, legs, law, box=box)
     phase.close()
+    route_exits(world, folder, recs)
     guards(world, folder, [s.id for s in subs])
     return recs
 
@@ -547,11 +587,39 @@ def n2(world, out, variant, law, kind, reps):
     far = world.nearest_walkable((a["centre"][0] + u[0] * 75, a["centre"][1] + u[1] * 75), within=20)
     keeper = next(m["member"] for m in world.rows("SELECT * FROM membership WHERE community = 1") if world.bodies([m["member"]]))
     world.call("set_behavior", keeper, json.dumps({"wait": 3600}))
-    set_gate(world, keeper, a, True)
+    mid_close = variant == "mid-close"
+    if not set_gate(world, keeper, a, True) and mid_close:
+        raise RuntimeError("N2 mid-close requires gate A to start open")
+    if mid_close:
+        # Leave a channel through the gate group and close it during the walk.
+        # Closing the whole group one tile at a time lets walkers reach it
+        # before the final tile shuts. Use a local destination so the initial
+        # walking leg includes the gate.
+        start, _ = outside(world, centre, a["centre"], 38)
+        far = start
+        goal, _ = outside(world, centre, a["centre"], -10)
+        shut = world.shut_tiles()
+        request = {"start": start, "goal": goal, "path": True}
+        route = world.optimal([request], shut)[0]["true"]
+        opening = set(map(tuple, route["path"])) & set(map(tuple, a["tiles"])) if route else set()
+        if not opening:
+            raise RuntimeError("N2 mid-close setup has no open route through gate A")
+        # Preserve the adjacent tiles needed for diagonal steps in the route.
+        for p, q in zip(route["path"], route["path"][1:]):
+            if p[0] != q[0] and p[1] != q[1]:
+                opening.update(((p[0], q[1]), (q[0], p[1])))
+        channel = [(gid, tile) for gid, tile in zip(a["ids"], a["tiles"]) if tuple(tile) in opening]
+        rest = [(gid, tile) for gid, tile in zip(a["ids"], a["tiles"]) if tuple(tile) not in opening]
+        if not set_gate(world, keeper, {"ids": [gid for gid, _ in rest],
+                                       "tiles": [tile for _, tile in rest]}, False):
+            raise RuntimeError("N2 mid-close could not prepare the remaining gate tiles")
+        a = {**a, "ids": [gid for gid, _ in channel], "tiles": [tile for _, tile in channel]}
+        if not world.optimal([request], world.shut_tiles() + a["tiles"])[0]["true"]:
+            raise RuntimeError("N2 mid-close needs a reachable alternative with the channel shut")
     world.law("nav_belief", law == "on")
     subs = subjects(world, kind, reps, f"n2{variant}{law}")
     across = (-u[1], u[0])
-    starts = spread(world, start, reps, across)
+    starts = spread(world, start, reps, across, step=2 if mid_close else 6.0)
     for sub, p in zip(subs, starts):
         world.call("place_at", sub.id, p[0], p[1])
     time.sleep(3.0)
@@ -565,12 +633,12 @@ def n2(world, out, variant, law, kind, reps):
     warmups = walks_to(world, warmup, subs, warm, law, box=box)
     warmup.close()
     # Out of sight of gate A: 75 m out along its road.
-    fars = spread(world, far, reps, across)
+    fars = starts if mid_close else spread(world, far, reps, across)
     for sub, p in zip(subs, fars):
         world.call("place_at", sub.id, p[0], p[1])
     time.sleep(2.0)
-    ok = set_gate(world, keeper, a, False, subs)
-    shut_ms = world.now()
+    ok = None if mid_close else set_gate(world, keeper, a, False, subs)
+    shut_ms = None if mid_close else world.now()
     reopened = None
     if variant == "c":
         # Let each subject see the closed gate, then open it out of their sight.
@@ -592,8 +660,11 @@ def n2(world, out, variant, law, kind, reps):
         remembered_open[sub.id] = sorted(x["state"] for x in r if x["target"] in a["ids"])
         remembered_alternative[sub.id] = sorted(x["state"] for x in r if x["target"] in b["ids"])
 
-    phase = Phase(world, folder, [s.id for s in subs] + [keeper], 1800, known_ids=[s.id for s in subs])
-    phase.mark("gate shut", gate=a["ids"], tiles=a["tiles"], all_shut=ok, completed_ms=shut_ms)
+    phase = Phase(world, folder, [s.id for s in subs] + [keeper], 1800,
+                  known_ids=[s.id for s in subs], record_acts=True,
+                  gates=a["ids"] if mid_close else ())
+    if not mid_close:
+        phase.mark("gate shut", gate=a["ids"], tiles=a["tiles"], all_shut=ok, completed_ms=shut_ms)
     if variant == "c":
         phase.mark("gate reopened", gate=a["ids"], ok=reopened)
     (folder / "phase.json").write_text(json.dumps({"arena": "n2", "variant": variant, "law": law, "kind": kind, "gate_a": a, "gate_b": b, "start": start, "far": far, "goal": goal,
@@ -603,9 +674,42 @@ def n2(world, out, variant, law, kind, reps):
                                                    "calendar": world.rows("SELECT epoch_ms, day_ms FROM world")[0],
                                                    "warmups_arrived": sum(w["outcome"] == "arrived" for w in warmups), "warmups": len(warmups), "box": box,
                                                    **world.meta()}, indent=1, default=list))
+    def close_after_dispatch(bodies):
+        # The queued body order may take a graph slot to start. Verify every route
+        # approaches the open gate before asking the keeper to close it.
+        verified = {}
+        started = time.monotonic()
+        gate_tiles = {tuple(tile) for tile in a["tiles"]}
+        while True:
+            now = world.now()
+            verified = {
+                actor: path_crosses(world.pos(body, now), body["path"], gate_tiles)
+                and math.hypot(body["vx"], body["vy"]) > 0.05
+                for actor, body in bodies.items()
+            }
+            if all(verified.get(s.id) for s in subs) or time.monotonic() - started >= 6:
+                break
+            time.sleep(0.2)
+            bodies = world.bodies([s.id for s in subs])
+        phase.mark("before gate close", routes=verified, bodies=bodies)
+        if not any(verified.values()):
+            log("N2 mid-close: no dispatched route crosses the open channel")
+            return
+        all_shut = set_gate(world, keeper, a, False, subs)
+        closed = [[g["x"], g["y"], g["changed_ms"]] for g in world.rows("SELECT * FROM gate")
+                  if g["id"] in a["ids"] and not g["open"]]
+        stamps = [stamp for _, _, stamp in closed]
+        phase.mark("gate shut", gate=a["ids"], tiles=a["tiles"], all_shut=all_shut,
+                   closed_tiles=closed, started_ms=min(stamps, default=None),
+                   completed_ms=max(stamps, default=None))
+
     phase.mark("test walks")
-    recs = walks_to(world, phase, subs, [[[goal]] for _ in subs], law, box=box)
-    phase.close()
+    try:
+        recs = walks_to(world, phase, subs, [[[goal]] for _ in subs], law, box=box,
+                        after_dispatch=close_after_dispatch if mid_close else None)
+    finally:
+        phase.close()
+    route_exits(world, folder, recs)
     guards(world, folder, [s.id for s in subs])
     return recs
 
@@ -909,7 +1013,7 @@ def n4(world, out, variant, law, kind, reps):
     return recs
 
 
-ARENAS = {"n1": (n1, ["a", "b", "c", "d"]), "n2": (n2, ["a", "b", "c"]), "n3": (n3, ["w50", "w200", "stop", "run"]), "n4": (n4, ["fu", "fk", "pu", "pk"])}
+ARENAS = {"n1": (n1, ["a", "b", "c", "d"]), "n2": (n2, ["a", "b", "c", "mid-close"]), "n3": (n3, ["w50", "w200", "stop", "run"]), "n4": (n4, ["fu", "fk", "pu", "pk"])}
 
 
 def main():

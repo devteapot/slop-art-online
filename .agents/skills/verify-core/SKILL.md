@@ -23,6 +23,8 @@ python3 "$V" launch --run "$R" > "$E/launch.txt" 2>&1
 python3 "$V" doctor --run "$R" > "$E/doctor.txt" 2>&1
 ```
 
+`scenes.py`, `town.py` and the other drivers call the authority directly, so they do not renew the harness's 10-minute lease (verify SKILL.md, "Launch"). For a batch of scenes or the town run, launch with `VERIFY_LEASE_SECONDS=2700`. Otherwise the world is paused partway and later scenes fail on a frozen world (a `sleeper` timeout, morning checks at 0).
+
 Stop driving if launch or doctor fails. Run cleanup and retain the error. The scenes use the in-container admin CLI. Do not mix a remote `LIVING_STDB_URL` with `stdb -s local`.
 
 ## Drive the baseline
@@ -44,6 +46,8 @@ python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
 # What someone is visibly doing: the `doing` condition and the scene's `visibly`, by sight, field
 # and far label (features/doing.md, about 2 min).
 python3 "$C/scenes.py" doing_seen --run "$R" > "$E/doing_seen.txt" 2>&1
+# A continuous activity's row held to its renewal: no blink of doing nothing between two rests, the pacing unchanged, a real change still at once, the renew_in_place law (features/doing.md, about 2 min).
+python3 "$C/scenes.py" doing_renew --run "$R" > "$E/doing_renew.txt" 2>&1
 # Committed moves end early only by a wall or death (features/combat.md, about 30 s).
 python3 "$C/scenes.py" committed --run "$R" > "$E/committed.txt" 2>&1
 # A dodge over before the blow came, and a cooldown's refusals told once (features/combat.md, about 20 s).
@@ -69,6 +73,17 @@ python3 "$C/scenes.py" witness_fold --run "$R" > "$E/witness_fold.txt" 2>&1
 python3 "$C/scenes.py" cheap_check_ctx --run "$R" > "$E/cheap_check_ctx.txt" 2>&1
 python3 "$C/scenes.py" cheap_alarms --run "$R" > "$E/cheap_alarms.txt" 2>&1
 python3 "$C/scenes.py" cheap_warmth --run "$R" > "$E/cheap_warmth.txt" 2>&1
+# Two builds compared tick by tick on one Cullet battle (docs/COMBAT_PHASE.md "Step 3 results",
+# features/battle.md): an exact change passes with every tick's table hashes and every row at the
+# stop identical. Its own private server and a template volume; about 8 minutes a run:
+#   python3 living/tools/det_compare.py prepare --container <own> --url http://127.0.0.1:<port> \
+#     --volume <own volume> --wasm-dir <its /wasm dir> --template <own>-dett --meta <dir>/template.json \
+#     --base base-cullet.wasm --ticks 3600
+#   python3 living/tools/det_compare.py run --wasm-dir <its /wasm dir> --template <own>-dett \
+#     --meta <dir>/template.json --base base-cullet.wasm --candidate new-cullet.wasm --ports P1,P2 --out <dir>
+# The body's statuses by their parts equal the whole law over every status, and off ask it whole
+# (features/battle.md, about 2.5 min). It moves the world to its night: run it on its own world, or last.
+python3 "$C/scenes.py" status_parts --run "$R" > "$E/status_parts.txt" 2>&1
 # The lazy scene gives the whole scene's answers, all round and by facing; off, the old path (features/battle.md, about 2.5 min).
 python3 "$C/scenes.py" scene_lazy --run "$R" > "$E/scene_lazy.txt" 2>&1
 # The chronicle's repeat check read newest first, and noticing read in place, give the full reads' answers; off, the old paths (features/battle.md, about 2 min each).
@@ -76,6 +91,10 @@ python3 "$C/scenes.py" chronicle_recent --run "$R" > "$E/chronicle_recent.txt" 2
 python3 "$C/scenes.py" notice_inplace --run "$R" > "$E/notice_inplace.txt" 2>&1
 # A look checks only what is new since the last; everything passed over is familiar (features/battle.md, about 2 min).
 python3 "$C/scenes.py" notice_delta --run "$R" > "$E/notice_delta.txt" 2>&1
+# Use a fresh run for the field fixture.
+python3 "$C/scenes.py" seen_remains --run "$R" > "$E/seen_remains.txt" 2>&1
+# On a Cullet run (--seed cullet): counted remains under the shipped cover and gaze laws, by day (waits for daylight).
+python3 "$C/scenes.py" seen_remains_gaze --run "$R" > "$E/seen_remains_gaze.txt" 2>&1
 # A mind's line waits when another spoke to its listener first, under heard_first_rethinks (features/speech.md, about 1.5 min).
 python3 "$C/scenes.py" heard_first --run "$R" > "$E/heard_first.txt" 2>&1
 # The shared answers equal fresh ones (regard_cache_check; features/cues.md#shared-answers, about 4 min;
@@ -198,6 +217,16 @@ python3 "$V" launch --run "$L" --seed island > ".local/living/verify/$L/launch.t
 python3 "$C/lives.py" --run "$L" --minutes 24 > ".local/living/verify/$L/lives.txt" 2>&1
 python3 "$V" cleanup --run "$L" > ".local/living/verify/$L/cleanup.txt" 2>&1
 
+# Value-only law changes (about 3 min): the `law_override` row, law revision and audit, the script
+# kept, refusals rolled back, a client's first result, and the reducer's time (features/law-override.md,
+# docs/LAW_OVERRIDE.md). Needs the verify-client probe built (its SKILL.md).
+W=client-law-$(date +%H%M%S)   # a client-* name: its first-result checks drive verify-client's drive.py
+mkdir -p ".local/living/verify/$W"
+python3 "$V" launch --run "$W" --seed island > ".local/living/verify/$W/launch.txt" 2>&1
+python3 "$C/law_override.py" checks --run "$W" > ".local/living/verify/$W/law-checks.txt" 2>&1
+python3 "$C/law_override.py" time --run "$W" > ".local/living/verify/$W/law-time.txt" 2>&1
+python3 "$V" cleanup --run "$W" > ".local/living/verify/$W/cleanup.txt" 2>&1
+
 # Goods, fires that eat fuel and recipes over Cullet's goods (about 11 min), and a seeded
 # fishing ground's shared stock (features/goods.md, docs/WORLD_RULES.md).
 G=$R-goods
@@ -264,7 +293,7 @@ cargo test --manifest-path living/Cargo.toml -p living-mind
 cargo test --manifest-path living/Cargo.toml -p living-viewer sync::tests
 ```
 
-The authority tests run on the host despite its WASM `cdylib` target and include infant cry routing and cadence. Rules includes infant appearance versus cold damage checks and one ignored reference printer. The mind's five ignored Neo4j tests stay skipped. Do not add `--ignored`. `just living-check` builds the authority WASM, the mind, and the native and WASM viewer targets. Only its test step runs rules tests. It skips a step that already passed on this machine on identical inputs (docs/TOOLING.md); `just living-check-full` runs every step, and `LIVING_CHECK_SERIAL=1` shows cargo's output and the test counts on the terminal. The commands above also run authority, mind and viewer sync tests. Viewer coverage is limited to `living/viewer/src/sync.rs`; no other viewer code is verified here.
+The authority tests run on the host despite its WASM `cdylib` target and include infant cry routing and cadence. Rules includes infant appearance versus cold damage checks and one ignored reference printer. The mind's five ignored Neo4j tests stay skipped. Do not add `--ignored`. `just living-check` builds the authority WASM, the mind, and the native and WASM viewer targets, and runs the rules tests (`rules-tests`), the game client's tests (`game-tests`) and, since check-authority-tests, the authority's whole lib suite in release (`authority-tests`, which replaced the `seed-laws` and `frame-tests` steps). A test in `AUTHORITY_TEST_XFAIL` in `living/tools/check.py` is known red on main with an owner and a date: the check skips it in the suite, runs it alone and passes only while it still fails, and names it on every run; the `cargo test` above still fails on it until it is fixed (2026-11-20: `look::tests::the_island_wears_the_pool`, the island's stale look data, dev-box). It skips a step that already passed on this machine on identical inputs (docs/TOOLING.md); `just living-check-full` runs every step, and `LIVING_CHECK_SERIAL=1` shows cargo's output and the test counts on the terminal. The commands above also run authority, mind and viewer sync tests. Viewer coverage is limited to `living/viewer/src/sync.rs`; no other viewer code is verified here.
 
 ## Drive the existing mechanics and steering scripts
 

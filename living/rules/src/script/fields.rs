@@ -123,6 +123,61 @@ impl FnFacts {
     }
 }
 
+/// Whether `name(p)` is written as exactly `f1(p) + f2(p) + … + fn(p)`, the functions `parts`
+/// in that order called on its own parameter, and nothing else: its answer is then their answers
+/// joined, by construction (`status_of` and `status_parts()`, docs/STATUS_PARTS.md).
+pub fn is_join(ast: &AST, name: &str, parts: &[String]) -> bool {
+    let defs: Vec<_> = ast.iter_fn_def().filter(|f| f.name == name).collect();
+    let [f] = defs.as_slice() else { return false };
+    if f.params.len() != 1 {
+        return false;
+    }
+    let p = f.params[0].clone();
+    let key = |p: rhai::Position| (p.line().unwrap_or(0), p.position().unwrap_or(0));
+    let (start, end) = (key(f.body.start_position()), key(f.body.end_position()));
+    // The function's top-level statements (as `Fields::analyze` places them): one, the join.
+    let (mut statements, mut join) = (0usize, false);
+    ast.walk(&mut |path: &[ASTNode]| {
+        if path.len() != 1 {
+            return true;
+        }
+        let ASTNode::Stmt(stmt) = &path[0] else { return true };
+        let at = key(stmt.position());
+        if stmt.position().is_none() || at < start || at > end {
+            return true;
+        }
+        statements += 1;
+        // A call standing as a statement is stored as one (`Stmt::FnCall`), `+` included.
+        let mut leaves = Vec::new();
+        match stmt {
+            Stmt::Expr(e) | Stmt::Return(Some(e), ..) => flatten_plus(e, &mut leaves),
+            Stmt::FnCall(c, ..) if c.name == "+" && c.args.len() == 2 && c.namespace.is_empty() => {
+                flatten_plus(&c.args[0], &mut leaves);
+                flatten_plus(&c.args[1], &mut leaves);
+            },
+            _ => return true,
+        }
+        join = leaves.len() == parts.len()
+            && leaves.iter().zip(parts).all(|(e, part)| {
+                matches!(e, Expr::FnCall(c, ..) if c.name == part.as_str() && c.namespace.is_empty() && !c.capture_parent_scope
+                    && c.args.len() == 1 && matches!(&c.args[0], Expr::Variable(v, ..) if v.1 == p))
+            });
+        true
+    });
+    statements == 1 && join
+}
+
+/// The operands of a chain of `+`, left to right.
+fn flatten_plus<'a>(e: &'a Expr, out: &mut Vec<&'a Expr>) {
+    match e {
+        Expr::FnCall(c, ..) if c.name == "+" && c.args.len() == 2 && c.namespace.is_empty() => {
+            flatten_plus(&c.args[0], out);
+            flatten_plus(&c.args[1], out);
+        },
+        _ => out.push(e),
+    }
+}
+
 /// What every script function reads of its parameters.
 #[derive(Debug, Default)]
 pub struct Fields {

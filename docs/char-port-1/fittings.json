@@ -1,0 +1,360 @@
+{
+  "woman": {
+    "seed": 8,
+    "age": 29,
+    "build": {
+      "height": 1.66,
+      "weight": -0.41,
+      "muscle": 0.03
+    },
+    "main": {
+      "type": "adult-f-b",
+      "height": 1.66,
+      "proportions": {
+        "legs": 1.075,
+        "arms": 0.9,
+        "torso": 0.84,
+        "shoulders": 0.622,
+        "build": 0.933,
+        "hips": 0.92,
+        "hands": 0.75,
+        "feet": 0.9,
+        "head": 0.993
+      },
+      "identity": {},
+      "colors": {
+        "skin": "#e8bea6",
+        "hair": "#4a2b1a",
+        "beard": "#4a2b1a",
+        "outfit": {
+          "smock_58-f": "#5a6876",
+          "smock_bands-f": "#8c877c",
+          "jersey_smock-f": "#898579",
+          "apron_58-f": "#b6b3a5",
+          "trousers-f": "#2d2f35",
+          "boots-f": "#32271f"
+        },
+        "eyes": "#2c3f2c",
+        "eyes_natural": "#547a54"
+      },
+      "styles": {
+        "hair": "long.3",
+        "outfit": [
+          "smock_58-f",
+          "smock_bands-f",
+          "jersey_smock-f",
+          "apron_58-f",
+          "trousers-f",
+          "boots-f"
+        ],
+        "overlays": []
+      }
+    },
+    "port": {
+      "type": "adult-f-b",
+      "height": 1.66,
+      "proportions": {
+        "legs": 1.075,
+        "arms": 0.9,
+        "torso": 0.84,
+        "shoulders": 0.622,
+        "build": 0.933,
+        "hips": 0.92,
+        "hands": 0.75,
+        "feet": 0.9,
+        "head": 0.993
+      },
+      "identity": {},
+      "colors": {
+        "skin": "#e8bea6",
+        "hair": "#4a2b1a",
+        "beard": "#4a2b1a",
+        "outfit": {
+          "coat_2-f": "#8197b0",
+          "jersey_coat-f": "#504f48",
+          "trousers-f": "#353840",
+          "boots-f": "#332820"
+        },
+        "eyes": "#2c3f2c",
+        "eyes_natural": "#547a54"
+      },
+      "styles": {
+        "hair": "braid.3.collar",
+        "outfit": [
+          "coat_2-f",
+          "jersey_coat-f",
+          "trousers-f",
+          "boots-f"
+        ],
+        "overlays": []
+      }
+    }
+  },
+  "man": {
+    "seed": 3,
+    "age": 36,
+    "build": {
+      "height": 1.8,
+      "weight": 0.1,
+      "muscle": 0.4
+    },
+    "main": {
+      "type": "adult-m-b",
+      "height": 1.8,
+      "proportions": {
+        "shoulders": 0.984,
+        "build": 1.056,
+        "head": 0.99
+      },
+      "identity": {},
+      "colors": {
+        "skin": "#e1b49b",
+        "hair": "#201814",
+        "beard": "#201814",
+        "outfit": {
+          "coat-m": "#ad8c4b",
+          "jersey_coat-m": "#2a4b49",
+          "trousers-m": "#2d2f36",
+          "boots-m": "#32281f"
+        },
+        "eyes": "#2c4053",
+        "eyes_natural": "#4c789e"
+      },
+      "styles": {
+        "hair": "tousled",
+        "outfit": [
+          "coat-m",
+          "jersey_coat-m",
+          "trousers-m",
+          "boots-m"
+        ],
+        "overlays": [
+          "beard_full",
+          "stubble",
+          "freckles"
+        ]
+      }
+    },
+    "port": {
+      "type": "adult-m-b",
+      "height": 1.8,
+      "proportions": {
+        "shoulders": 0.984,
+        "build": 1.056,
+        "head": 0.99
+      },
+      "identity": {},
+      "colors": {
+        "skin": "#e1b49b",
+        "hair": "#201814",
+        "beard": "#201814",
+        "outfit": {
+          "coat-m": "#b18d3a",
+          "jersey_coat-m": "#335c5a",
+          "trousers-m": "#353840",
+          "boots-m": "#332820"
+        },
+        "eyes": "#2c4053",
+        "eyes_natural": "#4c789e"
+      },
+      "styles": {
+        "hair": "braid.collar.m",
+        "outfit": [
+          "coat-m",
+          "jersey_coat-m",
+          "trousers-m",
+          "boots-m"
+        ],
+        "overlays": [
+          "beard_full",
+          "stubble",
+          "freckles"
+        ]
+      }
+    }
+  },
+  "elder": {
+    "seed": 5,
+    "age": 70,
+    "build": {
+      "height": 1.72,
+      "weight": 1.0,
+      "muscle": 0.92
+    },
+    "main": {
+      "type": "elder-m-b",
+      "height": 1.72,
+      "proportions": {
+        "neck": 0.951,
+        "shoulders": 0.872,
+        "build": 1.278,
+        "head": 1.007
+      },
+      "identity": {},
+      "colors": {
+        "skin": "#e0b297",
+        "hair": "#afafac",
+        "beard": "#b1b1ae",
+        "hair_natural": "#201814",
+        "hair_silver": "#b1b1ae",
+        "outfit": {
+          "coat-m": "#303032",
+          "jersey_coat-m": "#481714",
+          "trousers-m": "#2e2f36",
+          "boots-m": "#32281f",
+          "cap": "#2c2e32"
+        },
+        "eyes": "#384247",
+        "eyes_natural": "#6b808a"
+      },
+      "styles": {
+        "hair": "sides.cap",
+        "outfit": [
+          "coat-m",
+          "jersey_coat-m",
+          "trousers-m",
+          "boots-m",
+          "cap"
+        ],
+        "overlays": [
+          "beard_short",
+          "stubble",
+          "lines",
+          "freckles"
+        ]
+      },
+      "belly": 0.398,
+      "grey": 0.759
+    },
+    "port": {
+      "type": "elder-m-b",
+      "height": 1.72,
+      "proportions": {
+        "neck": 0.951,
+        "shoulders": 0.872,
+        "build": 1.278,
+        "head": 1.007
+      },
+      "identity": {},
+      "colors": {
+        "skin": "#e0b297",
+        "hair": "#afafac",
+        "beard": "#b1b1ae",
+        "hair_natural": "#201814",
+        "hair_silver": "#b1b1ae",
+        "outfit": {
+          "coat_2-m": "#989dac",
+          "jersey_coat-m": "#8d3530",
+          "trousers-m": "#353840",
+          "boots-m": "#332820"
+        },
+        "eyes": "#384247",
+        "eyes_natural": "#6b808a"
+      },
+      "styles": {
+        "hair": "braid.3.collar.full",
+        "outfit": [
+          "coat_2-m",
+          "jersey_coat-m",
+          "trousers-m",
+          "boots-m"
+        ],
+        "overlays": [
+          "beard_short",
+          "stubble",
+          "lines",
+          "freckles"
+        ]
+      },
+      "belly": 0.398,
+      "grey": 0.759
+    }
+  },
+  "girl": {
+    "seed": 22,
+    "age": 6,
+    "build": {
+      "height": 1.12,
+      "weight": -0.56,
+      "muscle": -0.32
+    },
+    "main": {
+      "type": "child-u-a",
+      "height": 1.12,
+      "proportions": {
+        "legs": 0.816,
+        "arms": 0.865,
+        "torso": 0.918,
+        "neck": 0.745,
+        "head": 1.386,
+        "shoulders": 0.932,
+        "build": 0.799
+      },
+      "identity": {},
+      "colors": {
+        "skin": "#f3d3bf",
+        "hair": "#332217",
+        "beard": "#332217",
+        "outfit": {
+          "smock_58-m": "#572720",
+          "smock_bands-m": "#9a968a",
+          "jersey_smock-m": "#2a2d33",
+          "trousers-m": "#2c2d34",
+          "boots-m": "#31271f"
+        },
+        "eyes": "#2c4053",
+        "eyes_natural": "#4c789e"
+      },
+      "styles": {
+        "hair": "bob.2",
+        "outfit": [
+          "smock_58-m",
+          "smock_bands-m",
+          "jersey_smock-m",
+          "trousers-m",
+          "boots-m"
+        ],
+        "overlays": []
+      },
+      "belly": 0.037
+    },
+    "port": {
+      "type": "child-u-a",
+      "height": 1.12,
+      "proportions": {
+        "legs": 0.816,
+        "arms": 0.865,
+        "torso": 0.918,
+        "neck": 0.745,
+        "head": 1.386,
+        "shoulders": 0.932,
+        "build": 0.799
+      },
+      "identity": {},
+      "colors": {
+        "skin": "#f3d3bf",
+        "hair": "#332217",
+        "beard": "#332217",
+        "outfit": {
+          "coat_1-m": "#f56d60",
+          "jersey_coat-m": "#4c525e",
+          "trousers-m": "#353840",
+          "boots-m": "#332820"
+        },
+        "eyes": "#2c4053",
+        "eyes_natural": "#4c789e"
+      },
+      "styles": {
+        "hair": "braid.2.collar",
+        "outfit": [
+          "coat_1-m",
+          "jersey_coat-m",
+          "trousers-m",
+          "boots-m"
+        ],
+        "overlays": []
+      },
+      "belly": 0.037
+    }
+  }
+}

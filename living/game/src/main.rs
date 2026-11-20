@@ -23,6 +23,7 @@ mod daylight;
 mod demo;
 mod envs;
 mod gait;
+mod handmade;
 mod ground;
 mod ik;
 mod twist;
@@ -38,6 +39,7 @@ mod live;
 mod loading;
 mod lookdev;
 mod mouth;
+mod genesis;
 mod net;
 mod perf;
 mod phase;
@@ -85,7 +87,9 @@ fn main() {
                 // Hair's greying lock by lock (`_GREY`, characters/compose.rs).
                 .add_custom_vertex_attribute("GREY", characters::compose::ATTRIBUTE_GREY)
                 // Where hair may carry its ring (`_RING`, characters/compose.rs).
-                .add_custom_vertex_attribute("RING", characters::compose::ATTRIBUTE_RING),
+                .add_custom_vertex_attribute("RING", characters::compose::ATTRIBUTE_RING)
+                // A hand-made file's hair highlight (`_HIGHLIGHT`, handmade.rs).
+                .add_custom_vertex_attribute("HIGHLIGHT", handmade::ATTRIBUTE_HIGHLIGHT),
         );
     let headless = capture::headless();
     if headless {
@@ -103,14 +107,30 @@ fn main() {
             primary_window: Some(Window {
                 title: "Slop Art Online — camera spike".into(),
                 resolution: bevy::window::WindowResolution::new(size.x, size.y),
+                // `LIVING_GAME_VSYNC=0|immediate|mailbox` (measurement): a window that presents
+                // without waiting for the display and updates as fast as it can when it hasn't
+                // the focus (below), so a windowed run's frame time is its cost, not 16.7 ms.
+                present_mode: match std::env::var("LIVING_GAME_VSYNC").as_deref().map(str::trim) {
+                    Ok("0") => bevy::window::PresentMode::AutoNoVsync,
+                    Ok("immediate") => bevy::window::PresentMode::Immediate,
+                    Ok("mailbox") => bevy::window::PresentMode::Mailbox,
+                    _ => bevy::window::PresentMode::default(),
+                },
                 ..default()
             }),
             ..default()
         }))
         .add_plugins(EguiPlugin::default());
+        // Bevy's game settings update an unfocused window at 60 Hz: a measurement run started
+        // in the background would read 16.7 ms whatever it cost.
+        if std::env::var("LIVING_GAME_VSYNC").is_ok_and(|v| !v.trim().is_empty() && v.trim() != "1") {
+            app.insert_resource(bevy::winit::WinitSettings::continuous());
+        }
     }
     app.add_systems(PostUpdate, perf::apply.before(post::update));
     perf::diagnostics(&mut app);
+    // Hand-made `"+Z"` files turned to face −Z as their scenes come in (handmade.rs).
+    app.add_observer(handmade::on_ready);
     app.insert_resource(lookdev::FarModels::from_env())
         .add_systems(Update, lookdev::character_shadows)
         .add_systems(PostUpdate, lookdev::far_models
@@ -184,7 +204,7 @@ fn main() {
         phase::configure(&mut app);
         use phase::Phase;
         app.add_systems(Startup, (world::setup, camera::spawn, sight::setup))
-            .add_systems(Update, net::pump.in_set(Phase::Net))
+            .add_systems(Update, (net::pump, verbs::refresh_rules, net::perception_law, net::seen_log).chain().in_set(Phase::Net))
             .add_systems(Update, (bodies::update, world::things, controls::target, world::terrain.run_if(live::tiles), looks::update).chain().in_set(Phase::Mirror))
             .add_systems(Update, (demo::run, controls::scheme, keys::double_tap, controls::movement).chain().in_set(Phase::Input))
             .add_systems(Update, weapon::update.in_set(Phase::Input).after(crate::ui::UiInput).before(combat::input))

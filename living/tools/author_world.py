@@ -808,9 +808,10 @@ Write one sheet for each of: {', '.join(m['name'] for m in h['members'])}."""
             for r in t.get("residents", []):
                 if r["name"] in looks.get("residents", {}):
                     r["look"] = looks["residents"][r["name"]]
-    seed_path.write_text(json.dumps(seed, indent=2, ensure_ascii=False) + "\n")
+    target = Path(a.seed_out) if getattr(a, "seed_out", "") else seed_path
+    target.write_text(json.dumps(seed, indent=2, ensure_ascii=False) + "\n")
     n_rel = sum(len(s["relations"]) for s in sheets.values())
-    print(f"wrote {seed_path.relative_to(ROOT)}: {len([s for s in world['settlements'] if s['name'] in casts])} settlements, {len(sheets)} residents; {n_rel} relations ({one} one-sided, {unshared} family/named/situation ties still one-sided), {sum(len(s['memories']) for s in sheets.values())} memories, {sum(len(s['stances']) for s in sheets.values())} stances, {sum(1 for s in sheets.values() if s.get('secret'))} secrets, {len(sits_all)} situations; {len(problems)} problems")
+    print(f"wrote {shown(target)}: {len([s for s in world['settlements'] if s['name'] in casts])} settlements, {len(sheets)} residents; {n_rel} relations ({one} one-sided, {unshared} family/named/situation ties still one-sided), {sum(len(s['memories']) for s in sheets.values())} memories, {sum(len(s['stances']) for s in sheets.values())} stances, {sum(1 for s in sheets.values() if s.get('secret'))} secrets, {len(sits_all)} situations; {len(problems)} problems")
     for n in notes[:30]:
         print("  note:", n)
     if LOG_PATH.exists():
@@ -991,6 +992,12 @@ def work_span(works):
     if b - a <= 12:
         return [a, b]
     return list(max(works, key=lambda w: w[1] - w[0]))
+
+
+def shown(path):
+    """A path for messages: relative to the repository when inside it."""
+    path = Path(path).resolve()
+    return path.relative_to(ROOT) if path.is_relative_to(ROOT) else path
 
 
 def seed_rhythm(r, notes, name):
@@ -1366,6 +1373,7 @@ def main():
     ap.add_argument("--profile", default="glm-flash")
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--compile-only", action="store_true")
+    ap.add_argument("--seed-out", default="", help="with --compile-only: write the compiled seed here instead of living/seeds/<into>.json (the tracked seed is still read as the base); seed_fresh.py compares the two")
     # Seeded lives (a world directory with world.json; docs/SEEDED_LIVES.md).
     ap.add_argument("--effort", default=None, help="reasoning effort to send (none: not sent)")
     ap.add_argument("--only", default="", help="comma-separated settlements to draft (cast, sheets, review)")
@@ -1470,8 +1478,9 @@ def main():
         looks = world_looks(wd)
         if looks is not None:
             seed["looks"] = looks["looks"]
-        out.write_text(json.dumps(seed, indent=1, ensure_ascii=False) + "\n")
-        print(f"wrote {out.relative_to(ROOT)}: {len(sheets)} residents")
+        target = Path(a.seed_out) if a.seed_out else out
+        target.write_text(json.dumps(seed, indent=1, ensure_ascii=False) + "\n")
+        print(f"wrote {shown(target)}: {len(sheets)} residents")
         for n in notes[:30]:
             print("  note:", n)
         return
@@ -1490,10 +1499,10 @@ def main():
         t = {"name": s["name"], "character": s["character"], "walled": s["walled"], "occupations": {}, "stores": s["stores"], "resources": s.get("resources", {}), "ledger": s["ledger"], "buildings": s.get("buildings", []), "residents": residents}
         (villages if s["kind"] == "village" else towns).append(t)
     seed["towns"], seed["villages"] = towns, villages
-    out = ROOT / "living/seeds" / f"{a.world}.json"
+    out = Path(a.seed_out) if a.seed_out else ROOT / "living/seeds" / f"{a.world}.json"
     out.write_text(json.dumps(seed, indent=2, ensure_ascii=False) + "\n")
     one_sided = sum(1 for n, sh in sheets.items() for r in sh["relations"] if not any(x["name"] == n for x in sheets[r["name"]]["relations"]))
-    print(f"wrote {out.relative_to(ROOT)}: {len(towns)} towns, {len(villages)} villages, {len(sheets)} residents; {sum(len(s['relations']) for s in sheets.values())} relations ({one_sided} one-sided), {sum(len(s['memories']) for s in sheets.values())} memories, {sum(len(s['stances']) for s in sheets.values())} stances, {sum(1 for s in sheets.values() if s.get('secret'))} secrets")
+    print(f"wrote {shown(out)}: {len(towns)} towns, {len(villages)} villages, {len(sheets)} residents; {sum(len(s['relations']) for s in sheets.values())} relations ({one_sided} one-sided), {sum(len(s['memories']) for s in sheets.values())} memories, {sum(len(s['stances']) for s in sheets.values())} stances, {sum(1 for s in sheets.values() if s.get('secret'))} secrets")
     for n in notes[:30]:
         print("  note:", n)
 

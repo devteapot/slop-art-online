@@ -14,6 +14,8 @@ import subprocess
 import sys
 import time
 import traceback
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "living/tools"))
+from law_values import own_laws  # noqa: E402  (the world's own law values, docs/LAW_OVERRIDE.md)
 import urllib.error
 import urllib.request
 
@@ -1117,6 +1119,67 @@ def doing_case(run):
     return {'status': 'pass', 'visibly': entry.get('visibly'), 'entry': entry, 'purposes': sorted(text)}
 
 
+@case('doing-renew')
+def doing_renew_case(run):
+    """A resting resident is seen resting on (doing-renew; docs/PERCEPTION.md, "What someone is
+    visibly doing"): the other rests 8 s at a time under a desire to rest, each rest renewed as it
+    ends. The eye's deliberation is asked about 150 ms after one of the other's rests ends, where a
+    build before doing-renew showed nobody doing anything for 0.4–1 s. The request's scene lists the
+    other with `visibly` {is: rest} and its activity, and the think prompt the fake model is sent
+    carries it."""
+    people = prepare(run)
+    eye, other = [p['id'] for p in people]
+    e = wall_spots(run)['open']
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    run.admin('set_behavior', eye, json.dumps({'wait': 300}))
+    run.admin('place_at', eye, *e)
+    run.admin('place_at', other, e[0] + 3.0, e[1])
+    run.admin('set_behavior', other, json.dumps({'desires': [{'want': 'rest', 'weight': {'base': 1.0}, 'do': {'do': 'rest'}}]}))
+    row = run.wait(lambda: run.private(f'SELECT * FROM doing WHERE id = {other}', 'doing-first'), 'the other rests', 20)[0]
+    # Wait out the first renewal (so the rest has renewed once), then aim at the end of the next.
+    run.wait(lambda: [d for d in run.private(f'SELECT * FROM doing WHERE id = {other}', 'doing-renewed') if d['until_ms'] != row['until_ms']], 'the rest renewed', 20)
+    script = {'replies': {'think': {'thought': 'They are resting.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+    models = model(run, script)
+    # A think asks only once the eye's deliberation clock has settled 45 s (brain.rs): wait it
+    # out, so the ask comes at the install and not at a later evaluation.
+    settled = run.private(f'SELECT deliberated_ms FROM mind_state WHERE id = {eye}', 'eye-clock')[0]['deliberated_ms'] + 47_000
+    run.wait(lambda: run.private('SELECT last_ms FROM clock', 'clock-settle')[0]['last_ms'] > settled, "the eye's deliberation clock settled", 60)
+    # How long `request` takes to reach its install (its reads, then the admin call), measured.
+    t0 = time.monotonic()
+    run.thoughts(eye, 'thoughts-lead')
+    run.admin('set_behavior', eye, json.dumps({'wait': 300}))
+    lead = (time.monotonic() - t0) * 1000
+    now = run.private('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
+    local = time.time() * 1000
+    ends = run.private(f'SELECT * FROM doing WHERE id = {other}', 'doing-aimed')[0]
+    if ends['until_ms'] - now < lead + 500:
+        # Too close to this rest's end to aim at it: the next one.
+        ends = run.wait(lambda: [d for d in run.private(f'SELECT * FROM doing WHERE id = {other}', 'doing-aimed-next') if d['until_ms'] != ends['until_ms']], 'the next rest', 20)[0]
+        now = run.private('SELECT last_ms FROM clock', 'clock')[0]['last_ms']
+        local = time.time() * 1000
+    target = ends['until_ms'] + 150
+    run.note(f"rest ends at {ends['until_ms']}; asking at {target} (authority clock {now} at local {local:.0f}; request lead {lead:.0f} ms)")
+    time.sleep(max(0.0, (target - now - lead) / 1000 - (time.time() * 1000 - local) / 1000))
+    pending = run.request(eye, 'doing-renew')
+    asked = pending[0].get('requested_ms') if pending else None
+    scene = json.loads(pending[0]['scene']) if pending and 'scene' in pending[0] else {}
+    (run.directory / 'scene.json').write_text(json.dumps(scene, indent=2))
+    entry = next((c for c in scene.get('creatures', []) if c.get('id') == other), {})
+    after = (asked - ends['until_ms']) if asked else None
+    run.note(f'asked {after} ms after the rest ended; the other in the scene: {json.dumps(entry)}')
+    assert asked is not None and 0 <= after <= 900, f'the scene was written {after} ms after the rest ended, not in the window a gap would show'
+    assert (entry.get('visibly') or {}).get('is') == 'rest', f'the other is seen resting just after a rest ended: {entry}'
+    assert entry.get('doing') == 'rest', f"the other's activity is a rest: {entry}"
+    run.start(models, [eye])
+    run.wait(lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'think'] or None, 'the think prompt', 60)
+    reqs = [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'think']
+    sent = '\n'.join(str(m.get('content', '')) for m in reqs[0]['body'].get('messages', []))
+    (run.directory / 'sent-prompts.txt').write_text(sent)
+    assert re.search(r'"visibly":\s*\{[^}]*"is":\s*"rest"', sent), 'the model is sent that the other is resting'
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    return {'status': 'pass', 'asked_after_end_ms': after, 'entry': entry}
+
+
 
 def dodge_wall(run):
     """A walkable tile, the next one along an axis walkable and the one after it wall or rock, the
@@ -1476,7 +1539,7 @@ def watch_fight_case(run):
     for who in (a, c):
         run.admin('set_behavior', who, json.dumps({'wait': 120}))
     # The law in force: the world's own value, else the installed script's.
-    own = [r['value'] for r in run.private('SELECT * FROM world_law', 'laws') if r['name'] == 'witness_fold_ms']
+    own = [v for k, v in own_laws(lambda q: run.private(q, 'laws')).items() if k == 'witness_fold_ms']
     src = run.private("SELECT source FROM script WHERE name = 'skills'", 'script')[0]['source']
     fold = float(own[0]) if own else float(re.search(r'\bwitness_fold_ms: ([0-9.]+)', src).group(1))
     # Blows still in flight land first, then every onlooker's window holding them ends.
@@ -1722,7 +1785,7 @@ def first_sight_case(run):
     # (no gap: M's opening thought may itself be a first sight of someone else in view)
     run.admin('set_world_law', 'first_sight_gap_s', '0')
     try:
-        laws = {w['name']: w['value'] for w in run.sql('SELECT * FROM world_law', 'world-law')}
+        laws = own_laws(lambda q: run.sql(q, 'world-law'))
         assert laws.get('first_sight_thinks') == 'true', laws
         script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
         run.start(model(run, script), [m])
@@ -2022,7 +2085,7 @@ def think_framing_case(run):
         run.request(m, 'framing off')
         off = run.wait(lambda: asked('framing off'), 'the think request with the law off', 90)[0]
         run.admin('set_world_law', 'think_framing', 'true')
-        laws = {w['name']: w['value'] for w in run.sql('SELECT * FROM world_law', 'world-law')}
+        laws = own_laws(lambda q: run.sql(q, 'world-law'))
         assert laws.get('think_framing') == 'true', laws
         time.sleep(3.0)
         run.request(m, 'framing on')
@@ -2337,8 +2400,9 @@ def talk_places_case(run):
 
     1. A asks H "Where can I find berries around here?" (admin `mind_say`). H's talk prompt has
        "# Places you know, from where you stand" with `"verify well" at [x, y], 16 m east` and
-       `3 berry bush around [x, y], <N> m <dir>: seen day …` (H's `seen_stock` row), and H's
-       `standing` row (`mind_where`) is where H stands.
+       `3 berry bush around [x, y], <N> m <dir>: seen day …` (H's `seen_stock` row), from where H
+       stands (`mind_reach`, reply-timing; before, the `standing` row `mind_where` wrote), and
+       its "# Now" says H stands still and where A is.
     2. H's think prompt's "# Places you remember" has the well's coordinates without a way, and
        its scene's `places` has the well with the way (`dir`, `dist`, known-ground's remembered
        places): the way is given once, by the scene.
@@ -2392,7 +2456,6 @@ def talk_places_case(run):
     names = {x['id']: x['name'] for x in run.sql('SELECT id, name FROM character', 'names')}
     talk1 = talk_prompt('verify places one')
     (run.directory / 'prompt-talk-1.txt').write_text(talk1)
-    standing = run.private(f'SELECT * FROM standing WHERE actor = {h}', 'standing-h')
     body = next(b for b in run.private('SELECT id, x, y FROM body', 'bodies-h') if b['id'] == h)
     here = (body['x'], body['y'])
     way = lambda to: way_words(here, to)
@@ -2430,7 +2493,7 @@ def talk_places_case(run):
         'three_bushes_placed': len(ours) == 3,
         'h_remembers_the_three': first['count'] == 3 and first['gone_ms'] == 0,
         'talk_prompt_lists_places_from_where_h_stands': bool(section),
-        'standing_is_where_h_stands': bool(standing) and math.dist((standing[0]['x'], standing[0]['y']), here) < 1.5,
+        'now_says_h_stands_still_and_where_a_is': re.search(r'You are standing still[ .]', talk1) is not None and re.search(r'\n.+ is \d+ m \w+ of you\.|\n.+ is right beside you\.', talk1) is not None,
         'the_well_with_its_way': any(l.startswith('- ' + well_line) for l in section.splitlines()),
         'the_bushes_with_their_way_and_when_seen': any(l.startswith('- ' + bush_head) for l in section.splitlines()),
         'think_prompt_places_without_the_way': any(l == f'- "verify well" at [{well[0]:.0f}, {well[1]:.0f}]' for l in remember.splitlines()),
@@ -2440,9 +2503,175 @@ def talk_places_case(run):
         'gone_once_seen_bare': gone['count'] == 3 and gone['seen_ms'] == first['seen_ms'],
         'talk_prompt_says_gone_when_last_here': any('berry bush around [' in l and ': gone when you were last here, day ' in l and '(3 seen day ' in l for l in section2.splitlines()),
     }
-    result = {'h': h, 'a': a, 'ours': ours, 'well': well, 'here': here, 'first': first, 'away': away, 'gone': gone, 'standing': standing,
+    result = {'h': h, 'a': a, 'ours': ours, 'well': well, 'here': here, 'first': first, 'away': away, 'gone': gone,
               'section': section, 'remember': remember, 'scene_well': scene_well, 'section2': section2, 'checks': checks}
     (run.directory / 'talk-places.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
+@case('reply-timing')
+def reply_timing_case(run):
+    """A reply is said when it is ready (reply-timing, after play-test 10: Agnes's reply, ready in
+    572 ms, waited 1.98 s for Fern's line to be done being said, and Agnes had walked out of
+    reach). On a quiet open line, F (not thought for; its lines are the admin's) stands still and
+    residents H and K (thought for) walk east on a `goto` graph. A said line carries 9 m.
+
+    A. F greets H when H is 3.5 m off and walking away (2.6 m/s, `walk_base`): twenty-one words,
+       which before were "said" for 6.93 s before H could answer. H's reply is ready at once and said while H is within reach:
+       F receives it (no `silence`), and the exchange goes on: F's next line (a call, after F's
+       own 2 s speaking gap, when H is past a said line's reach) gets H's next turn.
+       H's talk prompt says where F is, from H's perception ("… is <N> m west of you."), and that
+       H is walking, and away from F.
+    B. F greets K the same way, and K's reply is ready only 6 s later (the fake model's delay):
+       K is out of reach then, and is told so truthfully (`silence`). Its next turn weighs it:
+       the turn's prompt ends with "# What came of your last words" and the silence's own words,
+       and says K neither sees nor hears F (K is beyond sight and hearing). That turn's reply is
+       recorded as a talk thought with `detail.missed`; it is said and is out of reach again, and
+       the exchange then ends: one follow-up per missed line, no second.
+
+    With `VERIFY_REPLY_TIMING=main` (a build of main, before reply-timing) the case checks the old
+    behaviour instead: H's reply gets a `silence` and the mind ends the conversation; K's silence
+    ends it with no further turn."""
+    main = os.environ.get('VERIFY_REPLY_TIMING') == 'main'
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 3, True)
+    f, h, k = sorted(x['id'] for x in run.sql('SELECT id FROM character', 'ids-after') if x['id'] not in before)
+    names = {x['id']: x['name'] for x in run.sql('SELECT id, name FROM character', 'names')}
+    for who in (f, h, k):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    line = open_line(run, 28)
+    run.admin('place_at', f, *line[2])
+    run.admin('place_at', h, *line[12])
+    run.admin('place_at', k, *line[22])
+    # Twenty-one words (6.93 s "being said" before reply-timing), and a question: an addressed
+    # remark that asks nothing may be let pass by chance (`Temper::answers_remarks`).
+    greeting = lambda marker: f'Good morning to you, I hope the walk is pleasant and the weather holds for us today, does it not? ({marker})'
+    follow_head = '# What came of your last words'
+    script = {'replies': {'think': {'thought': 'I listen.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply(),
+                          'talk': {'thought': 'Nothing more.', 'say': '', 'to': 0, 'acts': [], 'end': True, 'settled': None}},
+              'rules': [
+                  # B's follow-up turn (first: its prompt carries B's greeting too).
+                  {'purpose': 'talk', 'contains': follow_head, 'times': -1,
+                   'reply': {'thought': 'They did not hear me.', 'say': 'Did you hear me?', 'to': f, 'acts': [], 'end': False, 'settled': None}},
+                  {'purpose': 'talk', 'contains': 'verify-rt-a2', 'times': -1,
+                   'reply': {'thought': 'I walk on.', 'say': '', 'to': f, 'acts': [], 'end': True, 'settled': None}},
+                  {'purpose': 'talk', 'contains': 'verify-rt-a', 'times': -1,
+                   'reply': {'thought': 'A greeting.', 'say': 'Good morning to you too.', 'to': f, 'acts': [], 'end': False, 'settled': None}},
+                  {'purpose': 'talk', 'contains': 'verify-rt-b', 'times': -1, 'delay_s': 6,
+                   'reply': {'thought': 'A greeting.', 'say': 'Good morning to you too.', 'to': f, 'acts': [], 'end': False, 'settled': None}},
+              ]}
+    run.start(model(run, script), [h, k])
+    time.sleep(3.0)
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'talk']
+    sent_text = lambda e: '\n'.join(str(x.get('content', '')) for x in e['body'].get('messages', []))
+    prompts_of = lambda who, marker: [sent_text(e) for e in requests() if marker in sent_text(e) and '# Who you are\n' + names[who] in sent_text(e)]
+    def body(who):
+        """Where `who` is now and its velocity: a body row holds where its motion segment began
+        (`x`, `y` at `t_ms`), so the position is projected along it (`common::pos`, straight
+        segments; these walks are straight east)."""
+        b = next((b for b in run.private(f'SELECT id, x, y, vx, vy, t_ms, next_ms FROM body WHERE id = {who}', 'bodies') if b['id'] == who), None)
+        if b is None:
+            return None
+        t = max(0.0, (min(time.time() * 1000, b['next_ms']) - b['t_ms']) / 1000.0)
+        return (b['x'] + b['vx'] * t, b['y'] + b['vy'] * t, b['vx'], b['vy'])
+    say = lambda text, to, way='say': run.admin('mind_say', f, text, to, way, 0, TALK_THOUGHT)
+    exps = lambda: run.private(f'SELECT * FROM experience WHERE observer = {f} OR observer = {h} OR observer = {k}', 'experiences')
+    mind_log = lambda: (run.directory / 'mind.log').read_text(errors='replace')
+
+    def walk_off(who, start, at_m, within_m=6.0):
+        """`who` walks east from `start`; returns once it is `at_m` m from F and moving. A poll
+        that first sees it farther than `within_m` (the walk began between polls) starts again."""
+        fx = body(f)
+        for attempt in range(4):
+            run.admin('set_behavior', who, json.dumps({'wait': 300}))
+            run.admin('place_at', who, *line[start])
+            time.sleep(0.5)
+            run.admin('set_behavior', who, json.dumps({'seq': [{'do': {'skill': 'goto', 'target': {'at': list(line[27])}}}, {'wait': 300}]}))
+            def far_enough():
+                b = body(who)
+                return [b] if b and math.dist(b[:2], fx[:2]) >= at_m and (b[2] or b[3]) else []
+            b = run.wait(far_enough, f'{names[who]} walks {at_m} m off', 30)[0]
+            if math.dist(b[:2], fx[:2]) <= within_m:
+                return b
+            run.note(f'{names[who]} was first seen walking {math.dist(b[:2], fx[:2]):.1f} m off (over {within_m}): again')
+        raise RuntimeError(f'{names[who]} was never seen walking within {within_m} m of F')
+
+    # A: in reach when ready.
+    a_start = walk_off(h, 5, 3.5)
+    a_speed = math.hypot(a_start[2], a_start[3])
+    say(greeting('verify-rt-a'), h)
+    # When the authority said the greeting (H's row of it): the admin call itself takes a while.
+    greeted = run.wait(lambda: [e['at_ms'] for e in exps() if e['observer'] == h and e['subject'] == f and 'verify-rt-a)' in e['text']], 'H hears the greeting', 10)[0]
+    heard_reply = lambda: [e for e in exps() if e['observer'] == f and e['subject'] == h and 'Good morning to you too' in e['text']]
+    silence_of = lambda who: [e for e in exps() if e['observer'] == who and e['kind'] == 'silence' and e['subject'] == f]
+    if main:
+        a_silence = run.wait(lambda: silence_of(h), "H's reply out of reach (main)", 30)
+        time.sleep(1.0)
+        a_reply = heard_reply()
+        a2, a2_at = [], None
+    else:
+        a_reply = run.wait(heard_reply, 'F hears H', 30)
+        # F's own 2 s speaking gap (`SPEAK_GAP_MS`) before its next line.
+        time.sleep(max(0.0, greeted / 1000.0 + 2.4 - time.time()))
+        a2_at = body(h)
+        # H walks 2.6 m/s (`walk_base`): past a said line's 9 m by then, within a call's 22.5 m.
+        say('Where are you off to? (verify-rt-a2)', h, 'call')
+        a2 = run.wait(lambda: prompts_of(h, 'verify-rt-a2'), "H's next turn", 30)
+        a_silence = silence_of(h)
+    a_prompt = next(iter(prompts_of(h, 'verify-rt-a')), '')
+    # From the greeting to the reply, by the authority's clock (before reply-timing at least the
+    # greeting's 6.93 s "being said").
+    reply_after_ms = a_reply[0]['at_ms'] - greeted if a_reply else None
+    (run.directory / 'prompt-a.txt').write_text(a_prompt)
+    at_reply = body(h)
+    # B: out of reach when ready (after F's own 2 s speaking gap since its last line).
+    time.sleep(2.5)
+    b_start = walk_off(k, 5, 3.5)
+    say(greeting('verify-rt-b'), k)
+    b_silence = run.wait(lambda: silence_of(k), "K's reply out of reach", 40)
+    if main:
+        time.sleep(8.0)
+        follow = []
+    else:
+        follow = run.wait(lambda: prompts_of(k, follow_head), "K's follow-up turn", 30)
+        run.wait(lambda: [1] if len(silence_of(k)) >= 2 else [], "K's follow-up out of reach too", 30)
+        time.sleep(8.0)
+    follow_prompts = prompts_of(k, follow_head)
+    k_at_follow = body(k)
+    (run.directory / 'prompt-b-follow.txt').write_text(follow_prompts[0] if follow_prompts else '')
+    k_thoughts = [t for t in run.thoughts(k, 'thoughts-k') if t['kind'] == 'talk']
+    missed_thoughts = [t for t in k_thoughts if (json.loads(t['detail'] or '{}').get('missed') or '')]
+    log = mind_log()
+    first_silence = b_silence[0]['text'] if b_silence else ''
+    frame = re.search(r'\n(.+?) is (\d+) m (\w+) of you\.', a_prompt)
+    fb = body(f)
+    checks = {'h_walks_away': a_speed > 0.5}
+    if main:
+        checks.update({
+            'h_reply_lost': bool(a_silence) and not a_reply,
+            'h_conversation_over': f'{names[h]} and {names[f]}: out of earshot, conversation over' in log or f'{names[f]} and {names[h]}: out of earshot, conversation over' in log,
+            'k_silence_ends_it_with_no_turn': bool(b_silence) and not follow_prompts,
+        })
+    else:
+        checks.update({
+            'h_reply_delivered': bool(a_reply) and not a_silence,
+            'h_said_when_ready': reply_after_ms is not None and reply_after_ms < 2_500,
+            'h_takes_the_next_turn': bool(a2),
+            'frame_says_where_f_is': bool(frame) and frame.group(3) == 'west' and abs(int(frame.group(2)) - math.dist(a_start[:2], fb[:2])) <= 3.0,
+            'frame_says_h_walks_away': re.search(r'You are walking to a spot \d+ m east, away from ', a_prompt) is not None,
+            'k_reply_out_of_reach_told_truly': bool(b_silence) and 'could not have heard you' in first_silence,
+            'k_follow_up_weighs_the_silence': len(follow_prompts) == 1 and follow_prompts[0].rstrip().endswith(f'{follow_head}\n{first_silence}'),
+            'k_follow_up_perceives_only_what_k_does': len(follow_prompts) == 1 and 'You neither see nor hear ' in follow_prompts[0],
+            'k_choice_recorded': len(missed_thoughts) == 1 and json.loads(missed_thoughts[0]['detail'])['missed'] == first_silence,
+            'one_follow_up_then_over': len(silence_of(k)) >= 2 and len(follow_prompts) == 1 and 'out of earshot, conversation over' in log,
+        })
+    result = {'mode': 'main' if main else 'branch', 'f': f, 'h': h, 'k': k, 'speed': a_speed, 'greeted_at_m': round(math.dist(a_start[:2], fb[:2]), 2), 'reply_after_ms': reply_after_ms, 'a_start': a_start, 'at_reply': at_reply, 'a2_at': a2_at, 'b_start': b_start, 'k_at_follow': k_at_follow, 'f_at': fb,
+              'a_reply': a_reply, 'a_silence': a_silence, 'b_silence': b_silence, 'frame': frame.group(0) if frame else None,
+              'follow_prompts': len(follow_prompts), 'missed_thoughts': missed_thoughts, 'checks': checks}
+    (run.directory / 'reply-timing.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
     assert all(checks.values()), checks
     return {'status': 'pass', **result}
 
@@ -4399,6 +4628,78 @@ def act_repair_case(run, case):
     assert bool(retry['refused']) == (case == 'act-repair-stop'), retry
     return {'status': 'pass', 'attempts': attempts(), 'repair_calls': len(repair_calls),
             'speech_delivered': len(speech)}
+
+
+@case('seen-remains')
+def seen_remains_case(run):
+    """A real mind gets the count, the named exceptions and the bounded scene in its prompt."""
+    from types import SimpleNamespace
+
+    path = ROOT / '.agents/skills/verify-core/scripts/scenes.py'
+    spec = importlib.util.spec_from_file_location('core_scenes', path)
+    core = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(core)
+    run.harness('launch')
+    run.harness('doctor')
+    rows = lambda query: run.private(query, 'field-query')
+    adapter = SimpleNamespace(rows=rows, call=run.admin,
+                              wait=lambda condition, seconds: run.wait(condition, 'introduction', seconds))
+    line = core.clear_line(adapter)
+    before = {r['id'] for r in rows('SELECT id FROM character')}
+    run.admin('spawn_crowd', 23, True)
+    observer, builder, *dead = sorted(r['id'] for r in rows('SELECT id FROM character') if r['id'] not in before)
+    writer = dead[-1]
+    # The writer needs to survive the setup in the same quiet area as the field.
+    run.admin('place_at', writer, *line[10])
+    for who in [observer, builder, *dead]:
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    run.admin('grant_know_how', writer, 'writing')
+    run.admin('grant_items', writer, 'wood', 1)
+    run.admin('set_behavior', writer, json.dumps({'do': {'skill': 'write', 'item': 'tablet',
+                                                         'text': 'These are field notes.', 'topic': 'writing'}}))
+    run.wait(lambda: rows(f'SELECT id FROM artifact WHERE holder = {writer}'), 'tablet written')
+    at, _, names = core.stage_seen_remains(adapter, (observer,), dead, line)
+    field = {r['owner']: r['id'] for r in run.private("SELECT * FROM structure WHERE kind = 'remains'", 'field')
+             if r['owner'] in dead}
+    assert len(field) == 21
+    run.admin('place_at', builder, at[0] + 5, at[1])
+    for _ in range(10):
+        run.admin('place_structure', builder, 'shelter')
+    run.admin('place_at', observer, *at)
+    prefix = 'You notice the remains of 18 strangers around you, the nearest '
+    told = lambda: [r for r in run.private(f'SELECT * FROM experience WHERE observer = {observer}', 'told')
+                   if r['text'].startswith('You notice') and 'remains' in r['text']]
+    lines = run.wait(lambda: value if len(value := told()) >= 4 else None, 'four remains lines', 15)
+    run.start(model(run, {'replies': {'think': {'thought': 'I look around.', 'intend': [], 'say': None},
+                                     'deliberate': basic_reply()}}), [observer])
+    requests = lambda: shared.rows(run.directory / 'fake-requests.jsonl')
+    sent_text = lambda e: '\n'.join(str(m.get('content', '')) for m in e['body'].get('messages', []))
+    run.request(observer, 'seen-remains')
+    prompt = run.wait(lambda: [sent_text(e) for e in requests() if 'verify seen-remains' in sent_text(e)],
+                      'remains prompt', 60)[0]
+    (run.directory / 'prompt-seen-remains.txt').write_text(prompt)
+    structures = json.loads(scene_part(prompt))['structures']
+    bodies = {r['id']: r for r in structures if r['kind'] == 'remains'}
+    aggregate = [r for r in structures if r['kind'] == 'counted_remains']
+    known = {field[who]: name for who, name in zip(dead[:2], names)}
+    sent = '\n'.join(sent_text(e) for e in requests())
+    named = [r['text'] for r in lines if r['text'].startswith('You notice a remains') and
+             any(name in r['text'] for name in names)]
+    checks = {
+        'four experiences include the exact counted line': len(lines) == 4 and sum(r['text'].startswith(prefix) for r in lines) == 1,
+        'the counted line reaches a real mind prompt': prefix in sent,
+        'both named exceptions reach the mind': len(named) == 2 and all(text in sent for text in named),
+        'scene has one exact aggregate with no body ID':
+            len(aggregate) == 1 and 'id' not in aggregate[0] and
+            aggregate[0]['text'].startswith('the remains of 18 strangers, the nearest '),
+        'scene exposes only the named and readable individual bodies':
+            bodies.keys() == {*known, field[writer]} and all(bodies[id]['of'] == name for id, name in known.items())
+            and bodies[field[writer]]['contents'].get('tablet') == 1,
+        'counted remains use one of ten slots and leave space for shelters':
+            len(structures) == 10 and sum(r['kind'] == 'shelter' for r in structures) == 6,
+    }
+    return {'status': 'pass' if all(checks.values()) else 'fail', 'checks': checks,
+            'field_ids': sorted(field.values()), 'scene_structures': structures}
 
 
 def main():

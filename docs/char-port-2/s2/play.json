@@ -1,0 +1,42 @@
+{
+ "woman": {
+  "near": {
+   "changed_over_8": 29,
+   "max_levels": 70
+  },
+  "middle": {
+   "changed_over_8": 0,
+   "max_levels": 4
+  }
+ },
+ "man": {
+  "near": {
+   "changed_over_8": 14,
+   "max_levels": 56
+  },
+  "middle": {
+   "changed_over_8": 2,
+   "max_levels": 9
+  }
+ },
+ "elder": {
+  "near": {
+   "changed_over_8": 13,
+   "max_levels": 50
+  },
+  "middle": {
+   "changed_over_8": 0,
+   "max_levels": 4
+  }
+ },
+ "girl": {
+  "near": {
+   "changed_over_8": 0,
+   "max_levels": 8
+  },
+  "middle": {
+   "changed_over_8": 0,
+   "max_levels": 7
+  }
+ }
+}

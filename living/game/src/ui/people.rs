@@ -93,7 +93,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<crate::world::Scene>, looks: Res
         *t = Talks { me: Some(me), ..default() };
     }
     let now = scene.now_ms as u64;
-    for c in conn.db.seen_characters().iter().filter(|c| c.id != me && c.kind == "person") {
+    for c in crate::net::characters(conn).into_iter().filter(|c| c.id != me && c.kind == "person") {
         t.met.entry(c.id).or_insert(Met { first_ms: now, ..default() });
     }
     let mut fresh: Vec<Experience> = conn.db.my_experience().iter().filter(|e| e.observer == me && !t.seen.contains(&e.id)).collect();
@@ -432,7 +432,7 @@ pub fn clicks(ui: Res<UiPointer>, tags: Query<&Tag>, mut ws: ResMut<Windows>, mu
                         verbs.want_toward = Some(id);
                     }
                     "trade" => verbs.open_group = Some((id, "offer".into())),
-                    "more" if net.conn.as_ref().is_some_and(|c| c.db.seen_characters().id().find(&id).is_none()) => {
+                    "more" if net.conn.as_ref().is_some_and(|c| crate::net::find_character(c, id).is_none()) => {
                         verbs.toasts.push(crate::verbs::Toast { text: format!("{} is not in sight", looks.cap(id)), ok: None, at: time.elapsed_secs_f64() });
                     }
                     "more" => {
@@ -508,7 +508,7 @@ pub fn update(
     let me = net.my_id;
     let now = scene.now_ms;
     let lower = |id: u32| if Some(id) == me { "you".to_string() } else { looks.of(id).unwrap_or("someone").to_string() };
-    let perceived = |id: u32| net.conn.as_ref().is_some_and(|c| c.db.seen_characters().id().find(&id).is_some());
+    let perceived = |id: u32| net.conn.as_ref().is_some_and(|c| crate::net::find_character(c, id).is_some());
     // Each open window's lines (the log: everything heard and said).
     // The same words said again by the same speaker to the same one, in a row, are one bubble
     // with a count (the owner's coordinator: ten "Good evening" bubbles filled the window).
@@ -590,7 +590,7 @@ pub fn update(
         }
     }
     for (w, mut t) in &mut texts.p0() {
-        let named = net.conn.as_ref().and_then(|c| c.db.seen_characters().id().find(&w.0)).is_some_and(|c| !c.name.is_empty());
+        let named = net.conn.as_ref().and_then(|c| crate::net::find_character(c, w.0)).is_some_and(|c| !c.name.is_empty());
         let colour = looks.colours.get(&w.0).and_then(|(t, _)| t.as_deref()).and_then(crate::looks::colour_name);
         // The title names them; this line adds only what the title lacks (a named person's
         // clothes), and is empty otherwise.

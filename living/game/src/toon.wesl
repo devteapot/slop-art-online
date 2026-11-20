@@ -12,7 +12,7 @@ import bevy_pbr::render::{
 };
 import living_game::toon_light::{
     toon, is_kind, hash3, noise3, rgb_to_hsv, hsv_to_rgb, scene, wetted, view_depth, sun_shadow, sun_color,
-    bands, banded, puddles, wet_sheen, fresnel, rim_light, point_lights, emission, has_sun, sun_direction, eye,
+    bands, banded, puddles, wet_sheen, fresnel, rim_light, point_lights, emission, has_sun, sun_direction, eye, metres_per_pixel,
 };
 
 @if(PREPASS_PIPELINE)
@@ -41,6 +41,11 @@ var detail_sampler: sampler;
 // row 0 the natural colours, row 1 the silvers, as sRGB values; a fallback elsewhere.
 @group(constants::MATERIAL_BIND_GROUP) @binding(105)
 var hair_tints: texture_2d<f32>;
+// A hand-made material's ink map (contract v1.2, docs/HANDMADE_INK.md; style.rs `ToonExt::ink`):
+// G the distance to the nearest stroke over `range`, R its width. Sampled through `face_sampler`;
+// a fallback, never read, on materials without ink.
+@group(constants::MATERIAL_BIND_GROUP) @binding(106)
+var ink_map: texture_2d<f32>;
 
 // The surface that a vertex colour's alpha names (living/tools/textures/surfaces.py: surface k
 // is (k + 0.5) / 32), or -1 for none (alpha 1).
@@ -131,6 +136,21 @@ fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
     return select(pow((c + 0.055) / 1.055, vec3(2.4)), c / 12.92, c <= vec3(0.04045));
 }
 
+// A palette tag (contract v1.3, characters/palette.rs `tag`): a character's colour (bit 24, not
+// a plant's sway, bit 25) whose bits name columns of the material's palette image (bit 27).
+fn is_palette(tag: u32) -> bool {
+    return (tag & ((1u << 24u) | (1u << 25u) | (1u << 27u))) == ((1u << 24u) | (1u << 27u));
+}
+
+// Row `row` of a palette tag's entry, linear: the natural column's and the silver's sRGB values
+// mixed by clamp(grey x _GREY), as `recolor` greys hair (rows: shade, mid, light, highlight, ink).
+fn palette_row(tag: u32, row: i32, grey_v: f32) -> vec3<f32> {
+    let natural = textureLoad(hair_tints, vec2<i32>(i32(tag & 255u), row), 0).rgb;
+    let silver = textureLoad(hair_tints, vec2<i32>(i32((tag >> 8u) & 255u), row), 0).rgb;
+    let t = clamp(f32((tag >> 16u) & 255u) / 255.0 * grey_v, 0.0, 1.0);
+    return srgb_to_linear(mix(natural, silver, t));
+}
+
 // A character's own colours on a shared texture: the mean texture colour moves to the recipe's,
 // keeping the texture's detail. Characters share their base's materials (so they batch); each
 // mesh's tag carries its recipe colour as sRGB bytes with bit 24 set (characters.rs `recolor`).
@@ -140,6 +160,10 @@ fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
 // colour is then mix(natural, silver, clamp(grey x _GREY, 0, 1)) in sRGB values
 // (docs/CHARACTERS.md, "Long hair, short hair and the hair's shading").
 fn recolor(c: vec3<f32>, tag: u32, grey_v: f32) -> vec3<f32> {
+    // A palette tag names columns of the material's palette, not a colour (`hand_colours`).
+    if (is_palette(tag)) {
+        return c;
+    }
     var mode = toon.recolor.w;
     var goal = toon.recolor.xyz;
     var mean_hue = toon.recolor_from.xy;
@@ -256,28 +280,145 @@ fn hair_light(albedo: vec3<f32>, N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, lit: 
 
 // The character's forward, level: the mesh's world frame turned by the character's root (its
 // body's facing; a head turned aside is not followed). Our character files face -Z in their own
-// frame (VRM's convention), their roots turned to face +Z.
+// frame (VRM's convention), their roots turned to face +Z. A hand-made file says which way it
+// faces (`extras.slop.forward`); the client works that out in each mesh's own frame
+// (handmade.rs `local_forward`, in `toon.file`), whatever its nodes turn.
 fn facing(in: VertexOutput) -> vec3<f32> {
     let m = mesh_functions::get_world_from_local(in.instance_index);
-    let f = -m[2].xyz;
+    let own = select(vec3<f32>(0.0, 0.0, -1.0), toon.file.xyz, toon.file.w > 0.5);
+    let f = (m * vec4<f32>(own, 0.0)).xyz;
     let flat = vec3<f32>(f.x, 0.0, f.z);
     return select(normalize(flat), vec3<f32>(0.0, 0.0, 1.0), length(flat) < 1e-4);
 }
 
 // The strand picture's own light at this point against its mean across the strands (a few taps
 // along u, where the strands vary): about 1 on average, above on light strands. 1 without UVs.
-fn strand_light(in: VertexOutput) -> f32 {
+// The taps read the mip the pixel's footprint selects (`duv`: the UV's screen derivatives, x/y
+// then z/w, taken in uniform control flow): strands finer than a pixel average out, so their
+// contrast fades at a distance instead of shimmering from frame to frame as mip 0 did.
+fn strand_light(in: VertexOutput, duv: vec4<f32>) -> f32 {
     var s = 1.0;
 @if(VERTEX_UVS_A && !BINDLESS) {
     let lum = vec3<f32>(0.3, 0.59, 0.11);
-    let here = dot(textureSampleLevel(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, in.uv, 0.0).rgb, lum);
+    let here = dot(textureSampleGrad(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, in.uv, duv.xy, duv.zw).rgb, lum);
     var mean = 0.0;
     for (var i = -3; i <= 3; i++) {
-        mean += dot(textureSampleLevel(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, in.uv + vec2<f32>(f32(i) * 0.012, 0.0), 0.0).rgb, lum);
+        mean += dot(textureSampleGrad(pbr_bindings::base_color_texture, pbr_bindings::base_color_sampler, in.uv + vec2<f32>(f32(i) * 0.012, 0.0), duv.xy, duv.zw).rgb, lum);
     }
     s = here / max(mean / 7.0, 1e-3);
 }
     return s;
+}
+
+// A threshold `t` on `x` with a half-width `w`, never narrower than the pixel (`fw`, the screen
+// derivative of x): clean bands without stair steps.
+fn aa(t: f32, w: f32, x: f32, fw: f32) -> f32 {
+    let ww = max(max(w, fw), 1e-4);
+    return smoothstep(t - ww, t + ww, x);
+}
+
+// A hand-made file's hair (style.rs `Kind::HandHair`, docs/HANDMADE_HAIR.md, "The hair profile"):
+// at most three flat levels from two thresholds on N·L, the shade colour in cast shadow, and one
+// broad highlight where its mask (the larger of the second UVs' y as 1 + _HIGHLIGHT and the mask
+// texture's R) passes 0.5, only where the sun reaches; and, v1.1, the lock ink lines from the
+// texture's G (a distance field in UV, "Lock ink lines"). `duv` is the UV's screen derivatives,
+// taken in uniform control flow; `view_z` the point's view depth.
+struct HandColours {
+    shade: vec3<f32>,
+    mid: vec3<f32>,
+    light: vec3<f32>,
+    highlight: vec3<f32>,
+    ink: vec3<f32>,
+}
+
+// A profile's colours (linear): its own (`toon.hand`, `toon.hand_ink`), or, on a palette material
+// (contract v1.3) whose mesh carries a palette tag, its entry for the person's hair colour.
+fn hand_colours(tag: u32, grey_v: f32) -> HandColours {
+    if (toon.palette.x > 0.5 && is_palette(tag)) {
+        return HandColours(palette_row(tag, 0, grey_v), palette_row(tag, 1, grey_v), palette_row(tag, 2, grey_v), palette_row(tag, 3, grey_v), palette_row(tag, 4, grey_v));
+    }
+    return HandColours(toon.hand[0].rgb, toon.hand[1].rgb, toon.hand[2].rgb, toon.hand[3].rgb, toon.hand_ink.rgb);
+}
+
+struct HandHair {
+    // The base colour, before the light.
+    base: vec3<f32>,
+    // How far the point is out of shade (0 in the shade band and in cast shadow).
+    s1: f32,
+    // How much of the pixel the ink line covers.
+    ink: f32,
+}
+
+// A pixel's metres at the Near stop (view.rs: 8 m up at 58°, 9.43 m away, FOV 42°, 900 px tall):
+// `ink_px` is the line's width there.
+const INK_NEAR_M_PX: f32 = 0.00805;
+
+// How much of the pixel an ink line covers (docs/HANDMADE_INK.md, "What the client computes";
+// the hair's v1.1 lines and every v1.2 ink). `g` is the distance field (G, the distance over
+// `range`), `r` the stroke's width (R); `mode` 1 "px" (full width), 2 "px" with taper (R the
+// width fraction), 3 "uv" (R the half-width over `range`); `w` px ("px") or min_px ("uv");
+// `m_uv` the texel density (metres per UV, 0 unknown); `duv` the UV's screen derivatives.
+fn ink_cover(g: f32, r: f32, range: f32, mode: f32, w: f32, fade: f32, m_uv: f32, duv: vec4<f32>, view_z: f32) -> f32 {
+    if (g >= 1.0) {
+        return 0.0;
+    }
+    // The UV a pixel spans (its longer side): the distance in pixels.
+    let fw_uv = max(max(length(duv.xy), length(duv.zw)), 1e-7);
+    let d_px = g * range / fw_uv;
+    // The width and the fade follow the pixel's size at its depth and the texel density, which
+    // are smooth on screen: screen derivatives step between pixel quads, and a width or fade
+    // driven by them flickered as the camera moved.
+    let m_px = max(metres_per_pixel(view_z), 1e-6);
+    var width = w * min(INK_NEAR_M_PX / m_px, 4.0);
+    if (mode > 1.5 && mode < 2.5) {
+        width = width * r;
+    }
+    if (mode > 2.5) {
+        // "uv": the stroke's own half-width (R x range) in the world, in pixels, with a floor;
+        // nothing at a tip.
+        // (Mode 4, `LIVING_GAME_PERF=inkfw`: through the screen derivatives, as the distance.)
+        let hw = select(r * range / fw_uv, r * range * m_uv / m_px, m_uv > 0.0 && mode < 3.5);
+        width = select(0.0, max(2.0 * hw, w), r > 0.0);
+    }
+    // How much of the pixel (a 1-pixel box across the line) a line `width` wide covers: it sums
+    // to the width across the line whatever its place in the pixels, so a thin line moving by a
+    // fraction of a pixel neither flickers nor crawls.
+    var cov = clamp(min(d_px + 0.5, width * 0.5) - max(d_px - 0.5, -width * 0.5), 0.0, 1.0);
+    // Neighbouring lines' spacing on screen, estimated as 2 · range (the field's range is half
+    // the narrowest spacing): fade before they would merge. 0 never fades.
+    let space = select(2.0 * range / fw_uv, 2.0 * range * m_uv / m_px, m_uv > 0.0);
+    if (fade > 0.0) {
+        cov = cov * smoothstep(fade, 2.0 * fade, space);
+    }
+    return cov;
+}
+
+fn hand_hair(N: vec3<f32>, L: vec3<f32>, vis: f32, in: VertexOutput, duv: vec4<f32>, view_z: f32, hc: HandColours) -> HandHair {
+    let ndl = dot(N, L);
+    let fw = fwidth(ndl);
+    let t = toon.hand_bands;
+    let s1 = aa(t.x, t.z, ndl, fw) * vis;
+    let s2 = aa(t.y, t.z, ndl, fw);
+    let level = mix(hc.shade, mix(hc.mid, hc.light, s2), s1);
+    var mask = -1.0;
+@if(VERTEX_UVS_B) {
+    mask = in.uv_b.y - 1.0;
+}
+    var cov = 0.0;
+@if(VERTEX_UVS_A) {
+    if (toon.hand[3].w > 0.5) {
+        // One tap for both: R the highlight, G the ink field.
+        let tex = textureSampleGrad(face_map, face_sampler, in.uv, duv.xy, duv.zw);
+        mask = max(mask, tex.r);
+        if (toon.hand_ink_range.z > 0.5) {
+            // The v1.1 lock lines: full width, the texel density measured from the mesh.
+            cov = ink_cover(tex.g, 1.0, toon.hand_ink_range.x, 1.0, toon.hand_ink.w, toon.hand_ink_range.y, toon.hand_ink_range.w, duv, view_z);
+        }
+    }
+}
+    let fm = fwidth(mask);
+    let h = select(0.0, aa(0.5, t.w, mask, fm), mask >= 0.0) * s1;
+    return HandHair(mix(level, hc.highlight, h), s1, cov);
 }
 
 @fragment
@@ -302,11 +443,22 @@ fn fragment(
 @if(VERTEX_UVS_B)
     grey_v = in.uv_b.x;
     var albedo = vec4<f32>(recolor(pbr_input.material.base_color.rgb, tag, grey_v), pbr_input.material.base_color.a);
+    // A tint layer (style.rs `Kind::Tint`) is a factor over the lit skin under it, blended by
+    // multiplying (`AlphaMode::Multiply`: dst × mix(1, rgb, a), so premultiplied here), so it
+    // carries that skin's light and shadow and never glows on a shaded cheek.
+    if (is_kind(6.0)) {
+        out.color = vec4<f32>(albedo.rgb * albedo.a, albedo.a);
+        return out;
+    }
     let N = normalize(pbr_input.N);
     let p = pbr_input.world_position;
     // In uniform control flow: the gradients that painted detail samples with.
     let dpx = dpdx(p.xyz);
     let dpy = dpdy(p.xyz);
+    var duv = vec4<f32>(0.0);
+@if(VERTEX_UVS_A) {
+    duv = vec4<f32>(dpdx(in.uv), dpdy(in.uv));
+}
     // Painted detail on generated scenery, under the vertex colours, fading out with distance so
     // the far view stays calm. `relief` is how far its height moves the sun's band edge.
     var relief = 0.0;
@@ -355,7 +507,44 @@ fn fragment(
         var depth = select(toon.shadow.a, toon.shadow.a * 0.45, skin);
         depth = select(depth, depth * toon.face.y, face);
         depth = select(depth, toon.shadow.a * toon.face.z, part);
-        var color = banded(albedo.rgb, sun, lit, (1.0 - depth) * select(away, 1.0, skin || part), sc);
+        let value = (1.0 - depth) * select(away, 1.0, skin || part);
+        var color = banded(albedo.rgb, sun, lit, value, sc);
+        // A hand-made hair profile replaces the hair's colour and its banding.
+        let hand = is_kind(5.0);
+        var lit_albedo = albedo.rgb;
+        if (hand) {
+            let hc = hand_colours(tag, grey_v);
+            let hh = hand_hair(N, L, shadow, in, duv, view_z, hc);
+            color = hh.base * sun + hh.base * sc.fill * mix(1.0, 0.45, hh.s1);
+            // The ink takes the shade band's light wherever it falls.
+            let ink = hc.ink;
+            color = mix(color, ink * sun + ink * sc.fill, hh.ink);
+            lit_albedo = mix(hh.base, ink, hh.ink);
+        }
+        // A material's general ink (contract v1.2, docs/HANDMADE_INK.md): an albedo lit exactly
+        // as the material lights its own (the same band, cast shadow and depth; a profile hair's
+        // shade-band light), laid over the material's own colour (Porter-Duff over: a carrier,
+        // whose own alpha is 0, draws only its line). It takes no rim (below).
+        var ink_cov = 0.0;
+        var out_a = albedo.a;
+@if(VERTEX_UVS_A) {
+        if (toon.ink_shape.z > 0.5) {
+            let t = textureSampleGrad(ink_map, face_sampler, in.uv, duv.xy, duv.zw);
+            ink_cov = ink_cover(t.g, t.r, toon.ink_shape.x, toon.ink_shape.z, toon.ink.w, toon.ink_shape.y, toon.ink_shape.w, duv, view_z);
+        }
+}
+        if (ink_cov > 0.0) {
+            // A relative ink (v1.3) takes its colour from the mesh's palette entry.
+            var ink = toon.ink.rgb;
+            if (toon.palette.y > 0.5 && is_palette(tag)) {
+                ink = palette_row(tag, 4, grey_v);
+            }
+            let ink_lit = select(banded(ink, sun, lit, value, sc), ink * sun + ink * sc.fill, hand);
+            let a = albedo.a;
+            out_a = ink_cov + a * (1.0 - ink_cov);
+            color = (ink_lit * ink_cov + color * a * (1.0 - ink_cov)) / max(out_a, 1e-4);
+            lit_albedo = (ink * ink_cov + lit_albedo * a * (1.0 - ink_cov)) / max(out_a, 1e-4);
+        }
         if (toon.atmo.y > 0.05 && N.y > 0.97 && (tag & (1u << 24u)) == 0u) {
             color = puddles(color, p.xyz, 0.0);
         }
@@ -365,16 +554,16 @@ fn fragment(
         let fr = fresnel(N, V);
         // Hair takes no general rim: its pale cream, added, is several times dark hair's own
         // colour and washes it out. Its one rim is `hair_light`'s, in its own hue (toon.hair.w).
-        let rim_strength = select(select(toon.rim.a, toon.face.w, face), 0.0, part || is_kind(4.0));
-        color = color + rim_light(fr, lit, rim_strength) * sun;
+        let rim_strength = select(select(toon.rim.a, toon.face.w, face), 0.0, part || is_kind(4.0) || hand);
+        color = color + rim_light(fr, lit, rim_strength) * sun * (1.0 - ink_cov);
         if (is_kind(4.0)) {
-            color = color + hair_light(albedo.rgb, N, V, L, lit, fr, strand_light(in), facing(in), in) * sun;
+            color = color + hair_light(albedo.rgb, N, V, L, lit, fr, strand_light(in, duv), facing(in), in) * sun * (1.0 - ink_cov);
         }
-        color = color + point_lights(albedo.rgb, p.xyz, N, view_z, pbr_input.frag_coord.xy, pbr_input.is_orthographic);
+        color = color + point_lights(lit_albedo, p.xyz, N, view_z, pbr_input.frag_coord.xy, pbr_input.is_orthographic);
         color = color + emission(pbr_input.material.emissive.rgb, sc);
-        out.color = vec4<f32>(color, albedo.a);
+        out.color = vec4<f32>(color, out_a);
     } else {
-        out.color = vec4<f32>(albedo.rgb * toon.extra.y, albedo.a);
+        out.color = vec4<f32>(select(albedo.rgb, hand_colours(tag, grey_v).shade, is_kind(5.0)) * toon.extra.y, albedo.a);
     }
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
 }

@@ -163,6 +163,8 @@ struct Ev<'a> {
     latched: Option<u16>,
     /// A deliberate act holds the body: graph leaves wait, except reflexes (see `acts.rs`).
     acting: bool,
+    /// The leaf whose activity's success this evaluation read (`finished`), and its skill.
+    done: Option<(u16, String)>,
 }
 
 /// Work that, once begun under an `if`, is finished even after the `if`'s condition stops
@@ -170,6 +172,7 @@ struct Ev<'a> {
 
 pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     let load = common::detail_span("brain.load");
+    let part = common::detail_span("load.rows");
     let Some(me) = ctx.db.character().id().find(id) else { return };
     if !me.alive {
         return;
@@ -179,24 +182,35 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     let w = common::world(ctx);
     let at = pos(&body, now);
     let mut cur = ctx.db.activity().id().find(id);
+    drop(part);
+    let part = common::detail_span("load.needs");
     let Some(vit) = settle_needs(ctx, &me, vit, at, &w, cur.as_ref(), now) else { return };
+    drop(part);
+    let part = common::detail_span("load.infant");
     perceive::infant_distress(ctx, &me, at, now);
+    drop(part);
     let needs = common::needs(&vit, now);
+    let part = common::detail_span("load.graph");
     let Some(g) = common::compiled(ctx, id, st.revision) else {
         log::warn!("character {id} has no valid graph at revision {}", st.revision);
         return;
     };
+    drop(part);
+    let part = common::detail_span("load.overdue");
     // A deliberate act that cannot reach its target gives up after a while (and the next
     // one waiting may start in its place).
     if let Some(a) = cur.clone().filter(|a| crate::acts::overdue(ctx, a, now)) {
         act::cancel(ctx, a, now, Some("you could not get to it in time"));
         cur = ctx.db.activity().id().find(id);
     }
+    drop(part);
+    let part = common::detail_span("load.ev");
     let acting = cur.as_ref().map_or(false, |a| act::held(a.node));
-    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting };
+    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting, done: None };
     // A pace aside (an `aside` skill in the script) is a short walk that finishes on its own too.
     let sc = common::scripts(ctx);
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && (sc.skills().get(&a.skill).is_some_and(|k| k.latch) || sc.shows().aside(&a.skill))).map(|a| a.node);
+    drop(part);
     drop(load);
     let alerts = common::detail_span("brain.alerts");
     ev.alerts();
@@ -209,14 +223,21 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     };
     common::diag(|| "eval:all", 1);
     common::diag(|| "do:visits", ev.visits as u64);
+    // The leaf whose end this evaluation read, if it came to nothing else: a continuous
+    // activity's `doing` row held at its end stays while this is so (`town::settle`).
+    let read_end = ev.done.take().map(|(_, skill)| skill).filter(|_| result == St::Ok && !played && !matches!(root.root, Node::Seq(_)));
     let _span = common::span("brain.after");
     ev.after(result, &root.root);
     drop(_span);
+    let part = common::detail_span("brain.settle");
+    // The activity as the after-step left it, read once for both (`settle` writes only the
+    // `doing` row).
+    let act_now = ctx.db.activity().id().find(id);
+    crate::town::settle_with(ctx, id, read_end.as_deref(), act_now.is_some());
+    drop(part);
     let _span = common::detail_span("brain.slept");
     // Fell asleep, or woke (and thinks on what waited): perceive::slept.
-    if let Some(me) = ctx.db.character().id().find(id) {
-        perceive::slept(ctx, &me, now);
-    }
+    perceive::slept_with(ctx, id, now, act_now);
     if played && result != St::Run {
         crate::command_done(ctx, id, now);
     }
@@ -232,7 +253,7 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Optio
     let g = common::compiled(ctx, id, st.revision)?;
     let at = pos(&body, now);
     let needs = common::needs(&vit, now);
-    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false };
+    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false, done: None };
     ev.sensed(t)
 }
 
@@ -287,8 +308,8 @@ fn settle_needs(ctx: &ReducerContext, me: &Character, mut v: Vitals, at: (f32, f
     }
     // Profiled: what a recompute costs (the facts and the law), and how many there are.
     let _timer = common::span("needs.rates");
-    let facts = act::facts(ctx, me.id, now);
     let sc = common::scripts(ctx);
+    let facts = act::rates_facts(ctx, me.id, now, &sc.law_plan("rates"));
     let hour = common::hour(w, now);
     let sctx = living_rules::script::SkillCtx { actor: facts, night, dark, hour, season: season.into(), raining: crate::town::raining(ctx), ..Default::default() };
     let _ = at;
@@ -658,7 +679,7 @@ impl<'a> Ev<'a> {
             Node::Do(a) => {
                 // A leaf that has finished is done, whether or not its target is still in sight
                 // (a back_off or a flight that took it out of sight succeeded all the same).
-                if let Some(done) = self.finished(id) {
+                if let Some(done) = self.finished(id, &a.skill) {
                     return done;
                 }
                 let sensed = a.target.as_ref().map(|t| {
@@ -859,15 +880,22 @@ impl<'a> Ev<'a> {
 
     /// The outcome of leaf `id`'s activity that has ended since it was last visited (read once),
     /// unless that activity is still under way.
-    fn finished(&mut self, id: u16) -> Option<St> {
+    fn finished(&mut self, id: u16, skill: &str) -> Option<St> {
+        let (ctx, me) = (self.ctx, self.me.id);
+        self.finished_with(id, skill, || ctx.db.activity().id().find(me))
+    }
+
+    /// `finished`, given how to have the body's activity row (read only when it is needed).
+    fn finished_with(&mut self, id: u16, skill: &str, activity: impl FnOnce() -> Option<Activity>) -> Option<St> {
         let _span = common::detail_span("brain.finished");
         let rev = self.st.revision;
         let l = self.st.last.clone().filter(|l| l.node == id && l.revision == rev)?;
-        if self.ctx.db.activity().id().find(self.me.id).is_some_and(|a| a.node == id && a.revision == rev) {
+        if activity().is_some_and(|a| a.node == id && a.revision == rev) {
             return None;
         }
         self.st.last = None;
         if l.ok {
+            self.done = Some((id, skill.to_string()));
             return Some(St::Ok);
         }
         self.last_fail = l.why.clone();
@@ -877,36 +905,42 @@ impl<'a> Ev<'a> {
     #[allow(clippy::too_many_arguments)]
     fn leaf(&mut self, id: u16, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, desc: String) -> St {
         let _span = common::detail_span("brain.leaf");
+        // The body's activity, read once for this leaf (docs/COMBAT_PHASE.md step 3): nothing
+        // below writes it before `begin`, except a reflex taking the body back from a deliberate
+        // act, after which it is read again.
+        let mut cur = self.ctx.db.activity().id().find(self.me.id);
         // A committed move under way holds the body until it has run its course (a dash may cut
         // in on a windup): the graph waits on it, as a player's keys do (`combat::held_by`).
-        if let Some(a) = self.ctx.db.activity().id().find(self.me.id) {
+        if let Some(a) = &cur {
             let own = a.node == id && a.revision == self.st.revision;
-            if !own && crate::combat::held_by(&common::scripts(self.ctx), &a, skill).is_err() {
-                self.status = a.label;
+            if !own && crate::combat::held_by(&common::scripts(self.ctx), a, skill).is_err() {
+                self.status = a.label.clone();
                 return St::Run;
             }
         }
         if self.acting {
             // A deliberate act holds the body: the graph's work waits for it, but a reflex
             // (flee, dodge, block, attack, throw) takes the body back at once.
-            match self.ctx.db.activity().id().find(self.me.id).filter(|a| act::held(a.node)) {
+            match cur.clone().filter(|a| act::held(a.node)) {
                 Some(a) if common::scripts(self.ctx).shapes().reflex(skill) => {
                     crate::acts::interrupt(self.ctx, a, skill, self.now);
                     self.acting = false;
+                    cur = self.ctx.db.activity().id().find(self.me.id);
                 }
                 Some(_) => return St::Run,
                 None => self.acting = false,
             }
         }
         let rev = self.st.revision;
-        if let Some(a) = self.ctx.db.activity().id().find(self.me.id) {
+        if let Some(a) = &cur {
             if a.node == id && a.revision == rev {
                 self.running = Some(id);
-                self.status = a.label;
+                self.status = a.label.clone();
                 return St::Run;
             }
         }
-        if let Some(done) = self.finished(id) {
+        let seen = cur.clone();
+        if let Some(done) = self.finished_with(id, skill, move || seen) {
             return done;
         }
         let want = std::mem::take(&mut self.want);
@@ -914,7 +948,7 @@ impl<'a> Ev<'a> {
         let run = self.run.take();
         let spacing = std::mem::take(&mut self.spacing);
         let _span = common::detail_span("brain.begin");
-        match act::begin(self.ctx, self.me.id, id, rev, skill, target, item, qty, text, topic, (&want.0, want.1), answers, run, spacing, self.now) {
+        match act::begin_with(self.ctx, self.me.id, id, rev, skill, target, item, qty, text, topic, (&want.0, want.1), answers, run, spacing, self.now, cur) {
             Ok(()) => {
                 common::diag(|| format!("begin:ok:{skill}"), 1);
                 self.running = Some(id);
@@ -1090,9 +1124,22 @@ impl<'a> Ev<'a> {
                 let (ctx, me) = (self.ctx, self.me.id);
                 let kind = f.kind.clone();
                 let matches = |k: &str| kind == "creature" || k == kind;
-                let ok = |id: u32| f.relation.as_deref().map_or(true, |rel| relation_ok(ctx, me, id, rel)) && ctx.db.character().id().find(id).is_some();
+                // The character row `ok` found last, kept for the answer's name (nothing is written
+                // between the two reads; docs/COMBAT_PHASE.md step 3).
+                let found: std::cell::RefCell<Option<Character>> = std::cell::RefCell::new(None);
+                let ok = |id: u32| {
+                    f.relation.as_deref().map_or(true, |rel| relation_ok(ctx, me, id, rel)) && {
+                        let ch = ctx.db.character().id().find(id);
+                        let some = ch.is_some();
+                        *found.borrow_mut() = ch;
+                        some
+                    }
+                };
                 if let Some(c) = self.first_seen(|c| matches(&c.kind) && ok(c.id)) {
-                    let ch = ctx.db.character().id().find(c.id)?;
+                    let ch = match found.take().filter(|ch| ch.id == c.id) {
+                        Some(ch) => ch,
+                        None => ctx.db.character().id().find(c.id)?,
+                    };
                     return Some(Resolved { class: 3, id: c.id as u64, at: c.pos, kind: c.kind.to_string(), name: ch.name });
                 }
                 let scent = if self.smell { common::scent_of(&self.me.kind) } else { None };
@@ -1285,7 +1332,7 @@ impl<'a> Ev<'a> {
                 };
                 act::can(self.ctx, self.me.id, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), self.now)
             }
-            Cond::Chance(p) => self.ctx.rng().gen_range(0.0f32..1.0) < *p,
+            Cond::Chance(p) => crate::seed::rng(self.ctx).gen_range(0.0f32..1.0) < *p,
             Cond::All(v) => v.iter().all(|x| self.cond(x)),
             Cond::Any(v) => v.iter().any(|x| self.cond(x)),
             Cond::Not(x) => !self.cond(x),
@@ -2002,30 +2049,33 @@ impl<'a> Ev<'a> {
         // Structures. One made of several tiles (a town gate is a block of gate tiles) is noticed
         // once: new tiles touching others of the same kind and owner are one thing, and nothing
         // is said when any part of it was already familiar.
-        // Remains and every other structure lie still: one looked at lately is in the seen set,
-        // so a look costs one check of its id, and their details are copied only when something
-        // in sight is new.
+        // Durable block ranges answer structure newness. The legacy path uses recent marks
+        // and familiarity. Details are copied only when something in sight is new.
         drop(part);
         let _part = common::detail_span("noticed.structures");
+        let mut seen = crate::seen_structures::Look::default();
         let new: Vec<usize> = if laws.notice_inplace {
-            let ids = self.new_structures_in_place(laws.notice_inplace_check, laws.notice_delta, laws.notice_delta_check);
+            let ids = self.new_structures_in_place(&laws, &mut seen);
             if ids.is_empty() {
+                // An unchanged look can still have migrated legacy familiarity.
+                seen.write(self.ctx);
                 return;
             }
             common::diag(|| "notice_inplace:listed", 1);
             let ids: std::collections::HashSet<u64> = ids.into_iter().collect();
             self.structures().iter().enumerate().filter(|(_, (s, _))| ids.contains(&s.id)).map(|(i, _)| i).collect()
         } else {
-            let ids: Vec<u64> = self.structures().iter().map(|(s, _)| s.id).collect();
+            let ids: Vec<_> = self.structures().iter().map(|(s, _)| (s.id, s.chunk)).collect();
             common::diag(|| "noticed:structures", ids.len() as u64);
             let mut new: Vec<usize> = Vec::new();
-            for (i, id) in ids.iter().enumerate() {
-                if !self.recently_seen(structure_key(*id)) && self.familiarity(FAM_STRUCTURE | id).is_none() {
+            for (i, (id, chunk)) in ids.into_iter().enumerate() {
+                if self.new_structure(&laws, &mut seen, id, chunk) {
                     new.push(i);
                 }
             }
             new
         };
+        seen.write(self.ctx);
         common::diag(|| "noticed:structures_new", new.len() as u64);
         if new.is_empty() {
             return;
@@ -2040,24 +2090,42 @@ impl<'a> Ev<'a> {
         // Tiles by kind and owner, each in list order, for `joined_tiles`.
         let mut groups: std::collections::HashMap<(&str, u32), Vec<usize>> = std::collections::HashMap::new();
         for (j, (_, kind, owner, _, _)) in structures.iter().enumerate() {
-            groups.entry((kind.as_str(), *owner)).or_default().push(j);
+            if kind != "remains" {
+                groups.entry((kind.as_str(), *owner)).or_default().push(j);
+            }
         }
+        let mut counted = Vec::new();
+        let mut known = None;
         for &i in &new {
             if told[i] {
                 continue;
             }
-            let part = joined_tiles(&structures, &groups[&(structures[i].1.as_str(), structures[i].2)], i);
+            let (id, kind, owner, pos, dist) = &structures[i];
+            if kind == "remains" {
+                // Each body is an individual, even when several lie on the same tile.
+                if *owner != self.me.id {
+                    let (species, readable) = common::remains_label(self.ctx, *id, *owner);
+                    let named = &*species == "person" && known.get_or_insert_with(|| crate::perception::known_name_ids(self.ctx, &self.me)).contains(owner);
+                    if named || readable {
+                        self.notice_remains(*owner, *pos, *dist);
+                    } else {
+                        let group = if &*species == "person" { "stranger".to_owned() } else { species.to_string() };
+                        counted.push((*owner, *pos, *dist, group));
+                    }
+                }
+                continue;
+            }
+            let part = joined_tiles(&structures, &groups[&(kind.as_str(), *owner)], i);
             for &k in &part {
                 told[k] = true;
             }
-            let (_, kind, owner, _, _) = &structures[i];
             if *owner == self.me.id || part.iter().any(|k| !is_new[*k]) {
                 continue;
             }
             let nearest = *part.iter().min_by(|a, b| structures[**a].4.total_cmp(&structures[**b].4)).unwrap_or(&i);
             let (_, _, _, pos, dist) = structures[nearest];
-            let whose = if *owner != 0 && kind != "remains" { common::owner_label(self.ctx, &self.me, *owner, kind) } else { None };
-            let by = if let Some(w) = &whose { format!(" built by {w}") } else if kind == "remains" { format!(" — the remains of {}", common::label_for(self.ctx, &self.me, *owner)) } else { String::new() };
+            let whose = if *owner != 0 { common::owner_label(self.ctx, &self.me, *owner, kind) } else { None };
+            let by = if let Some(w) = &whose { format!(" built by {w}") } else { String::new() };
             // Its extent as it lies on the ground (a town gate is a block of gate tiles).
             let wide = if part.len() > 1 {
                 let (xs, ys): (Vec<f32>, Vec<f32>) = part.iter().map(|k| structures[*k].3).unzip();
@@ -2067,17 +2135,75 @@ impl<'a> Ev<'a> {
                 String::new()
             };
             let text = format!("You notice a {kind}{wide}{by}, {dist:.0} tiles {}.", direction(at, pos));
-            if kind == "remains" {
-                // Remains are a death seen again, as what it left: their observer is a bystander
-                // of it (woken at most once per `witness_wake_ms`, docs/BATTLE_SCALE.md), told at once.
-                crate::perceive::percept_seen(self.ctx, &self.me, now, "saw", *owner, 0, pos, text, 0.8, false);
-            } else {
-                // Whose it is, only as the line names them (house-owner-label).
-                crate::perceive::percept_owned(self.ctx, &self.me, now, "saw", if whose.is_some() { *owner } else { 0 }, 0, pos, text, 0.35);
+            // Whose it is, only as the line names them (house-owner-label).
+            crate::perceive::percept_owned(self.ctx, &self.me, now, "saw", if whose.is_some() { *owner } else { 0 }, 0, pos, text, 0.35);
+        }
+        if let [only] = counted.as_slice() {
+            self.notice_remains(only.0, only.1, only.2);
+        } else if let Some(nearest) = counted.first() {
+            let mut groups: Vec<(&str, usize)> = Vec::new();
+            for (_, _, _, label) in &counted {
+                if let Some(group) = groups.iter_mut().find(|(name, _)| *name == label) {
+                    group.1 += 1;
+                } else {
+                    groups.push((label, 1));
+                }
             }
+            let (_, pos, dist, _) = nearest;
+            let text = living_rules::remains::counted_line(&groups, (*dist, direction(at, *pos)));
+            crate::perceive::percept_seen(self.ctx, &self.me, now, "saw", 0, 0, *pos, text, 0.8, false);
         }
     }
 
+    fn notice_remains(&self, owner: u32, pos: (f32, f32), dist: f32) {
+        let label = common::label_for(self.ctx, &self.me, owner);
+        let direction = direction(self.at, pos);
+        let text = format!("You notice a remains — the remains of {label}, {dist:.0} tiles {direction}.");
+        crate::perceive::percept_seen(self.ctx, &self.me, self.now, "saw", owner, 0, pos, text, 0.8, false);
+    }
+
+    fn new_structure(&mut self, laws: &living_rules::script::Laws, look: &mut crate::seen_structures::Look, id: u64, chunk: u32) -> bool {
+        let thing = FAM_STRUCTURE | id;
+        if !laws.seen_ranges {
+            return !self.recently_seen(structure_key(id)) && self.familiarity(thing).is_none();
+        }
+
+        let (ctx, actor) = (self.ctx, self.me.id);
+        let previously_seen = look.seen(ctx, actor, chunk, id);
+        if previously_seen && !laws.seen_ranges_check {
+            return false;
+        }
+
+        // Legacy recognition seeds the ranges. Migration and its deletion are in the
+        // same transaction as the block write. The diagnostic maintains a shadow row.
+        let legacy = if laws.seen_ranges_check {
+            self.recently_seen(structure_key(id));
+            self.familiarity(thing)
+        } else {
+            ctx.db.familiar().by_actor_thing().filter((actor, thing)).next()
+        };
+        if !previously_seen {
+            look.add(ctx, actor, chunk, id);
+        }
+        let new = !previously_seen && legacy.is_none();
+        if laws.seen_ranges_check {
+            common::diag(|| "seen_ranges:checked", 1);
+            match (previously_seen, legacy.is_some()) {
+                (true, false) => common::diag(|| "seen_ranges:kept", 1),
+                (false, true) => {
+                    common::diag(|| "seen_ranges:differed", 1);
+                    log::error!("seen_ranges of {actor}: structure {id} was missing from the ranges");
+                }
+                _ => {}
+            }
+        } else if let Some(row) = legacy {
+            ctx.db.familiar().id().delete(row.id);
+            common::diag(|| "seen_ranges:migrated", 1);
+        }
+        new
+    }
+
+    /// With ranges on, recent marks and ordering for familiarity pruning are unnecessary.
     /// The structures in sight that are new to this character (`noticed`, `notice_inplace`,
     /// docs/BATTLE_SCALE.md battle-exact-2 C1), read in place from the chunks' lists: no copy of
     /// them and no sort unless something is new. The same calls as the full list's pass, in the
@@ -2093,28 +2219,29 @@ impl<'a> Ev<'a> {
     ///
     /// With `delta` (`notice_delta`, docs/BATTLE_SCALE.md C2), a structure that was in sight at the
     /// character's last look (`last_look`, within `LOOK_VALID_MS`: in its disc, and no newer than the
-    /// highest id in sight then) is passed over: it was looked at then, and has had its `familiar`
-    /// row since (pruning spares the last look's disc, `prune_familiar`). Only structures built since
-    /// or come into sight are checked. `delta_check` (`notice_delta_check`) checks every one passed
-    /// over has its row. A look that finds no valid row checks everything, as without `delta`.
-    fn new_structures_in_place(&mut self, check: bool, delta: bool, delta_check: bool) -> Vec<u64> {
+    /// highest id in sight then) is passed over: it was recorded in a range or in `familiar`
+    /// (pruning spares legacy rows in the last look's disc). Only structures built since or come
+    /// into sight are checked. `notice_delta_check` verifies that skipped IDs are recognized.
+    /// A look that finds no valid row checks everything.
+    fn new_structures_in_place(&mut self, laws: &living_rules::script::Laws, look: &mut crate::seen_structures::Look) -> Vec<u64> {
+        let (check, delta, delta_check) = (laws.notice_inplace_check, laws.notice_delta, laws.notice_delta_check);
         let (ctx, me, now, at) = (self.ctx, self.me.id, self.now, self.at);
         let r = common::sight_for(ctx, me, &self.w, now);
-        let lately = |k: u32| SEEN.with(|s| s.borrow().get(&me).and_then(|m| m.get(&k).copied())).is_some_and(|t| now.saturating_sub(t) < SEEN_MS);
+        let lately = |k: u32| !laws.seen_ranges && SEEN.with(|s| s.borrow().get(&me).and_then(|m| m.get(&k).copied())).is_some_and(|t| now.saturating_sub(t) < SEEN_MS);
         let last = if delta { ctx.db.last_look().id().find(me).filter(|l| now.saturating_sub(l.at_ms) <= LOOK_VALID_MS) } else { None };
         if delta {
             common::diag(|| if last.is_some() { "notice_delta:incremental" } else { "notice_delta:whole" }, 1);
         }
         let mut recent: Vec<u32> = Vec::new();
-        let mut other: Vec<(u64, f32)> = Vec::new();
-        let mut passed: Vec<u64> = Vec::new();
+        let mut other: Vec<(u64, u32, f32)> = Vec::new();
+        let mut passed: Vec<(u64, u32)> = Vec::new();
         let mut top = 0u64;
         common::for_structures_near(ctx, at, r, |s, d| {
             top = top.max(s.id);
             if let Some(l) = &last {
                 if s.id <= l.max_structure && common::dist((l.x, l.y), (s.x, s.y)) <= l.r {
                     if delta_check || check {
-                        passed.push(s.id);
+                        passed.push((s.id, s.chunk));
                     }
                     common::diag(|| "notice_delta:passed", 1);
                     return;
@@ -2124,7 +2251,7 @@ impl<'a> Ev<'a> {
             if lately(k) {
                 recent.push(k);
             } else {
-                other.push((s.id, d));
+                other.push((s.id, s.chunk, d));
             }
         });
         if delta {
@@ -2137,19 +2264,25 @@ impl<'a> Ev<'a> {
         }
         if delta_check && !passed.is_empty() {
             common::diag(|| "notice_delta:checked", passed.len() as u64);
-            let missing: Vec<u64> = passed.iter().copied().filter(|id| ctx.db.familiar().by_actor_thing().filter((me, FAM_STRUCTURE | id)).next().is_none()).collect();
+            let missing: Vec<u64> = passed.iter().filter_map(|&(id, chunk)| {
+                let seen = (laws.seen_ranges && look.seen(ctx, me, chunk, id))
+                    || ctx.db.familiar().by_actor_thing().filter((me, FAM_STRUCTURE | id)).next().is_some();
+                (!seen).then_some(id)
+            }).collect();
             if !missing.is_empty() {
                 common::diag(|| "notice_delta:differed", missing.len() as u64);
-                log::error!("notice_delta of {me}: passed over {missing:?}, which have no familiar row (they would have been new)");
+                log::error!("notice_delta of {me}: passed over {missing:?}, which have no recognition record (they would have been new)");
             }
         }
-        other.sort_by(|a, b| a.1.total_cmp(&b.1));
+        if !laws.seen_ranges || laws.seen_ranges_check || check {
+            other.sort_by(|a, b| a.2.total_cmp(&b.2));
+        }
         if check {
             // The full list's split, less what the last look lets this one pass over (`delta`).
-            let full: Vec<u64> = self.structures().iter().filter(|(s, _)| !passed.contains(&s.id) && !lately(structure_key(s.id))).map(|(s, _)| s.id).collect();
-            let seen_n = self.structures().iter().filter(|(s, _)| !passed.contains(&s.id)).count() - full.len();
+            let full: Vec<u64> = self.structures().iter().filter(|(s, _)| !passed.contains(&(s.id, s.chunk)) && !lately(structure_key(s.id))).map(|(s, _)| s.id).collect();
+            let seen_n = self.structures().iter().filter(|(s, _)| !passed.contains(&(s.id, s.chunk))).count() - full.len();
             common::diag(|| "notice_inplace:checked", 1);
-            if full.iter().ne(other.iter().map(|(id, _)| id)) || seen_n != recent.len() {
+            if full.iter().ne(other.iter().map(|(id, _, _)| id)) || seen_n != recent.len() {
                 common::diag(|| "notice_inplace:differed", 1);
                 log::error!("notice_inplace of {me}: in place {:?} ({} seen lately) differs from the full list's {:?} ({seen_n})", other.iter().map(|o| o.0).collect::<Vec<_>>(), recent.len(), full);
             }
@@ -2158,8 +2291,8 @@ impl<'a> Ev<'a> {
             self.recently_seen(k);
         }
         let mut new = Vec::new();
-        for (id, _) in other {
-            if !self.recently_seen(structure_key(id)) && self.familiarity(FAM_STRUCTURE | id).is_none() {
+        for (id, chunk, _) in other {
+            if self.new_structure(laws, look, id, chunk) {
                 new.push(id);
             }
         }
@@ -2273,7 +2406,9 @@ impl<'a> Ev<'a> {
             }
             // Cues keep their own interval (`cue_check_s`); what is new is looked for at most
             // once a second per character (fix 2), not at every woken or combat evaluation.
+            let part = common::detail_span("mind.cues");
             self.cues();
+            drop(part);
             let (me, now) = (self.me.id, self.now);
             if NOTICED_AT.with(|n| n.borrow().get(&me).map_or(true, |t| now.saturating_sub(*t) >= NOTICE_MS)) {
                 NOTICED_AT.with(|n| n.borrow_mut().insert(me, now));
@@ -2285,10 +2420,11 @@ impl<'a> Ev<'a> {
         // planned again when it now sees its way blocked.
         let (me, now) = (self.me.id, self.now);
         if LOOKED_AT.with(|n| n.borrow().get(&me).map_or(true, |t| now.saturating_sub(*t) >= NOTICE_MS)) {
+            let _part = common::detail_span("mind.known");
             LOOKED_AT.with(|n| n.borrow_mut().insert(me, now));
             if let Some(b) = ctx.db.body().id().find(me) {
-                let marked = crate::known::mark(ctx, me, self.at, common::facing_at(&b, now), now);
-                if marked > 0 && common::laws(ctx).nav_belief {
+                let changed = crate::known::mark(ctx, me, self.at, common::facing_at(&b, now), now);
+                if changed && common::laws(ctx).nav_belief {
                     crate::motion::replan_if_blocked(ctx, me, now);
                 }
             }
@@ -2367,6 +2503,9 @@ thread_local! {
 
 struct AlarmCell {
     rev: u32,
+    /// The way the law was asked (`status_parts`, `status_parts_check`): a switch takes effect
+    /// at once, on kept answers too.
+    way: living_rules::script::StatusWay,
     row: [u64; 20],
     stage: u8,
     night: bool,
@@ -2379,18 +2518,35 @@ struct AlarmCell {
 /// asked. The same statuses at the same moments: `alarm_cells_check` compares each.
 fn alarm_statuses(ctx: &ReducerContext, sc: &living_rules::script::Scripts, me: &Character, vit: &Vitals, night: bool, now: u64) -> Rc<Vec<living_rules::script::Status>> {
     let laws = common::laws(ctx);
+    let way = living_rules::script::StatusWay { parts: laws.status_parts, check: laws.status_parts_check };
     let ask = || {
-        let facts = living_rules::script::BodyFacts::of(&me.kind, crate::common::stage_name(me.stage), night, &vit.fields(), sc.meters(), now);
-        sc.status_of(&facts).unwrap_or_else(|e| {
+        let facts = {
+            let _span = common::detail_span("status.facts");
+            living_rules::script::BodyFacts::of(&me.kind, crate::common::stage_name(me.stage), night, &vit.fields(), sc.meters(), now)
+        };
+        let _span = common::detail_span("status.ask");
+        let s = sc.status_of_profiled(&facts, way, common::detail_span).unwrap_or_else(|e| {
             log::warn!("status_of for {}: {e}", me.id);
             Rc::new(Vec::new())
-        })
+        });
+        if way.check {
+            for d in sc.take_status_differences() {
+                log::error!("status_parts of {}: {d}", me.id);
+            }
+            // While profiling: which statuses the compared asks gave (the check's coverage).
+            if common::profiling() {
+                for x in s.iter() {
+                    common::diag(|| format!("status_parts:has:{}", x.name), 1);
+                }
+            }
+        }
+        s
     };
     if !laws.alarm_cells {
         return ask();
     }
     let (rev, row) = (common::scripts_rev(ctx), vit.bits());
-    let kept = ALARM_CELLS.with(|c| c.borrow().get(&me.id).filter(|e| e.rev == rev && e.row == row && e.stage == me.stage && e.night == night && now < e.until).map(|e| e.statuses.clone()));
+    let kept = ALARM_CELLS.with(|c| c.borrow().get(&me.id).filter(|e| e.rev == rev && e.way == way && e.row == row && e.stage == me.stage && e.night == night && now < e.until).map(|e| e.statuses.clone()));
     if let Some(s) = kept {
         common::diag(|| "alarm:kept", 1);
         if laws.alarm_cells_check {
@@ -2409,14 +2565,15 @@ fn alarm_statuses(ctx: &ReducerContext, sc: &living_rules::script::Scripts, me: 
         status_inputs_changed(sc, me, vit, night, now);
     }
     let statuses = ask();
-    let reads = sc.status_reads();
+    // Until a fact the way asked reads can change (the parts' reads together, or the whole law's).
+    let reads = sc.status_reads_as(way);
     let until = living_rules::script::BodyFacts::next_change_ms(&vit.fields(), sc.meters(), now, reads.as_deref());
     ALARM_CELLS.with(|c| {
         let mut c = c.borrow_mut();
         if c.len() > 8192 {
             c.clear();
         }
-        c.insert(me.id, AlarmCell { rev, row, stage: me.stage, night, until, statuses: statuses.clone() });
+        c.insert(me.id, AlarmCell { rev, way, row, stage: me.stage, night, until, statuses: statuses.clone() });
     });
     statuses
 }

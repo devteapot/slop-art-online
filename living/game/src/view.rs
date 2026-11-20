@@ -11,6 +11,8 @@
 //!     camera, 28° down, 22 m) or `YAW:PITCH[:ZOOM[:AIM]]` (degrees; yaw 0 faces the model's
 //!     front; zoom 1 frames the model, 0.5 is twice as close; aim is the height looked at as a
 //!     fraction of the model's, 0.92 for a character's face);
+//!   - a game camera stop, 58° down at the chest: `near@YAW` (8 m up, FOV 42°), `middle@YAW`
+//!     (12 m, 44°), `far@YAW` (19 m, 46°), or `play:HEIGHT:FOV@YAW` anywhere between;
 //!   - `views`: the five angles and `game`;
 //!   - `<clip>`: six frames of that clip from the side; `<clip>/<view>` from that view;
 //!     `<clip>@<seconds>` or `<clip>@<seconds>/<view>`: one frame;
@@ -38,6 +40,12 @@
 //! - `LIVING_GAME_VIEW_JOINTS=<file>`: at each photograph, append a JSON line with every bone's
 //!   (`J_*`) place in the model's own frame, in metres (unturned, from its root), and its
 //!   scale: to compare two ways of building a person joint by joint.
+//!
+//! - `LIVING_GAME_VIEW_COPIES=<n>`: n − 1 more of each file stand beside it (a row each side,
+//!   in the file's rest pose, unanimated), to measure what several of them cost on screen
+//!   (`LIVING_GAME_PERF=diag`).
+//! - `LIVING_GAME_VIEW_SETTLE=<s>`: how long each shot waits before its photograph (default 1.5 s
+//!   for the first, 0.6 s after), for a measurement that needs steady frames.
 //!
 //! Files outside the asset folder are copied into `assets/view/` (git-ignored) first, since the
 //! asset server reads only under its root.
@@ -69,6 +77,7 @@ const CLIP_FRAMES: usize = 6;
 enum Pose {
     /// `aim`: the height looked at, as a fraction of the model's height (default its middle).
     Orbit { yaw: f32, pitch: f32, zoom: f32, aim: Option<f32> },
+    PlayStop { height: f32, yaw: f32, fov: f32 },
     Game,
 }
 
@@ -81,6 +90,19 @@ struct Shot {
 }
 
 fn parse_view(s: &str) -> Option<(String, Pose)> {
+    if let Some((stop, angle)) = s.split_once('@') {
+        // The game camera's stops (camera.rs `Rig`), or `play:<height>:<fov>` between them.
+        let (height, fov) = match stop {
+            "near" => (8., 42.),
+            "middle" => (12., 44.),
+            "far" => (19., 46.),
+            _ => {
+                let mut p = stop.strip_prefix("play:")?.split(':').map(|v| v.parse::<f32>().ok());
+                (p.next()??, p.next()??)
+            }
+        };
+        return Some((s.replace('@', "_"), Pose::PlayStop { height, yaw: angle.parse().ok()?, fov }));
+    }
     if s == "game" {
         return Some(("game".into(), Pose::Game));
     }
@@ -146,6 +168,19 @@ pub struct Item {
     graph: Option<(Handle<Gltf>, Vec<AnimationNodeIndex>, Entity)>,
     /// The model's own turn to face the camera (VRM 0.x models face −Z).
     turn: Quat,
+    /// The clip variants it plays, as the game would (`anim::variants`, those its clips have):
+    /// a shot of a logical clip (`sit_ground@1.0`) plays its variant.
+    plays: crate::anim::Plays,
+}
+
+impl Item {
+    /// The clip index a shot of clip `c` plays (its variant's, when the model has one). A model
+    /// without that clip (a scenery file has none) keeps `c`, and the caller finds no node.
+    fn played(&self, c: usize) -> usize {
+        let Some(clip) = self.clips.get(c) else { return c };
+        let name = crate::anim::resolve(&self.plays, crate::anim::intern(&clip.0));
+        self.clips.iter().position(|x| x.0 == name).unwrap_or(c)
+    }
 }
 
 #[derive(Resource)]
@@ -316,7 +351,8 @@ pub fn setup(
         let is_vrm = file.ends_with(".vrm") || file.contains("vroid-") || json.as_ref().is_some_and(|j| j["extensions"]["VRM"].is_object() || j["extensions"]["VRMC_vrm"].is_object());
         // VRM 0.x models face −Z; turn them to face the camera. Models with clips aren't given
         // the procedural rig (`vrm: false`), so their own animation plays.
-        let turn = Quat::from_rotation_y(if is_vrm && !file.contains("VRMC") { std::f32::consts::PI } else { 0.0 });
+        // A hand-made file faces −Z once its scene is in, whichever way it was made (handmade.rs).
+        let turn = Quat::from_rotation_y(if (is_vrm && !file.contains("VRMC")) || crate::handmade::of(file).is_some() { std::f32::consts::PI } else { 0.0 });
         let model = Model { vrm: is_vrm && (clips.is_empty() || recipe.is_some()), file: file.clone(), height: recipe.as_ref().map_or(height, |r| r.height), ground_y: 0.0, glow: None };
         // The root alone: the clips' load of it below must not read the file a second time
         // (`characters::SceneOf`).
@@ -327,7 +363,24 @@ pub fn setup(
         let shots = parse_shots(&spec, &clips, &shown, file);
         let first_clip = shown.first().copied().unwrap_or(0);
         let graph = (!clips.is_empty()).then(|| (assets.load::<Gltf>(clip_src.clone()), vec![], Entity::PLACEHOLDER));
-        let mut e = commands.spawn((model, Item { index, clips, shots, first_clip, graph, turn }, crate::characters::SceneOf(handle), Transform::from_rotation(turn), Visibility::Hidden));
+        // Copies beside it (`LIVING_GAME_VIEW_COPIES`), in rows of four a side behind its line.
+        let copies = std::env::var("LIVING_GAME_VIEW_COPIES").ok().and_then(|n| n.parse::<usize>().ok()).unwrap_or(1);
+        if recipe.is_none() {
+            for k in 1..copies {
+                let side = if k % 2 == 1 { 1.0 } else { -1.0 };
+                let at = Vec3::new(side * 0.8 * k.div_ceil(2).min(4) as f32, 0.0, -1.2 * ((k - 1) / 8) as f32);
+                let copy = Model { vrm: model.vrm, file: file.clone(), height: model.height, ground_y: 0.0, glow: None };
+                commands.spawn((copy, crate::characters::SceneOf(handle.clone()), Transform::from_translation(at).with_rotation(turn), Visibility::Hidden));
+            }
+        }
+        let plays: crate::anim::Plays = match (recipe.as_ref().and_then(|r| r.person.as_ref()).filter(|_| crate::anim::variants_on()), styled.as_ref()) {
+            (Some(p), Some(s)) => crate::anim::variants(&p.kind, s.worn.iter().filter_map(|w| w.slot.as_deref())).into_iter().filter(|(_, v)| clips.iter().any(|c| c.0 == *v)).collect(),
+            _ => vec![],
+        };
+        if !plays.is_empty() {
+            info!("view: {file} plays {plays:?}");
+        }
+        let mut e = commands.spawn((model, Item { index, clips, shots, first_clip, graph, turn, plays }, crate::characters::SceneOf(handle), Transform::from_rotation(turn), Visibility::Hidden));
         if let Some(r) = recipe {
             // A recipe's character: rigged for its face, shaped, recoloured and sprung.
             e.insert(crate::characters::Character { recipe: r, stride: 1.0 });
@@ -366,7 +419,7 @@ pub fn clips(
 ) {
     for (e, mut item) in &mut items {
         let clip_names: Vec<String> = item.clips.iter().map(|c| c.0.clone()).collect();
-        let pick = item.first_clip;
+        let pick = item.played(item.first_clip);
         let Some((handle, nodes, player)) = item.graph.as_mut() else { continue };
         if !nodes.is_empty() {
             continue;
@@ -541,14 +594,34 @@ pub fn batch(
     let Some((c, h)) = framing(&state, &items) else { return };
     let Ok((mut tf, mut proj)) = cam.single_mut() else { return };
     // Each shot: pose the camera (and clip), let the frame settle, photograph, move on.
-    let settle = if step == 0 { 1.5 } else { 0.6 };
+    let settle = std::env::var("LIVING_GAME_VIEW_SETTLE").ok().and_then(|s| s.parse::<f32>().ok()).unwrap_or(if step == 0 { 1.5 } else { 0.6 });
     let name = if let Some(shot) = item.shots.get(step) {
         match shot.pose {
             Pose::Orbit { yaw, pitch, zoom, aim } => place_camera(&mut tf, &mut proj, aim.map_or(c, |a| Vec3::new(c.x, c.y - h.y + 2.0 * h.y * a, c.z)), h, yaw, pitch, zoom),
+            Pose::PlayStop { height, yaw, fov } => {
+                let chest = Vec3::new(c.x, h.y * 1.2, c.z);
+                let reach = height / 58f32.to_radians().tan();
+                let angle = yaw.to_radians();
+                if let Projection::Perspective(p) = &mut *proj { p.fov = fov.to_radians(); }
+                *tf = Transform::from_translation(chest + Vec3::new(reach * angle.sin(), height, reach * angle.cos())).looking_at(chest, Vec3::Y);
+            }
             Pose::Game => game_camera(&mut tf, &mut proj, Vec3::new(c.x, 0.0, c.z)),
         }
+        // A ground seat's clip sits the body on the checker: its cloth takes the game's ground
+        // contact, weighted by the clip's time (`characters::SeatAnchor`).
+        let seat = shot.clip.and_then(|(clip, t)| crate::anim::seat_of(crate::anim::logical(&item.clips[clip].0), t, 1.0));
+        if let Some(root) = roots.iter().find(|(_, it)| it.index == i).map(|(e, _)| e) {
+            match seat {
+                Some(w) => {
+                    commands.entity(root).try_insert(crate::characters::SeatAnchor { point: Vec3::ZERO, normal: Vec3::Y, weight: Some(w) });
+                }
+                None => {
+                    commands.entity(root).try_remove::<crate::characters::SeatAnchor>();
+                }
+            }
+        }
         if let (Some((clip, t)), Some((_, nodes, p))) = (shot.clip, &item.graph) {
-            if let (Ok(mut pl), Some(node)) = (players.get_mut(*p), nodes.get(clip)) {
+            if let (Ok(mut pl), Some(node)) = (players.get_mut(*p), nodes.get(item.played(clip))) {
                 pl.stop_all();
                 pl.play(*node).seek_to(t).pause();
             }

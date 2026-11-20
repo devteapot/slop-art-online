@@ -1,0 +1,11 @@
+{
+  "iris_width_scale": 1.27,
+  "outer_lift_m": 0.0013,
+  "wing_extension_m": 0.004,
+  "wing_lift_m": 0.0048,
+  "outer_band_thickness_scale": 1.24,
+  "lash_length_scale": 1.4,
+  "ink_gain": 0.18,
+  "changed_face_vertices": 614,
+  "upper_lash_cards": 10
+}

@@ -1,0 +1,122 @@
+{
+  "own-cora-live.glb": {
+    "checkpoint_sha256": "b19bbc7bd0f9e8a747f85725ca72441d2d35599fcbccbdfc7a81452e4a9fad1d",
+    "factory_sha256": "b19bbc7bd0f9e8a747f85725ca72441d2d35599fcbccbdfc7a81452e4a9fad1d",
+    "packaged_sha256": "b19bbc7bd0f9e8a747f85725ca72441d2d35599fcbccbdfc7a81452e4a9fad1d"
+  },
+  "own-cora-live.face.png": {
+    "checkpoint_sha256": "f9fff170e2b9d7ef8a3b28a576e5b91b22f29167e2ffaced5d862d59d07143dc",
+    "factory_sha256": "f9fff170e2b9d7ef8a3b28a576e5b91b22f29167e2ffaced5d862d59d07143dc",
+    "packaged_sha256": "f9fff170e2b9d7ef8a3b28a576e5b91b22f29167e2ffaced5d862d59d07143dc"
+  },
+  "own-cora-live.hair.png": {
+    "checkpoint_sha256": "14e40d221fd01e5b376e5c99649067ebbd77556265f205a47491168a0efff465",
+    "factory_sha256": "14e40d221fd01e5b376e5c99649067ebbd77556265f205a47491168a0efff465",
+    "packaged_sha256": "14e40d221fd01e5b376e5c99649067ebbd77556265f205a47491168a0efff465"
+  },
+  "game-counts.json": {
+    "checkpoint_sha256": "18373aa49d0e6bc72f6eaacf8430a563e4ba3d2ccecce0301a3885c19c46f4b4",
+    "factory_sha256": "18373aa49d0e6bc72f6eaacf8430a563e4ba3d2ccecce0301a3885c19c46f4b4",
+    "packaged_sha256": "18373aa49d0e6bc72f6eaacf8430a563e4ba3d2ccecce0301a3885c19c46f4b4"
+  },
+  "different_pixels": {
+    "face3-back.png": 0,
+    "face3-front.png": 0,
+    "face3-middle.png": 0,
+    "face3-near.png": 0,
+    "face3-profile.png": 0,
+    "face3-three-quarter.png": 0,
+    "stage3-expression-Fcl_BRW_Angry.png": 0,
+    "stage3-expression-Fcl_BRW_Fun.png": 0,
+    "stage3-expression-Fcl_BRW_Sorrow.png": 0,
+    "stage3-expression-Fcl_BRW_Surprised.png": 0,
+    "stage3-expression-Fcl_EYE_Close.png": 0,
+    "stage3-expression-Fcl_EYE_Close_L.png": 0,
+    "stage3-expression-Fcl_EYE_Close_R.png": 0,
+    "stage3-expression-Fcl_EYE_Joy.png": 0,
+    "stage3-expression-Fcl_MTH_A.png": 0,
+    "stage3-expression-Fcl_MTH_E.png": 0,
+    "stage3-expression-Fcl_MTH_Fun.png": 0,
+    "stage3-expression-Fcl_MTH_I.png": 0,
+    "stage3-expression-Fcl_MTH_O.png": 0,
+    "stage3-expression-Fcl_MTH_Sorrow.png": 0,
+    "stage3-expression-Fcl_MTH_U.png": 0,
+    "stage3-expression-neutral.png": 0,
+    "stage3-expression-returned.png": 0
+  },
+  "expression_pixels_vs_neutral": {
+    "Fcl_BRW_Angry": 1007,
+    "Fcl_BRW_Fun": 1030,
+    "Fcl_BRW_Sorrow": 998,
+    "Fcl_BRW_Surprised": 1348,
+    "Fcl_EYE_Close": 4662,
+    "Fcl_EYE_Close_L": 2546,
+    "Fcl_EYE_Close_R": 2124,
+    "Fcl_EYE_Joy": 6856,
+    "Fcl_MTH_A": 6475,
+    "Fcl_MTH_E": 6123,
+    "Fcl_MTH_Fun": 1830,
+    "Fcl_MTH_I": 5704,
+    "Fcl_MTH_O": 7469,
+    "Fcl_MTH_Sorrow": 985,
+    "Fcl_MTH_U": 5946,
+    "neutral": 0,
+    "returned": 0
+  },
+  "images": {
+    "cora.atlas": {
+      "checkpoint": "e94b2e891262960de3b21b7fdc3f2cc0c714277b6702cb76fffcc9a2e6095f2f",
+      "factory": "e94b2e891262960de3b21b7fdc3f2cc0c714277b6702cb76fffcc9a2e6095f2f"
+    },
+    "cora.iris": {
+      "checkpoint": "307a6c5805d361b75f0f3bb03a5fd3cfb77e7ed67fe2af1db2e3801376924808",
+      "factory": "307a6c5805d361b75f0f3bb03a5fd3cfb77e7ed67fe2af1db2e3801376924808"
+    },
+    "cora.tint": {
+      "checkpoint": "14ecd690b8fda652ba15b7595766a2286700a8f066a995ff90f840c1e8e78ac5",
+      "factory": "14ecd690b8fda652ba15b7595766a2286700a8f066a995ff90f840c1e8e78ac5"
+    }
+  },
+  "geometry": {
+    "triangles": 48896,
+    "vertices": 29697,
+    "primitives": 9,
+    "materials": 9,
+    "clips": [
+      "idle",
+      "walk",
+      "run",
+      "talk",
+      "sit_idle",
+      "sit_ground"
+    ],
+    "face_keys": [
+      "Fcl_EYE_Close",
+      "Fcl_EYE_Close_L",
+      "Fcl_EYE_Close_R",
+      "Fcl_EYE_Joy",
+      "Fcl_MTH_A",
+      "Fcl_MTH_I",
+      "Fcl_MTH_U",
+      "Fcl_MTH_E",
+      "Fcl_MTH_O",
+      "Fcl_MTH_Fun",
+      "Fcl_MTH_Sorrow",
+      "Fcl_BRW_Angry",
+      "Fcl_BRW_Sorrow",
+      "Fcl_BRW_Surprised",
+      "Fcl_BRW_Fun"
+    ]
+  },
+  "ocio": "docs/char-live-1/standard.ocio",
+  "factory_material_audit": {
+    "stage": "stage3-expressions",
+    "materials": 26,
+    "images": [
+      "cora.atlas.png",
+      "cora.iris.png",
+      "cora.tint.png"
+    ],
+    "failures": []
+  }
+}

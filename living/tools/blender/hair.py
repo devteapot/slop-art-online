@@ -792,9 +792,14 @@ class Hair:
         self.temples(-0.075, n=1, width=0.022)
 
     def _braid(self):
-        g = self.comb.surface(180.0, 2.0)[0]
+        # Anchor just inside the nape hairline on this head's surface.
+        g = self.point(180, self.hairline(180) + .012)
         self.gather(g, n_mid=16)
-        self.braid = [dict(p=g, d=np.array([0.0, -0.5, -1.0]), length=0.16 + self.length * 1.6)]
+        width = np.linalg.norm(self.comb.surface(90, 0) - self.comb.surface(-90, 0))
+        back_length = g[2] - self.comb.b.get("belt_z", -0.55)
+        self.braid = [dict(p=g, d=np.array([0.0, -0.5, -1.0]),
+                           length=back_length * (0.58 + 0.30 * self.length),
+                           radius=0.085 * width)]
         self.bangs("curtain" if abs(self.parting) < 0.3 else "swept", points=5, reach=0.9)
         self.temples(-0.085, n=1, width=0.024)
 
@@ -1294,15 +1299,45 @@ class Hair:
         to side. It gets a spring chain of its own."""
         keep = self.locks
         self.locks = []
-        self.lock(0, 0, b["d"], root=b["p"], length=b["length"], width=0.03, lift=0.016, g=30.0)
+        self.lock(0, 0, b["d"], root=b["p"], length=b["length"], width=0.03, lift=max(.016, b.get("radius", 0) * 1.55), g=30.0)
         (path,), (touch,) = self._walk()
         self.locks = keep
+        if "radius" in b:
+            # The type rig scales a hair chain about the skull while the chest
+            # scales about the spine. Ease the fitted plait over the upper back.
+            path[:, 1] -= self.comb.b.get("braid_ease", 0) * np.clip((path[0, 2] - path[:, 2]) / .080, 0, 1)
         n = max(4, int(b["length"] / 0.012))
         pts, on, s = self._resample(path, touch, n)
         tan, out, side = self._frame(pts, on)
         ci = len(self.chains)
         m = int(np.clip(round(s[-1] / 0.09), 1, 4))
         self.chains.append(dict(name=f"Braid{ci}", joints=[np.array([np.interp(s[-1] * j / m, s, pts[:, q]) for q in range(3)]) for j in range(m + 1)], step=s[-1] / m))
+        if "radius" in b:
+            radius = b["radius"]
+            self.rope_chains[ci] = radius
+            turns = max(1, round(s[-1] / (7 * radius)))
+            points, contact, along = self._resample(path, touch, turns * (14 if self.detail >= 1 else 8))
+            _, outward, across = self._frame(points, contact)
+            u = along / along[-1]
+            r = radius * (1 - 0.59 * u)
+            # Cora's alternating over/under path, measured along the combed spine.
+            for strand in range(3):
+                phase = math.tau * (turns * u + strand / 3)
+                centres = (points + across * (r * np.sin(phase))[:, None]
+                           + outward * (0.68 * r * np.sin(2 * phase))[:, None])
+                colours = self._lock_colour(dict(tone=strand-1, shade=0, grey=self.rng.random()),
+                                            base, tipc, silver, grey)
+                self._plait_tube(centres, across, outward, r, along, ci, colours)
+            # The binding and brush share the plait's material and last joint.
+            offsets = radius * np.array([0, .25, .50, .65, 1.30, 1.85, 2.55])
+            radii = radius * np.array([.54, .56, .54, .40, .63, .49, .035])
+            tip = points[-1] + offsets[:, None] * tan[-1]
+            for rows, colour in ((slice(0, 3), base * .48), (slice(2, None), tipc)):
+                count = len(tip[rows])
+                self._plait_tube(tip[rows], np.tile(across[-1], (count, 1)),
+                                 np.tile(outward[-1], (count, 1)), radii[rows],
+                                 np.full(count, along[-1]), ci, (colour, colour))
+            return
         self.rope_chains[ci] = 0.013
         pitch = 0.022
         count = int(s[-1] / pitch)
@@ -1337,3 +1372,24 @@ class Hair:
             self._ribbon_about(tuft, np.arange(5) * 0.011, k, self._lock_colour(k, base, tipc, silver, grey), end - out[-1] * 0.03)
             for z in range(a, len(self.v)):
                 self.along[z] = s[-1]
+
+    def _plait_tube(self, centres, across, outward, radii, along, chain, colours):
+        sides = 6
+        start = len(self.v)
+        for i, centre in enumerate(centres):
+            for j in range(sides):
+                angle = math.tau * j / sides
+                a, b = math.cos(angle), math.sin(angle)
+                self.v.append(centre + radii[i] * (.81 * a * across[i] + .72 * b * outward[i]))
+                self.nrm.append(unit(a * across[i] + b * outward[i]))
+                self.col.append(lerp(*colours, i / (len(centres)-1)))
+                self.uv.append((j / sides, 1 - i / (len(centres)-1)))
+                self.chain.append(chain)
+                self.along.append(along[i])
+                if i:
+                    k = start + i * sides
+                    nxt = (j + 1) % sides
+                    self.f.append((k-sides+j, k+j, k+nxt, k-sides+nxt))
+        self.f.append(tuple(start + j for j in range(sides)))
+        last = start + (len(centres) - 1) * sides
+        self.f.append(tuple(last + j for j in reversed(range(sides))))

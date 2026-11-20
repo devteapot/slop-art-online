@@ -110,14 +110,21 @@ def main():
         p.call("place_at", [walker, *at(8.0)], "admin")
         time.sleep(1.5)
         go()
-        time.sleep(0.8)
+        # The bystander's client row of the walker as it walks: a near creature's copy follows at
+        # most every 500 ms since frame-views (its changes reach a subscribed client as cues
+        # meanwhile; docs/PERCEPTION.md "Cues and tiers"), so poll for up to 1.5 s.
+        moving = lambda rows: rows and abs(rows[0]["vx"]) + abs(rows[0]["vy"]) > 0.1
+        seen_bodies = A.wait_for(lambda: (lambda rows: rows if moving(rows) else None)(
+            [b for b in p.sql("SELECT * FROM seen_bodies", "bystander") if b["id"] == walker]), 1.5) or \
+            [b for b in p.sql("SELECT * FROM seen_bodies", "bystander") if b["id"] == walker]
+        time.sleep(0.3)
         since = stamp(p, r["id"])
         think(p, r["id"])
         sc = A.wait_for(lambda: scene_of(p, r["id"], since), 8)
         return {"scene_entry": entry(sc, walker), "activity": p.sql(f"SELECT id, skill, label, phase FROM activity WHERE id = {walker}"),
                 "steer": p.sql(f"SELECT id, goal, flags FROM steer WHERE id = {walker}"),
                 "bystander_seen_doing": [d for d in p.sql("SELECT * FROM seen_doing", "bystander") if d["id"] == walker],
-                "bystander_seen_bodies": [b for b in p.sql("SELECT * FROM seen_bodies", "bystander") if b["id"] == walker]}
+                "bystander_seen_bodies": seen_bodies}
 
     def moving_unshown(ev):
         b = ev["bystander_seen_bodies"]

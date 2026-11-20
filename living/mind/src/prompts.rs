@@ -1328,6 +1328,9 @@ pub struct TalkUser<'a> {
     /// from where one stands when that is known (`placed`); empty: no section (talk-places).
     pub places: &'a [String],
     pub placed: bool,
+    /// What came of one's own last words when the other could not have heard them (the
+    /// authority's `silence`, verbatim; reply-timing): told in place of a line to answer.
+    pub missed: Option<&'a str>,
 }
 
 pub fn talk_user(t: &TalkUser) -> String {
@@ -1371,15 +1374,38 @@ pub fn talk_user(t: &TalkUser) -> String {
     for l in t.conversation {
         out.push(Stability::Dynamic, format!("{l}\n"));
     }
-    out.push(Stability::Dynamic, format!("\n# What you are answering\n{other}: “{}”", t.heard));
-    if !t.how.is_empty() {
-        out.push(Stability::Dynamic, format!("\n{}", t.how));
+    match t.missed {
+        Some(m) => out.push(Stability::Dynamic, format!("\n# What came of your last words\n{m}")),
+        None => {
+            out.push(Stability::Dynamic, format!("\n# What you are answering\n{other}: “{}”", t.heard));
+            if !t.how.is_empty() {
+                out.push(Stability::Dynamic, format!("\n{}", t.how));
+            }
+        }
     }
     out.render()
 }
 
 #[cfg(test)]
 mod tests {
+    /// The mind service compiles the world's `script` row alone, without `law_override`
+    /// (docs/LAW_OVERRIDE.md): every law it reads must be one whose change installs the script
+    /// again with the value written at its end. A law the mind reads made value-only would leave
+    /// the minds on its old value until the next install.
+    #[test]
+    fn the_laws_minds_read_change_by_an_install() {
+        let read = ["cues_on", "cue_cooldown_s", "cue_gap_s", "speech_truth", "stranger_by_name", "think_framing", "fast_lane_inflight"];
+        for l in read {
+            assert!(living_rules::script::VALUE_ONLY.iter().all(|(n, _)| *n != l), "{l} is value-only: the mind service must lay `law_override` over its script first");
+        }
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+        let src: String = std::fs::read_dir(dir).unwrap().filter_map(|e| e.ok()).filter(|e| e.path().extension().is_some_and(|x| x == "rs")).map(|e| std::fs::read_to_string(e.path()).unwrap()).collect();
+        let mut asked: Vec<&str> = src.match_indices(".laws().").map(|(i, m)| &src[i + m.len()..]).map(|t| &t[..t.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(t.len())]).collect();
+        asked.extend(src.match_indices("l.cue_").map(|(i, _)| &src[i + 2..]).map(|t| &t[..t.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(t.len())]));
+        for l in asked.into_iter().filter(|l| !l.is_empty() && !l.ends_with('_')) {
+            assert!(read.contains(&l), "the minds read `{l}`: add it to this list once it is checked");
+        }
+    }
 
     /// Every speaking mind is told, in the same words, that the `#<id>` handles are for acts and
     /// memory and never spoken (fix-spoken-ids: r2e's minds said three lines with them).
@@ -1394,6 +1420,24 @@ mod tests {
     /// The grammar's `doing` example names no skill a reader may never face (a mind copied
     /// "strike" against a foe whose blow is `attack`; r2c): a kind word, and `is` is said to take
     /// what a creature's `visibly`.is shows. Matching is unchanged.
+    /// A turn on a line the other could not have heard is told the authority's words verbatim
+    /// in place of a line to answer (reply-timing), with no advice.
+    #[test]
+    fn a_missed_line_is_told_in_the_authoritys_words() {
+        let silence = "Fern is too far away: they could not have heard you.";
+        let t = |missed| {
+            talk_user(&TalkUser {
+                name: "Agnes", identity: "", pacing: "", other: "Fern", other_id: 7, other_body: "", feeling: "", mind: &[], memories: &[], lately: &[], earlier: None,
+                scene: "Now.", body: "", conversation: &["You: “Morning!”".into()], heard: "Hello Agnes", how: "", between: &[], places: &[], placed: false, missed,
+            })
+        };
+        let missed = t(Some(silence));
+        assert!(missed.ends_with(&format!("# What came of your last words\n{silence}")), "{missed}");
+        assert!(!missed.contains("# What you are answering"));
+        let answering = t(None);
+        assert!(answering.contains("# What you are answering\nFern: “Hello Agnes”") && !answering.contains("came of your last words"));
+    }
+
     #[test]
     fn the_doing_example_uses_a_kind_word() {
         let g = grammar();
@@ -1553,6 +1597,7 @@ mod tests {
                     // Dynamic: the way to each place depends on where one stands now.
                     places: &["dynamic-place".into()],
                     placed: true,
+                    missed: None,
                 }),
             ),
             "animal_impulse" | "animal_compile" | "animal_consolidate" => {

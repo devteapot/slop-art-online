@@ -27,6 +27,8 @@ import json
 import sys
 import time
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "living/tools"))
+from law_values import own_laws  # noqa: E402  (the world's own law values, docs/LAW_OVERRIDE.md)
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("verify", HERE.parent.parent / "verify/scripts/verify.py")
@@ -95,7 +97,7 @@ def main():
     try:
         call("set_world_law", ["first_sight_thinks", "true"], as_admin=True)
         call("set_world_law", ["first_sight_gap_s", "0"], as_admin=True)
-        laws = {w["name"]: w["value"] for w in sql("SELECT * FROM world_law", admin)}
+        laws = own_laws(lambda q: sql(q, admin))
         check("the law is on for the world", laws.get("first_sight_thinks") == "true", laws)
         code, body = call("set_world_law", ["first_sight_thinks", "false"])
         check("a player may not set the law", code != 200, f"{code} {body.strip()[:160]}")
