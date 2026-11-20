@@ -634,6 +634,66 @@ pub fn spawn_battle(ctx: &ReducerContext, n: u32) -> Result<(), String> {
     Ok(())
 }
 
+/// Benchmark support (a fixture, no game rule; docs/BATTLE_LAWS.md): `spawn_battle`'s packed
+/// battle, its `n` fighters in `sides` sides (2-4) that fight each other and leave bystanders be.
+/// Each side is a community (`Side A`, `Side B`, …); an open stance record each way between every
+/// two sides says `enemy`, so a fighter's target, the nearest person of `relation: enemy`, is
+/// someone of another side (residents of no side are not enemies). The side is the fighter's
+/// membership, and its name's prefix (`A12`), for a client that tints by side.
+#[spacetimedb::reducer]
+pub fn spawn_battle_sides(ctx: &ReducerContext, n: u32, sides: u32) -> Result<(), String> {
+    use spacetimedb::rand::Rng;
+    require_admin(ctx)?;
+    let sides = sides.clamp(2, 4) as usize;
+    let now = common::now_ms(ctx);
+    let map = common::map(ctx);
+    let spot = if ctx.db.land().id().find(0).is_some() { let a = island::arrival(ctx); (a.0, a.1 - 20.0) } else { (55.0, 60.0) };
+    let center = map.nearest_walkable(spot.0, spot.1).ok_or("no room")?;
+    let letters = ["A", "B", "C", "D"];
+    let ids: Vec<u32> = (0..sides)
+        .map(|i| {
+            let name = format!("Side {}", letters[i]);
+            match ctx.db.community().iter().find(|c| c.name == name) {
+                Some(c) => c.id,
+                None => ctx.db.community().insert(Community { id: 0, name, founder: 0, founded_ms: now, home_x: center.0, home_y: center.1 }).id,
+            }
+        })
+        .collect();
+    for (i, a) in ids.iter().enumerate() {
+        for (j, b) in ids.iter().enumerate() {
+            if i != j {
+                let parties = [(living_rules::records::HOLDER.to_string(), living_rules::records::COMMUNITY | *a as u64), (living_rules::records::TOWARD.to_string(), living_rules::records::COMMUNITY | *b as u64)];
+                let mut terms = serde_json::Map::new();
+                terms.insert("label".into(), serde_json::json!("enemy"));
+                terms.insert("value".into(), serde_json::json!(-50.0));
+                crate::records::make(ctx, "stance", "open", 0, &parties, &terms, 0, now);
+            }
+        }
+    }
+    let mut made = 0;
+    for _ in 0..n * 30 {
+        if made >= n {
+            break;
+        }
+        let p = (center.0 + ctx.rng().gen_range(-7.0f32..7.0), center.1 + ctx.rng().gen_range(-7.0f32..7.0));
+        if !map.free(p.0, p.1) {
+            continue;
+        }
+        let side = made as usize % sides;
+        let id = seed::spawn_creature(ctx, &format!("{}{}", letters[side], made / sides as u32 + 1), "person", ctx.database_identity(), false, p, now);
+        common::inv_add(ctx, id as u64, "spear", 1);
+        ctx.db.membership().insert(Membership { id: 0, community: ids[side], member: id, since_ms: now });
+        let defend = if id % 2 == 0 { "dodge" } else { "block" };
+        let graph = format!(
+            r#"{{"first":{{"label":"combat","children":[{{"if":{{"cond":{{"threatened":true}},"then":{{"do":{{"skill":"{defend}"}}}}}}}},{{"do":{{"skill":"attack","target":{{"nearest":{{"kind":"person","relation":"enemy"}}}}}}}}]}}}}"#
+        );
+        mind::set_graph(ctx, id, &graph, "fight", "battle", now)?;
+        made += 1;
+    }
+    crate::perception::knowledge_changed(ctx, None);
+    Ok(())
+}
+
 /// Benchmark and test support: `n` people in two sides `spacing` tiles apart near the
 /// arrival point (or the map centre), fighting the other side with the starter skills on a
 /// behavior graph (strike in reach, bow shots at range, block or dodge when threatened, a

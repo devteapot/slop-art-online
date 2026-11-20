@@ -125,6 +125,8 @@ fn laws() {
         // asker works it out afresh, giving the same answers. `regard_cache_check` (a diagnostic)
         // compares every shared answer with a fresh one and logs any difference.
         regard_cache: true, regard_cache_check: false,
+        // Diagnostics, off in play (docs/COMBAT_PHASE.md).
+        sweep_keep_memory: false, sweep_keep_check: false,
         // A diagnostic: while profiling, also time the parts of a graph's evaluation.
         profile_detail: false,
         latency_nav_from: 0,
@@ -164,6 +166,11 @@ fn laws() {
         // The same for what a player perceives of the creatures it sees (its `seen_characters`
         // rows mirrored into a table only that player can read; on since bv-defaults-on).
         characters_table_on: true,
+        // Whether a player's copies of the fighters it sees (their moves and health bands) reach its
+        // client as rows of a table only that player can read (`seen_fighter_copy`, row-level
+        // security; on) or only through the fighter views (off, until the client reads the table:
+        // docs/BATTLE_VIEWERS.md). The views show the same either way.
+        fighter_tables_on: false,
         // What a player's character perceived of fights reaching its client as event rows only
         // that player can read (`combat_feed`, row-level security; on) or only through the
         // `my_combat` view (off, until the client reads the table: docs/BATTLE_VIEWERS.md).
@@ -172,6 +179,19 @@ fn laws() {
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
         witness_wake_ms: 500.0,
+        // Battle laws (docs/BATTLE_LAWS.md, prototypes; 0 or the value here is off in play):
+        // at most this many creatures a player sees at once (the nearest, engaged first)...
+        far_cap: 0.0,
+        // ...a player's sweep less often above this many in sight (at most 3x the period)...
+        crowd_sweep_n: 0.0,
+        // ...the longest interval between its frames in a crowd (ms; 0: the built-in 100)...
+        crowd_frame_max_ms: 0.0,
+        // ...whether a fighter on the combat cadence is woken by what it sees as a bystander...
+        fighter_bystander_wakes: true,
+        // ...and the metres a far creature's motion copy may drift before it is rewritten.
+        far_motion_tol_m: 0.0,
+        // ...and how often one in a fight weighs what to do (docs/BATTLE_LAWS.md (d)): 15, as before.
+        combat_eval_hz: 15.0,
         // A test switch (docs/PERCEPTION.md, "Module memory and rollback"), 0 in play: a step the
         // world fails on purpose, to prove nothing kept in module memory outlives a failed one.
         memory_test: 0.0,
@@ -3189,6 +3209,12 @@ fn law_about(l, name) {
         "memory_test" => "A test switch that makes one step of the world fail on purpose; it is off in play.",
         "det_clock" => "A test switch that makes the world's time and chance follow its steps alone, to compare two builds; it is off in play.",
         "det_stop" => "A test switch that pauses the world at a given step; it is off in play.",
+        "far_cap" => if l.far_cap > 0.0 { `a player sees at most ${short(l.far_cap)} others at once, the nearest` } else { "a player sees everyone in sight" },
+        "crowd_sweep_n" => if l.crowd_sweep_n > 0.0 { `what a player sees is looked at again less often in a crowd of more than ${short(l.crowd_sweep_n)}` } else { "what a player sees is looked at again at the same pace in any crowd" },
+        "crowd_frame_max_ms" => if l.crowd_frame_max_ms > 0.0 { `in a crowd, a player's view of others follows at least every ${short(l.crowd_frame_max_ms)} ms` } else { "in a crowd, a player's view of others follows at least every 100 ms" },
+        "fighter_bystander_wakes" => if l.fighter_bystander_wakes { "a fighter turns to what it sees around it at once" } else { "a fighter turns to what it sees around it at its next beat in the fight" },
+        "far_motion_tol_m" => if l.far_motion_tol_m > 0.0 { `how a far creature moves follows when it would be ${short(l.far_motion_tol_m)} m off` } else { "how a far creature moves follows every change" },
+        "combat_eval_hz" => `one in a fight weighs what to do ${short(l.combat_eval_hz)} times a second`,
         "witness_wake_ms" => if l.witness_wake_ms > 0.0 { `a bystander turns to what it sees at most every ${short(l.witness_wake_ms)} ms` } else { "a bystander turns to each thing it sees at once" },
         "regard_cache" => if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
         // How the work is done, not what anyone perceives: plain words (no condition), so the
@@ -3201,6 +3227,7 @@ fn law_about(l, name) {
         "status_parts_check" => "a diagnostic: how a body is, is also worked out whole and compared",
         "near_tier_on" => if l.near_tier_on { "what is near a player is kept apart from the rest of what it sees, and follows on its own" } else { "what a player sees is kept together" },
         "characters_table_on" => if l.characters_table_on { "what each player perceives of others reaches it as rows meant for that player alone" } else { "what each player perceives of others reaches it through what it may look at" },
+        "fighter_tables_on" => if l.fighter_tables_on { "how the fighters a player sees move and fare reaches it as rows meant for that player alone" } else { "how the fighters a player sees move and fare reaches it through what it may look at" },
         "combat_feed_on" => if l.combat_feed_on { "what each player sees of fights reaches it as rows meant for that player alone" } else { "what each player sees of fights reaches it through what it may look at" },
         "motion_tables_on" => if l.motion_tables_on { "how others move reaches each player as rows meant for that player alone" } else { "how others move reaches each player through what it may look at" },
         "cue_transport_on" => if l.cue_transport_on { "what is near a player, or fighting it, reaches the player's screen at once" } else { "what is near a player reaches the player's screen with the rest of what it sees" },
@@ -3218,6 +3245,8 @@ fn law_about(l, name) {
         "latency_nav_from" => if l.latency_nav_from == 0 { "navigation latency logging is off" } else { "navigation latency logging starts at the chosen character id" },
         "latency_fast" => if l.latency_fast { "the fast lane's authority stages are logged" } else { "fast lane latency logging is off" },
         "profile_detail" => if l.profile_detail { "while profiling, the parts of each behaviour's evaluation are timed" } else { "profiling times each behaviour's evaluation whole" },
+        "sweep_keep_memory" => "a diagnostic: what each player hears and how others' health stands are remembered from one moment to the next",
+        "sweep_keep_check" => "a diagnostic: each remembered sound and health is checked against the record",
         "regard_cache_check" => if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
         "fast_lane_on" => if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },
         "seen_again_n" => `seeing the same move started at one ${short(l.seen_again_n)} times in a fight is reason for a quick revision`,

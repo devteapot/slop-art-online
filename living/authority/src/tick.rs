@@ -87,7 +87,7 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     let phase = common::span("tick.wakes");
     // Bystanders' wakes held back by `witness_wake_ms` whose window has ended.
     let due_wakes = common::detail_span("wake.bystanders_due");
-    common::due_bystander_wakes(ctx, now);
+    common::due_bystander_wakes(ctx, now, k_tick);
     drop(due_wakes);
     let mut done = HashSet::new();
     for _ in 0..3 {
@@ -114,10 +114,11 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
         }
     }
     drop(phase);
-    // Combat cadence: creatures in a fight are evaluated about 15 times per second,
-    // staggered across ticks so a battle does not land in one tick.
+    // Combat cadence: creatures in a fight are evaluated `combat_eval_hz` times a second (15,
+    // every 4th tick), staggered across ticks so a battle does not land in one tick.
     let phase = common::span("tick.combat");
-    let fighting: Vec<u32> = ctx.db.mind_state().fast_until().filter(now..).map(|m| m.id).filter(|id| (*id as u64 + k_tick) % 4 == 0).collect();
+    let every = common::laws(ctx).combat_every_ticks();
+    let fighting: Vec<u32> = ctx.db.mind_state().fast_until().filter(now..).map(|m| m.id).filter(|id| (*id as u64 + k_tick) % every == 0).collect();
     common::diag(|| "eval:combat_due", fighting.len() as u64);
     for id in fighting {
         if done.insert(id) {

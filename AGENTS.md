@@ -39,7 +39,7 @@ Spatial subscriptions are not permission boundaries by themselves: enforce perce
 
 Use focused correctness checks and representative actual-authority workloads. A passing synthetic transport fixture does not establish full model-workload access; small-world correctness does not establish scale. Declare population, duration, action rate, local density, subscriptions and observer/export load when making performance claims.
 
-Measure reducer execution/queue time, subscription volume, table growth, WASM memory and service allocator/pool memory where relevant. Distinguish service-wide RSS across retained databases from a single world's footprint, and retained WAL size from cumulative writes. Keep historical evidence while planning bounded active-data retention. Do not hide growth with restarts or label a forced service stop graceful.
+Measure reducer execution/queue time, subscription volume, table growth, WASM memory and service allocator/pool memory where relevant. Distinguish service-wide RSS across retained databases from a single world's footprint, and retained WAL size from cumulative writes. Keep historical evidence while planning bounded active-data retention. Do not hide growth with restarts or label a forced service stop graceful. Remove a worktree only with `living/tools/wt_remove.py` (`~/.local/share/slop-tools/wt-remove`), which archives its untracked and ignored evidence first; never run `git worktree remove --force` directly ([tooling](docs/TOOLING.md#removing-a-worktree)).
 
 ## Build and run
 

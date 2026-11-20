@@ -212,6 +212,7 @@ fn a_law_a_script_reads_elsewhere_is_not_value_only() {
     assert_eq!(s.value_only("cue_transport_on"), Some(ValueOnly::Delivery));
     assert_eq!(s.value_only("motion_tables_on"), Some(ValueOnly::Delivery));
     assert_eq!(s.value_only("characters_table_on"), Some(ValueOnly::Delivery));
+    assert_eq!(s.value_only("fighter_tables_on"), Some(ValueOnly::Delivery));
     assert_eq!(s.value_only("combat_feed_on"), Some(ValueOnly::Delivery));
     assert!(s.apply_overrides(&[("near_tier_on".into(), json!(false))]).unwrap_err().contains("not value-only"));
     // A field of the constants read elsewhere counts too (`laws().gaze_on`).
@@ -244,4 +245,43 @@ fn value_only_edit_cost() {
         let _ = s.laws_about();
         println!("{world} laws_about (kept): {:.3} ms", t.elapsed().as_secs_f64() * 1000.0);
     }
+}
+
+/// battle-laws (docs/COMBAT_PHASE.md): the fighters' scheduling laws and the sweep's memory are
+/// value-only, so switching one is a `law_override` row edit read at the next tick.
+#[test]
+fn the_fighters_scheduling_laws_are_value_only() {
+    let s = Scripts::new(BASE).unwrap();
+    for law in ["fighter_bystander_wakes", "combat_eval_hz", "sweep_keep_memory", "sweep_keep_check"] {
+        assert_eq!(s.value_only(law), Some(ValueOnly::Delivery), "{law}");
+    }
+    assert!(s.laws().fighter_bystander_wakes && s.laws().combat_every_ticks() == 4);
+    let on = s.apply_overrides(&[("combat_eval_hz".into(), json!(7.5)), ("fighter_bystander_wakes".into(), json!(false))]).unwrap();
+    assert!(on.delivery && !on.cover && !on.gaze, "{on:?}");
+    assert_eq!(on.changed, vec!["combat_eval_hz".to_string(), "fighter_bystander_wakes".to_string()], "{on:?}");
+    assert!(s.laws().combat_every_ticks() == 8 && !s.laws().fighter_bystander_wakes);
+    let off = s.apply_overrides(&[]).unwrap();
+    assert!(off.delivery && s.laws().combat_every_ticks() == 4 && s.laws().fighter_bystander_wakes, "{off:?}");
+}
+
+/// The battle laws' prototypes (docs/BATTLE_LAWS.md) are value-only delivery laws: a world's
+/// value goes in place with no install, the words follow, and taking the override away restores
+/// the script's value (the laptop's stills: `far_cap` took a full install, about 5 s, before).
+#[test]
+fn the_battle_laws_are_value_only() {
+    let mut s = Scripts::new(BASE).unwrap();
+    for law in ["far_cap", "crowd_sweep_n", "crowd_frame_max_ms", "fighter_bystander_wakes", "far_motion_tol_m"] {
+        assert_eq!(s.value_only(law), Some(ValueOnly::Delivery), "{law}");
+    }
+    assert_eq!(s.laws().far_cap, 0.0);
+    let on = s.apply_overrides(&[("far_cap".into(), json!(40.0)), ("fighter_bystander_wakes".into(), json!(false))]).unwrap();
+    assert!(on.delivery && !on.cover && !on.gaze, "{on:?}");
+    assert_eq!(on.changed, vec!["far_cap".to_string(), "fighter_bystander_wakes".to_string()], "{on:?}");
+    assert!((s.laws().far_cap - 40.0).abs() < 1e-6 && !s.laws().fighter_bystander_wakes);
+    let about: std::collections::HashMap<String, String> = s.laws_about().into_iter().collect();
+    assert!(about["far_cap"].contains("at most 40"), "{about:?}");
+    let off = s.apply_overrides(&[]).unwrap();
+    assert!(off.delivery && s.laws().far_cap == 0.0 && s.laws().fighter_bystander_wakes, "{off:?}");
+    let about: std::collections::HashMap<String, String> = s.laws_about().into_iter().collect();
+    assert!(about["far_cap"].contains("everyone in sight"), "{about:?}");
 }

@@ -29,6 +29,10 @@ and MemAvailable every second of the window, as tick_report.py reads it). `--no-
 logging (the uninstrumented cost). `--full-log` reads the replica's whole module log from the
 server's data directory instead of the CLI's tail, which drops lines when detail spans log tens
 of thousands a second; `span_report.py` reads it.
+
+`--keep-fighters SECS` (battle-laws): a sustained battle; every SECS s the fighters alive (`Fighter…`)
+are counted and the dead replaced one for one with `spawn_battle` (`result.json` `keeper_window`: the
+census at the window's start and end, its mean and minimum, the refills).
 """
 import argparse
 import json
@@ -122,6 +126,41 @@ class KeepAlive(threading.Thread):
                 "calls_per_s": round(self.calls / seconds, 2) if seconds else None, "hp_restored": round(self.restored, 1)}
 
 
+class Keeper(threading.Thread):
+    """The sustained battle (`--keep-fighters`, battle-laws, docs/COMBAT_PHASE.md): every `every` s,
+    the fighters alive (characters named `Fighter…`, as `spawn_battle` names them) are counted and
+    the dead replaced one for one by `spawn_battle` (the same profile: spear, fight graph, placed
+    within the site's 7 m). A respawn the game does not have, as battle_diag.py's refills; it keeps
+    deaths and their witnessed events in the fight. Records the census at each round."""
+
+    def __init__(self, db, token, target, every):
+        super().__init__(daemon=True)
+        self.db, self.token, self.target, self.every = db, token, target, every
+        self.stop = threading.Event()
+        self.refills = self.failed = 0
+        self.census = []
+
+    def run(self):
+        while not self.stop.wait(self.every):
+            try:
+                alive = sum(1 for r in lc.sql(self.db, "SELECT name FROM character WHERE alive = true", self.token) if str(r["name"]).startswith("Fighter"))
+            except RuntimeError:
+                continue
+            self.census.append((round(time.time(), 2), alive))
+            short = self.target - alive
+            if short > 0:
+                try:
+                    lc.call(self.db, "spawn_battle", [short], self.token)
+                    self.refills += short
+                except RuntimeError:
+                    self.failed += 1
+
+    def window(self, t0, t1):
+        inside = [n for t, n in self.census if t0 <= t <= t1]
+        return {"every_s": self.every, "target": self.target, "alive_start": inside[0] if inside else None, "alive_end": inside[-1] if inside else None,
+                "alive_min": min(inside, default=None), "alive_mean": round(sum(inside) / len(inside), 1) if inside else None, "rounds": len(inside)}
+
+
 # ---- copy-privacy (docs/BATTLE_VIEWERS.md, "Addendum 3") ------------------------------------
 
 _VC = Path(__file__).resolve().parents[2] / ".agents/skills/verify-client/scripts"
@@ -168,11 +207,12 @@ class Privacy:
     every public table by name, `SELECT * FROM *`, and the SDK's `subscribe_to_all_tables`; (c) one
     viewer asking for another's rows by identity, by subscription and by SQL."""
 
-    def __init__(self, db, token, out, n, players, seconds, combat_feed=False):
+    def __init__(self, db, token, out, n, players, seconds, fighter_tables=False, combat_feed=False):
         cues, _ = _vc()
         self.db, self.out, self.n, self.players = db, out, n, players
-        # With `--combat-feed`, the probes ask for the combat feed's event rows too (views step 2).
-        self.tables = COPY + (("combat_feed",) if combat_feed else ())
+        # With `--fighter-tables` the public fighter copies (views step 3), with `--combat-feed` the
+        # combat feed's event rows (views step 2), are checked with the copy tables.
+        self.tables = COPY + (("seen_fighter_copy",) if fighter_tables else ()) + (("combat_feed",) if combat_feed else ())
         ids = {}
         for l in open(out / f"events-v{n}.jsonl"):
             e = json.loads(l)
@@ -205,8 +245,8 @@ class Privacy:
         self.sql_read = []
         for i, p in enumerate(self.players):
             other = self.ident[(i + 1) % len(self.players)]
-            own = {t: mt.player_sql(self.db, p["token"], f"SELECT * FROM {t}") for t in COPY}
-            peek = {t: mt.player_sql(self.db, p["token"], f"SELECT * FROM {t} WHERE viewer = 0x{other}") for t in COPY}
+            own = {t: mt.player_sql(self.db, p["token"], f"SELECT * FROM {t}") for t in self.tables}
+            peek = {t: mt.player_sql(self.db, p["token"], f"SELECT * FROM {t} WHERE viewer = 0x{other}") for t in self.tables}
             self.sql_read.append((i, own, peek))
             if own["seen_body_copy"]:
                 break
@@ -225,7 +265,7 @@ class Privacy:
             "spectator: the SDK's subscribe_to_all_tables is refused (it names a private table), or delivers no one else's copy row": (helper_refusal is not None and "marked private" in helper_refusal and not rows(ev["helper"])) or (cues.accepted(ev["helper"]) and not foreign(ev["helper"], self.spect_ident)),
             "a viewer subscribing another viewer's rows by identity, accepted, receives none": cues.accepted(ev["peek"]) and not rows(ev["peek"]),
             "viewers' SQL reads only their own rows (one sees bodies now), none of another's by identity": bool(self.sql_read[-1][1]["seen_body_copy"])
-            and all(cues.norm(r["viewer"]) == self.ident[i] for i, own, _ in self.sql_read for t in COPY for r in own[t]) and not any(v for _, _, peek in self.sql_read for v in peek.values()),
+            and all(cues.norm(r["viewer"]) == self.ident[i] for i, own, _ in self.sql_read for t in self.tables for r in own[t]) and not any(v for _, _, peek in self.sql_read for v in peek.values()),
             "every side probe ran to its end": all(e and e[-1].get("code") == 0 for e in ev.values()),
         }
         info = {"spectator": self.spect_ident, "helper": {"refused": helper_refusal, "rows": len(rows(ev["helper"]))},
@@ -236,7 +276,8 @@ class Privacy:
     def snapshot(self, sample, tag="window"):
         """Paused: each sampled viewer's copy tables against its views, through its own connection."""
         cues, mt = _vc()
-        qs = [f"SELECT * FROM {t}" for t in (*COPY, "seen_bodies", "seen_bodies_near", "seen_bodies_far", "seen_characters")]
+        qs = [f"SELECT * FROM {t}" for t in (*self.tables, "seen_bodies", "seen_bodies_near", "seen_bodies_far", "seen_characters",
+                                             *(("seen_fighters", "seen_fighters_near", "seen_fighters_far") if "seen_fighter_copy" in self.tables else ()))]
         paths = {i: self.out / f"privacy-v{self.n}-snap-{tag}-p{i}.jsonl" for i in sample}
         ts = [probe_stream(self.db, self.players[i]["token"], qs, 4, paths[i]) for i in sample]
         for t in ts:
@@ -256,6 +297,14 @@ class Privacy:
                       "near_split_equal": {k for k, r in mine.items() if r["near"]} == set(near) and {k for k, r in mine.items() if not r["near"]} == set(far),
                       "mirror_equal": mirror == chars, "mirror_foreign": sum(1 for r in mt.final(ev, "seen_character_copy").values() if cues.norm(r["viewer"]) != own),
                       "bodies": len(view), "characters": len(chars)}
+            if "seen_fighter_copy" in self.tables:
+                ftable = mt.final(ev, "seen_fighter_copy")
+                fmine = {r["body"]: r for r in ftable.values() if cues.norm(r["viewer"]) == own}
+                fview = mt.final(ev, "seen_fighters")
+                fnear, ffar = mt.final(ev, "seen_fighters_near"), mt.final(ev, "seen_fighters_far")
+                per[i].update({"fighters_foreign": len(ftable) - len(fmine), "fighters": len(fview),
+                               "fighters_equal": {k: r["fighter"] for k, r in fmine.items()} == fview,
+                               "fighters_near_split_equal": {k for k, r in fmine.items() if r["near"]} == set(fnear) and {k for k, r in fmine.items() if not r["near"]} == set(ffar)})
         return per
 
 
@@ -288,24 +337,29 @@ def privacy_after_window(a, db, token, priv, load, out, n):
         "paused, sampled viewers: seen_body_copy equals seen_bodies, near flags equal the tier split": len(live) >= max(1, len(sample) // 2) and all(v["bodies_equal"] and v["near_split_equal"] for v in snap.values()),
         "paused, sampled viewers: seen_character_copy equals seen_characters": all(v["mirror_equal"] for v in snap.values()) and any(v["characters"] for v in snap.values()),
     })
+    fighters = "seen_fighter_copy" in priv.tables
+    fok = lambda snapv: all(v.get("fighters_foreign", 0) == 0 and v.get("fighters_equal", True) and v.get("fighters_near_split_equal", True) for v in snapv.values())
+    if fighters:
+        checks["paused, sampled viewers: seen_fighter_copy equals seen_fighters, near flags equal the fighter tier split, no foreign row"] = fok(snap) and any(v.get("fighters") for v in snap.values())
     count = lambda t: lc.sql(db, f"SELECT COUNT(*) AS n FROM {t}", token)[0]["n"]
-    before = {t: count(t) for t in COPY}
-    for law in ("motion_tables_on", "characters_table_on"):
+    laws = ("motion_tables_on", "characters_table_on") + (("fighter_tables_on",) if "seen_fighter_copy" in priv.tables else ())
+    before = {t: count(t) for t in priv.tables}
+    for law in laws:
         lc.call(db, "set_world_law", [law, "false"], token)
     time.sleep(3)
-    off = {t: count(t) for t in COPY}
+    off = {t: count(t) for t in priv.tables}
     load.send("held")
     held_off = load.expect("held", 120)["players"]
     t_on = time.time()
-    for law in ("motion_tables_on", "characters_table_on"):
+    for law in laws:
         lc.call(db, "set_world_law", [law, "true"], token)
     # The rows come back at each viewer's next frame (`to_public`, `fill_mirror`): the owner's
     # counts every half second for 10 s, then, paused, the sampled viewers' tables against their views.
     series = []
     while time.time() < t_on + 10:
         time.sleep(0.5)
-        series.append([round(time.time() - t_on, 1), *(count(t) for t in COPY)])
-    on = {t: count(t) for t in COPY}
+        series.append([round(time.time() - t_on, 1), *(count(t) for t in priv.tables)])
+    on = {t: count(t) for t in priv.tables}
     load.send("held")
     held_on = load.expect("held", 120)["players"]
     alive_on = [p for p in held_on if p["alive"]]
@@ -319,7 +373,10 @@ def privacy_after_window(a, db, token, priv, load, out, n):
         "kill switch: both laws on again, the rows return: paused, each sampled viewer's tables equal its views, no foreign row": all(v > 0 for v in on.values())
         and len(live_on) >= max(1, len(sample) // 2) and all(v["accepted"] and v["foreign"] == 0 and v["mirror_foreign"] == 0 and v["bodies_equal"] and v["near_split_equal"] and v["mirror_equal"] for v in snap_on.values()),
     })
-    return {"checks": checks, "info": info, "combat_feed": combat, "sample": {str(k): v for k, v in snap.items()}, "sample_on": {str(k): v for k, v in snap_on.items()},
+    if fighters:
+        checks["fighter table, law off: empty to the owner and in every viewer's cache; on again: paused, equal to the views"] = off["seen_fighter_copy"] == 0 \
+            and all(p["held"].get("fighter", 0) == 0 for p in held_off) and fok(snap_on)
+    return {"checks": checks, "info": info, "fighters": fighters, "combat_feed": combat, "sample": {str(k): v for k, v in snap.items()}, "sample_on": {str(k): v for k, v in snap_on.items()},
             "owner_rows": {"before": before, "off": off, "on": on, "on_series": series},
             "held_on_alive": len(alive_on), "held_on_with_bodies": sum(1 for p in alive_on if p["held"]["body"] > 0)}
 
@@ -327,7 +384,7 @@ def privacy_after_window(a, db, token, priv, load, out, n):
 def privacy_final(pr, done, out, n):
     """From gate-load's `done`: every copy row each viewer received, over the whole run, was its own."""
     ps = [p for p in done.get("players", []) if p.get("privacy")]
-    tot = {k: sum(p["privacy"].get(k, 0) for p in ps) for k in ("body_rows", "character_rows", "combat_rows", "foreign_rows")}
+    tot = {k: sum(p["privacy"].get(k, 0) for p in ps) for k in ("body_rows", "character_rows", "fighter_rows", "combat_rows", "foreign_rows")}
     pr["viewer_rows"] = {**tot, "players": len(ps), "without_body_rows": sum(1 for p in ps if not p["privacy"]["body_rows"]),
                          "without_character_rows": sum(1 for p in ps if not p["privacy"]["character_rows"]),
                          "foreign_viewers": sorted({v for p in ps for v in p["privacy"]["foreign_viewers"]})[:8]}
@@ -335,9 +392,46 @@ def privacy_final(pr, done, out, n):
         "every viewer's copy rows over the run (initial, inserts, updates) name it as the viewer": len(ps) == n and tot["foreign_rows"] == 0,
         "every viewer received copy rows of both tables (the check is not vacuous)": len(ps) == n and pr["viewer_rows"]["without_body_rows"] == 0 and pr["viewer_rows"]["without_character_rows"] == 0,
     })
+    if pr.get("fighters"):
+        pr["checks"]["the viewers received seen_fighter_copy rows, all their own (counted with the copies above)"] = tot["fighter_rows"] > 0 and tot["foreign_rows"] == 0
     if pr.get("combat_feed"):
         pr["checks"]["the viewers received combat_feed event rows, all their own (counted with the copies above)"] = tot["combat_rows"] > 0 and tot["foreign_rows"] == 0
     (out / f"privacy-v{n}.json").write_text(json.dumps(pr, indent=1) + "\n")
+
+
+CLOG = "/home/spacetime/.local/share/spacetime/data/replicas/{}/clog"
+
+
+def clog_state(replica):
+    """A replica's commitlog on disk: its bytes (du -sb) and its segment files (`*.stdb.log`)."""
+    r = subprocess.run(["docker", "exec", lc.CONTAINER, "sh", "-c", f"du -sb {CLOG.format(replica)}; ls {CLOG.format(replica)}"], capture_output=True, text=True)
+    lines = r.stdout.split("\n")
+    return {"bytes": int(lines[0].split()[0]), "segments": sum(1 for x in lines[1:] if x.endswith(".stdb.log")), "files": sum(1 for x in lines[1:] if x.strip())}
+
+
+def clog_zstd(replica):
+    """The commitlog's segments (`*.stdb.log`) compressed: bytes raw, at zstd -3 (the level 2.14.1
+    uses for sealed segments behind a snapshot) and zstd -6 (as trial_archive.py keeps them), or
+    None. Read after the world is deleted: a deleted database's files stay and no longer change."""
+    cat = ["docker", "exec", lc.CONTAINER, "sh", "-c", f"cat {CLOG.format(replica)}/*.stdb.log"]
+    out = {}
+    for name, cmd in (("raw", ["wc", "-c"]), ("zstd3", ["sh", "-c", "zstd -3 -q -c -T0 | wc -c"]), ("zstd6", ["sh", "-c", "zstd -6 -q -c -T0 | wc -c"])):
+        src = subprocess.Popen(cat, stdout=subprocess.PIPE)
+        r = subprocess.run(cmd, stdin=src.stdout, capture_output=True, text=True)
+        src.stdout.close()
+        if src.wait() != 0 or r.returncode != 0:
+            return None
+        out[name] = int(r.stdout.split()[0])
+    return out
+
+
+def spawn(db, token, a):
+    """The battle: `spawn_battle`, or with `--sides N` the fixture `spawn_battle_sides` (fighters in
+    N sides that fight each other and leave bystanders be; docs/BATTLE_LAWS.md)."""
+    if a.sides:
+        lc.call(db, "spawn_battle_sides", [a.fighters, a.sides], token)
+    else:
+        lc.call(db, "spawn_battle", [a.fighters], token)
 
 
 def one(a, n, out):
@@ -358,8 +452,11 @@ def one(a, n, out):
         for law in a.law:
             name, value = law.split("=", 1)
             lc.call(db, "set_world_law", [name, value], token)
-        if not a.battle_after_placing:
-            lc.call(db, "spawn_battle", [a.fighters], token)
+        # With no viewers there is no placement to wait for, so `--battle-after-placing` spawns the
+        # battle here too: the 0-viewer arm is the same battle, the subtraction baseline (before
+        # 2026-11-20 it had none).
+        if not a.battle_after_placing or not n:
+            spawn(db, token, a)
         land = lc.sql(db, "SELECT * FROM land", token)[0]
         site = tuple(float(x) for x in a.site.split(",")) if a.site else (land["arrive_x"], land["arrive_y"] - 20.0)
         res["site"], res["arrival"] = list(site), [land["arrive_x"], land["arrive_y"]]
@@ -371,7 +468,7 @@ def one(a, n, out):
             load = lc.Proc([a.load, "players"], out / f"players-v{n}.stderr")
             load.send(json.dumps({"uri": lc.URL, "db": db, "events": str(out / f"events-v{n}.jsonl"), "battle": list(site),
                                   "behaviour": {"walk_period_ms": 1500, "rejoin_s": 3}, "players": players, "client": "gate",
-                                  "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables, "character_tables": a.character_tables,
+                                  "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables, "character_tables": a.character_tables, "fighter_tables": a.fighter_tables,
                                   "combat_feed": a.combat_feed, "fresh_every": a.fresh_every}))
             joined = load.expect("joined", 900)
             lo, hi = (float(x) for x in a.ring.split(",")) if a.ring else (0.0, 6.0)
@@ -389,13 +486,17 @@ def one(a, n, out):
             if a.battle_after_placing:
                 # The viewers stand on their ring before the fighters appear (none is killed at the
                 # arrival point, 20 m from the battle, while it waits to be placed).
-                lc.call(db, "spawn_battle", [a.fighters], token)
+                spawn(db, token, a)
             load.send("placed")
             ready = load.expect("ready", 900)
             res["held_at_ready"] = ready.get("held")
             if a.paused_placement:
                 lc.call(db, "set_paused", [False], token)
             load.send("go")
+        keeper = None
+        if a.keep_fighters:
+            keeper = Keeper(db, token, a.fighters, a.keep_fighters)
+            keeper.start()
         keep = None
         if a.keep_alive and n:
             keep = KeepAlive(db, token, a.keep_alive)
@@ -412,13 +513,29 @@ def one(a, n, out):
             loadlog.start()
             m0, th0, p0 = tc.scrape(ident), tc.thread_cpu(pid), tc.proc_cpu(pid)
         if a.privacy and n:
-            priv = Privacy(db, token, out, n, players, a.seconds, a.combat_feed)
+            priv = Privacy(db, token, out, n, players, a.seconds, a.fighter_tables, a.combat_feed)
+        clog0 = clog_state(res["replica"]) if a.clog else None
         c0, t0 = tick_count(ident), time.time()
         k0 = (keep.calls, keep.restored) if keep else None
+        f0 = keeper.refills if keeper else 0
         if load:
             load.send("fresh on")
         time.sleep(a.seconds)
         c1, t1 = tick_count(ident), time.time()
+        if keeper:
+            keeper.stop.set()
+            res["keeper_window"] = keeper.window(t0, t1)
+            res["keeper_window"]["refills"] = keeper.refills - f0
+            res["keeper_window"]["refills_per_s"] = round((keeper.refills - f0) / (t1 - t0), 2)
+        if a.clog:
+            # Commitlog growth over the window: the replica's `clog/` on disk (segments and their
+            # offset indexes), not what a snapshot would let go (docs/TRIAL_DISK.md).
+            clog1 = clog_state(res["replica"])
+            dt = t1 - t0
+            grew = clog1["bytes"] - clog0["bytes"]
+            res["clog"] = {"start": clog0, "end": clog1, "seconds": round(dt, 2), "bytes": grew,
+                           "bytes_per_s": round(grew / dt, 1), "bytes_per_hour": round(grew / dt * 3600),
+                           "segments_added": clog1["segments"] - clog0["segments"]}
         if keep:
             res["keep_alive_window"] = {"calls": keep.calls - k0[0], "hp_restored": round(keep.restored - k0[1], 1),
                                         "calls_per_s": round((keep.calls - k0[0]) / (t1 - t0), 2)}
@@ -586,6 +703,14 @@ def one(a, n, out):
         if load and load.p.poll() is None:
             load.p.terminate()
         lc.delete_world(db)
+        if a.clog and "clog" in res:
+            # The whole commitlog compressed, as the server keeps sealed segments behind a snapshot
+            # (zstd -3) and as an archive keeps it (zstd -6).
+            z = clog_zstd(res["replica"])
+            res["clog"]["zstd"] = z
+            if z and z["raw"]:
+                res["clog"]["zstd3_ratio"] = round(z["zstd3"] / z["raw"], 4)
+                res["clog"]["zstd6_ratio"] = round(z["zstd6"] / z["raw"], 4)
     return res
 
 
@@ -604,6 +729,7 @@ def main():
     ap.add_argument("--character-tables", action="store_true", help="the viewers subscribe seen_character_copy in place of seen_characters (battle-views)")
     ap.add_argument("--law", action="append", default=[])
     ap.add_argument("--fresh-every", type=int, default=0, help="sample every Nth viewer's motion freshness (gate-load `fresh`)")
+    ap.add_argument("--keep-fighters", type=float, default=0, metavar="SECS", help="a sustained battle: every SECS s, replace dead fighters one for one with spawn_battle (battle-laws)")
     ap.add_argument("--keep-alive", type=float, default=0, metavar="SECS", help="every SECS s, set each hurt viewer back to full health (admin_set_vitals; the agreed keep-alive fixture)")
     ap.add_argument("--paused-placement", action="store_true", help="pause the world while the viewers join and are placed; unpause at ready (the Spark's procedure)")
     ap.add_argument("--site", default=None, metavar="X,Y", help="the viewers' centre (default: the arrival less 20 m, the battle's centre)")
@@ -613,7 +739,10 @@ def main():
     ap.add_argument("--no-profile", action="store_true", help="with --detail: server metrics and thread CPU only, profiling left off (no spans)")
     ap.add_argument("--full-log", action="store_true", help="with --detail: read the replica's whole module log from the server's data directory")
     ap.add_argument("--flip-off", action="store_true", help="after the window, turn motion_tables_on off and time the kill switch's tick")
+    ap.add_argument("--fighter-tables", action="store_true", help="the viewers subscribe seen_fighter_copy in place of the fighter views (views step 3; set fighter_tables_on=true)")
     ap.add_argument("--combat-feed", action="store_true", help="the viewers subscribe combat_feed in place of my_combat (views step 2; set combat_feed_on=true)")
+    ap.add_argument("--clog", action="store_true", help="record the replica's commitlog growth on disk over the window, and its compressed size after the world is deleted, zstd -3 and -6 (result clog)")
+    ap.add_argument("--sides", type=int, default=0, help="the fighters in this many sides (2-4) that fight each other, not bystanders (spawn_battle_sides)")
     ap.add_argument("--privacy", action="store_true", help="copy-privacy: prove each viewer receives only its own copy rows (needs --motion-tables --character-tables and both laws on); <out>/privacy-v<count>.json, exit 1 on a failed check")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()

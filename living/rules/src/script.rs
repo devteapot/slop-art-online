@@ -612,6 +612,26 @@ pub struct Laws {
     /// once per this many ms (docs/BATTLE_SCALE.md, fix 3); the percept is written at once and in
     /// full. 0: woken by each, as before.
     pub witness_wake_ms: f32,
+    /// Battle laws (docs/BATTLE_LAWS.md, prototypes, 0 = off in play). (a) At most this many
+    /// creatures a player sees at once: the nearest, and whoever is engaged with it first.
+    pub far_cap: f32,
+    /// (b) Above this many creatures in sight, a player's sweep comes less often, in proportion
+    /// (at most three times the period).
+    pub crowd_sweep_n: f32,
+    /// (b) The longest interval between a player's frames in a crowd (ms; 0: `frame::FRAME_MAX_MS`).
+    pub crowd_frame_max_ms: f32,
+    /// (e) A far creature's motion copy is rewritten only when the client's extrapolation of the old
+    /// one would be this many metres off within half a second (0: on every change).
+    pub far_motion_tol_m: f32,
+    /// Whether a creature in a fight (on the combat cadence, `mind_state.fast_until`) is woken as a
+    /// bystander (`witness_wake_ms`), as before (on). Off (docs/BATTLE_LAWS.md (c), COMBAT_PHASE.md
+    /// "Part B"): what it sees of others' acts waits for its own next cadence evaluation, at most
+    /// `60 / combat_eval_hz` ticks later. The percept is written at once either way, and a party to
+    /// an act is still woken at once.
+    pub fighter_bystander_wakes: bool,
+    /// How often a creature in a fight is evaluated (docs/COMBAT_PHASE.md, "Part B"): every
+    /// `round(60 / combat_eval_hz)` ticks, staggered by id. 15 (every 4th tick) as before.
+    pub combat_eval_hz: f32,
     /// A diagnostic, 0 in play (docs/PERCEPTION.md, "Module memory and rollback"): a step the
     /// world fails on purpose, to prove that nothing kept in module memory outlives a
     /// transaction that rolled back (1 the tick after its sweep, 2 the tick by a panic, 3
@@ -636,6 +656,13 @@ pub struct Laws {
     /// Diagnostic: every shared answer is also computed afresh and compared; differences are
     /// logged and counted (`perception::report_answers`). Costs both.
     pub regard_cache_check: bool,
+    /// A diagnostic, off in play (docs/COMBAT_PHASE.md, "Next: tick body and module memory"):
+    /// each player's sweep keeps its `heard` rows, and the creatures' health readings, in module
+    /// memory across ticks instead of reading them each sweep. Inexact: a vitals write that
+    /// `health_moved` does not mark stands until the reading is renewed (1 s). `sweep_keep_check`
+    /// compares each kept value with the table and counts differences (`sweep keep: …`).
+    pub sweep_keep_memory: bool,
+    pub sweep_keep_check: bool,
     /// A diagnostic: while profiling (`set_profile`), also time the parts of a behaviour graph's
     /// evaluation (its conditions, targets, act starts, alerts), docs/BATTLE_SCALE.md. Off by
     /// default: those spans are many and would weigh on what an ordinary profile measures.
@@ -676,6 +703,13 @@ pub struct Laws {
     /// viewer. Off (the kill switch), every mirror row goes in one tick. Delivery only: the view
     /// shows the same either way.
     pub characters_table_on: bool,
+    /// Whether a player's copies of the fighters it perceives (`seen_fighters` and its tiers) live
+    /// in the public `seen_fighter_copy` table, filtered per client by row-level security (views
+    /// step 3, docs/BATTLE_VIEWERS.md, addendum 5), instead of the private `fighter_seen` and
+    /// `fighter_near`. Moved at each viewer's frame; off (the kill switch, and the default until the
+    /// client reads it), every public copy goes back to the private tables in one tick. Delivery
+    /// only: the views show the same either way.
+    pub fighter_tables_on: bool,
     /// Whether what a player's character perceived of fights (its `combat_seen` feed rows) also
     /// reaches its client as rows of the public `combat_feed` event table, filtered per client by
     /// row-level security (views step 2, docs/BATTLE_VIEWERS.md, addendum 4): one event row per
@@ -763,6 +797,14 @@ pub fn longing_wait_ms(after_min: f32, nurture: f32) -> f32 {
 }
 
 
+impl Laws {
+    /// Every how many ticks a creature in a fight is evaluated: `round(60 / combat_eval_hz)`, at
+    /// least 1 (15 Hz: every 4th tick).
+    pub fn combat_every_ticks(&self) -> u64 {
+        (60.0 / self.combat_eval_hz.max(1.0)).round().max(1.0) as u64
+    }
+}
+
 impl Default for Laws {
     fn default() -> Self {
         Self {
@@ -834,12 +876,20 @@ impl Default for Laws {
             think_framing: false,
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
+            far_cap: 0.0,
+            crowd_sweep_n: 0.0,
+            crowd_frame_max_ms: 0.0,
+            fighter_bystander_wakes: true,
+            far_motion_tol_m: 0.0,
+            combat_eval_hz: 15.0,
             memory_test: 0.0,
             det_clock: false,
             det_stop: 0.0,
             witness_fold_ms: 2000.0,
             regard_cache: true,
             regard_cache_check: false,
+            sweep_keep_memory: false,
+            sweep_keep_check: false,
             profile_detail: false,
             latency_nav_from: 0,
             latency_fast: false,
@@ -850,6 +900,7 @@ impl Default for Laws {
             near_tier_on: true,
             motion_tables_on: true,
             characters_table_on: true,
+            fighter_tables_on: false,
             combat_feed_on: false,
             alarm_cells_check: false,
             status_parts: true,
@@ -3186,12 +3237,20 @@ impl Scripts {
             think_framing: flag("think_framing", l.think_framing),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
+            far_cap: g("far_cap", l.far_cap).clamp(0.0, 10_000.0),
+            crowd_sweep_n: g("crowd_sweep_n", l.crowd_sweep_n).clamp(0.0, 10_000.0),
+            crowd_frame_max_ms: g("crowd_frame_max_ms", l.crowd_frame_max_ms).clamp(0.0, 2_000.0),
+            fighter_bystander_wakes: flag("fighter_bystander_wakes", l.fighter_bystander_wakes),
+            far_motion_tol_m: g("far_motion_tol_m", l.far_motion_tol_m).clamp(0.0, 50.0),
+            combat_eval_hz: g("combat_eval_hz", l.combat_eval_hz).clamp(1.0, 60.0),
             memory_test: g("memory_test", l.memory_test).round().clamp(0.0, 9.0),
             det_clock: flag("det_clock", l.det_clock),
             det_stop: g("det_stop", l.det_stop).round().clamp(0.0, 16_000_000.0),
             witness_fold_ms: g("witness_fold_ms", l.witness_fold_ms).clamp(0.0, 10_000.0),
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
+            sweep_keep_memory: flag("sweep_keep_memory", l.sweep_keep_memory),
+            sweep_keep_check: flag("sweep_keep_check", l.sweep_keep_check),
             profile_detail: flag("profile_detail", l.profile_detail),
             latency_nav_from: g("latency_nav_from", l.latency_nav_from as f32) as u32,
             latency_fast: flag("latency_fast", l.latency_fast),
@@ -3202,6 +3261,7 @@ impl Scripts {
             near_tier_on: flag("near_tier_on", l.near_tier_on),
             motion_tables_on: flag("motion_tables_on", l.motion_tables_on),
             characters_table_on: flag("characters_table_on", l.characters_table_on),
+            fighter_tables_on: flag("fighter_tables_on", l.fighter_tables_on),
             combat_feed_on: flag("combat_feed_on", l.combat_feed_on),
             alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
             status_parts: flag("status_parts", l.status_parts),
@@ -3438,7 +3498,8 @@ fn decode_senses(d: Dynamic, reach: &Reach, dark: f32, band: Option<(crate::sigh
 /// What a value-only law's value reaches beyond the laws in force (see [`VALUE_ONLY`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ValueOnly {
-    /// Read by the authority's frames alone (`frame.rs`): nothing derived, the next tick reads it.
+    /// Read live by the authority each tick (its frames, sweeps and wakes): nothing derived, the
+    /// next tick reads it. The delivery laws, and the battle laws' prototypes (docs/BATTLE_LAWS.md).
     Delivery,
     /// The cover policy: the authority's `cover_law` row and its cover mask (`living_rules::cover`).
     Cover,
@@ -3453,15 +3514,31 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 11] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 20] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
     ("motion_tables_on", ValueOnly::Delivery),
     // battle-views: the mirror of a player's projections (`perception.rs`, `seen_character_copy`).
     ("characters_table_on", ValueOnly::Delivery),
+    // views step 3: where a player's fighter copies live (`frame.rs`, `seen_fighter_copy`).
+    ("fighter_tables_on", ValueOnly::Delivery),
     // views step 2: a player's combat feed as event rows (`combat.rs`, `combat_feed`).
     ("combat_feed_on", ValueOnly::Delivery),
+    // The battle laws' prototypes (docs/BATTLE_LAWS.md), live-tunable: the sweeps read `far_cap`
+    // and `crowd_sweep_n`, the frames `crowd_frame_max_ms` and `far_motion_tol_m`, the wakes
+    // `fighter_bystander_wakes`, each at its next tick.
+    ("far_cap", ValueOnly::Delivery),
+    ("crowd_sweep_n", ValueOnly::Delivery),
+    ("crowd_frame_max_ms", ValueOnly::Delivery),
+    ("fighter_bystander_wakes", ValueOnly::Delivery),
+    ("far_motion_tol_m", ValueOnly::Delivery),
+    // battle-laws (docs/COMBAT_PHASE.md, docs/BATTLE_LAWS.md §4), read live by the tick: the wakes
+    // `fighter_bystander_wakes`, the combat cadence `combat_eval_hz`, the sweeps' memory
+    // `sweep_keep_memory` and its check, each at its next tick.
+    ("combat_eval_hz", ValueOnly::Delivery),
+    ("sweep_keep_memory", ValueOnly::Delivery),
+    ("sweep_keep_check", ValueOnly::Delivery),
     ("cover_sight_on", ValueOnly::Cover),
     ("cover_eye_height_m", ValueOnly::Cover),
     ("cover_brush_on", ValueOnly::Cover),
@@ -4286,6 +4363,9 @@ mod tests {
         assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (600.0, 60.0, 1.0));
         assert!(l.regard_cache && !l.regard_cache_check, "answers are shared by default, unchecked");
         assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
+        assert!(!l.sweep_keep_memory && !l.sweep_keep_check, "sweeps read heard rows and health afresh by default");
+        assert!(l.fighter_bystander_wakes, "a fighter is woken as any bystander by default (docs/COMBAT_PHASE.md)");
+        assert_eq!((l.combat_eval_hz, l.combat_every_ticks()), (15.0, 4), "fighters evaluated every 4th tick by default");
         assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
         assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");
         assert!(l.chronicle_recent && !l.chronicle_recent_check, "the chronicle's repeat check reads the newest rows; its check off");
@@ -4305,6 +4385,12 @@ mod tests {
         assert!(about["memory_test"].starts_with("A test switch"), "{about:?}");
         let t = Scripts::new(&with_world_laws(src, &[("memory_test".into(), serde_json::json!(3.4))])).unwrap();
         assert_eq!(t.laws().memory_test, 3.0);
+        assert!(about["combat_eval_hz"].contains("15 times a second"), "{about:?}");
+        for (hz, every) in [(10.0, 6), (7.5, 8), (60.0, 1), (0.0, 60), (100.0, 1)] {
+            let t = Scripts::new(&with_world_laws(src, &[("combat_eval_hz".into(), serde_json::json!(hz)), ("fighter_bystander_wakes".into(), serde_json::json!(false))])).unwrap();
+            assert_eq!(t.laws().combat_every_ticks(), every, "{hz} Hz");
+            assert!(!t.laws().fighter_bystander_wakes);
+        }
     }
 
     /// First sights that ask for a thought (docs/FIRST_SIGHT.md): off by default, with the gap a
