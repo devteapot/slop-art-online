@@ -337,7 +337,7 @@ fn laws() {
 }
 ```
 
-A world needs its cover bands (`cover_ground`) for the switch. Since `cover-genesis` (2026-11-20), a land made with its cover law off (the island) has none. When the overlay is installed, it derives them in steps, for about 6 s on the island, and cover is in force once they are complete ([cover geometry](#cover-geometry-only-where-cover-is-on-2026-11-20)). Before that, the play-test world had to be made fresh from a module at or after `7619ad71`.
+A world needs its cover bands (`cover_ground`) for the switch. Since `cover-genesis` (2026-11-20), a land made with its cover law off (the island) has none. When the overlay is installed, it derives them in steps (about 6 s on the island before `cover-stall`, about 2 s since, [the cover-stall fix](#the-cover-stall-fix-2026-11-20)), and cover is in force once they are complete ([cover geometry](#cover-geometry-only-where-cover-is-on-2026-11-20)). Before that, the play-test world had to be made fresh from a module at or after `7619ad71`.
 
 **Island creation and an overlay (found 2026-11-19).** A module with the island seed compiled in *and* the play-test scene's overlay as the seed's `laws` ran out of reducer energy in `init`, with or without the switch-on lines; the plain island seed created normally on the same server. The scratch proof therefore made a plain island world and installed the composed overlay with `living/tools/install_script.py <db> --seed <seed>`. A play scene that compiles the overlay into an island module may hit the same limit. Proof: verify-player `sight_on.py` ([cover in a player's projection](../.agents/skills/verify-player/features/cover.md)) on scratch worlds of Cullet and of the island with that overlay, with the laws as shipped and no admin override before the checks. Its validation record is in `.agents/skills/verify-player/references/validation/`.
 
@@ -402,7 +402,7 @@ The retained data is the same bands as before, and only in worlds that use cover
 | island, live | 40 | 72.9 × 10⁹ | under 29 × 10⁹ (land generation, about 1.2 s) | 6.8 s |
 | megacity 4096 m, live | 147 | 450.8 × 10⁹ | 28.8 × 10⁹ (land tile rows, 1.0 s) | 31.4 s |
 
-Each step blocks the module while it runs, so ticks stop for up to about a second during the large land steps. Switching cover on is a rare admin act. Pause the world first if those stalls matter.
+Each step blocks the module while it runs, so ticks stopped for up to about a second during the large land steps. Superseded by [the cover-stall fix](#the-cover-stall-fix-2026-11-20): a land made since samples its kept ground source in steps of a few ms; a land made before still generates again, with shorter tile steps.
 
 ### Staged creation with cover on (4096 m megacity, seed rule `cover_sight_on: true`)
 

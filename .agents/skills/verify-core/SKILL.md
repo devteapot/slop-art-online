@@ -226,6 +226,13 @@ python3 "$V" launch --run "$W" --seed island > ".local/living/verify/$W/launch.t
 python3 "$C/law_override.py" checks --run "$W" > ".local/living/verify/$W/law-checks.txt" 2>&1
 python3 "$C/law_override.py" time --run "$W" > ".local/living/verify/$W/law-time.txt" 2>&1
 python3 "$V" cleanup --run "$W" > ".local/living/verify/$W/cleanup.txt" 2>&1
+# A cover switch-on timed on a fresh island (the tick's longest standstill, cover_step's longest,
+# the wall time to cover_law on, then a brush edit; features/law-override.md, docs/COVER_SIGHT.md).
+W2=$R-switch
+mkdir -p ".local/living/verify/$W2"
+python3 "$V" launch --run "$W2" --seed island > ".local/living/verify/$W2/launch.txt" 2>&1
+python3 "$C/law_override.py" switch --run "$W2" > ".local/living/verify/$W2/switch.txt" 2>&1
+python3 "$V" cleanup --run "$W2" > ".local/living/verify/$W2/cleanup.txt" 2>&1
 
 # Goods, fires that eat fuel and recipes over Cullet's goods (about 11 min), and a seeded
 # fishing ground's shared stock (features/goods.md, docs/WORLD_RULES.md).
