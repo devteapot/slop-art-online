@@ -161,5 +161,5 @@ A newer SpacetimeDB may add retention. Check it at the next version change, agai
 ## Evidence
 
 - `~/archive/worktree-evidence-20261120/clog-long-local.tar.gz` on the dev-box. It holds the series log, every sample (`watch/samples.jsonl`), the schema, `analysis.json`, the decoded bytes (`read-all.json`, each window's `*-read.json`), each run's `battle-viewers.json` and metrics, the prune trial (`prune-trial.json`) and the host load.
-- The hour's whole replica log and snapshots, as archived before the prune: `~/archive/worktree-evidence-20261120/clog-long-replica4000001.tar.zst` (5.1 GB, `.sha256` beside it).
+- The hour's whole replica log and snapshots, as archived before the prune: `~/archive/worktree-evidence-20261120/clog-long-replica4000001.tar.zst` (1.78 GB, `.sha256` beside it: the trial's 5.1 GB archive rewritten with the server's compressed segments decompressed, as one zstd -6 stream, every member's content checked against the original; `clog-long-recompress.py` beside it).
 - The tools: `living/tools/clog_watch.py`, `clog_read.py`, `clog_prune_trial.py`, and `battle_viewers.py --keep-world --clog`.
