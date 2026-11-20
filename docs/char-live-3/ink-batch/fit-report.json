@@ -1,0 +1,272 @@
+{
+  "params": {
+    "carrier_offset_m": 0.0003,
+    "skin_offset_m": 0.0003,
+    "core_offset_m": 0.00015,
+    "carrier_clear_m": 0.00035,
+    "core_clear_m": 0.00015,
+    "core_inset": 0.35,
+    "core_margin_m": 0.0006,
+    "lid_overlap_m": 0.0005,
+    "eyes_range_m": 0.0055,
+    "skin_range_m": 0.0035,
+    "eyes_side_m": 0.26,
+    "skin_side_m": 0.21,
+    "margin_m": 0.0018,
+    "outline_smooth": 12,
+    "jaw_inset_m": 0.0003,
+    "jaw_end_drop_m": 0.008,
+    "jaw_min_facing": 0.55,
+    "max_stretch": 2.5,
+    "brow_gain": 1.0,
+    "nostril_gain": 0.8,
+    "lower_gain": 1.3
+  },
+  "colours": {
+    "Cora_LidInk_EYE": [
+      14,
+      5,
+      4
+    ],
+    "Cora_BrowInk_EYE": [
+      57,
+      32,
+      20
+    ],
+    "Cora_JawInk_SKIN": [
+      27,
+      11,
+      7
+    ],
+    "Cora_NoseInk_SKIN": [
+      30,
+      11,
+      9
+    ]
+  },
+  "info": {
+    "eye_scale_m_per_px": 0.0004842540423779599,
+    "eye_width_m": 0.035430059072423824,
+    "face_scale_m_per_px": 0.0004496335435777382,
+    "jaw_top_z": 1.4726199703325245,
+    "jaw_length_m": 0.11875241894554464
+  },
+  "maps": {
+    "eyes": {
+      "size": [
+        2048,
+        2048
+      ],
+      "range_m": 0.0055,
+      "side_m": 0.26,
+      "range_uv": 0.02115384615384615,
+      "used_fraction": 0.5793432039684183,
+      "m_uv_median": 1.0030504400327125,
+      "density_within_25": 0.998898678414097,
+      "widths": {
+        "lid R": {
+          "max_f": 0.39587106227153757,
+          "max_surface_hw_mm": 2.1772908424934565,
+          "stretch": [
+            0.9183576387050527,
+            1.8234901555912277
+          ]
+        },
+        "lash 1 R": {
+          "max_f": 0.14865195791130603,
+          "max_surface_hw_mm": 0.8175857685121831,
+          "stretch": [
+            1.1281078985648385,
+            1.40695051385525
+          ]
+        },
+        "lash 2 R": {
+          "max_f": 0.15049992192947464,
+          "max_surface_hw_mm": 0.8277495706121105,
+          "stretch": [
+            1.0854382760229218,
+            1.1995292570097895
+          ]
+        },
+        "lower lid R": {
+          "max_f": 0.16462760019298214,
+          "max_surface_hw_mm": 0.9054518010614017,
+          "stretch": [
+            0.9775636545165668,
+            1.1392249036491293
+          ]
+        },
+        "brow R": {
+          "max_f": 0.543195075385681,
+          "max_surface_hw_mm": 2.9875729146212455,
+          "stretch": [
+            1.0254101436586762,
+            1.3364172584312342
+          ]
+        },
+        "lid L": {
+          "max_f": 0.4149741308103034,
+          "max_surface_hw_mm": 2.282357719456668,
+          "stretch": [
+            0.9125461662619747,
+            1.7860094621341018
+          ]
+        },
+        "lash 1 L": {
+          "max_f": 0.14325755366214732,
+          "max_surface_hw_mm": 0.7879165451418102,
+          "stretch": [
+            1.0450650824405774,
+            1.3558939389070397
+          ]
+        },
+        "lash 2 L": {
+          "max_f": 0.13338921044311267,
+          "max_surface_hw_mm": 0.7336406574371196,
+          "stretch": [
+            1.0252091483115755,
+            1.1090881675639939
+          ]
+        },
+        "lower lid L": {
+          "max_f": 0.17194047400448959,
+          "max_surface_hw_mm": 0.9456726070246927,
+          "stretch": [
+            0.9754104283394296,
+            1.0729912154754988
+          ]
+        },
+        "brow L": {
+          "max_f": 0.6084691071495064,
+          "max_surface_hw_mm": 3.3465800893222855,
+          "stretch": [
+            1.0030419050843908,
+            1.260478635659555
+          ]
+        }
+      }
+    },
+    "skin": {
+      "size": [
+        2048,
+        2048
+      ],
+      "range_m": 0.0035,
+      "side_m": 0.21,
+      "range_uv": 0.016666666666666666,
+      "used_fraction": 0.283342371571342,
+      "m_uv_median": 1.0156008378016765,
+      "density_within_25": 0.9966666666666667,
+      "widths": {
+        "nostril A": {
+          "max_f": 0.11732516742065204,
+          "max_surface_hw_mm": 0.41063808597228213,
+          "stretch": [
+            0.9995827449515762,
+            1.1800267997824594
+          ]
+        },
+        "nostril B": {
+          "max_f": 0.13482640531883835,
+          "max_surface_hw_mm": 0.47189241861593423,
+          "stretch": [
+            0.9587754354888888,
+            1.4462085138438325
+          ]
+        },
+        "jaw": {
+          "max_f": 0.2044993236285858,
+          "max_surface_hw_mm": 0.7157476327000503,
+          "stretch": [
+            1.1042126188460977,
+            2.1512473796117053
+          ]
+        }
+      }
+    }
+  },
+  "removed_vertices": 402,
+  "removed_faces": 184,
+  "carriers": {
+    "lid R": {
+      "vertices": 110,
+      "quads": 84
+    },
+    "lash 1 R": {
+      "vertices": 36,
+      "quads": 24
+    },
+    "lash 2 R": {
+      "vertices": 36,
+      "quads": 24
+    },
+    "lower lid R": {
+      "vertices": 40,
+      "quads": 27
+    },
+    "brow R": {
+      "vertices": 90,
+      "quads": 68
+    },
+    "lid L": {
+      "vertices": 110,
+      "quads": 84
+    },
+    "lash 1 L": {
+      "vertices": 36,
+      "quads": 24
+    },
+    "lash 2 L": {
+      "vertices": 36,
+      "quads": 24
+    },
+    "lower lid L": {
+      "vertices": 40,
+      "quads": 27
+    },
+    "brow L": {
+      "vertices": 90,
+      "quads": 68
+    },
+    "nostril A": {
+      "vertices": 32,
+      "quads": 21
+    },
+    "nostril B": {
+      "vertices": 28,
+      "quads": 18
+    },
+    "jaw": {
+      "vertices": 152,
+      "quads": 111
+    },
+    "lid core R": {
+      "vertices": 28,
+      "quads": 13
+    },
+    "lid core L": {
+      "vertices": 28,
+      "quads": 13
+    }
+  },
+  "nose": {
+    "source": "e94b2e891262960de3b21b7fdc3f2cc0c714277b6702cb76fffcc9a2e6095f2f",
+    "painted": "a95f9647918fa258dee5923a13d3ec2b9ab4d9584ad9fef56b95778be6417333"
+  },
+  "neck": {
+    "z_full": 1.422,
+    "z_clear": 1.385,
+    "side_rise": 0.025,
+    "strength": [
+      0.601,
+      0.724,
+      0.728
+    ],
+    "side_fade": 0.3,
+    "base": [
+      0.754,
+      0.389,
+      0.247
+    ]
+  }
+}

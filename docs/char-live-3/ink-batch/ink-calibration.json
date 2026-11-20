@@ -1,0 +1,262 @@
+{
+  "shots": [
+    "0:8:0.16:0.91",
+    "0:8:0.16:0.87"
+  ],
+  "rows": [
+    {
+      "material": "Cora_LidInk_EYE",
+      "shot": "0:8:0.16:0.91",
+      "patch": [
+        683,
+        417
+      ],
+      "depth_px": 11,
+      "reference": [
+        683,
+        400
+      ],
+      "measured": [
+        72,
+        49,
+        37
+      ],
+      "floor": [
+        67,
+        46,
+        35
+      ],
+      "reference_measured": [
+        238,
+        179,
+        143
+      ],
+      "drawing_ink": [
+        46,
+        18,
+        9
+      ],
+      "drawing_ref": [
+        237,
+        175,
+        139
+      ],
+      "target": [
+        81,
+        51,
+        38
+      ],
+      "delta": [
+        -9,
+        -2,
+        -1
+      ],
+      "color": [
+        14,
+        5,
+        4
+      ],
+      "suggested": [
+        17,
+        5,
+        4
+      ]
+    },
+    {
+      "material": "Cora_BrowInk_EYE",
+      "shot": "0:8:0.16:0.91",
+      "patch": [
+        766,
+        372
+      ],
+      "depth_px": 15,
+      "reference": [
+        766,
+        352
+      ],
+      "measured": [
+        109,
+        67,
+        43
+      ],
+      "floor": [
+        69,
+        45,
+        30
+      ],
+      "reference_measured": [
+        237,
+        182,
+        146
+      ],
+      "drawing_ink": [
+        80,
+        46,
+        26
+      ],
+      "drawing_ref": [
+        241,
+        181,
+        145
+      ],
+      "target": [
+        101,
+        65,
+        42
+      ],
+      "delta": [
+        8,
+        2,
+        1
+      ],
+      "color": [
+        57,
+        32,
+        20
+      ],
+      "suggested": [
+        52,
+        31,
+        19
+      ]
+    },
+    {
+      "material": "Cora_JawInk_SKIN",
+      "shot": "0:8:0.16:0.87",
+      "patch": [
+        667,
+        414
+      ],
+      "depth_px": 5,
+      "reference": [
+        667,
+        377
+      ],
+      "measured": [
+        90,
+        65,
+        48
+      ],
+      "floor": [
+        84,
+        64,
+        47
+      ],
+      "reference_measured": [
+        103,
+        58,
+        39
+      ],
+      "drawing_ink": [
+        36,
+        12,
+        7
+      ],
+      "drawing_ref": [
+        240,
+        182,
+        146
+      ],
+      "target": [
+        84,
+        64,
+        47
+      ],
+      "delta": [
+        6,
+        1,
+        1
+      ],
+      "color": [
+        27,
+        11,
+        7
+      ],
+      "suggested": [
+        25,
+        11,
+        7
+      ]
+    },
+    {
+      "material": "Cora_NoseInk_SKIN",
+      "shot": "0:8:0.16:0.87",
+      "patch": [
+        784,
+        316
+      ],
+      "depth_px": 3,
+      "reference": [
+        784,
+        309
+      ],
+      "measured": [
+        112,
+        70,
+        51
+      ],
+      "floor": [
+        103,
+        66,
+        47
+      ],
+      "reference_measured": [
+        236,
+        178,
+        144
+      ],
+      "drawing_ink": [
+        28,
+        7,
+        8
+      ],
+      "drawing_ref": [
+        237,
+        174,
+        139
+      ],
+      "target": [
+        106,
+        67,
+        49
+      ],
+      "delta": [
+        6,
+        3,
+        2
+      ],
+      "color": [
+        30,
+        11,
+        9
+      ],
+      "suggested": [
+        28,
+        10,
+        8
+      ]
+    }
+  ],
+  "suggested": {
+    "Cora_LidInk_EYE": [
+      17,
+      5,
+      4
+    ],
+    "Cora_BrowInk_EYE": [
+      52,
+      31,
+      19
+    ],
+    "Cora_JawInk_SKIN": [
+      25,
+      11,
+      7
+    ],
+    "Cora_NoseInk_SKIN": [
+      28,
+      10,
+      8
+    ]
+  }
+}

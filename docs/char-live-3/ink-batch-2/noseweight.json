@@ -1,0 +1,114 @@
+{
+ "drawing": [
+  {
+   "area_px": 16,
+   "w": 8,
+   "h": 5,
+   "centre": [
+    -6.4,
+    54.4
+   ],
+   "below_tip": 10.8,
+   "from_tip": -8.3,
+   "core_rgb": [
+    104,
+    61,
+    45
+   ],
+   "softness": 13.0
+  },
+  {
+   "area_px": 15,
+   "w": 8,
+   "h": 5,
+   "centre": [
+    9.1,
+    54.4
+   ],
+   "below_tip": 10.8,
+   "from_tip": 7.3,
+   "core_rgb": [
+    96,
+    55,
+    44
+   ],
+   "softness": 11.67
+  }
+ ],
+ "approved": [
+  null,
+  null
+ ],
+ "batch": [
+  {
+   "area_px": 8,
+   "w": 6,
+   "h": 3,
+   "centre": [
+    -20.0,
+    43.3
+   ],
+   "below_tip": 7.8,
+   "from_tip": -8.9,
+   "core_rgb": [
+    229,
+    158,
+    122
+   ],
+   "softness": 10.62
+  },
+  {
+   "area_px": 4,
+   "w": 8,
+   "h": 3,
+   "centre": [
+    -2.1,
+    46.1
+   ],
+   "below_tip": 10.5,
+   "from_tip": 9.0,
+   "core_rgb": [
+    235,
+    161,
+    124
+   ],
+   "softness": 13.5
+  }
+ ],
+ "attempt2": [
+  {
+   "area_px": 17,
+   "w": 6,
+   "h": 4,
+   "centre": [
+    -18.5,
+    43.8
+   ],
+   "below_tip": 8.2,
+   "from_tip": -7.4,
+   "core_rgb": [
+    126,
+    84,
+    63
+   ],
+   "softness": 5.65
+  },
+  {
+   "area_px": 19,
+   "w": 8,
+   "h": 3,
+   "centre": [
+    -3.0,
+    45.8
+   ],
+   "below_tip": 10.2,
+   "from_tip": 8.1,
+   "core_rgb": [
+    120,
+    80,
+    57
+   ],
+   "softness": 3.58
+  }
+ ]
+}

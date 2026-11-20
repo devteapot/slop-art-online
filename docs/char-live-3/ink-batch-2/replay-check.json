@@ -1,0 +1,229 @@
+{
+  "changed_against_attempt_1": {
+    "Cora_BrowInk_EYE": "triangle order only (same triangles and winding)",
+    "Cora_JawInk_SKIN": "removed",
+    "Cora_LidInk_EYE": [
+      "COLOR_0",
+      "JOINTS_0",
+      "NORMAL",
+      "POSITION",
+      "TEXCOORD_0",
+      "TEXCOORD_1",
+      "WEIGHTS_0",
+      "indices",
+      "target0.POSITION",
+      "target1.POSITION",
+      "target10.POSITION",
+      "target11.POSITION",
+      "target12.POSITION",
+      "target13.POSITION",
+      "target14.POSITION",
+      "target2.POSITION",
+      "target3.POSITION",
+      "target4.POSITION",
+      "target5.POSITION",
+      "target6.POSITION",
+      "target7.POSITION",
+      "target8.POSITION",
+      "target9.POSITION",
+      "material"
+    ],
+    "Cora_NoseInk_SKIN": "removed",
+    "M00_000_00_FaceEyeline_00_FACE": [
+      "COLOR_0",
+      "JOINTS_0",
+      "NORMAL",
+      "POSITION",
+      "WEIGHTS_0",
+      "indices",
+      "target0.POSITION",
+      "target1.POSITION",
+      "target2.POSITION",
+      "target3.POSITION"
+    ]
+  },
+  "held_primitives": [
+    "Cora_PlaitCrest_HAIR",
+    "M00_000_00_Body_00_SKIN",
+    "M00_000_00_EyeIris_00_EYE",
+    "M00_000_00_Eye_00_EYE",
+    "M00_000_00_FaceTint_00_FACE",
+    "M00_000_00_Face_00_SKIN",
+    "M00_000_Hair_00_HAIR",
+    "M00_001_01_Cloth_01_CLOTH"
+  ],
+  "embedded_images": {
+    "cora.atlas": "changed",
+    "cora.iris": "same",
+    "cora.tint": "same"
+  },
+  "atlas_change": {
+    "changed_texels": 412,
+    "bounds_xy": [
+      477,
+      741,
+      555,
+      758
+    ]
+  },
+  "kept_stroke_texels_changed": {
+    "3": 0,
+    "4": 0,
+    "8": 0,
+    "9": 0
+  },
+  "sidecars_same_as_attempt_1": {
+    "hair.png": true,
+    "calibration.json": true,
+    "face.png": true
+  },
+  "volume": {
+    "spread": 1.8700001239776611,
+    "crown_lift": 0.12436522243664064,
+    "rear_depth": 0.5191808751459246
+  },
+  "triangles": 49702,
+  "factory_artifacts_sha256": {
+    "own-cora-live.glb": "cbe287865e645ab7862370c6b1f5972c238c2a04fe185bb2fa13457a9f451d1f",
+    "own-cora-live.face.png": "f9fff170e2b9d7ef8a3b28a576e5b91b22f29167e2ffaced5d862d59d07143dc",
+    "own-cora-live.hair.png": "8a0d72abaefafc0f0f661b4b19513d38a8ad2b6e93a3f8c781e399b58b29d2fa",
+    "own-cora-live.calibration.json": "471e3655afccb12eea5236f69e057ff98520bc1f8bde8657dbdf3de5b155d37f",
+    "own-cora-live.eyes.ink.png": "d94e57952aa969a38209248f1b310e8e9dd752fd40b0a5839f4764ff75a22189"
+  },
+  "factory_expression_changed_pixels": {
+    "eye-Fcl_BRW_Angry": 0,
+    "eye-Fcl_BRW_Fun": 0,
+    "eye-Fcl_BRW_Sorrow": 0,
+    "eye-Fcl_BRW_Surprised": 0,
+    "eye-Fcl_EYE_Close": 0,
+    "eye-Fcl_EYE_Close_L": 0,
+    "eye-Fcl_EYE_Close_R": 0,
+    "eye-Fcl_EYE_Joy": 0,
+    "eye-Fcl_MTH_A": 0,
+    "eye-Fcl_MTH_E": 0,
+    "eye-Fcl_MTH_Fun": 0,
+    "eye-Fcl_MTH_I": 0,
+    "eye-Fcl_MTH_O": 0,
+    "eye-Fcl_MTH_Sorrow": 0,
+    "eye-Fcl_MTH_U": 0,
+    "eye-neutral": 0,
+    "eye-returned": 0,
+    "eye-three-quarter": 0
+  },
+  "expression_changed_pixels": {
+    "Fcl_EYE_Close": 1955,
+    "Fcl_EYE_Close_L": 1719,
+    "Fcl_EYE_Close_R": 399,
+    "Fcl_EYE_Joy": 3786,
+    "Fcl_MTH_A": 6077,
+    "Fcl_MTH_I": 5360,
+    "Fcl_MTH_U": 5589,
+    "Fcl_MTH_E": 5733,
+    "Fcl_MTH_O": 7010,
+    "Fcl_MTH_Fun": 1753,
+    "Fcl_MTH_Sorrow": 895,
+    "Fcl_BRW_Angry": 1426,
+    "Fcl_BRW_Sorrow": 1460,
+    "Fcl_BRW_Surprised": 3093,
+    "Fcl_BRW_Fun": 1242
+  },
+  "neutral_return_changed_pixels": 0,
+  "colour_checks": 20,
+  "colour_patch_change_since_attempt_1": {
+    "hair shade / portrait": [
+      0,
+      1,
+      0
+    ],
+    "hair shade / portrait45": [
+      0,
+      0,
+      0
+    ],
+    "hair mid / portrait": [
+      0,
+      0,
+      0
+    ],
+    "hair mid / portrait45": [
+      0,
+      0,
+      0
+    ],
+    "hair light / portrait": [
+      0,
+      0,
+      0
+    ],
+    "hair light / portrait45": [
+      0,
+      0,
+      0
+    ],
+    "hair highlight / portrait": [
+      0,
+      0,
+      0
+    ],
+    "hair highlight / portrait45": [
+      0,
+      0,
+      0
+    ],
+    "hair ink / portrait": [
+      0,
+      0,
+      0
+    ],
+    "skin base / portrait": [
+      0,
+      0,
+      0
+    ],
+    "skin cheek / portrait": [
+      0,
+      0,
+      0
+    ],
+    "skin shadow / portrait": [
+      0,
+      0,
+      0
+    ],
+    "coat / portrait": [
+      0,
+      0,
+      0
+    ],
+    "jersey / portrait": [
+      0,
+      0,
+      0
+    ]
+  },
+  "second_capture_changed_pixels": {
+    "portrait": 0,
+    "near": 0,
+    "portrait45": 0,
+    "near_180": 0,
+    "middle_180": 0,
+    "near_135": 0,
+    "middle_135": 0,
+    "middle_0": 0,
+    "90:8:0.36:0.88": 0,
+    "180:8:0.36:0.88": 0,
+    "-35:8:0.36:0.88": 0,
+    "0:5:1.14:0.50": 0,
+    "180:8:0.75:0.68": 0,
+    "0:8:0.16:0.91": 0,
+    "-35:8:0.16:0.91": 0,
+    "0:8:0.16:0.87": 0,
+    "-35:8:0.16:0.87": 0
+  },
+  "rear_frames_changed_pixels_vs_attempt_1": {
+    "near_180": 0,
+    "middle_180": 0,
+    "180:8:0.36:0.88": 0,
+    "180:8:0.75:0.68": 0
+  }
+}

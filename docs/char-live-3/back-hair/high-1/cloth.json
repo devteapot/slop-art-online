@@ -1,0 +1,237 @@
+{
+  "passed": true,
+  "patches": [
+    {
+      "patch": "coat",
+      "shot": "portrait",
+      "window": [
+        656,
+        696
+      ],
+      "target": [
+        156,
+        126,
+        135
+      ],
+      "measured": [
+        153,
+        125,
+        134
+      ],
+      "delta": [
+        -3,
+        -1,
+        -1
+      ],
+      "floor": [
+        29,
+        27,
+        19
+      ],
+      "passed": true
+    },
+    {
+      "patch": "jersey",
+      "shot": "portrait",
+      "window": [
+        800,
+        767
+      ],
+      "target": [
+        118,
+        50,
+        43
+      ],
+      "measured": [
+        120,
+        50,
+        44
+      ],
+      "delta": [
+        2,
+        0,
+        1
+      ],
+      "floor": [
+        21,
+        19,
+        11
+      ],
+      "passed": true
+    },
+    {
+      "patch": "lapel",
+      "shot": "0:5:1.14:0.50",
+      "window": [
+        834,
+        253
+      ],
+      "target": [
+        152,
+        131,
+        140
+      ],
+      "measured": [
+        144,
+        123,
+        134
+      ],
+      "delta": [
+        -8,
+        -8,
+        -6
+      ],
+      "floor": [
+        37,
+        37,
+        36
+      ],
+      "passed": true
+    },
+    {
+      "patch": "apron",
+      "shot": "0:5:1.14:0.50",
+      "window": [
+        802,
+        498
+      ],
+      "target": [
+        214,
+        190,
+        167
+      ],
+      "measured": [
+        215,
+        190,
+        166
+      ],
+      "delta": [
+        1,
+        0,
+        -1
+      ],
+      "floor": [
+        29,
+        29,
+        23
+      ],
+      "passed": true
+    },
+    {
+      "patch": "cuff",
+      "shot": "0:5:1.14:0.50",
+      "window": [
+        878,
+        407
+      ],
+      "target": [
+        193,
+        171,
+        167
+      ],
+      "measured": [
+        199,
+        175,
+        169
+      ],
+      "delta": [
+        6,
+        4,
+        2
+      ],
+      "floor": [
+        41,
+        40,
+        33
+      ],
+      "passed": true
+    },
+    {
+      "patch": "trousers",
+      "shot": "0:5:1.14:0.50",
+      "window": [
+        721,
+        650
+      ],
+      "target": [
+        74,
+        59,
+        57
+      ],
+      "measured": [
+        75,
+        60,
+        58
+      ],
+      "delta": [
+        1,
+        1,
+        1
+      ],
+      "floor": [
+        36,
+        38,
+        27
+      ],
+      "passed": true
+    },
+    {
+      "patch": "boots",
+      "shot": "0:5:1.14:0.50",
+      "window": [
+        702,
+        776
+      ],
+      "target": [
+        115,
+        74,
+        53
+      ],
+      "measured": [
+        116,
+        75,
+        54
+      ],
+      "delta": [
+        1,
+        1,
+        1
+      ],
+      "floor": [
+        38,
+        40,
+        27
+      ],
+      "passed": true
+    },
+    {
+      "patch": "pocket",
+      "shot": "0:5:1.14:0.50",
+      "window": [
+        862,
+        461
+      ],
+      "target": [
+        149,
+        126,
+        135
+      ],
+      "measured": [
+        152,
+        128,
+        137
+      ],
+      "delta": [
+        3,
+        2,
+        2
+      ],
+      "floor": [
+        61,
+        54,
+        42
+      ],
+      "passed": true
+    }
+  ]
+}
