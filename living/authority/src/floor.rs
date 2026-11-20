@@ -232,11 +232,14 @@ fn world_laws(ctx: &ReducerContext, s: &Seed) {
 
 /// Create the world from the active seed: in this call, or by scheduling the first step. First
 /// its rules: its day, its laws overlay (installed as `install_script` installs a script) and its
-/// own values of laws. `laws` is what [`check`] returned for this seed.
+/// own values of laws. `laws` is what [`check`] returned for this seed (both callers run `check`
+/// first), so the overlay is installed without a second validation.
 pub fn begin(ctx: &ReducerContext, s: &Seed, laws: Option<String>, now: u64) -> Result<(), String> {
     set_day(ctx, s)?;
     if let Some(source) = laws {
-        crate::install_source(ctx, source)?;
+        // `check` compiled and validated this overlay on this day; at genesis nothing else
+        // differs, so it is not validated twice.
+        crate::install_checked_source(ctx, source)?;
         log::info!("the seed's laws are installed over the shipped script");
     }
     world_laws(ctx, s);
