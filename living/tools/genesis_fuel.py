@@ -64,7 +64,7 @@ def main():
     ap.add_argument("--floor-seed", help="a floor module (built with LIVING_SEED=none): give it this seed JSON with create_floor after the publish; its fuel is reported as create_floor_fuel")
     a = ap.parse_args()
     db = f"verify-lookcost-gfuel-{a.seed}-{time.strftime('%H%M%S')}"[:60]
-    commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+    commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()   # the full sha (the guard matches it)
     lc.stdb("publish", "-s", "local", "-b", str(Path("/wasm") / a.wasm), db, "--delete-data", "-y")
     try:
         token = lc.admin_token()
@@ -111,7 +111,7 @@ def main():
             if (now or {}).get("done"):
                 after = label if label.startswith("world") else "populate: people, animals and the settlements' life"
             out["steps"].append({"phase": after.split(":", 1)[0], "label": after, "fuel": round(f1 - f0), "reducer": "genesis_step"})
-        out["largest_step_share"] = round(max((s["fuel"] for s in out["steps"]), default=0) / BUDGET, 4)
+        out["largest_step_share"] = max((s["fuel"] for s in out["steps"]), default=0) / BUDGET
     finally:
         lc.delete_world(db)
     text = json.dumps(out, indent=1)
