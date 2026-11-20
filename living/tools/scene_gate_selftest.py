@@ -250,7 +250,7 @@ def check_genesis_live():
 
 def check_seed_fresh():
     """seed_fresh.py on a throwaway worlds tree: each block stale and fresh, by name."""
-    original = seed_fresh.ROOT, seed_fresh.WORLDS, dict(seed_fresh.PLAN_CHECKS)
+    original = seed_fresh.ROOT, seed_fresh.WORLDS, dict(seed_fresh.PLAN_CHECKS), seed_fresh.compile_seed
     with tempfile.TemporaryDirectory(prefix="seed-fresh-selftest-") as t:
         root = Path(t)
         wd = root / "living/seeds/worlds/town"
@@ -274,9 +274,13 @@ def check_seed_fresh():
             seed_path.write_text(json.dumps(s))
             return seed_fresh.check_world(wd)
 
+        # The fixture world is not a real authored world, so the whole-seed compile is the
+        # fixture's own seed as its sources would compile it (by default) or what a case says.
+        compiled = {"seed": seed}
+        seed_fresh.compile_seed = lambda wd, into: compiled["seed"] if isinstance(compiled["seed"], str) else json.loads(json.dumps(compiled["seed"]))
         seed_fresh.ROOT, seed_fresh.WORLDS = root, root / "living/seeds/worlds"
         try:
-            expect("seed freshness: a seed as compiled from its sources is fresh", stale() == ("town", []), stale())
+            expect("seed freshness: a seed as compiled from its sources is fresh", stale()[:2] == ("town", []), stale())
             cases = [
                 ("an older look generation", lambda s: s["looks"].update(generation="c4-old"), "looks", "look generation c4-old in the seed, c4-new"),
                 ("the same generation with another pool", lambda s: s["looks"].update(pool=[2]), "looks", "same generation c4-new"),
@@ -289,8 +293,36 @@ def check_seed_fresh():
             ]
             for name, change, block, words in cases:
                 got = stale(change)[1]
+                named = [g for g in got if g[0] != "compile"]
                 expect(f"seed freshness: {name} is a stale {block} block, and says so",
-                       len(got) == 1 and got[0][0] == block and words in got[0][1], got)
+                       len(named) == 1 and named[0][0] == block and words in named[0][1], got)
+                expect(f"seed freshness: {name} also differs from a fresh compile", any(g[0] == "compile" for g in got), got)
+            # A field the compiler learned after the seed was compiled: only the whole-seed compile sees it.
+            learned = json.loads(json.dumps(seed))
+            learned["towns"][0]["residents"][0]["sheet"]["pastimes"] = ["fishing"]
+            compiled["seed"] = learned
+            got = stale()[1]
+            expect("seed freshness: a field only a fresh compile writes is a stale compile block, and says where",
+                   len(got) == 1 and got[0][0] == "compile" and "pastimes only in the source" in got[0][1], got)
+            compiled["seed"] = "author_world.py town --compile-only exit 1: no bible.md"
+            got = stale()[1]
+            expect("seed freshness: a compile that fails is a stale compile block with its error",
+                   len(got) == 1 and got[0][0] == "compile" and "no bible.md" in got[0][1], got)
+            compiled["seed"] = seed
+            # A derived seed (its run names the world, its file is not the world's seed) carries the
+            # compiled world's residents exactly.
+            variant = json.loads(json.dumps(seed))
+            variant.update(run="town", rules={"x": 1})
+            variant_path = root / "living/seeds/town-variant.json"
+            variant_path.write_text(json.dumps(variant))
+            expect("seed freshness: a derived seed with the compiled residents is fresh", seed_fresh.check_derived({"town": seed}) == [],
+                   seed_fresh.check_derived({"town": seed}))
+            variant["towns"][0]["residents"][0]["sheet"]["pastimes"] = ["old"]
+            variant_path.write_text(json.dumps(variant))
+            got = seed_fresh.check_derived({"town": seed})
+            expect("seed freshness: a derived seed whose residents differ is stale, and names the run",
+                   len(got) == 1 and got[0][0] == "town-variant" and got[0][1] == "town" and "1 residents differ" in got[0][2], got)
+            variant_path.unlink()
             tool = root / "plan_check.py"
             tool.write_text("import sys; print('differs: plan.json'); sys.exit(1)")
             seed_fresh.PLAN_CHECKS["town"] = [str(tool), "--check"]
@@ -303,6 +335,7 @@ def check_seed_fresh():
             seed_fresh.ROOT, seed_fresh.WORLDS = original[:2]
             seed_fresh.PLAN_CHECKS.clear()
             seed_fresh.PLAN_CHECKS.update(original[2])
+            seed_fresh.compile_seed = original[3]
 
 
 def check_generation_group():

@@ -33,6 +33,9 @@ def process_stamp(pid):
     return started.strip() if status and not status.startswith("Z") else None
 
 
+ARM_WAIT_S = 30  # how long arming waits for a just-published world to answer (scene gate, 2026-11-20)
+
+
 def request(url, token, body=None, json_body=False):
     headers = {"Authorization": f"Bearer {token}"}
     if json_body:
@@ -171,6 +174,12 @@ def prepare(config):
             raise RuntimeError(f"could not verify the published identity of {db}")
         endpoint = f"{url}/v1/database/{identity}"
         status, row = world(endpoint, token)
+        # A world just published can be slow to answer its first query on a loaded server (no
+        # answer within the 5 s timeout reads as HTTP 0): ask again for up to ARM_WAIT_S.
+        deadline = time.monotonic() + ARM_WAIT_S
+        while status == 0 and time.monotonic() < deadline:
+            time.sleep(2)
+            status, row = world(endpoint, token)
         if status != 200:
             raise RuntimeError(f"cannot arm orphan guard for {db} (world query HTTP {status})")
         epoch = row[0] if row else None
