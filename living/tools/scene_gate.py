@@ -434,23 +434,47 @@ def render_selection(paths, split=False):
 
 # ---------------------------------------------------------------- the render asset set
 
+# The set's format, staleness and links are living/tools/render_set.py's (docs/TOOLING.md, "Render
+# asset set"); the gate runs its `check` and `link` and maps the verdicts.
 RENDER_ASSETS = os.environ.get("LIVING_GATE_RENDER_ASSETS") or str(HOME / "slop-assets/current")
-GENERATOR_PATHS = ("living/tools/blender", "living/tools/characters", "living/tools/textures")
-RENDER_SEEDS = ("cullet", "island")  # the worlds the render cases launch
-SET_FIELDS = ("schema", "bundle_sha", "main_commit", "generator_trees", "look_generations", "clip_count", "link")
-CLIPS = "lookdev/anim/own-clips.glb"
-BOOK = "characters/looks.json"
+RENDER_SET_TOOL = "living/tools/render_set.py"
+RENDER_SEEDS = ("cullet", "island")  # the worlds the render cases launch, in this order
 
 
-def glb_animations(path):
-    """How many animations a .glb holds (its JSON chunk's `animations`)."""
-    import struct
-    with open(path, "rb") as f:
-        magic, _version, _length = struct.unpack("<4sII", f.read(12))
-        size, kind = struct.unpack("<II", f.read(8))
-        if magic != b"glTF" or kind != 0x4E4F534A:
-            raise ValueError(f"{path} is not a binary glTF")
-        return len(json.loads(f.read(size)).get("animations") or [])
+def render_set_present(path=None):
+    p = Path(path or RENDER_ASSETS)
+    return p.exists() or p.is_symlink()  # a dangling `current` is a broken set, not an absent one
+
+
+def render_set_check(repo, path=None, tool_repo=None):
+    """render_set.py check of the set at `path` against the checkout `repo`: (verdict, set.json with
+    its resolved `dir`, reasons). Verdicts: ok, corrupt (its exit 1, or a check that could not run),
+    stale (its exit 2)."""
+    path = str(path or RENDER_ASSETS)
+    tool = Path(tool_repo or repo) / RENDER_SET_TOOL
+    if not tool.is_file():
+        return "corrupt", None, [f"no {RENDER_SET_TOOL} in {tool_repo or repo}"]
+    try:
+        r = subprocess.run([sys.executable, str(tool), "check", path, "--repo", str(repo)], capture_output=True, text=True, timeout=3600)
+    except subprocess.TimeoutExpired:
+        return "corrupt", None, ["render_set.py check took over an hour"]
+    try:
+        got = json.loads(r.stdout)
+    except ValueError:
+        got = {}
+    verdict = {0: "ok", 2: "stale"}.get(r.returncode, "corrupt")
+    reasons = list(got.get("reasons") or []) or ([] if r.returncode == 0 else [(r.stderr or r.stdout).strip()[-400:] or f"exit {r.returncode}"])
+    where = got.get("set") or str(Path(path).resolve())
+    meta = load_json(Path(where) / "set.json", None)
+    return verdict, (dict(meta, dir=where) if isinstance(meta, dict) else None), reasons
+
+
+def render_set_link(tool_repo, game_root, set_dir):
+    """render_set.py link: the set's files into a checkout's living/game/assets; (ok, output). The links
+    stay (the ignore patterns match them); the next gate's link replaces them."""
+    r = subprocess.run([sys.executable, str(Path(tool_repo) / RENDER_SET_TOOL), "link", str(set_dir), "--repo", str(game_root)],
+                       capture_output=True, text=True, timeout=300)
+    return r.returncode == 0, (r.stdout + r.stderr).strip()
 
 
 def sha256_file(path):
@@ -462,124 +486,18 @@ def sha256_file(path):
     return h.hexdigest()
 
 
-def head_generator_trees(rev="HEAD", cwd=None):
-    return {p: git("rev-parse", f"{rev}:{p}", cwd=cwd, check=False) or None for p in GENERATOR_PATHS}
-
-
-def seed_look_generations(root):
-    """{seed: its looks.generation} for the render cases' seeds (None for a seed without looks)."""
-    out = {}
-    for seed in RENDER_SEEDS:
-        data = load_json(Path(root) / "living/seeds" / f"{seed}.json", {})
-        out[seed] = (data.get("looks") or {}).get("generation") if isinstance(data, dict) else None
-    return out
-
-
-def check_render_set(path, trees, seed_generations, cache_path=None):
-    """(the set's record with its resolved `dir`, [why it is stale]) for the set at `path`
-    (docs/TOOLING.md, "Render asset set"). `trees` are the tree under test's generator trees."""
-    problems = []
-    root = Path(path).resolve()
-    meta = load_json(root / "set.json", None)
-    if not isinstance(meta, dict):
-        return None, [f"{root}/set.json is missing or not a JSON object"]
-    meta = dict(meta, dir=str(root))
-    missing = [k for k in SET_FIELDS if k not in meta]
-    if missing:
-        problems.append(f"set.json lacks {', '.join(missing)}")
-    if meta.get("schema") != 1:
-        problems.append(f"set.json schema {meta.get('schema')!r}, not 1")
-    if meta.get("bundle_sha") != root.name:
-        problems.append(f"the set's folder {root.name} is not its bundle_sha {meta.get('bundle_sha')!r}")
-    if problems:
-        return meta, problems
-    # The manifest: every file listed and matching, nothing unlisted, no symlinks.
-    try:
-        manifest_text = (root / "MANIFEST.txt").read_text()
-    except OSError as e:
-        return meta, [f"no MANIFEST.txt ({e})"]
-    listed = {}
-    for n, line in enumerate(manifest_text.splitlines(), 1):
-        m = re.fullmatch(r"([0-9a-f]{64}) [ *](.+)", line)
-        if not m:
-            problems.append(f"MANIFEST.txt line {n} is not `<sha256>  <path>`")
-            continue
-        listed[m[2]] = m[1]
-    present = set()
-    for d, dirs, files in os.walk(root):
-        for name in dirs + files:
-            full = Path(d) / name
-            rel = str(full.relative_to(root))
-            if full.is_symlink():
-                problems.append(f"{rel} is a symlink")
-            elif name in files and rel not in ("set.json", "MANIFEST.txt"):
-                present.add(rel)
-    for rel in sorted(present - set(listed))[:5]:
-        problems.append(f"{rel} is not in MANIFEST.txt")
-    cache_path = Path(cache_path or STATE / "render-sets.json")
-    cache = load_json(cache_path, {})
-    manifest_sha = __import__("hashlib").sha256(manifest_text.encode()).hexdigest()
-    known = cache.get(str(root), {}) if cache.get(str(root), {}).get("manifest") == manifest_sha else {}
-    seen, bad = {}, []
-    for rel, want in sorted(listed.items()):
-        full = root / rel
-        try:
-            st = full.stat()
-        except OSError:
-            bad.append(f"{rel} is missing")
-            continue
-        stamp = [st.st_size, st.st_mtime_ns]
-        if (known.get("files") or {}).get(rel) == stamp:
-            seen[rel] = stamp
-        elif sha256_file(full) == want:
-            seen[rel] = stamp
-        else:
-            bad.append(f"{rel} differs from its MANIFEST.txt sha256")
-    problems += bad[:5] + ([f"… and {len(bad) - 5} more files"] if len(bad) > 5 else [])
-    cache[str(root)] = {"manifest": manifest_sha, "files": seen}
-    try:
-        save_json(cache_path, cache)
-    except OSError:
-        pass
-    # What the set was made from against the tree under test.
-    for p in GENERATOR_PATHS:
-        if (meta["generator_trees"] or {}).get(p) != trees.get(p):
-            problems.append(f"generator tree {p}: the set's {str((meta['generator_trees'] or {}).get(p))[:12]}, "
-                            f"the tree under test's {str(trees.get(p))[:12]} (a set built from this head is needed)")
-    book = load_json(root / BOOK, None)
-    if not isinstance(book, dict):
-        problems.append(f"no readable look book {BOOK}")
-    else:
-        held = {book.get("generation"), *(book.get("generations") or [])} - {None}
-        if set(meta["look_generations"] or []) != held:
-            problems.append(f"look_generations {sorted(meta['look_generations'] or [])} is not the book's {sorted(held)}")
-        for seed, gen in seed_generations.items():
-            if gen and gen not in held:
-                problems.append(f"the {seed} seed wears look generation {gen}, which the book does not hold")
-    try:
-        clips = glb_animations(root / CLIPS)
-        if clips != meta["clip_count"]:
-            problems.append(f"{CLIPS} holds {clips} animations, set.json says {meta['clip_count']}")
-    except (OSError, ValueError) as e:
-        problems.append(f"{CLIPS}: {e}")
-    for rel in meta["link"] or []:
-        if not isinstance(rel, str) or rel.startswith("/") or ".." in Path(rel).parts or not (root / rel).exists():
-            problems.append(f"link {rel!r} is not a path in the set")
-    return meta, problems
-
-
-def link_set(game_root, set_dir, links):
-    """Link each of the set's `links` into living/game/assets/; [(link, target)] made. Refuses a path
-    that exists as a real file or folder (tracked, or someone's own assets)."""
+def link_set(game_root, src_root, links):
+    """render-smoke's own lookdev (not a render set): link each of `links` from src_root into
+    living/game/assets; [(link, target)] made. Refuses a path that exists as a real file or folder."""
     base = Path(game_root) / "living/game/assets"
     made = []
     for rel in links:
-        dst, src = base / rel, Path(set_dir) / rel
+        dst, src = base / rel, Path(src_root) / rel
         if dst.is_symlink():
-            dst.unlink()  # an earlier gate's link (a gate killed before it removed its own)
+            dst.unlink()  # an earlier link (a render set's, or a smoke killed before its cleanup)
         elif dst.exists():
             unlink_set(made)
-            raise RuntimeError(f"{dst} exists and is not a link: the render group links the asset set there")
+            raise RuntimeError(f"{dst} exists and is not a link")
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.symlink_to(src, target_is_directory=src.is_dir())
         made.append((dst, src))
@@ -907,6 +825,7 @@ class Runner:
         self.smoke = {}  # (root, seed) -> (failed checks or None when it did not run, evidence)
         self.fresh = 0  # numbers the generation cases' own worlds
         self.render_set = None  # the checked render asset set (set.json and its `dir`) on a render host
+        self.render_tool = None  # the checkout whose render_set.py links the set (the tree under test's)
         self.stale = []  # drive log lines that say the set is stale (the book lacks a key or generation)
         self.client_built = set()  # roots whose release client this gate has built
 
@@ -1174,11 +1093,14 @@ class Runner:
         asset or panic lines in its drives' client logs; stale-set lines are kept for the verdict."""
         res = {}
         if not self.render_set:
-            return {c: (False, f"render: not run here; needs {RENDER_HOST}", 0.0) for c in cases}
+            return {c: (False, f"render: not run here; needs a pinned asset set ({RENDER_HOST})", 0.0) for c in cases}
         log = self.out / f"{tag}.log"
-        made = []
         try:
-            made = link_set(root, self.render_set["dir"], self.render_set["link"])
+            linked, said = render_set_link(self.render_tool or root, root, self.render_set["dir"])
+            with open(log, "a") as f:
+                f.write(f"render_set.py link: {said}\n")
+            if not linked:
+                return {c: (False, f"render setup: render_set.py link failed: {said[-300:]}", time.time() - t0) for c in cases}
             if self.build_client(root, log):
                 return {c: (False, f"{log} (client build failed)", time.time() - t0) for c in cases}
             env = self.render_env()
@@ -1215,10 +1137,8 @@ class Runner:
                 finally:
                     self.cleanup(root, run, log)
             return res
-        except RuntimeError as e:
+        except (RuntimeError, OSError, subprocess.SubprocessError) as e:
             return {c: (False, f"render setup: {e}", time.time() - t0) for c in cases}
-        finally:
-            unlink_set(made)
 
     def render_smoke(self, root, tag, t0):
         """A host without the set: the VRoid bases, the look-dev island tour and one live drive on an
@@ -1407,7 +1327,7 @@ def judge_on_main(a, runner, repo, base, cases, record):
         say(f"judging {', '.join(todo)} on main {base[:10]} (checkout {root}, build {a.main_dir}-target)")
         env = dict(runner.env, CARGO_TARGET_DIR=f"{a.main_dir}-target")
         main_runner = Runner(runner.stamp, env, runner.out, runner.reds_path)
-        main_runner.render_set = runner.render_set  # main draws with the same set (checked against the branch)
+        main_runner.render_set, main_runner.render_tool = runner.render_set, runner.render_tool  # main draws with the same set
         t0 = time.time()
         first = retry_each(main_runner, root, todo, "main")
         again = [c for c in todo if not first[c][0]]
@@ -1492,19 +1412,22 @@ def cmd_run(a):
     render_set, needs_host = None, []
     if render:
         record.update(render={"cases": render, "split": split, "key": key, "paths": drawn[:20]})
-        if Path(RENDER_ASSETS).exists():
-            render_set, stale = check_render_set(RENDER_ASSETS, head_generator_trees("HEAD"), seed_look_generations(repo))
-            record["render"]["set"] = {k: (render_set or {}).get(k) for k in ("dir", "bundle_sha", "main_commit", "built_on", "built_at")}
-            if stale:
-                for why in stale:
-                    say(f"render: asset set stale: {why}")
-                record.update(result="asset set stale: " + "; ".join(stale[:3]), seconds=round(time.time() - t0))
+        if render_set_present():
+            verdict, render_set, why = render_set_check(repo)
+            record["render"]["set"] = {"path": RENDER_ASSETS, "verdict": verdict, "reasons": why[:20],
+                                       **{k: (render_set or {}).get(k) for k in ("dir", "id", "main_commit", "bundle", "built")}}
+            if verdict != "ok":
+                for line in why[:20]:
+                    say(f"render: asset set {verdict}: {line}")
+                record.update(result=f"asset set {verdict}: " + "; ".join(why[:3]), seconds=round(time.time() - t0))
                 return finish(a, record, 2)
-            say(f"render: {', '.join(render)} on the asset set {render_set['dir']} (bundle {render_set['bundle_sha']}, "
-                f"built from main {str(render_set['main_commit'])[:10]} on {render_set.get('built_on', '?')})")
+            say(f"render: {', '.join(render)} on the asset set {render_set['dir']} (set {render_set.get('id')}, "
+                f"{(render_set.get('bundle') or {}).get('pictures')} bundle, built from main {str(render_set.get('main_commit'))[:10]} "
+                f"at {render_set.get('built')})")
         elif a.cases or getattr(a, "render_only", False):
-            say(f"setup error: no render asset set at {RENDER_ASSETS} (LIVING_GATE_RENDER_ASSETS): the render cases run on {RENDER_HOST}")
-            record.update(result="setup error: no render asset set")
+            say(f"render: not run here; needs a pinned asset set: none at {RENDER_ASSETS} (LIVING_GATE_RENDER_ASSETS; "
+                f"the render cases run on {RENDER_HOST})")
+            record.update(result="setup error: render: not run here; needs a pinned asset set")
             return finish(a, record, 2)
         else:
             passes = refresh_reds(a.passes, PASSES_BRANCH, PASSES_FILE) if REDS_GIT else load_json(a.passes, {})
@@ -1518,7 +1441,8 @@ def cmd_run(a):
             else:
                 needs_host = render
                 parents = git("rev-list", "--parents", "-n", "1", "HEAD").split()[1:]
-                say(f"render: not run here; needs {RENDER_HOST}: no render pass recorded for this content (key {key[:12]}). "
+                say(f"render: not run here; needs a pinned asset set ({RENDER_HOST}): none at {RENDER_ASSETS}, and no render pass "
+                    f"recorded for this content (key {key[:12]}). "
                     f"There: make the same tree ({'merge ' + parents[1][:10] + ' into ' if len(parents) > 1 else 'check out '}"
                     f"{parents[0][:10] if parents else head[:10]}) and run `just living-scene-gate run --render-only"
                     f"{' --render-split' if split else ''} --base {base[:10]}`; the merge here is refused until then")
@@ -1539,7 +1463,7 @@ def cmd_run(a):
         f"{' (' + ', '.join(drawn[:4]) + (', …' if len(drawn) > 4 else '') + ')' if drawn else ''}; running {work} on {container} ({a.stdb_url}), "
         f"databases verify-gate-{stamp}-*, evidence {out}")
     runner = Runner(stamp, env, out, a.reds)
-    runner.render_set = render_set
+    runner.render_set, runner.render_tool = render_set, repo
     try:
         try:
             threshold = genesis_threshold(env) if genesis else None
@@ -1619,7 +1543,7 @@ def cmd_run(a):
                               **({"known_flake": CASES[c]["flaky"]} if "flaky" in CASES[c] and status != "pass" else {})}
     for c in needs_host:
         record["cases"][c] = {"status": "needs-render-host", "skill": "verify-ui", "evidence": [],
-                              "why": f"render: not run here; needs {RENDER_HOST} (no pass recorded for key {key[:12]})"}
+                              "why": f"render: not run here; needs a pinned asset set ({RENDER_HOST}); no pass recorded for key {key[:12]}"}
         blocking.append(c)
     if render and all(record["cases"][c]["status"] in PASS_OK for c in render):
         record_render_pass(a, key, head, render, record, render_set)
@@ -1646,7 +1570,7 @@ def cmd_run(a):
         if unjudged:
             why.append(f"{', '.join(unjudged)} could not be judged on main")
         if needs_host:
-            why.append(f"render: not run here; needs {RENDER_HOST}")
+            why.append(f"render: not run here; needs a pinned asset set ({RENDER_HOST})")
         say(f"FAILED: {', '.join(blocking)}: {'; '.join(why)}")
         return finish(a, record, 1)
     reds = [c for c in record["cases"] if record["cases"][c]["status"] == "red-on-main"]
@@ -1658,7 +1582,7 @@ def cmd_run(a):
 def record_render_pass(a, key, head, cases, record, render_set):
     """Record on the shared `render-passes` list that this content's render cases passed here."""
     entry = {"head": head, "base": record.get("base"), "host": os.uname().nodename, "at": now(),
-             "set": (render_set or {}).get("bundle_sha"), "evidence": record.get("evidence"),
+             "set": (render_set or {}).get("id"), "evidence": record.get("evidence"),
              "cases": {c: record["cases"][c]["status"] for c in cases}}
 
     def change(passes):
@@ -1803,18 +1727,19 @@ def cmd_recheck(a):
     for c in set(reds) - set(cases):
         say(f"{c}: the gate cannot run it; drop it by hand when it is green (reds --drop {c})")
     render_set = None
+    if cases:
+        root = main_checkout(repo, a.main_dir, base)
     if any(c in RENDER_CASES for c in cases):
-        if Path(RENDER_ASSETS).exists():
-            render_set, stale = check_render_set(RENDER_ASSETS, head_generator_trees(base, cwd=repo), seed_look_generations(repo))
-            if stale:
-                say(f"render: asset set stale ({'; '.join(stale[:3])}); render cases not rechecked")
+        if render_set_present():
+            verdict, render_set, why = render_set_check(root, tool_repo=repo)
+            if verdict != "ok":
+                say(f"render: asset set {verdict} against main ({'; '.join(why[:3])}); render cases not rechecked")
                 render_set = None
         if not render_set:
-            say(f"render cases not rechecked here (no usable render asset set; they run on {RENDER_HOST}): "
+            say(f"render cases not rechecked here (no usable pinned asset set; they run on {RENDER_HOST}): "
                 f"{', '.join(c for c in cases if c in RENDER_CASES)}")
             cases = [c for c in cases if c not in RENDER_CASES]
     if cases:
-        root = main_checkout(repo, a.main_dir, base)
         env = dict(os.environ, LIVING_STDB_CONTAINER=a.stdb_container, LIVING_STDB_URL=a.stdb_url, PYTHONDONTWRITEBYTECODE="1",
                    CARGO_TARGET_DIR=f"{a.main_dir}-target")
         stamp = time.strftime("%m%d%H%M%S")
@@ -1822,7 +1747,7 @@ def cmd_recheck(a):
         out.mkdir(parents=True, exist_ok=True)
         say(f"rechecking {', '.join(cases)} on main {base[:10]} (checkout {root}), databases verify-gate-{stamp}-*")
         runner = Runner(stamp, env, out, a.reds)
-        runner.render_set = render_set
+        runner.render_set, runner.render_tool = render_set, repo
         try:
             got = retry_each(runner, root, cases, "recheck")
         finally:

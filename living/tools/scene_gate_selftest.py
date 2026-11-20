@@ -12,6 +12,7 @@ Usage: scene_gate_selftest.py
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -513,107 +514,125 @@ def make_glb(path, animations):
     Path(path).write_bytes(struct.pack("<4sII", b"glTF", 2, 12 + 8 + len(doc)) + struct.pack("<II", len(doc), 0x4E4F534A) + doc)
 
 
-def write_set(root, bundle="b0nd1e", gens=("c4-a", "c4-b"), clips=3, trees=None):
-    import hashlib
-    s = Path(root) / bundle
-    make_glb(s / "lookdev/anim/own-clips.glb", clips)
-    (s / "lookdev/types").mkdir(parents=True)
-    (s / "lookdev/types/adult-f.glb").write_bytes(b"type")
-    (s / "textures").mkdir()
-    (s / "textures/ground.ktx2").write_bytes(b"ktx")
-    (s / "envs/cullet").mkdir(parents=True)
-    (s / "envs/cullet/quay.glb").write_bytes(b"quay")
-    (s / "characters").mkdir()
-    (s / "characters/looks.json").write_text(json.dumps({"generation": gens[-1], "generations": list(gens), "lines": {}}))
-    files = sorted(str(p.relative_to(s)) for p in s.rglob("*") if p.is_file())
-    (s / "MANIFEST.txt").write_text("".join(f"{hashlib.sha256((s / f).read_bytes()).hexdigest()}  {f}\n" for f in files))
-    (s / "set.json").write_text(json.dumps({
-        "schema": 1, "bundle_sha": bundle, "main_commit": "a" * 40, "generator_trees": trees or {p: "t" + p[-3:] for p in scene_gate.GENERATOR_PATHS},
-        "look_generations": list(gens), "clip_count": clips, "pictures": "ktx2",
-        "link": ["lookdev", "textures", "envs/cullet", "characters/looks.json"], "built_on": "dev-box", "built_at": "2026-11-20T21:00:00+01:00"}))
-    return s
+def make_render_set(t, repo, book_generations=("c4-a", "c4-b")):
+    """A synthetic render asset set built by the real render_set.py from `repo` (a checkout whose
+    HEAD the bundle names) and a stand-in bundle; returns the set's root (sets/current)."""
+    import tarfile
+    a = Path(repo) / "living/game/assets"
+    make_glb(a / "lookdev/vroid-Fake.glb", 0)
+    make_glb(a / "lookdev/anim/vroid-Fake.glb", 2)
+    for d, f in (("view", "v.glb"), ("textures", "ground.png"), ("envs/cullet", "quay.glb")):
+        (a / d).mkdir(parents=True, exist_ok=True)
+        (a / d / f).write_bytes(d.encode())
+    commit = sh("git rev-parse HEAD", repo).strip()
+    trees = " ".join(f"{d}={sh(f'git rev-parse HEAD:living/tools/{d}', repo).strip()}" for d in ("blender", "characters", "textures"))
+    b = Path(t, "bundle")
+    make_glb(b / "living/game/assets/lookdev/anim/own-clips.glb", 3)
+    (b / "living/game/assets/lookdev/types").mkdir(parents=True)
+    (b / "living/game/assets/lookdev/types/adult-f.glb").write_bytes(b"type")
+    (b / "living/game/assets/characters").mkdir(parents=True)
+    (b / "living/game/assets/characters/looks.json").write_text(json.dumps({"generation": book_generations[-1], "generations": list(book_generations)}))
+    (b / "MANIFEST.txt").write_text(f"commit {commit}\nport: off\npictures: ktx2\ngenerator trees: {trees}\n\n")
+    tar = Path(t, "bundle-fake-ktx2.tar.gz")
+    with tarfile.open(tar, "w:gz") as out:
+        for f in sorted(b.rglob("*")):
+            if f.is_file():
+                out.add(f, arcname=str(f.relative_to(b)))
+    r = subprocess.run([sys.executable, os.path.join(os.path.dirname(GATE), "render_set.py"), "build", "--bundle", str(tar),
+                        "--repo", str(repo), "--root", str(Path(t, "sets")), "--pin"], capture_output=True, text=True)
+    if r.returncode:
+        raise RuntimeError(f"render_set.py build: {r.stdout}{r.stderr}")
+    return Path(t, "sets/current")
+
+
+def writable(root):
+    for p in [Path(root), *Path(root).rglob("*")]:
+        if p.is_dir() and not p.is_symlink():
+            os.chmod(p, 0o755)
 
 
 def check_render_set():
-    """The asset set's checks: a good set passes; each stale condition names itself; links go in and out."""
-    trees = {p: "t" + p[-3:] for p in scene_gate.GENERATOR_PATHS}
-    seeds = {"cullet": "c4-b", "island": "c4-a"}
+    """The gate's setup on render_set.py: a set it built checks ok and links; corrupt, stale and
+    absent sets are named as such, never a silent pass."""
+    tools = os.path.dirname(GATE)
+    real = str(Path(tools).parents[1])
+    t = tempfile.mkdtemp(prefix="gate-render-set-")
+    try:
+        repo = os.path.join(t, "repo")
+        sh(f"git init -q -b main {repo}", t)
+        for d in ("blender", "characters", "textures"):
+            os.makedirs(os.path.join(repo, "living/tools", d))
+            Path(repo, "living/tools", d, "x.py").write_text(d)
+        for w, g in (("cullet", "c4-b"), ("island", "c4-a")):
+            os.makedirs(os.path.join(repo, "living/seeds/worlds", w))
+            Path(repo, "living/seeds/worlds", w, "looks.json").write_text(json.dumps({"looks": {"generation": g}}))
+        sh("git add -A && git -c user.name=t -c user.email=t@t commit -q -m one", repo)
+        cur = make_render_set(t, repo)
+        shutil.rmtree(os.path.join(repo, "living/game/assets"))  # a gate's checkout holds no generated assets of its own
+        verdict, meta, why = scene_gate.render_set_check(repo, cur, tool_repo=real)
+        expect("render set: one render_set.py built checks ok, read through `current`",
+               verdict == "ok" and meta and meta.get("dir") == str(cur.resolve()) and meta.get("id"), f"{verdict} {why}")
+        ok, said = scene_gate.render_set_link(real, repo, meta["dir"])
+        a = Path(repo, "living/game/assets")
+        expect("render set: linked into the checkout by render_set.py link",
+               ok and (a / "lookdev").is_symlink() and (a / "characters/looks.json").is_symlink() and (a / "envs/cullet").is_symlink(), said)
+        ignored = subprocess.run(["git", "check-ignore", "--no-index", "living/game/assets/lookdev", "living/game/assets/envs/cullet",
+                                  "living/game/assets/textures", "living/game/assets/view", "living/game/assets/characters/looks.json"], cwd=real, capture_output=True, text=True)
+        expect("render set: the links are ignored in this repository (no untracked noise after a gate)",
+               ignored.returncode == 0 and len(ignored.stdout.split()) == 5, ignored.stdout + ignored.stderr)
+        # stale: the tree under test changed a generator, or a world wears a generation the book lacks
+        Path(repo, "living/tools/blender/x.py").write_text("changed")
+        sh("git -c user.name=t -c user.email=t@t commit -q -am gen", repo)
+        verdict, _, why = scene_gate.render_set_check(repo, cur, tool_repo=real)
+        expect("render set: a changed generator tree is stale", verdict == "stale" and any("generator tree" in w for w in why), f"{verdict} {why}")
+        sh("git reset -q --hard HEAD~1", repo)
+        Path(repo, "living/seeds/worlds/island/looks.json").write_text(json.dumps({"looks": {"generation": "c4-z"}}))
+        verdict, _, why = scene_gate.render_set_check(repo, cur, tool_repo=real)
+        expect("render set: a world at a generation the book lacks is stale", verdict == "stale" and any("c4-z" in w for w in why), f"{verdict} {why}")
+        sh("git checkout -q -- living/seeds", repo)
+        # corrupt: a file changed, added or removed
+        f = cur.resolve() / "assets/textures/ground.png"
+        os.chmod(f.parent, 0o755)
+        os.chmod(f, 0o644)
+        f.write_bytes(b"other")
+        verdict, _, why = scene_gate.render_set_check(repo, cur, tool_repo=real)
+        expect("render set: a changed file is corrupt", verdict == "corrupt" and any("ground.png" in w for w in why), f"{verdict} {why}")
+        f.unlink()
+        verdict, _, why = scene_gate.render_set_check(repo, cur, tool_repo=real)
+        expect("render set: a missing file is corrupt", verdict == "corrupt" and any("missing textures/ground.png" in w for w in why), f"{verdict} {why}")
+        os.chmod(cur.resolve(), 0o755)
+        os.rename(cur.resolve() / "set.json", cur.resolve() / "set.json.away")
+        verdict, _, why = scene_gate.render_set_check(repo, cur, tool_repo=real)
+        expect("render set: a set without its set.json is corrupt (the check could not run)", verdict == "corrupt" and why, f"{verdict} {why}")
+        expect("render set: no set is absent, a dangling `current` is present (and then corrupt)",
+               not scene_gate.render_set_present(os.path.join(t, "nothing/current")) and scene_gate.render_set_present(cur))
+        os.symlink(os.path.join(t, "gone"), os.path.join(t, "dangling"))
+        expect("render set: a dangling link is present", scene_gate.render_set_present(os.path.join(t, "dangling")))
+    finally:
+        writable(t)
+        shutil.rmtree(t, ignore_errors=True)
+
+
+def check_smoke_links():
+    """render-smoke's own lookdev link goes in and out; a real folder is never replaced."""
     with tempfile.TemporaryDirectory() as t:
-        s = write_set(t)
-        cache = os.path.join(t, "cache.json")
-        meta, stale = scene_gate.check_render_set(s, trees, seeds, cache)
-        expect("render set: a good set passes", meta and not stale, str(stale))
-        cur = Path(t, "current")
-        cur.symlink_to(s)
-        meta, stale = scene_gate.check_render_set(cur, trees, seeds, cache)
-        expect("render set: read through `current`, resolved to its folder", not stale and meta["dir"] == str(s), str(stale))
-
-        def stale_after(name, change, want, **kw):
-            with tempfile.TemporaryDirectory() as t2:
-                s2 = write_set(t2, **kw)
-                change(s2)
-                _, why = scene_gate.check_render_set(s2, trees, seeds, os.path.join(t2, "c.json"))
-                expect(f"render set stale: {name}", any(re.search(want, w) for w in why), str(why))
-        stale_after("a file differs from the manifest", lambda s2: (s2 / "textures/ground.ktx2").write_bytes(b"other"), r"ground.ktx2 differs")
-        stale_after("a listed file is missing", lambda s2: (s2 / "envs/cullet/quay.glb").unlink(), r"quay.glb is missing")
-        stale_after("an unlisted file", lambda s2: (s2 / "textures/extra.png").write_bytes(b"x"), r"extra.png is not in MANIFEST")
-        stale_after("a symlink in the set", lambda s2: (s2 / "textures/link.png").symlink_to(s2 / "textures/ground.ktx2"), r"link.png is a symlink")
-        stale_after("a generator tree differs", lambda s2: None, r"generator tree living/tools/blender", trees={**trees, "living/tools/blender": "old"})
-
-        def rename(s2):
-            data = json.loads((s2 / "set.json").read_text())
-            (s2 / "set.json").write_text(json.dumps(dict(data, bundle_sha="other")))
-        stale_after("the folder is not the bundle sha", rename, r"is not its bundle_sha")
-        stale_after("a seed's generation is not in the book", lambda s2: None, r"island seed wears look generation c4-a", gens=("c4-b",))
-
-        def gens_off(s2):
-            data = json.loads((s2 / "set.json").read_text())
-            (s2 / "set.json").write_text(json.dumps(dict(data, look_generations=["c4-b"])))
-        stale_after("look_generations is not the book's", gens_off, r"look_generations .* is not the book's")
-
-        def clips_off(s2):
-            data = json.loads((s2 / "set.json").read_text())
-            (s2 / "set.json").write_text(json.dumps(dict(data, clip_count=87)))
-        stale_after("the clip count differs", clips_off, r"holds 3 animations, set.json says 87")
-
-        def schema(s2):
-            data = json.loads((s2 / "set.json").read_text())
-            data.pop("clip_count")
-            (s2 / "set.json").write_text(json.dumps(dict(data, schema=2)))
-        stale_after("a field missing and another schema", schema, r"lacks clip_count")
-        # the hash cache: a changed file is hashed again even with its old size and time
-        f = s / "textures/ground.ktx2"
-        st = f.stat()
-        f.write_bytes(b"KTX")
-        os.utime(f, ns=(st.st_atime_ns, st.st_mtime_ns))
-        _, stale = scene_gate.check_render_set(s, trees, seeds, cache)
-        expect("render set: the cache keeps a file whose size and time did not change (a same-size edit with its time put back is the one blind spot)",
-               not stale, str(stale))
-        f.write_bytes(b"KTX2")
-        _, stale = scene_gate.check_render_set(s, trees, seeds, cache)
-        expect("render set: a file that changed size is hashed again", any("ground.ktx2 differs" in w for w in stale), str(stale))
-        # links into a worktree, and out again
+        src = Path(t, "smoke/lookdev")
+        src.mkdir(parents=True)
         game = Path(t, "wt")
-        (game / "living/game/assets/envs").mkdir(parents=True)
-        (game / "living/game/assets/characters").mkdir(parents=True)
-        (game / "living/game/assets/characters/recipes.json").write_text("{}")
-        made = scene_gate.link_set(game, s, ["lookdev", "envs/cullet", "characters/looks.json"])
         a = game / "living/game/assets"
-        expect("links: each linked path points into the set",
-               os.readlink(a / "lookdev") == str(s / "lookdev") and (a / "characters/looks.json").read_text().startswith("{")
-               and (a / "characters/recipes.json").exists(), str(made))
-        again = scene_gate.link_set(game, s, ["lookdev"])  # a gate killed before its cleanup: replaced
-        scene_gate.unlink_set(made + again)
-        expect("links: removed afterwards, the worktree's own files kept",
-               not (a / "lookdev").exists() and not (a / "envs/cullet").is_symlink() and (a / "characters/recipes.json").exists())
+        (a / "characters").mkdir(parents=True)
+        (a / "characters/recipes.json").write_text("{}")
+        made = scene_gate.link_set(game, src.parent, ["lookdev"])
+        expect("smoke links: lookdev points at the smoke's folder", os.readlink(a / "lookdev") == str(src), str(made))
+        scene_gate.unlink_set(made)
+        expect("smoke links: removed afterwards, the worktree's own files kept", not (a / "lookdev").exists() and (a / "characters/recipes.json").exists())
         (a / "lookdev").mkdir()
         try:
-            scene_gate.link_set(game, s, ["envs/cullet", "lookdev"])
+            scene_gate.link_set(game, src.parent, ["lookdev"])
             refused = False
         except RuntimeError as e:
             refused = "exists and is not a link" in str(e)
-        expect("links: a real folder is never replaced, and the links made before it are taken back",
-               refused and (a / "lookdev").is_dir() and not (a / "envs/cullet").is_symlink())
+        expect("smoke links: a real folder is never replaced", refused and (a / "lookdev").is_dir() and not (a / "lookdev").is_symlink())
 
 
 def check_render_passes(t):
@@ -669,6 +688,7 @@ def main():
     check_render_selection()
     check_render_logs()
     check_render_set()
+    check_smoke_links()
     with tempfile.TemporaryDirectory(prefix="gate-reds-selftest-") as t:
         os.environ.update({"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
         origin = os.path.join(t, "origin.git")
