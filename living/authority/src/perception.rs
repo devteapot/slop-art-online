@@ -228,9 +228,6 @@ pub struct MyOffer {
 /// a player's aimed act all see by this.
 #[allow(clippy::too_many_arguments)]
 pub fn in_sight(ctx: &ReducerContext, map: &Map, observer: u32, eye: (f32, f32), heading: f32, target: u32, at: (f32, f32), dist: f32, w: &World, now: u64, kept: bool) -> bool {
-    if common::profiling() {
-        sight_repeat(observer, target, now, "in_sight");
-    }
     let senses = common::senses_of(ctx, observer, w, now);
     let glow = if target != 0 && senses.gaze.is_none_or(|gaze| gaze.glow > 0.0) {
         common::glow_of(ctx, target, w, now)
@@ -239,26 +236,6 @@ pub fn in_sight(ctx: &ReducerContext, map: &Map, observer: u32, eye: (f32, f32),
     };
     let keep = kept.then(|| common::laws(ctx).keep_seen_m);
     living_rules::sight::sees(map, eye, heading, at, dist, &senses, glow, keep)
-}
-
-thread_local! {
-    /// While profiling: the (observer, target) pairs whose sight was tested at this instant.
-    static SIGHT_PAIRS: RefCell<(u64, HashSet<(u32, u32)>)> = RefCell::new((0, HashSet::new()));
-}
-
-/// While profiling (docs/COMBAT_PHASE.md step 10): whether this (observer, target) pair's sight was
-/// already tested at this instant, by a scene or `in_sight` (`sight:repeat:<by>`), or not
-/// (`sight:first:<by>`): what a memo of sight answers per tick could save.
-fn sight_repeat(observer: u32, target: u32, now: u64, by: &'static str) {
-    let again = SIGHT_PAIRS.with(|p| {
-        let mut p = p.borrow_mut();
-        if p.0 != now {
-            p.0 = now;
-            p.1.clear();
-        }
-        !p.1.insert((observer, target))
-    });
-    common::diag(move || format!("sight:{}:{by}", if again { "repeat" } else { "first" }), 1);
 }
 
 /// Whether character `observer` sees creature `target` where it stands now (its own sight, the
@@ -306,8 +283,6 @@ pub struct Sensing {
     rest: Option<std::collections::BinaryHeap<std::cmp::Reverse<u64>>>,
     /// Per candidate: 0 not yet tested, 1 seen, 2 not seen.
     seen: Vec<u8>,
-    /// Whose scene it is.
-    id: u32,
     at: (f32, f32),
     heading: f32,
     gather: f32,
@@ -349,7 +324,7 @@ impl Sensing {
             (cands, Vec::new())
         };
         let seen = vec![0; cands.len()];
-        Sensing { cands, order, rest: None, seen, id, at, heading, gather, hearing, lit, senses, map, w }
+        Sensing { cands, order, rest: None, seen, at, heading, gather, hearing, lit, senses, map, w }
     }
 
     /// The `k`-th nearest candidate (an index into `cands`), ordering only as far as `k`.
@@ -386,9 +361,6 @@ impl Sensing {
     fn sees(&mut self, ctx: &ReducerContext, i: usize, now: u64) -> bool {
         if self.seen[i] == 0 {
             let c = &self.cands[i];
-            if common::profiling() {
-                sight_repeat(self.id, c.id, now, "scene");
-            }
             let glow = if self.lit { common::glow_of(ctx, c.id, &self.w, now) } else { 0.0 };
             let s = c.dist <= self.gather && living_rules::sight::sees(&self.map, self.at, self.heading, c.pos, c.dist, &self.senses, glow, None);
             common::diag(|| "scene:sight_tests", 1);

@@ -513,9 +513,6 @@ fn checked(ctx: &ReducerContext, sc: &living_rules::script::Scripts, id: u32, a:
     let part = common::detail_span("check.rhai");
     let r = sc.check(&a.skill, &sctx);
     drop(part);
-    if common::profiling() {
-        check_repeats(sc, id, a, &sctx, plan.as_deref(), &r);
-    }
     if plan.is_some() && laws.check_ctx_check {
         let whole = sc.check(&a.skill, &skill_ctx_with(ctx, id, a, now, roll, &Reads::all()));
         common::diag(|| "check_ctx:checked", 1);
@@ -526,42 +523,6 @@ fn checked(ctx: &ReducerContext, sc: &living_rules::script::Scripts, id: u32, a:
         }
     }
     r
-}
-
-thread_local! {
-    /// While profiling: each (character, skill)'s last check input (its plan's fields as bytes)
-    /// and the same with the pools left out (`check_repeats`).
-    static CHECK_KEYS: std::cell::RefCell<std::collections::HashMap<(u32, String), (Vec<u8>, Vec<u8>)>> = std::cell::RefCell::new(std::collections::HashMap::new());
-}
-
-/// While profiling (docs/COMBAT_PHASE.md, step 3): whether a move's check is asked again with the
-/// very input of its last ask for that character and skill (`check:same_input`), the same but
-/// for the pools' levels (`check:same_but_pools`), or other input (`check:new_input`), and how
-/// each kind of answer splits so.
-fn check_repeats(sc: &living_rules::script::Scripts, id: u32, a: &Activity, c: &SkillCtx, plan: Option<&living_rules::script::context::Plan>, r: &Result<(), String>) {
-    let Some(p) = plan else { return };
-    use living_rules::script::context::key;
-    let knack = sc.shapes().knack(&a.skill).to_string();
-    let mut k = Vec::new();
-    key(c, &knack, p, &mut k);
-    let mut np = c.clone();
-    np.actor.stamina = 0.0;
-    np.actor.focus = 0.0;
-    let mut kn = Vec::new();
-    key(&np, &knack, p, &mut kn);
-    let reads_roll = p.top & (1 << living_rules::script::context::TOP.iter().position(|t| *t == "roll").unwrap_or(63)) != 0;
-    let what = match r {
-        Ok(()) => "ok".to_string(),
-        Err(w) => w.chars().filter(|c| !c.is_ascii_digit() && *c != '.').take(32).collect(),
-    };
-    let prev = CHECK_KEYS.with(|m| m.borrow_mut().insert((id, a.skill.clone()), (k.clone(), kn.clone())));
-    let kind = match prev {
-        Some((pk, _)) if pk == k => "same_input",
-        Some((_, pn)) if pn == kn => "same_but_pools",
-        Some(_) => "new_input",
-        None => "first",
-    };
-    common::diag(move || format!("check:{kind}:{}:{what}", if reads_roll { "roll" } else { "noroll" }), 1);
 }
 
 fn skill_ctx_with(ctx: &ReducerContext, id: u32, a: &Activity, now: u64, roll: f32, reads: &Reads) -> SkillCtx {
