@@ -161,6 +161,12 @@ thread_local! {
     /// ((observer, target) -> place, open, lit): a sighting that changes nothing reads no row.
     /// Dropped with the copies (`clear_memory`) when ticks do not follow on.
     static MEMO: RefCell<HashMap<(u32, u64), (f32, f32, Option<bool>, bool)>> = RefCell::new(HashMap::new());
+    /// Each player's character: when its far not-yet-seen things were last tested
+    /// (`feed_scope_far_s`). Lost with the instance: they are tested at once then.
+    static FAR: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
+    /// `feed_scope_popin_probe`: when each far thing a viewer had not yet seen first passed the
+    /// sight test at a sweep that did not take it ((character, key) -> ms, distance).
+    static POPIN: RefCell<HashMap<(u32, u64), (u64, f32)>> = RefCell::new(HashMap::new());
 }
 
 /// A structure or resource write: the cells it touches are built again (all of them for
@@ -307,8 +313,23 @@ pub fn sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, look: &Look
     });
     let fresh_owners = OWNERS.with(|o| !o.borrow().contains_key(&me.id));
     let mut seen: Vec<(SeenThing, bool)> = Vec::new();
-    let mut tests = 0u64;
+    let (mut tests, mut skipped) = (0u64, 0u64);
     let r2 = look.gather * look.gather;
+    // Iteration 3 cadence (docs/FEED_SCOPING.md): what this viewer sees, and what it has not yet
+    // seen within `feed_scope_near_m`, is tested at every sweep; not-yet-seen things beyond it once
+    // every `feed_scope_far_s`.
+    let laws = common::laws(ctx);
+    let near2 = laws.feed_scope_near_m * laws.feed_scope_near_m;
+    let far_every = (laws.feed_scope_far_s * 1000.0) as u64;
+    let probe = laws.feed_scope_popin_probe;
+    let far_due = FAR.with(|f| {
+        let mut f = f.borrow_mut();
+        let due = f.get(&me.id).is_none_or(|t| now.saturating_sub(*t) >= far_every);
+        if due {
+            f.insert(me.id, now);
+        }
+        due
+    });
     for cid in cells_around(look.at, look.gather) {
         for c in cell(ctx, cid).iter() {
             let (dx, dy) = (c.x - look.at.0, c.y - look.at.1);
@@ -323,9 +344,21 @@ pub fn sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, look: &Look
                 Some(p) => p,
                 None => continue,
             };
+            let far = before.is_none() && d2 > near2;
+            if far && !far_due && !probe {
+                skipped += 1;
+                continue;
+            }
             tests += 1;
             let glow = if c.light > 0.0 && (!c.burns || p.0) { c.light } else { 0.0 };
-            if !eye.sees_at((c.x, c.y), d2.sqrt(), glow, before.is_some()) {
+            let visible = eye.sees_at((c.x, c.y), d2.sqrt(), glow, before.is_some());
+            if far && probe {
+                popin(me.id, k, visible, far_due, d2.sqrt(), now);
+                if !far_due {
+                    continue;
+                }
+            }
+            if !visible {
                 continue;
             }
             let (lit, open, stock) = p;
@@ -339,6 +372,7 @@ pub fn sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, look: &Look
     }
     drop(span);
     common::diag(|| "scope:tests", tests);
+    common::diag(|| "scope:far_skipped", skipped);
     let (mut ins, mut upd) = (0u64, 0u64);
     let mut keys: HashSet<u64> = HashSet::with_capacity(seen.len());
     let mut now_copies: HashMap<u64, (u64, SeenThing)> = HashMap::with_capacity(seen.len());
@@ -377,6 +411,30 @@ pub fn sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, look: &Look
     owners(ctx, me, viewer);
 }
 
+/// The pop-in probe for one far thing this viewer has not yet seen, at one sweep: `visible` is the
+/// sight test now, `taken` whether this sweep takes far things. A sighting at a sweep that does not
+/// take it starts its clock; the sweep that takes it logs the extra delay (0 when it was taken at
+/// its first sighting); one that leaves sight before it is taken logs a miss.
+fn popin(id: u32, k: u64, visible: bool, taken: bool, dist: f32, now: u64) {
+    POPIN.with(|p| {
+        let mut p = p.borrow_mut();
+        match (visible, taken) {
+            (true, true) => {
+                let (since, at) = p.remove(&(id, k)).unwrap_or((now, dist));
+                log::info!("feed scope pop-in: {} ms at {:.1} m", now.saturating_sub(since), at);
+            }
+            (true, false) => {
+                p.entry((id, k)).or_insert((now, dist));
+            }
+            (false, _) => {
+                if let Some((since, at)) = p.remove(&(id, k)) {
+                    log::info!("feed scope pop-in missed: in sight {} ms at {:.1} m", now.saturating_sub(since), at);
+                }
+            }
+        }
+    });
+}
+
 /// A player's character perceives nothing any more (death, a hand-over to the minds).
 pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
     for r in ctx.db.thing_seen().viewer().filter(viewer).map(|r| r.id).collect::<Vec<_>>() {
@@ -387,6 +445,8 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
     }
     OWNERS.with(|o| o.borrow_mut().remove(&id));
     COPIES.with(|c| c.borrow_mut().remove(&id));
+    FAR.with(|f| f.borrow_mut().remove(&id));
+    POPIN.with(|p| p.borrow_mut().retain(|(c, _), _| *c != id));
 }
 
 /// A character died: what it remembered and found out goes with it.

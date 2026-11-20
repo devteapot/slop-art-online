@@ -309,6 +309,9 @@ pub fn step(ctx: &ReducerContext, now: u64) {
         (true, 0) => begin(ctx, now),
         (true, 1) if now.saturating_sub(since) as f32 >= laws.feed_scope_grace_s * 1000.0 => close(ctx, now),
         (false, 1) => revert(ctx, now),
+        // The scoped rows go one housekeeping step after the stage went back to 0, so a client
+        // has them while it subscribes the legacy set again (make-before-break).
+        (false, 0) if row.is_some() && leftover(ctx) => clear(ctx),
         (false, 2) => {
             if !WARNED.with(|w| w.replace(true)) {
                 log::warn!("feed scope: the law is off but this world's legacy feeds are closed (stage 2 is latched); nothing is re-exposed");
@@ -322,6 +325,10 @@ pub fn step(ctx: &ReducerContext, now: u64) {
 /// (each player's copies at its next sweep).
 fn begin(ctx: &ReducerContext, now: u64) {
     let _span = common::span("feed_scope.begin");
+    // Rows a revert left for a step (the law turned on again within it) are written afresh.
+    if leftover(ctx) {
+        clear(ctx);
+    }
     let mut n = (0u32, 0u32);
     for s in ctx.db.structure().iter() {
         if on_map(&s.kind) {
@@ -386,10 +393,22 @@ fn close(ctx: &ReducerContext, now: u64) {
     log::info!("feed scope: stage 2 ({} structures, {} gates, {} resource nodes and {} lot doors held privately); the legacy feeds are closed", structures.len(), n_gates, resources.len(), n_lots);
 }
 
-/// Stage 1 back to 0 (the law turned off before the legacy feeds closed): the scoped rows go;
-/// what characters remember stays theirs.
+/// Stage 1 back to 0 (the law turned off before the legacy feeds closed): the stage first, so
+/// clients switch back while the scoped rows are still there; the rows go at the next step
+/// (`clear`). What characters remember stays theirs.
 fn revert(ctx: &ReducerContext, now: u64) {
-    let _span = common::span("feed_scope.revert");
+    set_stage(ctx, 0, now);
+    log::info!("feed scope: back to stage 0 (the law went off before the legacy feeds closed); the scoped rows go at the next step");
+}
+
+/// Scoped rows written at stage 1 are still there.
+fn leftover(ctx: &ReducerContext) -> bool {
+    ctx.db.map_structure().iter().next().is_some() || ctx.db.map_resource().iter().next().is_some() || ctx.db.thing_seen().iter().next().is_some() || ctx.db.owner_seen().iter().next().is_some()
+}
+
+/// The scoped rows of stage 1 go (a step after a revert, or before a new begin).
+fn clear(ctx: &ReducerContext) {
+    let _span = common::span("feed_scope.clear");
     for id in ctx.db.thing_seen().iter().map(|r| r.id).collect::<Vec<_>>() {
         ctx.db.thing_seen().id().delete(id);
     }
@@ -405,7 +424,7 @@ fn revert(ctx: &ReducerContext, now: u64) {
     for id in ctx.db.owned_by().iter().map(|r| r.structure).collect::<Vec<_>>() {
         ctx.db.owned_by().structure().delete(id);
     }
-    set_stage(ctx, 0, now);
+    crate::scope::clear_memory();
     crate::scope::owners_changed();
-    log::info!("feed scope: back to stage 0 (the law went off before the legacy feeds closed)");
+    log::info!("feed scope: the scoped rows of stage 1 are cleared");
 }

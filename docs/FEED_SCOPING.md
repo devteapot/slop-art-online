@@ -353,3 +353,18 @@ Partial re-measure, series `s3` (Cullet Middle only, 2 runs per arm, loads at st
 The per-test cost is now 0.72–0.94 µs, close to people's ~1 µs (it was 2.2–2.9 µs). Middle still fails the budget: +49.5% against the off mean of 25.98, and ticks/s fall below the lowest off run. The bound is now the number of tests. About 7,500 thing tests a second sit beside about 29,000 people tests, so at equal cost per test the feature adds about a quarter to player sight. That cannot fit +15% unless fewer things are tested each second. The options are a slower re-acquire rate for unseen candidates (latency, an owner's feel call) or a narrower candidate set.
 
 Left: Round and the wooded battle in a low-load window (`living/tools/feed_scope_cost.py --series <s> [--reclaim-closed]`), the verify-client `run.py` suite on this iteration, and the GC's call on the test-rate trade-off.
+
+## Iteration 3 status (paused 2026-11-20, WIP)
+
+Branch merged with `origin/main` at `16f50c0c` (rustc 1.99.1); the authority builds. Written, not yet verified or measured:
+
+- **Cadence (the GC's option (a), refined):** a thing the viewer sees now (it holds a copy), and a not-yet-seen thing within `feed_scope_near_m` (default 10 m), is tested at every sweep. A not-yet-seen thing beyond that is tested once every `feed_scope_far_s` (default 1 s) per viewer. Both are value-only laws (`law_override`, `set_world_law`). "Seen" means in sight now: a thing that left sight and comes back beyond the radius takes the slow path again.
+- **Pop-in probe:** `feed_scope_popin_probe` (diagnostic, off) tests the far ones at every sweep too, only to time them. Each far thing's first sighting logs `feed scope pop-in: <ms> ms at <m> m` (the extra delay; 0 when it was taken at its first sighting), and one that leaves sight before it is taken logs `… missed`. The cost series is to add a probe arm per workload and read p50/p90/max from these lines.
+- **Stage 1 → 0:** `revert` now only sets stage 0, and the scoped rows (`map_structure`, `map_resource`, `thing_seen`, `owner_seen`, `owned_by`) go at the next housekeeping step (`clear`). A `begin` within that step clears the leftovers first.
+
+Left:
+- `just living-check`;
+- the genesis fuel gate (island `init` ≤ 118.441e9);
+- the feed-scope scenes on a private server;
+- the cost driver's probe arm and pop-in parsing;
+- the series (Cullet Round and Middle, 2 runs per arm; woods, 4 runs per arm), with a stop-and-report if Middle is still above +15%.

@@ -95,6 +95,12 @@ fn laws() {
         // cutover closes the legacy feeds `feed_scope_grace_s` seconds after it begins.
         feed_scope_on: false,
         feed_scope_grace_s: 10.0,
+        // Things not yet seen are looked for at every sweep within feed_scope_near_m, farther ones
+        // every feed_scope_far_s; what is in sight is checked at every sweep. A diagnostic times the
+        // extra delay of the far ones.
+        feed_scope_near_m: 10.0,
+        feed_scope_far_s: 1.0,
+        feed_scope_popin_probe: false,
         // Known ground (docs/MOVEMENT_MIND.md): how far ground is seen by day, metres (at night,
         // one's own sight); the most 4 m cells one look marks (0: no cap; the rest come with
         // later looks); whether walks are planned over what each walker has seen instead of the
@@ -3240,6 +3246,9 @@ fn law_about(l, name) {
         "cover_sight_on" => "whether cover hides people",
         "feed_scope_on" => if l.feed_scope_on { "small things, fires and gates are known only as far as one sees them" } else { "small things, fires and gates are shown to every player's client" },
         "feed_scope_grace_s" => `clients have ${short(l.feed_scope_grace_s)} s to switch before the open feeds close`,
+        "feed_scope_near_m" => `small things not yet seen are looked for at once within ${short(l.feed_scope_near_m)} m`,
+        "feed_scope_far_s" => `and farther ones every ${short(l.feed_scope_far_s)} s`,
+        "feed_scope_popin_probe" => if l.feed_scope_popin_probe { "a diagnostic: the delay of far things coming into sight is timed" } else { "far things coming into sight are not timed" },
         "cover_eye_height_m" => "the standing eye height in metres",
         "cover_brush_on" => "whether dense brush hides people",
         "cover_brush_min_fill" => "minimum fill for brush concealment",

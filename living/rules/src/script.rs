@@ -563,6 +563,15 @@ pub struct Laws {
     /// Seconds between a world's stage 1 (scoped feeds beside the legacy ones) and stage 2 (the
     /// legacy feeds closed): the time a connected client has to switch its subscriptions.
     pub feed_scope_grace_s: f32,
+    /// A thing a viewer has not yet seen is tested at every sweep only within this many metres;
+    /// farther ones every `feed_scope_far_s` (docs/FEED_SCOPING.md, iteration 3). A thing already
+    /// seen is tested at every sweep wherever it is.
+    pub feed_scope_near_m: f32,
+    /// Seconds between the tests of not-yet-seen things beyond `feed_scope_near_m`.
+    pub feed_scope_far_s: f32,
+    /// A diagnostic: the far things a viewer has not yet seen are tested at every sweep too, only to
+    /// time when each came into sight, and each one's first sighting logs its extra delay (pop-in).
+    pub feed_scope_popin_probe: bool,
     /// How far a character sees ground by day (metres): the cells of `known_ground` it marks
     /// (docs/MOVEMENT_MIND.md, step 3). At night, its own sight.
     pub ground_sight_m: f32,
@@ -812,6 +821,9 @@ impl Default for Laws {
             cover_sight_on: false,
             feed_scope_on: false,
             feed_scope_grace_s: 10.0,
+            feed_scope_near_m: 10.0,
+            feed_scope_far_s: 1.0,
+            feed_scope_popin_probe: false,
             ground_sight_m: 24.0,
             known_cells_pass: 0.0,
             nav_belief: false,
@@ -3161,6 +3173,9 @@ impl Scripts {
             cover_sight_on: flag("cover_sight_on", l.cover_sight_on),
             feed_scope_on: flag("feed_scope_on", l.feed_scope_on),
             feed_scope_grace_s: g("feed_scope_grace_s", l.feed_scope_grace_s).clamp(0.0, 3600.0),
+            feed_scope_near_m: g("feed_scope_near_m", l.feed_scope_near_m).clamp(0.0, 1000.0),
+            feed_scope_far_s: g("feed_scope_far_s", l.feed_scope_far_s).clamp(0.0, 60.0),
+            feed_scope_popin_probe: flag("feed_scope_popin_probe", l.feed_scope_popin_probe),
             ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
             known_cells_pass: g("known_cells_pass", l.known_cells_pass).clamp(0.0, 100_000.0),
             nav_belief: flag("nav_belief", l.nav_belief),
