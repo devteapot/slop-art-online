@@ -134,3 +134,9 @@ One combined artistic attempt at high effort, ran from 00:24 to about 02:45 UTC 
 - about 15 minutes waiting while another worker's merge gate held the Blender lock.
 
 No paid model or image calls were made, and no database was used. Free disk stayed at or above 42 GB during the other worker's gate and was 56 GB at packaging. A reserved second attempt at high may follow for any stroke the general coordinator fails.
+
+## GC verdict
+
+- **Outer lower lid and brows: passed.** The brows' blunt inner ends are noted for later.
+- **Jaw line: dropped without spending an attempt.** A static carrier cannot follow a view-dependent silhouette, so in both views it read as a seam or mask edge. **Follow-up: the jaw outline needs a view-dependent edge technique (client).** The neck shade that starts under the jaw is kept; it is the real fix for the collar band.
+- **Upper lid and nostrils: not yet.** The lid was too light and thin against the drawing's bold band, and the nostrils read as a squiggle. Both went to one last attempt at xhigh: [attempt 2](../ink-batch-2/README.md).

@@ -1,0 +1,74 @@
+{
+ "drawing": {
+  "front": {
+   "band_width_px440": {
+    "mean": 7.26,
+    "at_5_6": 6.7,
+    "max": 9.18
+   },
+   "mean_darkness": 0.594
+  },
+  "three-quarter": {
+   "band_width_px440": {
+    "mean": 6.21,
+    "at_5_6": 5.02,
+    "max": 7.94
+   },
+   "mean_darkness": 0.551
+  }
+ },
+ "approved": {
+  "front": {
+   "band_width_px440": {
+    "mean": 8.44,
+    "at_5_6": 8.26,
+    "max": 10.75
+   },
+   "mean_darkness": 0.704
+  },
+  "three-quarter": {
+   "band_width_px440": {
+    "mean": 8.86,
+    "at_5_6": 7.57,
+    "max": 15.23
+   },
+   "mean_darkness": 0.729
+  }
+ },
+ "batch": {
+  "front": {
+   "band_width_px440": {
+    "mean": 5.49,
+    "at_5_6": 5.36,
+    "max": 7.46
+   },
+   "mean_darkness": 0.414
+  },
+  "three-quarter": {
+   "band_width_px440": {
+    "mean": 6.79,
+    "at_5_6": 4.08,
+    "max": 15.36
+   },
+   "mean_darkness": 0.478
+  }
+ },
+ "attempt2": {
+  "front": {
+   "band_width_px440": {
+    "mean": 7.54,
+    "at_5_6": 6.86,
+    "max": 9.59
+   },
+   "mean_darkness": 0.593
+  },
+  "three-quarter": {
+   "band_width_px440": {
+    "mean": 7.87,
+    "at_5_6": 6.21,
+    "max": 10.31
+   },
+   "mean_darkness": 0.682
+  }
+ }
+}
