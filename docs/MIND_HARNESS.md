@@ -391,6 +391,38 @@ Claude side, not billed to a provider here: two blind judges (about 120k tokens 
 - **Not changed:** authority, rules, bindings, `models.json` and `judgments.json`.
 - **Other branches:** `townlife-2` also edits `mind.rs`, `talk.rs` and `main.rs`. This diff touches `schedule`, `run`, `thinking` and the experience callback only.
 
+## The grant stall (grant-stall, 2026-11-20)
+
+**The bug.** `Queue::candidate` names one ticket, and only that ticket's own task could take the slot (`Scheduler::admit` checked `candidate(now) == Some(id)`). The other waiters, woken every 50 ms, saw another ticket's id and went back to sleep. When the named task was not polled, every grant waited for it. That happens when the task is held up behind CPU-heavy work on its worker thread. In the 200-fighter fixed-site battle on main, nothing was granted for 1 s or more, 3 to 9 times per run, the longest up to 35 s, with up to 158 ready calls and free slots (`urgent-merge` branch, docs/MIND_HARNESS.md §8, and the A runs below).
+
+**The fix** is the grant half of `urgent-merge`'s `4b5cd4c8`, ported to main's scheduler without that branch's preparation order (no turn nomination, lookahead or reason merging). Whichever waiter runs a pass grants every call that may take a slot (`Queue::dispatch`). Each owner collects its grant from `Queue.decided` when it next runs. A dropped owner's uncollected slot is released (`Drop for Admission`). A held-up task now costs only its own slot. `queue_wait_ms` ends at the grant, and the owner's delay is slot hold. A grant stall of 1 s or more is logged as `grant stall: <ms> ms with up to <n> ready calls and free slots` (`Queue::watch`). `a_held_up_ticket_does_not_stop_the_grants` (llm.rs) leaves a never-polled ticket at the head of its lane. On main, six ready calls with 16 free slots got no grant in 2 s. With the fix all six are granted, and the held-up slot is released when it is dropped.
+
+SpacetimeDB: none. The change is inside the mind service's model queue. No table, reducer, view or subscription changed.
+
+### A/B against main (2026-11-20)
+
+Arm A is main `ff639920` plus the measurement harness only (`grant-stall-control` `db81145d`: `urgent-merge-ab2-control`'s `4a315a1c` and `ef07d864` cherry-picked, so it has the fixed-site driver, the fake timing log and header, and the passive grant-stall watch). Arm B is A plus the fix (`grant-stall-ab-b` `3bbb0ad1`). Its timing header takes the grant time from the admission. Both arms ran `battle_diag.py --battle 200 --walkers 16 --minutes 5 --keep-plans --fast-lane --fixed-site 412.5 237.5`: 200 fighters striking in place with zero damage, 16 walkers, no refills, the fake model, and the fast lane on with `keep` replies.
+
+The protocol was the same as §8's second series on `urgent-merge`. Runs were interleaved A, B, A, B, A, B, all under one hold of `battle.lock`. Each run started only with a 1-minute load under 4, no compiler running and the merge lock free. Each had a fresh private SpacetimeDB 2.14.1 container pinned to CPUs 5-9,15-19, and every sampled busy server thread was on those cores. Load was sampled every 10 s. A run whose load passed 8 in its 300 s window was discarded and redone. A1 was discarded at 25.9 and B3 at 24.2, both from other workers' builds that started mid-run. Every run ticked in every window, the orphan guard paused none, and 200 fighters were at the site at the end.
+
+| Run | Load start / end (max) | Urgent queue p50 / p90 (s) | Routine queue p50 / p90 (s) | Urgent start→grant p50 / p90 (s) | Routine start→grant p50 / p90 (s) | Ticks/s | Grant stalls ≥1 s (longest s) | Routine thinks | Reasons per urgent prompt |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: |
+| A1r1 | 3.4 / 6.9 (5.7) | 9.20 / 18.46 | 7.53 / 16.45 | 11.73 / 16.49 | 9.44 / 20.44 | 45.48 | 7 (16.9) | 151 | 1.008 |
+| B1 | 3.2 / 5.7 (5.3) | 8.40 / 17.94 | 6.46 / 18.98 | 11.40 / 16.15 | 10.25 / 22.87 | 45.74 | 0 | 145 | 1.006 |
+| A2 | 3.6 / 4.7 (6.3) | 8.90 / 18.58 | 8.24 / 14.15 | 11.69 / 16.85 | 11.60 / 21.12 | 46.18 | 5 (4.0) | 152 | 1.022 |
+| B2 | 3.6 / 4.8 (4.7) | 7.84 / 17.96 | 7.15 / 23.19 | 11.17 / 19.59 | 9.87 / 31.12 | 46.06 | 0 | 148 | 1.048 |
+| A3 | 2.9 / 6.9 (6.6) | 8.92 / 18.21 | 6.66 / 20.79 | 11.89 / 21.83 | 9.94 / 21.59 | 45.14 | 5 (35.1) | 144 | 1.047 |
+| B3r1 | 3.3 / 4.9 (7.5) | 8.56 / 17.56 | 6.44 / 21.64 | 12.17 / 23.44 | 12.25 / 64.29 | 45.76 | 0 | 184 | 1.112 |
+| A1 (discarded) | 1.3 / 9.6 (25.9) | 12.32 / 20.26 | 5.13 / 9.47 | 14.47 / 28.28 | 8.50 / 17.74 | 42.04 | 7 (5.7) | 95 | 1.014 |
+| B3 (discarded) | 3.2 / 6.3 (24.2) | 10.86 / 17.89 | 3.04 / 6.38 | 13.79 / 20.73 | 6.53 / 10.96 | 42.44 | 0 | 116 | 1.054 |
+
+The queue columns are `queue_wait_ms` over think and deliberate calls, from enqueue to grant in both arms. Start→grant runs from the scheduler starting the actor's deliberation to its grant, over think calls. It is the same span in both arms. On main, the prompt is built inside that span, before the call is queued.
+
+- **Verdict: the one-sided check fails on routine start→grant p90.** The stalls are fixed: none in B, against 5–7 per run in A (longest 4.0–35.1 s, 9.8–46.0 s in total). Ticks/s match: 45.74–46.06 against 45.14–46.18. Urgent queue p50/p90 and routine queue p50 are at or below A's range. Urgent start→grant is within A's range in B1 and B2. B3r1 is above it at p50 (12.17 against at most 11.89) and p90 (23.44 against at most 21.83). Routine start→grant p90 is above A's range in every B run (22.87, 31.12 and 64.29 s against 20.44–21.59), and B3r1's p50 is above it too.
+- **Where B loses time.** The difference is before the call is queued, not in the queue. For routine thinks, deliberation start to enqueue (prompt building) has p90 of 9.5, 12.4 and 62.1 s on B, against 7.0–9.3 on A. Routine queue wait p90 is 12.8, 18.1 and 13.4 s, against 12.0–14.1. Both arms show a mind-wide slowdown from about 140–160 s into the window, with grants dropping from about 200 to under 50 per 20 s. On A it shows as grant stalls. On B it shows as held-up owners (slot hold up to 21.8 s for one routine call; routine hold p90 69 ms, 1.49 s and 1.23 s) and slow preparation. For deliberations that started in the first 100 s, before the slowdown, B equals A: urgent start→grant p50/p90 is 11.8–12.2 / 17.2 s against 11.5–11.7 / 17.4–17.6, and routine is 7.8 / 11.6–11.9 s against 7.0–8.7 / 11.8–15.3. The whole-window gap comes from deliberations that overlap the slowdown. Three runs do not establish whether the fix makes that period worse, or whether the slowdown's timing and length simply varied. B3r1, the worst run, had the highest load in its window (7.5). The slowdown itself is not addressed here, as on `urgent-merge`.
+
+Evidence: the run directories under `.local/living/verify/minds-gs-*` of both arm checkouts, the per-run preflight, host samples, placement and container logs, `tables.json`, and the breakdown scripts (`gs_tables.py`, `breakdown.py`, `split.py`, `timeline.py`). They are archived in `~/slop-evidence/grant-stall-20261120.tar.zst`.
+
 ## Fixes from the rules2-r2 review (2026-11-10)
 
 Reviewers measured the `rules2-r2` trial journals (1,129 real calls, `.local/living/trials/rules2-r2/journal/`) and read the code at 6c8d1002. Each defect below was confirmed against the code and the journal before it was fixed. Branch `fix-mind-small`, one commit each; prompt edits are separate commits.
