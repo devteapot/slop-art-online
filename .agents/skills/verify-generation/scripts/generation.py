@@ -1314,13 +1314,51 @@ def suite(args):
     return 0 if all(r["pass"] for r in results.values()) else 1
 
 
+def smoke(run):
+    """The scene gate's light generation case (living/tools/scene_gate.py, `generation-*`): the
+    per-world checks of `worlds` (check_seed: the day and the seed's laws composed over the shipped
+    script, dimensions, chunks, settlements, residents, sheets, animals, resources, rhythms, land and
+    plans, looks, sex; and no sheet secrets in public tables) on a world someone else launched (the
+    gate's fresh genesis-fuel world). It pauses the world and reads its tables; no native digests,
+    no repeatability, no floors, no build. The caller cleans the world up. Writes checks.json and
+    smoke.json in the run's folder (the table snapshots only when a check fails); exit 0 when every
+    check passes."""
+    d = BASE / run
+    state = json.loads((d / "state.json").read_text())
+    if not state.get("published"):
+        raise SystemExit(f"{run} is not published")
+    seed = seed_text(ROOT / f"living/seeds/{state['seed']}.json")
+    write(d / "seed.json", seed)
+    if harness("call", run, d / "pause.log", "set_paused", "[true]", "--as-admin"):
+        raise SystemExit(f"pause failed; read {d}/pause.log")
+    rows = snapshot(run, TABLES)
+    public_tables = re.findall(r"#\[spacetimedb::table\(accessor = (\w+), public\)\]", (ROOT / "living/authority/src/tables.rs").read_text())
+    rows.update(snapshot(run, [t for t in public_tables if t not in rows]))
+    checks = check_seed(seed, rows)
+    checks.append({"check": "public tables exclude sheet secrets", **no_secrets(seed, rows)})
+    write(d / "checks.json", checks)
+    failed = [c["check"] for c in checks if not c["pass"]]
+    write(d / "smoke.json", {"seed": state["seed"], "pass": not failed, "checks": len(checks), "failed": failed})
+    if not failed:
+        # Every merge runs this: a passing world keeps its checks, not its table snapshots (an
+        # island's are about 60 MB). A failing one keeps them for the diagnosis.
+        for table in rows:
+            (d / f"{table}.json").unlink(missing_ok=True)
+            (d / f"sql-{table}.log").unlink(missing_ok=True)
+    for name in failed:
+        print(f"FAIL {state['seed']}: {name}", flush=True)
+    print(f"generation smoke {state['seed']}: {len(checks) - len(failed)} of {len(checks)} checks passed", flush=True)
+    return 1 if failed else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", required=True)
+    parser.add_argument("--smoke", action="store_true", help="the gate's light case: check the already launched world RUN (see smoke())")
     parser.add_argument("--feature", choices=("all", "worlds", "authored", "guards"), default="all")
     parser.add_argument("--seeds", help="comma-separated subset of the worlds' seeds (e.g. floor-megacity-2k,floor-megacity-4k)")
     args = parser.parse_args()
-    return suite(args)
+    return smoke(args.run) if args.smoke else suite(args)
 
 
 if __name__ == "__main__":

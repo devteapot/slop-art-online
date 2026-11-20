@@ -4,6 +4,9 @@
 In the current worktree, which must be clean and have no commits that main lacks:
   1. fetch; move HEAD to origin/main (git reset --keep);
   2. git merge --no-ff the branch, pinned to the commit it had when this started;
+  2a. seed freshness (`living/tools/scene_gate.py seeds`: every compiled seed against its
+     `living/seeds/worlds/<world>/` sources, files only, a fraction of a second); stop without
+     pushing when a seed is stale and not on the red-on-main list;
   3. run the check (`living/tools/check.py`: `just living-check` with step stamps), and
      stop without pushing if it fails or leaves the worktree dirty;
   3a. when the merge touches the module's shape (authority, rules, bindings, the workspace
@@ -34,10 +37,12 @@ LIVING_GENERATE_CMD (generate_bindings.sh); when unset and a container named
 LIVING_GENERATE_CONTAINER (default slop-trials-stdb, the Spark's) is running, the bindings check
 generates inside it (living/tools/generate_in_container.sh), else the Justfile's compose run.
 LIVING_MERGE_BINDINGS=always runs the bindings check whatever the merge touches (=off skips it).
+LIVING_MERGE_SEEDS_CMD replaces the seed freshness command (for tests); LIVING_MERGE_SEEDS=off
+skips it, saying so.
 Exit codes: 0 merged and pushed (or nothing to merge), 2 usage, 3 refused (worktree), 4 merge
 conflict, 5 check failed, 6 check left the worktree dirty, 7 main kept moving, 8 push failed,
 9 another git command failed, 10 the scene gate failed (or could not run), 11 the bindings
-were not regenerated (or the bindings check could not run), 12 refused (disk).
+were not regenerated (or the bindings check could not run), 12 refused (disk), 13 a compiled seed is stale (or the freshness check could not run).
 
 Disk: SLOP_MERGE_FLOOR_GB overrides the installed disk cleaner's floor (45 GB without
 an installed floor). SLOP_MERGE_CHECK_GB overrides the cold check allowance (18 GB).
@@ -291,6 +296,39 @@ def bindings_check(merge_sha, base, log_path, start_head, attempt):
     return 11
 
 
+def seeds_check(merge_sha, log_path, start_head, attempt):
+    """Seed freshness on the merged tree, before the check; None when fresh (or skipped)."""
+    cmd = os.environ.get("LIVING_MERGE_SEEDS_CMD")
+    if os.environ.get("LIVING_MERGE_SEEDS") == "off":
+        done.append(f"attempt {attempt}: seed freshness skipped (LIVING_MERGE_SEEDS=off)")
+        return None
+    if not cmd and not os.path.isfile("living/tools/seed_fresh.py"):
+        done.append(f"attempt {attempt}: no seed freshness check in this tree; skipped")
+        return None
+    cmd = cmd or f"{shlex.quote(sys.executable)} living/tools/scene_gate.py seeds"
+    code, secs = run_check(cmd, log_path, "seeds")
+    if code == 0:
+        done.append(f"attempt {attempt}: compiled seeds fresh (or listed red on main) in {secs:.1f} s")
+        return None
+    done.append(f"attempt {attempt}: merge {merge_sha[:10]}; compiled seeds STALE (exit {code}); the lines above name each seed, block and recompile command")
+    restored = reset_to(start_head, "after the stale seeds")
+    summary(f"stale compiled seeds; nothing pushed{'' if restored else ' (HEAD NOT restored, see above)'}. Recompile them on the branch (log {log_path})")
+    return 13
+
+
+def genesis_summary(record):
+    """The gate's genesis fuel per seed in one line (scene_gate.py, docs/TOOLING.md "Genesis fuel")."""
+    if record.get("genesis_disabled"):
+        return "genesis fuel check disabled (SLOP_GATE_GENESIS_CHECK=0)"
+    seeds = []
+    for g in record.get("genesis") or []:
+        fuel = g.get("init_fuel")
+        share = f"{fuel / 1e9:.3f}e9, {100 * fuel / g['budget']:.2f}%" if fuel is not None and g.get("budget") else "no fuel"
+        steps = f", largest step {g['largest_step_share']:.2%}" if g.get("steps") else ""
+        seeds.append(f"{g.get('seed')} {share}{steps} {'pass' if g.get('passed') else 'FAIL'}")
+    return f"genesis init fuel per run: {'; '.join(seeds)}" if seeds else None
+
+
 def scene_gate(merge_sha, base, gate_base, gate_json, log_path, start_head, attempt):
     """Run the scene gate on the checked merge; None when it passed (or was not needed this
     attempt), else the exit code after the summary."""
@@ -307,6 +345,11 @@ def scene_gate(merge_sha, base, gate_base, gate_json, log_path, start_head, atte
             done.append(f"attempt {attempt}: scene gate kept from {gate_base[:10]} (main's new commits touch no behaviour)")
             return None
     cmd = cmd or f"{shlex.quote(sys.executable)} {tool} run --base {base} --json {shlex.quote(gate_json)}"
+    os.environ["LIVING_MERGE_GATE_JSON"] = gate_json  # where the gate's record goes (a LIVING_MERGE_SCENES_CMD writes it there)
+    try:
+        os.remove(gate_json)  # an earlier attempt's record is not this run's
+    except FileNotFoundError:
+        pass
     code, secs = run_check(cmd, log_path, "scenes")
     record = {}
     try:
@@ -314,6 +357,9 @@ def scene_gate(merge_sha, base, gate_base, gate_json, log_path, start_head, atte
             record = json.load(f)
     except (OSError, ValueError):
         pass
+    fuel = genesis_summary(record)
+    if fuel:
+        done.append(f"attempt {attempt}: {fuel}")
     if code == 0:
         done.append(f"attempt {attempt}: scene gate {record.get('result', 'passed')} in {secs:.0f} s"
                     + (f" (evidence {record['evidence']})" if record.get("evidence") else ""))
@@ -477,6 +523,9 @@ def run(argv):
             restored = reset_to(start_head, "after the odd merge")
             summary(f"no merge commit was made; nothing pushed{'' if restored else '; HEAD NOT restored, see above'}")
             return 9
+        fresh = seeds_check(merge_sha, log_path, start_head, attempt)
+        if fresh is not None:
+            return fresh
         # the merged tree's own check; a tree from before check.py has the plain recipe
         check_cmd = check_override or (f"{shlex.quote(sys.executable)} living/tools/check.py" if os.path.isfile("living/tools/check.py") else "just living-check")
         try:
