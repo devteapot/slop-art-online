@@ -21,7 +21,7 @@ LLM providers        Neo4j personal knowledge graphs
 
 ## Prerequisites
 
-- [Rust](https://rustup.rs/) (stable toolchain) with the `wasm32-unknown-unknown` target (`rustup target add wasm32-unknown-unknown`)
+- [Rust](https://rustup.rs/): the toolchain is pinned in [`rust-toolchain.toml`](rust-toolchain.toml) (rustc 1.99.1, with `wasm32-unknown-unknown`, clippy and rustfmt), which rustup installs on first use. Genesis fuel depends on the compiler, so every machine and deploy uses this one version.
 - [Docker](https://docs.docker.com/get-docker/) with Compose
 - [just](https://github.com/casey/just) (command runner)
 - API credentials for the configured model providers (`living/configs/models.json`)
