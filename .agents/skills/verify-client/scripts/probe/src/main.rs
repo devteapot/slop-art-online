@@ -22,6 +22,10 @@ struct Request {
     /// default streams only changes after it applied); for proving no row arrives at all.
     #[serde(default)]
     from_start: bool,
+    /// Subscribe with the SDK's own `subscribe_to_all_tables` (one query per table the generated
+    /// bindings name, private ones included) in place of `queries` (copy-privacy).
+    #[serde(default)]
+    all_tables: bool,
 }
 
 #[derive(Default)]
@@ -321,6 +325,7 @@ fn connect(r: &Request, signals: Arc<Mutex<Signals>>) -> Result<DbConnection, St
     let queries = r.queries.clone();
     let credential_fd = r.credential_fd;
     let stream = r.stream;
+    let all_tables = r.all_tables;
     DbConnection::builder()
         .with_uri(&r.uri)
         .with_database_name(&r.db)
@@ -342,10 +347,14 @@ fn connect(r: &Request, signals: Arc<Mutex<Signals>>) -> Result<DbConnection, St
                 .on_update(move |_, _, _| updates.lock().unwrap().stats_updates += 1);
             let applied = ready.clone();
             let error = ready.clone();
-            c.subscription_builder()
+            let builder = c.subscription_builder()
                 .on_applied(move |_| applied.lock().unwrap().applied = true)
-                .on_error(move |_, e| error.lock().unwrap().error = Some(e.to_string()))
-                .subscribe(queries);
+                .on_error(move |_, e| error.lock().unwrap().error = Some(e.to_string()));
+            if all_tables {
+                builder.subscribe_to_all_tables();
+            } else {
+                builder.subscribe(queries);
+            }
         })
         .on_disconnect(move |_, e| {
             gone.lock().unwrap().disconnected = Some(
@@ -446,9 +455,10 @@ fn main() {
         let r: Request = serde_json::from_str(&input).map_err(|e| e.to_string())?;
         // Scratch worlds only: a verify-client run, the merge's scene gate (living/tools/
         // scene_gate.py, case `cues`), verify-player's (gaze scenes; a player's `seen_doing`
-        // stream, rest_seen.py) and verify-core's (`doing` deltas, doing_deltas.py).
-        if !["verify-client-", "verify-gate-", "verify-player-", "verify-core-"].iter().any(|p| r.db.starts_with(p)) {
-            return Err("database must start with verify-client-, verify-gate-, verify-player- or verify-core-".into());
+        // stream, rest_seen.py), verify-core's (`doing` deltas, doing_deltas.py) and the battle
+        // measurements' (`verify-lookcost-*`: battle_viewers.py --privacy, copy-privacy).
+        if !["verify-client-", "verify-gate-", "verify-player-", "verify-core-", "verify-lookcost-"].iter().any(|p| r.db.starts_with(p)) {
+            return Err("database must start with verify-client-, verify-gate-, verify-player-, verify-core- or verify-lookcost-".into());
         }
         let first = drive(&r, r.drop_file.is_some())?;
         if r.drop_file.is_some() {
