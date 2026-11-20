@@ -1844,8 +1844,9 @@ pub fn wake_bystander(ctx: &ReducerContext, id: u32, now: u64) {
     }
 }
 
-/// The bystanders whose held-back wake is due: woken now (each tick, before the wakes).
-pub fn due_bystander_wakes(ctx: &ReducerContext, now: u64) {
+/// The bystanders whose held-back wake is due: woken now (each tick, before the wakes), in id
+/// order rotated by the tick (`tick` mod how many are due), so no one is always woken first.
+pub fn due_bystander_wakes(ctx: &ReducerContext, now: u64, tick: u64) {
     let due: Vec<u32> = BYSTANDER.with(|b| {
         let mut b = b.borrow_mut();
         let mut out = Vec::new();
@@ -1861,13 +1862,30 @@ pub fn due_bystander_wakes(ctx: &ReducerContext, now: u64) {
     });
     // By id: the map's own order is the hasher's, which on wasm32 comes from memory addresses and
     // so differs between builds; the order of these wakes is the order the woken are evaluated in
-    // this tick (docs/COMBAT_PHASE.md, "Step 3 results").
+    // this tick (docs/COMBAT_PHASE.md, "Step 3 results"). Those evaluated first act first, so the
+    // start turns with the tick: in id order alone the lowest ids would always go first. The
+    // turn depends on the tick count alone, the same in every build ("Wake order").
     let mut due = due;
     due.sort_unstable();
+    let start = wake_rotation(tick, due.len());
+    if laws(ctx).det_clock && !due.is_empty() {
+        log::info!("det wakes tick={tick} due={due:?} start={start}");
+    }
+    due.rotate_left(start);
     for id in due {
         diag(|| "wake:due", 1);
         wake(ctx, id);
     }
+}
+
+/// Where tick `tick`'s delivery of `n` due wakes starts in their id order: `tick` mod `n`. A
+/// build with `LIVING_DET_NOROTATE` set at compile time starts at 0 (id order, as before), the
+/// control for the comparison that the rotation changes only the order (det_compare).
+fn wake_rotation(tick: u64, n: usize) -> usize {
+    if n < 2 || option_env!("LIVING_DET_NOROTATE").is_some() {
+        return 0;
+    }
+    (tick % n as u64) as usize
 }
 
 /// While profiling, each wake is counted under where it was asked from (`wake@act.rs:1540`).
