@@ -343,7 +343,7 @@ A world needs its cover bands (`cover_ground`) for the switch. Since `cover-gene
 
 ## Cover geometry only where cover is on (2026-11-20)
 
-Branch `cover-genesis` (Spark), on main `b6aa7489` (staged genesis: every seeded world is made by `genesis_step` after `init`), rustc 1.99.1, SpacetimeDB 2.14.1 on a private server.
+Branch `cover-genesis` (Spark), measured on main `b6aa7489` (staged genesis: every seeded world is made by `genesis_step` after `init`) and checked again on `a4d4b2ab`, rustc 1.99.1, SpacetimeDB 2.14.1 on a private server. A creation's last, finishing `genesis_step` (`floor::finish`) publishes the cover in force; when the law went on during creation after hosting, it also starts the derivation.
 
 Before this branch, every land sampled its ground at every tile centre in its hosting step and kept it in `cover_ground`, whatever its cover law. That made `floor-megacity-4k`'s hosting step run out of energy, so the floor stalled at step 130 of 141. It was also most of every other land's hosting step. Now a world keeps cover geometry only when cover is on. The same rules apply to players and minds. Where cover is on, the bands are byte-identical to before.
 
