@@ -25,6 +25,15 @@ touches behaviour, these cases with the fake model only:
                  its per-world checks, the seed's laws composed over the shipped script among them,
                  on the world, island, cullet and cullet-laws genesis worlds; a failing check is a
                  part `<case>:<seed>:<check>` the red-on-main list can hold)
+  verify-ui      the render group, only when a merge changes how the client draws (RENDER_CHARACTER,
+                 RENDER_CAMERA, RENDER_BOTH; docs/TOOLING.md, "The render group"): looks (Cullet),
+                 hair, seat, camera-faces, camera-lod, far (island), check.py one at a time after
+                 every other group, on the pinned render asset set (render_set.py check, then link;
+                 corrupt or stale fail setup, exit 2). A case fails on check.py's exit and on
+                 shader/pipeline, asset (bevy_asset) or panic ERROR lines in its client logs; a log
+                 saying the book lacks a key or generation is "asset set stale" (exit 2). A host
+                 without a set runs render-smoke and refuses the merge unless the render host
+                 recorded a pass for the same content (the `render-passes` branch).
 
 The world groups and the tests run at once. A case whose only failures are parts on the red-on-main
 list (a mind test `living-mind::<test>`, a combat scene `combat:<scene>`) passes and says which. Flakes: a failing case runs again once, alone, on a fresh scratch
@@ -52,12 +61,16 @@ Usage:
       --force     run even when no behavioural path changed
       --genesis-only  the genesis fuel publishes alone: no scenes, no red-on-main list
       --genesis-fuel-report JSON  a staged genesis_fuel.py report for its seed (repeatable)
+      --render-only  only the render cases the diff selects (all with --force), on this host's set;
+                  records the pass (for a merge another host refused)
+      --render-split  character paths run looks, hair and seat; camera paths camera-faces,
+                  camera-lod and far (LIVING_GATE_RENDER_SPLIT=1)
   scene_gate.py seeds [--json PATH]   compiled seeds against their living/seeds/worlds/ sources
                   (seed_fresh.py, files only); a stale block listed red on main as
                   `seeds:<seed>:<block>` does not fail. living-merge runs it before the check
   scene_gate.py genesis-baseline RECORD SEED... [--note TEXT]   record SEEDs' init fuel from a
                   gate's genesis.json or gate.json as their baselines for its rustc
-  scene_gate.py touches --base A --head B   exit 0 when A..B touches behaviour, 1 when not
+  scene_gate.py touches --base A --head B   exit 0 when A..B touches behaviour or drawing, 1 when not
   scene_gate.py reds [--reds PATH] [--json] [--owner CASE WHO] [--drop CASE]
                   [--add CASE --skill S --who OWNER --reason WHY [--main SHA] [--evidence PATH]]
                   the red-on-main list (for the daily digest); --add lists a case known red
@@ -77,9 +90,15 @@ SLOP_GATE_GENESIS_CHECK=0 (disable with a warning), LIVING_GATE_REDS (the list's
 ~/slop-mq/red-on-main.json when ~/slop-mq exists, else the state folder below),
 LIVING_GATE_REDS_REMOTE / _BRANCH (origin, red-on-main), LIVING_GATE_REDS_REPO (the repository that
 reaches it; default this file's), LIVING_GATE_REDS_GIT=0 (the cache alone, no git), LIVING_GATE_MAIN_DIR (main's checkout for
-the main check; its build folder is <dir>-target). State: ~/.local/state/slop-merge/scene-gate/.
+the main check; its build folder is <dir>-target), LIVING_GATE_RENDER_ASSETS (the pinned render asset
+set; default ~/slop-assets/current), LIVING_GATE_RENDER_HOST (named in a refusal; default dev-box),
+LIVING_GATE_RENDER_SPLIT=1, LIVING_GATE_PASSES (the recorded render passes' cache; default
+~/slop-mq/render-passes.json when ~/slop-mq exists), LIVING_GATE_PASSES_BRANCH (render-passes),
+LIVING_GATE_SMOKE_ASSETS (render-smoke's cache; default ~/.cache/slop-render-smoke).
+State: ~/.local/state/slop-merge/scene-gate/.
 Exit: 0 passed, skipped, or scenes failed only where main fails too; 1 genesis failed, or a
-scene failed only on the branch (or could not be judged on main); 2 usage or setup error.
+scene failed only on the branch (or could not be judged on main), or render cases needed here
+without a set or a recorded pass; 2 usage or setup error, the render asset set corrupt or stale.
 No case uses Neo4j (the minds cases run LIVING_NEO4J=off). It never touches a database outside
 verify-gate-<this run>-*: not the paid verify-trial-* batches, nor sao-living_*.
 """
@@ -124,6 +143,19 @@ COPY_PRIVACY_PATHS = ("living/authority/src/frame.rs", "living/authority/src/per
                       "living/tools/battle_viewers.py", "living/tools/gate_load/", ".agents/skills/verify-client/scripts/probe/",
                       ".agents/skills/verify-client/scripts/motion_tables.py", ".agents/skills/verify-client/scripts/cues.py")
 
+# The render group (gate-render, 2026-11-20): verify-ui's drawing cases, for merges that change how
+# the client draws people, the camera or sight. Each glob's `*` stays within a folder, `**` crosses
+# folders. A character path selects the character cases, a camera path the camera cases; a path in
+# RENDER_BOTH (another shader, the verify-ui drivers, the client's manifest) selects both. Without
+# the split (LIVING_GATE_RENDER_SPLIT=1, --render-split) any of them selects every render case.
+GAME = "living/game/src/"
+RENDER_CHARACTER = tuple(GAME + p for p in (
+    "toon*.wesl", "edges.wesl", "characters/**", "characters.rs", "handmade.rs", "style.rs", "lookdev.rs", "looks.rs",
+    "bodies.rs", "anim.rs", "gait.rs", "ik.rs", "twist.rs", "mouth.rs", "facing.rs", "post.rs"))
+RENDER_CAMERA = tuple(GAME + p for p in (
+    "terrain.wesl", "sky.wesl", "water.wesl", "camera.rs", "perf.rs", "fade.rs", "envs.rs", "sightfield.rs", "sightedge.rs"))
+RENDER_BOTH = (GAME + "*.wesl", "living/game/Cargo.toml", ".agents/skills/verify-ui/scripts/**")
+
 # Each case: its surface skill and the world group it runs in. Known flakes are from the skills'
 # validation records (each skill's references/validation/); they get the same one retry, never a pass.
 CASES = {
@@ -167,6 +199,18 @@ CASES = {
     "mind-unit":    {"skill": "living-mind", "group": "unit",
                      "flaky": "timing bounds under load: llm::tests::unreachable_provider_holds_calls (1.97 s against 2 s), "
                               "fake_transport_records_caching_usage_and_paced_429_recovery (the 180 ms queue wait)"},
+    # The render group (verify-ui's check.py, one case at a time, after every other group; on the
+    # host with a render asset set, `LIVING_GATE_RENDER_ASSETS`): `world` is the seed its world is
+    # launched from, `render` the class of paths that selects it with the split on.
+    "looks":        {"skill": "verify-ui", "group": "render", "world": "cullet", "render": "character"},
+    "hair":         {"skill": "verify-ui", "group": "render", "world": "island", "render": "character"},
+    "seat":         {"skill": "verify-ui", "group": "render", "world": "island", "render": "character"},
+    "camera-faces": {"skill": "verify-ui", "group": "render", "world": "island", "render": "camera"},
+    "camera-lod":   {"skill": "verify-ui", "group": "render", "world": "island", "render": "camera"},
+    "far":          {"skill": "verify-ui", "group": "render", "world": "island", "render": "camera"},
+    # A host without the set runs this instead (the VRoid bases, the look-dev tour and one live
+    # drive; shader, pipeline and panic lines fail it), and needs a recorded render pass.
+    "render-smoke": {"skill": "verify-ui", "group": "render-smoke"},
 }
 # Parts of a case listed on the red-on-main list by key: `living-mind::<test>` (a mind-unit test)
 # and `combat:<scene>` (a verify-player combat scene). A case whose only failures are listed parts
@@ -354,6 +398,254 @@ def behavioural(paths):
     return [p for p in paths if p.startswith(BEHAVIOUR)]
 
 
+# ---------------------------------------------------------------- the render group: selection
+
+RENDER_CASES = [c for c in CASES if CASES[c]["group"] == "render"]
+RENDER_GROUPS = ("render", "render-smoke")
+RENDER_HOST = os.environ.get("LIVING_GATE_RENDER_HOST", "dev-box")  # named when a host lacks the set
+
+
+def glob_re(pattern):
+    """A path glob as a regex: `**` any run of characters, `*` and `?` within one folder."""
+    out, i = "", 0
+    while i < len(pattern):
+        if pattern.startswith("**", i):
+            out, i = out + ".*", i + 2
+        elif pattern[i] in "*?":
+            out, i = out + ("[^/]*" if pattern[i] == "*" else "[^/]"), i + 1
+        else:
+            out, i = out + re.escape(pattern[i]), i + 1
+    return re.compile(out + r"\Z")
+
+
+_GLOBS = {}
+
+
+def glob_match(path, globs):
+    return any((_GLOBS.get(g) or _GLOBS.setdefault(g, glob_re(g))).match(path) for g in globs)
+
+
+def render_classes(paths):
+    """{class: [paths]} for the drawing paths among `paths`: `character`, `camera`, `both`."""
+    out = {}
+    for p in paths:
+        kind = ("character" if glob_match(p, RENDER_CHARACTER) else "camera" if glob_match(p, RENDER_CAMERA)
+                else "both" if glob_match(p, RENDER_BOTH) else None)
+        if kind:
+            out.setdefault(kind, []).append(p)
+    return out
+
+
+def rendering(paths):
+    return [p for ps in render_classes(paths).values() for p in ps]
+
+
+def render_selection(paths, split=False):
+    """The render cases a diff needs: none when it draws nothing; all of them, or with the split
+    the character cases for character paths and the camera cases for camera paths."""
+    kinds = render_classes(paths)
+    if not kinds:
+        return []
+    if not split or "both" in kinds:
+        return list(RENDER_CASES)
+    return [c for c in RENDER_CASES if CASES[c]["render"] in kinds]
+
+
+# ---------------------------------------------------------------- the render asset set
+
+# The set's format, staleness and links are living/tools/render_set.py's (docs/TOOLING.md, "Render
+# asset set"); the gate runs its `check` and `link` and maps the verdicts.
+RENDER_ASSETS = os.environ.get("LIVING_GATE_RENDER_ASSETS") or str(HOME / "slop-assets/current")
+RENDER_SET_TOOL = "living/tools/render_set.py"
+RENDER_SEEDS = ("cullet", "island")  # the worlds the render cases launch, in this order
+
+
+def render_set_present(path=None):
+    p = Path(path or RENDER_ASSETS)
+    return p.exists() or p.is_symlink()  # a dangling `current` is a broken set, not an absent one
+
+
+def render_set_check(repo, path=None, tool_repo=None):
+    """render_set.py check of the set at `path` against the checkout `repo`: (verdict, set.json with
+    its resolved `dir`, reasons). Verdicts: ok, corrupt (its exit 1, or a check that could not run),
+    stale (its exit 2)."""
+    path = str(path or RENDER_ASSETS)
+    tool = Path(tool_repo or repo) / RENDER_SET_TOOL
+    if not tool.is_file():
+        return "corrupt", None, [f"no {RENDER_SET_TOOL} in {tool_repo or repo}"]
+    try:
+        r = subprocess.run([sys.executable, str(tool), "check", path, "--repo", str(repo)], capture_output=True, text=True, timeout=3600)
+    except subprocess.TimeoutExpired:
+        return "corrupt", None, ["render_set.py check took over an hour"]
+    try:
+        got = json.loads(r.stdout)
+    except ValueError:
+        got = {}
+    verdict = {0: "ok", 2: "stale"}.get(r.returncode, "corrupt")
+    reasons = list(got.get("reasons") or []) or ([] if r.returncode == 0 else [(r.stderr or r.stdout).strip()[-400:] or f"exit {r.returncode}"])
+    where = got.get("set") or str(Path(path).resolve())
+    meta = load_json(Path(where) / "set.json", None)
+    return verdict, (dict(meta, dir=where) if isinstance(meta, dict) else None), reasons
+
+
+def render_set_link(tool_repo, game_root, set_dir):
+    """render_set.py link: the set's files into a checkout's living/game/assets; (ok, output). The links
+    stay (the ignore patterns match them); the next gate's link replaces them."""
+    r = subprocess.run([sys.executable, str(Path(tool_repo) / RENDER_SET_TOOL), "link", str(set_dir), "--repo", str(game_root)],
+                       capture_output=True, text=True, timeout=300)
+    return r.returncode == 0, (r.stdout + r.stderr).strip()
+
+
+def sha256_file(path):
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def link_set(game_root, src_root, links):
+    """render-smoke's own lookdev (not a render set): link each of `links` from src_root into
+    living/game/assets; [(link, target)] made. Refuses a path that exists as a real file or folder."""
+    base = Path(game_root) / "living/game/assets"
+    made = []
+    for rel in links:
+        dst, src = base / rel, Path(src_root) / rel
+        if dst.is_symlink():
+            dst.unlink()  # an earlier link (a render set's, or a smoke killed before its cleanup)
+        elif dst.exists():
+            unlink_set(made)
+            raise RuntimeError(f"{dst} exists and is not a link")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.symlink_to(src, target_is_directory=src.is_dir())
+        made.append((dst, src))
+    return made
+
+
+def unlink_set(made):
+    for dst, src in made:
+        if dst.is_symlink() and os.readlink(dst) == str(src):
+            dst.unlink()
+
+
+# ---------------------------------------------------------------- the render group: logs
+
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+LOG_LINE_RE = re.compile(r"^\S+\s+(ERROR|WARN|INFO|DEBUG|TRACE)\s+([\w:]+):\s?(.*)$")
+SHADER_TARGETS = ("wgpu", "wgpu_core", "wgpu_hal", "naga", "bevy_render", "bevy_pbr", "bevy_core_pipeline")
+SHADER_WORDS = re.compile(r"Shader|pipeline|Validation Error")
+STALE_LINES = re.compile(r"is not in the look book|which the look book \(.*\) does not hold|looks: no look book at")
+# Drives that leave a key or a generation out of their book on purpose (check.py `looks`, `camera-faces`).
+STALE_EXEMPT = ("looks", "looks-generation", "camera-faces")
+
+
+def scan_log(text, stale_exempt=False):
+    """A client log's failing lines by verdict: `shader` (shader and pipeline ERRORs: the code),
+    `asset` (bevy_asset ERRORs: a load failure, the code or the set), `stale` (the book lacks a key
+    or the world's generation: the set) and `panic`. WARN lines never fail."""
+    out = {"shader": [], "asset": [], "stale": [], "panic": []}
+    for raw in text.splitlines():
+        line = ANSI.sub("", raw).strip()
+        if " panicked at " in line:
+            out["panic"].append(line)
+        m = LOG_LINE_RE.match(line)
+        if m and m[1] == "ERROR":
+            if m[2].split("::")[0] in SHADER_TARGETS or SHADER_WORDS.search(m[3]):
+                out["shader"].append(line)
+            elif m[2].split("::")[0] == "bevy_asset":
+                out["asset"].append(line)
+        if not stale_exempt and STALE_LINES.search(line):
+            out["stale"].append(line)
+    return out
+
+
+def client_logs(ev):
+    """{path: mtime} of every client.log under a run's evidence."""
+    out = {}
+    for p in Path(ev).glob("ui/**/client.log"):
+        try:
+            out[str(p)] = p.stat().st_mtime_ns
+        except OSError:
+            pass
+    return out
+
+
+def scan_logs(paths, verdicts=("shader", "asset", "stale", "panic")):
+    """Each verdict's lines over the given client logs, `<drive>: <line>`."""
+    got = {v: [] for v in verdicts}
+    for path in sorted(paths):
+        drive = Path(path).parent.name
+        try:
+            found = scan_log(Path(path).read_text(errors="replace"), stale_exempt=drive in STALE_EXEMPT)
+        except OSError:
+            continue
+        for v in verdicts:
+            got[v] += [f"{drive}: {line}" for line in found[v]]
+    return got
+
+
+def log_note(got):
+    names = {"shader": "shader/pipeline", "asset": "asset", "stale": "asset set stale", "panic": "panic"}
+    return "; ".join(f"{names[v]}: {len(lines)} line{'s' if len(lines) != 1 else ''} (first: {lines[0][-200:]})"
+                     for v, lines in got.items() if lines)
+
+
+# ---------------------------------------------------------------- render-smoke's assets
+
+# The VRoid bases (CC0; living/tools/lookdev_assets.sh), pinned to the mirror's commit and their sha256.
+SMOKE_COMMIT = "e16eb187100149a315ad92c3c9968f1d5baa6c7d"
+SMOKE_FILES = {
+    "vroid-Sendagaya_Shino.glb": ("vroid/beta/Sendagaya_Shino.vrm", "1e177c1a7b14f783a9c48395831db8616260d3bddd4154cb2784b779adca49b5"),
+    "vroid-Vivi.glb": ("vroid/beta/Vivi.vrm", "eaf902e041a7a810f1423599ae75682f61184ab6ef0206da9a8ed9caa8ec3a9d"),
+}
+SMOKE_ASSETS = Path(os.environ.get("LIVING_GATE_SMOKE_ASSETS") or HOME / ".cache/slop-render-smoke")
+SMOKE_PLAN = "ready;wait:1;dump:middle;shot:middle;notches:30;wait:2;shot:near;notches:-60;wait:3;shot:far;dump:far;quit"
+
+
+def smoke_assets():
+    """The smoke's lookdev folder, fetched once and checked every time; raises when it cannot be."""
+    d = SMOKE_ASSETS / "lookdev"
+    d.mkdir(parents=True, exist_ok=True)
+    for name, (src, want) in SMOKE_FILES.items():
+        f = d / name
+        if not f.exists() or sha256_file(f) != want:
+            tmp = f.with_suffix(".part")
+            url = f"https://raw.githubusercontent.com/madjin/vrm-samples/{SMOKE_COMMIT}/{src}"
+            with urllib.request.urlopen(url, timeout=120) as r, open(tmp, "wb") as out:
+                shutil.copyfileobj(r, out)
+            if sha256_file(tmp) != want:
+                tmp.unlink()
+                raise RuntimeError(f"{url} does not have the pinned sha256")
+            tmp.replace(f)
+    return d
+
+
+# ---------------------------------------------------------------- recorded render passes
+
+# A host without the set may merge a drawing change only when the render host recorded a pass
+# for the same content: the trees of `living/` and the verify skills the cases run, so the same
+# merge made on two machines (two merge commits) has one key, and a docs commit on main keeps it.
+RENDER_KEY_PATHS = ("living", ".agents/skills/verify", ".agents/skills/verify-ui")
+PASSES_BRANCH = os.environ.get("LIVING_GATE_PASSES_BRANCH", "render-passes")
+PASSES_FILE = "render-passes.json"
+PASSES_DEFAULT = HOME / "slop-mq/render-passes.json" if (HOME / "slop-mq").is_dir() else STATE / "render-passes.json"
+PASS_OK = ("pass", "flaky-pass", "red-on-main")
+
+
+def render_key(rev="HEAD", cwd=None):
+    import hashlib
+    h = hashlib.sha256()
+    for p in RENDER_KEY_PATHS:
+        h.update(f"{p} {git('rev-parse', f'{rev}:{p}', cwd=cwd, check=False)}\n".encode())
+    return h.hexdigest()[:40]
+
+
+def pass_covers(entry, needed):
+    """Whether a recorded render pass covers every needed case."""
+    return bool(entry) and all((entry.get("cases") or {}).get(c) in PASS_OK for c in needed)
+
+
 # ---------------------------------------------------------------- the red-on-main list
 
 def load_json(path, default):
@@ -423,8 +715,10 @@ class RedsLock:
         self.f.close()
 
 
-def fetch_reds():
-    """(the list on the remote, its commit or None when the branch does not exist yet), or raise."""
+def fetch_reds(branch=REDS_BRANCH, file=REDS_FILE):
+    """(the list on the remote, its commit or None when the branch does not exist yet), or raise.
+    The same for another shared list (`render-passes`) by branch and file."""
+    REDS_BRANCH, REDS_FILE = branch, file  # noqa: N806 (the messages below name the list's own branch)
     ref = f"refs/remotes/{REDS_REMOTE}/{REDS_BRANCH}"
     for attempt in range(3):
         r = rgit("fetch", "-q", REDS_REMOTE, f"+refs/heads/{REDS_BRANCH}:{ref}")
@@ -446,22 +740,22 @@ def fetch_reds():
     return json.loads(show.stdout), sha
 
 
-def refresh_reds(cache):
+def refresh_reds(cache, branch=REDS_BRANCH, file=REDS_FILE):
     """Read the list from the remote into the cache; on failure keep the cache and say so."""
     if not REDS_GIT:
         return load_json(cache, {})
     try:
         with RedsLock():
-            reds, sha = fetch_reds()
+            reds, sha = fetch_reds(branch, file)
     except Exception as e:  # unreachable remote, a timeout, a broken branch: the cache stands in
-        say(f"note: could not read the red-on-main list from {REDS_REMOTE}/{REDS_BRANCH} ({e}); using the local cache {cache}"
+        say(f"note: could not read the {'red-on-main' if branch == REDS_BRANCH else branch} list from {REDS_REMOTE}/{branch} ({e}); using the local cache {cache}"
             + (f" (written {time.strftime('%Y-%m-%d %H:%M', time.localtime(Path(cache).stat().st_mtime))})" if Path(cache).exists() else " (none: empty)"))
         return load_json(cache, {})
     save_json(cache, reds)
     return reds
 
 
-def update_reds(cache, change, message, tries=8):
+def update_reds(cache, change, message, tries=8, branch=REDS_BRANCH, file=REDS_FILE):
     """Apply change(reds) -> True when it changed something, commit it to the branch and push;
     retried on a non-fast-forward. Returns the list as now on the remote. Raises when the remote
     cannot be written: the change is then not made anywhere (the cache is left as read)."""
@@ -473,19 +767,20 @@ def update_reds(cache, change, message, tries=8):
             return reds
         for attempt in range(tries):
             with RedsLock():  # this clone's other writers wait; other machines are caught by the push
-                reds, base = fetch_reds()
+                reds, base = fetch_reds(branch, file)
                 if not change(reds):
                     save_json(cache, reds)
                     return reds
-                if push_reds(reds, base, message, cache):
+                if push_reds(reds, base, message, cache, branch, file):
                     return reds
             time.sleep(0.2 * (attempt + 1))  # another machine got there first: read again
-        raise RuntimeError(f"{REDS_REMOTE}/{REDS_BRANCH} kept moving: {tries} tries")
+        raise RuntimeError(f"{REDS_REMOTE}/{branch} kept moving: {tries} tries")
 
 
-def push_reds(reds, base, message, cache):
+def push_reds(reds, base, message, cache, branch=REDS_BRANCH, file=REDS_FILE):
     """Commit the list on `base` and push it without force: True when it landed, False when the
     branch moved meanwhile; raise on any other failure."""
+    REDS_BRANCH, REDS_FILE = branch, file  # noqa: N806
     blob = rgit("hash-object", "-w", "--stdin", input=json.dumps(reds, indent=2, sort_keys=True) + "\n").stdout.strip()
     tree = rgit("mktree", input=f"100644 blob {blob}\t{REDS_FILE}\n").stdout.strip()
     commit = rgit("commit-tree", tree, *(["-p", base] if base else []), "-m",
@@ -548,13 +843,18 @@ class Runner:
         self.smoke_seeds = set()  # seeds whose genesis world the generation smoke reads first
         self.smoke = {}  # (root, seed) -> (failed checks or None when it did not run, evidence)
         self.fresh = 0  # numbers the generation cases' own worlds
+        self.render_set = None  # the checked render asset set (set.json and its `dir`) on a render host
+        self.render_tool = None  # the checkout whose render_set.py links the set (the tree under test's)
+        self.stale = []  # drive log lines that say the set is stale (the book lacks a key or generation)
+        self.render_setup = None  # why the set could not be put in place (a setup failure, not a case's)
+        self.client_built = set()  # roots whose release client this gate has built
 
-    def sh(self, cmd, root, log, timeout, stdout=None):
+    def sh(self, cmd, root, log, timeout, stdout=None, env=None):
         """Run one command in its own process group, output appended to log; return its code."""
         with open(log, "a") as f:
             f.write(f"$ {' '.join(map(str, cmd))}\n")
             f.flush()
-            p = subprocess.Popen([str(c) for c in cmd], cwd=root, env=self.env, stdout=stdout or f, stderr=f,
+            p = subprocess.Popen([str(c) for c in cmd], cwd=root, env=env or self.env, stdout=stdout or f, stderr=f,
                                  start_new_session=True)
             with LOCK:
                 self.procs.add(p)
@@ -715,6 +1015,10 @@ class Runner:
                     self.notes[(tag, c)] = ("only listed red checks failed: " if ok else "failed: ") + "; ".join(failed)
                 res[c] = (ok, ", ".join(evidence), time.time() - t0)
             return res
+        if group == "render":
+            return self.render(root, cases, tag, t0)
+        if group == "render-smoke":
+            return {"render-smoke": self.render_smoke(root, tag, t0)}
         if group == "minds":
             suite = f"gate-{self.stamp}-{tag}"
             ev = Path(root) / ".local/living/verify" / suite
@@ -787,6 +1091,121 @@ class Runner:
         finally:
             self.cleanup(root, run, log)
 
+    def render_env(self):
+        """The render cases' environment: the gate's, without what would change how the client draws
+        or logs (Vulkan validation logs benign ERRORs; a window, a theme or a forced shine)."""
+        drop = ("WGPU_VALIDATION", "WGPU_DEBUG", "LIVING_GAME_WINDOW", "LIVING_GAME_THEME", "LIVING_GAME_HAIR_SHINE",
+                "LIVING_GAME_HAIR_RING", "LIVING_GAME_LOOK_BOOK", "RUST_LOG")
+        return {k: v for k, v in self.env.items() if k not in drop}
+
+    def build_client(self, root, log):
+        """The release client in the gate's CARGO_TARGET_DIR, once per root; its exit code."""
+        if str(root) in self.client_built:
+            return 0
+        code = self.sh(["cargo", "build", "--release", "--manifest-path", "living/Cargo.toml", "-p", "living-game"], root, log, 2400)
+        if code == 0:
+            self.client_built.add(str(root))
+        return code
+
+    def render(self, root, cases, tag, t0):
+        """verify-ui's drawing cases on the render asset set, one at a time, a world per seed:
+        {case: (ok, evidence, seconds)}. A case fails on check.py's exit and on shader, pipeline,
+        asset or panic lines in its drives' client logs; stale-set lines are kept for the verdict."""
+        res = {}
+        if not self.render_set:
+            return {c: (False, f"render: not run here; needs a pinned asset set ({RENDER_HOST})", 0.0) for c in cases}
+        log = self.out / f"{tag}.log"
+        try:
+            linked, said = render_set_link(self.render_tool or root, root, self.render_set["dir"])
+            with open(log, "a") as f:
+                f.write(f"render_set.py link: {said}\n")
+            if not linked:
+                with LOCK:
+                    self.render_setup = f"render_set.py link failed: {said[-300:]}"
+                return {c: (False, f"render setup: {self.render_setup}", time.time() - t0) for c in cases}
+            if self.build_client(root, log):
+                return {c: (False, f"{log} (client build failed)", time.time() - t0) for c in cases}
+            env = self.render_env()
+            uv = shutil.which("uv")
+            check = [uv, "run", "--no-project", "--with", "pillow", "--with", "numpy", "python"] if uv else [sys.executable]
+            for seed in RENDER_SEEDS:
+                todo = [c for c in cases if CASES[c]["world"] == seed]
+                if not todo:
+                    continue
+                run = f"gate-{self.stamp}-{tag}-{seed[:3]}"
+                ev = Path(root) / ".local/living/verify" / run
+                ev.mkdir(parents=True, exist_ok=True)
+                try:
+                    if not self.world(root, run, seed, log):
+                        res.update({c: (False, f"{log} (launch or doctor failed)", time.time() - t0) for c in todo})
+                        continue
+                    for c in todo:
+                        before = client_logs(ev)
+                        code = self.sh([*check, ".agents/skills/verify-ui/scripts/check.py", "--run", run, c], root,
+                                       ev / f"render-{c}.txt", 1800, env=env)
+                        checks = ev / "ui" / "checks.json"
+                        if checks.exists():
+                            shutil.copy(checks, ev / "ui" / f"checks-{c}.json")
+                        logs = [p for p, m in client_logs(ev).items() if before.get(p) != m]
+                        got = scan_logs(logs)
+                        with LOCK:
+                            self.stale += [f"{c}: {line}" for line in got.pop("stale")]
+                        bad = {v: lines for v, lines in got.items() if lines}
+                        notes = ([f"check.py exit {code}"] if code else []) + ([log_note(bad)] if bad else []) + \
+                            ([] if logs else ["no client log"])
+                        if notes:
+                            self.notes[(tag, c)] = "; ".join(notes)
+                        res[c] = (code == 0 and not bad and bool(logs), str(ev / "ui" / f"checks-{c}.json"), time.time() - t0)
+                finally:
+                    self.cleanup(root, run, log)
+            return res
+        except (RuntimeError, OSError, subprocess.SubprocessError) as e:
+            return {c: (False, f"render setup: {e}", time.time() - t0) for c in cases}
+
+    def render_smoke(self, root, tag, t0):
+        """A host without the set: the VRoid bases, the look-dev island tour and one live drive on an
+        island world. Fails on a client that did not finish and on shader, pipeline or panic lines
+        (missing kits, textures and the book are expected here: no asset or stale verdict)."""
+        log = self.out / f"{tag}.log"
+        run = f"gate-{self.stamp}-{tag}"
+        ev = Path(root) / ".local/living/verify" / run
+        ev.mkdir(parents=True, exist_ok=True)
+        made, notes = [], []
+        try:
+            try:
+                lookdev = smoke_assets()
+                made = link_set(root, lookdev.parent, ["lookdev"])
+            except Exception as e:
+                return (False, f"render-smoke assets: {type(e).__name__}: {e}", time.time() - t0)
+            if self.build_client(root, log):
+                return (False, f"{log} (client build failed)", time.time() - t0)
+            env = self.render_env()
+            tour = ev / "ui" / "tour"
+            tour.mkdir(parents=True, exist_ok=True)
+            client = Path(env.get("CARGO_TARGET_DIR", Path(root) / "living/target")) / "release/living-game"
+            code = self.sh([client], root, tour / "client.log", 600,
+                           env=dict(env, LIVING_GAME_LOOKDEV="1", LIVING_GAME_TOUR=str(tour), LIVING_GAME_TOUR_ONLY="island",
+                                    LIVING_GAME_TOUR_SHOTS="default", LIVING_GAME_SIZE="1280x720"))
+            if code or not list(tour.glob("*.png")):
+                notes.append(f"tour exit {code}, {len(list(tour.glob('*.png')))} photographs")
+            if not self.world(root, run, "island", log):
+                notes.append("world launch or doctor failed")
+            else:
+                code = self.sh([sys.executable, ".agents/skills/verify-ui/scripts/drive.py", "--run", run, "--name", "smoke",
+                                "--plan", SMOKE_PLAN, "--timeout", "420"], root, ev / "drive.txt", 600, env=env)
+                shots = list((ev / "ui" / "smoke").glob("*.png"))
+                if code or len(shots) < 3:
+                    notes.append(f"live drive exit {code}, {len(shots)} photographs")
+            got = scan_logs(list(client_logs(ev)), verdicts=("shader", "panic"))
+            if any(got.values()):
+                notes.append(log_note(got))
+            if notes:
+                self.notes[(tag, "render-smoke")] = "; ".join(notes)
+            return (not notes, str(ev / "ui"), time.time() - t0)
+        finally:
+            unlink_set(made)
+            self.cleanup(root, run, log)
+
     def copy_privacy(self, root, run, ev, log, t0):
         """battle_viewers.py --privacy at 16 viewers on this group's island module (its own fresh
         database, from the launched run's module copy): (ok, evidence, seconds)."""
@@ -824,34 +1243,49 @@ def run_part(name):
 
 
 def run_cases(runner, root, cases, tag):
-    """All `cases` at once, one task per world group; {case: (ok, evidence, seconds)}."""
+    """All `cases` at once, one task per world group, then the render groups alone (they never run
+    beside another group: a client and its GPU work on top of the scenes would load the host past
+    what the scenes' timings allow); {case: (ok, evidence, seconds)}."""
     groups = {}
     for c in cases:
         groups.setdefault(spec(c)["group"], []).append(c)
     out = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(groups))) as ex:
-        futs = {ex.submit(runner.group, root, g, cs, f"{tag}-{run_part(g)}"): g for g, cs in groups.items()}
+
+    def report(g, got):
+        for c, (ok, ev, secs) in got.items():
+            # a note (listed red parts that failed, or which parts failed) travels with the evidence
+            note = runner.notes.get((f"{tag}-{run_part(g)}", c))
+            ev = f"{ev} [{note}]" if note else ev
+            say(f"{tag}: {c} {'passed' if ok else 'FAILED'} in {secs:.0f} s ({ev})")
+            out[c] = (ok, ev, secs)
+
+    def one(g):
+        try:
+            return runner.group(root, g, groups[g], f"{tag}-{run_part(g)}")
+        except Exception as e:  # a driver crash is the group's failure, never the gate's crash
+            return {c: (False, f"gate error: {type(e).__name__}: {e}", 0.0) for c in groups[g]}
+    scenes = [g for g in groups if g not in RENDER_GROUPS]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(scenes))) as ex:
+        futs = {ex.submit(one, g): g for g in scenes}
         for f in concurrent.futures.as_completed(futs):
-            try:
-                got = f.result()
-            except Exception as e:  # a driver crash is the group's failure, never the gate's crash
-                got = {c: (False, f"gate error: {type(e).__name__}: {e}", 0.0) for c in groups[futs[f]]}
-            for c, (ok, ev, secs) in got.items():
-                # a note (listed red parts that failed, or which parts failed) travels with the evidence
-                note = runner.notes.get((f"{tag}-{run_part(futs[f])}", c))
-                ev = f"{ev} [{note}]" if note else ev
-                say(f"{tag}: {c} {'passed' if ok else 'FAILED'} in {secs:.0f} s ({ev})")
-                out[c] = (ok, ev, secs)
+            report(futs[f], f.result())
+    for g in RENDER_GROUPS:
+        if g in groups:
+            report(g, one(g))
     return out
 
 
 def retry_each(runner, root, cases, tag):
-    """Each case alone on its own fresh world, all at once."""
+    """Each case alone on its own fresh world, all at once; then each render case alone, one at a time."""
     out = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(cases))) as ex:
-        futs = {ex.submit(run_cases, runner, root, [c], f"{tag}-{run_part(c)}"): c for c in cases}
+    scenes = [c for c in cases if spec(c)["group"] not in RENDER_GROUPS]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(scenes))) as ex:
+        futs = {ex.submit(run_cases, runner, root, [c], f"{tag}-{run_part(c)}"): c for c in scenes}
         for f in concurrent.futures.as_completed(futs):
             out.update(f.result())
+    for c in cases:
+        if c not in scenes:
+            out.update(run_cases(runner, root, [c], f"{tag}-{run_part(c)}"))
     return out
 
 
@@ -884,7 +1318,8 @@ def judge_on_main(a, runner, repo, base, cases, record):
             continue
         e = reds.get(c)
         if e and e.get("last_main") and git("cat-file", "-t", e["last_main"], cwd=repo, check=False) == "commit":
-            moved = behavioural(changed(e["last_main"], base, cwd=repo))
+            between = changed(e["last_main"], base, cwd=repo)
+            moved = behavioural(between) + (rendering(between) if spec(c)["group"] in RENDER_GROUPS else [])
             if not moved:
                 verdict[c] = ("red-on-main", e["last_evidence"],
                               f"listed red on main {e['last_main'][:10]}; nothing behavioural changed since")
@@ -905,10 +1340,16 @@ def judge_on_main(a, runner, repo, base, cases, record):
                     verdict[c] = ("unknown", "", f"main {base[:10]}'s drivers predate the scene gate")
                 todo = []
                 break
+        drive = root / ".agents/skills/verify-ui/scripts/drive.py"
+        if any(spec(c)["group"] in RENDER_GROUPS for c in todo) and "verify-gate-" not in (drive.read_text() if drive.exists() else ""):
+            for c in [c for c in todo if spec(c)["group"] in RENDER_GROUPS]:
+                verdict[c] = ("unknown", "", f"main {base[:10]}'s verify-ui drivers predate the render group")
+                todo.remove(c)
     if todo:
         say(f"judging {', '.join(todo)} on main {base[:10]} (checkout {root}, build {a.main_dir}-target)")
         env = dict(runner.env, CARGO_TARGET_DIR=f"{a.main_dir}-target")
         main_runner = Runner(runner.stamp, env, runner.out, runner.reds_path)
+        main_runner.render_set, main_runner.render_tool = runner.render_set, runner.render_tool  # main draws with the same set
         t0 = time.time()
         first = retry_each(main_runner, root, todo, "main")
         again = [c for c in todo if not first[c][0]]
@@ -937,6 +1378,26 @@ def judge_on_main(a, runner, repo, base, cases, record):
 
 # ---------------------------------------------------------------- commands
 
+def plan_cases(a, paths, touched, split):
+    """(scene cases, render cases) a run needs. --cases names them exactly; otherwise the scene
+    cases when behaviour is touched (all with --force; a `paths` case only for its paths) and the
+    render cases the drawing paths select (all of them with --render-only --force)."""
+    if a.cases:
+        cases = a.cases.split(",")
+        return [c for c in cases if c not in RENDER_CASES], [c for c in cases if c in RENDER_CASES]
+    scenes = [c for c in ORDER if CASES[c]["group"] not in RENDER_GROUPS]
+    unneeded = [c for c in scenes if CASES[c].get("paths") and not any(p.startswith(CASES[c]["paths"]) for p in paths)]
+    if unneeded:
+        say(f"not needed (none of their paths touched): {', '.join(unneeded)}")
+    scenes = [c for c in scenes if c not in unneeded]
+    if getattr(a, "render_only", False) or not (touched or a.force):
+        scenes = []
+    render = render_selection(paths, split)
+    if not render and getattr(a, "render_only", False) and a.force:
+        render = list(RENDER_CASES)
+    return scenes, render
+
+
 def cmd_run(a):
     repo = git("rev-parse", "--show-toplevel")
     report_paths = [Path(path).resolve() for path in a.genesis_fuel_report]
@@ -953,24 +1414,62 @@ def cmd_run(a):
     t0 = time.time()
     paths = changed(base, head)
     touched = behavioural(paths)
-    cases = [c for c in (a.cases.split(",") if a.cases else ORDER)]
-    bad = [c for c in cases if c not in CASES]
+    drawn = rendering(paths)
+    split = a.render_split or os.environ.get("LIVING_GATE_RENDER_SPLIT") == "1"
+    bad = [c for c in (a.cases.split(",") if a.cases else []) if c not in CASES]
     if bad:
         raise SystemExit(f"scene-gate: unknown case {bad}; cases: {ORDER}")
-    if not a.cases:
-        # A case with `paths` runs only when the merge touches one of them (named with --cases, always).
-        unneeded = [c for c in cases if CASES[c].get("paths") and not any(p.startswith(CASES[c]["paths"]) for p in paths)]
-        if unneeded:
-            say(f"not needed for {base[:10]}..{head[:10]} (none of their paths touched): {', '.join(unneeded)}")
-            cases = [c for c in cases if c not in unneeded]
+    cases, render = plan_cases(a, paths, touched, split)
     dirty = git("status", "--porcelain", "--untracked-files=no")
     if dirty:
         say(f"note: the tree has uncommitted changes; they are what is tested:\n{dirty}")
-    if not touched and not (a.force or a.genesis_only):
+    if not cases and not render and not a.genesis_only:
         say(f"skipped: {base[:10]}..{head[:10]} changes {len(paths)} path{'s' if len(paths) != 1 else ''}, none behavioural "
-            f"({', '.join(paths[:5])}{', …' if len(paths) > 5 else ''})")
+            f"and none drawing ({', '.join(paths[:5])}{', …' if len(paths) > 5 else ''})")
         record.update(result="skipped", seconds=round(time.time() - t0))
         return finish(a, record, 0)
+    # The render group runs where a render asset set is (LIVING_GATE_RENDER_ASSETS); elsewhere the
+    # smoke runs and the merge needs a pass the render host recorded for the same content.
+    key = render_key("HEAD")
+    render_set, needs_host = None, []
+    if render:
+        record.update(render={"cases": render, "split": split, "key": key, "paths": drawn[:20]})
+        if render_set_present():
+            verdict, render_set, why = render_set_check(repo)
+            record["render"]["set"] = {"path": RENDER_ASSETS, "verdict": verdict, "reasons": why[:20],
+                                       **{k: (render_set or {}).get(k) for k in ("dir", "id", "main_commit", "bundle", "built")}}
+            if verdict != "ok":
+                for line in why[:20]:
+                    say(f"render: asset set {verdict}: {line}")
+                record.update(result=f"asset set {verdict}: " + "; ".join(why[:3]), seconds=round(time.time() - t0))
+                return finish(a, record, 2)
+            say(f"render: {', '.join(render)} on the asset set {render_set['dir']} (set {render_set.get('id')}, "
+                f"{(render_set.get('bundle') or {}).get('pictures')} bundle, built from main {str(render_set.get('main_commit'))[:10]} "
+                f"at {render_set.get('built')})")
+        elif a.cases or getattr(a, "render_only", False):
+            say(f"render: not run here; needs a pinned asset set: none at {RENDER_ASSETS} (LIVING_GATE_RENDER_ASSETS; "
+                f"the render cases run on {RENDER_HOST})")
+            record.update(result="setup error: render: not run here; needs a pinned asset set")
+            return finish(a, record, 2)
+        else:
+            passes = refresh_reds(a.passes, PASSES_BRANCH, PASSES_FILE) if REDS_GIT else load_json(a.passes, {})
+            entry = passes.get(key)
+            if pass_covers(entry, render):
+                say(f"render: not run here; {entry.get('host')} recorded a pass for this content at {entry.get('at')} "
+                    f"(head {str(entry.get('head'))[:10]}, set {entry.get('set')}): {', '.join(render)}")
+                for c in render:
+                    record["cases"][c] = {"status": "recorded-pass", "skill": "verify-ui", "evidence": [entry.get("evidence") or ""],
+                                          "recorded": entry}
+            else:
+                needs_host = render
+                parents = git("rev-list", "--parents", "-n", "1", "HEAD").split()[1:]
+                say(f"render: not run here; needs a pinned asset set ({RENDER_HOST}): none at {RENDER_ASSETS}, and no render pass "
+                    f"recorded for this content (key {key[:12]}). "
+                    f"There: make the same tree ({'merge ' + parents[1][:10] + ' into ' + parents[0][:10] if len(parents) > 1 else 'check out ' + head[:10]}"
+                    f") and run `just living-scene-gate run --render-only"
+                    f"{' --render-split' if split else ''} --base {base[:10]}`; the merge here is refused until then")
+            cases = cases + ["render-smoke"]
+            render = []
     container = a.stdb_container
     stamp = time.strftime("%m%d%H%M%S") + "-" + secrets.token_hex(3)
     out = Path(repo) / ".local/living/verify" / f"gate-{stamp}"
@@ -978,14 +1477,18 @@ def cmd_run(a):
     record["evidence"] = str(out)
     env = dict(os.environ, LIVING_STDB_CONTAINER=container, LIVING_STDB_URL=a.stdb_url, PYTHONDONTWRITEBYTECODE="1")
     env.setdefault("CARGO_TARGET_DIR", str(Path(repo) / "living/target"))
-    work = "genesis publishes" if a.genesis_only else "genesis publishes and " + ", ".join(cases)
+    genesis = (bool(touched) or a.force or a.genesis_only) and not getattr(a, "render_only", False)
+    all_cases = cases + render
+    work = "genesis publishes" if a.genesis_only else ("genesis publishes and " if genesis else "") + ", ".join(all_cases)
     say(f"{base[:10]}..{head[:10]} touches {len(touched)} behavioural path{'s' if len(touched) != 1 else ''} "
-        f"({', '.join(touched[:4])}{', …' if len(touched) > 4 else ''}); running {work} on {container} ({a.stdb_url}), "
+        f"({', '.join(touched[:4])}{', …' if len(touched) > 4 else ''}) and {len(drawn)} drawing path{'s' if len(drawn) != 1 else ''}"
+        f"{' (' + ', '.join(drawn[:4]) + (', …' if len(drawn) > 4 else '') + ')' if drawn else ''}; running {work} on {container} ({a.stdb_url}), "
         f"databases verify-gate-{stamp}-*, evidence {out}")
     runner = Runner(stamp, env, out, a.reds)
+    runner.render_set, runner.render_tool = render_set, repo
     try:
         try:
-            threshold = genesis_threshold(env)
+            threshold = genesis_threshold(env) if genesis else None
             baselines = load_genesis_baselines(GENESIS_BASELINE_FILE) if threshold is not None else {}
             toolchain = genesis_toolchain(env, repo) if threshold is not None else None
             reports = {}
@@ -1005,17 +1508,20 @@ def cmd_run(a):
                 say(f"setup error: the SpacetimeDB container {container} is not running (--stdb-container, LIVING_GATE_STDB_CONTAINER)")
                 record.update(result="setup error")
                 return finish(a, record, 2)
-        if threshold is None:
+        if genesis and threshold is None:
             say("WARNING genesis fuel check disabled by SLOP_GATE_GENESIS_CHECK=0: init fuel is not measured")
+        if not genesis:
+            say("genesis fuel: not measured (no behavioural path: the authority is main's)")
         if not a.genesis_only:
             runner.smoke_seeds = {seed for c in cases if CASES[c]["group"] == "generation" for seed in CASES[c]["seeds"]}
         measurements = []
         for seed in GENESIS_SEEDS if threshold is not None else ():
             baseline, missing = genesis_baseline(baselines, seed, toolchain)
             measurements.append(runner.genesis(repo, seed, head, threshold, baseline, reports.get(seed), toolchain, missing))
-        record.update(genesis=measurements, genesis_disabled=threshold is None)
-        save_json(out / "genesis.json", dict(head=head, base=base, disabled=threshold is None, toolchain=toolchain,
-                                            minimum_headroom_pct=threshold, seeds=measurements))
+        record.update(genesis=measurements, genesis_disabled=genesis and threshold is None)
+        if genesis:
+            save_json(out / "genesis.json", dict(head=head, base=base, disabled=threshold is None, toolchain=toolchain,
+                                                minimum_headroom_pct=threshold, seeds=measurements))
         failed_seeds = [item["seed"] for item in measurements if not item["passed"]]
         if failed_seeds:
             record.update(result="failed genesis: " + ", ".join(failed_seeds), seconds=round(time.time() - t0))
@@ -1024,19 +1530,31 @@ def cmd_run(a):
             record.update(result="passed genesis" if threshold is not None else "genesis skipped",
                           seconds=round(time.time() - t0))
             return finish(a, record, 0)
-        first = run_cases(runner, repo, cases, "a")
+        first = run_cases(runner, repo, all_cases, "a")
         record["first_seconds"] = round(time.time() - t0)
-        failed = [c for c in cases if not first[c][0]]
+        failed = [c for c in all_cases if not first[c][0]]
         second = {}
-        if failed:
+        if failed and (runner.stale or runner.render_setup):
+            say("not re-running: the render asset set is stale or could not be linked (below)")
+        elif failed:
             say(f"re-running {', '.join(failed)} once, each on a fresh world")
             second = retry_each(runner, repo, failed, "b")
-        twice = [c for c in failed if not second[c][0]]
-        on_main = judge_on_main(a, runner, repo, base, twice, record) if twice else {}
+        twice = [c for c in failed if c in second and not second[c][0]]
+        on_main = judge_on_main(a, runner, repo, base, twice, record) if twice and not (runner.stale or runner.render_setup) else {}
     finally:
         runner.sweep()
+    if runner.render_setup:
+        say(f"render: setup failed: {runner.render_setup}")
+        record.update(result=f"render setup failed: {runner.render_setup}", seconds=round(time.time() - t0))
+        return finish(a, record, 2)
+    if runner.stale:
+        for line in runner.stale[:10]:
+            say(f"render: asset set stale: {line[-300:]}")
+        record.update(result="asset set stale: the look book lacks what a world wears (" + runner.stale[0][-200:] + ")",
+                      stale=runner.stale[:50], seconds=round(time.time() - t0))
+        return finish(a, record, 2)
     blocking = []
-    for c in cases:
+    for c in all_cases:
         runs = [first[c][1]] + ([second[c][1]] if c in second else [])
         if first[c][0]:
             status = "pass"
@@ -1049,9 +1567,15 @@ def cmd_run(a):
         record["cases"][c] = {"status": status, "skill": CASES[c]["skill"], "evidence": runs,
                               **({"main": {"verdict": on_main[c][0], "evidence": on_main[c][1], "how": on_main[c][2]}} if c in on_main else {}),
                               **({"known_flake": CASES[c]["flaky"]} if "flaky" in CASES[c] and status != "pass" else {})}
+    for c in needs_host:
+        record["cases"][c] = {"status": "needs-render-host", "skill": "verify-ui", "evidence": [],
+                              "why": f"render: not run here; needs a pinned asset set ({RENDER_HOST}); no pass recorded for key {key[:12]}"}
+        blocking.append(c)
+    if render and all(record["cases"][c]["status"] in PASS_OK for c in render):
+        record_render_pass(a, key, head, render, record, render_set)
     record["seconds"] = round(time.time() - t0)
-    say(f"results ({record['seconds']} s; first pass {record['first_seconds']} s):")
-    for c in cases:
+    say(f"results ({record['seconds']} s; first pass {record.get('first_seconds', 0)} s):")
+    for c in list(record["cases"]):
         r = record["cases"][c]
         line = f"  {c:<13} {r['status']:<14} {' | '.join(r['evidence'])}"
         if "main" in r:
@@ -1060,16 +1584,45 @@ def cmd_run(a):
             line += f"\n  {'':<13} failed once, passed alone: a flake{' (recorded: ' + r['known_flake'] + ')' if 'known_flake' in r else ', not one the skill records'}"
         if r["status"] == "red-on-main":
             line += f"\n  {'':<13} red on main too: not this branch's failure; it does not block"
+        if r["status"] == "needs-render-host":
+            line += f"\n  {'':<13} {r['why']}"
         say(line)
     if blocking:
         record["result"] = "failed: " + ", ".join(blocking)
-        say(f"FAILED: {', '.join(blocking)} failed twice on the branch and "
-            + ("pass on main" if all(record["cases"][c]["status"] == "fail" for c in blocking) else "could not be judged on main"))
+        unjudged = [c for c in blocking if record["cases"][c]["status"] == "fail-unjudged"]
+        why = []
+        if any(record["cases"][c]["status"] == "fail" for c in blocking):
+            why.append("failed twice on the branch and pass on main")
+        if unjudged:
+            why.append(f"{', '.join(unjudged)} could not be judged on main")
+        if needs_host:
+            why.append(f"render: not run here; needs a pinned asset set ({RENDER_HOST})")
+        say(f"FAILED: {', '.join(blocking)}: {'; '.join(why)}")
         return finish(a, record, 1)
-    reds = [c for c in cases if record["cases"][c]["status"] == "red-on-main"]
+    reds = [c for c in record["cases"] if record["cases"][c]["status"] == "red-on-main"]
     record["result"] = "passed" + (f" (red on main too: {', '.join(reds)})" if reds else "")
     say(record["result"])
     return finish(a, record, 0)
+
+
+def record_render_pass(a, key, head, cases, record, render_set):
+    """Record on the shared `render-passes` list that this content's render cases passed here."""
+    entry = {"head": head, "base": record.get("base"), "host": os.uname().nodename, "at": now(),
+             "set": (render_set or {}).get("id"), "evidence": record.get("evidence"),
+             "cases": {c: record["cases"][c]["status"] for c in cases}}
+
+    def change(passes):
+        old = passes.get(key) or {}
+        merged = dict(entry, cases={**(old.get("cases") or {}), **entry["cases"]})
+        passes[key] = merged
+        for k in sorted(passes, key=lambda k: passes[k].get("at", ""))[:-300]:  # the last 300
+            passes.pop(k)
+        return True
+    try:
+        update_reds(a.passes, change, f"render pass: {head[:10]} ({', '.join(cases)})", branch=PASSES_BRANCH, file=PASSES_FILE)
+        say(f"render: pass recorded for this content (key {key[:12]}) on {REDS_REMOTE}/{PASSES_BRANCH}")
+    except Exception as e:
+        say(f"WARNING: the render pass could not be recorded on {REDS_REMOTE}/{PASSES_BRANCH} ({e})")
 
 
 def finish(a, record, code):
@@ -1136,8 +1689,10 @@ def cmd_seeds(a):
 
 
 def cmd_touches(a):
-    t = behavioural(changed(a.base, a.head))
-    print("\n".join(t) if t else "no behavioural path")
+    """Exit 0 when A..B touches behaviour or how the client draws (the gate would run), 1 when not."""
+    paths = changed(a.base, a.head)
+    t = behavioural(paths) + rendering(paths)
+    print("\n".join(t) if t else "no behavioural or drawing path")
     return 0 if t else 1
 
 
@@ -1197,8 +1752,20 @@ def cmd_recheck(a):
     cases = [c for c in reds if spec(c, reds[c].get("skill"))]
     for c in set(reds) - set(cases):
         say(f"{c}: the gate cannot run it; drop it by hand when it is green (reds --drop {c})")
+    render_set = None
     if cases:
         root = main_checkout(repo, a.main_dir, base)
+    if any(c in RENDER_CASES for c in cases):
+        if render_set_present():
+            verdict, render_set, why = render_set_check(root, tool_repo=repo)
+            if verdict != "ok":
+                say(f"render: asset set {verdict} against main ({'; '.join(why[:3])}); render cases not rechecked")
+                render_set = None
+        if not render_set:
+            say(f"render cases not rechecked here (no usable pinned asset set; they run on {RENDER_HOST}): "
+                f"{', '.join(c for c in cases if c in RENDER_CASES)}")
+            cases = [c for c in cases if c not in RENDER_CASES]
+    if cases:
         env = dict(os.environ, LIVING_STDB_CONTAINER=a.stdb_container, LIVING_STDB_URL=a.stdb_url, PYTHONDONTWRITEBYTECODE="1",
                    CARGO_TARGET_DIR=f"{a.main_dir}-target")
         stamp = time.strftime("%m%d%H%M%S")
@@ -1206,6 +1773,7 @@ def cmd_recheck(a):
         out.mkdir(parents=True, exist_ok=True)
         say(f"rechecking {', '.join(cases)} on main {base[:10]} (checkout {root}), databases verify-gate-{stamp}-*")
         runner = Runner(stamp, env, out, a.reds)
+        runner.render_set, runner.render_tool = render_set, repo
         try:
             got = retry_each(runner, root, cases, "recheck")
         finally:
@@ -1232,6 +1800,8 @@ def main(argv):
     import argparse
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--reds", default=os.environ.get("LIVING_GATE_REDS", str(REDS_DEFAULT)))
+    ap.add_argument("--passes", default=os.environ.get("LIVING_GATE_PASSES", str(PASSES_DEFAULT)),
+                    help="the recorded render passes' local cache (shared through the render-passes branch)")
     sub = ap.add_subparsers(dest="cmd")
     r = sub.add_parser("run")
     r.add_argument("--base")
@@ -1246,6 +1816,10 @@ def main(argv):
     r.add_argument("--stdb-url", default=os.environ.get("LIVING_GATE_STDB_URL", "http://127.0.0.1:3320"))
     r.add_argument("--main-dir", default=os.environ.get("LIVING_GATE_MAIN_DIR", str(STATE / "main")))
     r.add_argument("--json")
+    r.add_argument("--render-only", action="store_true",
+                   help="only the render cases the diff selects (all of them with --force), on this host's render asset set; records the pass")
+    r.add_argument("--render-split", action="store_true",
+                   help="character paths select the character cases, camera paths the camera cases (LIVING_GATE_RENDER_SPLIT=1)")
     r.set_defaults(f=cmd_run)
     t = sub.add_parser("touches")
     t.add_argument("--base", required=True)
@@ -1283,6 +1857,7 @@ def main(argv):
     gb.set_defaults(f=cmd_genesis_baseline)
     for p in (r, t, s, st, rc, gb, sd):  # --reds is accepted after the command too
         p.add_argument("--reds", default=argparse.SUPPRESS)
+        p.add_argument("--passes", default=argparse.SUPPRESS)
     a = ap.parse_args(argv or ["run"])
     if not getattr(a, "f", None):
         ap.print_help()

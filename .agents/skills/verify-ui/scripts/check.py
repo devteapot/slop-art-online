@@ -5471,8 +5471,9 @@ def main():
         return
     if not a.run:
         ap.error("--run is required")
-    if not f"verify-{a.run}".startswith("verify-ui-"):
-        sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*)")
+    # gate-*: the scene gate's render group (living/tools/scene_gate.py), on its own verify-gate-* worlds.
+    if not f"verify-{a.run}".startswith(("verify-ui-", "verify-gate-")):
+        sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*), or the scene gate's gate-*")
     c = Checks()
     owner = None
     # Special seed fixtures require a scenario name on the command line.
