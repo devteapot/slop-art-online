@@ -293,7 +293,7 @@ pub fn sees(ctx: &ReducerContext, id: u32, eye: &Body, at: (f32, f32), w: &World
 /// field when the world's law turns it on, with a clear line. Heard: only while it has a field,
 /// within its hearing and not seen ([`heard`] for one that has no scene to share).
 pub fn sensed(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> (Vec<NearCreature>, Vec<NearCreature>) {
-    Sensing::new(ctx, id, at, now).all(ctx, now)
+    Sensing::sorted(ctx, id, at, now).all(ctx, now)
 }
 
 /// What a body senses, worked out as far as it is asked (docs/BATTLE_SCALE.md, scene-lazy): every
@@ -301,8 +301,18 @@ pub fn sensed(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> (Vec<N
 /// each tested by the sight rule only when a reader comes to it. `all` tests every one and gives
 /// `sensed`'s lists; `first` and `by_id` test only as far as their answer needs, in the same
 /// order and by the same test, so they give what `all`'s seen list would.
+///
+/// The candidates are put in order only as far as a reader goes (docs/COMBAT_PHASE.md, step 3): a
+/// fighter's `first` usually stops at the nearest few of a crowd of 100–250. The order is the one
+/// `common::creatures_near`'s stable sort by distance gives (`common::nearest_key`); [`sensed`]
+/// (the `scene_lazy_check` reference) still sorts all at once.
 pub struct Sensing {
+    /// As gathered (`common::creatures_near_gathered`), itself left out; not sorted.
     cands: Vec<NearCreature>,
+    /// Candidates nearest first, as far as asked (indices into `cands`).
+    order: Vec<u32>,
+    /// The rest, smallest `nearest_key` first; made at the first reader that goes past `order`.
+    rest: Option<std::collections::BinaryHeap<std::cmp::Reverse<u64>>>,
     /// Per candidate: 0 not yet tested, 1 seen, 2 not seen.
     seen: Vec<u8>,
     at: (f32, f32),
@@ -317,6 +327,16 @@ pub struct Sensing {
 
 impl Sensing {
     pub fn new(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> Sensing {
+        Self::make(ctx, id, at, now, false)
+    }
+
+    /// All the candidates sorted at once (`creatures_near`), as before step 3: `sensed`'s, the
+    /// reference the lazy order is checked against.
+    fn sorted(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> Sensing {
+        Self::make(ctx, id, at, now, true)
+    }
+
+    fn make(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64, sorted: bool) -> Sensing {
         let map = common::map(ctx);
         let w = common::world(ctx);
         let senses = common::senses_of(ctx, id, &w, now);
@@ -325,9 +345,48 @@ impl Sensing {
         let field = senses.field.is_some();
         let heading = if field { ctx.db.body().id().find(id).map_or(0.0, |b| common::facing_at(&b, now)) } else { 0.0 };
         let hearing = if field { senses.hearing } else { 0.0 };
-        let cands: Vec<NearCreature> = common::creatures_near(ctx, at, gather.max(hearing), now).into_iter().filter(|c| c.id != id).collect();
+        let r = gather.max(hearing);
+        let (cands, order): (Vec<NearCreature>, Vec<u32>) = if sorted {
+            let cands: Vec<NearCreature> = common::creatures_near(ctx, at, r, now).into_iter().filter(|c| c.id != id).collect();
+            let order = (0..cands.len() as u32).collect();
+            (cands, order)
+        } else {
+            let mut cands = common::creatures_near_gathered(ctx, at, r, now);
+            cands.retain(|c| c.id != id);
+            (cands, Vec::new())
+        };
         let seen = vec![0; cands.len()];
-        Sensing { cands, seen, at, heading, gather, hearing, lit, senses, map, w }
+        Sensing { cands, order, rest: None, seen, at, heading, gather, hearing, lit, senses, map, w }
+    }
+
+    /// The `k`-th nearest candidate (an index into `cands`), ordering only as far as `k`.
+    fn nth(&mut self, k: usize) -> Option<usize> {
+        if k >= self.cands.len() {
+            return None;
+        }
+        if self.order.len() <= k {
+            let cands = &self.cands;
+            let rest = self.rest.get_or_insert_with(|| cands.iter().enumerate().map(|(i, c)| std::cmp::Reverse(common::nearest_key(c.dist, i))).collect());
+            while self.order.len() <= k {
+                let std::cmp::Reverse(key) = rest.pop()?;
+                self.order.push(key as u32);
+            }
+        }
+        Some(self.order[k] as usize)
+    }
+
+    /// Every candidate in order (`nth` to the end; all at once when none was ordered yet).
+    fn order_all(&mut self) {
+        if self.order.len() == self.cands.len() {
+            return;
+        }
+        if self.rest.is_none() && self.order.is_empty() {
+            let mut keys: Vec<u64> = self.cands.iter().enumerate().map(|(i, c)| common::nearest_key(c.dist, i)).collect();
+            keys.sort_unstable();
+            self.order = keys.into_iter().map(|k| k as u32).collect();
+            return;
+        }
+        let _ = self.nth(self.cands.len() - 1);
     }
 
     /// Whether candidate `i` is seen, tested once.
@@ -344,8 +403,10 @@ impl Sensing {
 
     /// Everything sensed: the seen, nearest first, and the heard and not seen (within hearing).
     pub fn all(&mut self, ctx: &ReducerContext, now: u64) -> (Vec<NearCreature>, Vec<NearCreature>) {
+        self.order_all();
         let (mut seen, mut heard) = (Vec::new(), Vec::new());
-        for i in 0..self.cands.len() {
+        for k in 0..self.order.len() {
+            let i = self.order[k] as usize;
             if self.sees(ctx, i, now) {
                 seen.push(self.cands[i].clone());
             } else if self.cands[i].dist <= self.hearing {
@@ -358,16 +419,19 @@ impl Sensing {
     /// The nearest seen creature `pred` accepts: `all().0.into_iter().find(pred)`, testing sight
     /// only for those `pred` accepts, nearest first, until one is seen.
     pub fn first(&mut self, ctx: &ReducerContext, now: u64, mut pred: impl FnMut(&NearCreature) -> bool) -> Option<NearCreature> {
-        for i in 0..self.cands.len() {
+        let mut k = 0;
+        while let Some(i) = self.nth(k) {
             if pred(&self.cands[i]) && self.sees(ctx, i, now) {
                 return Some(self.cands[i].clone());
             }
+            k += 1;
         }
         None
     }
 
     /// Creature `id` as sensed: `(it, true)` seen, `(it, false)` heard and not seen (within
-    /// hearing while sight has a field), `None` neither: the list of `all` it is in.
+    /// hearing while sight has a field), `None` neither: the list of `all` it is in. (A body is
+    /// gathered once, so its place in the order does not matter here.)
     pub fn sensed_id(&mut self, ctx: &ReducerContext, now: u64, id: u32) -> Option<(NearCreature, bool)> {
         let i = self.cands.iter().position(|c| c.id == id)?;
         if self.sees(ctx, i, now) {

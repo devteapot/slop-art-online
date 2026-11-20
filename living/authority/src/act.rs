@@ -224,13 +224,32 @@ pub fn facts(ctx: &ReducerContext, id: u32, now: u64) -> ActorFacts {
     facts_reading(ctx, id, now, &Reads::all())
 }
 
+/// The facts the `rates` law reads (its plan), and the genes its answer is finished with per body
+/// (`NeedLaw::rates`: hunger, energy and the genes; hunger and energy are always worked out):
+/// what a needs recompute gives the law and finishes with (docs/COMBAT_PHASE.md step 3). The other
+/// fields stay at their defaults; neither the law nor the finishing reads them.
+pub fn rates_facts(ctx: &ReducerContext, id: u32, now: u64, plan: &living_rules::script::context::Plan) -> ActorFacts {
+    let mut reads = Reads::of(plan);
+    if !reads.all {
+        let gene = living_rules::script::context::ACTOR.iter().position(|f| *f == "strength").expect("a gene field");
+        reads.actor |= 1u64 << gene;
+    }
+    facts_reading(ctx, id, now, &reads)
+}
+
 /// `facts`, the costlier fields only when `reads` asks for them (left at their defaults).
 fn facts_reading(ctx: &ReducerContext, id: u32, now: u64, reads: &Reads) -> ActorFacts {
+    let at = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
+    facts_at(ctx, id, now, reads, at)
+}
+
+/// `facts_reading` for a body whose position now (`at`, read from its row in this transaction) the
+/// caller already has.
+fn facts_at(ctx: &ReducerContext, id: u32, now: u64, reads: &Reads, at: (f32, f32)) -> ActorFacts {
     let w = common::world(ctx);
     let ch = ctx.db.character().id().find(id);
     let kind = ch.as_ref().map(|c| c.kind.clone()).unwrap_or_default();
     let age = ch.as_ref().map(|c| common::age_days(c, &w, now)).unwrap_or(20.0);
-    let at = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
     let (hp, hunger, energy, hurt_by, hurt_ago, (stamina, focus)) = ctx.db.vitals().id().find(id).map(|v| {
         let n = common::needs(&v, now);
         (n.hp, n.hunger, n.energy, v.hurt_by, (v.hurt_ms != 0).then(|| now.saturating_sub(v.hurt_ms) as f32), crate::breath::levels(&v, now))
@@ -340,6 +359,13 @@ pub fn body_state(ctx: &ReducerContext, id: u32, now: u64) -> Result<living_rule
 }
 
 fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64) -> TargetFacts {
+    target_facts_reading(ctx, t, from, now, &Reads::all())
+}
+
+/// `target_facts`, a creature's costlier fields (what it knows and carries, its body sex, its
+/// distance, what it is doing, its stage) only when `reads` asks for them (left at their
+/// defaults; docs/COMBAT_PHASE.md step 3). Other targets as `target_facts`.
+fn target_facts_reading(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64, reads: &Reads) -> TargetFacts {
     let mut f = TargetFacts { class: "none".into(), ..Default::default() };
     match t.class {
         1 => {
@@ -371,21 +397,33 @@ fn target_facts(ctx: &ReducerContext, t: &TargetRef, from: (f32, f32), now: u64)
                 f.id = c.id as u64;
                 f.alive = c.alive;
                 f.kind = c.kind.clone();
-                f.stage = common::stage_of(ctx, &c, &common::world(ctx), now).name().to_string();
-                f.sex = crate::sex::of(ctx, c.id).map(|s| s.name().to_string()).unwrap_or_default();
+                if reads.target("stage") {
+                    f.stage = common::stage_of(ctx, &c, &common::world(ctx), now).name().to_string();
+                }
+                if reads.target("sex") {
+                    f.sex = crate::sex::of(ctx, c.id).map(|s| s.name().to_string()).unwrap_or_default();
+                }
                 f.name = c.name;
-                if let Some(b) = ctx.db.body().id().find(c.id) {
-                    f.dist = dist(from, pos(&b, now));
+                if reads.target("dist") {
+                    if let Some(b) = ctx.db.body().id().find(c.id) {
+                        f.dist = dist(from, pos(&b, now));
+                    }
                 }
                 if let Some(v) = ctx.db.vitals().id().find(c.id) {
                     f.hp = common::needs(&v, now).hp;
                     f.max_hp = v.max_hp;
                     f.hurt_ago = if v.hurt_ms == 0 { 1e9 } else { now.saturating_sub(v.hurt_ms) as f32 };
                 }
-                f.knows = common::knows(ctx, c.id);
-                f.activity = ctx.db.activity().id().find(c.id).filter(|a| a.phase == 1).map(|a| a.skill).unwrap_or_default();
+                if reads.target("knows") {
+                    f.knows = common::knows(ctx, c.id);
+                }
+                if reads.target("activity") {
+                    f.activity = ctx.db.activity().id().find(c.id).filter(|a| a.phase == 1).map(|a| a.skill).unwrap_or_default();
+                }
                 // What they carry (armor softens blows).
-                f.inv = common::inv_list(ctx, c.id as u64);
+                if reads.target("inv") {
+                    f.inv = common::inv_list(ctx, c.id as u64);
+                }
             }
         }
         4 => {
@@ -414,7 +452,7 @@ pub fn way_facts(ctx: &ReducerContext, id: u32, way: &str, to: u32, now: u64) ->
 
 fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx {
     let _detail = common::detail_span("act.skill_ctx");
-    let roll: f32 = ctx.rng().gen_range(0.0..1.0);
+    let roll: f32 = crate::seed::rng(ctx).gen_range(0.0..1.0);
     skill_ctx_with(ctx, id, a, now, roll, &Reads::all())
 }
 
@@ -439,6 +477,23 @@ impl Reads {
         self.all || living_rules::script::context::ACTOR.iter().position(|t| *t == f).is_some_and(|i| self.actor & (1u64 << i) != 0)
     }
 
+    /// What either reads.
+    fn or(self, o: Reads) -> Reads {
+        Reads { all: self.all || o.all, actor: self.actor | o.actor, target: self.target | o.target }
+    }
+
+    /// The fields a move's start reads (`perform`): its check's and its windup's (`<skill>_check`,
+    /// `<skill>_duration`; a function the script lacks reads nothing), and for a paced skill the
+    /// genes and practice its duration is divided by (`Scripts::duration_ms`).
+    fn of_start(sc: &living_rules::script::Scripts, skill: &str) -> Reads {
+        let plan = |f: String| if sc.has(&f) { Reads::of(&sc.law_plan(&f)) } else { Reads { all: false, actor: 0, target: 0 } };
+        let mut r = plan(format!("{skill}_check")).or(plan(format!("{skill}_duration")));
+        if living_rules::genes::is_skilled(skill) && !sc.shapes().timed(skill) {
+            r.actor |= 1u64 << living_rules::script::context::ACTOR.iter().position(|f| *f == "factor").expect("the factor field");
+        }
+        r
+    }
+
     fn target(&self, f: &str) -> bool {
         self.all || living_rules::script::context::TARGET.iter().position(|t| *t == f).is_some_and(|i| self.target & (1 << i) != 0)
     }
@@ -449,10 +504,15 @@ impl Reads {
 /// compares. One roll is drawn either way, so the world's draws are the same.
 fn checked(ctx: &ReducerContext, sc: &living_rules::script::Scripts, id: u32, a: &Activity, now: u64) -> Result<(), String> {
     let laws = common::laws(ctx);
-    let roll: f32 = ctx.rng().gen_range(0.0..1.0);
+    let roll: f32 = crate::seed::rng(ctx).gen_range(0.0..1.0);
     let plan = sc.check_plan(&a.skill).filter(|_| laws.check_ctx_plan);
     let reads = plan.as_ref().map_or_else(Reads::all, |p| Reads::of(p));
-    let r = sc.check(&a.skill, &skill_ctx_with(ctx, id, a, now, roll, &reads));
+    let part = common::detail_span("check.ctx");
+    let sctx = skill_ctx_with(ctx, id, a, now, roll, &reads);
+    drop(part);
+    let part = common::detail_span("check.rhai");
+    let r = sc.check(&a.skill, &sctx);
+    drop(part);
     if plan.is_some() && laws.check_ctx_check {
         let whole = sc.check(&a.skill, &skill_ctx_with(ctx, id, a, now, roll, &Reads::all()));
         common::diag(|| "check_ctx:checked", 1);
@@ -467,11 +527,13 @@ fn checked(ctx: &ReducerContext, sc: &living_rules::script::Scripts, id: u32, a:
 
 fn skill_ctx_with(ctx: &ReducerContext, id: u32, a: &Activity, now: u64, roll: f32, reads: &Reads) -> SkillCtx {
     let w = common::world(ctx);
-    let mut actor = facts_reading(ctx, id, now, reads);
+    // The actor's body, read once for the whole context (nothing here writes it).
+    let body = ctx.db.body().id().find(id);
+    let from = body.as_ref().map(|b| pos(b, now)).unwrap_or((0.0, 0.0));
+    let mut actor = facts_at(ctx, id, now, reads, from);
     if reads.actor("factor") {
         actor.practice = common::practice_of(ctx, id);
     }
-    let from = ctx.db.body().id().find(id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
     if reads.actor("kin_near") {
         actor.kin_near = common::creatures_near(ctx, from, common::laws(ctx).kin_near_m, now).iter().filter(|c| c.id != id && *c.kind == *actor.kind).count() as u32;
     }
@@ -481,12 +543,12 @@ fn skill_ctx_with(ctx: &ReducerContext, id: u32, a: &Activity, now: u64, roll: f
     }
     let hour = common::hour(&w, now);
     let routine = if a.skill == "rework" { crate::mind::routine_facts(ctx, id, &a.item, now) } else { Default::default() };
-    let mut target = target_facts(ctx, &a.target, from, now);
+    let mut target = target_facts_reading(ctx, &a.target, from, now, reads);
     // Force: whether either side has yielded, and what a predator weighs before daring a person.
     let sc = common::scripts(ctx);
     // Where the target is from where the actor faces, and whether it comes at the actor.
-    if let (true, Some(b), Some(tp)) = (reads.target("bearing") || reads.target("closing"), ctx.db.body().id().find(id), target_pos(ctx, &a.target, now)) {
-        target.bearing = living_rules::social::bearing(from, common::facing_at(&b, now), tp);
+    if let (true, Some(b), Some(tp)) = (reads.target("bearing") || reads.target("closing"), body.as_ref(), target_pos(ctx, &a.target, now)) {
+        target.bearing = living_rules::social::bearing(from, common::facing_at(b, now), tp);
         if a.target.class == 3 && a.target.id as u32 != id {
             if let Some(tb) = ctx.db.body().id().find(a.target.id as u32) {
                 target.closing = living_rules::social::closing(from, tp, crate::town::motion_of(&tb, now).1);
@@ -769,6 +831,14 @@ pub fn refusal() -> &'static str {
 /// `spacing` is a movement intent's distances (`living_rules::steer::INTENTS`).
 #[allow(clippy::too_many_arguments)]
 pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), run: Option<bool>, spacing: Spacing, now: u64) -> Result<(), String> {
+    let cur = ctx.db.activity().id().find(id);
+    begin_with(ctx, id, node, revision, skill, target, item, qty, text, topic, want, answers, run, spacing, now, cur)
+}
+
+/// `begin`, given the body's activity row as it is now (`cur`, read by the caller in this
+/// transaction with nothing written since: a graph leaf's; docs/COMBAT_PHASE.md step 3).
+#[allow(clippy::too_many_arguments)]
+pub fn begin_with(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), run: Option<bool>, spacing: Spacing, now: u64, cur: Option<Activity>) -> Result<(), String> {
     refuse(living_rules::outcome::act::REFUSED);
     let sc = common::scripts(ctx);
     let shape = shape_of(&sc, skill);
@@ -777,7 +847,6 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
     // A blow has no mode: a "hurt" or "kill" left on a skill that takes no item (a graph
     // stored before normalization dropped the word) means nothing and is not carried.
     let item = if sc.skills().get(skill).is_some_and(|k| !k.needs_item) && living_rules::normalize::force_word(item) { "" } else { item };
-    let cur = ctx.db.activity().id().find(id);
     if cur.is_none() {
         // What it was seen doing, held since a continuous activity ended (`town::hold`), gives
         // way to what begins now: the same one renewed takes the row up again in place.
@@ -868,7 +937,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             let from = threat.unwrap_or((here.0 - 1.0, here.1));
             let away = (here.1 - from.1).atan2(here.0 - from.0);
             let map = common::map(ctx);
-            let side: f32 = if ctx.rng().gen_range(0..2) == 0 { 1.2 } else { -1.2 };
+            let side: f32 = if crate::seed::rng(ctx).gen_range(0..2) == 0 { 1.2 } else { -1.2 };
             let mut pick = None;
             for spread in [side, -side, 0.0, side * 2.0] {
                 let ang = away + spread;
@@ -890,8 +959,8 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             let keep = me.vx != 0.0 || me.vy != 0.0 || now.saturating_sub(me.t_ms) < (moves.wander_keep_s * 1000.0) as u64;
             let turn = moves.wander_turn.max(0.01);
             for k in 0..12 {
-                let ang: f32 = if keep && k < 6 { me.heading + ctx.rng().gen_range(-turn..turn) } else { ctx.rng().gen_range(0.0..std::f32::consts::TAU) };
-                let r: f32 = ctx.rng().gen_range(3.0..9.0);
+                let ang: f32 = if keep && k < 6 { me.heading + crate::seed::rng(ctx).gen_range(-turn..turn) } else { crate::seed::rng(ctx).gen_range(0.0..std::f32::consts::TAU) };
+                let r: f32 = crate::seed::rng(ctx).gen_range(3.0..9.0);
                 let p = (here.0 + ang.cos() * r, here.1 + ang.sin() * r);
                 if map.free(p.0, p.1) {
                     pick = Some(p);
@@ -1141,7 +1210,29 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
 fn perform(ctx: &ReducerContext, mut act: Activity, now: u64) -> Result<(), String> {
     let sc = common::scripts(ctx);
     act.phase = 1;
-    let sctx = skill_ctx(ctx, act.id, &act, now);
+    // Its check and windup are given the fields they read alone, as a check before the start is
+    // (`check_ctx_plan`; docs/COMBAT_PHASE.md step 3); one roll is drawn either way.
+    let laws = common::laws(ctx);
+    let reads = if laws.check_ctx_plan { Reads::of_start(&sc, &act.skill) } else { Reads::all() };
+    let sctx = {
+        let _detail = common::detail_span("act.skill_ctx");
+        let roll: f32 = crate::seed::rng(ctx).gen_range(0.0..1.0);
+        let sctx = skill_ctx_with(ctx, act.id, &act, now, roll, &reads);
+        if laws.check_ctx_plan && laws.check_ctx_check {
+            let whole = skill_ctx_with(ctx, act.id, &act, now, roll, &Reads::all());
+            let (a, b) = ((sc.check(&act.skill, &sctx), sc.duration_ms(&act.skill, &sctx)), (sc.check(&act.skill, &whole), sc.duration_ms(&act.skill, &whole)));
+            common::diag(|| "check_ctx:checked", 1);
+            if a != b {
+                common::diag(|| "check_ctx:differed", 1);
+                log::error!("start of {} for {}: check and windup on their plans' fields {a:?} differ from the whole context's {b:?}", act.skill, act.id);
+                whole
+            } else {
+                sctx
+            }
+        } else {
+            sctx
+        }
+    };
     sc.check(&act.skill, &sctx).inspect_err(|_| refuse(living_rules::outcome::act::CHECK))?;
     let dur = sc.duration_ms(&act.skill, &sctx)?;
     if rooted(&act.skill) {

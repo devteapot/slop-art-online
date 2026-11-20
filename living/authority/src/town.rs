@@ -241,8 +241,11 @@ pub fn unhold(ctx: &ReducerContext, id: u32) {
 /// At the end of a body's evaluation: with nothing under way, a held row (`hold`) is deleted,
 /// unless this evaluation read the end of that very activity and came to nothing else
 /// (`read_end`, its skill): then the next evaluation decides.
-pub fn settle(ctx: &ReducerContext, id: u32, read_end: Option<&str>) {
-    if ctx.db.activity().id().find(id).is_some() {
+///
+/// `busy`: whether the body has an activity now, read by the caller in this transaction with
+/// nothing written to it since (docs/COMBAT_PHASE.md step 3).
+pub fn settle_with(ctx: &ReducerContext, id: u32, read_end: Option<&str>, busy: bool) {
+    if busy {
         return;
     }
     let Some(row) = ctx.db.doing().id().find(id) else { return };

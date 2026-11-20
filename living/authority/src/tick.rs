@@ -21,7 +21,17 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     if w.paused {
         return Ok(());
     }
-    let now = common::now_ms(ctx);
+    // The `det_clock` law (a diagnostic, crate::det): the clock, the draws and housekeeping
+    // follow the tick count alone.
+    let det = common::laws(ctx).det_clock;
+    let now = if det { common::det_now_ms(ctx) } else { common::now_ms(ctx) };
+    if det {
+        crate::det::perturb();
+    }
+    let _draws = det.then(|| crate::seed::Creating::start(crate::det::SEED, common::clock(ctx).tick + 1));
+    if det && (common::clock(ctx).tick + 1) % 60 == 0 {
+        housekeeping_body(ctx)?;
+    }
     let mut k = common::clock(ctx);
     let prev_ms = if k.last_ms != 0 { k.last_ms } else { now };
     if k.last_ms != 0 {
@@ -153,6 +163,10 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     // else reads the clock row during the tick).
     common::flush_counts(&mut k);
     ctx.db.clock().id().update(k);
+    if det {
+        crate::det::trace(ctx, k_tick);
+        crate::det::stop_at(ctx, k_tick, common::laws(ctx).det_stop);
+    }
     Ok(())
 }
 
@@ -276,7 +290,7 @@ fn spoil(ctx: &ReducerContext, now: u64) {
         };
         let expect = r.qty as f32 * rate;
         let mut lost = expect.floor() as u32;
-        if ctx.rng().gen::<f32>() < expect.fract() {
+        if crate::seed::rng(ctx).gen::<f32>() < expect.fract() {
             lost += 1;
         }
         let lost = lost.min(r.qty);
@@ -354,13 +368,13 @@ fn birth(ctx: &ReducerContext, a: u32, b: u32, now: u64) {
     };
     let Some(at) = ctx.db.body().id().find(first.id).map(|bd| common::pos(&bd, now)) else { return };
     let kind = first.kind.clone();
-    let litter = ctx.rng().gen_range(1..=common::life_of(ctx, &kind).litter.max(1));
+    let litter = crate::seed::rng(ctx).gen_range(1..=common::life_of(ctx, &kind).litter.max(1));
     let (controller, minded) = if first.ai { (first.controller, true) } else { common::mind_controller(ctx) };
     let mut names = Vec::new();
     for _ in 0..litter {
         let id = if kind == "person" {
             let used: Vec<String> = ctx.db.character().kind().filter("person").map(|c| c.name).collect();
-            let pick = ctx.rng().gen_range(0..NAMES.len());
+            let pick = crate::seed::rng(ctx).gen_range(0..NAMES.len());
             let name = (0..NAMES.len()).map(|i| NAMES[(pick + i) % NAMES.len()]).find(|n| !used.iter().any(|u| u == n)).map(String::from).unwrap_or_else(|| format!("Child{}", used.len()));
             seed::spawn_with(ctx, &name, "person", controller, minded, at, now, 0.0, (pa.id, pb.id))
         } else {
@@ -402,10 +416,16 @@ pub fn housekeeping(ctx: &ReducerContext, _t: SlowTimer) -> Result<(), String> {
     if common::schema_moved("housekeeping") {
         return Ok(());
     }
-    let w = common::world(ctx);
-    if w.paused {
+    // Under the `det_clock` law housekeeping runs inside every 60th tick instead (crate::det).
+    if common::world(ctx).paused || common::laws(ctx).det_clock {
         return Ok(());
     }
+    housekeeping_body(ctx)
+}
+
+/// Housekeeping's work: on its own schedule, or inside a tick under the `det_clock` law.
+fn housekeeping_body(ctx: &ReducerContext) -> Result<(), String> {
+    let w = common::world(ctx);
     let now = common::now_ms(ctx);
     let mut k = common::clock(ctx);
     common::set_profiling(k.profile);
