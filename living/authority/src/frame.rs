@@ -401,6 +401,39 @@ pub fn scene(ctx: &ReducerContext, id: u32, who: Identity, seen: &HashSet<u32>, 
     }
 }
 
+/// The creatures engaged with viewer `id` at the last tick (battle law `far_cap` keeps them).
+pub fn engaged_with(id: u32) -> HashSet<u32> {
+    ENGAGED.with(|g| g.borrow().get(&id).cloned()).unwrap_or_default()
+}
+
+fn ctx_now(ctx: &ReducerContext) -> u64 {
+    common::now_ms(ctx)
+}
+
+/// Where a motion copy puts its creature at `t` (the client's extrapolation, as `common::pos`).
+fn moving_pos(m: &Moving, t: u64) -> (f32, f32) {
+    if m.vx == 0.0 && m.vy == 0.0 {
+        return (m.x, m.y);
+    }
+    let dt = t.min(m.next_ms).saturating_sub(m.t_ms) as f32 / 1000.0;
+    if m.turn == 0.0 || m.turn_s <= 0.0 {
+        return (m.x + m.vx * dt, m.y + m.vy * dt);
+    }
+    let (x, y, _) = living_rules::steer::pose(m.x, m.y, m.heading, (m.vx * m.vx + m.vy * m.vy).sqrt(), m.turn, m.turn_s, dt);
+    (x, y)
+}
+
+/// (e) battle law `far_motion_tol_m`: whether the old far copy still puts the creature within `tol`
+/// metres of where the new motion does, now, in 250 and 500 ms, and at the end of either segment
+/// (at most 2 s on), so the copy is kept and nothing is written.
+fn within_tol(old: &Moving, new: &Moving, now: u64, tol: f32) -> bool {
+    let end = old.next_ms.min(new.next_ms).min(now + 2_000).max(now);
+    [now, now + 250, now + 500, end].into_iter().all(|t| {
+        let (a, b) = (moving_pos(old, t), moving_pos(new, t));
+        ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt() < tol
+    })
+}
+
 /// Whether `body` is in the near tier of viewer `id` (as its last sweep left it).
 pub fn is_near(id: u32, body: u32) -> bool {
     VIEWERS.with(|v| v.borrow().get(&id).is_some_and(|e| e.near.contains(&body)))
@@ -558,7 +591,11 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: &[u32]) {
             // late tick every viewer comes due in the same step from then on.
             let moving_in = tables && !public_of(ctx, e.who);
             let n = if moving_in { n_all } else { far + if near_due { e.near.len() } else { 0 } } + if tiers { FRAME_FIXED_ROWS } else { 0 };
-            let every = interval(far);
+            // (b) battle law `crowd_frame_max_ms` (docs/BATTLE_LAWS.md): a higher ceiling in a crowd.
+            let every = match common::laws(ctx).crowd_frame_max_ms {
+                m if m > 0.0 => (far as u64 * 1000 / SCENE_ROWS_PER_S).clamp(FRAME_MIN_MS, m as u64),
+                _ => interval(far),
+            };
             if e.last_ms == 0 {
                 // A first frame comes within one interval, staggered by character so a crowd's
                 // frames spread over the ticks.
@@ -1069,6 +1106,11 @@ fn show_motion(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, near
         if row.seg == seg && row.near == near {
             return false;
         }
+        let tol = common::laws(ctx).far_motion_tol_m;
+        if tol > 0.0 && !near && !row.near && within_tol(&row.seg.moving(body), &m, ctx_now(ctx), tol) {
+            common::diag(|| "frames:far_kept", 1);
+            return false;
+        }
         ctx.db.seen_body_copy().delete(row);
         ctx.db.seen_body_copy().insert(SeenBodyCopy { viewer: who, body, near, seg });
         return true;
@@ -1089,6 +1131,11 @@ fn show_motion(ctx: &ReducerContext, viewer: u32, who: Identity, body: u32, near
     let Some(m) = motion_now(ctx, body) else { return false };
     let changed = row.moving() != m;
     if !changed && was_near == near {
+        return false;
+    }
+    let tol = common::laws(ctx).far_motion_tol_m;
+    if tol > 0.0 && !near && !was_near && within_tol(&row.moving(), &m, ctx_now(ctx), tol) {
+        common::diag(|| "frames:far_kept", 1);
         return false;
     }
     row.set(&m);
