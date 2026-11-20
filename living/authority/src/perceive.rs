@@ -85,7 +85,7 @@ fn told(ctx: &ReducerContext, observer: &Character, now: u64, kind: &str, subjec
         crate::frame::line(ctx, &row);
     }
     // Bound the per-character window (checked periodically, not on every insert).
-    if row.id % 32 == 0 {
+    if crate::det::window_due(ctx, row.id) {
         let mut ids: Vec<u64> = ctx.db.experience().observer().filter(observer.id).map(|p| p.id).collect();
         if ids.len() > WINDOW {
             ids.sort_unstable();

@@ -172,6 +172,7 @@ struct Ev<'a> {
 
 pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     let load = common::detail_span("brain.load");
+    let part = common::detail_span("load.rows");
     let Some(me) = ctx.db.character().id().find(id) else { return };
     if !me.alive {
         return;
@@ -181,24 +182,35 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     let w = common::world(ctx);
     let at = pos(&body, now);
     let mut cur = ctx.db.activity().id().find(id);
+    drop(part);
+    let part = common::detail_span("load.needs");
     let Some(vit) = settle_needs(ctx, &me, vit, at, &w, cur.as_ref(), now) else { return };
+    drop(part);
+    let part = common::detail_span("load.infant");
     perceive::infant_distress(ctx, &me, at, now);
+    drop(part);
     let needs = common::needs(&vit, now);
+    let part = common::detail_span("load.graph");
     let Some(g) = common::compiled(ctx, id, st.revision) else {
         log::warn!("character {id} has no valid graph at revision {}", st.revision);
         return;
     };
+    drop(part);
+    let part = common::detail_span("load.overdue");
     // A deliberate act that cannot reach its target gives up after a while (and the next
     // one waiting may start in its place).
     if let Some(a) = cur.clone().filter(|a| crate::acts::overdue(ctx, a, now)) {
         act::cancel(ctx, a, now, Some("you could not get to it in time"));
         cur = ctx.db.activity().id().find(id);
     }
+    drop(part);
+    let part = common::detail_span("load.ev");
     let acting = cur.as_ref().map_or(false, |a| act::held(a.node));
     let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting, done: None };
     // A pace aside (an `aside` skill in the script) is a short walk that finishes on its own too.
     let sc = common::scripts(ctx);
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && (sc.skills().get(&a.skill).is_some_and(|k| k.latch) || sc.shows().aside(&a.skill))).map(|a| a.node);
+    drop(part);
     drop(load);
     let alerts = common::detail_span("brain.alerts");
     ev.alerts();
@@ -217,7 +229,9 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     let _span = common::span("brain.after");
     ev.after(result, &root.root);
     drop(_span);
+    let part = common::detail_span("brain.settle");
     crate::town::settle(ctx, id, read_end.as_deref());
+    drop(part);
     let _span = common::detail_span("brain.slept");
     // Fell asleep, or woke (and thinks on what waited): perceive::slept.
     if let Some(me) = ctx.db.character().id().find(id) {
@@ -1292,7 +1306,7 @@ impl<'a> Ev<'a> {
                 };
                 act::can(self.ctx, self.me.id, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), self.now)
             }
-            Cond::Chance(p) => self.ctx.rng().gen_range(0.0f32..1.0) < *p,
+            Cond::Chance(p) => crate::seed::rng(self.ctx).gen_range(0.0f32..1.0) < *p,
             Cond::All(v) => v.iter().all(|x| self.cond(x)),
             Cond::Any(v) => v.iter().any(|x| self.cond(x)),
             Cond::Not(x) => !self.cond(x),
@@ -2366,7 +2380,9 @@ impl<'a> Ev<'a> {
             }
             // Cues keep their own interval (`cue_check_s`); what is new is looked for at most
             // once a second per character (fix 2), not at every woken or combat evaluation.
+            let part = common::detail_span("mind.cues");
             self.cues();
+            drop(part);
             let (me, now) = (self.me.id, self.now);
             if NOTICED_AT.with(|n| n.borrow().get(&me).map_or(true, |t| now.saturating_sub(*t) >= NOTICE_MS)) {
                 NOTICED_AT.with(|n| n.borrow_mut().insert(me, now));
@@ -2378,6 +2394,7 @@ impl<'a> Ev<'a> {
         // planned again when it now sees its way blocked.
         let (me, now) = (self.me.id, self.now);
         if LOOKED_AT.with(|n| n.borrow().get(&me).map_or(true, |t| now.saturating_sub(*t) >= NOTICE_MS)) {
+            let _part = common::detail_span("mind.known");
             LOOKED_AT.with(|n| n.borrow_mut().insert(me, now));
             if let Some(b) = ctx.db.body().id().find(me) {
                 let changed = crate::known::mark(ctx, me, self.at, common::facing_at(&b, now), now);

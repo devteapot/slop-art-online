@@ -31,6 +31,7 @@ mod tables;
 mod tick;
 mod town;
 mod common;
+mod det;
 mod far;
 mod earshot;
 mod fold;

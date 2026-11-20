@@ -414,7 +414,7 @@ pub fn way_facts(ctx: &ReducerContext, id: u32, way: &str, to: u32, now: u64) ->
 
 fn skill_ctx(ctx: &ReducerContext, id: u32, a: &Activity, now: u64) -> SkillCtx {
     let _detail = common::detail_span("act.skill_ctx");
-    let roll: f32 = ctx.rng().gen_range(0.0..1.0);
+    let roll: f32 = crate::seed::rng(ctx).gen_range(0.0..1.0);
     skill_ctx_with(ctx, id, a, now, roll, &Reads::all())
 }
 
@@ -449,10 +449,15 @@ impl Reads {
 /// compares. One roll is drawn either way, so the world's draws are the same.
 fn checked(ctx: &ReducerContext, sc: &living_rules::script::Scripts, id: u32, a: &Activity, now: u64) -> Result<(), String> {
     let laws = common::laws(ctx);
-    let roll: f32 = ctx.rng().gen_range(0.0..1.0);
+    let roll: f32 = crate::seed::rng(ctx).gen_range(0.0..1.0);
     let plan = sc.check_plan(&a.skill).filter(|_| laws.check_ctx_plan);
     let reads = plan.as_ref().map_or_else(Reads::all, |p| Reads::of(p));
-    let r = sc.check(&a.skill, &skill_ctx_with(ctx, id, a, now, roll, &reads));
+    let part = common::detail_span("check.ctx");
+    let sctx = skill_ctx_with(ctx, id, a, now, roll, &reads);
+    drop(part);
+    let part = common::detail_span("check.rhai");
+    let r = sc.check(&a.skill, &sctx);
+    drop(part);
     if plan.is_some() && laws.check_ctx_check {
         let whole = sc.check(&a.skill, &skill_ctx_with(ctx, id, a, now, roll, &Reads::all()));
         common::diag(|| "check_ctx:checked", 1);
@@ -868,7 +873,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             let from = threat.unwrap_or((here.0 - 1.0, here.1));
             let away = (here.1 - from.1).atan2(here.0 - from.0);
             let map = common::map(ctx);
-            let side: f32 = if ctx.rng().gen_range(0..2) == 0 { 1.2 } else { -1.2 };
+            let side: f32 = if crate::seed::rng(ctx).gen_range(0..2) == 0 { 1.2 } else { -1.2 };
             let mut pick = None;
             for spread in [side, -side, 0.0, side * 2.0] {
                 let ang = away + spread;
@@ -890,8 +895,8 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
             let keep = me.vx != 0.0 || me.vy != 0.0 || now.saturating_sub(me.t_ms) < (moves.wander_keep_s * 1000.0) as u64;
             let turn = moves.wander_turn.max(0.01);
             for k in 0..12 {
-                let ang: f32 = if keep && k < 6 { me.heading + ctx.rng().gen_range(-turn..turn) } else { ctx.rng().gen_range(0.0..std::f32::consts::TAU) };
-                let r: f32 = ctx.rng().gen_range(3.0..9.0);
+                let ang: f32 = if keep && k < 6 { me.heading + crate::seed::rng(ctx).gen_range(-turn..turn) } else { crate::seed::rng(ctx).gen_range(0.0..std::f32::consts::TAU) };
+                let r: f32 = crate::seed::rng(ctx).gen_range(3.0..9.0);
                 let p = (here.0 + ang.cos() * r, here.1 + ang.sin() * r);
                 if map.free(p.0, p.1) {
                     pick = Some(p);

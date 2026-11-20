@@ -242,6 +242,19 @@ pub fn now_ms(ctx: &ReducerContext) -> u64 {
     })
 }
 
+/// The tick's time under the `det_clock` law (crate::det): the last tick's time plus 1/60 s, set
+/// as this transaction's time, so every `now_ms` in it gives the same.
+pub fn det_now_ms(ctx: &ReducerContext) -> u64 {
+    let k = clock(ctx);
+    let now = crate::det::next_ms(k.last_ms, k.tick);
+    let st = stamp(ctx);
+    TX.with(|t| {
+        let (_, _, seq, _) = t.get();
+        t.set((st, now, seq + 1, now));
+    });
+    now
+}
+
 /// The current transaction's time as `now_ms` last gave it (0 before any): for stamps taken
 /// where no context is at hand (`frame`'s change marks, profiling only).
 pub fn tx_now() -> u64 {

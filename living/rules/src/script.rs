@@ -617,6 +617,14 @@ pub struct Laws {
     /// transaction that rolled back (1 the tick after its sweep, 2 the tick by a panic, 3
     /// `place_at`, 4 `kill`, 5 `join`; 6 drops the marks kept in memory, as if made elsewhere).
     pub memory_test: f32,
+    /// A diagnostic, off in play (docs/COMBAT_PHASE.md, "Step 3 results"): the world's clock, its
+    /// random draws and its 1 Hz housekeeping follow the tick count alone (the clock moves 1/60 s a
+    /// tick from where it stood, the draws are seeded from the tick, housekeeping runs in every
+    /// 60th tick), and each tick logs a hash of every table, so two builds started from one copy
+    /// of a world can be compared tick by tick. `det_stop` (a tick number, 0: none) pauses the world
+    /// at that tick.
+    pub det_clock: bool,
+    pub det_stop: f32,
     /// What an onlooker sees of fights it is not party to is told as one line per this many ms
     /// (docs/BATTLE_SCALE.md, fix 4): every blow it could see, with counts and outcomes. A blow
     /// at it or by it is told at once. 0: each fight's first blow told at once, as before.
@@ -818,6 +826,8 @@ impl Default for Laws {
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
             memory_test: 0.0,
+            det_clock: false,
+            det_stop: 0.0,
             witness_fold_ms: 2000.0,
             regard_cache: true,
             regard_cache_check: false,
@@ -3165,6 +3175,8 @@ impl Scripts {
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
             memory_test: g("memory_test", l.memory_test).round().clamp(0.0, 9.0),
+            det_clock: flag("det_clock", l.det_clock),
+            det_stop: g("det_stop", l.det_stop).round().clamp(0.0, 16_000_000.0),
             witness_fold_ms: g("witness_fold_ms", l.witness_fold_ms).clamp(0.0, 10_000.0),
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
