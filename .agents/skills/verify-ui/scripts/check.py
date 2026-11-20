@@ -1858,6 +1858,11 @@ def first_after(lines, pattern, after, before=None):
     return None
 
 
+# How long law-override waits for `cover_law` to read a cover change in force (the island's
+# switch-on derivation takes about 1.9 s on a world made since cover-stall).
+COVER_WAIT_S = 10.0
+
+
 @scenario("law-override", explicit=True)
 def law_override(run, c):
     """Value-only law edits reach a connected client in place (docs/LAW_OVERRIDE.md): each of
@@ -1867,7 +1872,14 @@ def law_override(run, c):
     `LIVING_GAME_SEEN_LOG`) and the world's tick gap around the call (the authority's `clock`
     sampled every ~20 ms); an ordinary law (`turn_rate`) still installs a new revision, compiled
     here with the overrides kept; a reconnect and a fresh client with overrides present take the
-    set the rows choose first. The laws touched are restored afterwards."""
+    set the rows choose first. The laws touched are restored afterwards.
+
+    A cover law is in force only when the public `cover_law` row reads it: switching
+    `cover_sight_on` on derives the cover ground in steps first (cover-genesis, about 1.9 s on the
+    island since cover-stall), so after each cover change the driver waits (at most
+    COVER_WAIT_S) for the row before it judges the client's cover effect, and records the wait
+    (`in_force_s`). The world must be made at or after cover-stall (`c83ee5d1`): an older land
+    has no `cover_source` and stalls the tick while it is generated again."""
     import threading
     s = "law-override"
     st = verify.load(run)
@@ -1918,14 +1930,39 @@ def law_override(run, c):
         rate = (w[-1][1] - w[0][1]) / (w[-1][0] - w[0][0]) if len(w) > 1 and w[-1][0] > w[0][0] else 0.0
         return round(worst * 1000, 1), round(rate, 1), len(w)
 
+    def cover_row():
+        rows = q("SELECT * FROM cover_law WHERE id = 0")
+        return rows[0] if rows else None
+
+    def wait_in_force(want, after):
+        """Poll `cover_law` until each field in `want` reads so (the cover in force), at most
+        COVER_WAIT_S from `after`: (the first wall time it read so or None, the last row)."""
+        end, row = after + COVER_WAIT_S, None
+        while time.time() < end:
+            row = cover_row()
+            if row and all(abs(float(row[k]) - v) < 1e-4 if isinstance(v, float) else row[k] == v for k, v in want.items()):
+                return time.time(), row
+            time.sleep(0.02)
+        return None, row
+
     original = {r["name"]: r["value"] for r in (q("SELECT name, value FROM law_override") or [])}
     cover = (q("SELECT * FROM cover_law") or [{}])[0]
+    # A land made before cover-stall (`c83ee5d1`) keeps no ground source: switching cover on
+    # regenerates it, stalling the tick, so this scenario needs a world made since.
+    if not cover.get("cover_sight_on") and not q("SELECT id, chunks FROM cover_source WHERE id = 0"):
+        c.check(s, "the world keeps its cover ground source (made at or after c83ee5d1)", False,
+                "no cover_source row: this world was made before cover-stall; make a fresh island world")
+        return
     fill = float(cover.get("cover_brush_min_fill", 0.6))
     new_fill = 0.5 if abs(fill - 0.5) > 1e-3 else 0.7
     shipped = {"cue_transport_on": "true", "near_tier_on": "true", "gaze_on": "false", "cover_sight_on": "false",
                "cover_brush_min_fill": f"{fill:g}", "turn_rate": "6"}
     touched = list(shipped)
     in_place = r"rules: law overrides laid over in place .*changed \[\"{law}\"\]; delivery {d} cover {c} gaze {g}"
+    # What `cover_law` reads once each cover step is in force.
+    in_force = {("cover_sight_on", "true"): {"cover_sight_on": True},
+                ("cover_brush_min_fill", f"{new_fill:g}"): {"cover_sight_on": True, "cover_brush_min_fill": new_fill},
+                ("cover_sight_on", "false"): {"cover_sight_on": False}}
     steps = [
         ("cue_transport_on", "false", "delivery", r"rules: cue_transport_on false near_tier_on true", None),
         ("near_tier_on", "false", "delivery", r"perception: on the untiered set after", "untiered"),
@@ -1970,9 +2007,20 @@ def law_override(run, c):
         for law, value, cls, effect, _ in steps:
             rev = revision()
             r = set_law(law, value)
-            time.sleep(3.0)
+            settled = r["t1"]
+            if cls == "cover":
+                # Judge the client's cover effect only once the authority holds it in force; the
+                # next step (a brush edit after the switch-on) starts after this one completed.
+                want = in_force[(law, value)]
+                t_in, row = wait_in_force(want, r["t1"])
+                r["in_force_want"], r["in_force_row"] = want, row
+                r["in_force_at"] = t_in
+                r["in_force_s"] = round(t_in - r["t1"], 3) if t_in else None
+                settled = t_in or time.time()
+            time.sleep(max(0.0, max(r["t1"] + 3.0, settled + 2.0) - time.time()))
             r.update(cls=cls, rev_before=rev, rev_after=revision())
-            r["gap_ms"], r["ticks_per_s"], r["samples"] = gap(r["t0"] - 0.5, r["t1"] + 1.5)
+            # The tick gap spans the call and, for cover, the whole derivation up to the row.
+            r["gap_ms"], r["ticks_per_s"], r["samples"] = gap(r["t0"] - 0.5, settled + 1.5)
             results.append(r)
         for law, value in (("turn_rate", "6.5"), ("turn_rate", shipped["turn_rate"] if "turn_rate" not in original else original["turn_rate"])):
             rev = revision()
@@ -2021,7 +2069,17 @@ def law_override(run, c):
         r["effect_ms"] = round((eff[0] - r["t1"]) * 1000, 1) if eff else None
         r["effect_line"] = eff[1] if eff else None
         c.check(s, f"{tag}: laid over in place as {cls}", hit is not None, pat)
-        c.check(s, f"{tag}: the client reacted within a second ({effect})", eff is not None and eff[0] - r["t1"] < 1.0, f"{r['effect_ms']} ms")
+        if cls == "cover":
+            # The cover effect follows the `cover_law` row, not the override: within a second of
+            # the row reading the change in force (polled, so the line may lead it by a poll).
+            t_in = r.get("in_force_at")
+            r["effect_after_in_force_ms"] = round((eff[0] - t_in) * 1000, 1) if eff and t_in else None
+            ok = t_in is not None and eff is not None and eff[0] - t_in < 1.0
+            detail = (f"cover in force after {r['in_force_s']} s; effect {r['effect_after_in_force_ms']} ms after it ({r['effect_ms']} ms after the reply)"
+                      if t_in else f"cover_law did not read {r['in_force_want']} within {COVER_WAIT_S} s of the reply (last row {r['in_force_row']})")
+            c.check(s, f"{tag}: the client reacted within a second of cover_law reading it in force ({effect})", ok, detail)
+        else:
+            c.check(s, f"{tag}: the client reacted within a second ({effect})", eff is not None and eff[0] - r["t1"] < 1.0, f"{r['effect_ms']} ms")
         c.check(s, f"{tag}: no compile on the client", first_after(lines, r"rules: skill script revision \d+ compiled", r["t0"] - 0.05, r["t0"] + 3.0) is None)
         c.check(s, f"{tag}: no world freeze (tick gap under 150 ms)", r["gap_ms"] < 150, f"{r['gap_ms']} ms")
         if switch:
