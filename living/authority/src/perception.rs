@@ -1101,6 +1101,8 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
     if last.wrapping_add(1) != tick {
         KEPT.with(|k| k.borrow_mut().clear());
         PROJECTED.with(|p| p.borrow_mut().clear());
+        HEARD_KEPT.with(|k| k.borrow_mut().clear());
+        VITALS_KEPT.with(|k| k.borrow_mut().clear());
         crate::frame::all_full();
         if last != 0 {
             log::info!("sweep kept: cleared at tick {tick} (this instance's last sweep was at tick {last})");
@@ -1120,6 +1122,7 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
         l.retain(|id, _| ids.contains(id));
         PROJECTED.with(|p| p.borrow_mut().retain(|id, _| ids.contains(id)));
         KEPT.with(|k| k.borrow_mut().retain(|id, _| ids.contains(id)));
+        HEARD_KEPT.with(|k| k.borrow_mut().retain(|id, _| ids.contains(id)));
         let who: HashSet<Identity> = humans.iter().map(|(_, w)| *w).collect();
         TOUCHED.with(|t| t.borrow_mut().retain(|w, _| who.contains(w)));
         humans
@@ -1146,7 +1149,8 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Vec<u32> {
     let map = common::map(ctx);
     // The memos pay only when two or more viewers sweep in the tick (a lone sweep would fill them
     // for no one).
-    let mut shared = Shared { check: common::laws(ctx).regard_cache_check, memo: due.len() > 1, ..Shared::default() };
+    let laws = common::laws(ctx);
+    let mut shared = Shared { check: laws.regard_cache_check, memo: due.len() > 1, keep: laws.sweep_keep_memory, keep_check: laws.sweep_keep_check, tick, ..Shared::default() };
     let mut swept = Vec::with_capacity(due.len());
     for (id, viewer) in due {
         // While profiling with detail: each viewer's sweep whole (docs/COMBAT_PHASE.md).
@@ -1193,6 +1197,12 @@ struct Shared {
     check: bool,
     /// Projections and records are kept for the next viewer (more than one sweeps this tick).
     memo: bool,
+    /// The `sweep_keep_memory` law (a diagnostic, off in play): heard rows and health readings
+    /// are kept in module memory across ticks (`HEARD_KEPT`, `VITALS_KEPT`); `keep_check`
+    /// (`sweep_keep_check`) compares each kept value with the table.
+    keep: bool,
+    keep_check: bool,
+    tick: u64,
 }
 
 /// `target`'s projection under the law's answer `r` now: from the tick's memo when there is one
@@ -1295,7 +1305,8 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     if common::laws(ctx).regard_cache_check {
         check_gather(ctx, id, here, gather, &crowd, sight_chunks.as_deref(), &seen, &now_heard, now);
     }
-    hear(ctx, id, viewer, here, &seen, now_heard, now);
+    let keep = shared.as_deref().map(|sh| (sh.keep, sh.keep_check));
+    hear(ctx, id, viewer, here, &seen, now_heard, keep, now);
     drop(hearing);
     // What it remembers of resources here (talk-places): the look a mind takes at its noticing.
     crate::stock::look(ctx, &me, here, || sight, now);
@@ -1561,7 +1572,9 @@ fn count(i: usize, n: u64) {
 pub fn report_kept(ctx: &ReducerContext) {
     let [kept, again, full, compared, differed] = KEPT_COUNTS.with(|c| c.replace([0; 5]));
     let [checked, sight_differed, heard_differed, memo, memo_compared, memo_differed] = EXACT_COUNTS.with(|c| c.replace([0; 6]));
-    if !common::laws(ctx).regard_cache_check && !common::profiling() {
+    let [k_heard, k_heard_read, k_heard_compared, k_heard_differed, k_health, k_health_read, k_health_compared, k_health_differed, k_band_differed] = KEEP_COUNTS.with(|c| c.replace([0; 9]));
+    let laws = common::laws(ctx);
+    if !laws.regard_cache_check && !laws.sweep_keep_check && !common::profiling() {
         return;
     }
     // Which module instance this is: the stamp of the first report it made (a trap replaces the
@@ -1569,6 +1582,9 @@ pub fn report_kept(ctx: &ReducerContext) {
     let born = INSTANCE_BORN.with(|b| *b.get_or_init(|| common::stamp(ctx)));
     if kept + again > 0 {
         log::info!("sweep kept: kept={kept} projected={again} full={full} compared={compared} differed={differed} instance={born}");
+    }
+    if k_heard + k_heard_read + k_health + k_health_read > 0 {
+        log::info!("sweep keep: heard_kept={k_heard} heard_read={k_heard_read} heard_compared={k_heard_compared} heard_differed={k_heard_differed} health_kept={k_health} health_read={k_health_read} health_compared={k_health_compared} health_differed={k_health_differed} health_band_differed={k_band_differed} instance={born}");
     }
     if checked + memo > 0 {
         log::info!("sweep exact: gathers_checked={checked} sight_differed={sight_differed} heard_differed={heard_differed} memo={memo} memo_compared={memo_compared} memo_differed={memo_differed}");
@@ -1625,11 +1641,39 @@ fn dist_for_law(ctx: &ReducerContext, here: (f32, f32), body: u32, near: Option<
     d.ceil().clamp(0.0, u16::MAX as f32) as u16
 }
 
-/// A creature's health now, once per tick for every viewer.
-fn health_now(ctx: &ReducerContext, shared: &mut IdMap<u32, Option<(f32, f32)>>, id: u32, now: u64) -> Option<(f32, f32)> {
-    *shared.entry(id).or_insert_with(|| {
+/// A creature's health now, once per tick for every viewer. Under the `sweep_keep_memory` law
+/// (a diagnostic) from its vitals row as a sweep last read it, within [`VITALS_KEEP_TICKS`] and
+/// unless `health_moved` marked it since: inexact (see `VITALS_KEPT`).
+fn health_now(ctx: &ReducerContext, shared: &mut Shared, id: u32, now: u64) -> Option<(f32, f32)> {
+    let (keep, check, tick) = (shared.keep, shared.keep_check, shared.tick);
+    *shared.health.entry(id).or_insert_with(|| {
+        if keep {
+            let kept = VITALS_KEPT.with(|k| k.borrow().get(&id).filter(|(at, _)| tick.saturating_sub(*at) < VITALS_KEEP_TICKS).map(|(_, v)| v.clone()));
+            if let Some(v) = kept {
+                keep_count(4, 1);
+                let hp = v.as_ref().map(|v| (common::needs(v, now).hp, v.max_hp));
+                if check {
+                    keep_count(6, 1);
+                    let fresh = ctx.db.vitals().id().find(id).map(|v| (common::needs(&v, now).hp, v.max_hp));
+                    let band = |h: Option<(f32, f32)>| h.map(|(hp, max)| living_rules::combat::band(hp, max));
+                    if fresh.map(|(a, b)| (a.to_bits(), b.to_bits())) != hp.map(|(a, b)| (a.to_bits(), b.to_bits())) {
+                        keep_count(7, 1);
+                    }
+                    if band(fresh) != band(hp) {
+                        keep_count(8, 1);
+                    }
+                }
+                return hp;
+            }
+        }
         common::diag(|| "sweep:health_read", 1);
-        ctx.db.vitals().id().find(id).map(|v| (common::needs(&v, now).hp, v.max_hp))
+        let v = ctx.db.vitals().id().find(id);
+        let hp = v.as_ref().map(|v| (common::needs(v, now).hp, v.max_hp));
+        if keep {
+            keep_count(5, 1);
+            VITALS_KEPT.with(|k| k.borrow_mut().insert(id, (tick, v)));
+        }
+        hp
     })
 }
 
@@ -1711,7 +1755,7 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
                         || (ask_known && shared.character(ctx, body).map_or(true, |t| knows_name(ctx, me, &t) != k.known))
                         // Where the law hides health its fields are the same whatever it is:
                         // no need to read it.
-                        || (k.precision != Precision::None && health_from(k.precision, health_now(ctx, &mut shared.health, body, now)) != k.health)
+                        || (k.precision != Precision::None && health_from(k.precision, health_now(ctx, shared, body, now)) != k.health)
                 }
             };
             if changed {
@@ -1882,6 +1926,44 @@ thread_local! {
     static HEARD_LAST: RefCell<IdMap<(u32, u32), u64>> = RefCell::new(IdMap::default());
 }
 
+// ---- the `sweep_keep_memory` law: heard rows and health kept across ticks (a diagnostic) ----
+//
+// docs/COMBAT_PHASE.md, "Next: tick body and module memory". Off in play. SpacetimeDB does not
+// promise that module memory lasts from one reducer call to the next (docs: reducers, "Global and
+// Static Variables Are Undefined Behavior"); in 2.14.1 one instance usually runs them in turn,
+// and a trap replaces it. As with `KEPT`, what is kept here only stands in for a read:
+// - it goes whole when this instance's sweeps skip or repeat a tick (`sweep`: a tick rolled back,
+//   or run by another instance), and for a viewer outside the tick (`sweep_now`, `forget`);
+// - a viewer's heard rows are written only by its own sweep (`hear`) and `forget`, so the kept
+//   list is the table's while the instance is the only writer; it is read afresh every
+//   [`KEPT_REFRESH_SWEEPS`] sweeps all the same;
+// - a vitals row is written in many places (needs settled at evaluations, breath, eating); only
+//   `health_moved` (a blow, a heal, a band that moved) marks it, so a kept row can be stale until
+//   it is read again, at most [`VITALS_KEEP_TICKS`] ticks later. That is the imprecision the
+//   `sweep_keep_check` law counts (`sweep keep: … health_differed=…`).
+
+thread_local! {
+    /// Each listener's heard rows as its last scheduled sweep left them, with its viewer and the
+    /// sweeps since they were read from the table.
+    static HEARD_KEPT: RefCell<IdMap<u32, (Identity, u32, Vec<Heard>)>> = RefCell::new(IdMap::default());
+    /// Each creature's vitals row as a sweep last read it, with the tick it was read in.
+    static VITALS_KEPT: RefCell<IdMap<u32, (u64, Option<Vitals>)>> = RefCell::new(IdMap::default());
+    /// Heard lists from memory, read, compared, differing; health from memory, read, compared,
+    /// differing (bits), differing in band.
+    static KEEP_COUNTS: std::cell::Cell<[u64; 9]> = const { std::cell::Cell::new([0; 9]) };
+}
+
+/// Ticks a kept vitals row stands for a read (one second at 60 Hz).
+const VITALS_KEEP_TICKS: u64 = 60;
+
+fn keep_count(i: usize, n: u64) {
+    KEEP_COUNTS.with(|c| {
+        let mut v = c.get();
+        v[i] += n;
+        c.set(v);
+    });
+}
+
 fn hear_salt(ctx: &ReducerContext) -> u64 {
     if let Some(s) = ctx.db.hear_salt().id().find(0) {
         return s.salt;
@@ -1908,15 +1990,49 @@ fn heard_key(salt: u64, listener: u32, target: u32, now: u64) -> u64 {
 /// sight, or `heard_linger_s` after it was last heard. Nothing while its senses have no field.
 /// `now_heard`: what it hears and does not see now, nearest first (`heard`, from the sweep's
 /// gather).
-fn hear(ctx: &ReducerContext, id: u32, viewer: Identity, here: (f32, f32), seen: &HashSet<u32>, now_heard: Vec<NearCreature>, now: u64) {
+/// `keep`: in the tick, whether the `sweep_keep_memory` and `sweep_keep_check` laws hold (`None`
+/// outside the tick: nothing is kept).
+#[allow(clippy::too_many_arguments)]
+fn hear(ctx: &ReducerContext, id: u32, viewer: Identity, here: (f32, f32), seen: &HashSet<u32>, now_heard: Vec<NearCreature>, keep: Option<(bool, bool)>, now: u64) {
     let reading = common::detail_span("hear.read");
-    let rows: Vec<Heard> = ctx.db.heard().viewer().filter(viewer).collect();
+    let (keep, check) = keep.unwrap_or((false, false));
+    // Under `sweep_keep_memory`: its rows as its last sweep left them, unless due to be read afresh
+    // (staggered by id, as `KEPT`).
+    let kept = HEARD_KEPT.with(|k| k.borrow_mut().remove(&id)).filter(|(who, sweeps, _)| keep && *who == viewer && *sweeps < KEPT_REFRESH_SWEEPS);
+    let sweeps = kept.as_ref().map_or(id % KEPT_REFRESH_SWEEPS, |(_, n, _)| n + 1);
+    let rows: Vec<Heard> = match kept {
+        Some((_, _, rows)) => {
+            keep_count(0, 1);
+            if check {
+                keep_count(2, 1);
+                let mut table: Vec<Heard> = ctx.db.heard().viewer().filter(viewer).collect();
+                let mut mine = rows.clone();
+                table.sort_by_key(|r| r.key);
+                mine.sort_by_key(|r| r.key);
+                if table != mine {
+                    keep_count(3, 1);
+                }
+            }
+            rows
+        }
+        None => {
+            if keep {
+                keep_count(1, 1);
+            }
+            ctx.db.heard().viewer().filter(viewer).collect()
+        }
+    };
     drop(reading);
     common::diag(|| "hear:now", now_heard.len() as u64);
     common::diag(|| "hear:rows", rows.len() as u64);
     if now_heard.is_empty() && rows.is_empty() {
+        if keep {
+            HEARD_KEPT.with(|k| k.borrow_mut().insert(id, (viewer, sweeps, Vec::new())));
+        }
         return;
     }
+    // What its rows are after this sweep's writes (kept under `sweep_keep_memory`).
+    let mut after: Vec<Heard> = Vec::new();
     let laws = common::laws(ctx);
     let linger = (laws.heard_linger_s * 1000.0) as u64;
     let mut current: IdSet<u32> = IdSet::default();
@@ -1935,25 +2051,49 @@ fn hear(ctx: &ReducerContext, id: u32, viewer: Identity, here: (f32, f32), seen:
             Some(r) if r.bearing == bearing && r.band == band => {}
             Some(r) => {
                 common::diag(|| "hear:update", 1);
-                ctx.db.heard().key().update(Heard { bearing, band, ..r.clone() });
+                // A kept row the table no longer holds (memory that missed a write) is not updated.
+                if !keep || ctx.db.heard().key().find(r.key).is_some() {
+                    ctx.db.heard().key().update(Heard { bearing, band, ..r.clone() });
+                }
+                if keep {
+                    after.push(Heard { bearing, band, ..r.clone() });
+                }
             }
             None => {
                 let salt = *salt.get_or_insert_with(|| hear_salt(ctx));
                 let key = heard_key(salt, id, c.id, now);
-                if ctx.db.heard().key().find(key).is_none() {
-                    common::diag(|| "hear:insert", 1);
-                    ctx.db.heard().insert(Heard { key, viewer, listener: id, target: c.id, kind: heard_kind(ctx, &c.kind), bearing, band, since_ms: now });
+                match ctx.db.heard().key().find(key) {
+                    None => {
+                        common::diag(|| "hear:insert", 1);
+                        let row = ctx.db.heard().insert(Heard { key, viewer, listener: id, target: c.id, kind: heard_kind(ctx, &c.kind), bearing, band, since_ms: now });
+                        if keep {
+                            after.push(row);
+                        }
+                    }
+                    Some(row) if keep => after.push(row),
+                    Some(_) => {}
                 }
             }
         }
     }
+    let mut gone: IdSet<u64> = IdSet::default();
     for r in rows.iter().filter(|r| !current.contains(&r.target)) {
         let last = HEARD_LAST.with(|h| *h.borrow_mut().entry((id, r.target)).or_insert(now));
         if r.listener != id || seen.contains(&r.target) || now.saturating_sub(last) >= linger {
             common::diag(|| "hear:delete", 1);
             ctx.db.heard().key().delete(r.key);
             HEARD_LAST.with(|h| h.borrow_mut().remove(&(id, r.target)));
+            if keep {
+                gone.insert(r.key);
+            }
         }
+    }
+    if keep {
+        // Its rows now: those it had and did not rewrite or delete, then those written.
+        let written: IdSet<u64> = after.iter().map(|r| r.key).collect();
+        let mut now_rows: Vec<Heard> = rows.into_iter().filter(|r| !gone.contains(&r.key) && !written.contains(&r.key)).collect();
+        now_rows.extend(after);
+        HEARD_KEPT.with(|k| k.borrow_mut().insert(id, (viewer, sweeps, now_rows)));
     }
 }
 
@@ -1962,6 +2102,7 @@ fn hear(ctx: &ReducerContext, id: u32, viewer: Identity, here: (f32, f32), seen:
 /// at once, the others at their next frame (`frame.rs`).
 pub fn health_moved(ctx: &ReducerContext, id: u32, now: u64) {
     crate::frame::hurt(id);
+    VITALS_KEPT.with(|k| k.borrow_mut().remove(&id));
     let rows: Vec<Projected> = ctx.db.projected().body().filter(id).filter(|p| p.own).collect();
     if rows.is_empty() {
         return;
@@ -2015,6 +2156,7 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
         ctx.db.heard().key().delete(k);
     }
     HEARD_LAST.with(|h| h.borrow_mut().retain(|(l, _), _| *l != id));
+    HEARD_KEPT.with(|k| k.borrow_mut().remove(&id));
     KEPT.with(|k| k.borrow_mut().remove(&id));
     TOUCHED.with(|t| t.borrow_mut().remove(&viewer));
 }

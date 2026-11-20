@@ -397,6 +397,7 @@ Since the module-memory review of cullet-sweep (2026-11-13). The sweep keeps sta
   - A new instance starts at 0.
 
   Each case clears the kept rows and the old path's epochs (`PROJECTED`), marks every frame `full`, and logs `sweep kept: cleared at tick N`. The next sweep then projects every row afresh from committed rows.
+- **Heard rows and health readings, under the `sweep_keep_memory` law only** (a diagnostic, off in play; battle-laws, [combat phase](COMBAT_PHASE.md#next-tick-body-and-module-memory-part-c)): `HEARD_KEPT` holds each viewer's `heard` rows as its last scheduled sweep left them, and `VITALS_KEPT` each creature's `vitals` row as a sweep last read it. Both are cleared with `KEPT` on a gap or a repeated tick, dropped for a viewer by `sweep_now` and `forget`, and renewed every `KEPT_REFRESH_SWEEPS` sweeps (heard) or 60 ticks (vitals); `health_moved` drops a creature's kept vitals. The heard keep is exact while one instance runs the ticks (only `hear` and `forget` write `heard`). The health keep is not: most `vitals` writes do not mark it. `sweep_keep_check` compares each kept value with the table (`sweep keep: …`): no heard list differed in 31,313 comparisons; raw health differed in 13–14% of 392,155 and its band never did.
 - **The law's bands (`BANDS`) and answers (`REGARDS`)** are pure functions of the compiled script, kept per script. They hold whatever happened.
 - **Marks that only force work:**
   - a row written outside the sweep (`row_touched`: `health_moved`, a frame's band, a death's deletion);

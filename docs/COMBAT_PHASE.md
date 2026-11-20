@@ -957,3 +957,154 @@ Status: built and proven, 2026-11-20, commit on `battle-laws` from `origin/main`
 **Cost.** 2.4 wakes are due a tick on average (at most 21) when any are; the rotation is one `rotate_left` of that list. Part A's 0-viewer arms below run on this build.
 
 **What a fighter notices.** Among bystanders woken in the same tick, which one is evaluated first now changes from tick to tick instead of always being the lowest id.
+
+## battle-laws: one per-pair series, the fighters' scheduling laws, and what is left (Spark, Parts A–C)
+
+Status: measured, 2026-11-20, branch `battle-laws` (Spark) from `origin/main` 1511d5e8, merged with main 0c14a944 (`det_compare` with players). Nothing here is on by default. Part D is the [wake order](#wake-order-rotating-the-held-back-bystander-wakes-spark-branch-battle-laws-part-d) above; Parts A–C feed dev-box's owner note on battle laws (`docs/BATTLE_LAWS.md`, frame-views). Law names here are the ones built; BATTLE_VIEWERS.md's options C (a bounded far tier) and D (a far cadence that follows density) keep their letters.
+
+### In short
+
+- **Where main stands, per (viewer, creature in sight) pair** (all exact steps in, the rotated wake order, copy tables on as shipped, 16 viewers on the 10 m ring): **119–144 µs/s per pair** (L1; about 133 from the uninstrumented runs), about 12 ms/s per viewer. The copy tables off: 147–175 µs/s. The contract needs about 7–10, so the gap is still about **13–20×**.
+- **216 viewers, per pair per tick** (the thread is saturated, so per second says little): 10 m ring 10.6 µs with the copy tables, 16.3–16.8 without; 26–32 m ring **1.9–2.3 µs with the copy tables, 5.8–6.7 without**. On the far ring the copy tables take 216 viewers from 10.6–12.1 to **23.7–28.1 ticks/s**, the largest single gain measured on this fixture. At 60 Hz the target is about 0.12–0.17 µs per pair per tick.
+- **The fighters' scheduling laws** (new, off or at today's value; value-only in `law_override`):
+  - `combat_eval_hz` 10 or 7.5 (today 15): the fighters' cadence evaluations cost 16% / 37% less per engaged fighter-second at 0 viewers (`tick.combat` 817 → 684 / 516 µs), about −20..−29 / −40..−48 ms/s at 130–160 engaged fighters; the AI tick 7% / 15% less. At 216 viewers on the 10 m ring every law state ran 6–8% more ticks than off, within what the saturated arm varies; on the far ring nothing measurable. The per-pair cost does not move: these laws touch the AI side only.
+  - `fighter_bystander_wake_cadence` on: 194–2,736 bystander wakes a second are left to the cadence, `tick.wakes` −3..−7 ms/s, no measurable change in the tick or per pair.
+  - **Behaviour** (3 matched battles each, deterministic stepping): reaction to an attack aimed at a fighter is unchanged under every law (p50 17 ms, about 64% of attacks met by a block or dodge before they resolve). It comes from the party wake, not the cadence. At 7.5 Hz the slow tail between moves grows by about 11% (p90 1,300–1,450 → 1,517–1,566 ms), blocks fall 1.4 points and misses rise from 4.8% to 5.1–5.7% (10 Hz the most). Deaths and engagement length stay within the spread between battles.
+- **Module memory across transactions** (Part C, built behind the diagnostic `sweep_keep_memory`, off): keeping each viewer's `heard` rows and the creatures' health readings in memory saves **little: 0–7% of a sweep per creature in sight** (none on the 10 m ring at 216; −1..−7 µs a sweep on the far ring, where 1,080 sweeps a second make that −1..−7 ms/s). Kept heard rows never differed from the table (0 of 31,313 compared). Kept health differed in its raw value 13–14% of the time, but never in band (0 of 392,155). Not worth its risk on its own; the per-viewer cost is row writes, views and the call's remainder, not these reads.
+- **Exactness.** With every new law off, the branch is identical to main tick by tick: without players over 3,600 ticks, and with 16 players over 1,800 ticks. A planted one-row difference was caught at its tick and table (the negative control).
+
+### Fixture and method
+
+As in [Fixture and method](#fixture-and-method): `battle_viewers.py`, a fresh Cullet world per run, 200 AI fighters, `--tiers --cues --paused-placement --keep-alive 0.5 --fresh-every 3`, 20 s warm-up and a 60 s window. Rings `--ring 10,10` (density) and `--ring 26,32` (liveness). Copy tables **on**: laws `motion_tables_on` and `characters_table_on` true (shipped) and the viewers on `seen_body_copy` and `seen_character_copy`; **off**: both laws false and the viewers on the views.
+
+- **Levels.** L1 (`--full-log`: `set_profile` on, phase spans and `diag:` counters, no detail spans) for every arm, because the per-pair method needs the creatures in sight (`sweep:seen` / `sweep:viewers`) and the sweep and frame spans. L0 (`--no-profile`) for the 0- and 16-viewer arms as the uninstrumented reference. L2 (`profile_detail`) only for the sweep split of Part C.
+- **Server.** Private `slop-battlelaws-20261120` (127.0.0.1:3533), `clockworklabs/spacetime:v2.14.1`, pinned to the X925 cores (`docker update --cpuset-cpus 5-9,15-19`) for every run's window and back to the A725 cores between runs; each run's `placement.json` records `5-9,15-19` (all 70 runs). Which core the database thread ran on was not sampled.
+- **Builds** (rustc 1.99.1, Cullet compiled in): Part A `rot-de2c4208.wasm` (Part D's authority code; the Part D commit ac0b765f adds only docs and the comparator); Parts B and C `laws-ca236fa6.wasm` (this branch's laws, identical to the rotated build with them off, below).
+- **Discipline.** Every series held `~/slop-mq/battle.lock`, each run started only with `~/slop-mq/lock` free (the series waited 10:13–10:28 for a merge) and MemAvailable ≥ 40 GB, disk ≥ 45 GB. Two or more runs per arm, interleaved, the second rep in reverse order. Host load (1-minute, median of the window) is in each table. Some first reps ran under load 17–55 from other sessions' builds and, from 09:33 to 09:43, this branch's own scene gate before it was moved to the A725 cores. Those runs are kept, and each table gives its load.
+- **Per pair.** µs/s per (viewer, creature in sight) pair = (DB-thread CPU ms/s − the same build's 0-viewer arm at the same level) ÷ (viewers × mean creatures in sight a sweep), × 1000. Per pair per tick = (DB-thread ms per tick − the 0-viewer arm's ms per tick) ÷ pairs. Per viewer = the same difference ÷ viewers. The 0-viewer arm with the same law state is the reference in Part B.
+
+### Part A: the per-pair series on main (rotated build)
+
+| Arm (L1, X925) | Runs | Ticks/s | Tick WASM ms/s | DB thread ms/s | Views ms/s | Sweeps (`tick.perception`) ms/s | Frames ms/s | Call's remainder ms/s | Creatures in sight | Per viewer ms/s | **Pair µs/s** | **Pair µs/tick** | Viewer deaths / heals | Load (median) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|
+| 0 viewers | 2 | 59.97–59.99 | 222.4–226.7 | 230.8–234.2 | 0 | 0.1–0.2 | 1.2–1.7 | 7.0–8.8 | – | – | – | – | – | 1.3, 17.8 |
+| 16, 10 m, copy tables off | 2 | 58.30–58.87 | 272.8–313.6 | 440.4–480.2 | 112.1–116.6 | 26.5–30.7 | 25.3–28.6 | 41.0–48.5 | 88.6 | 14.2 | 147–175 | 2.54–3.08 | 0/143, 0/159 | 5.2, 33.5 |
+| 16, 10 m, on | 2 | 58.92–59.80 | 285.3–343.5 | 403.2–446.5 | 70.7–71.8 | 29.0–34.1 | 28.3–34.1 | 36.5–45.8 | 89.7–92.9 | 12.0 | 119–144 | 2.00–2.49 | 0/147, 0/132 | 5.0, 55.2 |
+| 216, 10 m, off | 2 | 1.63–1.68 | 401.0–436.1 | 924.9–994.1 | 291.3–314.9 | 239.4–252.4 | 13.8–14.9 | 203.0–264.1 | 160.1–161.9 | 3.4 | 20.0–21.8 | 16.30–16.81 | 24/41, 28/50 | 11.5, 53.7 |
+| 216, 10 m, on | 2 | 2.42–2.48 | 572.7–589.1 | 934.5–961.9 | 121.9–126.1 | 356.7–365.0 | 25.1–25.9 | 217.6–240.7 | 166.3–167.4 | 3.3 | 19.4–20.3 | 10.57–10.69 | 51/57, 61/62 | 23.0, 31.2 |
+| 216, 26–32 m, off | 2 | 10.61–12.09 | 400.6–401.5 | 885.1–891.5 | 255.1–264.2 | 202.1–202.6 | 20.8 | 199.8–229.5 | 55.2–56.2 | 3.0 | 54.3–54.7 | 5.76–6.67 | 0/123, 0/83 | 28.9, 22.9 |
+| 216, 26–32 m, on | 2 | 23.65–28.12 | 528.3–528.8 | 777.4–787.6 | 64.8–69.6 | 249.5–261.1 | 31.7–33.6 | 143.5–148.7 | 57.1–60.5 | 2.6 | 42.5–44.2 | 1.93–2.25 | 0/132, 0/160 | 18.9, 20.2 |
+
+Uninstrumented (L0, X925, 2 runs each): 0 viewers 221.8–232.6 ms/s tick WASM, DB thread 228.8–238.4; 16 viewers off: DB thread 443.1–453.0, views 105.8–110.8, 57.7–58.4 ticks/s, 13.4 ms/s per viewer (about 151 µs/s per pair at L1's 88.6 in sight); on: DB thread 420.0–425.2, views 72.2–72.6, 59.1–59.3 ticks/s, 11.8 ms/s per viewer (about 133 µs/s per pair). Part B's law-off arms on the laws build add two more L1 runs of every "on" arm at low load (1.5–2.1): 16 viewers 128–144 µs/s per pair (2.16–2.43 per tick); 216 at 10 m 2.54–2.66 ticks/s, 9.78–9.80 µs per pair-tick; 216 at 26–32 m 26.9–28.5 ticks/s, 1.75–1.94 µs per pair-tick.
+
+What the series says:
+- **At 16 viewers** the per-viewer cost is about 12 ms/s (L1; 11.8 at L0) with the copy tables, against 14.2 (13.4) without. Views fall from 112–117 to 71–72 ms/s. The tick WASM rises by about 15–30 ms/s for the copies, as in the diagnosis. Of 12 ms/s per viewer: views 4.4, the call's remainder about 2.0, sweeps about 1.9, frames about 1.8, and the rest is the extra fighting the viewers draw (the census rises from about 130 to about 158 engaged).
+- **At 216 viewers on the 10 m ring** every viewer sweeps in every tick (a tick takes about 400 ms). The copy tables raise ticks from 1.6–1.7 to 2.4–2.5; the sweeps then cost 357–365 ms/s (690 µs a sweep, 4.1 µs per creature in sight), and the keep-alive's heals wait behind ticks (51–61 deaths a window with the tables on, 24–28 off, because the faster world fights more).
+- **On the 26–32 m ring** the copy tables more than double the tick rate (10.6–12.1 → 23.7–28.1), with no deaths. Views fall from 255–264 to 65–70 ms/s and the remainder from 200–230 to 144–149. Sweeps are then the largest viewer cost: 250–261 ms/s, about 240 µs a sweep at about 58 in sight.
+
+### Part B: the fighters' scheduling laws
+
+**The laws** (`living/rules/src/script.rs` `Laws`, `living/scripts/skills.rhai`; value-only, so switching is one `law_override` row):
+- `fighter_bystander_wake_cadence` (bool, off): on, a creature on the combat cadence is not woken as a bystander (`common::wake_bystander`, and a held-back wake when it falls due). "On the cadence" means `mind_state.fast_until` reaches at least one cadence period ahead (`common::on_cadence`), so its next cadence evaluation is sure to come. That evaluation sees what happened. The percept is written at once either way, and a party to an act (its subject, or the one it is done to) is woken at once.
+- `combat_eval_hz` (number, 15): creatures in a fight are evaluated every `round(60 / combat_eval_hz)` ticks, staggered by id (`Laws::combat_every_ticks`; 15 → 4 ticks as before, 10 → 6, 7.5 → 8).
+
+Both govern the scheduling of graph evaluations, and both apply to every character on the combat cadence. **For players:** a player's character in a fight is evaluated on the same cadence, but what it evaluates is its waiting or command graph (`human_act`). Its skills (`use_skill`, `release_skill`) start when the player asks, so these laws do not change what a player can do or how fast. At 10 or 7.5 Hz a command graph in a fight (approach and strike) re-plans every 6 or 8 ticks instead of 4, up to 133 ms later. What a player perceives of the world is unchanged; what changes is how AI opponents behave (below).
+
+**Exactness, off.** `det_compare.py` (two builds stepped from one copied world under `det_clock`; every table's hash every tick and every row at the stop):
+- the rotated build against the laws build with every new law off (Cullet battle, 3,600 ticks, 113 tables, 48,431 rows): identical;
+- with 16 players on a 10 m ring (dev-box's player mode, main 0c14a944): main against this branch with every new law off and the no-rotation control (`LIVING_DET_NOROTATE`): identical over 1,800 ticks (48,446 rows at the stop). The branch against itself with moved hash keys: identical. The rotation against the control: identical until tick 119, the third tick it reordered anything, with the same due set (10 due, start 9) in every tick up to there;
+- **negative control:** a temporary build that adds 1 to one creature's `max_hp` at tick 900, and nothing else (`LIVING_DET_PLANT`, never committed). Reported: first difference at tick 900, in `vitals` alone, and in `vitals` at the stop.
+
+**A/B** (laws build, L1, X925, 2 runs per arm and state, interleaved; `law_override` set at publish). "Engaged" is the cadence census: `eval:combat_due` × ticks between evaluations ÷ ticks per second.
+
+| Arm | Law state | Ticks/s | Tick WASM ms/s | `tick.combat` ms/s | `tick.wakes` ms/s | Engaged | Tick WASM µs per engaged fighter-s | `tick.combat` µs per engaged fighter-s | Cadence evals/s | Fighters' woken evals/s | Wakes left to the cadence/s | Pair µs/s | Pair µs/tick | Load |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 0 viewers | off (15 Hz) | 60.00 | 191.6–247.9 | 95.3–117.4 | 31.0–41.3 | 130 | 1,471–1,904 | 732–901 | 1,913 | 210 | 0 | – | – | 16.7, 1.7 |
+| 0 viewers | wake to cadence | 60.00 | 202.9–257.1 | 107.4–129.2 | 28.1–37.9 | 136 | 1,474–1,905 | 780–957 | 2,010 | 192 | 194 | – | – | 20.8, 1.8 |
+| 0 viewers | 10 Hz | 59.99 | 180.4–255.0 | 80.8–109.9 | 31.8–46.1 | 140 | 1,284–1,839 | 575–793 | 1,359 | 226 | 0 | – | – | 28.6, 1.3 |
+| 0 viewers | 7.5 Hz | 59.98 | 166.2–205.7 | 61.0–73.4 | 33.6–41.9 | 130 | 1,277–1,580 | 469–564 | 955 | 207 | 0 | – | – | 14.9, 1.4 |
+| 16, 10 m | off | 59.55–59.74 | 285.8–313.6 | 113.1–118.2 | 35.4–41.4 | 159 | 1,800–1,979 | 712–746 | 2,309 | 258 | 0 | 128–144 | 2.16–2.43 | 9.3, 1.5 |
+| 16, 10 m | wake to cadence | 59.74–59.81 | 272.5–296.2 | 105.1–118.5 | 30.6–33.6 | 153 | 1,812–1,901 | 699–760 | 2,247 | 203 | 345 | 112–133 | 1.88–2.24 | 13.1, 1.9 |
+| 16, 10 m | 10 Hz | 59.46–59.56 | 257.4–282.9 | 80.9–93.1 | 33.0–36.5 | 158 | 1,672–1,741 | 526–573 | 1,527 | 263 | 0 | 110–130 | 1.87–2.21 | 6.9, 1.6 |
+| 16, 10 m | 7.5 Hz | 59.18–59.61 | 249.4–288.1 | 70.5–81.3 | 34.3–42.8 | 159 | 1,563–1,827 | 442–515 | 1,152 | 265 | 0 | 124–150 | 2.09–2.56 | 7.6, 2.8 |
+| 216, 10 m | off | 2.54–2.66 | 574.2–600.1 | 12.3–12.6 | 41.5–43.0 | 293 | 1,979–2,025 | 42–43 | 120 | 341 | 0 | 19.2–20.4 | 9.78–9.80 | 18.8, 2.0 |
+| 216, 10 m | wake to cadence | 2.66–2.83 | 598.8–600.5 | 15.7–16.2 | 35.4–35.8 | 293 | 2,028–2,063 | 53–56 | 165 | 206 | 2,736 | 19.9–21.0 | 9.62–9.70 | 19.7, 3.3 |
+| 216, 10 m | 10 Hz | 2.74–2.87 | 599.9–604.1 | 11.4–11.5 | 39.9–41.4 | 301 | 1,996–1,998 | 38 | 92 | 336 | 0 | 19.8–19.9 | 8.76–9.14 | 12.4, 3.4 |
+| 216, 10 m | 7.5 Hz | 2.64–2.89 | 598.9–603.3 | 8.3–8.9 | 39.5–40.5 | 289 | 2,000–2,173 | 28–32 | 69 | 292 | 0 | 19.3–20.6 | 8.76–8.99 | 29.4, 2.4 |
+| 216, 26–32 m | off | 26.94–28.46 | 504.2–522.3 | 57.9–65.3 | 49.3–49.9 | 151 | 3,388–3,413 | 389–427 | 988 | 241 | 0 | 40.6–42.5 | 1.75–1.94 | 18.7, 2.1 |
+| 216, 26–32 m | wake to cadence | 26.47–29.33 | 508.4–515.5 | 56.8–70.0 | 40.1–46.6 | 155 | 3,269–3,328 | 365–452 | 1,037 | 192 | 317 | 39.1–40.8 | 1.71–1.85 | 9.7, 4.4 |
+| 216, 26–32 m | 10 Hz | 25.77–28.13 | 511.6–515.5 | 50.5–51.0 | 48.8–51.3 | 164 | 3,059–3,226 | 300–322 | 690 | 265 | 0 | 40.4–42.0 | 1.80–1.92 | 3.2, 9.0 |
+| 216, 26–32 m | 7.5 Hz | 27.44–30.36 | 504.1–508.6 | 39.9–43.2 | 50.6–51.0 | 161 | 3,116–3,188 | 244–273 | 550 | 251 | 0 | 41.9–42.6 | 1.64–1.80 | 5.6, 3.9 |
+
+Reading it:
+- **`combat_eval_hz`.** The cadence evaluations fall in proportion (1,913 → 1,359 → 955 a second at 0 viewers) and `tick.combat` per engaged fighter-second by 16% at 10 Hz and 37% at 7.5 Hz (means; the first reps ran at load 15–29). Woken evaluations do not rise to fill the gap (207–226 a second against 210). The AI tick falls about 7% (10 Hz) and 15% (7.5 Hz) per engaged fighter-second. At 160 engaged fighters that is about −20..−29 and −40..−48 ms/s of a 60 Hz second (the 16-viewer arm: `tick.combat` 115.7 → 87.0 and 75.9 ms/s). At 216 viewers on the 10 m ring the saturated world ran 6–8% more ticks under every law state, the wake law included, so that is the arm's spread rather than this law. On the far ring the gain is within the spread.
+- **`fighter_bystander_wake_cadence`.** 194–2,736 bystander wakes a second are left to the cadence, and the fighters' woken evaluations fall from 210–341 to 192–206 a second. `tick.wakes` falls 3–7 ms/s. The tick as a whole does not move measurably, because most of a fighter's wakes are as a party (threats aimed at it), which the law keeps. The diagnosis's −23 ms/s counted every woken evaluation of a fighter, parties included.
+- **Per pair** neither law moves the viewers' cost: they schedule AI evaluations only. The differences in the pair columns are within the spread of the off arm.
+
+**Behaviour** (`behave_det.py`: one det template per battle, copied once per law state, stepped under `det_clock` at exactly 1/60 s a tick whatever the server's speed; `skill_use` and `fight_seen` read every second and merged; 3 battles (Cullet, `spawn_battle` 200, even ids dodge and odd ids block when threatened), 55 s of game time each from the fifth second, 0 viewers, A725 cores. Real-time runs on the loaded slow cores ran at 49–58 ticks/s and varied more between runs than between laws, so they are not used.)
+
+| Measure (3 battles) | Off (15 Hz) | Wake to cadence | 10 Hz | 7.5 Hz |
+|---|---|---|---|---|
+| Attacks met by a block or dodge decided before they resolved | 63.6% | 64.0% | 64.0% | 63.3% |
+| Reaction: from the attack's windup start to that decision, p50 / p90 ms | 17 / 567–583 | 17 / 567–583 | 17 / 567–583 | 17 / 567–600 |
+| Reaction mean, ms | 169–177 | 170–178 | 170–187 | 175–186 |
+| From the end of a fighter's own move to its next decision, p50 / p90 ms | 317–333 / 1,300–1,450 | 317–334 / 1,334–1,400 | 350 / 1,350–1,433 | 317 / 1,517–1,566 |
+| Blows: hit / blocked / dodged / missed | 52.4 / 32.0 / 10.7 / 4.8% | 52.5 / 32.8 / 10.0 / 4.8% | 53.2 / 31.2 / 10.0 / 5.7% | 52.6 / 30.6 / 11.7 / 5.1% |
+| Hits taken per fighter | 5.53–5.84 | 5.47–6.03 | 5.29–6.17 | 5.53–5.78 |
+| Deaths in 55 s | 98–100 | 90–107 | 87–101 | 91–97 |
+| From a fighter's first blow to its death, p50 s | 26.1–31.6 | 24.3–27.2 | 26.8–29.3 | 26.2–30.4 |
+| Turns to face (uses) / attacks begun | 1,075 / 12,101 | 975 / 11,867 | 975 / 11,848 | 1,024 / 12,294 |
+
+**What changes for fighters, and what a player would notice:**
+- **Reaction to an attack aimed at oneself** does not change under any of these laws. The attack's windup wakes its target as a party, and the target decides in the next tick (p50 17 ms) whatever the cadence.
+- **`combat_eval_hz`** slows everything else a fighter does between threats: choosing and closing on a target, turning to face, starting the next attack once recovered. At 7.5 Hz the slow tail between moves is about 11% longer (p90 1,517–1,566 against 1,300–1,450 ms). Blocks fall 1.4 points (more blows land or are dodged, not blocked), and at 10 Hz misses rise from 4.8% to 5.7% (strikes started at a target that moved). A player fighting AI would meet opponents that retarget and close later: evaluated every 100 ms (10 Hz) or 133 ms (7.5 Hz) instead of every 67. Their defence against the player's own strikes is unchanged. Not recommended unless the budget still fails after the rest (as the diagnosis said); if it is used, 10 Hz costs the least behaviour for about −25 ms/s.
+- **`fighter_bystander_wake_cadence`**: nothing measured in this fight. In a fight graph that reacts to others (an ally struck, a death seen), that reaction would come at the fighter's next cadence evaluation, up to 50 ms later at 15 Hz. A player would see AI bystanders in a fight turn to what happened near them up to 50 ms later. Its gain is 3–7 ms/s, so it is not worth a rule change on its own.
+
+### Next: tick body and module memory (Part C)
+
+One row per option, for the owner note. Gains are at the fixture's arms (pinned X925; ms/s of the database thread unless marked). "Exact" means nothing a player or mind perceives changes, nor when; "law" means it would need the owner's decision.
+
+| # | Option | Where | Gain (measured or estimated, with its source) | Risk | Exactness | What a player notices |
+|---:|---|---|---|---|---|---|
+| 1 | **Keep each viewer's `heard` rows in module memory across ticks** (built: `sweep_keep_memory`, diagnostic, off) | `perception::hear`, `HEARD_KEPT` | Measured with row 2 (below): 0–7% of a sweep together. `hear.read` is 17–23 µs a sweep at 16 viewers and at 216 on the 10 m ring, 6–7 µs on the far ring (Step 2's T6): about 1.4 ms/s at 16 viewers, 7–12 ms/s at 216 | Low: `hear` and `forget` are the only writers of `heard`. Memory is cleared on a skipped or repeated tick and outside the tick, and read afresh every 150 sweeps | Exact in practice: 0 of 31,313 kept lists differed from the table (`sweep_keep_check`, 16 and 216 viewers). Exact by construction while one instance runs every tick; another instance's write is caught at the next refresh | Nothing |
+| 2 | **Keep creatures' health readings across ticks** (built, same law) | `perception::health_now`, `VITALS_KEPT` | With row 1: per sweep per creature in sight 4.08–4.34 → 3.84–4.31 µs at 16 viewers, 3.68–3.78 → 3.72–3.91 at 216 on the 10 m ring (none), 3.86–3.96 → 3.61–3.68 on the far ring (−7% per creature; per sweep 230–237 → 224–236 µs, about −1..−7 ms/s at 1,080 sweeps a second) | Medium: a `vitals` row is written in many places (needs settled at evaluations, breath, eating) and only `health_moved` marks it. A missed write stands until the reading is renewed (60 ticks) | **Inexact**: the kept reading's raw health differed from the table's in 13–14% of 392,155 comparisons. Its band never differed (0), so no row a player sees changed. The exact-health rows (one's own, a reveal) are written by `health_moved` at once anyway | Nothing measured; a revealed exact health could lag up to 1 s between blows |
+| 3 | Rows 1–2 extended to the viewer's `perceived` rows (each sweep reads all of them to diff against what it sees) | `perception::sweep_one` | Estimated −20..−30 µs a sweep at 160 in sight (the read part of `rows.out` + `rows.in`, 102–113 µs at 216 r10, Step 2's T6; reads about 0.2 µs a row from `hear.read`), about −10..−16 ms/s at 216 on the 10 m ring, −1.5 ms/s at 16 | Medium: `perceived` is also written by joins, deaths and `sweep_now`; each needs a mark | Exact while every writer marks it (the `KEPT` rule), bounded by a refresh | Nothing |
+| 4 | Frames take the sweep's band and health instead of reading them again (`show_fighter` reads back the band just written for each newcomer; `deliver` reads health again) | `frame.rs` (dev-box) | Step 2: part of `project.show` (59–66 µs a sweep at 216 r10) and of `tick.frames` (25–34 ms/s at 16 viewers with the copy tables) | Low | Exact (same values, no write between) | Nothing |
+| 5 | **The call's remainder** (commit, read-set upkeep, subscription evaluation): 36–46 ms/s at 16 viewers (about 2.0–2.6 ms/s per viewer), 144–149 on the far ring and 218–241 on the 10 m ring at 216 | SpacetimeDB 2.14.1 host | Unknown until split: needs a host profile (`perf` on the database thread of our own container). The copy tables already cut it from 200–230 to 144–149 on the far ring | – | – | – |
+| 6 | **Sweeps themselves**: 250–261 ms/s at 216 on the far ring, 357–365 on the 10 m ring, about 4.1 µs per creature in sight, mostly row writes (projections, perceived rows, copies) | `perception.rs` | Exact work found little more (Steps 2 and 3). Fewer pairs or fewer refreshes are BATTLE_VIEWERS's option C (a bounded far tier: pairs per viewer from about 160 to about 32, about 5×) and option D (a far cadence that follows density) | – | **Law** (C changes what a player perceives of far fighters; D, when) | Far fighters shown as crowd rows (C), or refreshed less often (D) |
+| 7 | `combat_eval_hz` 10 (built, off) | `tick.rs` | −16% of `tick.combat` per engaged fighter-second, about −20..−29 ms/s at 130–160 engaged | Low (one value) | **Law** | AI opponents retarget and close up to 33 ms later than at 15 Hz (every 100 ms instead of every 67); more misses (4.8 → 5.7%) |
+| 8 | `combat_eval_hz` 7.5 (built, off) | `tick.rs` | −37% of `tick.combat`, about −40..−48 ms/s at 130–160 engaged | Low | **Law** | Evaluated every 133 ms instead of every 67; slow tail between moves about +11%; blocks −1.4 points |
+| 9 | `fighter_bystander_wake_cadence` (built, off) | `common.rs` | −3..−7 ms/s of `tick.wakes`; tick unchanged within noise | Low | **Law** | AI bystanders in a fight turn to others' acts up to 50 ms later |
+| 10 | The skill script's pool check run natively before Rhai when the plan's first test is the pool (`check.rhai` 21 µs for about 570 "out of breath" refusals a second, Step 3) | `act.rs` / `skills.rhai` | Up to about −12 ms/s at 0 viewers (L2's 17 ms/s for the Rhai check, of which the breath refusals are about 70%) | Medium: the native test must equal the script's for every skill, and the script is the world's (a world may change it) | Exact only if the native test is derived from the script's spec and checked against it (a `_check` law) | Nothing |
+
+**Module memory across transactions.** SpacetimeDB says module memory is not kept between reducer calls: "Relying on global variables, static variables, or module-level state to persist across reducer calls is undefined behavior", because "SpacetimeDB may run each reducer in a fresh WASM or JS instance", and "if you modify global state and then roll back the transaction, the modified value may remain for subsequent transactions" ([reducers](https://spacetimedb.com/docs/functions/reducers/), "Global and Static Variables Are Undefined Behavior", docs 2.0.0, read 2026-11-20; the pinned server is 2.14.1). `KEPT` (docs/PERCEPTION.md, "Module memory and rollback") is built for that:
+- what it keeps only stands in for a read, and an empty memory is always correct;
+- `SWEPT_TICK` clears it whenever this instance's sweeps skip a tick (another instance ran one) or see one again (it rolled back);
+- a sweep outside the tick (`sweep_now`, a join) leaves nothing kept for that viewer;
+- a mark another instance made and this one missed stands at most `KEPT_REFRESH_SWEEPS` (150 sweeps, about 30 s);
+- the `memory_test` law proves the rollback cases in scenes.
+
+`HEARD_KEPT` and `VITALS_KEPT` follow the same rules: cleared with `KEPT`, removed by `forget` and outside the tick, and read afresh every 150 sweeps (heard) or 60 ticks (vitals). The heard keep is exact while one instance runs the ticks, because only the sweep and `forget` write `heard`. The health keep is inexact by design, because most `vitals` writes do not mark it.
+
+**What this says about the next order of magnitude.** The reads that cross transactions are small (rows 1–3 together about 5–10% of a sweep). What remains per viewer is row writes in the sweep, views and the call's remainder, and all three go with pairs × refreshes. The exact rows here (1, 3, 4, 10) together might take 30–50 ms/s at 216 viewers and 15–20 ms/s at 16, about 12 of it the pool check, which does not grow with viewers. A 13–20× gap per pair needs option C or D (row 6), the owner's decision.
+
+### Proofs
+
+- **Exactness:** `det_compare.py` as above (no players: main = no-rotation control, the rotated build = the laws build with every new law off; 16 players: main = this branch with the laws off and no rotation, branch = branch with moved hash keys; the negative control caught at tick 900 in `vitals`).
+- **Scene gate** (`scene_gate.py run --base 1511d5e8 --force --no-main-check` on the private `slop-battlelaws-gate-20261120`, A725 cores, head 35a8c4c8, which has every authority and rules change of this branch): passed. verify-core `tick`, `sight`, `senses`, `refusal`, `skirmish`, `mechanics`; verify-player `combat`; verify-client `cues`, `motion_tables`, `copy_privacy`; verify-minds `roundtrip`, `acts`, `dealings`, `conversation`; `mind-unit`; generation on world, island and Cullet. Evidence `.local/living/verify/gate-1120093433-0e6503*`.
+- **Genesis fuel** (the gate's fresh publishes, same server and checkout; main 1511d5e8 measured the same way): Part D alone is identical to main on every seed (island 11.568e9, Cullet 37.363e9, cullet-laws 37.259e9, plan-test 11.527e9, world 11.478e9). With the four new laws: Cullet +0.28% (37.468e9; the script's law descriptions are read at each compile and Cullet compiles its composed script more often), cullet-laws +0.05%, island +0.05%, plan-test and world −0.01..+0.01%. Shorter comments changed nothing (37.471e9 → 37.468e9). Every seed keeps 68.8% or more headroom.
+- `cargo test -p living-rules`: 359 passed (the new laws' defaults, clamps and `combat_every_ticks`).
+- `just living-check` on the merged head: ok (1,094 s; the known red `look::tests::the_island_wears_the_pool` as on main).
+
+### Evidence
+
+`~/slop-evidence/battle-laws-20261120.tar.zst` and `.sha256`: every run directory of the series (`partA-1120-0915`, `partA2-1120` (L0), `partB-1120`, and the Part C L2 split if it ran), the rollups (`rollup.py`, `rollup_b.py`, `partA.json`, `partB.json`, `partB.md`), the behaviour runs (`behdet/t1–t3`, `behave.py`, `behave_det.py`, `behaviour.json`), the keep check (`keepcheck/`), the det comparisons (`.local/bl/det/*`), the gate logs and the wasm builds.
+
+### Not covered
+
+- A sustained 200-fighter battle: the fight thins, so engaged counts differ between runs. Part B normalizes per engaged fighter-second.
+- Minds connected, and real clients' input and frame pacing.
+- The 30-minute and 8-hour gates.
+- The split of the call's remainder (needs a host profile).
+- Behaviour with players fighting AI under the laws (the behaviour runs are AI-only); behaviour in fight graphs that react to bystander events.
+- One host. Nothing here establishes acceptance or capacity.

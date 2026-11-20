@@ -125,6 +125,8 @@ fn laws() {
         // asker works it out afresh, giving the same answers. `regard_cache_check` (a diagnostic)
         // compares every shared answer with a fresh one and logs any difference.
         regard_cache: true, regard_cache_check: false,
+        // Diagnostics, off in play (docs/COMBAT_PHASE.md).
+        sweep_keep_memory: false, sweep_keep_check: false,
         // A diagnostic: while profiling, also time the parts of a graph's evaluation.
         profile_detail: false,
         // How a fighter's work is done (docs/BATTLE_SCALE.md, battle-cheap), none of it changing what
@@ -166,6 +168,8 @@ fn laws() {
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
         witness_wake_ms: 500.0,
+        // Fighters' scheduling (docs/COMBAT_PHASE.md, "Part B"): off and 15 as before.
+        fighter_bystander_wake_cadence: false, combat_eval_hz: 15.0,
         // A test switch (docs/PERCEPTION.md, "Module memory and rollback"), 0 in play: a step the
         // world fails on purpose, to prove nothing kept in module memory outlives a failed one.
         memory_test: 0.0,
@@ -3183,6 +3187,8 @@ fn law_about(l, name) {
         "memory_test" => "A test switch that makes one step of the world fail on purpose; it is off in play.",
         "det_clock" => "A test switch that makes the world's time and chance follow its steps alone, to compare two builds; it is off in play.",
         "det_stop" => "A test switch that pauses the world at a given step; it is off in play.",
+        "fighter_bystander_wake_cadence" => if l.fighter_bystander_wake_cadence { "one in a fight turns to what others do near it at its own next look, not at once" } else { "one in a fight turns to what others do near it as any bystander does" },
+        "combat_eval_hz" => `one in a fight weighs what to do ${short(l.combat_eval_hz)} times a second`,
         "witness_wake_ms" => if l.witness_wake_ms > 0.0 { `a bystander turns to what it sees at most every ${short(l.witness_wake_ms)} ms` } else { "a bystander turns to each thing it sees at once" },
         "regard_cache" => if l.regard_cache { "what each one makes of another is worked out once a moment and shared" } else { "what each one makes of another is worked out afresh each time it is asked" },
         // How the work is done, not what anyone perceives: plain words (no condition), so the
@@ -3209,6 +3215,8 @@ fn law_about(l, name) {
         "seen_ranges" => "remember which structures were seen in ranges of ids by block",
         "seen_ranges_check" => "a diagnostic: compare structure newness with familiarity",
         "profile_detail" => if l.profile_detail { "while profiling, the parts of each behaviour's evaluation are timed" } else { "profiling times each behaviour's evaluation whole" },
+        "sweep_keep_memory" => "a diagnostic: what each player hears and how others' health stands are remembered from one moment to the next",
+        "sweep_keep_check" => "a diagnostic: each remembered sound and health is checked against the record",
         "regard_cache_check" => if l.regard_cache_check { "every shared answer about another is checked against a fresh one" } else { "shared answers about another are not checked" },
         "fast_lane_on" => if l.fast_lane_on { "a mind may revise its fighting quickly between blows" } else { "a mind revises its fighting only when it thinks" },
         "seen_again_n" => `seeing the same move started at one ${short(l.seen_again_n)} times in a fight is reason for a quick revision`,

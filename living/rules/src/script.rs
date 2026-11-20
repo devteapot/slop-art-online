@@ -612,6 +612,16 @@ pub struct Laws {
     /// once per this many ms (docs/BATTLE_SCALE.md, fix 3); the percept is written at once and in
     /// full. 0: woken by each, as before.
     pub witness_wake_ms: f32,
+    /// A creature in a fight (on the combat cadence, `mind_state.fast_until`) is not woken as a
+    /// bystander: what it sees of others' acts waits for its own next cadence evaluation, at most
+    /// `60 / combat_eval_hz` ticks later (docs/COMBAT_PHASE.md, "Part B"). The percept is written
+    /// at once either way, and a party to an act is still woken at once. Off: woken as any
+    /// bystander (`witness_wake_ms`), as before. AI scheduling only: a player's character is not
+    /// evaluated by a graph.
+    pub fighter_bystander_wake_cadence: bool,
+    /// How often a creature in a fight is evaluated (docs/COMBAT_PHASE.md, "Part B"): every
+    /// `round(60 / combat_eval_hz)` ticks, staggered by id. 15 (every 4th tick) as before.
+    pub combat_eval_hz: f32,
     /// A diagnostic, 0 in play (docs/PERCEPTION.md, "Module memory and rollback"): a step the
     /// world fails on purpose, to prove that nothing kept in module memory outlives a
     /// transaction that rolled back (1 the tick after its sweep, 2 the tick by a panic, 3
@@ -636,6 +646,13 @@ pub struct Laws {
     /// Diagnostic: every shared answer is also computed afresh and compared; differences are
     /// logged and counted (`perception::report_answers`). Costs both.
     pub regard_cache_check: bool,
+    /// A diagnostic, off in play (docs/COMBAT_PHASE.md, "Next: tick body and module memory"):
+    /// each player's sweep keeps its `heard` rows, and the creatures' health readings, in module
+    /// memory across ticks instead of reading them each sweep. Inexact: a vitals write that
+    /// `health_moved` does not mark stands until the reading is renewed (1 s). `sweep_keep_check`
+    /// compares each kept value with the table and counts differences (`sweep keep: …`).
+    pub sweep_keep_memory: bool,
+    pub sweep_keep_check: bool,
     /// A diagnostic: while profiling (`set_profile`), also time the parts of a behaviour graph's
     /// evaluation (its conditions, targets, act starts, alerts), docs/BATTLE_SCALE.md. Off by
     /// default: those spans are many and would weigh on what an ordinary profile measures.
@@ -754,6 +771,14 @@ pub fn longing_wait_ms(after_min: f32, nurture: f32) -> f32 {
 }
 
 
+impl Laws {
+    /// Every how many ticks a creature in a fight is evaluated: `round(60 / combat_eval_hz)`, at
+    /// least 1 (15 Hz: every 4th tick).
+    pub fn combat_every_ticks(&self) -> u64 {
+        (60.0 / self.combat_eval_hz.max(1.0)).round().max(1.0) as u64
+    }
+}
+
 impl Default for Laws {
     fn default() -> Self {
         Self {
@@ -825,12 +850,16 @@ impl Default for Laws {
             think_framing: false,
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
+            fighter_bystander_wake_cadence: false,
+            combat_eval_hz: 15.0,
             memory_test: 0.0,
             det_clock: false,
             det_stop: 0.0,
             witness_fold_ms: 2000.0,
             regard_cache: true,
             regard_cache_check: false,
+            sweep_keep_memory: false,
+            sweep_keep_check: false,
             profile_detail: false,
             check_ctx_plan: true,
             check_ctx_check: false,
@@ -3174,12 +3203,16 @@ impl Scripts {
             think_framing: flag("think_framing", l.think_framing),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
+            fighter_bystander_wake_cadence: flag("fighter_bystander_wake_cadence", l.fighter_bystander_wake_cadence),
+            combat_eval_hz: g("combat_eval_hz", l.combat_eval_hz).clamp(1.0, 60.0),
             memory_test: g("memory_test", l.memory_test).round().clamp(0.0, 9.0),
             det_clock: flag("det_clock", l.det_clock),
             det_stop: g("det_stop", l.det_stop).round().clamp(0.0, 16_000_000.0),
             witness_fold_ms: g("witness_fold_ms", l.witness_fold_ms).clamp(0.0, 10_000.0),
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
+            sweep_keep_memory: flag("sweep_keep_memory", l.sweep_keep_memory),
+            sweep_keep_check: flag("sweep_keep_check", l.sweep_keep_check),
             profile_detail: flag("profile_detail", l.profile_detail),
             check_ctx_plan: flag("check_ctx_plan", l.check_ctx_plan),
             check_ctx_check: flag("check_ctx_check", l.check_ctx_check),
@@ -4269,6 +4302,9 @@ mod tests {
         assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (600.0, 60.0, 1.0));
         assert!(l.regard_cache && !l.regard_cache_check, "answers are shared by default, unchecked");
         assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
+        assert!(!l.sweep_keep_memory && !l.sweep_keep_check, "sweeps read heard rows and health afresh by default");
+        assert!(!l.fighter_bystander_wake_cadence, "a fighter is woken as any bystander by default (docs/COMBAT_PHASE.md)");
+        assert_eq!((l.combat_eval_hz, l.combat_every_ticks()), (15.0, 4), "fighters evaluated every 4th tick by default");
         assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
         assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");
         assert!(l.chronicle_recent && !l.chronicle_recent_check, "the chronicle's repeat check reads the newest rows; its check off");
@@ -4288,6 +4324,12 @@ mod tests {
         assert!(about["memory_test"].starts_with("A test switch"), "{about:?}");
         let t = Scripts::new(&with_world_laws(src, &[("memory_test".into(), serde_json::json!(3.4))])).unwrap();
         assert_eq!(t.laws().memory_test, 3.0);
+        assert!(about["combat_eval_hz"].contains("15 times a second"), "{about:?}");
+        for (hz, every) in [(10.0, 6), (7.5, 8), (60.0, 1), (0.0, 60), (100.0, 1)] {
+            let t = Scripts::new(&with_world_laws(src, &[("combat_eval_hz".into(), serde_json::json!(hz)), ("fighter_bystander_wake_cadence".into(), serde_json::json!(true))])).unwrap();
+            assert_eq!(t.laws().combat_every_ticks(), every, "{hz} Hz");
+            assert!(t.laws().fighter_bystander_wake_cadence);
+        }
     }
 
     /// First sights that ask for a thought (docs/FIRST_SIGHT.md): off by default, with the gap a
