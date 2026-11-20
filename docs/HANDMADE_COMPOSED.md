@@ -1,6 +1,6 @@
 # Composed characters: hair profiles, ink and heroes (contract v1.3)
 
-**Status (2026-11-20): v1.3, agreed by dev-box and the GC (6b6a48ac3, with the shared pages added after); the client is being built on `char-port-2-s3`.** This is step S3 of the char-port-2 plan (`docs/char-port-2/PLAN.md` on branch `char-port-2`, §0.3, §2.6, §2.8, §2.10, §3.5, §4). It extends [the hair and face contract](HANDMADE_HAIR.md) (v1, v1.1) and [the ink contract](HANDMADE_INK.md) (v1.2) from hand-made whole files to **composed people**: residents that the client builds from a type file, shared style files and a look line (`characters/compose.rs`; [CHARACTERS.md § The client since compose-1](CHARACTERS.md#the-client-since-compose-1-2026-11-12)). Files keep `"contract": 1`: v1.3 only adds optional fields, file names and line fields.
+**Status (2026-11-20): v1.3, agreed by dev-box and the GC (6b6a48ac3, with the shared pages added after); built on branch `char-port-2-s3` (not merged): the client, the tools and the proof ([built](#built-char-port-2-s3)).** This is step S3 of the char-port-2 plan (`docs/char-port-2/PLAN.md` on branch `char-port-2`, §0.3, §2.6, §2.8, §2.10, §3.5, §4). It extends [the hair and face contract](HANDMADE_HAIR.md) (v1, v1.1) and [the ink contract](HANDMADE_INK.md) (v1.2) from hand-made whole files to **composed people**: residents that the client builds from a type file, shared style files and a look line (`characters/compose.rs`; [CHARACTERS.md § The client since compose-1](CHARACTERS.md#the-client-since-compose-1-2026-11-12)). Files keep `"contract": 1`: v1.3 only adds optional fields, file names and line fields.
 
 **Why a document of its own:** v1.3 touches four things that `HANDMADE_HAIR.md` doesn't own:
 
@@ -179,7 +179,7 @@ rgb = linear sRGB of OKLCh(L, C, h)
 | `dh` | none | a warning when \|dh\| > 30°: a hue shift that large across bands is probably a tuning slip |
 | L | at most 1 | none |
 
-**The result is a palette entry:** five sRGB byte triples, the four swatches and the ink. The **ink** is v1.1's `ink` when given; else `shade` × 0.6 in linear light, computed after the move. When a v1.2 `slop.ink` wins on the material, it is that ink's moved `color`. So everything the shader reads for a person is exact 8-bit data, computed on the CPU and unit-testable.
+**The result is a palette entry:** five sRGB byte triples, the four swatches and the ink. The **ink** is v1.1's `ink` when given; else the anchor's `shade` × 0.6 in linear light, taken at `ref` and moved like a swatch. When a v1.2 `slop.ink` wins on the material, it is that ink's moved `color`. So everything the shader reads for a person is exact 8-bit data, computed on the CPU and unit-testable.
 
 **Greying hair** (a person with `hair_natural`, `hair_silver` and `grey`): two entries, one for the natural colour and one for the silver. The shader mixes each swatch as `mix(natural, silver, clamp(grey × _GREY, 0, 1))` on the **sRGB-encoded** values, then linearises. This is exactly how `recolor` mixes the one hair colour today, so a profile greys lock by lock like today's hair.
 
@@ -191,7 +191,7 @@ With `anchors`, each anchor `i` (the profile's own swatches are anchor 0) gives 
 
 - **Weights:** `w_i = 1 / (ΔE_i² + 1e-4)`.
 - **Ratios and hue offsets:** arithmetic means weighted by `w_i`.
-- **A tag within ΔE 0.001 of an anchor's `ref`** takes that anchor alone, so each anchor reproduces its own swatches exactly.
+- **A tag within ΔE 0.001 of an anchor's `ref`** draws that anchor's own swatches, exactly. Its ratios alone wouldn't give them back when the reference is near grey, since such a reference has no hue to offset from.
 
 **Why distance, not lightness alone:** grey hair and blond hair sit at similar lightness and must not borrow each other's chroma. The blend is continuous, so two people with nearly the same hair never jump between palettes. Per-tag swatch tables are the special case where every colour in use is an anchor.
 
@@ -487,16 +487,69 @@ calibrate.py --line LINE.json [--targets T.json]
 1. Merge the lid and brow materials.
 2. Report the remainder with `diag` counts rather than trimming ink.
 
-## Sources in the code (for phase 2)
+## Built (char-port-2-s3)
+
+**Where it lives:** the client, the tools and the proof are on branch `char-port-2-s3`. The evidence is in the laptop worktree's `.local/char-port-2-s3/` and `.local/living/verify/ui-s3{cul,isl}/`. The verify-ui record is [2026-11-20-0641-char-port-2-s3](../.agents/skills/verify-ui/references/validation/2026-11-20-0641-char-port-2-s3.md).
+
+**What differs from the text above, as built:**
+
+- **Palettes are made by commands.**
+  - **How:** `palette::register` and `tag_later` queue them; `Composer` (an observer) adds them directly. `Palettes` is made on first use and sits in no system's parameters.
+  - **Why:** registering it when the app was built shifted every later component id. That reordered which mesh a type's shared `Body_00_SKIN` takes its recolour source from (`recolor` takes the first mesh's vertex mean, an order dependence that is on main), and people without `slop` drew up to 31 levels differently on the neck.
+- **`noink`** drops a profile's v1.1 lock ink as well as `slop.ink`.
+- **Two measurement switches beside `LIVING_GAME_COMPOSED_SLOP`:**
+  - `LIVING_GAME_VSYNC=0|immediate|mailbox` (main.rs): a windowed run presents without vsync and updates without focus (Bevy's game settings run an unfocused window at 60 Hz);
+  - `live_crowd.py --settings` seeds a camera's stops, since a window without focus takes no zoom.
+
+**The stand-in files:** `living/tools/characters/composed_fixture.py` makes an opted-in copy of a lookdev tree until S4 and S5 write the real files. It differs from the contract in three ways, which the audit reports:
+
+- **Carrier topology:** carriers are copies of today's eyeline and brow primitives (lifted 0.3 mm). Today's types don't share topology across a class's lines, so each type takes a quadrant of its class's cell, and `calibrate.py --pages` fails the class check, as it should.
+- **Densities:** 0.5 mm a texel for ink, since a whole eyeline with its lash cards is about 210 mm across, and 2 mm for hair, since a cylindrical projection isn't S5's packed lock islands.
+- **The 64 cells:** main's bundle has 74 hair files but 64 distinct hair meshes, and files with identical hair share a cell. That exactly fills the 8 × 8 page.
+
+**The proof** (laptop, Apple M4 Pro, Metal):
+
+- **Pixel identity:** main's client (`715aeb1ca`, built in its own worktree, since the asset root is compiled in) against the branch's, on main's files. 0 pixels differ on every shot:
+  - two composed people at three-quarter and Near;
+  - a VRoid base;
+  - scenery;
+  - Cora's hand-made file at four shots.
+- **Palette:** auburn, black, dark brown, blond, grey and a greying elder.
+  - **Dark anchor:** it lifts black and dark-brown hair from near black to readable greys.
+  - **The worked example:** `palette.py --self-test` and the client's unit tests reproduce it.
+- **Hero:** a line with `hero_file` draws Cora's file at the line's height. A line naming `characters/heroes/…` warns once and is composed.
+- **Shimmer** (`ink_shimmer.py look:<key>`, pass ≤ 1.5):
+  - **eyes:** faded at all three stops; portrait 1.42 and 1.39;
+  - **hair:** Near 0.40 and 0.43; Middle and Far faded; portrait 0.43 and 0.40.
+- **Cost** (windowed, uncapped, alternating; `on` the opted-in files, `main` main's files on the same client):
+  - **8 near** (live, the Cullet arrival at the Near stop, the cap's 8 full models): +0.055 ms mean over 3 pairs (+0.078, +0.073, +0.013), limit +0.3.
+  - **The 64 crowd** (meadow, game camera): −0.08 ms (−0.188, +0.007, −0.059), limit +1.0. On full models (`LIVING_GAME_FAR=1000`): medians 6.02 against 5.83 ms, paired mean −0.22, noisy.
+  - **Against `off`** (the same files with `slop` ignored), `on` is 0.2–0.5 ms faster: a profile skips the ring and strand samples.
+- **verify-ui:**
+  - `looks` 14/14 (Cullet, everyone opted in);
+  - `hair` 11/11 on the opted-in files and 11/11 on main's (a profile ignores the shines, so the second run is the shine's evidence);
+  - `camera-lod` 23/23.
+- **Tests:**
+  - `living-game`: 195 passed;
+  - `living-rules ui::`: 38 passed (the skill-name guard).
+
+**Not yet covered:**
+
+- S4's and S5's real files;
+- a bundle's KTX2 pages (`pictures.py check`'s new checks ran on the fixture tree);
+- a live scenario for ink or palette;
+- a hero in a live world.
+
+## Sources in the code
 
 | What | Where |
 |---|---|
-| The reader | `handmade.rs`: `material_of`, `hair_of` and `ink_of` gain `palette`, `ref`, `anchors` and `m_uv`. A new `composed_of(file)` reads the scene. `ink_map` is unchanged: the pages are named by `ink.map` and `highlight_map`. |
-| The palette maths, entries and images | a new module `characters/palette.rs` (OKLab, bisection, anchors; unit tests against the worked example) |
+| The reader | `handmade.rs`: `hair_of` and `ink_of` read `palette`, `ref`, `anchors`, `ink_m_uv` and `m_uv`; `composed_of`, `composed_scene` and `composed_material` read a composed file's scene and materials; `ComposedSlop` is the switch. `ink_map` is unchanged: the pages are named by `ink.map` and `highlight_map`. |
+| The palette maths, entries and images | `characters/palette.rs` (OKLab, bisection, anchors, `Palettes`, `register`, `tag_later`, `tag`; unit tests against the worked example) and its Python mirror `living/tools/characters/palette.py` |
 | Style materials | `compose.rs` `toon` (reads `slop` through `glb_json` by material name) and the `_HIGHLIGHT` packing |
 | Type materials | `lookdev.rs` `convert` (composed files' `slop`) |
 | Tags | `characters.rs` `recolor` (palette tags) |
 | The shader | `toon.wesl` `hand_hair` and `recolor` (bit 27) |
 | Heroes | `compose.rs` `prepare` and `characters/book.rs` (`hero_file`) |
 | The book's canonical fields | `look_lines.py` `DRAWN` |
-| Tools | `calibrate.py`, `ink_shimmer.py`, `pictures.py` and `share.py` |
+| Tools | `calibrate.py` with `composed_audit.py` (the composed audit and `--pages`), `ink_shimmer.py` (`look:<key>`), `pictures.py` (`ink`, `hairmask`, `composed_checks`), `live_crowd.py` (`--settings`, `--pre`), `composed_fixture.py` (the stand-in files); `share.py` needs no change (it merges `face_map` into extras, and pages no sidecars) |
