@@ -127,6 +127,8 @@ WHOLE_HEAD = False  # keep the scalp the hair's cap would cover (--parts head)
 RECEDE = 0.0  # how far the front hairline has moved back, m
 BALD = 0.0  # 0 a full head of hair to 1 a bald crown from the forehead back
 STRANDS_PATH = ""  # where the strands' picture is written
+OUT_PATH = ""  # the file being written
+HAIR_LAYOUT = None  # (SLOP_PORT=hair) the near hair's page layout, for the far hair
 LIMB_K = 1.0  # girth of arms and legs
 GIRTH = 1.0  # girth of the torso
 BELLY = 0.0  # how far a belly stands forward (a share of the torso's depth)
@@ -1736,7 +1738,30 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
         else:
             weights.append({"J_Bip_C_Head": 1.0})
     lock_faces = [tuple(base + i for i in f) for f in h.f]
+    page_hl = None
+    if hair.PAGE_HAIR:
+        # The hair-mask page (SLOP_PORT=hair): every piece its own island at 1 mm a texel, packed
+        # into one rectangle (hair.page_layout; the far mesh takes the near mesh's places), with
+        # a highlight per vertex and lock lines (hair_page.py puts the rectangle on the page).
+        global HAIR_LAYOUT
+        tex, size, layout = hair.page_layout(verts, faces + lock_faces, uvs, near=HAIR_LAYOUT if FAR else None)
+        uvs = [(float(x) / hair.PAGE_PX, 1.0 - float(y) / hair.PAGE_PX) for x, y in tex]
+        page_hl = np.concatenate([np.zeros(base), hair.highlight(HF, h.v, h.nrm) if len(h.v) else np.zeros(0)])
+        if not FAR:
+            HAIR_LAYOUT = layout
+            lines = []
+            for c in h.creases:
+                pts = tex[[base + i for i in c]]
+                run = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(pts, axis=0), axis=1))])
+                keep = (run >= hair.CREASE["clear"]) & (run <= hair.CREASE["up"] * run[-1])
+                if keep.sum() >= 2:
+                    lines.append(pts[keep].round(2).tolist())
+            with open(os.path.splitext(OUT_PATH)[0] + ".hairpage.json", "w") as fh:
+                json.dump(dict(size=list(size), density_mm=hair.TEXEL_M * 1000, range_px=hair.INK_RANGE_PX, creases=lines), fh)
     ob = raw_object("Hair", verts, faces + lock_faces, weights, cols, MAT["hair"], arm, uvs=uvs)
+    if page_hl is not None:
+        hl = ob.data.attributes.new("_HIGHLIGHT", "FLOAT", "POINT")
+        hl.data.foreach_set("value", page_hl.astype(np.float32))
     if spec.get("atelier") and not FAR:
         ob["scalp_vertices"] = base
     orient_islands(ob, skip=len(faces))
@@ -3187,6 +3212,7 @@ def main():
     write_params()
     g = globals()
     g["STRANDS_PATH"] = os.path.join(os.path.dirname(out), "strands.png")
+    g["OUT_PATH"] = out
     g["WHOLE_HEAD"] = a.parts in ("head", "face", "overlay")
     g["OVERLAY"] = a.overlay if a.parts == "overlay" else None
     # A smock's skirt hangs from spring bones where the file holds the skirt: a whole person, or

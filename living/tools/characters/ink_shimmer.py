@@ -31,13 +31,16 @@ camera path changes a well-drawn signal nearly linearly over a frame, so the sec
 difference isolates what flickers or crawls (0 is smooth, up to 4 for signal that comes and goes
 at random). **The region:** for `--slot hair` (`hair_shimmer.py`), the hair pixels (the hue of
 the plain frame where ink falls, within ±0.06, saturation above 0.2) in the box round every pixel
-the ink changes at that stop, 8 px wider; for other slots (eye whites and skin fail the hair's
+the ink changes at that stop, 8 px wider; grey and black hair, which has no hue, by saturation
+under 0.2 and luminance within 60 levels of the hair's where the ink falls; for other slots (eye whites and skin fail the hair's
 saturation test), the union over the sequence's frames of the pixels the ink darkens by more than
 2 levels, dilated by 3 px. **A sequence passes when F_ink <= 1.5 F_edge:** the line flickers no
 more, per unit of what it draws, than the antialiased edges the surface already shows in motion,
 with half again for a line having two edges to an edge's one. A sequence whose ink darkens fewer
 than 1 pixel a frame by more than 8 levels is not scored (the ink has faded out there): it is
-listed as `faded`.
+listed as `faded`. **Not ink:** ink only darkens, so where an inked frame is lighter than its
+reference by more than 8 levels (the client's blink runs on the clock and one render can catch a
+blink the other doesn't), those pixels, dilated by 3 px, are left out of the region and the count.
 
 **Deciding a fade:** `--fade A,B,...` scores the file once for each `fade_px` (an ink copy per
 value, the value set on every targeted ink; the reference is rendered once). `--stills` writes,
@@ -261,15 +264,35 @@ def score(plain_files, ink_files, hair=True, also=()):
             P = [read_rgb(f, x1, y1) for f in plain_files[start:start + FRAMES]]
             I = [read_rgb(f, x1, y1) for f in ink_files[start:start + FRAMES]]
             Lp, Li = [lum_of(p, x0 - 1, x1, y0 - 1, y1) for p in P], [lum_of(i, x0 - 1, x1, y0 - 1, y1) for i in I]
-            ink_px = sum(1 for k in range(FRAMES) for r_p, r_i in zip(Lp[k], Li[k]) for a, b in zip(r_p, r_i) if a - b > 8) / FRAMES
+            # Ink only darkens. Where an inked frame is lighter than its reference by more than 8
+            # levels the two renders differ for another reason (the client's blink runs on the
+            # clock, so one render can catch a blink the other doesn't): those pixels, dilated by
+            # 3 px, are not scored.
+            ny, nx = len(Lp[0]), len(Lp[0][0])
+            other = [[False] * nx for _ in range(ny)]
+            for k in range(FRAMES):
+                for yy in range(ny):
+                    rp, ri = Lp[k][yy], Li[k][yy]
+                    for xx in range(nx):
+                        if ri[xx] - rp[xx] > 8:
+                            for dy in range(max(0, yy - 3), min(ny, yy + 4)):
+                                for dx in range(max(0, xx - 3), min(nx, xx + 4)):
+                                    other[dy][dx] = True
+            ink_px = sum(1 for k in range(FRAMES) for yy, (r_p, r_i) in enumerate(zip(Lp[k], Li[k])) for xx, (a, b) in enumerate(zip(r_p, r_i)) if a - b > 8 and not other[yy][xx]) / FRAMES
             if ink_px < 1:
                 rows.append(dict(sequence=name, ink_px=round(ink_px, 1), result="faded"))
                 continue
             if hair:
                 # The hair's hue: the plain frame's median hue where the ink falls.
                 c0 = P[0]
-                hues = sorted(hsv(*c0[3][y][x * c0[2]:x * c0[2] + 3])[0] for x, y in diff[:4000] if y <= y1 and x <= x1)
-                hue = hues[len(hues) // 2]
+                pts = [(x, y) for x, y in diff[:4000] if y <= y1 and x <= x1]
+                hs = [hsv(*c0[3][y][x * c0[2]:x * c0[2] + 3]) for x, y in pts]
+                hue = sorted(h_ for h_, _ in hs)[len(hs) // 2]
+                # Grey and black hair (the median saturation where the ink falls under 0.2) has
+                # no hue to go by: its region is the unsaturated pixels within 60 levels of the
+                # hair's median luminance there (skin and eye whites fall outside).
+                grey = sorted(s_ for _, s_ in hs)[len(hs) // 2] < 0.2
+                lum0 = sorted(0.2126 * c0[3][y][x * c0[2]] + 0.7152 * c0[3][y][x * c0[2] + 1] + 0.0722 * c0[3][y][x * c0[2] + 2] for x, y in pts)[len(pts) // 2]
                 M = []
                 for y in range(y0 - 1, y1):
                     row = []
@@ -278,9 +301,13 @@ def score(plain_files, ink_files, hair=True, also=()):
                         for p in P:
                             if not ok:
                                 break
-                            hh, sat = hsv(*p[3][y][x * p[2]:x * p[2] + 3])
-                            d = abs(hh - hue)
-                            ok = sat > 0.2 and min(d, 1 - d) < 0.06
+                            px = p[3][y][x * p[2]:x * p[2] + 3]
+                            hh, sat = hsv(*px)
+                            if grey:
+                                ok = sat < 0.2 and abs(0.2126 * px[0] + 0.7152 * px[1] + 0.0722 * px[2] - lum0) < 60
+                            else:
+                                d = abs(hh - hue)
+                                ok = sat > 0.2 and min(d, 1 - d) < 0.06
                         row.append(ok)
                     M.append(row)
             else:
@@ -305,6 +332,7 @@ def score(plain_files, ink_files, hair=True, also=()):
                 for yy in range(ny):
                     M[yy][0] = False
                 M[0] = [False] * nx
+            M = [[m and not o for m, o in zip(mr, orow)] for mr, orow in zip(M, other)]
             S = [[[max(0.0, a - b) for a, b in zip(rp, ri)] for rp, ri in zip(Lp[k], Li[k])] for k in range(FRAMES)]
             Ed = [[[0.0 if x == 0 or y == 0 else abs(L[y][x] - L[y][x - 1]) + abs(L[y][x] - L[y - 1][x]) for x in range(len(L[0]))] for y in range(len(L))] for L in Lp]
             fi, fe = flicker(S, M), flicker(Ed, M)

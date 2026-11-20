@@ -214,54 +214,58 @@ def pages(cal, lookdev):
     # The hair-mask page.
     hm = root / "styles" / "hair" / "hair-masks.json"
     if hm.exists():
-        man = json.loads(hm.read_text())
-        size, cell = man.get("size", 4096), man.get("cell", 512)
-        if not (cal.ASSETS / man.get("page", "")).exists() and not (cal.ASSETS / (man.get("page", "")[:-4] + ".ktx2")).exists():
-            errors.append(f"hair page {man.get('page')!r} is not on disk: every cut's mask is missing")
-        rects, profile, uvs = {}, None, {}
-        for f, (c, r, w, h) in sorted(man.get("files", {}).items()):
-            path = root / "styles" / "hair" / f
-            if not path.exists():
-                errors.append(f"hair page: {f} is listed but not on disk")
-                continue
-            j, binary = cal.read_glb(path)
-            sc = j.get("scenes", [{}])[j.get("scene", 0)].get("extras", {}).get("slop")
-            if not is_composed(sc):
-                errors.append(f"hair page: {f} does not opt in (its scene has no slop contract)")
-            hair = [m for m in j.get("materials", []) if "_HAIR" in m.get("name", "")]
-            ms = [((m.get("extras") or {}).get("slop") or {}).get("hair") for m in hair]
-            for p in ms:
-                if p is None:
-                    errors.append(f"hair page: {f}'s hair has no profile")
+        top = json.loads(hm.read_text())
+        size, cell = top.get("size", 4096), top.get("cell", 512)
+        # One page, or several (`pages`: each its own page and files, the first the manifest's
+        # own); every page is audited alike, each with its one profile.
+        facts["hair_page"] = []
+        for man in top.get("pages") or [top]:
+            if not (cal.ASSETS / man.get("page", "")).exists() and not (cal.ASSETS / (man.get("page", "")[:-4] + ".ktx2")).exists():
+                errors.append(f"hair page {man.get('page')!r} is not on disk: every cut's mask is missing")
+            rects, profile, uvs = {}, None, {}
+            for f, (c, r, w, h) in sorted(man.get("files", {}).items()):
+                path = root / "styles" / "hair" / f
+                if not path.exists():
+                    errors.append(f"hair page: {f} is listed but not on disk")
                     continue
-                if p.get("highlight_map") != man.get("page"):
-                    errors.append(f"hair page: {f} names {p.get('highlight_map')!r}, not the page")
-                if profile is None:
-                    profile = p
-                elif p != profile:
-                    errors.append(f"hair page: {f}'s profile differs from the page's first (it would be a material of its own)")
-            uv = uv_of(cal, j, binary, {m.get("name") for m in hair})
-            flat = [q for lst in uv.values() for prim in lst for q in prim]
-            x0, y0, x1, y1 = c * cell / size, r * cell / size, (c + w) * cell / size, (r + h) * cell / size
-            half = 0.5 / size
-            out = sum(1 for (u, v) in flat if not (x0 - half <= u <= x1 + half and y0 - half <= v <= y1 + half))
-            if out:
-                errors.append(f"hair page: {f}: {out} of {len(flat)} hair UVs outside its rectangle {[c, r, w, h]}")
-            rects[f] = (c, r, w, h)
-            uvs[f] = flat
-            prims = [p for mesh in j["meshes"] for p in mesh["primitives"] if j["materials"][p["material"]].get("name", "").endswith("_HAIR")]
-            meas = median_density(cal, j, binary, prims)
-            decl = (profile or {}).get("ink_m_uv")
-            if meas and decl and abs(meas - decl) > 0.1 * decl:
-                warns.append(f"hair page: {f} measures {meas:.3f} m/UV against the page's {decl} (over 10%)")
-        keys = sorted(rects)
-        for i, a in enumerate(keys):
-            for b in keys[i + 1:]:
-                ra, rb = rects[a], rects[b]
-                if ra[0] < rb[0] + rb[2] and rb[0] < ra[0] + ra[2] and ra[1] < rb[1] + rb[3] and rb[1] < ra[1] + ra[3]:
-                    if uvs[a] != uvs[b]:
-                        errors.append(f"hair page: {a} and {b} overlap and their hair differs")
-        facts["hair_page"] = {"page": man.get("page"), "files": len(rects), "cells_used": len({rects[k] for k in rects})}
+                j, binary = cal.read_glb(path)
+                sc = j.get("scenes", [{}])[j.get("scene", 0)].get("extras", {}).get("slop")
+                if not is_composed(sc):
+                    errors.append(f"hair page: {f} does not opt in (its scene has no slop contract)")
+                hair = [m for m in j.get("materials", []) if "_HAIR" in m.get("name", "")]
+                ms = [((m.get("extras") or {}).get("slop") or {}).get("hair") for m in hair]
+                for p in ms:
+                    if p is None:
+                        errors.append(f"hair page: {f}'s hair has no profile")
+                        continue
+                    if p.get("highlight_map") != man.get("page"):
+                        errors.append(f"hair page: {f} names {p.get('highlight_map')!r}, not the page")
+                    if profile is None:
+                        profile = p
+                    elif p != profile:
+                        errors.append(f"hair page: {f}'s profile differs from the page's first (it would be a material of its own)")
+                uv = uv_of(cal, j, binary, {m.get("name") for m in hair})
+                flat = [q for lst in uv.values() for prim in lst for q in prim]
+                x0, y0, x1, y1 = c * cell / size, r * cell / size, (c + w) * cell / size, (r + h) * cell / size
+                half = 0.5 / size
+                out = sum(1 for (u, v) in flat if not (x0 - half <= u <= x1 + half and y0 - half <= v <= y1 + half))
+                if out:
+                    errors.append(f"hair page: {f}: {out} of {len(flat)} hair UVs outside its rectangle {[c, r, w, h]}")
+                rects[f] = (c, r, w, h)
+                uvs[f] = flat
+                prims = [p for mesh in j["meshes"] for p in mesh["primitives"] if j["materials"][p["material"]].get("name", "").endswith("_HAIR")]
+                meas = median_density(cal, j, binary, prims)
+                decl = (profile or {}).get("ink_m_uv")
+                if meas and decl and abs(meas - decl) > 0.1 * decl:
+                    warns.append(f"hair page: {f} measures {meas:.3f} m/UV against the page's {decl} (over 10%)")
+            keys = sorted(rects)
+            for i, a in enumerate(keys):
+                for b in keys[i + 1:]:
+                    ra, rb = rects[a], rects[b]
+                    if ra[0] < rb[0] + rb[2] and rb[0] < ra[0] + ra[2] and ra[1] < rb[1] + rb[3] and rb[1] < ra[1] + ra[3]:
+                        if uvs[a] != uvs[b]:
+                            errors.append(f"hair page: {a} and {b} overlap and their hair differs")
+            facts["hair_page"].append({"page": man.get("page"), "files": len(rects), "cells_used": len({rects[k] for k in rects})})
     else:
         facts["hair_page"] = "no hair-masks.json"
     # The ink page.

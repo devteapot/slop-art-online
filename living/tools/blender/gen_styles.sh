@@ -67,6 +67,8 @@ one() {
     grep -v OpenColorIO "$log" | tail -30; rm -rf "$log" "$tmp"; return 1
   fi
   python3 living/tools/merge_primitives.py "$tmp/x.glb" "$root/$item.glb" > /dev/null
+  # With the hair-mask page (SLOP_PORT=hair), the file's rectangle and lock lines (hair_page.py).
+  if [ -f "$tmp/x.hairpage.json" ]; then cp "$tmp/x.hairpage.json" "$root/$item.hairpage.json"; fi
   # One shading mean a class, so the client can share one material between a class's files.
   python3 living/tools/characters/shade_mean.py "$kind" "$root/$item.glb" > /dev/null
   if [ "$kind" = hair ]; then
