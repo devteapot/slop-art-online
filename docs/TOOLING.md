@@ -182,6 +182,59 @@ The cases `generation-default` (`world`), `generation-island` (`island`) and `ge
 
 A failing check is a part, `<case>:<seed>:<check>`, that the red-on-main list can hold like `combat:<scene>`. The case passes when every failing check is listed, and says which. `recheck` cannot run a part, so drop it by hand (`just living-scene-gate reds --drop '<key>'`) once it is green. Listed on 2026-11-20 against main `bfbbc079`: `generation-cullet:cullet-laws:the seed's laws are composed over the shipped script` (red on both cullet-laws seeds; fixed separately after status-parts-genesis), and Cullet's two look checks `generation-cullet:cullet:the cases are of the world's generation` and `generation-cullet:cullet:each band case's resident wears its entry, in its band, with its line, at its stage (11 cases)` (the stale compiled seed below; dev-box's `cullet-looks-seed`).
 
+#### Render asset set
+
+The render group (verify-ui's drawing cases, [below](#the-render-group)) needs the game client's git-ignored assets. The gate does not generate them: it reads one pinned, read-only **asset set** and links it into its worktree for the run. Sets are built on dev-box, from a tracked builder (`living/tools/characters/bundle.py`), because the composed bundle's KTX2 pictures are byte-identical only on dev-box's kernel ([CHARACTERS.md § Pictures as KTX2](CHARACTERS.md#pictures-as-ktx2)).
+
+**Where.** `~/slop-assets/<bundle-sha>/`, one folder per set, never written after it is made (files mode 0444, folders 0555). `~/slop-assets/current` is a symlink to the pinned set. The gate reads `LIVING_GATE_RENDER_ASSETS` (default `~/slop-assets/current`); a host without that folder does not run the render group ([the render group](#the-render-group)).
+
+**Layout.** The set's root mirrors `living/game/assets/`:
+
+| Path in the set | What | Linked into `living/game/assets/` |
+| --- | --- | --- |
+| `lookdev/` | the VRoid bases, the composed bundle (types, styles, overlays, pages, heroes, far models), the clip bake `lookdev/anim/own-clips.glb` | yes |
+| `textures/` | painted textures, terrain detail included | yes |
+| `view/` | hand-made files for the asset view (`hair`'s calibration files) | yes, when present |
+| `envs/<kit>/` | each environment kit folder (Cullet, the island's buildings, nature) | yes, each kit folder |
+| `characters/looks.json` | the look book | yes |
+| `worlds/<world>/looks.json` | the world look data the book was made with (Cullet, island): provenance only | no |
+| `set.json` | the record below | no |
+| `MANIFEST.txt` | every other file's sha256 | no |
+
+What is linked is `set.json`'s `link` list, not a scan. A linked path must not exist in the worktree as a tracked file or a real folder; the gate links each at the start of the render group and removes its own links when it ends (a gate killed meanwhile leaves links into the set, which the next gate replaces).
+
+**`set.json`** (schema 1):
+
+```json
+{
+  "schema": 1,
+  "bundle_sha": "<the composed bundle's sha, the folder's name>",
+  "main_commit": "<40-hex commit the set was built from: provenance, printed by the gate>",
+  "generator_trees": {
+    "living/tools/blender": "<git rev-parse <main_commit>:living/tools/blender>",
+    "living/tools/characters": "<… :living/tools/characters>",
+    "living/tools/textures": "<… :living/tools/textures>"
+  },
+  "look_generations": ["<every generation the book holds: its generation and generations>"],
+  "clip_count": 87,
+  "pictures": "ktx2",
+  "link": ["lookdev", "textures", "view", "envs/cullet", "envs/island", "characters/looks.json"],
+  "built_on": "dev-box",
+  "built_at": "<ISO 8601 time>"
+}
+```
+
+**`MANIFEST.txt`**: one line per file, `sha256sum` format (`<64 hex>  <path relative to the set root>`), every regular file in the set but `set.json` and `MANIFEST.txt`, sorted by path. The set holds no symlinks.
+
+**When a set is stale.** The gate checks the set before the render cases. Each failure is the verdict **asset set stale** (setup, exit 2: the merge is not blamed):
+
+- `schema` is not 1, a field is missing, or the folder's name is not `bundle_sha`;
+- a file differs from its `MANIFEST.txt` sha256, is missing, or is in the set but not in the manifest (the gate keeps a cache of the sizes and times of files it has hashed, by set, and hashes again only what changed);
+- `generator_trees` differs from the tree under test (`git rev-parse HEAD:<path>` for each of the three paths). A branch that changes a generator therefore passes only with a set built from its own head, given with `LIVING_GATE_RENDER_ASSETS`; its worker builds that set, and after the merge dev-box makes it `current`;
+- a seed the render cases use (`living/seeds/cullet.json`, `living/seeds/island.json`, `looks.generation`) wears a generation the book does not hold, or `look_generations` is not the book's own `generation` and `generations`;
+- `lookdev/anim/own-clips.glb` does not hold `clip_count` animations;
+- a drive's client logged that the book lacks a key or a world's generation (`is not in the look book`, `which the look book (…) does not hold`, `no look book at`), outside the cases that drop a key on purpose (`looks`, `looks-generation`, `camera-faces`).
+
 ### Seed freshness
 
 [`seed_fresh.py`](../living/tools/seed_fresh.py) compares every compiled seed with the sources it is compiled from, files only (no publish, no build, no model; about 0.5 s). Each `living/seeds/worlds/<world>/` compiles into `living/seeds/<into>.json` through `author_world.py <world> --compile-only` (`into` from `cast.json` or `world.json`, else the world's name). Cullet's land, plan, ways and town life come from `cullet_plan.py`. The compilers stamp nothing but the look data's own `generation`, so the check compares each block as its compiler copies it:
