@@ -34,17 +34,5 @@
     "reason": "stale compiled seed: living/seeds/cullet.json looks generation c4-e61b01c0, worlds/cullet/looks.json c4-cbcc40bf; dev-box recompiles it on cullet-looks-seed. Drop by hand when it lands",
     "skill": "verify-generation",
     "times": 0
-  },
-  "seeds:cullet:looks": {
-    "case": "seeds:cullet:looks",
-    "first_main": "bfbbc0796f633169b306c7eca0f9a8132ed919c2",
-    "first_seen": "2026-11-20T01:29:27+01:00",
-    "last_evidence": "python3 living/tools/seed_fresh.py",
-    "last_main": "bfbbc0796f633169b306c7eca0f9a8132ed919c2",
-    "last_seen": "2026-11-20T01:29:27+01:00",
-    "owner": "dev-box (cullet-looks-seed)",
-    "reason": "stale compiled seed: living/seeds/cullet.json looks generation c4-e61b01c0 and 55 residents' looks, against worlds/cullet/looks.json c4-cbcc40bf; dev-box recompiles it on cullet-looks-seed. Drop by hand when it lands",
-    "skill": "seed-freshness",
-    "times": 0
   }
 }
