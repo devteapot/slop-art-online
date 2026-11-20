@@ -315,6 +315,8 @@ pub mod seen_doing_cue_type;
 pub mod seen_doing_far_table;
 pub mod seen_doing_near_table;
 pub mod seen_doing_table;
+pub mod seen_fighter_copy_table;
+pub mod seen_fighter_copy_type;
 pub mod seen_fighter_cue_table;
 pub mod seen_fighter_cue_type;
 pub mod seen_fighters_far_table;
@@ -698,6 +700,8 @@ pub use seen_doing_cue_type::SeenDoingCue;
 pub use seen_doing_far_table::*;
 pub use seen_doing_near_table::*;
 pub use seen_doing_table::*;
+pub use seen_fighter_copy_table::*;
+pub use seen_fighter_copy_type::SeenFighterCopy;
 pub use seen_fighter_cue_table::*;
 pub use seen_fighter_cue_type::SeenFighterCue;
 pub use seen_fighters_far_table::*;
@@ -1535,6 +1539,7 @@ pub struct DbUpdate {
     seen_doing_cue: __sdk::TableUpdate<SeenDoingCue>,
     seen_doing_far: __sdk::TableUpdate<Doing>,
     seen_doing_near: __sdk::TableUpdate<Doing>,
+    seen_fighter_copy: __sdk::TableUpdate<SeenFighterCopy>,
     seen_fighter_cue: __sdk::TableUpdate<SeenFighterCue>,
     seen_fighters: __sdk::TableUpdate<Fighter>,
     seen_fighters_far: __sdk::TableUpdate<Fighter>,
@@ -1971,6 +1976,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "seen_doing_near" => db_update
                     .seen_doing_near
                     .append(seen_doing_near_table::parse_table_update(table_update)?),
+                "seen_fighter_copy" => db_update
+                    .seen_fighter_copy
+                    .append(seen_fighter_copy_table::parse_table_update(table_update)?),
                 "seen_fighter_cue" => db_update
                     .seen_fighter_cue
                     .append(seen_fighter_cue_table::parse_table_update(table_update)?),
@@ -2389,6 +2397,9 @@ impl __sdk::DbUpdate for DbUpdate {
             )
             .with_updates_by_pk(|row| &row.id);
         diff.seen_doing_cue = self.seen_doing_cue.into_event_diff();
+        diff.seen_fighter_copy = cache
+            .apply_diff_to_table::<SeenFighterCopy>("seen_fighter_copy", &self.seen_fighter_copy)
+            .with_updates_by_pk(|row| &row.id);
         diff.seen_fighter_cue = self.seen_fighter_cue.into_event_diff();
         diff.seen_stock = cache
             .apply_diff_to_table::<SeenStock>("seen_stock", &self.seen_stock)
@@ -2963,6 +2974,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_doing_near" => db_update
                     .seen_doing_near
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_fighter_copy" => db_update
+                    .seen_fighter_copy
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_fighter_cue" => db_update
                     .seen_fighter_cue
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -3462,6 +3476,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_doing_near" => db_update
                     .seen_doing_near
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_fighter_copy" => db_update
+                    .seen_fighter_copy
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "seen_fighter_cue" => db_update
                     .seen_fighter_cue
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3697,6 +3714,7 @@ pub struct AppliedDiff<'r> {
     seen_doing_cue: __sdk::TableAppliedDiff<'r, SeenDoingCue>,
     seen_doing_far: __sdk::TableAppliedDiff<'r, Doing>,
     seen_doing_near: __sdk::TableAppliedDiff<'r, Doing>,
+    seen_fighter_copy: __sdk::TableAppliedDiff<'r, SeenFighterCopy>,
     seen_fighter_cue: __sdk::TableAppliedDiff<'r, SeenFighterCue>,
     seen_fighters: __sdk::TableAppliedDiff<'r, Fighter>,
     seen_fighters_far: __sdk::TableAppliedDiff<'r, Fighter>,
@@ -4034,6 +4052,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Doing>(
             "seen_doing_near",
             &self.seen_doing_near,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<SeenFighterCopy>(
+            "seen_fighter_copy",
+            &self.seen_fighter_copy,
             event,
         );
         callbacks.invoke_table_row_callbacks::<SeenFighterCue>(
@@ -4882,6 +4905,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         seen_doing_cue_table::register_table(client_cache);
         seen_doing_far_table::register_table(client_cache);
         seen_doing_near_table::register_table(client_cache);
+        seen_fighter_copy_table::register_table(client_cache);
         seen_fighter_cue_table::register_table(client_cache);
         seen_fighters_table::register_table(client_cache);
         seen_fighters_far_table::register_table(client_cache);
@@ -5046,6 +5070,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "seen_doing_cue",
         "seen_doing_far",
         "seen_doing_near",
+        "seen_fighter_copy",
         "seen_fighter_cue",
         "seen_fighters",
         "seen_fighters_far",

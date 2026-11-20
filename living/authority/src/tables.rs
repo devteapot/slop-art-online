@@ -2352,13 +2352,42 @@ pub struct SeenBodyCopy {
 /// the moves (`frame::to_public`, `all_private`, `perception::fill_mirror`, `drop_mirrors`), so
 /// a step that rolls back takes it back with them: module memory could not say so to a reducer
 /// that runs before the next tick. No row: neither.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[spacetimedb::table(accessor = copy_state)]
 pub struct CopyState {
     #[primary_key]
     pub viewer: Identity,
     pub public: bool,
     pub mirrored: bool,
+    /// Its fighter copies are in `seen_fighter_copy` (views step 3, the `fighter_tables_on` law).
+    #[default(false)]
+    pub fighters: bool,
+}
+
+impl Default for CopyState {
+    fn default() -> Self {
+        CopyState { viewer: Identity::ZERO, public: false, mirrored: false, fighters: false }
+    }
+}
+
+/// A perceived creature's `fighter` row as the viewer's frames last wrote it (public, row-level
+/// security `viewer = :sender`; views step 3, the `fighter_tables_on` law): `id` the private
+/// copy's key (`frame::key`: the viewer's character and the creature), `body` the creature,
+/// `near` the tier, `fighter` the row `seen_fighters` returns for it (its band as this viewer
+/// perceives it). A primary key, unlike `seen_body_copy`: fighter copies change often (a move, a
+/// band), and a change is then one in-place update, not a delete and an insert on every index
+/// (measured: the keyless table cost 24-43 ms/s more tick WASM at 16-216 viewers).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_fighter_copy, public,
+    index(accessor = viewer_near, btree(columns = [viewer, near])))]
+pub struct SeenFighterCopy {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub body: u32,
+    pub near: bool,
+    pub fighter: Fighter,
 }
 
 /// A mirror of a viewer's `projected` row (public, row-level security `viewer = :sender`;

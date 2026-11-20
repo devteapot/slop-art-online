@@ -276,6 +276,8 @@ struct Player {
 struct Privacy {
     body_rows: u64,
     character_rows: u64,
+    /// `seen_fighter_copy` rows (views step 3), checked the same way.
+    fighter_rows: u64,
     /// `combat_feed` event rows (views step 2), checked the same way.
     combat_rows: u64,
     foreign_rows: u64,
@@ -307,14 +309,24 @@ impl Privacy {
         }
     }
 
+    fn check_fighter(&mut self, own: Identity, viewer: Identity) {
+        self.fighter_rows += 1;
+        if viewer != own {
+            self.foreign_rows += 1;
+            if self.foreign_viewers.len() < 8 {
+                self.foreign_viewers.insert(viewer.to_hex().to_string());
+            }
+        }
+    }
+
     fn json(&self) -> Value {
-        json!({"body_rows": self.body_rows, "character_rows": self.character_rows, "combat_rows": self.combat_rows, "foreign_rows": self.foreign_rows, "foreign_viewers": self.foreign_viewers})
+        json!({"body_rows": self.body_rows, "character_rows": self.character_rows, "fighter_rows": self.fighter_rows, "combat_rows": self.combat_rows, "foreign_rows": self.foreign_rows, "foreign_viewers": self.foreign_viewers})
     }
 }
 
 /// The copies a connection holds now (its client cache), by table.
 fn held_copies(db: &RemoteTables) -> Value {
-    json!({"body": db.seen_body_copy().count(), "character": db.seen_character_copy().count()})
+    json!({"body": db.seen_body_copy().count(), "character": db.seen_character_copy().count(), "fighter": db.seen_fighter_copy().count()})
 }
 
 /// `held` on stdin: print every player's copies held now and its privacy counts (copy-privacy).
@@ -449,6 +461,10 @@ fn hook(p: &Player, log: &Log, own: Identity) {
         conn.db.seen_character_copy().on_insert(move |_, c| pv.lock().unwrap().check(own, c.viewer, false));
         let pv = p.privacy.clone();
         conn.db.seen_character_copy().on_update(move |_, _, c| pv.lock().unwrap().check(own, c.viewer, false));
+        let pv = p.privacy.clone();
+        conn.db.seen_fighter_copy().on_insert(move |_, c| pv.lock().unwrap().check_fighter(own, c.viewer));
+        let pv = p.privacy.clone();
+        conn.db.seen_fighter_copy().on_update(move |_, _, c| pv.lock().unwrap().check_fighter(own, c.viewer));
         // A player's combat feed as event rows (views step 2): counted as `combat_feed` inserts.
         let (pv, cnt) = (p.privacy.clone(), p.counts.clone());
         EventTable::on_insert(&conn.db.combat_feed(), move |_, c| {
@@ -466,6 +482,7 @@ fn hook(p: &Player, log: &Log, own: Identity) {
     count!(conn, p.counts, seen_character_copy);
     count!(conn, p.counts, seen_fighters_near);
     count!(conn, p.counts, seen_fighters_far);
+    count!(conn, p.counts, seen_fighter_copy);
     count!(conn, p.counts, seen_doing_near);
     count!(conn, p.counts, seen_doing_far);
     count!(conn, p.counts, my_vitals);
@@ -590,6 +607,15 @@ fn hook(p: &Player, log: &Log, own: Identity) {
         windups!(seen_fighters);
         windups!(seen_fighters_near);
         windups!(seen_fighters_far);
+        // The public fighter copies (views step 3), keyed: a change is an update.
+        let inserted = fighter.clone();
+        conn.db.seen_fighter_copy().on_insert(move |_, c| inserted(&c.fighter, "view"));
+        let updated = fighter.clone();
+        conn.db.seen_fighter_copy().on_update(move |_, a, c| {
+            if a.fighter.act != c.fighter.act || a.fighter.act_ms != c.fighter.act_ms {
+                updated(&c.fighter, "view");
+            }
+        });
         EventTable::on_insert(&conn.db.seen_fighter_cue(), move |_, c| {
             if let Some(f) = &c.fighter {
                 fighter(f, "cue");
@@ -908,6 +934,9 @@ fn players_mode() {
     // The mirror of a player's projections (battle-views addendum 2, `characters_table_on`):
     // `seen_character_copy` in place of the `seen_characters` view.
     let character_tables = req["character_tables"].as_bool().unwrap_or(false);
+    // The public fighter copies (views step 3, `fighter_tables_on`): `seen_fighter_copy` in place of
+    // the fighter views (both tiers, or the untiered one).
+    let fighter_tables = req["fighter_tables"].as_bool().unwrap_or(false);
     // A player's combat feed as event rows (views step 2, `combat_feed_on`): `combat_feed` in
     // place of the `my_combat` view.
     let combat_feed = req["combat_feed"].as_bool().unwrap_or(false);
@@ -945,6 +974,10 @@ fn players_mode() {
         if character_tables {
             queries.retain(|q| q.as_str() != "SELECT * FROM seen_characters");
             queries.push("SELECT * FROM seen_character_copy".to_string());
+        }
+        if fighter_tables {
+            queries.retain(|q| !["SELECT * FROM seen_fighters", "SELECT * FROM seen_fighters_near", "SELECT * FROM seen_fighters_far"].contains(&q.as_str()));
+            queries.push("SELECT * FROM seen_fighter_copy".to_string());
         }
         if combat_feed {
             queries.retain(|q| q.as_str() != "SELECT * FROM my_combat");
