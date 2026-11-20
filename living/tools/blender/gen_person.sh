@@ -172,6 +172,10 @@ for p in "${people[@]}"; do
       if [ "${IDENTITY:-bones}" != bake ] && grep -q '"identity"' "$dir/$name.params.json"; then
         python3 living/tools/characters/compose.py "$f" "$f" --params "$dir/$name.params.json"
       fi
+      # Ink carriers (SLOP_PORT=ink): the file opts in and its carriers name the types' ink page.
+      if [[ ",${SLOP_PORT:-}," == *",ink,"* ]]; then
+        python3 living/tools/characters/type_ink.py "$f" > /dev/null
+      fi
     done
     # The shared clip file (`clips=<preset>`) is read for its clips alone: its skeleton, its
     # clips and the figure's bounds stay, and the person's meshes and pictures go

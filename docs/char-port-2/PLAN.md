@@ -131,6 +131,11 @@ Ranges below are proposals, set so Cora's values sit inside them. Each must be c
 - **Seed:** sd 0.08 each; family share .7.
 - **Carry weights:** they move from Cora's replay into `cage_head` as module constants: `jaw_taper` .395, `chin_taper` .675, and the existing per-row carries above. They are fixed style, not drawn.
 - **Unsure:** whether the carries generalise across lines a/b/c. Check with `cage_accept.py` across all 21 types.
+- **As built in S1** ([s1/README.md](s1/README.md)):
+  - **The means:** class means of `jaw_taper` −0.05 and `chin_taper` −0.18 for adult women, and lighter values elsewhere, in `living/tools/characters/port.json`.
+  - **No new seed streams:** the identity bones `J_Id_Jaw` and `J_Id_Chin` already carry each person's spread.
+  - **No carry weights:** they were Cora's own fit (`fit_cora_rows`), not the generator's.
+- **Decision (GC, 2026-11-20): the three lines stay distinct.** a stays round, b even, and c long with the V. Tapers alone reach the drawing's chin-over-jaw (0.507) only on line c. Bringing lines a and b there would mean moving the types' jaw line itself, at the cost of the variety the lines exist for. Cora's V is one face in a town.
 
 ### 2.2 Depth stations
 
@@ -193,6 +198,12 @@ The carrier code (`carriers.py`: lift, harmonic fill, isometric flatten, binding
 **Colours:** `ink.color` per material, calibrated once per class against the floor (the `ink_calibrate.py` procedure). Fixed style; the brow colour follows the hair tag (needs the client step, §0.3).
 
 **Morphs:** carriers are primitives of the type's `Face` mesh. They are built on each expression's cage, as `_shell_lines` already are (`cage_head.py:1095`), rather than bound after export. They follow the 15 keys and the identity bones by construction. The clearance pass runs per key, as Cora's did.
+
+**As built in S4** ([s4/README.md](s4/README.md)), to the laptop's final contract (HANDMADE_COMPOSED v1.3):
+- **The page:** one shared ink page, `lookdev/types/types.eyes.ink.png`, 4096² with a 1024 cell per class at 0.25 mm a texel, replaces "one map per class" above.
+- **Strokes:** in eye units, one stroke set and one carrier topology per class; per-person variation stays with the face's own shape and the identity bones.
+- **Colours:** `ink.color` is Cora's for every class.
+- **Materials:** lid and brow (`LidInk`, `FaceBrowInk`) for everyone.
 
 ### 2.7 Hair: see §3.
 
