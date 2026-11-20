@@ -1849,6 +1849,126 @@ pub(crate) struct Mods {
     ground: Vec<plan::Ground>,
 }
 
+// What a land keeps of its shaping for its ground source (`land::GroundSource`): every field,
+// exactly, so a decoded `Mods` shapes the ground bit for bit as the planner's.
+impl crate::bin::Bin for Rect {
+    fn put(&self, w: &mut Vec<u8>) {
+        (self.c, self.f, self.hw, self.hd).put(w);
+    }
+    fn get(r: &mut crate::bin::Reader) -> Result<Self, String> {
+        let (c, f, hw, hd) = crate::bin::Bin::get(r)?;
+        Ok(Self { c, f, hw, hd })
+    }
+}
+
+impl crate::bin::Bin for Shape {
+    fn put(&self, w: &mut Vec<u8>) {
+        match self {
+            Shape::Rect(rc) => {
+                0u8.put(w);
+                rc.put(w);
+            }
+            Shape::Poly(q) => {
+                1u8.put(w);
+                q.put(w);
+            }
+        }
+    }
+    fn get(r: &mut crate::bin::Reader) -> Result<Self, String> {
+        match u8::get(r)? {
+            0 => Ok(Shape::Rect(Rect::get(r)?)),
+            1 => Ok(Shape::Poly(crate::bin::Bin::get(r)?)),
+            k => Err(format!("ground source: pad shape {k}")),
+        }
+    }
+}
+
+impl crate::bin::Bin for Seg {
+    fn put(&self, w: &mut Vec<u8>) {
+        (self.road, self.a, self.b, self.ha).put(w);
+        (self.hb, self.hw, self.fade, self.cross).put(w);
+    }
+    fn get(r: &mut crate::bin::Reader) -> Result<Self, String> {
+        let (road, a, b, ha) = crate::bin::Bin::get(r)?;
+        let (hb, hw, fade, cross) = crate::bin::Bin::get(r)?;
+        Ok(Self { road, a, b, ha, hb, hw, fade, cross })
+    }
+}
+
+impl crate::bin::Bin for Pad {
+    fn put(&self, w: &mut Vec<u8>) {
+        self.shape.put(w);
+        (self.floor, self.skirt, self.gate, self.rise).put(w);
+    }
+    fn get(r: &mut crate::bin::Reader) -> Result<Self, String> {
+        let shape = Shape::get(r)?;
+        let (floor, skirt, gate, rise) = crate::bin::Bin::get(r)?;
+        Ok(Self { shape, floor, skirt, gate, rise })
+    }
+}
+
+impl crate::bin::Bin for Mods {
+    fn put(&self, w: &mut Vec<u8>) {
+        // The cell index is built again from the segments and pads (`Mods::index`).
+        (self.cell, self.n).put(w);
+        self.segs.put(w);
+        self.pads.put(w);
+        self.terr.put(w);
+        self.ground.put(w);
+    }
+    fn get(r: &mut crate::bin::Reader) -> Result<Self, String> {
+        let mut d = ModsDecode::default();
+        while !d.step(r)? {}
+        Ok(d.finish())
+    }
+}
+
+/// [`Mods`] decoded in three parts (the segments; the pads, terraces and plans' ground; the cell
+/// index built again), so a caller with a short budget per call can spread it out.
+#[derive(Default)]
+pub(crate) struct ModsDecode {
+    part: u8,
+    cell: f32,
+    n: usize,
+    segs: Vec<Seg>,
+    pads: Vec<Pad>,
+    terr: Vec<Terrace>,
+    ground: Vec<plan::Ground>,
+    index: Option<(Vec<u32>, Vec<u32>, Vec<u32>, Vec<u32>)>,
+}
+
+impl ModsDecode {
+    /// The next part; true once the last is done (`finish`).
+    pub(crate) fn step(&mut self, r: &mut crate::bin::Reader) -> Result<bool, String> {
+        use crate::bin::Bin;
+        match self.part {
+            0 => {
+                (self.cell, self.n) = Bin::get(r)?;
+                if self.n > 1 << 12 {
+                    return Err("ground source: a shaping grid out of range".into());
+                }
+                self.segs = Bin::get(r)?;
+            }
+            1 => {
+                self.pads = Bin::get(r)?;
+                self.terr = Bin::get(r)?;
+                self.ground = Bin::get(r)?;
+            }
+            _ => {
+                // A land with no shaping keeps the default's empty index (`apply` returns early on n 0).
+                self.index = Some(if self.n == 0 { Default::default() } else { Mods::index(self.n, self.cell, &self.segs, &self.pads) });
+            }
+        }
+        self.part += 1;
+        Ok(self.part > 2)
+    }
+
+    pub(crate) fn finish(self) -> Mods {
+        let (seg_at, seg_ids, pad_at, pad_ids) = self.index.expect("every part decoded");
+        Mods { cell: self.cell, n: self.n, seg_at, seg_ids, pad_at, pad_ids, segs: self.segs, pads: self.pads, terr: self.terr, ground: self.ground }
+    }
+}
+
 const MOD_CELL: f32 = 16.0;
 /// Softness (metres) of the soft-minimum that picks a road's nearest segment.
 const SOFT: f32 = 0.3;
@@ -1884,6 +2004,13 @@ impl Mods {
     fn build(size: u32, segs: Vec<Seg>, pads: Vec<Pad>, terr: Vec<Terrace>, ground: Vec<plan::Ground>) -> Self {
         let cell = MOD_CELL;
         let n = (size as f32 / cell).ceil() as usize + 1;
+        let (seg_at, seg_ids, pad_at, pad_ids) = Self::index(n, cell, &segs, &pads);
+        Self { cell, n, seg_at, seg_ids, pad_at, pad_ids, segs, pads, terr, ground }
+    }
+
+    /// The segments and pads that reach each cell, as `build` buckets them.
+    #[allow(clippy::type_complexity)]
+    fn index(n: usize, cell: f32, segs: &[Seg], pads: &[Pad]) -> (Vec<u32>, Vec<u32>, Vec<u32>, Vec<u32>) {
         let sb: Vec<(V2, V2)> = segs
             .iter()
             .map(|s| {
@@ -1909,7 +2036,7 @@ impl Mods {
             .collect();
         let (seg_at, seg_ids) = csr(n, cell, &sb);
         let (pad_at, pad_ids) = csr(n, cell, &pb);
-        Self { cell, n, seg_at, seg_ids, pad_at, pad_ids, segs, pads, terr, ground }
+        (seg_at, seg_ids, pad_at, pad_ids)
     }
 
     /// Shape `h`, the natural ground at (x, y), where `sd` is the signed distance to water.

@@ -6,7 +6,7 @@ with admin test reducers (`place_at`, `set_behavior`, `grant_items`; named in th
 checks the outcome in the authority's rows: `my_skill_uses`, `my_combat` and `my_readiness`
 (the player's views), and `vitals`, `fighter`, `character` (public).
 
-    combat.py --run RUN [--scene all|refusals|strike|kill|bow|shot|bolt|block|dodge|jump|committed|breath|heal|early_dodge|fast_lane|wolves|death]
+    combat.py --run RUN [--scene all|refusals|strike|kill|bow|shot|bolt|block|dodge|jump|teleport|committed|breath|heal|early_dodge|fast_lane|wolves|death]
 
 Needs `verify.py launch --run RUN --seed island` and `verify.py player --run RUN join NAME`
 first (the death scene rejoins with the same identity). Writes `RUN/combat.json`.
@@ -765,6 +765,66 @@ def scene_jump(st):
     call(st, "set_behavior", [a, '{"wait":60}'], "admin")
 
 
+def activity(st, cid):
+    r = sql(st, f"SELECT * FROM activity WHERE id = {cid}")
+    return r[0] if r else None
+
+
+def scene_teleport(st):
+    """A movement under way ends when its body is put somewhere else (2026-11-20, cover-stall):
+    the laptop's stuck jump (a jump, then an admin `place_at` mid-flight, left the activity at
+    phase 0 with no end, node 65533 = a player's own input, and every later move was deferred)
+    and dev-box's flaky threat check (a resident's walk, then `place_near`). The player jumps and
+    is put 6 m off at once: the jump is gone, the jump's use has an outcome, and a move then
+    moves the body. A resident walking to a point 30 m off is put elsewhere: its walk ends
+    (broken off, told to its graph) instead of standing there "walking" for good."""
+    cid = me(st)
+    p = open_ground(st, cid, east=8.0, south=8.0)
+    ready(st, "jump")
+    t0 = time.time()
+    code, body_ = call(st, "use_skill", ["jump", 0, p[0] + 2.0, p[1]])
+    call(st, "place_at", [cid, p[0], p[1] + 6.0], "admin")
+    gap = round((time.time() - t0) * 1000)
+    time.sleep(1.0)
+    a = activity(st, cid)
+    u = last_use(st, "jump")
+    check(st, "teleport: a jump's body put elsewhere mid-flight ends the jump (no jump left, the use told)",
+          code == 200 and (a is None or a["skill"] != "jump") and u and u["outcome"] not in (None, "", "in flight"),
+          f"use_skill {code} {body_.strip()[:80]}; place_at {gap} ms after; activity {a and {k: a[k] for k in ('skill', 'phase', 'node', 'ends_ms')}}; outcome {u and u['outcome']}")
+    q = body(st, cid)
+    call(st, "human_move", [1.0, 0.0, False])
+    time.sleep(1.2)
+    q2 = body(st, cid)
+    call(st, "human_move", [0.0, 0.0, False])
+    moved = q and q2 and math.dist(q, q2)
+    check(st, "teleport: then a move moves the body (not deferred behind the jump)", moved and moved > 0.8,
+          f"from {q and (round(q[0], 2), round(q[1], 2))} to {q2 and (round(q2[0], 2), round(q2[1], 2))}: {moved and round(moved, 2)} m")
+    # A mind's body alike: a resident's walk under way, put elsewhere.
+    time.sleep(0.5)
+    p = body(st, cid)
+    r = dummy(st, p, 3.0, 0.0, room=0.0)
+    rb = body(st, r)
+    g = json.dumps({"seq": [{"do": {"skill": "goto", "target": {"at": [rb[0] + 30.0, rb[1] + 0.5]}}}, {"wait": 60}]})
+    call(st, "set_behavior", [r, g], "admin")
+    walking = None
+    for _ in range(40):
+        walking = activity(st, r)
+        if walking and walking["skill"] == "goto" and walking["phase"] == 0:
+            break
+        time.sleep(0.1)
+    call(st, "place_at", [r, p[0], p[1] + 4.0], "admin")
+    time.sleep(1.5)
+    left = activity(st, r)
+    s1 = body(st, r)
+    time.sleep(1.5)
+    s2 = body(st, r)
+    stuck = left is not None and left["skill"] == "goto" and left["phase"] == 0 and s1 and s2 and math.dist(s1, s2) < 0.05
+    check(st, "teleport: a resident's walk put elsewhere ends (broken off, not walking nowhere for good)",
+          walking and walking["skill"] == "goto" and not stuck,
+          f"walking {walking and walking['skill']}; after: {left and {k: left[k] for k in ('skill', 'phase', 'node', 'ends_ms')}}; moved {s1 and s2 and round(math.dist(s1, s2), 2)} m in 1.5 s")
+    call(st, "set_behavior", [r, '{"wait":60}'], "admin")
+
+
 def full_breath(st, secs=12.0):
     """Wait until the player's breath is full (earlier scenes on a reused world spend it)."""
     end = time.time() + secs
@@ -1145,7 +1205,7 @@ def scene_onlooker(st):
     return a
 
 
-SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "shot": scene_shot, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "committed": scene_committed, "breath": scene_breath, "heal": scene_heal, "early_dodge": scene_early_dodge, "fast_lane": scene_fast_lane, "wolves": scene_wolves, "onlooker": scene_onlooker, "death": scene_death}
+SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "shot": scene_shot, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "teleport": scene_teleport, "committed": scene_committed, "breath": scene_breath, "heal": scene_heal, "early_dodge": scene_early_dodge, "fast_lane": scene_fast_lane, "wolves": scene_wolves, "onlooker": scene_onlooker, "death": scene_death}
 
 
 def main():

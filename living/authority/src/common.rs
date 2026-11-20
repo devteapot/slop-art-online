@@ -516,6 +516,38 @@ thread_local! {
     static COVER_BUILT: std::cell::Cell<Option<CoverLaw>> = const { std::cell::Cell::new(None) };
 }
 
+thread_local! {
+    /// The land's cover geometry as one ground array and its candidates, read once from the
+    /// complete `cover_ground` bands (or handed over by the derivation that sampled them): a
+    /// cover policy change compiles the mask from it without reading every band again. The
+    /// bands never change once complete, so it holds for the instance; world creation drops it.
+    static COVER_GEOMETRY: RefCell<Option<(std::sync::Arc<[i16]>, std::sync::Arc<[u32]>)>> = const { RefCell::new(None) };
+}
+
+/// The derivation's last step hands over what it sampled (`geometry`): the same values as the
+/// bands it kept.
+pub fn keep_cover_geometry(ground: std::sync::Arc<[i16]>, candidates: std::sync::Arc<[u32]>) {
+    COVER_GEOMETRY.with(|g| *g.borrow_mut() = Some((ground, candidates)));
+}
+
+fn cover_geometry(ctx: &ReducerContext, tiles: usize) -> (std::sync::Arc<[i16]>, std::sync::Arc<[u32]>) {
+    if let Some(g) = COVER_GEOMETRY.with(|g| g.borrow().clone()).filter(|g| g.0.len() == tiles) {
+        return g;
+    }
+    let _span = spacetimedb::log_stopwatch::LogStopwatch::new("map.cover_read");
+    let mut bands: Vec<_> = ctx.db.cover_ground().iter().collect();
+    bands.sort_unstable_by_key(|b| b.id);
+    let mut ground = Vec::with_capacity(tiles);
+    let mut candidates = Vec::new();
+    for b in &bands {
+        ground.extend_from_slice(&b.heights);
+        candidates.extend_from_slice(&b.candidates);
+    }
+    let g: (std::sync::Arc<[i16]>, std::sync::Arc<[u32]>) = (ground.into(), candidates.into());
+    COVER_GEOMETRY.with(|c| *c.borrow_mut() = Some(g.clone()));
+    g
+}
+
 fn cover_mask(ctx: &ReducerContext, map: &Map) -> Option<std::sync::Arc<living_rules::cover::Mask>> {
     let law = laws(ctx);
     if !law.cover_sight_on { return None; }
@@ -526,11 +558,8 @@ fn cover_mask(ctx: &ReducerContext, map: &Map) -> Option<std::sync::Arc<living_r
     }
     let _span = spacetimedb::log_stopwatch::LogStopwatch::new("map.cover");
     let recipe = ctx.db.land_plan().id().find(0).and_then(|p| serde_json::from_str(&p.params).ok()).unwrap_or_default();
-    let mut bands: Vec<_> = ctx.db.cover_ground().iter().collect();
-    bands.sort_unstable_by_key(|b| b.id);
-    let candidates = bands.iter().flat_map(|b| b.candidates.iter().copied()).collect::<Vec<_>>();
-    let ground = bands.into_iter().flat_map(|b| b.heights).collect();
-    let mask = living_rules::cover::compile_candidates(map.w, map.h, candidates, ground, &recipe, living_rules::cover::Policy {
+    let (ground, candidates) = cover_geometry(ctx, map.w as usize * map.h as usize);
+    let mask = living_rules::cover::compile_candidates(map.w, map.h, candidates.iter().copied(), ground, &recipe, living_rules::cover::Policy {
         eye_height_m: law.cover_eye_height_m, brush_on: law.cover_brush_on,
         brush_min_fill: law.cover_brush_min_fill, cliff_step_m: law.cover_cliff_step_m,
     });
@@ -601,6 +630,7 @@ pub fn map(ctx: &ReducerContext) -> Rc<Map> {
 /// Drop the whole cached map (world creation; the next read rebuilds it from every chunk).
 pub fn invalidate_map() {
     MAP.with(|m| *m.borrow_mut() = None);
+    COVER_GEOMETRY.with(|g| *g.borrow_mut() = None);
     COVER_FOR.with(|c| c.set(None));
     COVER_BUILT.with(|c| c.set(None));
     MAP_PATCHED.with(|p| *p.borrow_mut() = (0, Vec::new()));

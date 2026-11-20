@@ -957,6 +957,20 @@ pub(crate) struct Ground {
     skirt: f32,
 }
 
+impl crate::bin::Bin for Ground {
+    fn put(&self, w: &mut Vec<u8>) {
+        (self.lo, self.hi).put(w);
+        self.levels.put(w);
+        (self.fmin, self.drop, self.skirt, 0u8).put(w);
+    }
+    fn get(r: &mut crate::bin::Reader) -> Result<Self, String> {
+        let (lo, hi) = crate::bin::Bin::get(r)?;
+        let levels = crate::bin::Bin::get(r)?;
+        let (fmin, drop, skirt, _): (f32, f32, f32, u8) = crate::bin::Bin::get(r)?;
+        Ok(Self { lo, hi, levels, fmin, drop, skirt })
+    }
+}
+
 impl Ground {
     pub(crate) fn of(r: &Resolved) -> Self {
         let pad = r.skirt + r.drop + 1.0;

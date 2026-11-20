@@ -428,6 +428,11 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
             // ground is sampled in band steps from the land, kept until then.
             let cover = common::laws(ctx).cover_sight_on && (ctx.db.cover_ground().count() as usize) < crate::island::cover_bands(size);
             let h = crate::island::host(s.seed, m, &land, &params, cover)?;
+            if !cover {
+                // Without cover now, the land's ground source, so a later switch-on samples it
+                // in short steps instead of generating the land again (crate::geometry).
+                crate::geometry::keep_source(ctx, &land, &living_rules::cover::candidates(&h.map));
+            }
             w.land = cover.then_some(land);
             w.chunk_ids = h.map.chunks().collect();
             w.hosted = Some(h);
@@ -449,7 +454,7 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
             // Bands are kept in order, so the next one is the count kept.
             let total = crate::island::cover_bands(size);
             let a = ctx.db.cover_ground().count() as usize;
-            let b = (a + crate::geometry::BANDS_PER_STEP).min(total);
+            let b = (a + crate::geometry::CREATION_BANDS_PER_STEP).min(total);
             label = format!("cover: ground bands {a}..{b} of {total}");
             crate::island::keep_cover_bands_of(ctx, land, &h.cover_candidates, a..b);
             if b >= total {
@@ -497,7 +502,7 @@ fn step(ctx: &ReducerContext) -> Result<(), String> {
     // `steps` equals `step` only once the world is made (`made`): before, it is kept ahead of
     // the steps done, which a restart's repeated land steps could otherwise reach. A world whose
     // cover law is on has its cover ground band steps too (`crate::geometry`).
-    let cover_steps = if common::laws(ctx).cover_sight_on { crate::island::cover_bands(size).div_ceil(crate::geometry::BANDS_PER_STEP) as u32 } else { 0 };
+    let cover_steps = if common::laws(ctx).cover_sight_on { crate::island::cover_bands(size).div_ceil(crate::geometry::CREATION_BANDS_PER_STEP) as u32 } else { 0 };
     g.steps = if done { g.step } else { (expected(&g, size) + cover_steps).max(g.step + 1) };
     g.updated_ms = wall;
     ctx.db.genesis().id().update(g);

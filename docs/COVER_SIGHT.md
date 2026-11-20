@@ -435,3 +435,48 @@ Evidence: `~/slop-evidence/cover-genesis-20261120.tar.zst`, with `results.jsonl`
 
 - The dead inline path (`seed::seed` for a land, used now only by a test) still samples the whole ground in its one call when cover is on.
 - A derivation generates the land again. Its cost is the land's generation plus sampling: island about 73 × 10⁹, 4096 m about 450 × 10⁹. Up to a second at a time, it runs on a world that may be ticking.
+
+## The cover-stall fix (2026-11-20)
+
+Branch `cover-stall` (Spark), on main `f9b36cef` and before it `79cb4a42`, rustc 1.99.1, SpacetimeDB 2.14.1 on a private server.
+
+### What the laptop saw
+
+On island scratch worlds (main `75e26fca`), switching cover on stalled the tick for 829–936 ms. The `cover_law` row reached the client 5.45 s after `set_world_law cover_sight_on true`, and 2.44 s after a later `set_world_law cover_brush_min_fill …`. verify-ui `law-override` passed 68 of 72, and all four failures were cover laws (timing).
+
+### Why
+
+- **The stall.** SpacetimeDB runs one reducer at a time per database, in the order calls are queued. The 2.14.1 host runs a WASM module's reducers on "a single executor backed by a single OS thread" (`crates/core/src/host/module_host.rs`, `WasmtimeModuleHost`: "Reducers are not executed concurrently"). Its scheduler hands each due scheduled call to that executor as it comes due (`host/scheduler.rs`, `SchedulerActor`). So the tick waits behind whatever runs. The derivation's steps were the land generation's own steps: up to 24 × 10⁹ instructions on the island (all 2048 tile rows in one step, 0.9 s) and up to 29 × 10⁹ at 4096 m.
+  - Procedures are no way out. A WASM procedure takes an instance from the procedure pool but runs on the same executor thread, and yields it only while it awaits (an HTTP request, a sleep). CPU-bound work in a procedure blocks ticks just the same.
+  - The docs pages (version 2.0.0) do not say reducers run one at a time. [Reducers](https://spacetimedb.com/docs/functions/reducers/) reserve the right to run reducers "concurrently in separate execution environments", which is why module memory stays a cache here. [Schedule tables](https://spacetimedb.com/docs/tables/schedule-tables/) say one-shot rows are deleted after the reducer runs, and that the dispatch order of rows already expired is not guaranteed. A derivation has one row at a time, so ordering cannot reorder its steps.
+- **The brush-fill delay was not a re-derivation.** `set_world_law cover_brush_min_fill` with the bands kept is value-only: `geometry::ensure` returns at once, and only the `cover_law` row and the mask change. In the laptop's run, the scenario changes the brush 3 s after the switch-on, while the derivation was still running. The game client shows a cover policy only once `cover_law.cover_sight_on` is on (`sightfield.rs`), so the brush edit's effect line came when the derivation ended: 5.45 − 3.0 ≈ 2.45 s. A brush edit after the derivation took 0.5–0.8 ms in the reducer on both branches. The mask compile on the next tick, though, read all 256 bands back (8 MB of rows) and took 50–73 ms on the island (now 4–7 ms, below).
+
+### The design
+
+- **A ground source, kept at creation.** A land made with cover off now keeps, in its hosting step, what its ground heights are computed from: `Land::ground_source`. That is the macro grids, the sites' levelling, the shore distances (run-length coded) and the roads' and lots' shaping, encoded exactly, floats by their bits. It also keeps the tree and cliff candidates of the hosted tiles. They go in the new private table `cover_source` (256 KiB rows, never written again). Sizes: island 3.8 MB in 15 rows; the 4096 m megacity 9.0 MB in 35 rows. `Land::from_ground_source` gives a land whose `height` and `water_level` are bit for bit the generated land's (Cargo `ground_source_samples_the_land`: a default land and plan-test, every tile, plus the heights digest).
+- **A switch-on samples it in short steps.** No generation is involved. Each `cover_step` does one of these:
+  - reads two source rows;
+  - decodes one part (`living_rules::land::GroundDecode`: grids and sites, shore distances, segments, pads and plans' ground, the shaping index built again);
+  - checks 6,144 lattice points of the land row's heights digest (`host::heights_digest_rows`; a module whose ground differs stops with that reason);
+  - samples half a band (8,192 tiles), writing the band's `cover_ground` row once its second half is sampled.
+
+  Steps follow one another at once (`ScheduleAt::Time` at the step's own start, so due immediately). A tick queued meanwhile waits for one step at most.
+- **No mask compile reads the bands back.** The last step hands what it sampled to the map's cover cache (`common::keep_cover_geometry`). Without it, the first compile reads the bands once into that cache. A later value-only cover edit (eye height, brush, cliff step) then compiles the mask from memory; it never derives anything.
+- **Lands made before this branch** have no ground source. They still generate the land again, now with the tile rows in steps of 32,768 tiles instead of one, and the same half-band sampling. Their other generation steps are not split (the island's longest, the planner's lots, is about 0.5 s; up to 12 × 10⁹ at 4096 m), so a switch-on there still stalls the tick up to about half a second on the island. Pause such a world first if that matters, or make it again.
+- **The same rules for players and minds.** Cover is in force for everyone at once, when the last band is kept, as before.
+- **Bands are byte-identical.** sha256 over every `cover_ground` row (cover-genesis's `bands.py`):
+  - island, from the source: `e36c6426…` (256 rows);
+  - island made by main and then updated to this branch (the regeneration path): `e36c6426…`;
+  - 4096 m megacity floor, from the source: `24ebfd97…` (1,024 rows).
+
+  These are the digests cover-genesis recorded for creation with cover on and for its switch-on.
+
+### Data paths
+
+| Path | Reads | Writes | Recipients | Frequency |
+| --- | --- | --- | --- | --- |
+| Creation, cover off (hosting step) | the land in memory | `cover_source` (15 rows on the island, 35 at 4096 m) | none (private) | once per land |
+| Switch-on step from the source | `cover_derivation`, `land`, `land_plan`, `cover_source` (2 rows, then none), `cover_ground` count | one `cover_derivation` update and one `cover_timer` row per step; one `cover_ground` row every second sampling step | none until the last step's `cover_law` update | about 540 steps on the island, 2,110 at 4096 m, back to back |
+| Mask compile after a policy change | the cover cache (memory); the `cover_ground` rows once per instance when it is empty | — | — | per policy change |
+
+Retained data grows by the source: about 3.8 MB per island-sized land, about 9 MB at 4096 m, kept whether or not cover is ever switched on (half the bands' 8 MB and 32 MB). The decoded source lives in module memory during a derivation, about 30 MB at 4096 m, against the regenerated land's 60–210 MB.
