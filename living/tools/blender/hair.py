@@ -146,6 +146,46 @@ PARTING = dict(width=0.010, depth=0.014, from_deg=84.0, curtain_from_deg=70.0, t
 HAIR_LOOK = __import__("os").environ.get("SLOP_HAIR_LOOK", "b2")
 LOCK_ROUND = 0.60  # b1: how far a lock's normals turn across it, at its sides
 
+# char-port-2 S6 (`SLOP_PORT=masters`, docs/char-port-2/s6): hair masters, a cut as a named set of
+# parameters in the generator's own terms, never a mesh. `swept_braid` is Cora's cut (char-live-2
+# and char-live-3): her rear layers as stations, each a wide lock and on two layers a narrower
+# companion, joining a three-strand plait at staggered heights, and the plait itself. Off unless
+# named; with it off nothing changes.
+MASTERS_ON = "masters" in PORT
+MASTERS = dict(swept_braid=dict(
+    # The head's measures Cora's were taken in: half her cheek width over her head's height (her
+    # fit's cheek_radius .0589 m over head_height .2322 m). Stations are in those units: side
+    # distance in half-cheeks, height above the chin in head heights, width in half-cheeks.
+    cheek=0.2538,
+    # docs/char-live-3/back-hair/fit.py `layers`: per layer, six stations root to join, Catmull-Rom
+    # between. Layer 2 starts at the temples (the front opening stays) and joins lowest; the crown
+    # layer, 6, joins high. Each runs a side, mirrored, the pair making a descending V.
+    layers={
+        2: [(1.40, .77, .12), (1.55, .65, .22), (1.42, .48, .26), (.94, .37, .23), (.41, .25, .13), (.06, .18, .025)],
+        3: [(1.25, .91, .05), (1.52, .75, .22), (1.40, .65, .34), (.90, .52, .36), (.47, .42, .29), (.04, .32, .02)],
+        4: [(.93, .92, .06), (1.25, .83, .28), (1.18, .73, .39), (.86, .64, .34), (.53, .60, .28), (.02, .48, .030)],
+        5: [(.79, .92, .03), (.99, .85, .10), (1.14, .79, .16), (1.02, .72, .16), (.80, .68, .12), (.59, .64, .012)],
+        6: [(.16, .96, .05), (.41, .93, .30), (.60, .87, .45), (.56, .79, .44), (.39, .72, .36), (.03, .60, .022)],
+    },
+    part_asymmetry=0.065, side_tuck=(0.035, -0.018),  # Cora's part offset and the sides' tuck
+    over=0.011,  # how far the layers lie off the scalp: over the hair mass drawn to the plait
+    lift=(0.004, 0.0012),  # and each layer's own swell over its length (Cora's)
+    companions=(3, 4),  # the layers with a narrower companion beside the wide lock (her secondary folds)
+    companion=dict(width=0.45, side=0.22, start=0.14, end=0.09),  # its width, where it lies across, the share of the lock it leaves out
+    rings=14,  # sections along a layer's lock
+    plait=dict(
+        root_h=0.60,  # the plait's start, head heights above the chin: behind the crown, where the upper layers meet
+        root_lift=0.018,  # lifted over the hair mass, so the start shows to the 58° camera
+        scale=1.25,  # its radius over the styles' braid (0.085 of the head's width): the drawn rear's width at Near and Middle
+        turns=2.9, taper=0.63, gain=0.44, gain_span=(0.15, 0.92),  # Cora's pitch, its narrowing, the upper lobes' widening
+        crest=__import__("os").environ.get("SLOP_MASTER_CREST", "1") != "0",
+        crest_up=(-0.25, 0.55), crest_lit=(0.65, 0.65),  # a lobe's normals: down below, up on its upper face (base, by facing); where its crest highlight starts (over, facing)
+    ),
+    # SLOP_MASTER_PLAIT=0 builds the cut without its plait: the visibility control (the plait's
+    # pixels are where the two differ).
+    plait_on=__import__("os").environ.get("SLOP_MASTER_PLAIT", "1") != "0",
+))
+
 
 FRINGE_OVER = 0.003  # a full fringe ends this far above the top of the head's own brows
 FRINGE_BONE = "J_Hair_Fringe"  # the bone a fringe hangs from on a face type's head; a type's file says where it stands (hair_fit.py)
@@ -339,8 +379,11 @@ class Hair:
         self.extra = []  # (kind, data) for person.py: ties and bands in cloth
         self.creases = []  # (SLOP_PORT=hair) lock lines: points, hem first, each [(vertex, weight), ...] on a sheet's front
         self.partings = []  # where the hair parts: dict(pts, nrm, deg) on the scalp, head frame
+        self.paths = []  # (S6 masters) locks laid on explicit paths: dict(pts, widths, ...)
+        self.hl_marks = {}  # vertex -> highlight (0..1) a master asks for (the plait's crests)
+        self.part_tris = {}  # triangles by part, for the budget
         style = spec["style"]
-        if style not in STYLES:
+        if style not in STYLES and not (MASTERS_ON and style in MASTERS):
             raise SystemExit(f"hair.style: {style!r} is not one of {STYLES}")
         self.length = float(spec.get("length", 0.07))
         self.parting = float(np.clip(spec.get("parting", 0.0), -1, 1))
@@ -844,6 +887,136 @@ class Hair:
         self.bangs("curtain" if abs(self.parting) < 0.3 else "swept", points=5, reach=0.9)
         self.temples(-0.085, n=1, width=0.024)
 
+    def _swept_braid(self):
+        """The `swept_braid` master (MASTERS): Cora's cut. Under it the hair drawn back to the
+        plait's start (`gather`, as `braid`); over it the rear layers (`rear_layers`), wide locks
+        and companions meeting the plait at staggered heights; the plait from behind the crown,
+        lifted so its start shows to the game camera."""
+        m = MASTERS["swept_braid"]
+        H = self.hf.top_z - self.hf.chin_z
+        z0 = self.hf.chin_z + m["plait"]["root_h"] * H
+        g = self.point(180, z0)
+        self._tag("mass", lambda: self.gather(g, n_mid=16))
+        self._tag("rear layers", lambda: self.rear_layers(m))
+        width = np.linalg.norm(self.comb.surface(90, 0) - self.comb.surface(-90, 0))
+        back_length = g[2] - self.comb.b.get("belt_z", -0.55)
+        self.braid = [dict(p=g, d=np.array([0.0, -0.5, -1.0]), length=back_length * (0.58 + 0.30 * self.length), radius=0.085 * width * m["plait"]["scale"], master=m["plait"])] if m["plait_on"] else []
+        # The front until step 2 brings Cora's: the generator's swept fringe and temple locks.
+        self._tag("front", lambda: self.bangs("swept", points=6, reach=1.0))
+        self._tag("jaw strands", lambda: self.temples(-0.085, n=2, width=0.024))
+
+    def _tag(self, part, make):
+        """Run `make` and tag the locks and sheets it adds with `part` (the triangle budget)."""
+        n0, s0 = len(self.locks), len(self.sheets)
+        make()
+        for k in self.locks[n0:]:
+            k.setdefault("part", part)
+        for sp in self.sheets[s0:]:
+            sp.setdefault("part", part)
+
+    def rear_layers(self, m):
+        """The rear layers of a master: each layer's stations (side distance and width in
+        half-cheeks, height above the chin in head heights) as a path a side, Catmull-Rom between,
+        laid over the back of the head `over` off the scalp with the layer's own swell; the pair
+        offset by the part's asymmetry and tucked a little at the sides (Cora's fit, generator
+        units). A companion, narrower, lies beside the wide lock over the middle of its length."""
+        H = self.hf.top_z - self.hf.chin_z
+        cr = m["cheek"] * H
+        n = m["rings"]
+        ts = np.linspace(0.0, 1.0, n + 1)
+
+        def station(rows, t):
+            q = t * (len(rows) - 1)
+            j = min(int(q), len(rows) - 2)
+            u = q - j
+            a, b, c, d = (np.array(rows[int(np.clip(k, 0, len(rows) - 1))], float) for k in (j - 1, j, j + 1, j + 2))
+            return 0.5 * (2 * b + (-a + c) * u + (2 * a - 5 * b + 4 * c - d) * u * u + (-a + 3 * b - 3 * c + d) * u ** 3)
+
+        for g, rows in sorted(m["layers"].items()):
+            for side in (-1, 1):
+                pts, widths = [], []
+                for t in ts:
+                    x, h, w = station(rows, t)
+                    x = side * x * cr + m["part_asymmetry"] * cr * math.sin(t * math.pi + g * 0.8)
+                    z = self.hf.chin_z + H * (h + m["side_tuck"][1 if side > 0 else 0] * 0.23 * math.sin(math.pi * t + g * 0.47))
+                    off = m["over"] + (m["lift"][0] + m["lift"][1] * (g % 3)) * math.sin(math.pi * t)
+                    pts.append(self._back_point(x, z, off))
+                    widths.append(max(0.00035, w * cr))
+                self.paths.append(dict(pts=np.array(pts), widths=np.array(widths), layer=g, side=side, part="rear layers", tone=self.u(-1, 1), grey=self.rng.random()))
+                if g in m["companions"]:
+                    c = m["companion"]
+                    keep = (ts >= c["start"]) & (ts <= 1.0 - c["end"])
+                    P = np.array(pts)
+                    tan = unit(np.gradient(P, axis=0))
+                    nrm = self.comb.normal(P)
+                    across = unit(np.cross(tan, nrm))
+                    W = np.array(widths)
+                    Q = P + across * (side * c["side"] * W * 2)[:, None] + nrm * 0.0015
+                    self.paths.append(dict(pts=Q[keep], widths=W[keep] * c["width"], layer=g, side=side, part="rear layers", companion=True, tone=self.u(-1, 1), grey=self.rng.random()))
+
+    def _back_point(self, x, z, off):
+        """The point behind the head (or neck) at side x and height z, `off` out from what the hair
+        lies on."""
+        lo, hi = -0.30, 0.05  # y: far behind, and inside
+        for _ in range(28):
+            mid = 0.5 * (lo + hi)
+            if self.comb.dist(np.array([[x, mid, z]]))[0] > off:
+                lo = mid
+            else:
+                hi = mid
+        return np.array([x, lo, z])
+
+    def _path_ribbon(self, k, base, tipc, silver, grey):
+        """A lock on an explicit path (a master's rear layer): the ribbon's five across and one
+        behind, its width the path's own, shaded as Cora's leaves were: the broad face one band,
+        only the rolled margins turning into shadow."""
+        pts, widths = k["pts"], k["widths"]
+        n = len(pts)
+        if n < 2:
+            return
+        tan = unit(np.gradient(pts, axis=0))
+        out = self.comb.normal(pts)
+        side = unit(np.cross(tan, out))
+        out = np.cross(side, tan)
+        col = self._lock_colour(dict(tone=k["tone"], shade=0.0, grey=k["grey"]), base, tipc, silver, grey)
+        across = (-1.0, -0.5, 0.0, 0.5, 1.0)
+        profile = (0.0, 0.78, 1.0, 0.78, 0.0)
+        back = self.detail >= 1
+        if not back:
+            across, profile = (-1.0, 0.0, 1.0), (0.0, 1.0, 0.0)
+        s = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(pts, axis=0), axis=1))])
+        t = s / max(s[-1], 1e-9)
+        th = 0.0015 + 0.25 * widths
+        first = len(self.v)
+        self.marks.append((first, person_params.grey_mask(k["grey"])))
+        u0 = self.u(0, 1)
+        for i in range(n):
+            cc = lerp(col[0], col[1], smooth((t[i] - 0.35) / 0.65)) / TEX_MEAN
+            for a, h in zip(across, profile):
+                self.v.append(pts[i] + side[i] * (widths[i] * a) + out[i] * (th[i] * h))
+                self.col.append(cc * (1 - 0.22 * abs(a) ** 3))
+                self.uv.append((u0 + 0.2 * (a + 1) / 2, 1 - t[i]))
+                # The broad face carries one band (out, leaning up); the margins roll to the sides.
+                up = np.array([0.0, 0.0, 0.31 + 0.36 * (k["layer"] in (4, 6))])
+                c_ = math.cos(a * math.pi / 2)
+                self.nrm.append(unit(unit(out[i] + up) * c_ + side[i] * (math.sin(a * math.pi / 2) * (0.74 if k["layer"] in (4, 6) else 0.94))))
+            if back:
+                self.v.append(pts[i] - out[i] * th[i] * 0.35)
+                self.col.append(cc * 0.55)
+                self.uv.append((u0 + 0.1, 1 - t[i]))
+                self.nrm.append(-out[i])
+            self.chain += [-1] * (len(across) + back)
+            self.along += [s[i]] * (len(across) + back)
+        nr = len(across) + back
+        for i in range(n - 1):
+            a0, b0 = first + nr * i, first + nr * (i + 1)
+            for j in range(nr):
+                self.f.append((a0 + j, a0 + (j + 1) % nr, b0 + (j + 1) % nr, b0 + j))
+        for end in (0, n - 1):  # each end closed, so the lock is one solid shape for outlines
+            r0 = first + nr * end
+            ring = [r0 + j for j in range(nr)]
+            self.f.append(tuple(ring if end else ring[::-1]))
+
     def _braids(self):
         # Two braids from behind the ears, the hair parted down the middle and drawn to each.
         self.braid = []
@@ -962,10 +1135,14 @@ class Hair:
         grey = float(spec.get("grey", 0.0))
         chain_pts = {}
         sheets = {}
+        def tris(f0):
+            return sum(len(f) - 2 for f in self.f[f0:])
+
         for k, path, touch in zip(self.locks, paths, touches):
             if "sheet" in k:
                 sheets.setdefault(k["sheet"][0], []).append((k, path, touch))
                 continue
+            f0 = len(self.f)
             total = float(np.linalg.norm(np.diff(path, axis=0), axis=1).sum())
             if total < 0.012:
                 continue
@@ -976,18 +1153,30 @@ class Hair:
             col = self._lock_colour(k, base, tipc, silver, grey)
             first = len(self.v)
             self._ribbon(pts, on, s, k, col)
+            self.part_tris[k.get("part", "locks")] = self.part_tris.get(k.get("part", "locks"), 0) + tris(f0)
             if k["chain"] >= 0:
                 # Free from where it last touches the head.
                 head_on = on & (pts[:, 2] > -0.11)
                 free_from = s[np.nonzero(head_on)[0].max()] if head_on.any() else 0.0
                 chain_pts.setdefault(k["chain"], []).append((pts, s, free_from, first, len(self.v)))
         for sid in sorted(sheets):
+            f0 = len(self.f)
             self._sheet_mesh(self.sheets[sid], sheets[sid], base, tipc, silver, grey, chain_pts)
+            part = self.sheets[sid].get("part", "sheets")
+            self.part_tris[part] = self.part_tris.get(part, 0) + tris(f0)
+        for k in self.paths:
+            f0 = len(self.f)
+            self._path_ribbon(k, base, tipc, silver, grey)
+            self.part_tris[k["part"]] = self.part_tris.get(k["part"], 0) + tris(f0)
         self._springs(chain_pts)
         if hasattr(self, "bun"):
+            f0 = len(self.f)
             self._bun_mesh(base, tipc, silver, grey)
+            self.part_tris["bun"] = tris(f0)
         for b in getattr(self, "braid", []):
+            f0 = len(self.f)
             self._braid_mesh(b, base, tipc, silver, grey)
+            self.part_tris["plait"] = self.part_tris.get("plait", 0) + tris(f0)
         # The grey mask of every vertex, from the marks set as locks and columns were written.
         self.grey = np.full(len(self.v), person_params.grey_mask(0.5))
         for (a, m), (b, _) in zip(self.marks, self.marks[1:] + [(len(self.v), 0.0)]):
@@ -1408,7 +1597,8 @@ class Hair:
         to side. It gets a spring chain of its own."""
         keep = self.locks
         self.locks = []
-        self.lock(0, 0, b["d"], root=b["p"], length=b["length"], width=0.03, lift=max(.016, b.get("radius", 0) * 1.55), g=30.0)
+        mp = b.get("master")  # a master's plait (MASTERS[...]["plait"]); None for the styles' own
+        self.lock(0, 0, b["d"], root=b["p"], length=b["length"], width=0.03, lift=max(.016, b.get("radius", 0) * 1.55) + (mp["root_lift"] if mp else 0.0), g=30.0)
         (path,), (touch,) = self._walk()
         self.locks = keep
         if "radius" in b:
@@ -1424,19 +1614,27 @@ class Hair:
         if "radius" in b:
             radius = b["radius"]
             self.rope_chains[ci] = radius
-            turns = max(1, round(s[-1] / (7 * radius)))
-            points, contact, along = self._resample(path, touch, turns * (14 if self.detail >= 1 else 8))
+            turns = mp["turns"] if mp else max(1, round(s[-1] / (7 * radius)))
+            points, contact, along = self._resample(path, touch, int(round(turns * (14 if self.detail >= 1 else 8))))
             _, outward, across = self._frame(points, contact)
             u = along / along[-1]
-            r = radius * (1 - 0.59 * u)
+            if mp:
+                # Cora's plait (plait/fit.py): narrowing to the tie, fuller over its first few
+                # centimetres, the upper lobes widened by `gain`, falling to none before the tie.
+                r = radius * (1 - mp["taper"] * u) * (0.60 + 0.40 * smooth(u / 0.14))
+                wide = 1 + mp["gain"] * (1 - smooth((u - mp["gain_span"][0]) / (mp["gain_span"][1] - mp["gain_span"][0])))
+            else:
+                r = radius * (1 - 0.59 * u)
+                wide = None
             # Cora's alternating over/under path, measured along the combed spine.
             for strand in range(3):
                 phase = math.tau * (turns * u + strand / 3)
-                centres = (points + across * (r * np.sin(phase))[:, None]
+                centres = (points + across * (r * (wide if wide is not None else 1) * np.sin(phase))[:, None]
                            + outward * (0.68 * r * np.sin(2 * phase))[:, None])
                 colours = self._lock_colour(dict(tone=strand-1, shade=0, grey=self.rng.random()),
                                             base, tipc, silver, grey)
-                self._plait_tube(centres, across, outward, r, along, ci, colours)
+                self._plait_tube(centres, across, outward, r, along, ci, colours, wide=wide, crest=np.sin(2 * phase) if (mp and mp.get("crest")) else None,
+                                 crest_shape=(mp["crest_up"], mp["crest_lit"]) if mp else ((0.52, 0.32), (0.35, 0.35)))
             # The binding and brush share the plait's material and last joint.
             offsets = radius * np.array([0, .25, .50, .65, 1.30, 1.85, 2.55])
             radii = radius * np.array([.54, .56, .54, .40, .63, .49, .035])
@@ -1482,15 +1680,28 @@ class Hair:
             for z in range(a, len(self.v)):
                 self.along[z] = s[-1]
 
-    def _plait_tube(self, centres, across, outward, radii, along, chain, colours):
+    def _plait_tube(self, centres, across, outward, radii, along, chain, colours, wide=None, crest=None, crest_shape=((0.52, 0.32), (0.35, 0.35))):
+        """A plait's strand as a tube. `wide` widens it across (a master's upper lobes); `crest`
+        (how far the strand is over its neighbours, per ring: sin 2 phase) lights the top of each
+        crossing: normals up the lobe as Cora's (plait/fit.py), and a highlight on its crest
+        (`hl_marks`), in place of her second, lighter material."""
         sides = 6
         start = len(self.v)
+        up = np.array([0.0, 0.0, 1.0])
         for i, centre in enumerate(centres):
+            w = 1.0 if wide is None else float(wide[i])
             for j in range(sides):
                 angle = math.tau * j / sides
                 a, b = math.cos(angle), math.sin(angle)
-                self.v.append(centre + radii[i] * (.81 * a * across[i] + .72 * b * outward[i]))
-                self.nrm.append(unit(a * across[i] + b * outward[i]))
+                self.v.append(centre + radii[i] * (.81 * a * w * across[i] + .72 * b * outward[i]))
+                if crest is None:
+                    self.nrm.append(unit(a * across[i] + b * outward[i]))
+                else:
+                    cu, cl = crest_shape
+                    self.nrm.append(unit(b * outward[i] + 0.79 * a * across[i] + up * (cu[0] + cu[1] * b)))
+                    lit = smooth((float(crest[i]) - cl[0]) / 0.30) * smooth((b - cl[1]) / 0.30)
+                    if lit > 0:
+                        self.hl_marks[len(self.v) - 1] = max(self.hl_marks.get(len(self.v) - 1, 0.0), lit)
                 self.col.append(lerp(*colours, i / (len(centres)-1)))
                 self.uv.append((j / sides, 1 - i / (len(centres)-1)))
                 self.chain.append(chain)

@@ -420,7 +420,7 @@ def resolve(p):
     for k, v in WOMAN.items():
         prop[k] = prop.get(k, 1.0) * (1.0 + (v - 1.0) * fem)
     recipe = dict(height=b["height"], proportions={k: round(v, 3) for k, v in prop.items() if abs(v - 1) > 0.004})
-    for name, options in (("hair.style", HAIR_STYLES), ("outfit.coat", COATS), ("outfit.headwear", HEADWEAR)):
+    for name, options in (("hair.style", HAIR_STYLES + (MASTER_STYLES if _MASTERS else ())), ("outfit.coat", COATS), ("outfit.headwear", HEADWEAR)):
         a, k = name.split(".")
         if p[a][k] not in options:
             raise SystemExit(f"{name}: {p[a][k]!r} is not one of {options}")
@@ -634,11 +634,17 @@ def from_type(tid):
 
 
 STYLES = ("tousled", "short", "crop", "shag", "swept", "sides", "balding", "bob", "bob_parted", "braids", "tail", "long", "bun", "braid", "kerchief")
+# char-port-2 S6 (`SLOP_PORT=masters`): the hair masters, hair.MASTERS, written as styles too (no
+# resident draws one: HAIR_STYLES, which people are drawn from, does not list them).
+MASTER_STYLES = ("swept_braid",)
+_MASTERS = "masters" in {f.strip() for f in __import__("os").environ.get("SLOP_PORT", "").split(",")}
+if _MASTERS:
+    STYLES = STYLES + MASTER_STYLES
 CAPPED = ("tousled", "short", "crop", "shag", "swept", "sides", "balding")  # the styles also written as worn under a cap (`<style>.cap`)
 # The styles that hang past the collar are also written as worn over a coat (`<style>.collar`, each
 # cut): a shared style is combed over a smock's low collar and back, and a coat's collar stands
 # 4 cm higher and 3 cm wider, so hair that lies close on the one cuts through the other.
-COLLARED = ("long", "tail", "braid")
+COLLARED = ("long", "tail", "braid") + (("swept_braid",) if _MASTERS else ())
 # The styles that lie on the back and that men or children also wear are written a second time,
 # `<style>[.N][.collar].m`, combed over a man's back: a woman's back lies up to 5 cm further
 # forward under the same head, so one file cannot lie on both (docs/CHARACTERS.md, "The body").
