@@ -391,25 +391,23 @@ The checklist's item 0, for the GC. **The feed adds about 96 bytes of commitlog 
 
 **What 2.14.1 does with it, from the versioned source** (`v2.14.1`, `a0bf6be`):
 - **Event inserts are logged.** `committed_state.rs` merges an event table's inserts into the transaction data "for subscriptions and the commitlog" without keeping them. Only view (ephemeral) tables are left out of the log (`traits.rs`).
-- **When compression happens.** Segments rotate at 1 GiB (`DEFAULT_MAX_SEGMENT_SIZE`). A snapshot is taken every 1,000,000 logged transactions (`SNAPSHOT_FREQUENCY`). After each snapshot, the standalone server (`LocalPersistenceProvider`) compresses the sealed segments older than it with zstd at the default level (`snapshot_watching_commitlog_compressor`, `fs-utils/compression.rs`). Nothing is ever deleted.
-- **How long that takes here.**
-  - 216 viewers: at 362–372 transactions a second, a snapshot comes at most every 45 minutes or so, so about 23 GB of raw log builds up before the first compression.
-  - 16 viewers: at about 180 a second, about every 93 minutes, about 12 GB.
-  - The segment holding the snapshot stays raw.
-  - These 60 s windows did not reach a snapshot or a rotation, so the compression was read from source, not seen on disk.
+- **When compression happens** (corrected by the hour-long run, [BATTLE_DISK.md](BATTLE_DISK.md)). Segments rotate at 1 GiB (`DEFAULT_MAX_SEGMENT_SIZE`).
+  - A snapshot is taken at every rotation (`on_new_segment`), besides every 1,000,000 transactions (`SNAPSHOT_FREQUENCY`).
+  - After each snapshot, the standalone server compresses the sealed segments older than it in place (`snapshot_watching_commitlog_compressor`). It uses zstd seekable frames of at most 4 KiB, which keep about 0.34 of the raw bytes, not the 0.09 of one zstd stream. Nothing is ever deleted.
+  - The first reading here (a snapshot only every 1,000,000 transactions, so about 23 GB of raw log at 216 viewers before the first compression) was wrong. At 216 viewers a segment rotates every 2–4 minutes, and the raw part of the log stays within about one segment.
 
 **Does trial retention cover it?**
 - **For trial and verification worlds, yes.**
   - `trials.py run` and `battle_diag.py` pause the world, stream its `clog/` to a `.tar.zst` under `~/slop-evidence/`, test it, and delete only after the archive succeeds ([TRIAL_DISK.md](TRIAL_DISK.md#retention-on-the-trial-server)).
-  - The feed changes the archive by nothing measurable: about 2.5 GB per hour of a 216-viewer battle at zstd -6 either way.
+  - The feed changes the archive by nothing measurable: about 2.5 GB per hour of a 216-viewer battle at zstd -6 either way, if the raw log is compressed as one stream. A tar of segments the server has already compressed stays at about 0.30 of raw ([BATTLE_DISK.md](BATTLE_DISK.md)).
 - **What is missing, none of it new with the feed:**
-  1. **A running world.** SpacetimeDB 2.14.1 has no online commitlog retention or size cap. A world that holds a 216-viewer battle grows by about 31 GB an hour raw, then about 3 GB an hour once its snapshots compress the sealed segments. Nothing removes old segments except the manual offline procedure ([TRIAL_DISK.md](TRIAL_DISK.md#offline-snapshot-and-commitlog-pruning)): stop the server, take a cold backup, keep the latest snapshot and its covering segment onward, and test recovery on a copy. A play-test or a long-running world needs a disk budget per battle hour, or a scheduled maintenance window, before it runs battles of this size for hours.
-  2. **The hourly volume check.** `trial_volume_size.sh` samples hourly. A 216-viewer battle can add about 31 GB between two readings before its first snapshot, so the alarm's budget needs that much headroom, or a shorter interval while a battle runs.
+  1. **A running world.** SpacetimeDB 2.14.1 has no online commitlog retention or size cap. A world that holds a 216-viewer battle writes about 32 GB an hour raw and keeps about 12 GB an hour on disk after the server's own compression and snapshots (measured over an hour: [BATTLE_DISK.md](BATTLE_DISK.md)). Nothing removes old segments except the manual offline procedure ([TRIAL_DISK.md](TRIAL_DISK.md#offline-snapshot-and-commitlog-pruning)): stop the server, take a cold backup, keep the latest snapshot and its covering segment onward, and test recovery on a copy. A play-test or a long-running world needs a disk budget per battle hour, or a scheduled maintenance window, before it runs battles of this size for hours.
+  2. **The hourly volume check.** `trial_volume_size.sh` samples hourly. A 216-viewer battle adds about 12 GB on disk between two readings, so the alarm's budget needs that much headroom.
   3. **Deleted scratch worlds.** `battle_viewers.py` and plain verification cleanup (without `--archive-commitlog`) delete the database but leave its replica directory. Only recycling the scratch volume frees it. This series left 8 replicas with 4.1 GB of commitlog on `sg-stdb`.
 - **For the flip:** the feed's own share (+5% raw, about 0% compressed) needs nothing beyond what base already needs. Item 0 is met. The running-world gap stands with the law on or off.
 
 **Not covered.**
-- A run long enough to see the snapshot and compression on disk: at least 1,000,000 transactions, about 46 minutes at 216.
+- A run long enough to see the snapshot and compression on disk: done since, [BATTLE_DISK.md](BATTLE_DISK.md).
 - Snapshots' own size.
 - A world with long `note` strings: refusals carry text, so the row grows with it.
 - Pinned cores.
