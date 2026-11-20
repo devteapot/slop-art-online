@@ -5,11 +5,11 @@
     "first_seen": "2026-11-20T00:34:03+01:00",
     "last_evidence": "/home/carlid/.local/state/slop-merge/scene-gate/main/.local/living/verify/gate-1120005720-recheck-combat-player/gate.log (launch or doctor failed)",
     "last_main": "7fff6a61db7f57a8231f07d239f7170f5a674af0",
-    "last_seen": "2026-11-20T00:57:33+01:00",
+    "last_seen": "2026-11-20T01:24:40+01:00",
     "owner": null,
     "reason": null,
     "skill": "verify-player",
-    "times": 3
+    "times": 4
   },
   "skirmish": {
     "case": "skirmish",
