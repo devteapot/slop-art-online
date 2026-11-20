@@ -58,10 +58,11 @@ def main():
         for p in changed:
             print(f"  {p}", file=sys.stderr)
         sys.exit(1)
-    if r.returncode:
-        sys.exit(r.returncode)
     print(f"assets_guard: no tracked file changed ({len(before)} already modified before the run, left as they were)"
-          if before else "assets_guard: no tracked file changed")
+          if before else "assets_guard: no tracked file changed", file=sys.stderr)
+    if r.returncode:
+        print(f"assets_guard: the command itself failed (exit {r.returncode})", file=sys.stderr)
+        sys.exit(r.returncode)
 
 
 if __name__ == "__main__":
