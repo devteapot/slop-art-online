@@ -827,8 +827,8 @@ impl Default for Laws {
             alarm_cells: true,
             cue_transport_on: true,
             near_tier_on: true,
-            motion_tables_on: false,
-            characters_table_on: false,
+            motion_tables_on: true,
+            characters_table_on: true,
             alarm_cells_check: false,
             status_parts: true,
             status_parts_check: false,
@@ -4340,12 +4340,17 @@ mod tests {
         on.validate().unwrap();
         assert!(on.laws().cue_transport_on && !on.laws().cues_on);
         assert!(shipped.laws().near_tier_on, "the near tier is on by default");
-        assert!(!shipped.laws().motion_tables_on, "the motion tables are off until battle-views' acceptance");
-        assert!(!shipped.laws().characters_table_on, "the characters table is off until battle-views' acceptance");
-        assert!(about["characters_table_on"].contains("what it may look at"), "{about:?}");
-        assert!(about["motion_tables_on"].contains("what it may look at"), "{about:?}");
-        let tables = Scripts::new(&with_world_laws(src, &[("motion_tables_on".into(), serde_json::json!(true))])).unwrap();
-        assert!(tables.laws().motion_tables_on && tables.laws().near_tier_on && tables.laws().cue_transport_on);
+        assert!(shipped.laws().motion_tables_on, "the motion tables are on by default since bv-defaults-on");
+        assert!(shipped.laws().characters_table_on, "the characters table is on by default since bv-defaults-on");
+        assert!(about["characters_table_on"].contains("meant for that player alone"), "{about:?}");
+        assert!(about["motion_tables_on"].contains("meant for that player alone"), "{about:?}");
+        assert_eq!(Laws::default().motion_tables_on, shipped.laws().motion_tables_on, "Laws::default and the shipped script agree");
+        assert_eq!(Laws::default().characters_table_on, shipped.laws().characters_table_on, "Laws::default and the shipped script agree");
+        // The kill switch: a world's laws can still turn either off.
+        let tables = Scripts::new(&with_world_laws(src, &[("motion_tables_on".into(), serde_json::json!(false)), ("characters_table_on".into(), serde_json::json!(false))])).unwrap();
+        assert!(!tables.laws().motion_tables_on && !tables.laws().characters_table_on && tables.laws().near_tier_on && tables.laws().cue_transport_on);
+        let about_off: std::collections::HashMap<String, String> = tables.laws_about().into_iter().collect();
+        assert!(about_off["motion_tables_on"].contains("what it may look at") && about_off["characters_table_on"].contains("what it may look at"), "{about_off:?}");
         let off = Scripts::new(&with_world_laws(src, &[("near_tier_on".into(), serde_json::json!(false)), ("cue_transport_on".into(), serde_json::json!(false))])).unwrap();
         off.validate().unwrap();
         assert!(!off.laws().near_tier_on && !off.laws().cue_transport_on);

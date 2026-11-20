@@ -155,12 +155,13 @@ fn laws() {
         // apart (on), or delivered together (off; with cue_transport_on off too, as before).
         near_tier_on: true,
         // Whether a player's motion copies reach its client as rows of a table only that player
-        // can read (row-level security; on) or only through the motion views (off, until the
-        // battle-views acceptance). The views show the same either way (docs/BATTLE_VIEWERS.md).
-        motion_tables_on: false,
+        // can read (row-level security; on, since bv-defaults-on after the copy-privacy proofs) or
+        // only through the motion views (off: the kill switch). The views show the same either
+        // way (docs/BATTLE_VIEWERS.md).
+        motion_tables_on: true,
         // The same for what a player perceives of the creatures it sees (its `seen_characters`
-        // rows mirrored into a table only that player can read; off until acceptance).
-        characters_table_on: false,
+        // rows mirrored into a table only that player can read; on since bv-defaults-on).
+        characters_table_on: true,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.

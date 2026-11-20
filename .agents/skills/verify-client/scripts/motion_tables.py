@@ -229,7 +229,7 @@ def main():
     script_rev_after = sorted((r["name"], r["revision"]) for r in sql(rid, "SELECT name, revision FROM script"))
     override = [r for r in sql(rid, "SELECT * FROM law_override") if r.get("name") in LAWS]
     for law in LAWS:
-        restore = had.get(law, "false")
+        restore = had.get(law, "true")  # the shipped default since bv-defaults-on
         call(rid, "set_world_law", [law, restore if isinstance(restore, str) else json.dumps(restore)])
     checks.update({
         "law off: the table is empty to the owner within a second": owner_after == 0,
