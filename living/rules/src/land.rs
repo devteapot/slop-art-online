@@ -1039,6 +1039,173 @@ fn chamfer(w: usize, h: usize, step: f32, d: &mut [f32], mut src: Option<&mut [u
 }
 
 // ------------------------------------------------------------------------------------------
+// Ground source
+
+/// The first bytes of a [`Land::ground_source`], and its format: a source of another format is
+/// refused, and the caller generates the land again instead.
+const GROUND_SOURCE_MAGIC: &[u8; 4] = b"GSRC";
+const GROUND_SOURCE_FORMAT: u32 = 1;
+
+impl crate::bin::Bin for Grid {
+    fn put(&self, w: &mut Vec<u8>) {
+        (self.n, self.cell).put(w);
+        self.v.put(w);
+    }
+    fn get(r: &mut crate::bin::Reader) -> Result<Self, String> {
+        let (n, cell): (usize, f32) = crate::bin::Bin::get(r)?;
+        let v = crate::bin::get_f32s(r)?;
+        if v.len() != n * n {
+            return Err("ground source: a grid of the wrong size".into());
+        }
+        Ok(Self { n, cell, v })
+    }
+}
+
+impl Land {
+    /// Everything [`Land::height`] and [`Land::water_level`] read, encoded exactly (floats by
+    /// their bits): the macro grids, the sites' levelling, the shore distances (run-length) and
+    /// the roads' and lots' shaping. [`Land::from_ground_source`] gives a land that answers both
+    /// bit for bit as this one, without generating anything. The authority keeps it for a land
+    /// made with cover sight off, so switching cover on later samples the ground in short steps
+    /// instead of generating the land again (docs/COVER_SIGHT.md, "The cover-stall fix").
+    pub fn ground_source(&self) -> Vec<u8> {
+        use crate::bin::Bin;
+        let mut w = Vec::with_capacity(1 << 20);
+        w.extend_from_slice(GROUND_SOURCE_MAGIC);
+        GROUND_SOURCE_FORMAT.put(&mut w);
+        (self.seed, self.size, self.n, self.cell).put(&mut w);
+        self.elev.put(&mut w);
+        self.detail.put(&mut w);
+        self.surf.put(&mut w);
+        self.maxd.put(&mut w);
+        self.sites.len().put(&mut w);
+        for st in &self.sites {
+            (st.x, st.y, st.radius_m, (st.ground_m, st.flatten)).put(&mut w);
+        }
+        crate::bin::put_runs(&self.sd, &mut w);
+        self.mods.put(&mut w);
+        w
+    }
+
+    /// The land a [`Land::ground_source`] describes, for its ground alone: `height`,
+    /// `water_level` and what they read. Its map, regions, settlements, lots and roads are empty,
+    /// and its sites carry only their place and levelling. All of [`GroundDecode`]'s steps.
+    pub fn from_ground_source(bytes: &[u8]) -> Result<Land, String> {
+        let mut d = GroundDecode::new(bytes.to_vec());
+        while !d.step()? {}
+        d.into_land()
+    }
+}
+
+/// A [`Land::ground_source`] decoded in steps of bounded work (the macro grids and sites; the
+/// shore distances; the roads' segments; the pads, terraces and plans' ground; the shaping
+/// index built again): at most about 3.5 ms each natively for the 4096 m megacity, so a caller
+/// with a short budget per call (the authority's `cover_step` on a running world) can spread it.
+pub struct GroundDecode {
+    bytes: Vec<u8>,
+    at: usize,
+    part: u8,
+    head: Option<(u64, u32, usize, f32)>,
+    grids: Vec<Grid>,
+    sites: Vec<Site>,
+    sd: Vec<i8>,
+    mods: settle::ModsDecode,
+}
+
+impl GroundDecode {
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self { bytes, at: 0, part: 0, head: None, grids: Vec::new(), sites: Vec::new(), sd: Vec::new(), mods: settle::ModsDecode::default() }
+    }
+
+    /// Decode the next part; true once the last is done ([`GroundDecode::into_land`]).
+    pub fn step(&mut self) -> Result<bool, String> {
+        use crate::bin::{Bin, Reader};
+        let mut r = Reader::new(&self.bytes[self.at..]);
+        match self.part {
+            0 => {
+                if r.take(4)? != GROUND_SOURCE_MAGIC {
+                    return Err("not a ground source".into());
+                }
+                let format = u32::get(&mut r)?;
+                if format != GROUND_SOURCE_FORMAT {
+                    return Err(format!("ground source format {format}, this build reads {GROUND_SOURCE_FORMAT}"));
+                }
+                self.head = Some(Bin::get(&mut r)?);
+                for _ in 0..4 {
+                    self.grids.push(<Grid as Bin>::get(&mut r)?);
+                }
+                let count = usize::get(&mut r)?;
+                for _ in 0..count {
+                    let (x, y, radius_m, (ground_m, flatten)): (f32, f32, f32, (f32, f32)) = Bin::get(&mut r)?;
+                    self.sites.push(Site { kind: SiteKind::Town, x, y, radius_m, ground_m, scale: 1.0, facing: 0.0, region: RegionKind::Meadow, flatten, style: None, ward: false, plan: None });
+                }
+            }
+            1 => {
+                self.sd = crate::bin::get_runs(&mut r)?;
+                let size = self.head.expect("head").1 as usize;
+                if self.sd.len() != size * size {
+                    return Err("ground source: shore distances of the wrong size".into());
+                }
+            }
+            _ => {
+                if self.mods.step(&mut r)? {
+                    self.at += r.pos();
+                    if self.at != self.bytes.len() {
+                        return Err("ground source: bytes past its end".into());
+                    }
+                    self.part = u8::MAX;
+                    return Ok(true);
+                }
+            }
+        }
+        self.at += r.pos();
+        // Parts 0 and 1 once each; part 2 is the shaping's own three steps.
+        self.part = (self.part + 1).min(2);
+        Ok(false)
+    }
+
+    /// The decoded land (an error before the last step).
+    pub fn into_land(self) -> Result<Land, String> {
+        if self.part != u8::MAX {
+            return Err("ground source: not decoded yet".into());
+        }
+        let (seed, size, n, cell) = self.head.expect("head");
+        let mut g = self.grids.into_iter();
+        let (elev, detail, surf, maxd) = (g.next().expect("grid"), g.next().expect("grid"), g.next().expect("grid"), g.next().expect("grid"));
+        Ok(Land {
+            ways: None,
+            seed,
+            size,
+            map: Map::from_chunks(0, 0, std::iter::empty()),
+            regions: Vec::new(),
+            sites: self.sites,
+            rivers: Vec::new(),
+            dry_beds: Vec::new(),
+            lakes: Vec::new(),
+            ranges: Vec::new(),
+            opened_tiles: 0,
+            closed_pockets: 0,
+            settlements: Vec::new(),
+            lots: Vec::new(),
+            roads: Vec::new(),
+            crossings: Vec::new(),
+            props: Vec::new(),
+            plans: Vec::new(),
+            mods: self.mods.finish(),
+            n,
+            cell,
+            elev,
+            detail,
+            surf,
+            maxd,
+            region_of: Vec::new(),
+            node_kind: Vec::new(),
+            sd: self.sd,
+        })
+    }
+}
+
+// ------------------------------------------------------------------------------------------
 // Generation
 
 pub fn generate_default(seed: u64, size_m: u32) -> Land {
@@ -1072,6 +1239,8 @@ pub struct Gen {
     plan: settle::Staged,
     /// Dispersed-site steps run.
     dispersed_done: u32,
+    /// Tiles classified per tile step ([`BAND_TILES`] unless [`Gen::with_band_tiles`]).
+    band_tiles: usize,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -1128,11 +1297,19 @@ impl Gen {
         assert!((256..=MAX_SIDE).contains(&size_m), "land side {size_m} m outside 256..={MAX_SIDE}");
         let mut plan = settle::Staged::default();
         plan.specs = p.plans.clone();
-        Self { seed, size: size_m, p, next: Next::Hydro, hydro: None, work: None, land: None, plan, dispersed_done: 0 }
+        Self { seed, size: size_m, p, next: Next::Hydro, hydro: None, work: None, land: None, plan, dispersed_done: 0, band_tiles: BAND_TILES }
+    }
+
+    /// Classify about `tiles` tiles per tile step instead of [`BAND_TILES`]: more, shorter steps,
+    /// the same land (each tile's class depends only on the macro pass). The authority's cover
+    /// derivation on a running world uses it to keep its steps short (docs/COVER_SIGHT.md).
+    pub fn with_band_tiles(mut self, tiles: usize) -> Self {
+        self.band_tiles = tiles.max(1);
+        self
     }
 
     fn band_rows(&self) -> usize {
-        (BAND_TILES / self.size as usize).max(1)
+        (self.band_tiles / self.size as usize).max(1)
     }
 
     /// Steps in all, for progress: the macro pass, the dispersed sites, the bands, connect,

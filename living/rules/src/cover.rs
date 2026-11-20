@@ -348,6 +348,37 @@ mod tests {
         assert!(ground_range(&land, 70_000..80_000).is_empty());
     }
 
+    /// A land rebuilt from its ground source (`Land::ground_source`, kept by the authority for a
+    /// land made with cover off) samples exactly the generated land's ground and heights digest,
+    /// so a switch-on that samples it keeps the same `cover_ground` rows. Checked on a default
+    /// land (towns, roads, lots) and on plan-test (a planned settlement's levels and terraces).
+    #[test]
+    fn ground_source_samples_the_land() {
+        let seed: serde_json::Value = serde_json::from_str(include_str!("../../seeds/plan-test.json")).unwrap();
+        let m = &seed["map"];
+        let params: LandParams = serde_json::from_value(m["params"].clone()).unwrap();
+        let lands = [
+            crate::land::generate_default(7, 512),
+            crate::land::generate(seed["seed"].as_u64().unwrap(), m["size"].as_u64().unwrap() as u32, &params),
+        ];
+        for land in &lands {
+            let bytes = land.ground_source();
+            let back = Land::from_ground_source(&bytes).unwrap();
+            let n = (land.size as usize).pow(2);
+            assert_eq!(ground_range(&back, 0..n), ground_range(land, 0..n));
+            let (map, _) = crate::host::hosted_map(land, &params);
+            let whole = crate::host::digests(land, &map).heights;
+            let mut d = crate::det::FNV_OFFSET;
+            for r in (0..crate::host::height_rows(&back)).step_by(7) {
+                d = crate::host::heights_digest_rows(&back, d, r..r + 7);
+            }
+            assert_eq!(d, whole);
+            // A cut or corrupt source is refused, never read as another land.
+            assert!(Land::from_ground_source(&bytes[..bytes.len() - 1]).is_err());
+            assert!(Land::from_ground_source(&bytes[1..]).is_err());
+        }
+    }
+
     #[test]
     fn trunk_stops_missiles_and_sight_but_brush_only_hides() {
         let mut map = blank();

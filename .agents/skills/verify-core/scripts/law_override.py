@@ -3,6 +3,7 @@
 
     law_override.py time   --run R [--repeat 3]   (any module: main's too, for the before)
     law_override.py checks --run R                (this branch's module)
+    law_override.py switch --run R                (any module since cover-genesis: main's too)
 
 `time` changes laws with `set_world_law` as the admin and reads each call's reducer time from the
 module's own timing spans in the database log (`set_world_law`, `set_world_law.value_only`,
@@ -36,7 +37,17 @@ are the measure. Writes `RUN/law-time.json`.
 - a client's first subscription result holds `law_override` with the value in force, before and
   after an edit, each on a fresh connection (the verify-client probe, `drive.py --query`).
 Writes `RUN/law-checks.json`. Admin calls set the scene; the seed's script is installed again at
-the end. Python standard library only.
+the end.
+
+`switch` times a cover switch-on on a land without cover geometry (docs/COVER_SIGHT.md, "The
+cover-stall fix"), with `set_profile` on: `set_world_law cover_sight_on true`, then the public
+`cover_law` row polled every ~10 ms until it says on (the wall time a client waits), then, from
+the module's log, every `tick` span (its longest, and the intervals between ticks: p50, p99,
+max) and every `cover_step` span (count, longest) from the call until a second after. Then a
+`cover_brush_min_fill` edit with cover in force: its reducer span, the time until `cover_law`
+carries the new value, the mask compile (`map.cover`), and the ticks in the 1.5 s after. The
+brush fill and cover are set back at the end (the bands stay). Writes `RUN/cover-switch.json`.
+Python standard library only.
 """
 
 import argparse
@@ -365,9 +376,107 @@ def checks(r, seed):
     return 1 if bad else 0
 
 
+TICK_SPAN = re.compile(r'^(\S+)\s+\w+: (\w+): Timing span "([^"]+)": ([\d.]+)(ns|µs|us|ms|s)$')
+
+
+def spans_between(text, t0, t1, names):
+    """{span: [(epoch s, ms)]} for spans named `names` logged in [t0, t1]."""
+    out = {n: [] for n in names}
+    for line in text.splitlines():
+        m = TICK_SPAN.match(line.strip())
+        if not m or m[3] not in names:
+            continue
+        when = dt.datetime.fromisoformat(m[1].replace("Z", "+00:00")).timestamp()
+        if t0 - 0.05 <= when <= t1:
+            out[m[3]].append((when, float(m[4]) * UNIT[m[5]]))
+    return out
+
+
+def pct(v, q):
+    v = sorted(v)
+    return round(v[min(len(v) - 1, int(q * (len(v) - 1) + 0.5))], 2) if v else None
+
+
+def tick_summary(ticks):
+    ms = [d for _, d in ticks]
+    gaps = [(b[0] - a[0]) * 1000 for a, b in zip(ticks, ticks[1:])]
+    return {"ticks": len(ticks), "tick_max_ms": round(max(ms), 2) if ms else None, "tick_p99_ms": pct(ms, 0.99),
+            "interval_p50_ms": pct(gaps, 0.5), "interval_p99_ms": pct(gaps, 0.99), "interval_max_ms": round(max(gaps), 1) if gaps else None}
+
+
+def settled_logs(r, n=200000):
+    """The module log, read again until two reads agree (a busy module's lines land late)."""
+    last = None
+    for _ in range(10):
+        text = r.logs(n)
+        if last is not None and len(text) == len(last):
+            return text
+        last = text
+        time.sleep(1.0)
+    return last
+
+
+def poll(r, q, ok, timeout_s, every=0.01):
+    t0 = time.time()
+    while time.time() - t0 < timeout_s:
+        rows, _ = r.sql(q)
+        if rows and ok(rows[0]):
+            return time.time()
+        time.sleep(every)
+    return None
+
+
+def switch(r):
+    land = r.rows("SELECT size FROM land")
+    if not land:
+        sys.exit("not a land world")
+    if has_cover(r):
+        sys.exit("this world has cover geometry already: switch needs a land made with cover off")
+    bands = (land[0]["size"] ** 2 + 16383) // 16384
+    names = {"tick", "cover_step", "cover.generate", "cover.host", "cover.ground_bands", "map.cover", "set_world_law"}
+    r.call("set_profile", [True])
+    out = {"db": r.db, "size": land[0]["size"], "bands": bands}
+    try:
+        time.sleep(2.0)
+        code, body, t0, ms = r.call("set_world_law", ["cover_sight_on", "true"])
+        out["switch_status"], out["switch_round_trip_ms"] = code, round(ms, 1)
+        t_on = poll(r, "SELECT cover_sight_on FROM cover_law WHERE id = 0", lambda x: x["cover_sight_on"] is True, 900)
+        out["switch_on_s"] = round(t_on - t0, 3) if t_on else None
+        d = r.rows("SELECT * FROM cover_derivation")
+        out["derivation"] = d[0] if d else None
+        out["bands_kept"] = r.rows("SELECT COUNT(*) AS n FROM cover_ground")[0]["n"]
+        time.sleep(1.5)
+        text = settled_logs(r)
+        sp = spans_between(text, t0, (t_on or time.time()) + 1.0, names)
+        steps = [d for _, d in sp["cover_step"]] or [d for _, d in sp["cover.generate"] + sp["cover.host"] + sp["cover.ground_bands"]]
+        out["during_switch"] = {**tick_summary(sp["tick"]), "cover_steps": len(steps), "cover_step_max_ms": round(max(steps), 2) if steps else None,
+                                "cover_step_p99_ms": pct(steps, 0.99), "cover_step_total_ms": round(sum(steps), 1),
+                                "map_cover_ms": [round(d, 2) for _, d in sp["map.cover"]]}
+        print(f"switch-on: {code} in {ms:.1f} ms; cover_law on after {out['switch_on_s']} s; {out['during_switch']}", flush=True)
+        fill = r.rows("SELECT cover_brush_min_fill FROM cover_law WHERE id = 0")[0]["cover_brush_min_fill"]
+        new = round(0.44 if abs(fill - 0.44) > 1e-3 else 0.52, 3)
+        time.sleep(1.0)
+        code, body, t1, ms = r.call("set_world_law", ["cover_brush_min_fill", f"{new:g}"])
+        t_fill = poll(r, "SELECT cover_brush_min_fill FROM cover_law WHERE id = 0", lambda x: abs(x["cover_brush_min_fill"] - new) < 1e-4, 60)
+        time.sleep(1.5)
+        text = settled_logs(r)
+        sp = spans_between(text, t1, t1 + 1.5, names)
+        out["brush_fill"] = {"from": fill, "to": new, "status": code, "round_trip_ms": round(ms, 1),
+                             "cover_law_after_ms": round((t_fill - t1) * 1000, 1) if t_fill else None,
+                             "reducer_ms": [round(d, 3) for _, d in sp["set_world_law"]], "map_cover_ms": [round(d, 2) for _, d in sp["map.cover"]],
+                             "cover_steps": len(sp["cover_step"]) + len(sp["cover.generate"]), **tick_summary(sp["tick"])}
+        print(f"brush fill {fill} -> {new}: {out['brush_fill']}", flush=True)
+        r.call("set_world_law", ["cover_brush_min_fill", f"{fill:g}"])
+        r.call("set_world_law", ["cover_sight_on", "false"])
+    finally:
+        r.call("set_profile", [False])
+    r.save("cover-switch.json", out)
+    return 0
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("part", choices=["time", "checks"])
+    p.add_argument("part", choices=["time", "checks", "switch"])
     p.add_argument("--run", required=True)
     p.add_argument("--repeat", type=int, default=3)
     a = p.parse_args()
@@ -378,6 +487,8 @@ def main():
     if a.part == "time":
         timing(r, a.repeat)
         return 0
+    if a.part == "switch":
+        return switch(r)
     return checks(r, seed)
 
 

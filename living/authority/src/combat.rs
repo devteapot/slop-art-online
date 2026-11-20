@@ -329,6 +329,10 @@ pub fn resume_move(ctx: &ReducerContext, id: u32, now: u64) {
 /// move runs its course (the same rule a graph's change of mind meets, `committed`).
 pub fn rooted_now(ctx: &ReducerContext, id: u32) -> bool {
     let Some(a) = ctx.db.activity().id().find(id) else { return false };
+    // A dash that can no longer end holds nothing: it is broken off (`act::unstick`).
+    if act::unstick(ctx, &a, common::now_ms(ctx)) {
+        return false;
+    }
     let sc = common::scripts(ctx);
     committed(&sc, &a) || (a.node == act::PLAYER && sc.combat(&a.skill).is_some_and(|s| (a.phase == 1 && s.rooted) || s.aim == Aim::Dash))
 }

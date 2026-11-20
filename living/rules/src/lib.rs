@@ -3,6 +3,7 @@
 
 pub mod acts;
 pub mod bearing;
+mod bin;
 pub mod catalog;
 pub mod combat;
 pub mod det;

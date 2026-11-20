@@ -81,7 +81,7 @@ PRIVATE = ['attention', 'copy_state', 'applied_gaze', 'cover_ground', 'fast_ask'
            # A floor module's staged genesis (floor.rs), private since floors were added.
            'floor_seed', 'genesis_timer',
            # Cover geometry derived after creation (geometry.rs, cover-genesis).
-           'cover_derivation', 'cover_timer',
+           'cover_derivation', 'cover_timer', 'cover_source',
            # Frames: what each player was last shown of others (docs/PERCEPTION.md, "Frames").
            'motion_seen', 'fighter_seen', 'doing_seen', 'line_seen',
            # Which character each person plays (perception.rs `current`); a player reads it through my_characters.
