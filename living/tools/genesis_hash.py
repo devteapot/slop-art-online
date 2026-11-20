@@ -56,7 +56,7 @@ def digest(lines):
 
 def hash_world(wasm, out):
     db = f"verify-lookcost-hash-{Path(wasm).stem.replace('_', '-')}-{time.strftime('%H%M%S')}"[:60]
-    p = subprocess.run(["podman", "exec", "-i", lc.CONTAINER, "spacetime", "publish", "-s", "local", "-b", f"/wasm/{wasm}", db, "--delete-data", "-y"], capture_output=True, text=True, timeout=1800)
+    p = subprocess.run(["docker", "exec", "-i", lc.CONTAINER, "spacetime", "publish", "-s", "local", "-b", f"/wasm/{wasm}", db, "--delete-data", "-y"], capture_output=True, text=True, timeout=1800)
     if p.returncode:
         sys.exit(f"publish failed: {(p.stderr or p.stdout)[-300:]}")
     try:
