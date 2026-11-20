@@ -812,16 +812,21 @@ def scene_teleport(st):
         if walking and walking["skill"] == "goto" and walking["phase"] == 0:
             break
         time.sleep(0.1)
+    t_put = int(time.time() * 1000)
     call(st, "place_at", [r, p[0], p[1] + 4.0], "admin")
     time.sleep(1.5)
     left = activity(st, r)
-    s1 = body(st, r)
-    time.sleep(1.5)
-    s2 = body(st, r)
-    stuck = left is not None and left["skill"] == "goto" and left["phase"] == 0 and s1 and s2 and math.dist(s1, s2) < 0.05
+    # Stuck is a movement that can no longer end: at phase 0 with no timer while its steering has
+    # no goal and the body no motion due (main's state after the teleport). A walk begun again
+    # from the new spot has a goal, though it may stand still while its route is searched.
+    steer = sql(st, f"SELECT goal FROM steer WHERE id = {r}")
+    due = sql(st, f"SELECT next_ms FROM body WHERE id = {r}")
+    idle = 18446744073709551615
+    stuck = (left is not None and left["phase"] == 0 and left["ends_ms"] == idle and left["started_ms"] <= t_put
+             and (not steer or steer[0]["goal"] == 0) and (not due or due[0]["next_ms"] == idle))
     check(st, "teleport: a resident's walk put elsewhere ends (broken off, not walking nowhere for good)",
           walking and walking["skill"] == "goto" and not stuck,
-          f"walking {walking and walking['skill']}; after: {left and {k: left[k] for k in ('skill', 'phase', 'node', 'ends_ms')}}; moved {s1 and s2 and round(math.dist(s1, s2), 2)} m in 1.5 s")
+          f"walking {walking and walking['skill']}; after: {left and {k: left[k] for k in ('skill', 'phase', 'node', 'ends_ms', 'started_ms')}}; put at {t_put}; steer goal {steer and steer[0]['goal']}; next_ms {due and due[0]['next_ms']}")
     call(st, "set_behavior", [r, '{"wait":60}'], "admin")
 
 
