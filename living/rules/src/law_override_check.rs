@@ -247,6 +247,23 @@ fn value_only_edit_cost() {
     }
 }
 
+/// battle-laws (docs/COMBAT_PHASE.md): the fighters' scheduling laws and the sweep's memory are
+/// value-only, so switching one is a `law_override` row edit read at the next tick.
+#[test]
+fn the_fighters_scheduling_laws_are_value_only() {
+    let s = Scripts::new(BASE).unwrap();
+    for law in ["fighter_bystander_wakes", "combat_eval_hz", "sweep_keep_memory", "sweep_keep_check"] {
+        assert_eq!(s.value_only(law), Some(ValueOnly::Delivery), "{law}");
+    }
+    assert!(s.laws().fighter_bystander_wakes && s.laws().combat_every_ticks() == 4);
+    let on = s.apply_overrides(&[("combat_eval_hz".into(), json!(7.5)), ("fighter_bystander_wakes".into(), json!(false))]).unwrap();
+    assert!(on.delivery && !on.cover && !on.gaze, "{on:?}");
+    assert_eq!(on.changed, vec!["combat_eval_hz".to_string(), "fighter_bystander_wakes".to_string()], "{on:?}");
+    assert!(s.laws().combat_every_ticks() == 8 && !s.laws().fighter_bystander_wakes);
+    let off = s.apply_overrides(&[]).unwrap();
+    assert!(off.delivery && s.laws().combat_every_ticks() == 4 && s.laws().fighter_bystander_wakes, "{off:?}");
+}
+
 /// The battle laws' prototypes (docs/BATTLE_LAWS.md) are value-only delivery laws: a world's
 /// value goes in place with no install, the words follow, and taking the override away restores
 /// the script's value (the laptop's stills: `far_cap` took a full install, about 5 s, before).

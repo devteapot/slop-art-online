@@ -29,6 +29,10 @@ and MemAvailable every second of the window, as tick_report.py reads it). `--no-
 logging (the uninstrumented cost). `--full-log` reads the replica's whole module log from the
 server's data directory instead of the CLI's tail, which drops lines when detail spans log tens
 of thousands a second; `span_report.py` reads it.
+
+`--keep-fighters SECS` (battle-laws): a sustained battle; every SECS s the fighters alive (`Fighter…`)
+are counted and the dead replaced one for one with `spawn_battle` (`result.json` `keeper_window`: the
+census at the window's start and end, its mean and minimum, the refills).
 """
 import argparse
 import json
@@ -120,6 +124,41 @@ class KeepAlive(threading.Thread):
     def summary(self, seconds):
         return {"every_s": self.every, "rounds": self.rounds, "calls": self.calls, "failed": self.failed,
                 "calls_per_s": round(self.calls / seconds, 2) if seconds else None, "hp_restored": round(self.restored, 1)}
+
+
+class Keeper(threading.Thread):
+    """The sustained battle (`--keep-fighters`, battle-laws, docs/COMBAT_PHASE.md): every `every` s,
+    the fighters alive (characters named `Fighter…`, as `spawn_battle` names them) are counted and
+    the dead replaced one for one by `spawn_battle` (the same profile: spear, fight graph, placed
+    within the site's 7 m). A respawn the game does not have, as battle_diag.py's refills; it keeps
+    deaths and their witnessed events in the fight. Records the census at each round."""
+
+    def __init__(self, db, token, target, every):
+        super().__init__(daemon=True)
+        self.db, self.token, self.target, self.every = db, token, target, every
+        self.stop = threading.Event()
+        self.refills = self.failed = 0
+        self.census = []
+
+    def run(self):
+        while not self.stop.wait(self.every):
+            try:
+                alive = sum(1 for r in lc.sql(self.db, "SELECT name FROM character WHERE alive = true", self.token) if str(r["name"]).startswith("Fighter"))
+            except RuntimeError:
+                continue
+            self.census.append((round(time.time(), 2), alive))
+            short = self.target - alive
+            if short > 0:
+                try:
+                    lc.call(self.db, "spawn_battle", [short], self.token)
+                    self.refills += short
+                except RuntimeError:
+                    self.failed += 1
+
+    def window(self, t0, t1):
+        inside = [n for t, n in self.census if t0 <= t <= t1]
+        return {"every_s": self.every, "target": self.target, "alive_start": inside[0] if inside else None, "alive_end": inside[-1] if inside else None,
+                "alive_min": min(inside, default=None), "alive_mean": round(sum(inside) / len(inside), 1) if inside else None, "rounds": len(inside)}
 
 
 # ---- copy-privacy (docs/BATTLE_VIEWERS.md, "Addendum 3") ------------------------------------
@@ -454,6 +493,10 @@ def one(a, n, out):
             if a.paused_placement:
                 lc.call(db, "set_paused", [False], token)
             load.send("go")
+        keeper = None
+        if a.keep_fighters:
+            keeper = Keeper(db, token, a.fighters, a.keep_fighters)
+            keeper.start()
         keep = None
         if a.keep_alive and n:
             keep = KeepAlive(db, token, a.keep_alive)
@@ -474,10 +517,16 @@ def one(a, n, out):
         clog0 = clog_state(res["replica"]) if a.clog else None
         c0, t0 = tick_count(ident), time.time()
         k0 = (keep.calls, keep.restored) if keep else None
+        f0 = keeper.refills if keeper else 0
         if load:
             load.send("fresh on")
         time.sleep(a.seconds)
         c1, t1 = tick_count(ident), time.time()
+        if keeper:
+            keeper.stop.set()
+            res["keeper_window"] = keeper.window(t0, t1)
+            res["keeper_window"]["refills"] = keeper.refills - f0
+            res["keeper_window"]["refills_per_s"] = round((keeper.refills - f0) / (t1 - t0), 2)
         if a.clog:
             # Commitlog growth over the window: the replica's `clog/` on disk (segments and their
             # offset indexes), not what a snapshot would let go (docs/TRIAL_DISK.md).
@@ -680,6 +729,7 @@ def main():
     ap.add_argument("--character-tables", action="store_true", help="the viewers subscribe seen_character_copy in place of seen_characters (battle-views)")
     ap.add_argument("--law", action="append", default=[])
     ap.add_argument("--fresh-every", type=int, default=0, help="sample every Nth viewer's motion freshness (gate-load `fresh`)")
+    ap.add_argument("--keep-fighters", type=float, default=0, metavar="SECS", help="a sustained battle: every SECS s, replace dead fighters one for one with spawn_battle (battle-laws)")
     ap.add_argument("--keep-alive", type=float, default=0, metavar="SECS", help="every SECS s, set each hurt viewer back to full health (admin_set_vitals; the agreed keep-alive fixture)")
     ap.add_argument("--paused-placement", action="store_true", help="pause the world while the viewers join and are placed; unpause at ready (the Spark's procedure)")
     ap.add_argument("--site", default=None, metavar="X,Y", help="the viewers' centre (default: the arrival less 20 m, the battle's centre)")
