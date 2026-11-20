@@ -1358,6 +1358,24 @@ pub fn cached_body_current(id: u32, now: u64) -> bool {
     CHUNK_BODIES.with(|c| c.borrow().0 == (tx_seq(), now)) && !WRITTEN.with(|w| w.borrow().contains(&id))
 }
 
+/// Every creature [`creatures_near`] gathers within `r` of `at`, in chunk order (not sorted), each
+/// with the chunk it is filed under: a reader that gathers once for two radii keeps, for the
+/// smaller one, those within it whose chunk `chunks_around` gives for it, which is exactly what
+/// `creatures_near` would give at that radius (a body is filed under the chunk where its segment
+/// began, so one near the edge of a chunk can stand in a neighbouring one).
+pub fn creatures_near_filed(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) -> Vec<(NearCreature, u32)> {
+    let mut out = Vec::new();
+    for c in chunks_around(at.0, at.1, r) {
+        for (id, kind, p, h) in chunk_bodies(ctx, c, now).iter() {
+            let d = dist(at, *p);
+            if d <= r {
+                out.push((NearCreature { id: *id, kind: kind.clone(), pos: *p, dist: d, facing: *h }, c));
+            }
+        }
+    }
+    out
+}
+
 pub fn creatures_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) -> Vec<NearCreature> {
     let mut out = Vec::new();
     for c in chunks_around(at.0, at.1, r) {
