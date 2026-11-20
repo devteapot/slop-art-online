@@ -101,6 +101,8 @@ fn laws() {
         feed_scope_near_m: 10.0,
         feed_scope_far_s: 1.0,
         feed_scope_popin_probe: false,
+        // A diagnostic: each sweep's short pass is checked against a whole walk of the cells.
+        feed_scope_loop_check: false,
         // Known ground (docs/MOVEMENT_MIND.md): how far ground is seen by day, metres (at night,
         // one's own sight); the most 4 m cells one look marks (0: no cap; the rest come with
         // later looks); whether walks are planned over what each walker has seen instead of the
@@ -3249,6 +3251,7 @@ fn law_about(l, name) {
         "feed_scope_grace_s" => `clients have ${short(l.feed_scope_grace_s)} s to switch before the open feeds close`,
         "feed_scope_near_m" => `small things not yet seen are looked for at once within ${short(l.feed_scope_near_m)} m`,
         "feed_scope_far_s" => `and farther ones every ${short(l.feed_scope_far_s)} s`,
+        "feed_scope_loop_check" => if l.feed_scope_loop_check { "a diagnostic: what each sweep shows is checked against a whole look round" } else { "sweeps are not checked against a whole look round" },
         "feed_scope_popin_probe" => if l.feed_scope_popin_probe { "a diagnostic: the delay of far things coming into sight is timed" } else { "far things coming into sight are not timed" },
         "cover_eye_height_m" => "the standing eye height in metres",
         "cover_brush_on" => "whether dense brush hides people",

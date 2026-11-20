@@ -54,6 +54,9 @@ FEEDS = {"off": ["gate"], "on": ["my_things", "my_remembered_things", "my_owners
 # The probe arm: on, with `feed_scope_popin_probe` (it tests more than on does; its cost is not the
 # arm's, only its pop-in delays are read).
 FEEDS["probe"] = FEEDS["on"]
+# The check arm: on, with `feed_scope_loop_check` (iteration 4's short pass against iteration 3's
+# walk on the same state, every sweep); not a cost arm, only its counts are read.
+FEEDS["check"] = FEEDS["on"]
 
 
 def host():
@@ -202,11 +205,13 @@ def one(name, workload, arm, seconds, woods_seed, max_load):
         laws = {"profile_detail": True, "cover_sight_on": True, "fov_on": workload != "round", "gaze_on": workload != "round"}
         for key, value in laws.items():
             call("set_world_law", key, json.dumps(value))
-        if arm in ("on", "probe"):
+        if arm in ("on", "probe", "check"):
             call("set_world_law", "feed_scope_grace_s", "1")
             call("set_world_law", "feed_scope_on", "true")
             if arm == "probe":
                 call("set_world_law", "feed_scope_popin_probe", "true")
+            if arm == "check":
+                call("set_world_law", "feed_scope_loop_check", "true")
             t0 = time.time()
             while (sql("SELECT stage FROM feed_scope") or [{"stage": 0}])[0]["stage"] != 2:
                 if time.time() - t0 > 30:
@@ -347,6 +352,7 @@ def one(name, workload, arm, seconds, woods_seed, max_load):
                       copy_writes_s=sum(v for k, v in diags.items() if k.startswith("scope:copy_")) / per,
                       memory_writes_s=sum(v for k, v in diags.items() if k.startswith("scope:memory_")) / per,
                       scope_tests_s=diags.get("scope:tests", 0) / per, diagnostic_seconds=periods,
+                      loop={k.split(":")[1]: diags.get(k, 0) for k in ("scope:local", "scope:walk", "scope:loop_checked", "scope:loop_differed", "scope:far_skipped")},
                       total_kb_s_per_client=(m1[bytes_key] - m0[bytes_key]) / (1000 * elapsed * count),
                       reconnect=json.loads(reconnect.stdout), wasm_memory_bytes=[m0[memory_key], m1[memory_key]],
                       profile_source="full server module log", cpus=placement,
@@ -375,6 +381,7 @@ def main():
     p.add_argument("--seconds", type=int, default=30)
     p.add_argument("--max-load", type=float, default=6.0)
     p.add_argument("--probe-runs", type=int, default=1, help="probe arms per workload (pop-in delays; not a cost arm)")
+    p.add_argument("--check-runs", type=int, default=1, help="loop-check arms per workload (exactness; not a cost arm)")
     p.add_argument("--stop-after", default="middle", help="stop when this workload, once done, misses the budget")
     p.add_argument("--reclaim-closed", action="store_true", help="the coordinator closed tonight's reclaim window before 02:00")
     a = p.parse_args()
@@ -394,7 +401,7 @@ def main():
         print("holding the battle lock", flush=True)
         for workload, repeats in plan:
             for index in range(1, repeats + 1):
-                arms = ["off", "on"] + (["probe"] if index <= a.probe_runs else [])
+                arms = ["off", "on"] + (["probe"] if index <= a.probe_runs else []) + (["check"] if index <= a.check_runs else [])
                 for arm in arms:
                     for attempt in (1, 2):
                         if not in_window():

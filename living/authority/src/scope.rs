@@ -167,17 +167,42 @@ thread_local! {
     /// `feed_scope_popin_probe`: when each far thing a viewer had not yet seen first passed the
     /// sight test at a sweep that did not take it ((character, key) -> ms, distance).
     static POPIN: RefCell<HashMap<(u32, u64), (u64, f32)>> = RefCell::new(HashMap::new());
+    /// Bumped by every invalidation of the candidate cells (and a script change): a viewer's local
+    /// list from before it is walked again.
+    static CELLS_GEN: Cell<u64> = const { Cell::new(0) };
+    /// Each player's character's local candidates from its last walk of the cells (iteration 4).
+    static LOCAL: RefCell<HashMap<u32, Local>> = RefCell::new(HashMap::new());
+}
+
+/// How far a viewer may move from where its cells were last walked before they are walked again:
+/// its local list holds every candidate within its gather radius plus this, and the near band
+/// every one within `feed_scope_near_m` plus this.
+const LOCAL_MARGIN_M: f32 = 8.0;
+
+/// A viewer's candidates from its last walk of the cells: those within `gather` + the margin of
+/// `at` (by key), and of them those within `near` + the margin (the near band). Between far-due
+/// sweeps the sweep tests only the near band and what it sees now, read from here.
+struct Local {
+    at: (f32, f32),
+    gather: f32,
+    near: f32,
+    gen: u64,
+    all: Vec<Cand>,
+    by_key: HashMap<u64, usize>,
+    band: Vec<usize>,
 }
 
 /// A structure or resource write: the cells it touches are built again (all of them for
 /// structures, as the chunk cache does).
 pub fn invalidate_cells(t: i64, chunk: Option<u32>) {
     CELLS.with(|c| c.borrow_mut().invalidate(t, chunk.map(cell_of_chunk)));
+    CELLS_GEN.with(|g| g.set(g.get().wrapping_add(1)));
 }
 
 /// Module memory no longer follows the committed rows (`perception::sweep`).
 pub fn clear_memory() {
     COPIES.with(|c| c.borrow_mut().clear());
+    LOCAL.with(|l| l.borrow_mut().clear());
     MEMO.with(|m| m.borrow_mut().clear());
 }
 
@@ -223,6 +248,7 @@ fn cell(ctx: &ReducerContext, cell: u32) -> Rc<Vec<Cand>> {
     if CELLS_REV.with(|r| r.get()) != rev {
         CELLS.with(|c| c.borrow_mut().invalidate(t, None));
         CELLS_REV.with(|r| r.set(rev));
+        CELLS_GEN.with(|g| g.set(g.get().wrapping_add(1)));
     }
     CELLS.with(|c| c.borrow_mut().get(t, cell, || build_cell(ctx, cell)))
 }
@@ -300,6 +326,81 @@ fn owner_shown(ctx: &ReducerContext, me: &Character, owner: u32, kind: &str) -> 
 
 // ---- a player's copies -----------------------------------------------------------------------
 
+type Payload = (bool, Option<bool>, Option<(u32, u32)>);
+
+/// One sweep's test inputs.
+struct Pass<'a> {
+    eye: &'a Eye<'a>,
+    at: (f32, f32),
+    r2: f32,
+    near2: f32,
+    far_due: bool,
+    probe: bool,
+    now: u64,
+}
+
+impl Pass<'_> {
+    /// One candidate as the iteration 3 sweep tests it: shown (with its payload), or not. A
+    /// not-yet-seen thing beyond the near radius is passed over unless a far test is due (or the
+    /// probe times it), before its payload is read. `effects`: the pop-in probe's clock runs.
+    #[allow(clippy::too_many_arguments)]
+    fn test(&self, ctx: &ReducerContext, c: &Cand, prior: &HashMap<u64, (u64, SeenThing)>, me: u32, effects: bool, counts: &mut (u64, u64)) -> Option<(Cand, Payload)> {
+        let (dx, dy) = (c.x - self.at.0, c.y - self.at.1);
+        let d2 = dx * dx + dy * dy;
+        if d2 > self.r2 {
+            return None;
+        }
+        let k = key(c.class, c.id);
+        let before = prior.contains_key(&k);
+        let far = !before && d2 > self.near2;
+        if far && !self.far_due && !self.probe {
+            counts.1 += 1;
+            return None;
+        }
+        // A node at full stock gets no copy (it is drawn as its landmark): known before any ray.
+        let p = payload(ctx, c, self.now)?;
+        counts.0 += 1;
+        let glow = if c.light > 0.0 && (!c.burns || p.0) { c.light } else { 0.0 };
+        let visible = self.eye.sees_at((c.x, c.y), d2.sqrt(), glow, before);
+        if far && self.probe {
+            if effects {
+                popin(me, k, visible, self.far_due, d2.sqrt(), self.now);
+            }
+            if !self.far_due {
+                return None;
+            }
+        }
+        visible.then(|| (c.clone(), p))
+    }
+}
+
+/// Iteration 3's pass: every candidate of the cells round the viewer, tested; and the viewer's local
+/// list made from the same walk.
+#[allow(clippy::too_many_arguments)]
+fn walk(ctx: &ReducerContext, pass: &Pass, look: &Look, near: f32, gen: u64, prior: &HashMap<u64, (u64, SeenThing)>, me: u32, effects: bool, counts: &mut (u64, u64)) -> (Vec<(Cand, Payload)>, Local) {
+    let reach = look.gather + LOCAL_MARGIN_M;
+    let band = near + LOCAL_MARGIN_M;
+    let mut l = Local { at: look.at, gather: look.gather, near, gen, all: Vec::new(), by_key: HashMap::new(), band: Vec::new() };
+    let mut hits = Vec::new();
+    for cid in cells_around(look.at, reach) {
+        for c in cell(ctx, cid).iter() {
+            let d = dist(look.at, (c.x, c.y));
+            if d <= reach {
+                let i = l.all.len();
+                l.by_key.insert(key(c.class, c.id), i);
+                if d <= band {
+                    l.band.push(i);
+                }
+                l.all.push(c.clone());
+            }
+            if let Some(h) = pass.test(ctx, c, prior, me, effects, counts) {
+                hits.push(h);
+            }
+        }
+    }
+    (hits, l)
+}
+
 /// A player's character's sweep (`perception::sweep_one`, the same pass as the people it sees):
 /// the things in sight now, written as the viewer's copies; what it sees remembered.
 ///
@@ -313,7 +414,6 @@ pub fn sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, look: &Look
     });
     let fresh_owners = OWNERS.with(|o| !o.borrow().contains_key(&me.id));
     let mut seen: Vec<(SeenThing, bool)> = Vec::new();
-    let (mut tests, mut skipped) = (0u64, 0u64);
     let r2 = look.gather * look.gather;
     // Iteration 3 cadence (docs/FEED_SCOPING.md): what this viewer sees, and what it has not yet
     // seen within `feed_scope_near_m`, is tested at every sweep; not-yet-seen things beyond it once
@@ -330,45 +430,68 @@ pub fn sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, look: &Look
         }
         due
     });
-    for cid in cells_around(look.at, look.gather) {
-        for c in cell(ctx, cid).iter() {
-            let (dx, dy) = (c.x - look.at.0, c.y - look.at.1);
-            let d2 = dx * dx + dy * dy;
-            if d2 > r2 {
-                continue;
-            }
-            let k = key(c.class, c.id);
-            let before = prior.get(&k);
-            // A node at full stock gets no copy (it is drawn as its landmark): known before any ray.
-            let p = match payload(ctx, c, now) {
-                Some(p) => p,
-                None => continue,
-            };
-            let far = before.is_none() && d2 > near2;
-            if far && !far_due && !probe {
-                skipped += 1;
-                continue;
-            }
-            tests += 1;
-            let glow = if c.light > 0.0 && (!c.burns || p.0) { c.light } else { 0.0 };
-            let visible = eye.sees_at((c.x, c.y), d2.sqrt(), glow, before.is_some());
-            if far && probe {
-                popin(me.id, k, visible, far_due, d2.sqrt(), now);
-                if !far_due {
-                    continue;
+    let mut counts = (0u64, 0u64);
+    let ctxs = Pass { eye: &eye, at: look.at, r2, near2, far_due, probe, now };
+    let gen = CELLS_GEN.with(|g| g.get());
+    let local = LOCAL.with(|l| l.borrow_mut().remove(&me.id)).filter(|l| {
+        !far_due && !probe && l.gen == gen && dist(l.at, look.at) < LOCAL_MARGIN_M && look.gather <= l.gather && laws.feed_scope_near_m <= l.near
+    });
+    let (hits, local) = match local {
+        // Between far-due sweeps: the near band and what this viewer sees now, from its local list.
+        Some(l) => {
+            common::diag(|| "scope:local", 1);
+            let mut hits = Vec::new();
+            let mut done: HashSet<usize> = HashSet::new();
+            for &i in &l.band {
+                done.insert(i);
+                if let Some(h) = ctxs.test(ctx, &l.all[i], &prior, me.id, true, &mut counts) {
+                    hits.push(h);
                 }
             }
-            if !visible {
-                continue;
+            for k in prior.keys() {
+                if let Some(&i) = l.by_key.get(k) {
+                    if done.insert(i) {
+                        if let Some(h) = ctxs.test(ctx, &l.all[i], &prior, me.id, true, &mut counts) {
+                            hits.push(h);
+                        }
+                    }
+                }
             }
-            let (lit, open, stock) = p;
-            let owner = match before {
-                Some((_, t)) if !fresh_owners && (t.owner == 0 || t.owner == c.owner) => t.owner,
-                _ if c.class == 1 => owner_shown(ctx, me, c.owner, &c.kind),
-                _ => 0,
-            };
-            seen.push((SeenThing { key: k, class: c.class, id: c.id, kind: c.kind.to_string(), x: c.x, y: c.y, open, lit, owner, left: stock.map(|s| s.0), max: stock.map(|s| s.1) }, c.scoped));
+            (hits, l)
         }
+        // A far test is due (or the list is stale): the cells walked as in iteration 3, and the list
+        // made afresh from them.
+        None => {
+            common::diag(|| "scope:walk", 1);
+            let (hits, l) = walk(ctx, &ctxs, look, laws.feed_scope_near_m, gen, &prior, me.id, true, &mut counts);
+            (hits, l)
+        }
+    };
+    let (tests, skipped) = counts;
+    if laws.feed_scope_loop_check {
+        // The same-tick check (as `regard_cache_check`): iteration 3's walk of the cells on the same
+        // state, without its side effects, must show exactly the same things.
+        let mut c2 = (0, 0);
+        let (reference, _) = walk(ctx, &ctxs, look, laws.feed_scope_near_m, gen, &prior, me.id, false, &mut c2);
+        let a: std::collections::BTreeMap<u64, _> = hits.iter().map(|(c, p)| (key(c.class, c.id), *p)).collect();
+        let b: std::collections::BTreeMap<u64, _> = reference.iter().map(|(c, p)| (key(c.class, c.id), *p)).collect();
+        common::diag(|| "scope:loop_checked", 1);
+        if a != b {
+            common::diag(|| "scope:loop_differed", 1);
+            log::error!("feed scope loop check of {}: the local pass shows {:?}, the walk {:?}", me.id, a.keys().collect::<Vec<_>>(), b.keys().collect::<Vec<_>>());
+        }
+    }
+    if keep {
+        LOCAL.with(|l| l.borrow_mut().insert(me.id, local));
+    }
+    for (c, (lit, open, stock)) in hits {
+        let k = key(c.class, c.id);
+        let owner = match prior.get(&k) {
+            Some((_, t)) if !fresh_owners && (t.owner == 0 || t.owner == c.owner) => t.owner,
+            _ if c.class == 1 => owner_shown(ctx, me, c.owner, &c.kind),
+            _ => 0,
+        };
+        seen.push((SeenThing { key: k, class: c.class, id: c.id, kind: c.kind.to_string(), x: c.x, y: c.y, open, lit, owner, left: stock.map(|s| s.0), max: stock.map(|s| s.1) }, c.scoped));
     }
     drop(span);
     common::diag(|| "scope:tests", tests);
@@ -446,6 +569,7 @@ pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
     OWNERS.with(|o| o.borrow_mut().remove(&id));
     COPIES.with(|c| c.borrow_mut().remove(&id));
     FAR.with(|f| f.borrow_mut().remove(&id));
+    LOCAL.with(|l| l.borrow_mut().remove(&id));
     POPIN.with(|p| p.borrow_mut().retain(|(c, _), _| *c != id));
 }
 

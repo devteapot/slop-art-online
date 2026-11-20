@@ -572,6 +572,9 @@ pub struct Laws {
     /// A diagnostic: the far things a viewer has not yet seen are tested at every sweep too, only to
     /// time when each came into sight, and each one's first sighting logs its extra delay (pop-in).
     pub feed_scope_popin_probe: bool,
+    /// A diagnostic (iteration 4): each player's sweep also walks every candidate cell as iteration 3
+    /// did, on the same state and without side effects, and counts any difference in what it shows.
+    pub feed_scope_loop_check: bool,
     /// How far a character sees ground by day (metres): the cells of `known_ground` it marks
     /// (docs/MOVEMENT_MIND.md, step 3). At night, its own sight.
     pub ground_sight_m: f32,
@@ -824,6 +827,7 @@ impl Default for Laws {
             feed_scope_near_m: 10.0,
             feed_scope_far_s: 1.0,
             feed_scope_popin_probe: false,
+            feed_scope_loop_check: false,
             ground_sight_m: 24.0,
             known_cells_pass: 0.0,
             nav_belief: false,
@@ -3176,6 +3180,7 @@ impl Scripts {
             feed_scope_near_m: g("feed_scope_near_m", l.feed_scope_near_m).clamp(0.0, 1000.0),
             feed_scope_far_s: g("feed_scope_far_s", l.feed_scope_far_s).clamp(0.0, 60.0),
             feed_scope_popin_probe: flag("feed_scope_popin_probe", l.feed_scope_popin_probe),
+            feed_scope_loop_check: flag("feed_scope_loop_check", l.feed_scope_loop_check),
             ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
             known_cells_pass: g("known_cells_pass", l.known_cells_pass).clamp(0.0, 100_000.0),
             nav_belief: flag("nav_belief", l.nav_belief),
