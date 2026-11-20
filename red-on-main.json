@@ -10,5 +10,17 @@
     "reason": "red on main: the installed script's overlay part differs from the seed's laws on both cullet-laws seeds (GC: diagnosed and fixed separately, after status-parts-genesis). Drop by hand when green: reds --drop this key",
     "skill": "verify-generation",
     "times": 0
+  },
+  "generation:floor-megacity-2k": {
+    "case": "generation:floor-megacity-2k",
+    "first_main": "16f50c0c12b96d0860e2b433f9ec4d4abadb3376",
+    "first_seen": "2026-11-20T02:47:50+01:00",
+    "last_evidence": "~/slop-evidence/law-compose-20261120.tar.zst (Spark): generation-lc-015258-8-floor-megacity-2k",
+    "last_main": "16f50c0c12b96d0860e2b433f9ec4d4abadb3376",
+    "last_seen": "2026-11-20T02:47:50+01:00",
+    "owner": "dev-box (staged genesis)",
+    "reason": "publish refused: init runs out of energy (FLOORS.md had ~60% when floors landed). Found by law-compose 2026-11-20; cover ground derivation (island::host -> cover::ground, unconditional) suspected part of it, Spark checking. Not a gate case: the full verify-generation suite aborts here",
+    "skill": "verify-generation",
+    "times": 0
   }
 }
