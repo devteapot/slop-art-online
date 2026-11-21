@@ -1,0 +1,124 @@
+{
+ "type": "adult-m-a",
+ "line": {
+  "type": "adult-m-a",
+  "height": 1.64,
+  "colors": {
+   "hair": "#662e1a",
+   "skin": "#e8bca3",
+   "eyes": "#4f7a4f"
+  },
+  "styles": {
+   "hair": "bob_none",
+   "outfit": [
+    "jersey-m",
+    "trousers-m",
+    "boots-m"
+   ],
+   "overlays": []
+  }
+ },
+ "frame_m": 0.6,
+ "frame_middle_y_m": 1.45,
+ "portrait 00-0_0_0.36_0.88": {
+  "face_over_eyes": 1.689,
+  "cheek_width_px": 119,
+  "eye_spacing_px": 70.5,
+  "cheek_row": 272,
+  "cheek_px": [
+   140,
+   259
+  ],
+  "eye_line_px": 241.5,
+  "ear_on_cheek_row": true,
+  "ear_px": 412
+ },
+ "portrait 01-0_8_0.36_0.88": {
+  "face_over_eyes": 1.564,
+  "cheek_width_px": 111,
+  "eye_spacing_px": 71.0,
+  "cheek_row": 276,
+  "cheek_px": [
+   144,
+   255
+  ],
+  "eye_line_px": 245.5,
+  "ear_on_cheek_row": false,
+  "ear_px": 393
+ },
+ "ortho rule": {
+  "face_over_eyes": 1.723,
+  "cheek_width_px": 225,
+  "eye_spacing_px": 130.6,
+  "cheek_row": 288,
+  "cheek_px": [
+   87,
+   312
+  ],
+  "eye_line_px": 231.8,
+  "ear_on_cheek_row": true,
+  "ear_px": 1698,
+  "projection": {
+   "camera_height_m": 1.4500000476837158,
+   "camera_m": [
+    0.0,
+    1.4500000476837158,
+    4.0
+   ],
+   "far_m": 100.0,
+   "frame_m": [
+    1.0666667222976685,
+    0.6000000238418579
+   ],
+   "frame_middle_m": [
+    0.0,
+    1.4500000476837158,
+    0.0
+   ],
+   "frame_px": [
+    1600,
+    900
+   ],
+   "ground_row_px": 2625.0,
+   "near_m": 0.0,
+   "photo": "00-front.png",
+   "pitch_deg": 0.0,
+   "projection": "orthographic",
+   "px_per_m": 1500.0,
+   "standoff_m": 4.0,
+   "yaw_deg": 0.0
+  }
+ },
+ "scale": {
+  "view_m_per_file_m": 0.9120140716362953,
+  "by_eye_height": 0.9115740662715105,
+  "eye_spacing_view_m": 0.08707749080661235,
+  "eye_spacing_file_m": 0.0954782316575245,
+  "eye_height_view_m": 1.5021333333333333,
+  "eye_height_file_m": 1.6478456210116952
+ },
+ "rows": {
+  "3D rule (30 mm under the irises, file)": {
+   "drop_file_mm": 30.0,
+   "drop_view_mm": 27.36,
+   "row_px": 412.8,
+   "height_view_m": 1.47477,
+   "ortho_2d": 1.784,
+   "ortho_2d_width_file_mm": 170.3,
+   "cut_3d": 1.788,
+   "cut_3d_width_mm": 170.7,
+   "ortho_over_3d": -0.0022
+  },
+  "2D rule (drawing's ratio)": {
+   "drop_file_mm": 41.12,
+   "drop_view_mm": 37.5,
+   "row_px": 428.0,
+   "height_view_m": 1.46463,
+   "ortho_2d": 1.723,
+   "ortho_2d_width_file_mm": 164.5,
+   "cut_3d": 1.726,
+   "cut_3d_width_mm": 164.8,
+   "ortho_over_3d": -0.0022
+  }
+ }
+}

@@ -1,0 +1,136 @@
+{
+ "binary": "/Users/carlid/.cache/view-ortho-target/release/living-game",
+ "out": "/private/tmp/claude-501/-Users-carlid--t3-worktrees-slop-art-online-t3-ad9c3775-dbe85ea049bc6fe7/9fe4e6cf-7f7e-43d2-abfd-e5263a2b52cc/scratchpad/st2",
+ "known": {
+  "width_m": 0.15,
+  "depth_m": 0.2,
+  "height_m": 0.24,
+  "middle_y_m": 1.55,
+  "top_y_m": 1.67,
+  "bottom_y_m": 1.4300000000000002,
+  "eye_spacing_m": 0.064,
+  "eye_radius_m": 0.012,
+  "eye_y_m": 1.57,
+  "eye_centre_z_m": 0.0928919443919289,
+  "width_over_eyes": 2.34375,
+  "neck_radius_m": 0.03,
+  "forward": "+Z"
+ },
+ "frame_m": 0.3,
+ "size_px": [
+  1600,
+  900
+ ],
+ "lines": {
+  "00-front": {
+   "px_per_m": 3000.0,
+   "row": 450,
+   "px": 454,
+   "m": 0.15133333333333332,
+   "known_m": 0.15,
+   "faint_px": 454,
+   "error": 0.008888888888888946,
+   "top_y_m": 1.6706666666666667,
+   "known_top_y_m": 1.67,
+   "top_error_of_height": 0.002777777777778397,
+   "eye_spacing_m": 0.06409168390912703,
+   "eye_spacing_error": 0.0014325610801098065,
+   "width_over_eyes": 2.3612007690093253
+  },
+  "01-side": {
+   "px_per_m": 3000.0,
+   "row": 450,
+   "px": 603,
+   "m": 0.201,
+   "known_m": 0.2,
+   "faint_px": 603,
+   "error": 0.004999999999999893
+  }
+ },
+ "no_outline": {
+  "00-front": {
+   "px_per_m": 3000.0,
+   "row": 450,
+   "px": 450,
+   "m": 0.15,
+   "known_m": 0.15,
+   "faint_px": 453,
+   "error": 0.0,
+   "top_y_m": 1.67,
+   "known_top_y_m": 1.67,
+   "top_error_of_height": 0.0,
+   "eye_spacing_m": 0.06409168390912703,
+   "eye_spacing_error": 0.0014325610801098065,
+   "width_over_eyes": 2.340397238004838
+  },
+  "01-side": {
+   "px_per_m": 3000.0,
+   "row": 450,
+   "px": 600,
+   "m": 0.2,
+   "known_m": 0.2,
+   "faint_px": 602,
+   "error": 0.0
+  }
+ },
+ "bare": {
+  "00-front": {
+   "px_per_m": 3000.0,
+   "row": 450,
+   "px": 450,
+   "m": 0.15,
+   "known_m": 0.15,
+   "faint_px": 454,
+   "error": 0.0,
+   "top_y_m": 1.67,
+   "known_top_y_m": 1.67,
+   "top_error_of_height": 0.0,
+   "eye_spacing_m": 0.06416317378180247,
+   "eye_spacing_error": 0.002549590340663599,
+   "width_over_eyes": 2.337789594232042
+  },
+  "01-side": {
+   "px_per_m": 3000.0,
+   "row": 450,
+   "px": 600,
+   "m": 0.2,
+   "known_m": 0.2,
+   "faint_px": 603,
+   "error": 0.0
+  }
+ },
+ "added_px": {
+  "outline_and_ink": {
+   "00-front": 4,
+   "01-side": 3
+  },
+  "outline": {
+   "00-front": 4,
+   "01-side": 3
+  },
+  "ink": {
+   "00-front": 0,
+   "01-side": 0
+  }
+ },
+ "portrait": {
+  "00-0_8_0.36_0.88": {
+   "widest_row": 322,
+   "width_px": 216,
+   "eye_spacing_px": 100.30230159086682,
+   "width_over_eyes": 2.15348996557491,
+   "known": 2.34375,
+   "error": -0.08117761468803852
+  },
+  "01-0_0_0.36_0.88": {
+   "widest_row": 314,
+   "width_px": 214,
+   "eye_spacing_px": 98.93877394982917,
+   "width_over_eyes": 2.162953829491734,
+   "known": 2.34375,
+   "error": -0.07713969941686016
+  }
+ },
+ "fails": [],
+ "accepted": true
+}

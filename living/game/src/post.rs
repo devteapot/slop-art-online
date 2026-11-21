@@ -170,7 +170,14 @@ pub fn update(
     let s = &s;
     let on = s.enabled && s.edges;
     let (w, h) = camera.physical_viewport_size().map_or((1600.0, 900.0), |s| (s.x as f32, s.y as f32));
-    let near = if let Projection::Perspective(p) = proj { p.near } else { 0.1 };
+    // The pass reads a pixel's distance from its depth (`edges.wesl` `dist`): a perspective
+    // camera sends its near plane (depth = near / distance), an orthographic one (the asset
+    // view's measuring view, near 0) minus its far plane (depth = 1 − distance / far).
+    let near = match proj {
+        Projection::Perspective(p) => p.near,
+        Projection::Orthographic(o) => -(o.far - o.near),
+        _ => 0.1,
+    };
     // The sun's direction across the screen: project a step toward it from in front of the camera.
     let sun_dir = lights.iter().next().map(|l| -l.forward().as_vec3()).unwrap_or(Vec3::Y);
     let at = gtf.translation() + gtf.forward().as_vec3() * 10.0;
