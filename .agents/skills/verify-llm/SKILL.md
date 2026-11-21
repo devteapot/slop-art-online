@@ -57,7 +57,7 @@ Wait for `READY http://127.0.0.1:18181/v1 pid=...`. Stop that pid with SIGTERM. 
 .agents/skills/verify-llm/scripts/fake_contract.py --run llm-fake-$(date +%Y%m%d-%H%M%S)
 ```
 
-This checks reply overrides, status codes, malformed content and envelope JSON, delays, caller timeout, a closed port, request logs and owned-process cleanup. Its shortened caller timeout proves fake behavior. The real mind timeout is a separate case.
+This checks reply overrides, status codes, malformed content and envelope JSON, delays, caller timeout, a closed port, recorded calls (`samples`, with rate-limit headers and short logs), request logs and owned-process cleanup. Its shortened caller timeout proves fake behavior. The real mind timeout is a separate case.
 
 ## Opt-in live tier
 
