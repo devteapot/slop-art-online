@@ -75,7 +75,8 @@ def build_stepping(seed):
     for name in ("RUSTC_WRAPPER", "LIVING_NO_TICK"):
         env.pop(name, None)
     r = subprocess.run(["cargo", "build", "--manifest-path", str(ROOT / "living/Cargo.toml"), "-p", "living-authority",
-                        "--target", "wasm32-unknown-unknown", "--release"], env=env, capture_output=True, text=True, timeout=3600)
+                        "--target", "wasm32-unknown-unknown", "--release"], cwd=ROOT, env=env, capture_output=True, text=True,
+                       timeout=3600)  # cwd: cargo reads the checkout's .cargo/config.toml (path remapping) from it
     if r.returncode:
         raise SystemExit(f"genesis_fuel: the stepping build of {seed} failed:\n{r.stderr[-2000:]}")
     return target / "wasm32-unknown-unknown/release/living_authority.wasm"

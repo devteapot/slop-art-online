@@ -204,12 +204,13 @@ def described(step):
 
 # Inputs of every step besides its packages' own directories: the workspace manifest and
 # lock, the seeds and scripts the crates include (include_str!, the authority's build
-# script), and toolchain and Cargo configuration files. (This file is not an input: the
+# script), toolchain and Cargo configuration files, and the rustc that configuration names
+# (living/tools/rustc-remap, which remaps wasm compiles' paths). (This file is not an input: the
 # digest holds each step's command and input list, and TOOL_VERSION covers the rest.)
 SHARED_INPUTS = [
     "living/Cargo.toml", "living/Cargo.lock", "living/seeds", "living/scripts",
     "rust-toolchain", "rust-toolchain.toml", "living/rust-toolchain", "living/rust-toolchain.toml",
-    ".cargo", "living/.cargo",
+    ".cargo", "living/.cargo", "living/tools/rustc-remap",
 ]
 
 # Files a package compiles from outside its own directory besides the shared inputs (the
