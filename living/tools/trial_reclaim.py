@@ -7,6 +7,7 @@ import datetime
 import fcntl
 import hashlib
 import json
+import os
 import re
 import subprocess
 import tarfile
@@ -272,28 +273,185 @@ def restrict_to_review(rows, review, evidence, verified):
             row.update(action="keep", reason="reviewed removal lacks a verified commitlog archive")
 
 
-def blockers():
+# Tools that refuse a reclaim only while they target the trial server, and the environment
+# variables naming each one's server with its default when unset (read from each tool).
+TRIAL_PORT = 3320
+DRIVERS = {
+    # scene_gate.py: --stdb-container/--stdb-url, else LIVING_GATE_STDB_*, else the trial server.
+    "scene_gate.py": {"LIVING_GATE_STDB_CONTAINER": SERVER, "LIVING_GATE_STDB_URL": URL},
+    # trials.py: TRIALS_STDB_CONTAINER and TRIALS_STDB_PORT, else the trial server.
+    "trials.py": {"TRIALS_STDB_CONTAINER": SERVER, "TRIALS_STDB_PORT": str(TRIAL_PORT)},
+    # verify.py and battle_diag.py: LIVING_STDB_*, else the shared server on 3300.
+    "verify.py": {"LIVING_STDB_CONTAINER": "sao-living_spacetimedb_1", "LIVING_STDB_URL": "http://127.0.0.1:3300"},
+    "battle_diag.py": {"LIVING_STDB_CONTAINER": "sao-living_spacetimedb_1", "LIVING_STDB_URL": "http://127.0.0.1:3300"},
+}
+GATE_FLAGS = {"LIVING_GATE_STDB_CONTAINER": "--stdb-container", "LIVING_GATE_STDB_URL": "--stdb-url"}
+# The merge queue runs the scene gate on the trial server: these refuse whatever they target.
+ALWAYS = {"drain.sh", "merge2.sh"}
+assert set(DRIVERS) | ALWAYS == PROCESSES
+TRIAL_NAME = re.compile(r"(?<![\w.-])slop-trials-stdb(?![\w.-])")
+TRIAL_ADDRESS = re.compile(rf"(?:127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\]):{TRIAL_PORT}(?!\d)")
+# /proc/net/tcp{,6} remote addresses of 127.0.0.1:3320, ::ffff:127.0.0.1:3320 and [::1]:3320.
+TRIAL_PEERS = {f"0100007F:{TRIAL_PORT:04X}", f"0000000000000000FFFF00000100007F:{TRIAL_PORT:04X}",
+               f"00000000000000000000000001000000:{TRIAL_PORT:04X}"}
+
+
+def read_proc(path):
+    return path.read_bytes()
+
+
+def names_trial(value):
+    return bool(TRIAL_NAME.search(value) or TRIAL_ADDRESS.search(value))
+
+
+def trial_target(name, argv, environ):
+    """Why a process's arguments or environment point it at the trial server, or None."""
+    for arg in argv[1:]:
+        if names_trial(arg):
+            return f"argument {arg!r}"
+    for key, value in environ.items():
+        if names_trial(value) or (key.startswith("TRIALS_STDB_") and value in {SERVER, str(TRIAL_PORT)}):
+            return f"{key}={value}"
+    for key, default in DRIVERS.get(name, {}).items():
+        if key in environ or not (names_trial(default) or default == str(TRIAL_PORT)):
+            continue
+        flag = GATE_FLAGS.get(key)
+        if flag and any(a == flag or a.startswith(flag + "=") for a in argv):
+            continue  # scene_gate's flag replaces this default; its value was checked above.
+        return f"default {key}={default}"
+    return None
+
+
+def trial_sockets(proc):
+    """Socket inodes of established TCP connections to the trial server in this network namespace."""
+    inodes = set()
+    for table in ("tcp", "tcp6"):
+        try:
+            rows = read_proc(proc / "net" / table).decode().splitlines()[1:]
+        except OSError:
+            continue
+        for row in rows:
+            fields = row.split()
+            if len(fields) > 9 and fields[3] == "01" and fields[2].upper() in TRIAL_PEERS:
+                inodes.add(fields[9])
+    return inodes
+
+
+def lock_owners(proc, lock):
+    """PIDs /proc/locks names as holding a granted lock on `lock` (waiters are skipped)."""
+    try:
+        st = lock.stat()
+        rows = read_proc(proc / "locks").decode().splitlines()
+    except OSError:
+        return set()
+    key = f"{os.major(st.st_dev):02x}:{os.minor(st.st_dev):02x}:{st.st_ino}"
+    owners = set()
+    for row in rows:
+        fields = row.split()
+        if "->" not in fields and len(fields) >= 6 and fields[5] == key and fields[4].isdecimal():
+            owners.add(fields[4])
+    return owners
+
+
+def open_files(fd_dir):
+    """(socket inodes, (dev, ino) of open files) for one process; empty if unreadable."""
+    sockets, files = set(), set()
+    try:
+        entries = list(fd_dir.iterdir())
+    except OSError:
+        return sockets, files
+    for fd in entries:
+        try:
+            target = os.readlink(fd)
+            if target.startswith("socket:["):
+                sockets.add(target[8:-1])
+            else:
+                st = fd.stat()
+                files.add((st.st_dev, st.st_ino))
+        except OSError:
+            continue
+    return sockets, files
+
+
+def blockers(proc=Path("/proc"), self_pid=None):
     reasons = []
     if (QUEUE / "queue.txt").read_text().strip() and not (QUEUE / "HOLD").exists():
         reasons.append("merge queue is nonempty and HOLD is absent")
-    active = set()
-    for process in Path("/proc").iterdir():
+    self_pid = str(os.getpid() if self_pid is None else self_pid)
+    children = collections.defaultdict(list)
+    tools = {}
+    for process in proc.iterdir():
         if not process.name.isdecimal():
             continue
         try:
-            argv = (process / "cmdline").read_bytes().split(b"\0")
+            stat = read_proc(process / "stat").decode(errors="replace")
+            argv = read_proc(process / "cmdline").split(b"\0")
         except (ProcessLookupError, FileNotFoundError, PermissionError):
             continue
+        fields = stat.rpartition(")")[2].split()
+        if len(fields) > 1:
+            children[fields[1]].append(process.name)
         executable = Path(argv[0].decode(errors="replace")).name
         if executable in PROCESSES:
-            active.add(executable)
+            tools[process.name] = (executable, argv)
         elif executable.startswith(("python", "bash", "sh")):
             script = next((a for a in argv[1:] if a and not a.startswith(b"-")), b"")
             name = Path(script.decode(errors="replace")).name
             if name in PROCESSES:
-                active.add(name)
+                tools[process.name] = (name, argv)
+    lock = QUEUE / "trial-activity.lock"
+    holders = lock_owners(proc, lock) - {self_pid}
+    active = {}
+    if holders:
+        # A child sharing a holder's lock: any process with the lock file open while another holds it.
+        try:
+            st = lock.stat()
+            lock_key = (st.st_dev, st.st_ino)
+        except OSError:
+            lock_key = None
+        for process in proc.iterdir():
+            if process.name.isdecimal() and process.name != self_pid and (
+                    process.name in holders or lock_key in open_files(process / "fd")[1]):
+                try:
+                    name = Path(read_proc(process / "cmdline").split(b"\0")[0].decode(errors="replace")).name
+                except OSError:
+                    name = "?"
+                name = tools.get(process.name, (name,))[0]
+                active[process.name] = f"{name} (pid {process.name}: holds trial-activity.lock)"
+    sockets = None
+    for pid, (name, argv) in sorted(tools.items()):
+        if pid in active or pid == self_pid:
+            continue
+        if name in ALWAYS:
+            active[pid] = f"{name} (pid {pid}: merge queue)"
+            continue
+        text = [a.decode(errors="replace") for a in argv if a]
+        try:
+            environ = dict(e.decode(errors="replace").partition("=")[::2]
+                           for e in read_proc(proc / pid / "environ").split(b"\0") if e)
+        except (ProcessLookupError, FileNotFoundError):
+            continue
+        except PermissionError:
+            active[pid] = f"{name} (pid {pid}: environment unreadable)"
+            continue
+        if why := trial_target(name, text, environ):
+            active[pid] = f"{name} (pid {pid}: {why})"
+            continue
+        if sockets is None:
+            sockets = trial_sockets(proc)
+        tree, seen = [pid], set()
+        while tree:
+            member = tree.pop()
+            if member in seen:
+                continue
+            seen.add(member)
+            tree.extend(children[member])
+            if sockets & open_files(proc / member / "fd")[0]:
+                active[pid] = f"{name} (pid {pid}: connected to 127.0.0.1:{TRIAL_PORT}" + (
+                    f" through pid {member})" if member != pid else ")")
+                break
     if active:
-        reasons.append("active processes: " + ", ".join(sorted(active)))
+        reasons.append("active processes: " + ", ".join(active[pid] for pid in sorted(active, key=int)))
     return reasons
 
 
