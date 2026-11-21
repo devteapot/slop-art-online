@@ -658,7 +658,12 @@ def money(journal_dirs, from_ms=None, to_ms=None):
             lat[purpose].append(latency)
         if wait is not None:
             q[purpose].append(wait)
-    return {"usd": usd, "by_model": by, "unknown_models": unknown, "calls": len(j.entries()),
+    window_usd = 0.0
+    for at, model, purpose, pt, c, o, err, latency, wait in es:
+        if pt is not None:
+            (pin, pout, pcached), _ = j.price(model)
+            window_usd += ((pt - (c or 0)) * pin + (c or 0) * pcached + (o or 0) * pout) / 1e6
+    return {"usd": usd, "usd_in_window": round(window_usd, 4), "by_model": by, "unknown_models": unknown, "calls": len(j.entries()),
             "errors": sum(e[6] for e in j.entries()), "calls_in_window": len(es),
             "latency_ms_by_purpose": {k: act_trace.dist(v) for k, v in lat.items()},
             "queue_wait_ms_by_purpose": {k: act_trace.dist(v) for k, v in q.items()}}
