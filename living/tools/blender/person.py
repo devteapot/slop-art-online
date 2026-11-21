@@ -70,6 +70,7 @@ import hair  # noqa: E402
 import head_form  # noqa: E402
 import head_mesh  # noqa: E402
 import person_params  # noqa: E402
+import stable  # noqa: E402
 
 PI = math.pi
 
@@ -2144,7 +2145,7 @@ def make_kerchief(arm, pos, quads, colour):
     verts, cols, faces = [], [], []
     knot = Vector((0, -0.112, -0.060))
     bm = bmesh.new()
-    bmesh.ops.create_uvsphere(bm, u_segments=8, v_segments=5, radius=0.017)
+    stable.uvsphere(bm, u_segments=8, v_segments=5, radius=0.017)  # faces in a fixed order (stable.py)
     for v in bm.verts:
         verts.append(hw(knot + Vector((v.co.x * 1.3, v.co.y * 0.8, v.co.z))))
         cols.append(mix(colour, (0, 0, 0), 0.18))
