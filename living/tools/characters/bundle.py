@@ -126,8 +126,16 @@ def files_list(port, with_clips):
                     if k not in port:
                         continue
                 files.append(rel)
-    # The hair styles' shared picture, as the build left it; pictures.py refuses it unnamed (an orphan).
-    if (L / "strands.png").exists():
+    # The hair styles' shared picture, as the build left it, when a packed file names it; pictures.py
+    # refuses it unnamed (an orphan). Profile hair on a hair-mask page (`--port hair`) names none: its
+    # strands are the page's B (HANDMADE_COMPOSED v1.3.1), so the picture stays out.
+    def names_strands(rel):
+        with open(REPO / rel, "rb") as fh:
+            head = fh.read(20)
+            if len(head) < 20 or head[:4] != b"glTF":
+                return False
+            return b"strands.png" in fh.read(int.from_bytes(head[12:16], "little"))
+    if (L / "strands.png").exists() and any(names_strands(f) for f in files if f.endswith(".glb")):
         files.append(f"{LOOKDEV}/strands.png")
     if with_clips:
         files.append(f"{LOOKDEV}/anim/own-clips.glb")
