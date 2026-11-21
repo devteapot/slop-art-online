@@ -389,6 +389,30 @@ Two rules for any script, queue or agent shell that starts or restarts a Spaceti
 - **No lock fd:** close the gate lock's descriptor in the command that starts the container, e.g. `systemd-run --user --scope --quiet podman start NAME 9>&-` for a lock held on fd 9 (`exec 9>~/.local/state/slop-build/gate.lock; flock -x 9`). A container started while a shell holds the lock inherits the descriptor in `conmon` and `fuse-overlayfs` and keeps the lock after the script exits: on 2026-11-20 a scratch server recycled inside a locked measurement held `gate.lock` for 70 minutes, stalling a merge gate for two hours and Blender's `flock -s` pause. Python's `subprocess` does not pass descriptors on by default (`close_fds=True`). To see who holds the lock: `fuser ~/.local/state/slop-build/gate.lock`, then `ps` on each pid; a container's `conmon` among them is this case, and stopping the (idle) container with `podman kill -s INT` releases it.
 
 
+### The gate's server
+
+The dev-box's scene gate runs on a SpacetimeDB container of its own (`coord-stdb`, port 3319, `LIVING_GATE_STDB_CONTAINER`, `LIVING_GATE_STDB_URL`). [`living/tools/gate_server.py`](../living/tools/gate_server.py) looks after it:
+
+- **`check`.** `docker exec <c> true` and `GET <url>/v1/ping`, each with a time limit. Exit 0 if it answers, 14 if not, with the error. A container can read as running while its overlay helper is gone ("transport endpoint is not connected"), and only an exec shows that.
+- **`start`.** `docker start` in a systemd scope of its own, with no inherited descriptor, then waits until `check` passes.
+- **`stop`.** Lists the server's databases, stops it with SIGINT, and waits until it has exited.
+  - Only if it held **no database**, it removes every replica directory, in a one-off container of the server's image on its volume.
+  - SpacetimeDB 2.14.1 keeps a deleted database's replica on disk, and the gate deletes every world it makes. On 2026-11-21, 216 such directories (12.8 GB) held a gate two hours on disk.
+  - A database still listed (a world kept for inspection), or a list that could not be read, keeps every replica. `--keep-replicas` keeps them in any case.
+  - It refuses the trial and reference servers by name: their deleted databases' commitlogs are evidence ([TRIAL_DISK.md](TRIAL_DISK.md)).
+
+**A dead server fails the gate at once.**
+- **`merge.py --scenes`** runs the same probe before its disk check and before every attempt, and refuses with exit 14. The check no longer runs 15 to 20 minutes before the scene gate finds the server gone.
+- **The scene gate's own setup** uses the probe too. Before, it checked only that the container was running.
+- **[`living/tools/gate_merge.sh`](../living/tools/gate_merge.sh)**, the dev-box's `gate-merge` (`install -m 755 living/tools/gate_merge.sh ~/.local/share/slop-tools/gate-merge`), probes before it waits for disk and every minute while it waits. So a dead server is not taken for a disk shortage.
+
+**Who clears the replicas.** It is the gate's server tooling (`gate_server.py stop`), not `disk_clean.py`:
+- `disk_clean` runs on a timer, clears build trees, and must never touch a container's data or volume.
+- The replicas can only be cleared with the server stopped and known to be the gate's alone. Only the tool that starts and stops that server knows both.
+- The dev-box's queue (`~/.local/state/devbox-queue/run.sh`) calls `gate_server.py start` before each branch and `gate_server.py stop` after it, in place of its own `podman` lines.
+
+The selftests: `python3 living/tools/gate_server_selftest.py` (a fake `docker`: healthy, every exec failing, not running, no ping, refused names) and `merge_selftest.py`'s "a dead gate server refuses at once (exit 14)".
+
 ### Blender during a gate
 
 On the dev-box, `blender` on `PATH` is [`living/tools/blender_gate.sh`](../living/tools/blender_gate.sh), installed as `~/.local/share/slop-tools/build-bin/blender` (`install -m 755 living/tools/blender_gate.sh ~/.local/share/slop-tools/build-bin/blender`). The real binary stays `/usr/bin/blender`. A scene gate holds `~/.local/state/slop-build/gate.lock` exclusively, and Blender gives the gate the machine:

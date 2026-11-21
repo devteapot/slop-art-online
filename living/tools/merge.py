@@ -43,7 +43,8 @@ Exit codes: 0 merged and pushed (or nothing to merge), 2 usage, 3 refused (workt
 conflict, 5 check failed, 6 check left the worktree dirty, 7 main kept moving, 8 push failed,
 9 another git command failed, 10 the scene gate failed (or could not run), 11 the bindings
 were not regenerated (or the bindings check could not run), 12 refused (disk), 13 a compiled seed is stale (or the freshness check could not run),
-14 the scene gate's server is unreachable (gate_server.py check: a dead container fails the gate before the check, not after it).
+14 the scene gate's server is unreachable (gate_server.py check: a dead container fails the gate before the check, not after it;
+LIVING_MERGE_GATE_PROBE=off skips the probe, for tests).
 
 Disk: SLOP_MERGE_FLOOR_GB overrides the installed disk cleaner's floor (45 GB without
 an installed floor). SLOP_MERGE_CHECK_GB overrides the cold check allowance (18 GB).
@@ -196,7 +197,7 @@ def scene_filesystem(scenes):
 
 def gate_server_alive(scenes):
     """With --scenes, refuse at once (14) when the gate's server does not answer (gate_server.py)."""
-    if not scenes or os.environ.get("LIVING_MERGE_SCENES_CMD"):
+    if not scenes or os.environ.get("LIVING_MERGE_SCENES_CMD") or os.environ.get("LIVING_MERGE_GATE_PROBE") == "off":
         return
     import gate_server
     container = os.environ.get("LIVING_GATE_STDB_CONTAINER", "slop-trials-stdb")
