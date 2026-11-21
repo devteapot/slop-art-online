@@ -621,6 +621,12 @@ impl Queue {
     /// The caller is first in an eligible lane, no request was selected on this pass, and its
     /// only known profile gate is the RPM deadline: when that deadline is. The caller wakes then
     /// (`admit`), and the dispatch profile counts the poll delay past it.
+    ///
+    /// A token limit does not stop this: if the call's estimate fits the last minute's tokens
+    /// now, it still fits at the deadline (the window only drains; a grant in between notifies
+    /// every waiter), so spacing is its only gate. Before 2026-11-21 any profile with a token
+    /// limit (every Mistral profile, from its headers) fell back to the 50 ms poll, and the pool
+    /// study's GLM grants came every 66.9 ms against a 50 ms floor.
     fn spacing_deadline(&self, id: u64, lane: Lane, profile: &str, now: Instant) -> Option<Instant> {
         let has_slot = if lane == Lane::Fast {
             self.fast_in_flight < self.fast_slots
@@ -628,9 +634,13 @@ impl Queue {
             self.in_flight < self.concurrency && self.shared_lane() == Some(lane)
         };
         let rate = &self.rates[profile];
-        if !has_slot || now < self.global_next || rate.tpm.is_some() || rate.blocked_until > now
+        let head = self.waiting.iter().find(|w| w.lane == lane).filter(|w| w.id == id)?;
+        let tokens_fit = rate.tpm.is_none_or(|limit| {
+            let used: u64 = rate.tokens.iter().filter(|(_, at, _)| now.duration_since(*at) < Duration::from_secs(60)).map(|(_, _, n)| n).sum();
+            used.saturating_add(head.cost) <= limit
+        });
+        if !has_slot || now < self.global_next || !tokens_fit || rate.blocked_until > now
             || self.gates.get(&self.hosts[profile]).is_some_and(|gate| gate.retry_at.is_some())
-            || self.waiting.iter().find(|w| w.lane == lane).is_none_or(|w| w.id != id)
         {
             return None;
         }
@@ -1696,6 +1706,36 @@ mod tests {
         q.fast_in_flight = q.fast_slots;
         assert_eq!(q.spacing_deadline(id, Lane::Fast, "p", now), None);
         assert_eq!(q.ready_for_trace(deadline), 0);
+    }
+
+    /// A profile with a token limit (Mistral sends one on every reply) whose call is held only
+    /// by request spacing wakes at the spacing deadline, not at the next 50 ms poll; a call the
+    /// token window holds still waits for the poll or an event. Controlled clock: every
+    /// instant is given.
+    #[test]
+    fn a_call_held_only_by_spacing_wakes_at_its_deadline_with_a_token_limit() {
+        let models: ModelsFile = serde_json::from_value(json!({"default": "p", "profiles": {
+            "p": {"base_url": "x", "model": "m", "key_env": "unused", "requests_per_minute": 1200, "tokens_per_minute": 100000}
+        }}))
+        .unwrap();
+        let scheduler = Scheduler::new(&models, 4, 0.0);
+        let mut q = scheduler.queue.lock().unwrap();
+        let t0 = q.global_next;
+        // One call sent at t0 (60,000 tokens reserved): the next may go 50 ms later.
+        let first = enqueue(&mut q, Lane::Urgent, 60_000);
+        assert_eq!(q.candidate(t0), Some(first));
+        q.start(first, t0);
+        let second = enqueue(&mut q, Lane::Urgent, 30_000);
+        let now = t0 + Duration::from_millis(5);
+        let deadline = t0 + Duration::from_millis(50);
+        assert_eq!(q.candidate(now), None, "spacing holds it");
+        assert_eq!(q.spacing_deadline(second, Lane::Urgent, "p", now), Some(deadline), "90,000 of 100,000 tokens fit: spacing is its only gate");
+        assert_eq!(q.candidate(deadline), Some(second), "granted at the deadline it woke for");
+        // A call the token window holds (60,000 + 50,000 > 100,000) gets no spacing deadline.
+        q.waiting.back_mut().unwrap().cost = 50_000;
+        assert_eq!(q.spacing_deadline(second, Lane::Urgent, "p", now), None, "tokens hold it");
+        assert_eq!(q.candidate(deadline), None);
+        assert_eq!(q.candidate(t0 + Duration::from_secs(60)), Some(second), "the window drains a minute after the first call");
     }
 
     #[test]
