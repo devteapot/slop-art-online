@@ -1143,10 +1143,17 @@ def fk_pose(sk, local, off, names):
 
 
 def clean_contacts(c, cyclic, gap=2, short=1):
-    """Fill contact gaps of up to `gap` frames and drop contacts shorter than `short`."""
+    """Fill contact gaps of up to `gap` frames and drop contacts shorter than `short`. A loop's
+    run that crosses its seam is one run (clip-markers, 2026-11-21, docs/CLIP_MARKERS.md: a
+    four-frame contact split two and two at the seam was dropped as two short ones, and a long gap
+    across it filled as a short one; strafe_run_left_v48 lost its left foot's plant and window on
+    the VRoid bases, run_diag_br_v48 its right foot's window on Vivi)."""
     n = len(c)
     c = list(c)
     for val, run in ((True, gap), (False, short)):
+        # Read a loop from the start of a run, so that no run crosses the end; turned back below.
+        s = next((k for k in range(n) if c[k] != c[k - 1]), 0) if cyclic else 0
+        c = c[s:] + c[:s]
         # A run of `not val` no longer than `run`, bounded by `val` on both sides, flips.
         i = 0
         while i < n:
@@ -1161,6 +1168,7 @@ def clean_contacts(c, cyclic, gap=2, short=1):
                 i = j
             else:
                 i += 1
+        c = c[n - s:] + c[:n - s]
     return c
 
 

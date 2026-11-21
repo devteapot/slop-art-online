@@ -10,9 +10,9 @@ step is already gone, which counts as deleted.
 This is the one copy of that rule. Its callers: the verify harness's cleanup (`verify.py cleanup`,
 through `trial_archive.finish`, which archives between the confirmed pause and the delete, so it uses
 `pause_confirmed`), verify-core's `verify_mechanics.py`, `verify_steering.py` and `updates.py`,
-`gate.py`, `latency.py`, `play.py`, and the measurement tools `look_cost.py` (and `tick_cost.py` on
-it) and `battle_viewers.py`. Still with their own copy of the same rule, to adopt it: the trial
-runner (`trials.py` `delete_db`). Each passes its own ways of reaching the server:
+`gate.py`, `latency.py`, `play.py`, the trial runner's `trials.py clean` (`delete_db`, through
+`http_pause_and_delete`), and the measurement tools `look_cost.py` (and `tick_cost.py` on it) and
+`battle_viewers.py`. Each passes its own ways of reaching the server:
 
     deleted, why = pause_and_delete(
         pause=lambda: <call set_paused(true) as the world's admin; returns the HTTP status, or 0>,

@@ -149,15 +149,7 @@ for _s in STEPS:
 # check prints each entry with its owner and date, whether the step runs or is skipped, and its
 # last line names them. Keep an entry only while its owner is on it; it is also on the scene
 # gate's red-on-main list.
-AUTHORITY_TEST_XFAIL: dict[str, dict[str, str]] = {
-    "look::tests::the_island_wears_the_pool": {
-        "owner": "dev-box (char-4 track; parked until 2026-11-25)",
-        "since": "2026-11-20",
-        "reason": "the island's look data is generation c4-e61b01c0 (living/seeds/island.json, worlds/island/looks.json) while "
-                  "Cullet's looks.json is c4-cbcc40bf; fix: regenerate the island's looks (look_lines.py), recompile "
-                  "(author_world.py island --compile-only)",
-    },
-}
+AUTHORITY_TEST_XFAIL: dict[str, dict[str, str]] = {}
 for _s in STEPS:
     if _s["name"] == "authority-tests":
         _s["xfail"] = AUTHORITY_TEST_XFAIL
@@ -204,12 +196,13 @@ def described(step):
 
 # Inputs of every step besides its packages' own directories: the workspace manifest and
 # lock, the seeds and scripts the crates include (include_str!, the authority's build
-# script), and toolchain and Cargo configuration files. (This file is not an input: the
+# script), toolchain and Cargo configuration files, and the rustc that configuration names
+# (living/tools/rustc-remap, which remaps wasm compiles' paths). (This file is not an input: the
 # digest holds each step's command and input list, and TOOL_VERSION covers the rest.)
 SHARED_INPUTS = [
     "living/Cargo.toml", "living/Cargo.lock", "living/seeds", "living/scripts",
     "rust-toolchain", "rust-toolchain.toml", "living/rust-toolchain", "living/rust-toolchain.toml",
-    ".cargo", "living/.cargo",
+    ".cargo", "living/.cargo", "living/tools/rustc-remap",
 ]
 
 # Files a package compiles from outside its own directory besides the shared inputs (the

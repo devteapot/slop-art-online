@@ -461,11 +461,14 @@ def main():
     wolves = [r["id"] for r in rows(db, "SELECT id, kind, alive FROM character") if r["kind"] == "wolf" and r["alive"] == "true" and r["id"] in hunger]
     if wolves:
         W = int(min(wolves, key=lambda w: hunger[w]))
+        # The attack goes in before the wolf is placed. Placed first, its own ways ran beside I
+        # until set_behavior arrived: "stay safe" flees the nearest person within 7 tiles, so it
+        # ran 10-12 m off, out of sight, and its attack never found I to balk at (3 of 64 gate
+        # worlds; features/mechanics.md). Attempted in a loop: just placed, the wolf may not see I
+        # yet under load ("stuck: attack: no #I in sight", 2026-11-20).
+        call(db, "set_behavior", str(W), json.dumps({"first": [{"do": {"skill": "attack", "target": {"id": I}}}, {"wait": 1}]}))
         call(db, "place_near", str(W), str(I))
         h0 = hp(I)
-        # Just placed, the wolf may not see I yet under load ("stuck: attack: no #I in sight",
-        # 2026-11-20), and a one-step sequence then gives up: attempt in a loop until it balks.
-        call(db, "set_behavior", str(W), json.dumps({"first": [{"do": {"skill": "attack", "target": {"id": I}}}, {"wait": 1}]}))
         balked = wait_for(lambda: [r for r in story("balk") if int(r["a"]) == W], timeout=20)
         time.sleep(3)
         results["force: a wolf does not dare attack a healthy adult among others"] = bool(balked) and hp(I) >= h0 - 0.5

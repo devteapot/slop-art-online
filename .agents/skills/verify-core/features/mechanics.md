@@ -76,7 +76,7 @@ Gate flakes on 2026-11-20 (`gate-1120231507-0192e9-a-mechanics`: tending; earlie
 - **Planting, without the loose check, failed once on its own** (`gate-mf2-p4-1`): Walker1 never planted in 90 s while nine others planted 66 bushes. The old check had hidden this. On a failure the driver now prints A's position against the bush, its feedback and its activity, for the next occurrence.
 - **Not fixed here:**
   - **The threat check** waits on the authority's stuck-activity fix (the Spark's).
-  - **The wolf check failed 3 of 64** (`gate-mf2-d1-2`, `d2-3`, `p4-3`). In `p4-3` the wolf saw I and J 2 to 3 tiles away right after it was placed, and was 14.3 m from I at the end of its 20 s, with no balk and no activity: it walked off before its attack was refused for not daring. On a failure the driver now prints the wolf's distances, activity and feedback.
+  - **The wolf check failed 3 of 64** (`gate-mf2-d1-2`, `d2-3`, `p4-3`). In `p4-3` the wolf saw I and J 2 to 3 tiles away right after it was placed, and was 14.3 m from I at the end of its 20 s, with no balk and no activity: it walked off before its attack was refused for not daring. On a failure the driver now prints the wolf's distances, activity and feedback. Found and fixed later ([below](#the-wolf-that-fled-before-it-was-told-to-attack)): it fled from I before its attack was installed.
   - **"Road, wall and gate built" failed once** (`gate-mf2-p3-3`, the gate not built in 60 s). It now prints A's place, the target tiles, the nodes near them and A's feedback on a failure.
 
 The rounds: `d` on main's driver with diagnostics only; `p` while the fixes went in (the tending and planting fixes from `p1`, the C/D order after `f3`); `f` and `g` on the driver as merged, `g` with the C/D fix. Every run that was not 23/23:
@@ -94,6 +94,18 @@ The rounds: `d` on main's driver with diagnostics only; `p` while the fixes went
 | f1, f2 | 4/4 each | |
 | f3 | 3/4 | act: conception chosen by both |
 | g1, g2, g3 | 4/4 each | |
+
+### The wolf that fled before it was told to attack
+
+The wolf check's remaining flake (3 of 64 in `gate-mf2-*`; above), found and fixed on branch `wolf-drift` (2026-11-21).
+
+- **The cause.** The driver placed the wolf beside I, read I's health, and only then installed the attack loop (`set_behavior`). Between the two calls, half a second or more under load, the wolf's own ways ran beside two people. Its `stay safe` routine (`living/seeds/repertoire.json`, species `wolf`) flees the nearest person within 7 tiles unless it is starving (hunger 90). The wolf fled 10 to 16 m, beyond its sight of about 10 tiles. Its attack loop then never resolved I, so nothing was refused for not daring: no balk, and the check failed. A flee that stopped within sight still balked, which is why most runs passed. The 2026-11-20 diagnosis above ("did not see I yet") was very likely the same flee.
+- **The evidence.** `.local/wolf/probe.py` repeats the step on one world with a fresh wolf each trial and samples it, four default-seed worlds at a time on a scratch server:
+  - **Round `w1`** (the driver's order, 36 trials): 3 trials with no balk, the wolf 11.7 to 12.1 m from I by the first sample (about 2.5 s after placement), its activity the attack loop's `wait`. In the 33 that balked, the wolf was already 2 to 10 m off when it balked.
+  - **Round `w2`** (alternating, 48 trials): place first, 7 of 24 with no balk (the wolf 11.3 to 16.2 m off at the end); attack loop first, 0 of 24, the wolf 1.6 m from I at the balk.
+- **The fix, in the fixture only.** The attack loop is installed before the wolf is placed. Placing it ends whatever it was doing (`act::relocated`), and its next evaluation is the attack, beside I.
+- **The proof.** The fixed driver, as the gate drives it (`--gate-world`), on 12 fresh worlds of main's module (`e1f380909`), 4 at a time (`gate-wd-a1..a3-*-mechanics`): 12 of 12 at 23/23.
+- **Seen in the probe, not in the driver.** A balked trial sometimes failed on I's health (about 1.5 HP lower 8 s later) with no attack on I; the same drop repeated across trials in one world. I had no "attacked" feedback; the probe kept I standing for minutes without food, so most likely I's own needs (not traced further). The driver's wolf scene comes early, and its three failures all had I's health rising.
 
 ### Recognize and investigate intermittent failures
 

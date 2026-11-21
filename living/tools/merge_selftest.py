@@ -46,7 +46,7 @@ def merge(cwd, args, check_cmd="true", env_extra=None):
     env.update(HOME=str(base), XDG_CONFIG_HOME=str(base / ".config"), XDG_STATE_HOME=str(base / "state"),
                PATH=f"{base / 'bin'}{os.pathsep}{env['PATH']}", LIVING_MERGE_CHECK=check_cmd,
                CARGO_TARGET_DIR=str(base / "target-volume" / "new" / "target"),
-               FAKE_DF_WORKTREE_GB="100", FAKE_DF_TARGET_GB="100")
+               FAKE_DF_WORKTREE_GB="100", FAKE_DF_TARGET_GB="100", LIVING_MERGE_GATE_PROBE="off")
     env.update(env_extra or {})
     r = subprocess.run([sys.executable, MERGE, *args], cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
     return r.returncode, r.stdout
@@ -111,6 +111,17 @@ echo "$FAKE_SCENE_DEVICE 104857600 0 66060288 0% /home/spacetime"
            code == 12 and "Cargo target" in o and "need 64 GB (45 GB floor + 18 GB check + 1 GB scenes)" in o, o)
     code, o = probe(LIVING_MERGE_SCENES="1", FAKE_SCENE_DEVICE="separate", FAKE_DF_TARGET_GB="63")
     expect("a separate trial volume leaves the host threshold unchanged", code == 5 and "reached-check" in o, o)
+    # The gate's server first: with the probe on, a container that reads as running but whose every
+    # exec fails ("transport endpoint is not connected") refuses at once (14), before fetch or check.
+    dead = fake_df.with_name("dead-docker")
+    dead.mkdir(exist_ok=True)
+    (dead / "docker").write_text("#!/bin/sh\n[ \"$1\" = inspect ] && { echo true; exit 0; }\n"
+                                 "echo 'Error: Transport endpoint is not connected' >&2; exit 126\n")
+    (dead / "docker").chmod(0o755)
+    code, o = probe(LIVING_MERGE_SCENES="1", LIVING_MERGE_GATE_PROBE="on", PATH=f"{dead}{os.pathsep}{os.environ['PATH']}")
+    expect("a dead gate server refuses at once (exit 14), before fetch or check",
+           code == 14 and "Transport endpoint is not connected" in o and "$ git fetch" not in o and "reached-check" not in o
+           and sh("git rev-parse HEAD", coord) == head, o)
     code, o = probe(FAKE_DF_WORKTREE_GB="error")
     expect("a failed df refuses the merge (exit 12)", code == 12 and "could not determine free space" in o, o)
 
