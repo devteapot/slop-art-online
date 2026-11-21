@@ -225,3 +225,32 @@ The band's tolerance is not widened.
 - **elder-f-b's spread:** a narrower side volume for that line, or for the elders.
 - **Keep the master to women and girls** in the pool, if it is opened to residents at all.
 - **Fix the `--params` round trip** (above).
+
+### Where `--params` was passed a generator dump (inventory, 2026-11-22)
+
+**The fault:** `person.py` writes `<name>.params.json` with the person's values under `params` (beside `recipe`, `type`, `identity`, `person`). `person_params.given_from_args` merges a `--params` file at its top level, so a dump passed back builds seed 0's person on the dump's `type`.
+
+**1. The shipped path is not affected** (traced in code, and checked on the built files):
+- **The source:** `living/seeds/cullet.json`. `town.py from_seed` makes each resident's name, seed (a CRC of the name), age and household from it, and their sex from the world's cast.
+- **The input file:** `town.py main` writes `people/<name>.json` with top-level fields only (household, seed, age, sex, family, skin); there is no `params` wrapper.
+- **The build:** `gen_person.sh NAME=file` runs `person.py --params file`. `given_from_args` merges those fields, and `resolve` draws the rest from the person's seed.
+- **The render set** (step 4, TOOLING.md): `town.py --town living/seeds/cullet.json --models-only`.
+- **The bundles:** `bundle.py residents()` reads each built `own-<slug>.params.json`'s `person` line to pack it. It reads the dump; it never passes it back to the generator.
+- **Checked:** all 64 Cullet residents in the asset tree carry the sex, age and seed of their `town.json` entry.
+- **So the render set (61421f56f964), play-test 11's characters and the char-4 bundles to the laptop are built from the residents' own values.**
+
+**2. char-port-2, S0 through S6b: no build passed a dump.** Every person build there used a preset: woman, man, elder and girl (S0's `cp2-*`, S1's `cp2p-*`, S2's `cp2q-*`, S4's `cp2i-*`, S6's and S6b's `cp6*-*`). That holds for the scripts in `.local/char-port-2` and the archived ones. The S2/S3 identity checks were on those presets and the types.
+
+**3. char-live-2 and char-live-3: no build passed a dump.** Their scripts and docs have no `gen_person` with a params file. The back-port evidence is Cora's hand-made session file (`own-cora-live.glb`), not a generated resident.
+
+**4. S7: four builds and one check, all now known and handled.**
+
+| Build | Claimed | Actually | Used for | Decision on it | Status |
+|---|---|---|---|---|---|
+| `cp7p-cora` (final1, final2, sheets.sh) | Cora's resident line, port, in `swept_braid` (final runs) or her resident style (sheets) | seed 0's man (51, crop, brown) on adult-f-c; the final runs' `swept_braid` build failed on the master's tolerance | the Cora sheet; the "Cora arm can't build" report | decision 2 (a), her resident style, taken on the failure | rebuilt from her values (`cora2.sh`). On her real head `swept_braid` misses by 0.001 (rear 0.571), so (a) still stands |
+| `cp7m-cora` (final1, final2) | Cora's resident line, main | the same seed 0's man on adult-f-c | the Cora sheet (main arm) | none | rebuilt from her values |
+| the first town check (`sbcheck/run.sh`) | 64 residents | 64 × seed 0's man on each type | "0 of 64 pass" | none; the diagnosis found it | rerun from `town.json`'s values: 14 of 57 pass |
+
+No accepted S7 result rests on these. The checks, the measures and the parity used the presets, the types and the town's own values.
+
+**For S8** (the coordinator's note): fix the `--params` round trip first, with a test that writes a person, reads the file back and builds byte-identically. Then re-centre the master's rear stations (about 0.53), the elders' spread, and keep the master to women and girls.
