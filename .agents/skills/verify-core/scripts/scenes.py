@@ -7657,5 +7657,59 @@ def seen_remains_gaze(s):
 SCENES["seen_remains_gaze"] = seen_remains_gaze
 
 
+def act_replace(s):
+    """A mind's act under way and the next one it decides (docs/INPUT_LATENCY.md, "Mind acts
+    replace"; features/acts.md). With `mind_act_replaces` off (as shipped) the next waits in
+    `act_queue` for the walk under way to end. On, it replaces the walk as a player's command does
+    (`acts::submit_player`): the walk is broken off with no outcome told, what waited is dropped,
+    and the new act starts in the same transaction. A gaze change alone, or an act that cannot be
+    read, replaces nothing. The law is set back off at the end."""
+    a, = s.people(1)
+    line = open_line(s, 30)
+    start, far, back = line[0], line[-1], line[14]
+    goto = lambda p: {"do": "goto", "target": {"at": [p[0], p[1]]}}
+    doing = lambda: (s.http_rows(f"SELECT skill, node, started_ms, label FROM activity WHERE id = {a}") or [None])[0]
+    queued = lambda: s.http_rows(f"SELECT id, node FROM act_queue WHERE actor = {a}")
+    told = lambda: [r["text"] for r in s.rows(f"SELECT kind, text FROM experience WHERE observer = {a}") if r["kind"] == "act"]
+
+    def walking_far():
+        s.call("place_at", a, *start)
+        time.sleep(0.5)
+        s.act(a, goto(far))
+        return s.wait(lambda: (d := doing()) and d["skill"] == "goto" and d["node"] == 65534 and d, 10)
+
+    set_law(s, "mind_act_replaces", False)
+    first = walking_far()
+    time.sleep(1.0)
+    s.act(a, goto(back))
+    now = doing()
+    s.expect("off: the next act waits while the walk is under way", now and now["started_ms"] == first["started_ms"] and len(queued()) == 1,
+             {"first": first, "now": now, "queue": queued()})
+    s.wait(lambda: (d := doing()) and d["started_ms"] != first["started_ms"] and d, 40)
+    s.expect("off: it starts once the walk has ended, with the walk's outcome told", any("decided: goto" in t for t in told()), told())
+
+    set_law(s, "mind_act_replaces", True)
+    # Counted from here: `place_at` breaks off a walk still under way, told (act.rs `relocated`).
+    first = walking_far()
+    before = len(told())
+    time.sleep(1.0)
+    s.call("mind_act", a, [json.dumps(goto(back)), json.dumps(goto(far))], "verify-core")
+    time.sleep(0.2)
+    s.call("mind_act", a, [json.dumps(goto(start))], "verify-core")
+    now = doing()
+    s.expect("on: the next act replaces the walk at once and drops what waited", now and now["started_ms"] != first["started_ms"] and now["skill"] == "goto" and not queued(),
+             {"first": first, "now": now, "queue": queued()})
+    s.expect("on: the broken-off walks are told nothing (as a player's command is)", not any("did not work out: goto" in t for t in told()[before:]), told()[before:])
+    under_way = doing()
+    s.act(a, {"do": "gaze", "band": "middle"})
+    s.act(a, {"do": "no_such_skill"})
+    now = doing()
+    s.expect("on: a gaze change or an unreadable act replaces nothing", now and now["started_ms"] == under_way["started_ms"], {"under_way": under_way, "now": now})
+    set_law(s, "mind_act_replaces", False)
+    s.graph(a, {"wait": 120})
+
+
+SCENES["act_replace"] = act_replace
+
 if __name__ == "__main__":
     raise SystemExit(main())

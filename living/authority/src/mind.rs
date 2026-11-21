@@ -617,13 +617,15 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, way:
 /// Deliberate acts decided by a mind (in a deliberation or a conversation turn): each a
 /// `do` node (`{"do": "conceive", "target": {"id": 6}}`), carried out once, in order, by the
 /// same skill rules as graph leaves, outside the behavior graph. The outcome of each comes
-/// back as an experience. `source` says where it was decided (e.g. "deliberate", "talk").
+/// back as an experience. `source` says where it was decided (e.g. "deliberate", "talk"). They
+/// wait for the act in progress to end, or, under the `mind_act_replaces` law, replace it as a
+/// player's command does (`acts::submit_mind`).
 #[spacetimedb::reducer]
 pub fn mind_act(ctx: &ReducerContext, actor: u32, acts: Vec<String>, source: String) -> Result<(), String> {
     crate::floor::ready(ctx)?;
     require_live_controller(ctx, actor)?;
     crate::latency::nav(ctx, actor, "mind_act", 0, format_args!(""));
-    crate::acts::submit(ctx, actor, &acts, &source, false, common::now_ms(ctx));
+    crate::acts::submit_mind(ctx, actor, &acts, &source, common::now_ms(ctx));
     Ok(())
 }
 

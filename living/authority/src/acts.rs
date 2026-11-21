@@ -27,25 +27,62 @@ fn feedback(ctx: &ReducerContext, actor: u32, now: u64, text: String, salience: 
     }
 }
 
-/// Queue acts for `actor`; each is validated for the body first (a rejected one is told back).
-/// `replace` drops what was waiting and stops the act in progress (a player's new command).
-pub fn submit(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, replace: bool, now: u64) {
-    submit_inner(ctx, actor, acts, source, replace, now, false);
+/// Queue a player's act (`human_act`): it replaces what was waiting and stops the act in
+/// progress, unless that is a committed move.
+pub fn submit_player(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, now: u64) {
+    submit_inner(ctx, actor, acts, source, true, true, now, false);
+}
+
+/// Queue a mind's acts (`mind_act`); each is validated for the body first (a rejected one is
+/// told back). They wait for the act in progress, or, under the `mind_act_replaces` law, replace
+/// it exactly as a player's act does when the batch holds an act for the body.
+pub fn submit_mind(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, now: u64) {
+    let replace = mind_replaces(ctx, actor, acts);
+    submit_inner(ctx, actor, acts, source, false, replace, now, false);
 }
 
 /// Return ordered, synchronous refusals for this batch. Later activity outcomes remain
 /// experiences, since a queued interaction may start or fail well after this turn ends.
 pub fn submit_checked(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, now: u64) -> Vec<Option<String>> {
-    submit_inner(ctx, actor, acts, source, false, now, true)
+    let replace = mind_replaces(ctx, actor, acts);
+    submit_inner(ctx, actor, acts, source, false, replace, now, true)
 }
 
-fn submit_inner(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, replace: bool, now: u64, checked: bool) -> Vec<Option<String>> {
+/// Whether a mind's batch replaces the act in progress: only under `mind_act_replaces`, and only
+/// when at least one of its acts is one the body can be given (as a player's is, which reaches
+/// `submit` only as a parsed act): a gaze change alone, or acts that cannot be read, do not.
+fn mind_replaces(ctx: &ReducerContext, actor: u32, acts: &[String]) -> bool {
+    if !common::laws(ctx).mind_act_replaces {
+        return false;
+    }
     let kind = ctx.db.character().id().find(actor).map(|c| c.kind).unwrap_or_default();
     let sp = common::species(&kind);
+    let sc = common::scripts(ctx);
+    acts.iter().take(rules::MAX_QUEUED).any(|raw| {
+        serde_json::from_str::<serde_json::Value>(raw).is_ok_and(|v| v["do"] != "gaze" && rules::parse(v, sp.as_ref(), sc.shapes()).is_ok())
+    })
+}
+
+/// `player`: a person's command (a gaze change is a mind's act only). `replace` drops what was
+/// waiting and stops the act in progress (a player's new command; a mind's under the law).
+#[allow(clippy::too_many_arguments)]
+fn submit_inner(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, player: bool, replace: bool, now: u64, checked: bool) -> Vec<Option<String>> {
+    let kind = ctx.db.character().id().find(actor).map(|c| c.kind).unwrap_or_default();
+    let sp = common::species(&kind);
+    if crate::latency::acts_on(ctx, actor) {
+        crate::latency::acts(ctx, actor, "act_submit", acts.len() as u64, format_args!("{source} {} {}", u8::from(player), u8::from(replace)));
+    }
     if replace {
+        if crate::latency::acts_on(ctx, actor) {
+            let waiting = ctx.db.act_queue().actor().filter(actor).count();
+            if waiting > 0 {
+                crate::latency::acts(ctx, actor, "act_dropped", waiting as u64, format_args!("{source}"));
+            }
+        }
         ctx.db.act_queue().actor().delete(actor);
         // A committed move under way runs its course (`combat::committed`).
         if let Some(a) = ctx.db.activity().id().find(actor).filter(|a| a.node == ACT && !crate::combat::committed(&common::scripts(ctx), a)) {
+            crate::latency::acts(ctx, actor, "act_replaced", a.started_ms, format_args!("{} {} {} {source}", a.skill, a.phase, now.saturating_sub(a.started_ms)));
             act::cancel(ctx, a, now, None);
         }
     }
@@ -53,7 +90,7 @@ fn submit_inner(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str,
     for raw in acts.iter().take(rules::MAX_QUEUED) {
         let parsed = serde_json::from_str::<serde_json::Value>(raw).map_err(|e| format!("not JSON: {e}"));
         if let Ok(v) = &parsed {
-            if !replace && v["do"] == "gaze" {
+            if !player && v["do"] == "gaze" {
                 let band = match v["band"].as_str() {
                     Some("middle") => Ok(living_rules::sight::GazeBand::Middle),
                     Some("far") => Ok(living_rules::sight::GazeBand::Far),
@@ -89,7 +126,7 @@ fn submit_inner(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str,
             continue;
         }
         let queued = ctx.db.act_queue().insert(PlannedAct { id: 0, actor, node: rules::to_json(&a), source: source.chars().take(32).collect(), at_ms: now });
-        crate::latency::nav(ctx, actor, "act_queued", queued.id, format_args!("{source} {}", a.skill));
+        crate::latency::acts(ctx, actor, "act_queued", queued.id, format_args!("{source} {}", a.skill));
         results.push((Some(queued.id), None));
     }
     if !checked {
@@ -137,6 +174,7 @@ fn next_reporting(ctx: &ReducerContext, actor: u32, now: u64, mut report_refusal
         let Ok(a) = rules::from_json(&p.node) else { continue };
         let what = graph::describe(&graph::Node::Do(a.clone()));
         if now.saturating_sub(p.at_ms) > rules::QUEUE_MS {
+            crate::latency::acts(ctx, actor, "act_expired", p.id, format_args!("{}", a.skill));
             let told = Told { kind: kind::ACT, ok: false, skill: &a.skill, code: code::EXPIRED, what: &what, why: "the moment passed", other: 0 };
             feedback(ctx, actor, now, format!("You never got to {what}; the moment passed."), 0.3, false, told);
             continue;
@@ -146,6 +184,7 @@ fn next_reporting(ctx: &ReducerContext, actor: u32, now: u64, mut report_refusal
                 Some(r) => r,
                 None => {
                     let why = format!("no {} in sight", graph::describe_target(t));
+                    crate::latency::acts(ctx, actor, "act_refused", p.id, format_args!("{} unseen", a.skill));
                     let told = Told { kind: kind::ACT, ok: false, skill: &a.skill, code: code::UNSEEN, what: &what, why: &why, other: 0 };
                     feedback(ctx, actor, now, format!("What you had decided did not work out: {what}: {why}."), 0.5, !report_refusal(p.id, &why), told);
                     continue;
@@ -157,12 +196,13 @@ fn next_reporting(ctx: &ReducerContext, actor: u32, now: u64, mut report_refusal
         let want = (a.want.clone().unwrap_or_default(), a.want_qty.unwrap_or(0));
         match act::begin(ctx, actor, ACT, revision, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), a.text.as_deref().unwrap_or(""), a.topic.as_deref().unwrap_or(""), (&want.0, want.1), (a.offer.unwrap_or(0), a.record.unwrap_or(0)), a.run, a.spacing(), now) {
             Ok(()) => {
-                crate::latency::nav(ctx, actor, "act_started", p.id, format_args!("{}", a.skill));
+                crate::latency::acts(ctx, actor, "act_started", p.id, format_args!("{}", a.skill));
                 common::wake(ctx, actor);
                 return;
             }
             Err(why) => {
                 let told = Told { kind: kind::ACT, ok: false, skill: &a.skill, code: act::refusal(), what: &what, why: &why, other: 0 };
+                crate::latency::acts(ctx, actor, "act_refused", p.id, format_args!("{} {}", a.skill, act::refusal()));
                 feedback(ctx, actor, now, format!("What you had decided did not work out: {what}: {why}."), 0.5, !report_refusal(p.id, &why), told)
             }
         }
@@ -172,6 +212,7 @@ fn next_reporting(ctx: &ReducerContext, actor: u32, now: u64, mut report_refusal
 /// How an act went, told to the actor (called when an `ACT` activity ends); `code` says at
 /// which point it was decided (`living_rules::outcome::act`).
 pub fn outcome(ctx: &ReducerContext, a: &Activity, ok: bool, why: &str, now: u64, code: &'static str) {
+    crate::latency::acts(ctx, a.id, "act_done", a.started_ms, format_args!("{} {} {} {} {}", u8::from(ok), code, a.skill, a.phase, now.saturating_sub(a.started_ms)));
     let text = if ok {
         let why = why.trim();
         format!("You did what you had decided: {}{}", a.label, if why.is_empty() { ".".to_string() } else { format!(" ({why}).") })
@@ -193,6 +234,9 @@ pub fn interrupt(ctx: &ReducerContext, a: Activity, reflex: &str, now: u64) {
     let id = a.id;
     let dropped: Vec<String> = ctx.db.act_queue().actor().filter(id).filter_map(|p| rules::from_json(&p.node).ok()).map(|x| graph::describe(&graph::Node::Do(x))).collect();
     ctx.db.act_queue().actor().delete(id);
+    if !dropped.is_empty() {
+        crate::latency::acts(ctx, id, "act_set_aside", dropped.len() as u64, format_args!("{reflex}"));
+    }
     act::cancel(ctx, a, now, Some(&format!("you broke off to {reflex}")));
     if !dropped.is_empty() {
         let what = dropped.join("; ");

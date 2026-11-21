@@ -669,6 +669,16 @@ pub struct Laws {
     pub profile_detail: bool,
     pub latency_nav_from: u32,
     pub latency_fast: bool,
+    /// A diagnostic (docs/INPUT_LATENCY.md, "Mind acts replace"): each deliberate act's course
+    /// (decided, queued, started, replaced, ended and how) is logged as an `input_latency` marker,
+    /// for every character. Off in play.
+    pub latency_acts: bool,
+    /// Whether a mind's deliberate acts (`mind_act`, `mind_act_checked`) replace the act in
+    /// progress as a player's command does (`human_act`): what was waiting is dropped and the act
+    /// under way is broken off, unless it is a committed move (docs/INPUT_LATENCY.md, "Mind acts
+    /// replace"). Only a batch with at least one act for the body replaces (a gaze change alone
+    /// does not). Off: a mind's acts wait for the act in progress to end, as before.
+    pub mind_act_replaces: bool,
     /// A move's check before it starts is given a context of the fields the check reads alone
     /// (its plan; docs/BATTLE_SCALE.md, battle-cheap path 1): the same answer, without gathering
     /// what it never reads (kin near, practice, community and home, warmth). Off: the whole context.
@@ -893,6 +903,8 @@ impl Default for Laws {
             profile_detail: false,
             latency_nav_from: 0,
             latency_fast: false,
+            latency_acts: false,
+            mind_act_replaces: false,
             check_ctx_plan: true,
             check_ctx_check: false,
             alarm_cells: true,
@@ -3254,6 +3266,8 @@ impl Scripts {
             profile_detail: flag("profile_detail", l.profile_detail),
             latency_nav_from: g("latency_nav_from", l.latency_nav_from as f32) as u32,
             latency_fast: flag("latency_fast", l.latency_fast),
+            latency_acts: flag("latency_acts", l.latency_acts),
+            mind_act_replaces: flag("mind_act_replaces", l.mind_act_replaces),
             check_ctx_plan: flag("check_ctx_plan", l.check_ctx_plan),
             check_ctx_check: flag("check_ctx_check", l.check_ctx_check),
             alarm_cells: flag("alarm_cells", l.alarm_cells),
@@ -3514,7 +3528,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 20] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 22] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3539,6 +3553,10 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 20] = [
     ("combat_eval_hz", ValueOnly::Delivery),
     ("sweep_keep_memory", ValueOnly::Delivery),
     ("sweep_keep_check", ValueOnly::Delivery),
+    // mind-act-replace (docs/INPUT_LATENCY.md, "Mind acts replace"), read by `mind_act` and the
+    // act markers at their next call.
+    ("mind_act_replaces", ValueOnly::Delivery),
+    ("latency_acts", ValueOnly::Delivery),
     ("cover_sight_on", ValueOnly::Cover),
     ("cover_eye_height_m", ValueOnly::Cover),
     ("cover_brush_on", ValueOnly::Cover),
@@ -4365,6 +4383,7 @@ mod tests {
         assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
         assert!(!l.sweep_keep_memory && !l.sweep_keep_check, "sweeps read heard rows and health afresh by default");
         assert!(l.fighter_bystander_wakes, "a fighter is woken as any bystander by default (docs/COMBAT_PHASE.md)");
+        assert!(!l.mind_act_replaces && !l.latency_acts, "a mind's acts wait for the act in progress, unlogged, by default (docs/INPUT_LATENCY.md)");
         assert_eq!((l.combat_eval_hz, l.combat_every_ticks()), (15.0, 4), "fighters evaluated every 4th tick by default");
         assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
         assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");

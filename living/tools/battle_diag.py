@@ -326,6 +326,10 @@ def main():
     ap.add_argument("--familiar", action="store_true",
                     help="read every character's `familiar` row count at each sample and once more before cleanup, by role "
                          "(fighter, walker, resident): familiar.json, familiar-<k>.json (docs/BATTLE_SCALE.md, note C2)")
+    ap.add_argument("--fake-acts", default=None, metavar="JSON",
+                    help="with the fake model: a fighter's compile also decides these deliberate acts (a JSON list of `do` nodes), as a model's may (docs/INPUT_LATENCY.md, \"Mind acts replace\")")
+    ap.add_argument("--act-trace", action="store_true",
+                    help="set the diagnostic law latency_acts and keep each deliberate act's course from the replica's module log in act-trace.jsonl (act_trace.py)")
     ap.add_argument("--law", action="append", default=[], metavar="NAME=VALUE",
                     help="set a world law after launch (JSON value), e.g. witness_fold_ms=0 or profile_detail=true")
     ap.add_argument("--input-latency", action="store_true",
@@ -362,6 +366,8 @@ def main():
         run.admin("set_paused", True)
         if a.fast_lane:
             run.admin("set_world_law", "fast_lane_on", "true")
+        if a.act_trace:
+            run.admin("set_world_law", "latency_acts", "true")
         for law in a.law:
             name, value = law.split("=", 1)
             run.admin("set_world_law", name, value)
@@ -514,6 +520,8 @@ def main():
             # ("graph": "keep", the mind's "carries on"), so an installed fast patch is not undone by
             # the next compile. A fixture of the fake model's script only.
             fight_reply = {"graph": "keep"} if a.keep_plans else {"graph": graph(0), "plan": "diag fixture: keep fighting", "weight": 1.5}
+            if a.fake_acts:
+                fight_reply = dict(fight_reply, acts=json.loads(a.fake_acts))
             fight = [{"purpose": "deliberate", "contains": f"# Who you are (Walker{n})", "delay_s": 4.0, "times": -1,
                       "reply": fight_reply} for n in range(1, a.battle + 1)]
             replies["fast"] = {"keep": True, "thought": "diag fixture: as it is."}
@@ -598,7 +606,7 @@ def main():
                 time.sleep(min(0.5, a.refill_gap))
 
         keeper = threading.Thread(target=keep_battle, daemon=True)
-        head = {"arm": a.arm, "fast_real": a.fast_real, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane,
+        head = {"arm": a.arm, "fast_real": a.fast_real, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane, "fake_acts": a.fake_acts, "act_trace": a.act_trace,
                 "nproc": os.cpu_count(), "db_identity": ident, "world_seed": seed["seed"],
                 "layout": [{"id": id, "at": bodies[id]} for id in fighters],
                 "walker_layout": [{"id": id, "at": bodies[id]} for id in made[a.battle:]],
@@ -755,6 +763,15 @@ def main():
                                                 run.directory / "input-latency-authority.jsonl", trace_start)
             except (OSError, ValueError) as error:
                 head["input_latency_capture_error"] = str(error)
+        if a.act_trace and "started_ms" in head:
+            try:
+                import act_trace
+                container = os.environ.get("LIVING_STDB_CONTAINER", "sao-living_spacetimedb_1")
+                head["act_trace_markers"] = act_trace.capture(container, act_trace.newest_replica(container),
+                                                              run.directory / "act-trace.jsonl", trace_start)
+                (run.directory / "fighters-ever.json").write_text(json.dumps(sorted(state.get("ever_fighters", []))))
+            except (OSError, ValueError, subprocess.SubprocessError) as error:
+                head["act_trace_error"] = str(error)
         # The last read of `familiar`, before cleanup deletes the world.
         if a.familiar and "familiar_sample" in locals():
             try:

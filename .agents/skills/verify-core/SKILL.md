@@ -50,6 +50,8 @@ python3 "$C/scenes.py" doing_seen --run "$R" > "$E/doing_seen.txt" 2>&1
 python3 "$C/scenes.py" doing_renew --run "$R" > "$E/doing_renew.txt" 2>&1
 # Committed moves end early only by a wall or death (features/combat.md, about 30 s).
 python3 "$C/scenes.py" committed --run "$R" > "$E/committed.txt" 2>&1
+# A mind's act and the act in progress, mind_act_replaces off and on (features/acts.md#mind-acts-replace, about 1 min).
+python3 "$C/scenes.py" act_replace --run "$R" > "$E/act_replace.txt" 2>&1
 # A dodge over before the blow came, and a cooldown's refusals told once (features/combat.md, about 20 s).
 # The fast lane's triggers: the repeat at the law's N, never told; unseen moves not counted (features/fast.md, about 2 min).
 python3 "$C/scenes.py" seen_again --run "$R" > "$E/seen_again.txt" 2>&1

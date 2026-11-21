@@ -131,6 +131,11 @@ fn laws() {
         profile_detail: false,
         latency_nav_from: 0,
         latency_fast: false,
+        // A diagnostic, off in play: each deliberate act's course is logged (docs/INPUT_LATENCY.md).
+        latency_acts: false,
+        // Whether a mind's deliberate acts replace the act in progress as a player's command does
+        // (docs/INPUT_LATENCY.md, "Mind acts replace"). Off: they wait for it to end, as before.
+        mind_act_replaces: false,
         // How a fighter's work is done (docs/BATTLE_SCALE.md, battle-cheap), none of it changing what
         // anyone perceives or does: a move's check before it starts given only the fields it reads;
         // the body's alarms answered from the last answer while no field crosses one of their
@@ -3246,6 +3251,8 @@ fn law_about(l, name) {
         "seen_ranges_check" => "a diagnostic: compare structure newness with familiarity",
         "latency_nav_from" => if l.latency_nav_from == 0 { "navigation latency logging is off" } else { "navigation latency logging starts at the chosen character id" },
         "latency_fast" => if l.latency_fast { "the fast lane's authority stages are logged" } else { "fast lane latency logging is off" },
+        "latency_acts" => if l.latency_acts { "the course of each deliberate act is logged" } else { "deliberate act logging is off" },
+        "mind_act_replaces" => if l.mind_act_replaces { "what a mind decides to do replaces what it is doing, as a player's command does" } else { "what a mind decides to do waits until what it is doing ends" },
         "profile_detail" => if l.profile_detail { "while profiling, the parts of each behaviour's evaluation are timed" } else { "profiling times each behaviour's evaluation whole" },
         "sweep_keep_memory" => "a diagnostic: what each player hears and how others' health stands are remembered from one moment to the next",
         "sweep_keep_check" => "a diagnostic: each remembered sound and health is checked against the record",

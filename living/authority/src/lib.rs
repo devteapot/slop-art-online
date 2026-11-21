@@ -841,7 +841,7 @@ pub fn human_act(ctx: &ReducerContext, node: String) -> Result<(), String> {
     let g = living_rules::graph::parse(&node)?;
     if let living_rules::graph::Node::Do(a) = &g.root {
         if living_rules::acts::not_an_act(&a.skill, common::scripts(ctx).shapes()).is_none() {
-            acts::submit(ctx, me.id, &[g.to_json()], "human", true, common::now_ms(ctx));
+            acts::submit_player(ctx, me.id, &[g.to_json()], "human", common::now_ms(ctx));
             return Ok(());
         }
     }
