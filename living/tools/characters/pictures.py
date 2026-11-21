@@ -221,7 +221,9 @@ def survey(root):
     for face in sorted((lookdev / "types").glob("*.face.png")):
         found[face.relative_to(lookdev).as_posix()] = {"class": "face", "source": face, "out": face.with_suffix(".ktx2"), "users": []}
     for pattern, cls in SIDECARS:
-        for pic in sorted(lookdev.glob(pattern)):
+        # A pattern such as `hair-masks*.png` also matches a converted picture's own summary
+        # (`hair-masks.thumb.png`): that is not a picture to convert.
+        for pic in sorted(p for p in lookdev.glob(pattern) if not p.name.endswith(".thumb.png")):
             found[pic.relative_to(lookdev).as_posix()] = {"class": cls, "source": pic, "out": pic.with_suffix(".ktx2"), "users": []}
     known = {Path(v["source"]).resolve() for v in found.values() if not isinstance(v["source"], tuple)}
     for png in sorted(lookdev.rglob("*.png")):
@@ -455,7 +457,7 @@ def check(root, exe=None):
             fails.append(f"{t.stem}.face.png left beside {face.name}")
     # v1.3's sidecars and pages, and what names them.
     for pattern, cls in SIDECARS:
-        for pic in sorted(set(lookdev.glob(pattern)) | set(lookdev.glob(pattern[: -len(".png")] + ".ktx2"))):
+        for pic in sorted(p for p in set(lookdev.glob(pattern)) | set(lookdev.glob(pattern[: -len(".png")] + ".ktx2")) if not p.name.endswith(".thumb.png")):
             if pic.suffix == ".ktx2":
                 ktx2s[pic.resolve()] = cls
             elif cls in ktx2_classes:
