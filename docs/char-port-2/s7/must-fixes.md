@@ -18,6 +18,27 @@ Each measure here passed its known-answer test first (PLAN.md §7). All the chan
 
 **The acceptance:** each class within ±2% of its target; `cage_accept` 21/21; the jaw order and `face_types check` unchanged; the eye spacing unmoved.
 
+**Result** (n3: built at `66d440787`, measured in the measuring view at the landmark row; [ortho/step3.json](ortho/step3.json)):
+
+| Class | Factor | At 1.0 | Step 3 | Target | Off |
+|---|---|---|---|---|---|
+| adult-f | 0.987 | 1.774 | 1.762 | 1.751 | +0.6% |
+| youth-f | 0.987 | 1.774 | 1.764 | 1.751 | +0.8% |
+| adult-m | 0.961 | 1.822 | 1.782 | 1.751 | +1.8% |
+| youth-m | 0.965 | 1.814 | 1.781 | 1.751 | +1.7% |
+| elder-m | 0.962 | 1.804 | 1.768 | 1.751 | +1.0% |
+| elder-f | 0.936 | 1.871 | 1.758 | 1.751 | +0.4% |
+| child-u | 0.961 | 1.873 | 1.818 | 1.80 | +1.0% |
+
+- **Every class is within ±2%.** The cheek row narrows by about half to all of the factor, because the factor fades out by the chin.
+- **`cage_accept`:** 21 of 21.
+- **The jaw order:** kept in all 35 cells.
+- **`face_types check`:** 60,648 of 60,648 valid.
+- **brows and eye colours:** clean.
+- **Eye spacing:** unmoved (0.0 mm on every type), so the hair cuts are unchanged.
+
+[ortho/before-after.png](ortho/before-after.png): child-u and elder-f at 1.0 and at step 3, idle front and three-quarter, and bind front.
+
 **The ears' lower end at 1.0, in the measuring view:** 0.462–0.480 of eye-to-chin under the eye line, 42 of 42 ears within 0.47 ± 3% ([ortho/ears.json](ortho/ears.json)). Nothing changes there.
 
 ### Before: interim neutral, pending the ortho re-measure
@@ -104,7 +125,30 @@ Each measure here passed its known-answer test first (PLAN.md §7). All the chan
 
 **For the GC:** the port as landed, or the option.
 
-## 2. `swept_braid`'s mid strip: still out; the remedy is the GC's
+## 2. `swept_braid`'s mid strip: fixed by remedy (a), t2 0.65
+
+**The GC's choice** (2026-11-21): remedy (a), a wider mid band on the sweep's own surface. The cuts' side volume is accepted as it is (ortho bind: 2.971–3.009 against the band 2.973–3.319).
+
+**What changed:** `hair.MASTERS["swept_braid"]["profile"] = {t2: 0.65}`, the cut's own threshold between the mid and light bands (every other style keeps `hair_page.PROFILE`'s 0.4).
+- `person.py` writes it to the cut's `.hairpage.json`.
+- `hair_page.py` applies it to that cut's files, in its page and in its `--profile-only` rewrite.
+- **Built** (`SLOP_PORT=hair,masters`, the full set): the other 86 hair files are byte-identical to S6's set in their buffers, and their JSON differs only where `swept_braid`'s isn't involved. `swept_braid`'s six files differ only in t2.
+
+**Measured consistently** (`calibrate_bins`, idle, the calibration frame, step 3's types; [t2-sweep.png](t2-sweep.png)):
+
+| t2 | Result | dark.mid | brown.mid |
+|---|---|---|---|
+| 0.40 (S6's) | out | [−6, −5, −12] | [−6, −4, −7] |
+| 0.52 | out | [−3, −2, −10] | [−5, −3, −6] |
+| 0.60 | pass, at the edge | [−1, 0, −9] | [−3, −1, −5] |
+| **0.65** | **pass** | [−1, −1, −8] | **[−3, −1, −4]** |
+| 0.70 | pass | [−1, −1, −8] | [−3, −1, −4] |
+
+The light, highlight and shade bands don't move with t2. brown.highlight's −5 is S6's, unchanged.
+
+**A measuring artefact, caught.** The first t2 trial (0.50–0.53, "passes from 0.51") set t2 in the installed files only. `calibrate_bins` copies its band-mask file (`zzcal-`) before each round's `hair_page --profile-only` rewrite, and that rewrite reset the drawn files to 0.4. So only the masks moved with t2. The sweep above carries t2 in the files and in their `.hairpage.json`, which the rewrite keeps, so masks and drawing agree. `calibrate_bins` now records its pose (`--pose`).
+
+### Before: still out; the remedy was the GC's
 
 **Re-measured** (`calibrate_bins.py`, six styles, measure only, S7's types and S6's hair set installed; [mid/](mid/)):
 - bob, long, braid, swept and short pass;
