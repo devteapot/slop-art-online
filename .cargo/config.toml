@@ -5,12 +5,15 @@
 [build]
 # Runs rustc; for wasm32-unknown-unknown it adds --remap-path-prefix for CARGO_HOME (/cargo),
 # this checkout (/src) and the crate's OUT_DIR (/out). Native compiles pass through unchanged.
+# sccache never runs this script; living/tools/sccache-rustc adds its flags itself.
 rustc = "living/tools/rustc-remap"
 
 [target.wasm32-unknown-unknown]
 # A no-op remap (matches no path) that cargo and sccache can see: wasm crates built before
-# rustc-remap, or before its mapping last changed, are rebuilt. Bump v1 when the mapping changes.
-rustflags = ["--remap-path-prefix=/slop-remap-v1=/slop-remap-v1"]
+# rustc-remap, or before its mapping last changed, are rebuilt. Bump it when the mapping changes.
+# v2: /src and /out only where they can match; living/tools/sccache-rustc passes the flags to
+# sccache (under v1, sccache skipped rustc-remap and wasm crates kept host paths).
+rustflags = ["--remap-path-prefix=/slop-remap-v2=/slop-remap-v2"]
 
 [env]
 # rhai enables ahash's `compile-time-rng`, so const-random-macro draws fresh random keys into

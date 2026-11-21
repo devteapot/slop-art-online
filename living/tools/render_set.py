@@ -13,7 +13,8 @@ generated part, built once from a main commit on dev-box, at `ROOT/<id>/`:
 
   assets/                 laid out as living/game/assets: lookdev/ (the VRoid and KayKit bases, the
                           animated bases with their clips, the wolf and the deer, and the composed
-                          characters from the bundle: types, pages, styles, strands, own-clips.glb),
+                          characters from the bundle: types, pages, styles, strands, own-clips.glb
+                          and its own-clips.clips.json),
                           textures/, envs/<name>/, characters/looks.json, and view/ when the
                           checkout has one (the asset view's copies; not generated)
   bundle/                 the composed bundle (KTX2) as built, its MANIFEST.txt and cullet-people.json,
@@ -260,6 +261,17 @@ def build(a):
         bases = sorted((assets / "lookdev/anim").glob("vroid-*.glb"))
         if not bases or not (assets / "lookdev/anim/own-clips.glb").exists():
             sys.exit("render_set: the animated bases or own-clips.glb are missing (gen_anim.sh; bundle.py --with-clips)")
+        # Every clip file with its sidecar, and every gait with its foot-down markers: the client
+        # times the gaits and eases the legs by them, and without the sidecar a person has walk and
+        # run only (79072c65d37f to a7c606d204bb shipped own-clips.glb alone; docs/CLIP_MARKERS.md).
+        lost = [p.name for p in [*bases, assets / "lookdev/anim/own-clips.glb"] if not p.with_suffix(".clips.json").exists()]
+        if lost:
+            sys.exit(f"render_set: {', '.join(lost)} without its .clips.json sidecar (gen_anim.sh; bundle.py --with-clips packs own-clips.clips.json)")
+        r = subprocess.run([sys.executable, str(REPO / "living/tools/marker_check.py"), *map(str, bases), str(assets / "lookdev/anim/own-clips.glb")],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit("render_set: marker_check.py fails on the set's clips (missing contact windows or floor jerk):\n"
+                     + "\n".join(ln for ln in (r.stdout + r.stderr).splitlines() if "ERROR" in ln or "FAIL" in ln)[-3000:])
         if not (src / "textures").is_dir() or not any((src / "textures").iterdir()):
             sys.exit("render_set: no terrain textures (just living-game-textures --set all)")
         # The looks: the bundle's book against the checkout's worlds.
@@ -346,7 +358,13 @@ def check(a):
                 reasons.append(f"world {w} at look generation {g}, not in the set's book ({meta['looks']['book']})")
         if reasons:
             verdict = "stale"
-    print(json.dumps({"set": str(s), "id": meta["id"], "verdict": verdict, "reasons": reasons[:50]}, indent=1))
+    # Not a verdict (a set is not stale or corrupt for it), but a set the client draws people
+    # wrongly with: without own-clips.clips.json every person has walk and run only.
+    warnings = [f"{p.relative_to(s / 'assets').as_posix()} has no .clips.json sidecar: people draw with walk and run only (docs/CLIP_MARKERS.md)"
+                for p in sorted((s / "assets/lookdev/anim").glob("*.glb")) if not p.with_suffix(".clips.json").exists()]
+    print(json.dumps({"set": str(s), "id": meta["id"], "verdict": verdict, "reasons": reasons[:50], **({"warnings": warnings} if warnings else {})}, indent=1))
+    for w in warnings:
+        print(f"render_set: warning: {w}", file=sys.stderr)
     sys.exit({"ok": 0, "corrupt": 1, "stale": 2}[verdict])
 
 

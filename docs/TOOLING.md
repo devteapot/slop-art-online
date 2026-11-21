@@ -4,7 +4,7 @@ Status: **current** (Tool 7, 2026-11-11, branch `tool-7`; the laptop's follow-up
 
 | Part | Command | Script |
 | --- | --- | --- |
-| The check | `just living-check` (`just living-check-full`) | [`living/tools/check.py`](../living/tools/check.py), [`sccache-rustc`](../living/tools/sccache-rustc), [`install_sccache.sh`](../living/tools/install_sccache.sh), self-test [`check_selftest.py`](../living/tools/check_selftest.py) |
+| The check | `just living-check` (`just living-check-full`) | [`living/tools/check.py`](../living/tools/check.py), [`sccache-rustc`](../living/tools/sccache-rustc), [`host_paths.py`](../living/tools/host_paths.py), [`install_sccache.sh`](../living/tools/install_sccache.sh), self-test [`check_selftest.py`](../living/tools/check_selftest.py) |
 | Merging | `just living-merge <branch> -m "Merge <branch>: …"` | [`living/tools/merge.py`](../living/tools/merge.py), self-test [`merge_selftest.py`](../living/tools/merge_selftest.py) |
 | Disk | `just living-disk-clean [--apply]`, on a timer | [`living/tools/disk_clean.py`](../living/tools/disk_clean.py), [`disk_clean_install.sh`](../living/tools/disk_clean_install.sh), self-test [`disk_clean_selftest.py`](../living/tools/disk_clean_selftest.py) |
 
@@ -54,6 +54,7 @@ Three things are new:
 | Pre-set `RUSTC_WRAPPER` | What the check does |
 | --- | --- |
 | `sccache-rustc`: this worktree's, a symlink to it, a copy of it under any name or in another worktree, or the bare name on `PATH` (recognized by its header line) | Keeps the caller's wrapper and adds the cache settings: the pinned sccache, and `SCCACHE_DIR`, `SCCACHE_SERVER_PORT` and `SCCACHE_CACHE_SIZE` unless the caller set them (the caller's values win, so the stats ask the server it compiles through). Prints the `compile cache:` line and records the sccache stats in `runs.jsonl`. Not part of the step digest. |
+| a copy of `sccache-rustc` whose bytes differ from this checkout's (an older copy a `build-slot` pre-sets, say) | Runs this checkout's `living/tools/sccache-rustc` in its place, with the caller's cache settings, and says so in the `compile cache:` line (refresh the copy). A copy from before `wasm-remap-sccache` loses wasm compiles' path remapping ([Byte-identical wasm](#byte-identical-wasm)). |
 | a plain `sccache` | Left as it is, with its own settings; no cache line or stats. Not part of the digest, as sccache does not change outputs. |
 | anything else | Left as it is: cargo runs it, without this check's cache settings or stats. It enters every step's digest, so stamps made with it apply only with it. (This was the behaviour for every pre-set wrapper before `tool-7b`.) |
 
@@ -98,24 +99,52 @@ What it does not add: a skipped test step is not re-run, so a flaky test that on
 
 ### Byte-identical wasm
 
-Status: **current** (branch `wasm-remap`, Spark, 2026-11-21). **Reproducible per architecture:** with the pinned rustc ([`rust-toolchain.toml`](../rust-toolchain.toml)), one commit gives the same authority wasm on every machine of one host architecture, for any user, checkout path and target directory. **aarch64 and x86_64 still differ; the cause is open** (see below). Before, the same commit built different modules on dev-box and the Spark (island 16,269,709 B against 16,264,556 B), and genesis `init` fuel moved by about 0.02% between them. Two inputs varied even within one architecture:
+Status: **current** (branches `wasm-remap` and `wasm-remap-sccache`, Spark, 2026-11-21). **Reproducible within one OS and architecture:** with the pinned rustc ([`rust-toolchain.toml`](../rust-toolchain.toml)), one commit gives the same authority wasm on every machine of one OS and architecture, for any user, checkout path and target directory, with or without the compile cache. **Different OSes or architectures still give different modules; the cause is open** (see below). Before, the same commit built different modules on dev-box and the Spark (island 16,269,709 B against 16,264,556 B), and genesis `init` fuel moved by about 0.02% between them. Two inputs varied even within one machine type:
 
 - **Host paths.** Panic locations embed source paths. Registry and git crates are compiled from absolute paths under `CARGO_HOME` (`/home/<user>/.cargo/registry/src/…`). Cargo passes workspace crates' paths relative to the workspace, and the standard library's are already `/rustc/<commit>/…`. Cargo's `trim-paths` is unstable in cargo 1.99.1.
 - **Random keys.** rhai turns on ahash's `compile-time-rng`, so `const-random-macro` drew new random constants into ahash at every compile of it: two target directories on one machine already gave different modules. The laws' own hashing does not use them; living-rules fixes Rhai's hashing seed ([`script.rs`](../living/rules/src/script.rs), `HASHING_SEED`).
 
-The fix is one file, the repository's [`.cargo/config.toml`](../.cargo/config.toml). Cargo finds it from its working directory, not from `--manifest-path`, so every cargo run inside the checkout gets it: the Justfile, `check.py`, `verify.py`, the scene gate, `genesis_fuel.py`, `lab.py`, `trials.py`, the tool scripts, and SpacetimeDB 2.14.1's `spacetime build` (it runs `cargo build --target=wasm32-unknown-unknown --release` in the module's folder with the caller's environment, [`crates/cli/src/tasks/rust.rs`](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/cli/src/tasks/rust.rs)). A new build site needs nothing, as long as cargo runs inside the checkout. `genesis_fuel.py` and `trials.py` pass the checkout as the working directory for that reason.
+The fix is one file, the repository's [`.cargo/config.toml`](../.cargo/config.toml), and the cache wrapper. Cargo finds the file from its working directory, not from `--manifest-path`, so every cargo run inside the checkout gets it: the Justfile, `check.py`, `verify.py`, the scene gate, `genesis_fuel.py`, `lab.py`, `trials.py`, the tool scripts, and SpacetimeDB 2.14.1's `spacetime build` (it runs `cargo build --target=wasm32-unknown-unknown --release` in the module's folder with the caller's environment, [`crates/cli/src/tasks/rust.rs`](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/cli/src/tasks/rust.rs)). A new build site needs nothing, as long as cargo runs inside the checkout. `genesis_fuel.py` and `trials.py` pass the checkout as the working directory for that reason.
 
-- `build.rustc` is [`living/tools/rustc-remap`](../living/tools/rustc-remap). For a `wasm32-unknown-unknown` compile it adds `--remap-path-prefix` for `CARGO_HOME` (`/cargo`), the checkout (`/src`) and the crate's `OUT_DIR` (`/out`), each as given and as resolved through symlinks. Native compiles run rustc unchanged, so native caches stay valid. A `RUSTC_WRAPPER` (the check's sccache) runs the script as its compiler. A `RUSTC` in the environment replaces it and turns the remapping off.
-- The wasm target's `rustflags` hold a no-op marker remap (`/slop-remap-v1`). Cargo cannot see the flags the script adds. The marker is in cargo's fingerprint and sccache's key, so wasm crates built before the script are rebuilt. Bump it when the mapping changes. A `RUSTFLAGS` in the environment replaces the marker, but the script still remaps.
+- `build.rustc` is [`living/tools/rustc-remap`](../living/tools/rustc-remap). For a `wasm32-unknown-unknown` compile it adds `--remap-path-prefix` for `CARGO_HOME` (`/cargo`), the checkout (`/src`, only when rustc runs inside the checkout, as it does for workspace crates) and the crate's `OUT_DIR` (`/out`, only when its build script wrote files there), each as given and as resolved through symlinks. Native compiles run rustc unchanged, so native caches stay valid. `rustc-remap --remap-flags ARGS…` prints the flags for a compile instead of running it: the one computation both paths use.
+- **Under sccache** (`RUSTC_WRAPPER=living/tools/sccache-rustc`: `check.py`, the laptop's `build-slot`). sccache v0.19.0 never runs `rustc-remap`. Its name is not `rustc`, so sccache probes it: `rustc-remap -vV` answers as rustc, and `rustc-remap +stable` succeeds because the `rustc` it runs is rustup's proxy. sccache then takes the toolchain's own rustc from `rustup which rustc` and compiles with that ([`src/compiler/compiler.rs`](https://github.com/mozilla/sccache/blob/v0.19.0/src/compiler/compiler.rs), `detect_compiler` and `resolve_rust_compiler`; [`src/compiler/rust.rs`](https://github.com/mozilla/sccache/blob/v0.19.0/src/compiler/rust.rs), `RustupProxy::find_proxy_executable` and `resolve_proxied_executable`; [`src/server.rs`](https://github.com/mozilla/sccache/blob/v0.19.0/src/server.rs), `compiler_info`). The marker flag was in the argv, but the remap flags were not, so the island kept 83 `CARGO_HOME` paths (laptop, macOS; reproduced on the Spark, Linux). `sccache-rustc` now replaces `rustc-remap` with plain `rustc`, as the script itself runs it, and appends `rustc-remap --remap-flags` to the argv. sccache passes the flags to rustc and puts them in its key, which is correct. The two conditions above keep a checkout or target path out of registry crates' flags, so they still hit across checkouts and target directories. A native compile's argv is unchanged, so its key is too. A `rustc-remap` without `--remap-flags` (an older checkout) is passed through as before.
+- **A stale copy of the wrapper** (`~/.local/share/slop-tools/bin/sccache-rustc` that a `build-slot` pre-sets) keeps the bug for plain cargo runs until it is copied again from `living/tools/sccache-rustc`. The new copy is safe with older checkouts (see the previous point). `check.py` runs its own checkout's wrapper in place of a copy that differs from it, and says so ([pre-set wrappers](#the-check)).
+- **`RUSTC` in the environment** replaces `build.rustc` (cargo prefers it), so nothing remaps. The host-path check below fails such a module and names `RUSTC` as the likely cause.
+- The wasm target's `rustflags` hold a no-op marker remap (`/slop-remap-v2`). Cargo cannot see the flags the script adds. The marker is in cargo's fingerprint and sccache's key, so wasm crates built before the current mapping are rebuilt. Bump it when the mapping changes. v2 (`wasm-remap-sccache`) rebuilds what v1 built through sccache with host paths. A `RUSTFLAGS` in the environment replaces the marker, but the remapping still happens.
 - `[env]` sets `CONST_RANDOM_SEED`. `const-random-macro` reads it with `option_env!`, so cargo rebuilds that crate and its dependents once when the seed is introduced. A variable of the same name in the environment wins.
 - `check.py` keys every step on `rustc-remap` as well as on `.cargo`.
 
-**Evidence** (Spark, rustc 1.99.1, aarch64, `--locked`): two checkouts at different paths (`~/.t3/worktrees/…` and `~/slop-remap-checkout2/some/deeper/sao`), the second with a copied `CARGO_HOME` (`~/slop-remap-cargohome`, offline) and its own target directory. They built the same bytes for all ten modules the scene gate builds: five seeds, each plain and stepping. No module holds `/home/`, the user name or either checkout's path. Before the `[env]` seed, paths alone left the island 54 bytes apart in ahash's constants and in the `.llvm.<hash>` suffixes of the code that inlines them.
+**The host-path check** ([`living/tools/host_paths.py`](../living/tools/host_paths.py)). It fails a module that holds `/home/`, `/Users/`, this machine's `CARGO_HOME`, the checkout or `$HOME` (each as given and as resolved). It names the module, the number of hits and the first five distinct paths. It prints only the path strings, each cut at its `.rs` or its first non-path byte and at 160 characters. It runs on every module `verify.py launch` builds, which includes all of the scene gate's modules, before the publish (`refusing to publish …`). It also runs on `check.py`'s `authority` step module, which then fails. It costs a fraction of a second on a 17 MB module. `python3 living/tools/host_paths.py --selftest` plants host paths and checks that they are found and that nothing around them is printed (9 checks). `python3 living/tools/host_paths.py MODULE…` checks any module by hand.
 
-**Across architectures** (dev-box, x86_64, rustc 1.99.1, `--locked`, two fresh target directories): dev-box is reproducible with itself and its modules hold no host path, but every one of the ten differs from the Spark's, by 5.2–5.8 kB. Island at `wasm-remap` 299da4eb: aarch64 (Spark) `c9a6cbaf26e71af6bede0fc8e4ed9d94fb2827d0de4a53e798d66a768882f566`, 16,991,630 B; x86_64 (dev-box) `4435992654c7ee081de8115f5a7756910c768042c20ed2ce335611eecad1712f`, 16,997,417 B. It is not paths, `CONST_RANDOM_SEED` or the authority's `build.rs`. The cause (host-dependent code generation, or a proc-macro or build script whose output depends on the host) is an open, low-priority diagnosis. So compare module hashes, and fuel exactly, only between machines of one architecture. To build the authority into a scratch target directory and print its sha256:
+**Evidence, same machine type** (Spark, rustc 1.99.1, Linux aarch64, `--locked`, island). `wasm-remap` alone: two checkouts at different paths (`~/.t3/worktrees/…` and `~/slop-remap-checkout2/some/deeper/sao`), the second with a copied `CARGO_HOME` (`~/slop-remap-cargohome`, offline) and its own target directory. They built the same bytes for all ten modules the scene gate builds: five seeds, each plain and stepping. No module holds `/home/`, the user name or either checkout's path. Before the `[env]` seed, paths alone left the island 54 bytes apart in ahash's constants and in the `.llvm.<hash>` suffixes of the code that inlines them. `wasm-remap-sccache`, each build in a fresh target directory, through `build-slot` on CPUs 0-4 and 10-14, sccache v0.19.0 pinned (scratch copy, scratch cache):
+
+| Build | sha256 (island) | Size | Host paths | sccache hits / misses |
+| --- | --- | --- | --- | --- |
+| `wasm-remap` 65c3d834, plain cargo | `c9a6cbaf…f566` | 16,991,630 B | 0 | |
+| `wasm-remap` 65c3d834, through `sccache-rustc` (the bug) | `244bb312…d3c5` | 16,992,886 B | 83 | cold 0 / 101; warm 83 / 18 |
+| fix, plain cargo, two checkouts | `c9a6cbaf…f566` | 16,991,630 B | 0 | |
+| fix, through `sccache-rustc`, cold cache | `c9a6cbaf…f566` | 16,991,630 B | 0 | 0 / 101 |
+| fix, through `sccache-rustc`, warm, same checkout | `c9a6cbaf…f566` | 16,991,630 B | 0 | 85 / 16 |
+| fix, through `sccache-rustc`, warm, a second checkout at another path | `c9a6cbaf…f566` | 16,991,630 B | 0 | 85 / 16 |
+| fix, through `sccache-rustc`, on the pre-fix cache | `c9a6cbaf…f566` | 16,991,630 B | 0 | 26 / 75 (native hits; every wasm crate misses on the v2 marker) |
+| fix, `check.py --steps authority` with the wrapper pre-set | `c9a6cbaf…f566` | 16,991,630 B | 0 | 85 / 16 |
+| fix, `check.py` with a pre-fix copy of the wrapper pre-set | `c9a6cbaf…f566` | 16,991,630 B | 0 | 85 / 16 (its own wrapper ran instead) |
+| fix, `check.py` with `RUSTC=rustc` | (the bug's module) | | 83 | step **failed** on the host-path check |
+
+The fix's module is the same bytes as `wasm-remap`'s plain one, so the conditions on `/src` and `/out` change no output.
+
+**Across OSes and architectures** (rustc 1.99.1, `--locked`): each machine is reproducible with itself and its modules hold no host path, but they differ from one another. dev-box's ten modules differ from the Spark's by 5.2–5.8 kB. Island at `wasm-remap` 299da4eb (the laptop's from its coordinator's report, plain cargo):
+
+| Machine | OS, architecture | sha256 | Size |
+| --- | --- | --- | --- |
+| Spark | Linux aarch64 | `c9a6cbaf26e71af6bede0fc8e4ed9d94fb2827d0de4a53e798d66a768882f566` | 16,991,630 B |
+| dev-box | Linux x86_64 | `4435992654c7ee081de8115f5a7756910c768042c20ed2ce335611eecad1712f` | 16,997,417 B |
+| laptop | macOS aarch64 | `724dd073…` | 16,990,457 B |
+
+The laptop shares the Spark's architecture and still differs, so it is not the architecture alone. It is not paths, `CONST_RANDOM_SEED` or the authority's `build.rs`. The cause (host-dependent code generation, or a proc-macro or build script whose output depends on the host) is an open, low-priority diagnosis. So compare module hashes, and fuel exactly, only between machines of one OS and architecture. To build the authority into a scratch target directory and print its sha256:
 
 ```bash
-LIVING_SEED=island CARGO_TARGET_DIR=$(mktemp -d) sh -c 'cargo build -q --locked --manifest-path living/Cargo.toml -p living-authority --target wasm32-unknown-unknown --release && sha256sum "$CARGO_TARGET_DIR/wasm32-unknown-unknown/release/living_authority.wasm"'
+LIVING_SEED=island CARGO_TARGET_DIR=$(mktemp -d) sh -c 'cargo build -q --locked --manifest-path living/Cargo.toml -p living-authority --target wasm32-unknown-unknown --release && sha256sum "$CARGO_TARGET_DIR/wasm32-unknown-unknown/release/living_authority.wasm" && python3 living/tools/host_paths.py "$CARGO_TARGET_DIR/wasm32-unknown-unknown/release/living_authority.wasm"'
 ```
 
 ## Merging
@@ -420,6 +449,30 @@ Two rules for any script, queue or agent shell that starts or restarts a Spaceti
 - **No lock fd:** close the gate lock's descriptor in the command that starts the container, e.g. `systemd-run --user --scope --quiet podman start NAME 9>&-` for a lock held on fd 9 (`exec 9>~/.local/state/slop-build/gate.lock; flock -x 9`). A container started while a shell holds the lock inherits the descriptor in `conmon` and `fuse-overlayfs` and keeps the lock after the script exits: on 2026-11-20 a scratch server recycled inside a locked measurement held `gate.lock` for 70 minutes, stalling a merge gate for two hours and Blender's `flock -s` pause. Python's `subprocess` does not pass descriptors on by default (`close_fds=True`). To see who holds the lock: `fuser ~/.local/state/slop-build/gate.lock`, then `ps` on each pid; a container's `conmon` among them is this case, and stopping the (idle) container with `podman kill -s INT` releases it.
 
 
+### The gate's server
+
+The dev-box's scene gate runs on a SpacetimeDB container of its own (`coord-stdb`, port 3319, `LIVING_GATE_STDB_CONTAINER`, `LIVING_GATE_STDB_URL`). [`living/tools/gate_server.py`](../living/tools/gate_server.py) looks after it:
+
+- **`check`.** `docker exec <c> true` and `GET <url>/v1/ping`, each with a time limit. Exit 0 if it answers, 14 if not, with the error. A container can read as running while its overlay helper is gone ("transport endpoint is not connected"), and only an exec shows that.
+- **`start`.** `docker start` in a systemd scope of its own, with no inherited descriptor, then waits until `check` passes.
+- **`stop`.** Lists the server's databases, stops it with SIGINT, and waits until it has exited.
+  - Only if it held **no database**, it removes every replica directory, in a one-off container of the server's image on its volume.
+  - SpacetimeDB 2.14.1 keeps a deleted database's replica on disk, and the gate deletes every world it makes. On 2026-11-21, 216 such directories (12.8 GB) held a gate two hours on disk.
+  - A database still listed (a world kept for inspection), or a list that could not be read, keeps every replica. `--keep-replicas` keeps them in any case.
+  - It refuses the trial and reference servers by name: their deleted databases' commitlogs are evidence ([TRIAL_DISK.md](TRIAL_DISK.md)).
+
+**A dead server fails the gate at once.**
+- **`merge.py --scenes`** runs the same probe before its disk check and before every attempt, and refuses with exit 14. The check no longer runs 15 to 20 minutes before the scene gate finds the server gone.
+- **The scene gate's own setup** uses the probe too. Before, it checked only that the container was running.
+- **[`living/tools/gate_merge.sh`](../living/tools/gate_merge.sh)**, the dev-box's `gate-merge` (`install -m 755 living/tools/gate_merge.sh ~/.local/share/slop-tools/gate-merge`), probes before it waits for disk and every minute while it waits. So a dead server is not taken for a disk shortage.
+
+**Who clears the replicas.** It is the gate's server tooling (`gate_server.py stop`), not `disk_clean.py`:
+- `disk_clean` runs on a timer, clears build trees, and must never touch a container's data or volume.
+- The replicas can only be cleared with the server stopped and known to be the gate's alone. Only the tool that starts and stops that server knows both.
+- The dev-box's queue (`~/.local/state/devbox-queue/run.sh`) calls `gate_server.py start` before each branch and `gate_server.py stop` after it, in place of its own `podman` lines.
+
+The selftests: `python3 living/tools/gate_server_selftest.py` (a fake `docker`: healthy, every exec failing, not running, no ping, refused names) and `merge_selftest.py`'s "a dead gate server refuses at once (exit 14)".
+
 ### Blender during a gate
 
 On the dev-box, `blender` on `PATH` is [`living/tools/blender_gate.sh`](../living/tools/blender_gate.sh), installed as `~/.local/share/slop-tools/build-bin/blender` (`install -m 755 living/tools/blender_gate.sh ~/.local/share/slop-tools/build-bin/blender`). The real binary stays `/usr/bin/blender`. A scene gate holds `~/.local/state/slop-build/gate.lock` exclusively, and Blender gives the gate the machine:
@@ -448,7 +501,7 @@ The scene gate's verify-ui `render` group draws with the game client's generated
   - `textures/`, `envs/<name>/`, and `view/` when present.
 
   From the composed bundle:
-  - the types, pages, styles, strands and `own-clips.glb`;
+  - the types, pages, styles, strands, and `own-clips.glb` with its sidecar `own-clips.clips.json` (every person's gaits, their speeds and foot-down markers: without it the client gives people walk and run only, [CLIP_MARKERS.md](CLIP_MARKERS.md));
   - the look book.
 - `bundle/`: the bundle as built, its `MANIFEST.txt` and the world look data it was checked against.
 - `SET-MANIFEST.txt`: every file's sha256.
@@ -465,6 +518,8 @@ The scene gate's verify-ui `render` group draws with the game client's generated
 **Stale or corrupt.** `check` compares a set with a checkout:
 - **corrupt** (exit 1): a file's sha256 differs, or a file is missing or extra;
 - **stale** (exit 2): the checkout's generator hash differs from the set's, or a world's look generation (`living/seeds/worlds/<w>/looks.json`) is not in the set's book.
+
+It also lists `warnings`, which change no verdict: a clip file under `lookdev/anim/` without its `.clips.json` sidecar (every set from `79072c65d37f` to `a7c606d204bb` lacks `own-clips.clips.json`). `build` refuses such a set, and one whose clips `marker_check.py` fails ([CLIP_MARKERS.md](CLIP_MARKERS.md)).
 
 **The generator hash** (schema 2, since `render-set-exclude`) is a sha256 over every file of `living/tools/{blender,characters,textures}` (`git ls-tree -r`: mode, blob and path), less the non-generating tools listed in [`living/tools/render_set_exclude.txt`](../living/tools/render_set_exclude.txt), together with that list's own sha256. `build`, `check` and the bundle match all compute it with one function, `gen_hash`.
 - **What it ignores.** A main commit outside those folders, or an edit to a listed check or measuring tool (`cloth_check.py`, `book_drift.py`, the reference's measuring tools, …), leaves a set `ok`.
@@ -485,7 +540,7 @@ just living-game-assets                                 # 1-2: bases, textures, 
 living/tools/blender/gen_types.sh                       # 3: the 21 types and their pages
 living/tools/blender/gen_styles.sh                      # 3: hair, outfit and overlay styles, strands.png
 python3 living/tools/characters/town.py .local/town --town living/seeds/cullet.json --models-only --no-pages --lod near --jobs 2   # 4: the 64 residents the checks need
-ONLY=present LOD=near living/tools/blender/gen_person.sh clips=man     # 5: the shared clip bake, own-clips.glb
+ONLY=present LOD=near living/tools/blender/gen_person.sh clips=man     # 5: the shared clip bake, own-clips.glb and own-clips.clips.json (marker_check must pass)
 python3 living/tools/characters/bundle.py OUT --name render-set --with-clips --book SHIPPED_LOOKS.json \
     [--allow-book-drift living/tools/characters/book-drift-<generation>.json]   # 6: the checks, PNG and KTX2 bundles
 python3 living/tools/render_set.py build --bundle OUT/render-set-<sha8>-ktx2.tar.gz   # 7: ~/slop-assets/<id>/, read-only
@@ -518,6 +573,28 @@ python3 living/tools/render_set.py check ~/slop-assets/branches/<branch>/<id> &&
 - **The opt-in.** Making the write opt-in (`RULES_TABLE=1`) touches the hashed `blender` tree. It therefore goes in with the next change to the generator trees that rebuilds its own set (char-port-2's S6 or S8). The patch is `~/.t3/worktrees/slop-art-online/t3-b749c655-2e53274b9e364084/.local/rs/blender-optin.patch` on the dev-box.
 
 **Known on main** (2026-11-20, `error-lines.txt` of the build). `gen_anim.sh`'s own `marker_check.py` exits 1: `strafe_run_left_v48` has "no contact window" for a foot on both VRoid bases, and so does `run_diag_br_v48` on Vivi. These are clip-library takes. The bake is written anyway, and the set records 84 clips a base.
+
+## Reproducible generators
+
+Two runs of a generator on the same code and the same Blender give byte-identical files. A difference between two runs is a defect in the generator, fixed there, not noise to allow for: the render set's hash, the flag-off parity of a look change and the GLB size checks all compare bytes.
+
+**What made files differ (2026-11-21, Blender 5.2.2).** `bmesh.ops.create_uvsphere` gives the same vertices in every run, but the order of its faces round the poles changes from one Blender process to the next: two to three orders in five runs, at 8x5 and at 16x8. Two generators used it:
+- the kerchief's knot (`make_kerchief`, `person.py`): the kerchief style and every resident wearing it differed in the `Cloth` mesh's index order between runs (4 runs, 4 different files), the "known triangle-order noise" of S6b's parity;
+- the mushroom caps (`mushroom_cap`, `buildings.py`): small_city's mushroom houses, halls and towers (20 files).
+
+**The fix.** [`living/tools/blender/stable.py`](../living/tools/blender/stable.py)'s `uvsphere` calls the op, then sorts the new faces by their sorted vertex indices (the vertices are stable), keeping each face's winding. Use `stable.uvsphere` wherever a UV sphere goes into a file. Icospheres, cones (with and without caps), cubes and convex hulls of seeded points were the same in every run.
+
+**The selftest:** `python3 living/tools/stable_selftest.py [--runs 3]` builds each of these in separate Blender processes and fails if a stable result differs between them. It also reports how many orders the bare `create_uvsphere` gave (3 in 4 runs on 2026-11-21); that line is a note, not a check.
+
+**The proof for the fix** (dev-box, branch `gen-repro`):
+- **The kerchief style:** 4 runs, one file (`a138c5fe68dd`).
+- **`gen_buildings.sh`:** two full runs, 1,096 of 1,096 files byte-identical, the 20 with mushroom caps among them.
+- **The kerchief's two residents,** `own-nan-fenwick` and `own-vessa-pontil`: two builds each, and their animated GLBs, byte-identical.
+- **Against main** (main's residents, and the pinned set `a7c606d204bb`'s 1,096 building files): 1,076 building files are byte-identical. The 20 with mushroom caps and the residents' `Cloth` mesh have the same vertex data and the same triangles with the same winding; only their index order differs. The fix changes bytes once, in order only, so the render set needs one re-pack after it merges.
+
+**Not run twice here:** `gen_city.sh`, `gen_nature.sh` and the other generators build no UV sphere (city and Cullet use `buildings.py`, but not its mushroom caps); `gen_cullet.sh` was already byte-identical on two runs ([CULLET_KIT.md](CULLET_KIT.md)). Another machine or Blender version has not been compared.
+
+**To check a generator:** run it twice into two scratch out_roots and `cmp` every file. For a GLB that differs, compare its JSON, its vertex accessors and its triangles as a set (winding kept) before its index order: only an order difference points at an op like this one. A scratch `gen_buildings.sh` run rewrites the tracked `living/rules/data/buildings.json` ([above](#building-the-render-asset-set)); `git checkout` it afterwards.
 
 ## Measurements (dev-box, 2026-11-11)
 

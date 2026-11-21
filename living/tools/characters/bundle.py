@@ -15,8 +15,10 @@ What it packs, at the files' repository paths:
 - `living/game/assets/characters/looks.json`, the client's look book;
 - `living/seeds/worlds/<world>/looks.json` for every world with look data (Cullet and the island),
   and Cullet's `look-cases.json`;
-- with `--with-clips`, `lookdev/anim/own-clips.glb`, the shared clip bake (the gate's render set
-  carries it; the laptop bakes its own, so its bundles leave it out and say so);
+- with `--with-clips`, `lookdev/anim/own-clips.glb`, the shared clip bake, and its sidecar
+  `own-clips.clips.json` (the clips' speeds, lengths and contact windows, which the client cannot
+  do without: the gate's render set carries both; the laptop bakes its own, so its bundles leave
+  them out and say so);
 - at the root, `cullet-people.json` (each resident's line as built, and every file's use count)
   and `MANIFEST.txt` (a header, then every file's sha256).
 
@@ -140,7 +142,10 @@ def files_list(port, with_clips):
     if (L / "strands.png").exists() and any(names_strands(f) for f in files if f.endswith(".glb")):
         files.append(f"{LOOKDEV}/strands.png")
     if with_clips:
-        files.append(f"{LOOKDEV}/anim/own-clips.glb")
+        # The bake and its sidecar: the client times every person's gaits, plays the directional
+        # takes and eases the legs by the sidecar (gait.rs `of`); without it a person has only
+        # walk and run (`Gaits::fallback`). Set 79072c65d37f shipped the bake alone (clip-markers).
+        files += [f"{LOOKDEV}/anim/own-clips.glb", f"{LOOKDEV}/anim/own-clips.clips.json"]
     files.append(BOOK)
     for name, (p, _) in world_books().items():
         files.append(str(p.relative_to(REPO)))

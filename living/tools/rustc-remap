@@ -7,17 +7,32 @@
 #                                   (/home/<user>/.cargo/registry/src/...: the authority wasm
 #                                   differed between dev-box and the Spark, and genesis init
 #                                   fuel by ~0.02%)
-#   this checkout        -> /src    workspace crates are passed relative already; a safety net
-#   the crate's OUT_DIR  -> /out    generated sources a crate includes from the target dir
+#   this checkout        -> /src    workspace crates are passed relative already; a safety net,
+#                                   added only when rustc runs inside the checkout (workspace
+#                                   crates), so registry crates' flags name no checkout
+#   the crate's OUT_DIR  -> /out    generated sources a crate includes from the target dir;
+#                                   added only when its build script wrote files there
 #
 # The standard library is already /rustc/<commit>. Both the given and the resolved (symlink-free)
 # spelling of each prefix are mapped. The last matching flag wins, so OUT_DIR (often inside the
-# checkout) comes last. Cargo cannot see flags added here: .cargo/config.toml also gives the
-# wasm target a no-op marker remap, so changing this mapping means bumping that marker, which
-# rebuilds wasm crates and changes sccache's key.
+# checkout) comes last. The two conditions keep a path that cannot be in the output out of the
+# flags: under sccache the flags are in its cache key, and registry crates then still hit across
+# checkouts and target directories.
 #
-# `RUSTC` in the environment replaces this script (cargo prefers it over build.rustc); a
-# RUSTC_WRAPPER such as living/tools/sccache-rustc runs it as the compiler.
+# One computation, two callers:
+#   rustc-remap ARGS...                 cargo's rustc (build.rustc): exec rustc ARGS FLAGS
+#   rustc-remap --remap-flags ARGS...   print FLAGS, one per line (none for a native compile);
+#                                       living/tools/sccache-rustc appends them itself, because
+#                                       sccache runs the real rustc it finds through rustup and
+#                                       never this script (docs/TOOLING.md)
+# Cargo cannot see the flags: .cargo/config.toml also gives the wasm target a no-op marker remap,
+# so changing this mapping means bumping that marker, which rebuilds wasm crates and changes
+# sccache's key.
+#
+# `RUSTC` in the environment replaces this script (cargo prefers it over build.rustc): no remap,
+# and the gate's host-path check (living/tools/host_paths.py) fails the module.
+print=
+[ "${1:-}" = --remap-flags ] && { print=1; shift; }
 wasm=
 prev=
 for a in "$@"; do
@@ -27,7 +42,10 @@ for a in "$@"; do
   esac
   prev=$a
 done
-[ -n "$wasm" ] || exec rustc "$@"
+if [ -z "$wasm" ]; then
+  [ -n "$print" ] && exit 0
+  exec rustc "$@"
+fi
 
 remap() {  # remap FROM TO: FROM as given and as resolved
   [ -n "$1" ] || return 0
@@ -35,10 +53,23 @@ remap() {  # remap FROM TO: FROM as given and as resolved
   map="$map --remap-path-prefix=$1=$2"
   [ -z "$3" ] || [ "$3" = "$1" ] || map="$map --remap-path-prefix=$3=$2"
 }
+inside() {  # inside DIR: the working directory is DIR or under it (as given or resolved)
+  [ -n "$1" ] || return 1
+  case "$PWD/" in "$1"/*) return 0 ;; esac
+  r=$(cd "$1" 2>/dev/null && pwd -P) || return 1
+  case "$(pwd -P)/" in "$r"/*) return 0 ;; esac
+  return 1
+}
 map=
-remap "$(cd "$(dirname "$0")/../.." && pwd)" /src
+root=$(cd "$(dirname "$0")/../.." && pwd)
+inside "$root" && remap "$root" /src
 remap "${CARGO_HOME:-$HOME/.cargo}" /cargo
-remap "${OUT_DIR:-}" /out
+[ -n "${OUT_DIR:-}" ] && [ -n "$(ls -A "$OUT_DIR" 2>/dev/null)" ] && remap "$OUT_DIR" /out
+if [ -n "$print" ]; then
+  # shellcheck disable=SC2086
+  [ -z "$map" ] || printf '%s\n' $map
+  exit 0
+fi
 # Word splitting of $map: none of these paths may contain whitespace (cargo's own paths do not).
 # shellcheck disable=SC2086
 exec rustc "$@" $map

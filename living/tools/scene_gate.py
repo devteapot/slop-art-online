@@ -1630,9 +1630,13 @@ def cmd_run(a):
             record.update(result="genesis setup error", genesis_error=str(e))
             return finish(a, record, 2)
         if not a.genesis_only or (threshold is not None and len(reports) != len(GENESIS_SEEDS)):
-            up = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", container], capture_output=True, text=True)
-            if up.stdout.strip() != "true":
-                say(f"setup error: the SpacetimeDB container {container} is not running (--stdb-container, LIVING_GATE_STDB_CONTAINER)")
+            # Running is not enough: a container whose overlay helper died reads as running while
+            # every exec fails ("transport endpoint is not connected"). gate_server.probe execs and pings.
+            import gate_server
+            why = gate_server.probe(container, a.stdb_url)
+            if why:
+                say(f"setup error: the SpacetimeDB server is unreachable: {why} (--stdb-container, LIVING_GATE_STDB_CONTAINER; "
+                    f"living/tools/gate_server.py start)")
                 record.update(result="setup error")
                 return finish(a, record, 2)
         if genesis and threshold is None:
