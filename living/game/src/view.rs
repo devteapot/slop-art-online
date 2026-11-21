@@ -32,6 +32,23 @@
 //!   what a clip's pose does from what the drawing does (the hair mirror check,
 //!   docs/char-port-2/hair-mirror/README.md: the idle turns the head 12° at 2 s).
 //!
+//! - `LIVING_GAME_VIEW_ORTHO=1`: the **measuring view** (docs/char-port-2/measure-view/README.md). Every
+//!   shot is photographed by an orthographic camera, level (pitch 0), so a length across the
+//!   frame is the same number of pixels at any depth. Its yaw is the shot's (`front`, the
+//!   default shot here, is dead front: the model's forward, a hand-made file's declared one).
+//!   A shot's pitch, zoom, aim and camera stop are ignored; its clip and time are kept.
+//!   - `LIVING_GAME_VIEW_ORTHO_M=<m>`: the frame's height in metres, so pixels per metre is the
+//!     frame's height in pixels over it, exactly (default: the model's height × 1.1).
+//!   - `LIVING_GAME_VIEW_ORTHO_Y=<m>`: the height of the frame's middle above the ground
+//!     (default: the model's middle). The frame's middle is the model's middle across.
+//!   - Each photograph gets `NN-<shot>.ortho.json`: the projection (pixels per metre, the frame
+//!     in pixels and metres, the camera's height, the frame's middle, the row of the ground),
+//!     and the model's `report.json` lists them under `ortho`. A height y (m) is at pixel row
+//!     `ground_row_px − y · px_per_m`, a point x m right of the middle at column
+//!     `frame_px[0] / 2 + x · px_per_m` (rows from the top edge, columns from the left).
+//!   - Outlines and ink stay on, as in play; `LIVING_GAME_PERF=nooutlines` (shell outlines) and
+//!     `noedges` (the finishing pass's lines) turn them off to measure what they add.
+//!
 //! - `recipe:<name>` or `recipe:<folk>:<seed>` in `LIVING_GAME_VIEW` shows a character recipe
 //!   (`assets/characters/recipes.json`; folks `adult`, `giant`, `small`) at its own height; a
 //!   recipe with a person line is composed from shared files unless `LIVING_GAME_COMPOSE=0`
@@ -77,6 +94,112 @@ pub fn day_curve() -> bool {
     use std::sync::OnceLock;
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| enabled() && std::env::var("LIVING_GAME_VIEW_ATMO").is_ok_and(|v| v == "1"))
+}
+
+/// Whether the asset view is the measuring view (`LIVING_GAME_VIEW_ORTHO=1`, with the asset view
+/// on): a level orthographic camera of known pixels per metre.
+pub fn ortho() -> bool {
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| enabled() && std::env::var("LIVING_GAME_VIEW_ORTHO").is_ok_and(|v| v.trim() == "1"))
+}
+
+/// The measuring view's camera stands at least this far (m) in front of the frame's middle. Its
+/// distance changes no length on the picture; it keeps the camera in front of the model and
+/// characters' outlines at their full width (`style::person_width`, within 8 m).
+const ORTHO_STANDOFF: f32 = 4.0;
+/// How far the measuring view sees past its camera (m): the checker's far edge with room. Its
+/// near plane is 0, which the finishing pass's depth reading relies on (`post::update`).
+const ORTHO_FAR: f32 = 100.0;
+
+/// One measuring-view frame: a level orthographic camera.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OrthoFrame {
+    /// The picture's size in pixels.
+    pub px: UVec2,
+    /// The frame's height in metres.
+    pub height_m: f32,
+    /// The frame's middle (world, m).
+    pub middle: Vec3,
+    /// The camera's yaw (degrees; 0 looks at a model's front from +Z).
+    pub yaw: f32,
+    /// The camera's distance in front of the middle (m).
+    pub standoff: f32,
+}
+
+impl OrthoFrame {
+    /// The frame for a model framed by `centre` and `half` (see [`framing`]) at `yaw`, on a
+    /// picture of `px`: its height from `LIVING_GAME_VIEW_ORTHO_M`, its middle's height from
+    /// `LIVING_GAME_VIEW_ORTHO_Y`.
+    fn of(centre: Vec3, half: Vec3, yaw: f32, px: UVec2) -> Self {
+        let env = |k: &str| {
+            let v = std::env::var(k).ok().filter(|v| !v.trim().is_empty())?;
+            match v.trim().parse::<f32>() {
+                Ok(x) if x.is_finite() => Some(x),
+                _ => {
+                    crate::handmade::warn_once(format!("view: {k}={v:?} is not a number; the default"));
+                    None
+                }
+            }
+        };
+        let height_m = env("LIVING_GAME_VIEW_ORTHO_M").filter(|m| *m > 0.0).unwrap_or(2.0 * half.y * 1.1).max(1e-3);
+        let y = env("LIVING_GAME_VIEW_ORTHO_Y").unwrap_or(centre.y);
+        Self { px, height_m, middle: Vec3::new(centre.x, y, centre.z), yaw, standoff: ORTHO_STANDOFF.max(half.length() * 2.0 + 1.0) }
+    }
+
+    /// Pixels per metre, the same everywhere on the picture.
+    pub fn px_per_m(&self) -> f32 {
+        self.px.y as f32 / self.height_m
+    }
+
+    /// The camera's place: level, `standoff` in front of the middle at `yaw`.
+    pub fn eye(&self) -> Vec3 {
+        let y = self.yaw.to_radians();
+        self.middle + Vec3::new(y.sin(), 0.0, y.cos()) * self.standoff
+    }
+
+    pub fn transform(&self) -> Transform {
+        Transform::from_translation(self.eye()).looking_at(self.middle, Vec3::Y)
+    }
+
+    pub fn projection(&self) -> Projection {
+        Projection::Orthographic(OrthographicProjection {
+            near: 0.0,
+            far: ORTHO_FAR,
+            scaling_mode: bevy::camera::ScalingMode::FixedVertical { viewport_height: self.height_m },
+            ..OrthographicProjection::default_3d()
+        })
+    }
+
+    /// Where a world point falls on the picture, in pixels from its top-left corner (a pixel's
+    /// middle is at +0.5).
+    pub fn pixel_of(&self, p: Vec3) -> Vec2 {
+        let y = self.yaw.to_radians();
+        let right = Vec3::new(y.cos(), 0.0, -y.sin());
+        let k = self.px_per_m();
+        Vec2::new(self.px.x as f32 * 0.5 + (p - self.middle).dot(right) * k, self.px.y as f32 * 0.5 - (p.y - self.middle.y) * k)
+    }
+
+    /// What a photograph's sidecar records.
+    pub fn json(&self) -> serde_json::Value {
+        let k = self.px_per_m();
+        let eye = self.eye();
+        serde_json::json!({
+            "projection": "orthographic",
+            "pitch_deg": 0.0,
+            "yaw_deg": self.yaw,
+            "px_per_m": k,
+            "frame_px": [self.px.x, self.px.y],
+            "frame_m": [self.px.x as f32 / k, self.height_m],
+            "camera_height_m": eye.y,
+            "camera_m": [eye.x, eye.y, eye.z],
+            "frame_middle_m": [self.middle.x, self.middle.y, self.middle.z],
+            "ground_row_px": self.pixel_of(Vec3::new(self.middle.x, 0.0, self.middle.z)).y,
+            "standoff_m": self.standoff,
+            "near_m": 0.0,
+            "far_m": ORTHO_FAR,
+        })
+    }
 }
 
 /// Named camera angles for photographs: (name, yaw°, pitch°). Yaw 0 looks at a model's front
@@ -216,6 +339,10 @@ pub struct ViewState {
     fog: Option<bevy::pbr::FogFalloff>,
     /// Batch, `LIVING_GAME_VIEW_PLATE`: the model in focus is hidden for its shot's plate.
     plate: bool,
+    /// The measuring view (`ortho`): the frame of the shot being taken, and the model's
+    /// photographs' frames so far (its report's `ortho`).
+    ortho: Option<OrthoFrame>,
+    ortho_shots: Vec<serde_json::Value>,
 }
 
 /// Resolve the requested files to paths under the asset folder.
@@ -377,7 +504,8 @@ pub fn setup(
         let handle = assets.load::<Gltf>(file.clone());
         let wanted: Vec<String> = std::env::var("LIVING_GAME_VIEW_CLIP").unwrap_or_default().split(',').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).collect();
         let shown: Vec<usize> = if wanted.is_empty() { (0..clips.len().min(4)).collect() } else { clips.iter().enumerate().filter(|(_, c)| wanted.contains(&c.0)).map(|(i, _)| i).collect() };
-        let spec = std::env::var("LIVING_GAME_VIEW_SHOTS").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "views,clips".into());
+        // The measuring view photographs the front by default.
+        let spec = std::env::var("LIVING_GAME_VIEW_SHOTS").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| if ortho() { "front" } else { "views,clips" }.into());
         let shots = parse_shots(&spec, &clips, &shown, file);
         let first_clip = shown.first().copied().unwrap_or(0);
         let graph = (!clips.is_empty()).then(|| (assets.load::<Gltf>(clip_src.clone()), vec![], Entity::PLACEHOLDER));
@@ -421,6 +549,8 @@ pub fn setup(
         shift: (0.0, Vec3::ZERO),
         fog: cams.iter().next().map(|f| f.falloff.clone()),
         plate: false,
+        ortho: None,
+        ortho_shots: vec![],
     });
 }
 
@@ -523,7 +653,7 @@ pub fn interact(
     motion: Res<AccumulatedMouseMotion>,
     scroll: Res<AccumulatedMouseScroll>,
     items: Query<(&Item, &Fitted, &GlobalTransform)>,
-    mut cam: Query<(&mut Transform, &mut Projection), With<Camera3d>>,
+    mut cam: Query<(&mut Transform, &mut Projection, &Camera), With<Camera3d>>,
     mut players: Query<&mut AnimationPlayer>,
 ) {
     if state.out.is_some() {
@@ -552,8 +682,15 @@ pub fn interact(
     }
     state.zoom = (state.zoom * (1.0 - scroll.delta.y * 0.08)).clamp(0.2, 4.0);
     let Some((c, h)) = framing(&state, &items) else { return };
-    if let Ok((mut tf, mut proj)) = cam.single_mut() {
-        place_camera(&mut tf, &mut proj, c, h, state.yaw, state.pitch, state.zoom);
+    if let Ok((mut tf, mut proj, camera)) = cam.single_mut() {
+        if ortho() {
+            // Level: dragging turns it round the model; the wheel changes the frame's height.
+            let mut f = OrthoFrame::of(c, h, state.yaw, camera.physical_viewport_size().unwrap_or_else(crate::capture::size));
+            f.height_m *= state.zoom;
+            (*tf, *proj) = (f.transform(), f.projection());
+        } else {
+            place_camera(&mut tf, &mut proj, c, h, state.yaw, state.pitch, state.zoom);
+        }
     }
 }
 
@@ -566,7 +703,7 @@ pub fn batch(
     all: Query<(&Item, Option<&Fitted>)>,
     items: Query<(&Item, &Fitted, &GlobalTransform)>,
     roots: Query<(Entity, &Item)>,
-    mut cam: Query<(&mut Transform, &mut Projection), With<Camera3d>>,
+    mut cam: Query<(&mut Transform, &mut Projection, &Camera), With<Camera3d>>,
     mut players: Query<&mut AnimationPlayer>,
     children: Query<&Children>,
     mesh_q: Query<(&Mesh3d, Option<&bevy::gltf::GltfMaterialName>)>,
@@ -610,20 +747,31 @@ pub fn batch(
         return;
     }
     let Some((c, h)) = framing(&state, &items) else { return };
-    let Ok((mut tf, mut proj)) = cam.single_mut() else { return };
+    let Ok((mut tf, mut proj, camera)) = cam.single_mut() else { return };
     // Each shot: pose the camera (and clip), let the frame settle, photograph, move on.
     let settle = std::env::var("LIVING_GAME_VIEW_SETTLE").ok().and_then(|s| s.parse::<f32>().ok()).unwrap_or(if step == 0 { 1.5 } else { 0.6 });
     let name = if let Some(shot) = item.shots.get(step) {
-        match shot.pose {
-            Pose::Orbit { yaw, pitch, zoom, aim } => place_camera(&mut tf, &mut proj, aim.map_or(c, |a| Vec3::new(c.x, c.y - h.y + 2.0 * h.y * a, c.z)), h, yaw, pitch, zoom),
-            Pose::PlayStop { height, yaw, fov } => {
-                let chest = Vec3::new(c.x, h.y * 1.2, c.z);
-                let reach = height / 58f32.to_radians().tan();
-                let angle = yaw.to_radians();
-                if let Projection::Perspective(p) = &mut *proj { p.fov = fov.to_radians(); }
-                *tf = Transform::from_translation(chest + Vec3::new(reach * angle.sin(), height, reach * angle.cos())).looking_at(chest, Vec3::Y);
+        if ortho() {
+            // The measuring view: level and orthographic at the shot's yaw.
+            let yaw = match shot.pose {
+                Pose::Orbit { yaw, .. } | Pose::PlayStop { yaw, .. } => yaw,
+                Pose::Game => 0.0,
+            };
+            let f = OrthoFrame::of(c, h, yaw, camera.physical_viewport_size().unwrap_or_else(crate::capture::size));
+            (*tf, *proj) = (f.transform(), f.projection());
+            state.ortho = Some(f);
+        } else {
+            match shot.pose {
+                Pose::Orbit { yaw, pitch, zoom, aim } => place_camera(&mut tf, &mut proj, aim.map_or(c, |a| Vec3::new(c.x, c.y - h.y + 2.0 * h.y * a, c.z)), h, yaw, pitch, zoom),
+                Pose::PlayStop { height, yaw, fov } => {
+                    let chest = Vec3::new(c.x, h.y * 1.2, c.z);
+                    let reach = height / 58f32.to_radians().tan();
+                    let angle = yaw.to_radians();
+                    if let Projection::Perspective(p) = &mut *proj { p.fov = fov.to_radians(); }
+                    *tf = Transform::from_translation(chest + Vec3::new(reach * angle.sin(), height, reach * angle.cos())).looking_at(chest, Vec3::Y);
+                }
+                Pose::Game => game_camera(&mut tf, &mut proj, Vec3::new(c.x, 0.0, c.z)),
             }
-            Pose::Game => game_camera(&mut tf, &mut proj, Vec3::new(c.x, 0.0, c.z)),
         }
         // A ground seat's clip sits the body on the checker: its cloth takes the game's ground
         // contact, weighted by the clip's time (`characters::SeatAnchor`).
@@ -674,7 +822,7 @@ pub fn batch(
             }
         }
         let (_, fit, _) = items.iter().find(|(it, ..)| it.index == i).unwrap();
-        let report = serde_json::json!({
+        let mut report = serde_json::json!({
             "file": file,
             "size_m": [fit.size.x, fit.size.y, fit.size.z],
             "meshes": n_meshes,
@@ -686,6 +834,9 @@ pub fn batch(
             "clips": item.clips.iter().map(|(n, d)| serde_json::json!({ "name": n, "seconds": d })).collect::<Vec<_>>(),
             "photos": dir.display().to_string(),
         });
+        if ortho() {
+            report["ortho"] = serde_json::Value::Array(std::mem::take(&mut state.ortho_shots));
+        }
         let _ = std::fs::write(dir.join("report.json"), serde_json::to_string_pretty(&report).unwrap_or_default());
         state.reports.push(report);
         info!("view: {file} done");
@@ -705,6 +856,13 @@ pub fn batch(
             write_joints(&path, &file, &name, root, &children, &bones);
         }
         crate::capture::shot(&mut commands, target.as_deref(), dir.join(format!("{step:02}-{name}.png")));
+        if let Some(f) = state.ortho.filter(|_| ortho()) {
+            let mut j = f.json();
+            j["photo"] = format!("{step:02}-{name}.png").into();
+            info!("view: {file} {name}: orthographic, {:.3} px/m, frame {:.4} m high, camera {:.4} m up", f.px_per_m(), f.height_m, f.eye().y);
+            let _ = std::fs::write(dir.join(format!("{step:02}-{name}.ortho.json")), serde_json::to_string_pretty(&j).unwrap_or_default());
+            state.ortho_shots.push(j);
+        }
         if std::env::var("LIVING_GAME_VIEW_PLATE").is_ok_and(|v| v == "1") {
             state.plate = true;
             state.batch = (i, step, now + 0.3);
@@ -755,4 +913,84 @@ fn shift_of(file: &str, clip: &str, t: f32) -> (f32, Vec3) {
 
 fn sanitize(s: &str) -> String {
     s.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::camera::CameraProjection;
+
+    /// A world point through the frame's camera and Bevy's own orthographic matrix: (pixel x,
+    /// pixel y from the top, reverse-Z depth).
+    fn through(f: &OrthoFrame, p: Vec3) -> Vec3 {
+        let Projection::Orthographic(mut o) = f.projection() else { panic!("not orthographic") };
+        o.update(f.px.x as f32, f.px.y as f32);
+        let clip = o.get_clip_from_view() * f.transform().to_matrix().inverse() * p.extend(1.0);
+        let ndc = clip.truncate() / clip.w;
+        Vec3::new((ndc.x + 1.0) * 0.5 * f.px.x as f32, (1.0 - ndc.y) * 0.5 * f.px.y as f32, ndc.z)
+    }
+
+    fn frame(yaw: f32) -> OrthoFrame {
+        OrthoFrame { px: UVec2::new(1600, 900), height_m: 0.45, middle: Vec3::new(0.2, 1.55, -0.1), yaw, standoff: 4.0 }
+    }
+
+    #[test]
+    fn the_measuring_view_has_exact_pixels_per_metre_at_every_depth() {
+        let f = frame(0.0);
+        assert!((f.px_per_m() - 2000.0).abs() < 1e-3);
+        // A 0.15 m width across the front, at the frame's middle and 0.3 m nearer or farther.
+        for dz in [-0.3, 0.0, 0.3] {
+            let a = through(&f, f.middle + Vec3::new(-0.075, 0.0, dz));
+            let b = through(&f, f.middle + Vec3::new(0.075, 0.0, dz));
+            assert!(((b.x - a.x) - 300.0).abs() < 1e-2, "{dz}: {} px", b.x - a.x);
+            assert!((a.y - b.y).abs() < 1e-3, "level: the same row");
+        }
+        // The middle is the picture's middle; a height above it is higher on the picture.
+        let m = through(&f, f.middle);
+        assert!((m.truncate() - Vec2::new(800.0, 450.0)).length() < 1e-2);
+        let up = through(&f, f.middle + Vec3::Y * 0.1);
+        assert!((m.y - up.y - 200.0).abs() < 1e-2);
+    }
+
+    #[test]
+    fn the_recorded_projection_matches_the_camera() {
+        for yaw in [0.0, 90.0, 180.0, -35.0] {
+            let f = frame(yaw);
+            assert!((f.eye().y - f.middle.y).abs() < 1e-6, "level");
+            for p in [Vec3::new(0.3, 1.7, 0.05), Vec3::new(-0.1, 0.0, -0.4), Vec3::new(0.0, 1.2, 0.3)] {
+                let want = through(&f, p).truncate();
+                assert!((f.pixel_of(p) - want).length() < 0.02, "yaw {yaw}: {p} at {} not {want}", f.pixel_of(p));
+            }
+        }
+        let j = frame(0.0).json();
+        assert_eq!(j["frame_px"], serde_json::json!([1600, 900]));
+        assert!((j["px_per_m"].as_f64().unwrap() - 2000.0).abs() < 1e-3);
+        assert!((j["frame_m"][1].as_f64().unwrap() - 0.45).abs() < 1e-6);
+        assert!((j["camera_height_m"].as_f64().unwrap() - 1.55).abs() < 1e-6);
+        // The ground row: the middle's height below the picture's middle.
+        assert!((j["ground_row_px"].as_f64().unwrap() - (450.0 + 1.55 * 2000.0)).abs() < 0.05);
+    }
+
+    #[test]
+    fn the_front_looks_at_the_models_face() {
+        // Yaw 0 stands on +Z (a model faces +Z in the view); its right on the picture is +X.
+        let f = frame(0.0);
+        assert!(f.eye().z > f.middle.z);
+        assert!(f.pixel_of(f.middle + Vec3::X * 0.1).x > 800.0);
+        // From the side (yaw 90) a depth is across the picture.
+        let s = frame(90.0);
+        assert!((s.pixel_of(s.middle + Vec3::Z * 0.1).x - (800.0 - 200.0)).abs() < 1e-2);
+    }
+
+    #[test]
+    fn the_finishing_pass_reads_an_orthographic_depth_back_as_distance() {
+        // `edges.wesl` `dist` for an orthographic camera: −w · (1 − depth), w = −(far − near).
+        let f = frame(0.0);
+        let w = -ORTHO_FAR;
+        for d in [0.5_f32, 4.0, 4.3, 60.0] {
+            let p = f.eye() + (f.middle - f.eye()).normalize() * d;
+            let depth = through(&f, p).z;
+            assert!((-w * (1.0 - depth) - d).abs() < 1e-3, "{d} m reads {}", -w * (1.0 - depth));
+        }
+    }
 }

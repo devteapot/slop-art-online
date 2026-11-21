@@ -30,6 +30,7 @@ characters/person_check.py
 characters/rig_check.py
 characters/skeleton_check.py
 characters/pictures_selftest.py
+characters/ortho_selftest.py
 # characters: measurements, comparisons and check pages
 characters/bone_reach.py
 characters/cage_accept.py
@@ -38,6 +39,7 @@ characters/crowd.py
 characters/hair_shimmer.py
 characters/ink_shimmer.py
 characters/live_crowd.py
+characters/ortho_shape.py
 characters/piece_tones.py
 characters/pictures_stills.py
 characters/capture.sh
