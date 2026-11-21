@@ -60,15 +60,21 @@ DENSITY_MM = 1.0
 PAGE_PATH = "lookdev/styles/hair/hair-masks.png"
 STRANDS = 0.9  # main's strands under the bands, at this share of their own contrast (B; char-port-2 S5's B2)
 STRANDS_RANGE = (0.35, 0.65)  # B's range: the contract's low-contrast range (the bands x 0.7 to 1.3)
+# The strands' mean over a style's texels is held at neutral (0.5, 128): the bake's own mean runs
+# from 125 to 164 by style (main's shading factor, and the larger of a sheet's front and back), and
+# the palette, calibrated on one style, was off on the others by up to 15% (char-port-2 S6 step 4).
+# STRANDS_MEAN_TOL: how far a page's file may stand from 128 before the audit fails it.
+STRANDS_MEAN_TOL = 2.0
 AUBURN = [102, 46, 26]
 # At auburn: Cora's accepted hair (docs/char-live-3/ink-batch-2/own-cora-live.glb) as calibrated on a
 # composed person against the drawing's hair patches, with the strands under the bands
-# (docs/char-port-2/s5/calibrate_bins.py).
-PROFILE = dict(palette="tag", ref=AUBURN, shade=[35, 1, 0], mid=[92, 30, 5], light=[108, 39, 4], highlight=[138, 53, 3],
+# (docs/char-port-2/s5/calibrate_bins.py; again in S6 step 4, over the held strands).
+PROFILE = dict(palette="tag", ref=AUBURN, shade=[36, 1, 0], mid=[98, 33, 5], light=[114, 43, 4], highlight=[138, 53, 3],
                t1=-0.2, t2=0.4, edge=0.02, highlight_feather=0.08, ink_px=1.05, ink_fade_px=2.0)
 # One anchor a colour bin besides auburn (HANDMADE_COMPOSED "Several anchors"): black, brown, blond
-# and grey, calibrated in docs/char-port-2/s5 (calibrate_bins.py; the second pass's bins.json).
-ANCHORS = [{"ref": [19, 17, 17], "shade": [0, 0, 0], "mid": [6, 5, 5], "light": [20, 18, 17], "highlight": [51, 46, 46]}, {"ref": [51, 34, 23], "shade": [6, 2, 1], "mid": [39, 25, 15], "light": [51, 34, 24], "highlight": [67, 49, 36]}, {"ref": [158, 125, 71], "shade": [79, 58, 29], "mid": [151, 116, 52], "light": [181, 151, 96], "highlight": [238, 198, 121]}, {"ref": [133, 133, 133], "shade": [61, 61, 61], "mid": [118, 118, 118], "light": [150, 150, 150], "highlight": [193, 193, 193]}]
+# and grey, calibrated in docs/char-port-2/s5 (calibrate_bins.py) and again, over the strands held at
+# a neutral mean, in S6 step 4 (docs/char-port-2/s6/step4: bob, then checked on six styles).
+ANCHORS = [{"ref": [19, 17, 17], "shade": [0, 0, 0], "mid": [6, 5, 5], "light": [21, 19, 18], "highlight": [51, 46, 46]}, {"ref": [51, 34, 23], "shade": [6, 2, 1], "mid": [42, 27, 15], "light": [55, 36, 25], "highlight": [67, 49, 36]}, {"ref": [158, 125, 71], "shade": [84, 61, 29], "mid": [158, 121, 49], "light": [187, 156, 100], "highlight": [237, 197, 121]}, {"ref": [133, 133, 133], "shade": [65, 65, 65], "mid": [123, 123, 123], "light": [156, 156, 156], "highlight": [193, 193, 193]}]
 
 
 # The lock lines' colour (the third pass, 2026-11-20): a darker shade of the hair's own mid swatch,
@@ -383,6 +389,7 @@ def main():
     parted = 0
     D = [np.full((PAGE, PAGE), float(rng), np.float32) for _ in range(n_pages)]
     page_path = lambda k: PAGE_PATH if k == 0 else PAGE_PATH.replace(".png", f"-{k}.png")
+    means = {}
     for name, sp, _ in files:
         k, c, r, w, h = cells[name]
         off = np.array([c * CELL, r * CELL], float)
@@ -419,6 +426,15 @@ def main():
                 if B is not None and len(strand) == 3:
                     su, sv, sk = (accessor(j, binary, strand[n])[0][:, 0].astype(np.float64) for n in ("_STRANDU", "_STRANDV", "_STRANDK"))
                     strands_bake(B[k], px + off, idx.reshape(-1, 3), su, sv, sk, picture, a.strands)
+        if B is not None:
+            # This style's strands, held at a neutral mean (STRANDS_MEAN_TOL): shifted, so their
+            # contrast stays; the shift is recorded beside its measures.
+            cell = B[k][r * CELL:(r + h) * CELL, c * CELL:(c + w) * CELL]
+            wr = cell >= 0
+            if wr.any():
+                before = float(cell[wr].mean())
+                cell[wr] = np.clip(cell[wr] - before + 0.5, *STRANDS_RANGE)
+                means[name] = dict(before=round(before * 255, 1), after=round(float(cell[wr].mean()) * 255, 1))
         scene = j["scenes"][j.get("scene", 0)]
         slop = scene.setdefault("extras", {}).setdefault("slop", {})
         slop.pop("character", None)
@@ -438,6 +454,8 @@ def main():
     manifest = dict(page=PAGE_PATH, size=PAGE, cell=CELL, density_mm=DENSITY_MM, files={n: v[1:] for n, v in cells.items() if v[0] == 0})
     if n_pages > 1:
         manifest["pages"] = [dict(page=page_path(k), files={n: v[1:] for n, v in cells.items() if v[0] == k}) for k in range(n_pages)]
+    if means:
+        manifest["strands"] = dict(mean=128, tolerance=STRANDS_MEAN_TOL, files=dict(sorted(means.items())))  # each style's strands' mean (of 255) as baked and as held
     json.dump(manifest, open(os.path.join(a.folder, "hair-masks.json"), "w"), indent=1)
     used = sum(v[3] * v[4] for v in cells.values())
     print(f"hair_page: {len(files)} files on {n_pages} page(s), {used} cells of {n_pages * GRID * GRID}; lines from {sum(len(sp['creases']) for _, sp, _ in files)} creases;"

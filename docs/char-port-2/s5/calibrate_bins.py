@@ -3,7 +3,11 @@
 and an anchor each for the dark, light and grey bins, against targets measured in the calibration
 frame, on a composed person through the client.
 
-    python3 calibrate_bins.py OUT --binary BIN [--style bob] [--rounds 2] [--measure-only]
+    python3 calibrate_bins.py OUT --binary BIN [--style bob[,long,...]] [--rounds 2] [--measure-only]
+
+With several styles (char-port-2 S6 step 4), each is measured, the swatches are tuned to the mean of
+their measures, and a round passes only when every style passes on its own: a palette calibrated
+on one style was off on the others.
 
 **The person:** a composed woman (`adult-f-b`) wearing `--style`, from a one-line book a bin, at
 11:00 (soft film), idle at 0 s, the calibration portrait (0:8:0.36:0.88) and three-quarter
@@ -256,42 +260,63 @@ def main():
                     sw[name][b] = enc(lin(sw[name][b]) * k)
                 else:
                     sw[name][b] = list(seed[tuple(tag)][b])
-    dbg = HAIR/f'zzcal-{a.style}.glb'
-    shutil.copyfile(HAIR/f'{a.style}.glb', dbg)
-    set_profile(dbg)
-    log = dict(targets=tgt, rounds=[])
+    # Several styles (S6 step 4: `--style bob,long,...`): each measured, the swatches tuned to their
+    # mean, and a round passes only when every style passes on its own.
+    styles = a.style.split(',')
+    dbgs = {st: HAIR/f'zzcal-{st}.glb' for st in styles}
+    for st in styles:
+        shutil.copyfile(HAIR/f'{st}.glb', dbgs[st])
+        set_profile(dbgs[st])
+    log = dict(targets=tgt, styles=styles, rounds=[])
     try:
-        bpath = a.out/'book.json'
-        dkeys = book(bpath, f'zzcal-{a.style}', BINS)
-        keys = book(a.out/'book-real.json', a.style, BINS)
-        ms = {n: masks(render(dkeys[n], bpath, a.binary, a.out/'debug'/n)) for n in BINS}
+        keys, ms = {}, {}
+        for st in styles:
+            sub = a.out if len(styles) == 1 else a.out/st
+            sub.mkdir(parents=True, exist_ok=True)
+            dkeys = book(sub/'book.json', f'zzcal-{st}', BINS)
+            keys[st] = (book(sub/'book-real.json', st, BINS), sub)
+            ms[st] = {n: masks(render(dkeys[n], sub/'book.json', a.binary, sub/'debug'/n)) for n in BINS}
         for rnd in range(a.rounds + 1):
             anchors = [dict(ref=list(BINS[n]), **{b: sw[n][b] for b in BANDS}) for n in BINS if n != 'auburn' and n not in CHECK_ONLY]
             (a.out/'anchors.json').write_text(json.dumps(anchors, indent=1))
             (a.out/'profile.json').write_text(json.dumps(sw['auburn'], indent=1))
             subprocess.run([sys.executable, str(REPO/'living/tools/characters/hair_page.py'), str(HAIR), '--profile-only', '--anchors', str(a.out/'anchors.json'),
                             '--profile', str(a.out/'profile.json')], check=True, capture_output=True)
-            set_profile(dbg)
-            got = {n: measure(render(keys[n], a.out/'book-real.json', a.binary, a.out/f'r{rnd}'/n), ms[n]) for n in BINS}
+            for st in styles:
+                set_profile(dbgs[st])
+            per = {st: {n: measure(render(keys[st][0][n], keys[st][1]/'book-real.json', a.binary, keys[st][1]/f'r{rnd}'/n), ms[st][n]) for n in BINS} for st in styles}
+            got = {n: {b: dict(n=sum(per[st][n][b]['n'] for st in styles),
+                               rgb=np.mean([per[st][n][b]['rgb'] for st in styles], axis=0).round().astype(int).tolist() if all(per[st][n][b]['rgb'] for st in styles) else None)
+                       for b in BANDS} for n in BINS}
             delta = {n: {b: (np.array(got[n][b]['rgb']) - np.array(tgt[n][b])).tolist() if got[n][b]['rgb'] else None for b in BANDS} for n in BINS}
             # What each bin draws: the profile's own, an anchor's, or (white) the palette's entry.
             drawn = dict(sw)
             for n in CHECK_ONLY:
                 rows, _ = palette.entry(palette.anchors_of(dict(hair_page.PROFILE, **sw['auburn'], anchors=anchors)), BINS[n])
                 drawn[n] = {b: list(rows[i]) for i, b in enumerate(BANDS)}
-            checks = {n: {b: dict(zip(('passed', 'rule', 'delta', 'luma_delta'), check(b, got[n][b]['rgb'], tgt[n][b], drawn[n][b]))) if got[n][b]['rgb'] else dict(passed=False, rule='not measured')
-                          for b in BANDS} for n in BINS if n not in CHECK_ONLY}
-            for n, below in CHECK_ONLY.items():
-                checks[n] = {}
-                for b in BANDS:
-                    m, g = got[n][b]['rgb'], got[below][b]['rgb']
-                    if not (m and g):
-                        checks[n][b] = dict(passed=False, rule='not measured')
-                        continue
-                    above = round(luma(m) - luma(g), 1)
-                    checks[n][b] = dict(passed=above >= ORDER and chroma(drawn[n][b]) < SWATCH_C, rule=f'neutral swatch, luma {ORDER}+ above {below}', luma_above=above)
-            ok = all(c['passed'] for n in BINS for c in checks[n].values())
-            log['rounds'].append(dict(profile=sw['auburn'], anchors=anchors, measured=got, delta=delta, checks=checks, passed=ok))
+            def checks_of(got):
+                checks = {n: {b: dict(zip(('passed', 'rule', 'delta', 'luma_delta'), check(b, got[n][b]['rgb'], tgt[n][b], drawn[n][b]))) if got[n][b]['rgb'] else dict(passed=False, rule='not measured')
+                              for b in BANDS} for n in BINS if n not in CHECK_ONLY}
+                for n, below in CHECK_ONLY.items():
+                    checks[n] = {}
+                    for b in BANDS:
+                        m, g = got[n][b]['rgb'], got[below][b]['rgb']
+                        if not (m and g):
+                            checks[n][b] = dict(passed=False, rule='not measured')
+                            continue
+                        above = round(luma(m) - luma(g), 1)
+                        checks[n][b] = dict(passed=above >= ORDER and chroma(drawn[n][b]) < SWATCH_C, rule=f'neutral swatch, luma {ORDER}+ above {below}', luma_above=above)
+                return checks
+            checks = checks_of(got)
+            per_checks = {st: checks_of(per[st]) for st in styles}
+            per_ok = {st: all(c['passed'] for n in BINS for c in per_checks[st][n].values()) for st in styles}
+            ok = all(per_ok.values())
+            log['rounds'].append(dict(profile=sw['auburn'], anchors=anchors, measured=got, delta=delta, checks=checks, passed=ok,
+                                      **(dict(styles={st: dict(measured=per[st], checks=per_checks[st], passed=per_ok[st]) for st in styles}) if len(styles) > 1 else {})))
+            if len(styles) > 1:
+                for st in styles:
+                    fails = {f'{n}.{b}': per_checks[st][n][b].get('delta', per_checks[st][n][b].get('luma_delta')) for n in BINS for b in BANDS if not per_checks[st][n][b]['passed']}
+                    print(f'  round {rnd} {st}:', 'PASS' if per_ok[st] else f'fails {fails}', flush=True)
             (a.out/'bins.json').write_text(json.dumps(log, indent=1))
             print(f'round {rnd}:', 'PASS' if ok else 'not yet', {n: {b: (checks[n][b].get('delta'), checks[n][b].get('luma_delta', checks[n][b].get('luma_above')), 'ok' if checks[n][b]['passed'] else 'FAIL') for b in BANDS} for n in BINS}, flush=True)
             if ok or a.measure_only or rnd == a.rounds:
@@ -325,7 +350,8 @@ def main():
                             continue
                         sw[n][b] = enc(lin(sw[n][b]) * ratio)
     finally:
-        dbg.unlink(missing_ok=True)
+        for d in dbgs.values():
+            d.unlink(missing_ok=True)
 
 
 if __name__ == '__main__':

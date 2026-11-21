@@ -278,6 +278,15 @@ def pages(cal, lookdev):
                     zero = int((bch == 0).sum())
                     if zero:
                         errors.append(f"hair page {man.get('page')!r}: strands on, but {zero} texels of B are 0 (2 x B blacks them out; fill 128 where there are no strands)")
+                    # Each style's strands at a neutral mean (hair_page.STRANDS_MEAN_TOL): the bands are
+                    # x 2B, and a style whose strands stand off 128 is off the palette's calibration by
+                    # as much (char-port-2 S6 step 4: 125 to 164 by style before the bake held them).
+                    tol = 2.0
+                    for f, (c, r, w, h) in sorted(rects.items()):
+                        cb = bch[r * cell:(r + h) * cell, c * cell:(c + w) * cell].astype(float)
+                        wr = cb != 128
+                        if wr.sum() > 100 and abs(cb[wr].mean() - 128) > tol:
+                            errors.append(f"hair page {man.get('page')!r}: {f}'s strands average {cb[wr].mean():.1f}, not 128 ± {tol} (its bands drawn {2 * cb[wr].mean() / 255:.2f} x, off the palette's calibration)")
                 except (OSError, ImportError) as e:
                     warns.append(f"hair page {man.get('page')!r}: strands on, B not read ({e})")
             facts["hair_page"].append({"page": man.get("page"), "files": len(rects), "cells_used": len({rects[k] for k in rects}), "strands": strands})
