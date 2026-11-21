@@ -1,0 +1,32 @@
+{
+ "s6": {
+  "pixels": 320,
+  "black": 68.9,
+  "brown": 82.1,
+  "auburn": 100.0,
+  "chestnut": 94.4,
+  "blond": 176.4,
+  "grey": 177.7,
+  "white": 208.4
+ },
+ "s5-braid": {
+  "pixels": 189,
+  "black": 69.5,
+  "brown": 82.3,
+  "auburn": 100.7,
+  "chestnut": 95.2,
+  "blond": 177.3,
+  "grey": 178.5,
+  "white": 209.1
+ },
+ "main-braid": {
+  "pixels": 188,
+  "black": 68.7,
+  "brown": 80.1,
+  "auburn": 98.4,
+  "chestnut": 90.0,
+  "blond": 154.2,
+  "grey": 159.6,
+  "white": 193.1
+ }
+}

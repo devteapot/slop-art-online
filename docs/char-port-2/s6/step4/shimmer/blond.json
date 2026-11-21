@@ -1,0 +1,367 @@
+[
+  {
+    "clips": [
+      {
+        "name": "idle",
+        "seconds": 5.9666666984558105
+      },
+      {
+        "name": "idle_look",
+        "seconds": 5.9666666984558105
+      },
+      {
+        "name": "walk",
+        "seconds": 1.0
+      },
+      {
+        "name": "walk_brisk",
+        "seconds": 1.0
+      },
+      {
+        "name": "run",
+        "seconds": 0.6000000238418579
+      },
+      {
+        "name": "run_fast",
+        "seconds": 0.7666666507720947
+      },
+      {
+        "name": "sneak",
+        "seconds": 1.600000023841858
+      },
+      {
+        "name": "talk",
+        "seconds": 5.9666666984558105
+      },
+      {
+        "name": "talk_explain",
+        "seconds": 5.9666666984558105
+      },
+      {
+        "name": "listen",
+        "seconds": 5.9666666984558105
+      },
+      {
+        "name": "wave",
+        "seconds": 2.9666666984558105
+      },
+      {
+        "name": "point",
+        "seconds": 2.4666666984558105
+      },
+      {
+        "name": "nod",
+        "seconds": 1.399999976158142
+      },
+      {
+        "name": "shake_head",
+        "seconds": 1.600000023841858
+      },
+      {
+        "name": "sit_down",
+        "seconds": 2.9666666984558105
+      },
+      {
+        "name": "sit_idle",
+        "seconds": 5.9666666984558105
+      },
+      {
+        "name": "stand_up",
+        "seconds": 2.9666666984558105
+      },
+      {
+        "name": "gather",
+        "seconds": 4.9666666984558105
+      },
+      {
+        "name": "work",
+        "seconds": 5.9666666984558105
+      },
+      {
+        "name": "eat",
+        "seconds": 5.9666666984558105
+      },
+      {
+        "name": "play",
+        "seconds": 3.9666666984558105
+      },
+      {
+        "name": "sit_ground_down",
+        "seconds": 2.9666666984558105
+      },
+      {
+        "name": "sit_ground",
+        "seconds": 7.9666666984558105
+      },
+      {
+        "name": "stand_up_ground",
+        "seconds": 2.4666666984558105
+      },
+      {
+        "name": "sword_slash",
+        "seconds": 2.4666666984558105
+      },
+      {
+        "name": "sword_overhead",
+        "seconds": 2.4666666984558105
+      },
+      {
+        "name": "sword_thrust",
+        "seconds": 1.9666666984558105
+      },
+      {
+        "name": "block",
+        "seconds": 1.9666666984558105
+      },
+      {
+        "name": "dodge",
+        "seconds": 0.9666666388511658
+      },
+      {
+        "name": "hit",
+        "seconds": 1.4666666984558105
+      },
+      {
+        "name": "death",
+        "seconds": 3.4666666984558105
+      },
+      {
+        "name": "cast",
+        "seconds": 2.4666666984558105
+      },
+      {
+        "name": "attack",
+        "seconds": 1.2000000476837158
+      },
+      {
+        "name": "bow_shoot",
+        "seconds": 2.9666666984558105
+      },
+      {
+        "name": "turn_left_90",
+        "seconds": 1.4666666984558105
+      },
+      {
+        "name": "turn_right_90",
+        "seconds": 1.4666666984558105
+      },
+      {
+        "name": "turn_left_180",
+        "seconds": 1.9666666984558105
+      },
+      {
+        "name": "turn_right_180",
+        "seconds": 1.9666666984558105
+      },
+      {
+        "name": "walk_start",
+        "seconds": 1.4666666984558105
+      },
+      {
+        "name": "walk_stop",
+        "seconds": 1.4666666984558105
+      },
+      {
+        "name": "run_start",
+        "seconds": 1.3666666746139526
+      },
+      {
+        "name": "run_stop",
+        "seconds": 1.5666667222976685
+      },
+      {
+        "name": "jump_stand",
+        "seconds": 1.6666666269302368
+      },
+      {
+        "name": "jump_stand_hop",
+        "seconds": 1.6666666269302368
+      },
+      {
+        "name": "jump_forward",
+        "seconds": 2.1666667461395264
+      },
+      {
+        "name": "jump_forward_run",
+        "seconds": 2.1666667461395264
+      },
+      {
+        "name": "walk_back",
+        "seconds": 1.100000023841858
+      },
+      {
+        "name": "run_back",
+        "seconds": 0.7666666507720947
+      },
+      {
+        "name": "strafe_walk_left",
+        "seconds": 1.399999976158142
+      },
+      {
+        "name": "strafe_walk_right",
+        "seconds": 1.5333333015441895
+      },
+      {
+        "name": "strafe_run_left",
+        "seconds": 0.6333333253860474
+      },
+      {
+        "name": "strafe_run_right",
+        "seconds": 0.7333333492279053
+      },
+      {
+        "name": "strafe_walk_cross_left",
+        "seconds": 1.0666667222976685
+      },
+      {
+        "name": "strafe_walk_cross_right",
+        "seconds": 0.800000011920929
+      },
+      {
+        "name": "jump_back",
+        "seconds": 1.6666666269302368
+      },
+      {
+        "name": "jump_left",
+        "seconds": 1.6666666269302368
+      },
+      {
+        "name": "jump_right",
+        "seconds": 1.6666666269302368
+      },
+      {
+        "name": "walk_diag_fl",
+        "seconds": 1.0
+      },
+      {
+        "name": "walk_diag_fr",
+        "seconds": 1.0333333015441895
+      },
+      {
+        "name": "walk_diag_bl",
+        "seconds": 1.0333333015441895
+      },
+      {
+        "name": "walk_diag_br",
+        "seconds": 1.100000023841858
+      },
+      {
+        "name": "run_diag_fl",
+        "seconds": 0.699999988079071
+      },
+      {
+        "name": "run_diag_fr",
+        "seconds": 0.7333333492279053
+      },
+      {
+        "name": "run_diag_bl",
+        "seconds": 0.7666666507720947
+      },
+      {
+        "name": "run_diag_br",
+        "seconds": 0.7666666507720947
+      },
+      {
+        "name": "walk_v26",
+        "seconds": 0.7333333492279053
+      },
+      {
+        "name": "run_v48",
+        "seconds": 0.7333333492279053
+      },
+      {
+        "name": "run_back_v48",
+        "seconds": 0.6333333253860474
+      },
+      {
+        "name": "strafe_run_left_v48",
+        "seconds": 0.6333333253860474
+      },
+      {
+        "name": "strafe_run_right_v48",
+        "seconds": 0.6000000238418579
+      },
+      {
+        "name": "run_diag_fl_v48",
+        "seconds": 0.6666666865348816
+      },
+      {
+        "name": "run_diag_fr_v48",
+        "seconds": 0.6333333253860474
+      },
+      {
+        "name": "run_diag_bl_v48",
+        "seconds": 0.6333333253860474
+      },
+      {
+        "name": "run_diag_br_v48",
+        "seconds": 0.5666666626930237
+      },
+      {
+        "name": "run_stop_v48",
+        "seconds": 1.5666667222976685
+      },
+      {
+        "name": "walk_back_v26",
+        "seconds": 0.5666666626930237
+      },
+      {
+        "name": "strafe_walk_left_v26",
+        "seconds": 0.7666666507720947
+      },
+      {
+        "name": "strafe_walk_right_v26",
+        "seconds": 0.6666666865348816
+      },
+      {
+        "name": "walk_diag_fl_v26",
+        "seconds": 1.2000000476837158
+      },
+      {
+        "name": "walk_diag_fr_v26",
+        "seconds": 0.7666666507720947
+      },
+      {
+        "name": "walk_diag_bl_v26",
+        "seconds": 0.6666666865348816
+      },
+      {
+        "name": "walk_diag_br_v26",
+        "seconds": 1.1333333253860474
+      },
+      {
+        "name": "walk_v30",
+        "seconds": 0.7333333492279053
+      },
+      {
+        "name": "walk_v34",
+        "seconds": 0.6666666865348816
+      }
+    ],
+    "file": "look:lk_559dce9ad8429345",
+    "glow": false,
+    "materials": [
+      "M00_000_Hair_00_HAIR",
+      "M00_001_01_Cloth_01_CLOTH",
+      "M00_000_00_Face_00_SKIN",
+      "M00_000_00_Eye_00_EYE",
+      "M00_000_00_EyeIris_00_EYE",
+      "M00_000_00_FaceEyeline_00_FACE",
+      "M00_000_00_Body_00_SKIN",
+      "M00_000_00_FaceTint_00_FACE",
+      "M00_000_00_LidInk_00_FACE",
+      "M00_000_00_FaceBrowInk_00_FACE",
+      "M00_000_00_Body_01_SKIN"
+    ],
+    "meshes": 18,
+    "photos": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s6/step4/shimmer/blond/ink/look:lk_559dce9ad8429345",
+    "size_m": [
+      1.7202157974243164,
+      1.6399999856948853,
+      0.3258837163448334
+    ],
+    "triangles": 42678,
+    "vertex_colours": true,
+    "vertices": 25976
+  }
+]
