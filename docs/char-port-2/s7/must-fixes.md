@@ -146,6 +146,16 @@ Each measure here passed its known-answer test first (PLAN.md §7). All the chan
 
 The light, highlight and shade bands don't move with t2. brown.highlight's −5 is S6's, unchanged.
 
+**On the built set at t2 0.65** (`.local/char-port-2/s7/hair65`, step 3's types):
+
+| Run | Pose | Result |
+|---|---|---|
+| `swept_braid` alone | idle | **PASS**: brown.mid [−3, −1, −4], dark.mid [−1, −1, −8] |
+| six styles (bob, long, braid, swept, short, swept_braid) | idle | **PASS, 6 of 6** |
+| `swept_braid` alone | bind | mids in (brown.mid [−5, −2, −5], at the edge); **dark.shade −12.2 against ±12** |
+
+**The bind row is for the record.** The palettes were tuned in the calibration frame (idle at 0 s), and dark.shade reads the same −12.2 in bind at t2 0.52, so it is the pose's light on the shade band, not the remedy. Whether hair calibration moves to bind too would mean re-tuning every palette, so that is the GC's call.
+
 **A measuring artefact, caught.** The first t2 trial (0.50–0.53, "passes from 0.51") set t2 in the installed files only. `calibrate_bins` copies its band-mask file (`zzcal-`) before each round's `hair_page --profile-only` rewrite, and that rewrite reset the drawn files to 0.4. So only the masks moved with t2. The sweep above carries t2 in the files and in their `.hairpage.json`, which the rewrite keeps, so masks and drawing agree. `calibrate_bins` now records its pose (`--pose`).
 
 ### Before: still out; the remedy was the GC's
