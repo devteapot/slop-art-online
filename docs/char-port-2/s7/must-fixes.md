@@ -186,36 +186,42 @@ The band's tolerance is not widened.
 
 ### The town check: the master on every head the town could give it
 
-**The pool and the rule.** Cullet's town is 64 residents (`town-s6/town.json`, name `cullet`). Under the current pool rule no resident draws `swept_braid`: `person_params.HAIR_STYLES`, which people are drawn from, leaves the masters out, and a master comes only by an explicit `--set hair.style=`. **Under that rule: 0 heads.** To give S8 the number that matters, each resident was checked with the style forced on (their own params, `--set hair.style=swept_braid`). [swept_braid_check.py](swept_braid_check.py) runs `person.py` up to the master's own tolerance check and stops, about 15 s a head.
+**The pool and the rule.** Cullet's town is 64 residents (`town-s6/town.json`, name `cullet`). Under the current pool rule no resident draws `swept_braid`: `person_params.HAIR_STYLES`, which people are drawn from, leaves the masters out, and a master comes only by an explicit `--set hair.style=`. **Under that rule: 0 heads.** For S8's number, each resident was checked with the style forced on, from their own values (`town.json`'s `params`). [swept_braid_check.py](swept_braid_check.py) runs `person.py` up to the master's own tolerance check and stops, about 15 s a head.
 
-**Result: 0 of 64 pass (100% fail), the women and girls 0 of 32.**
+**A first run was wrong, and the fault was the check's input.** It passed each resident's `own-NAME.params.json`, the generator's output file, whose values sit under a `params` key. `person_params.given_from_args` merges a file at its top level, so they were ignored, and every head was seed 0's man on the resident's type. That gave "0 of 64, rear depth constant within a line".
+- **The diagnosis** (the coordinator's, capped at an hour): a dump of every input the hair build takes, on adult-f-b's base figure and on a resident. On the resident path the head form had `masc` 1 and `m` 1, a man's shoulders (`half_w` 0.205 against 0.145) and a man's `braid_ease` (0.034), on Runa Sarro, a woman of 55.
+- **With her own values unwrapped, she reads rear depth 0.567, the base figure's value.** The measure reads the same head the same way on both paths.
+- **Age, seed, outfit and the hair's own settings were probes along the way; none moves it.**
 
-| Line | Residents | Rear depth (0.49–0.57) | Spread over the face (1.906–2.106) |
-|---|---|---|---|
-| adult-f-a | 7 | 0.679 | 2.000 |
-| adult-f-b | 5 | 0.679 | 2.021 |
-| adult-f-c | 8 | 0.670 | 1.954 |
-| adult-m-a | 8 | 0.648 | 1.985 |
-| adult-m-b | 7 | 0.651 | 1.978 |
-| adult-m-c | 6 | 0.636 | 1.917 |
-| child-u-a | 6 | 0.693 | 2.014 |
-| child-u-b | 3 | 0.694 | 2.078 |
-| child-u-c | 2 | 0.689 | 2.028 |
-| elder-f-b | 3 | 0.677 | **2.157** |
-| elder-m-b | 1 | 0.647 | 1.960 |
-| elder-m-c | 2 | 0.632 | 1.924 |
-| youth-f-b | 1 | 0.679 | 2.020 |
-| youth-f-c | 1 | 0.670 | 1.954 |
-| youth-m-a | 1 | 0.650 | 1.977 |
-| youth-m-b | 2 | 0.653 | 1.972 |
-| youth-m-c | 1 | 0.655 | **1.891** |
+**The same fault in S7's Cora arm:** `cp7m-cora` and `cp7p-cora` were built from her output file, so they were seed 0's man (51, crop, brown) on adult-f-c, not Cora. They are rebuilt from her own values.
 
-- **Every head fails on rear depth:** 0.632–0.694. Four also fail on spread: elder-f-b's three residents at 2.157, and youth-m-c's one at 1.891. Crown lift is within on all (0.118–0.128). Every resident's results are in [final/swept_braid-town.json](final/swept_braid-town.json).
-- **The value is the same for every resident of a line**, whatever their face values, age, build or hair.
-- **The base figure passes, at the edge.** adult-f-b's base figure (`--variant type:adult-f-b`: identity 0, the band's build) reads rear depth 0.567, just inside 0.57. A resident of the same line reads 0.679.
-- **Probes that don't move it:**
-  - the outfit (smock, coat or none);
-  - age (32 or 55);
-  - seed;
-  - the hair's own settings (length, volume, fringe, curl, parting).
-- **So the cause is something on the resident path, constant within a line, that the base figure lacks.** It is not yet found. Candidate (c), fitting the master to head depth, may not be the right remedy until it is.
+**The generator's contract is broken here.** `person.py` says the `.params.json` it writes is "to edit and pass back with --params", but `--params` does not unwrap it. That is a candidate fix for S8 (`given_from_args` taking `params` from such a file); in S7 the values are passed unwrapped.
+
+**Result, from each resident's own values:**
+- **57 heads checked;** 7 wear a cap or kerchief, under which the master is not built.
+- **14 pass (25%) and 43 fail.** Of the women 15 and over: 11 of 22 pass.
+
+| Line | Checked | Pass | Rear depth (0.49–0.57) | Spread over the face (1.906–2.106) | Fails on |
+|---|---|---|---|---|---|
+| adult-f-a | 7 | 7 | 0.566–0.567 | 1.945–2.034 | — |
+| adult-f-b | 4 | 4 | 0.567 | 2.028–2.052 | — |
+| adult-f-c | 8 | 0 | 0.571 | 1.935–1.983 | rear (by 0.001) |
+| youth-f-b | 1 | 1 | 0.567 | 2.033 | — |
+| youth-f-c | 1 | 0 | 0.571 | 1.949 | rear (by 0.001) |
+| elder-f-b | 2 | 0 | 0.565 | 2.141–2.150 | spread |
+| child-u-a/b/c | 11 | 0 | 0.577–0.582 | 2.009–2.119 | rear; spread on two |
+| adult-m-a/b/c | 18 | 0 | 0.636–0.775 | 1.900–2.016 | rear; crown and spread on some |
+| youth-m-a/b/c | 4 | 2 | 0.553–0.777 | 1.906–2.000 | rear |
+| elder-m-b | 1 | 0 | 0.647 | 1.938 | rear |
+
+- **The women's a and b lines pass, but at the band's edge:** 0.566–0.567 against 0.57, as the master itself does on its own head.
+- **The c lines miss by 0.001** (0.571; Cora is one of them). Children miss by 0.007–0.012.
+- **elder-f-b's rear depth is in, but its spread is out** (2.14–2.15 against 2.106).
+- **The men fail by far** (0.636–0.777): their back and plait ease put the plait further back. The cut is a woman's.
+- Every head's numbers: [final/swept_braid-town.json](final/swept_braid-town.json).
+
+**Proposed for S8** (not done in S7; no hair or master change here):
+- **Re-centre the master's rear stations,** so its own head sits mid-band (about 0.53) rather than at the edge (0.567). The c lines (+0.004) and the children (+0.010–0.015) would then fit.
+- **elder-f-b's spread:** a narrower side volume for that line, or for the elders.
+- **Keep the master to women and girls** in the pool, if it is opened to residents at all.
+- **Fix the `--params` round trip** (above).
