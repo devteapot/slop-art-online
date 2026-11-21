@@ -1,0 +1,307 @@
+{
+ "body_px": 15,
+ "margin_px": 4,
+ "shots": {
+  "front portrait": {
+   "gated": true,
+   "ok": true,
+   "over_margin": 0,
+   "max_reach_px": 1.0,
+   "tips": [
+    {
+     "reach_px": 1.0,
+     "at": [
+      789,
+      299
+     ],
+     "pixels": 12,
+     "from_down_deg": 90.0
+    },
+    {
+     "reach_px": 1.0,
+     "at": [
+      834,
+      303
+     ],
+     "pixels": 7,
+     "from_down_deg": 90.0
+    },
+    {
+     "reach_px": 1.0,
+     "at": [
+      916,
+      409
+     ],
+     "pixels": 12,
+     "from_down_deg": 180.0
+    }
+   ],
+   "hanging": [
+    {
+     "reach_px": 38.5,
+     "at": [
+      725,
+      498
+     ],
+     "pixels": 120,
+     "from_down_deg": 2.2
+    },
+    {
+     "reach_px": 18.4,
+     "at": [
+      879,
+      506
+     ],
+     "pixels": 187,
+     "from_down_deg": 11.6
+    },
+    {
+     "reach_px": 11.2,
+     "at": [
+      775,
+      494
+     ],
+     "pixels": 21,
+     "from_down_deg": 15.3
+    },
+    {
+     "reach_px": 6.0,
+     "at": [
+      845,
+      520
+     ],
+     "pixels": 52,
+     "from_down_deg": 16.7
+    },
+    {
+     "reach_px": 4.5,
+     "at": [
+      717,
+      455
+     ],
+     "pixels": 13,
+     "from_down_deg": 27.8
+    },
+    {
+     "reach_px": 2.8,
+     "at": [
+      915,
+      426
+     ],
+     "pixels": 7,
+     "from_down_deg": 9.5
+    }
+   ]
+  },
+  "three-quarter": {
+   "gated": true,
+   "ok": true,
+   "over_margin": 0,
+   "max_reach_px": 1.0,
+   "tips": [
+    {
+     "reach_px": 1.0,
+     "at": [
+      760,
+      299
+     ],
+     "pixels": 8,
+     "from_down_deg": 90.0
+    },
+    {
+     "reach_px": 1.0,
+     "at": [
+      804,
+      303
+     ],
+     "pixels": 6,
+     "from_down_deg": 90.0
+    },
+    {
+     "reach_px": 1.0,
+     "at": [
+      683,
+      375
+     ],
+     "pixels": 12,
+     "from_down_deg": 180.0
+    }
+   ],
+   "hanging": [
+    {
+     "reach_px": 62.9,
+     "at": [
+      862,
+      494
+     ],
+     "pixels": 595,
+     "from_down_deg": 5.4
+    },
+    {
+     "reach_px": 8.5,
+     "at": [
+      716,
+      530
+     ],
+     "pixels": 133,
+     "from_down_deg": 27.8
+    }
+   ]
+  },
+  "profile": {
+   "gated": false,
+   "ok": false,
+   "over_margin": 3,
+   "max_reach_px": 17.5,
+   "tips": [
+    {
+     "reach_px": 17.5,
+     "at": [
+      760,
+      444
+     ],
+     "pixels": 10,
+     "from_down_deg": 51.3
+    },
+    {
+     "reach_px": 7.1,
+     "at": [
+      754,
+      401
+     ],
+     "pixels": 48,
+     "from_down_deg": 38.7
+    },
+    {
+     "reach_px": 7.0,
+     "at": [
+      754,
+      387
+     ],
+     "pixels": 17,
+     "from_down_deg": 53.1
+    },
+    {
+     "reach_px": 1.0,
+     "at": [
+      961,
+      387
+     ],
+     "pixels": 11,
+     "from_down_deg": 180.0
+    },
+    {
+     "reach_px": 1.0,
+     "at": [
+      961,
+      401
+     ],
+     "pixels": 7,
+     "from_down_deg": 180.0
+    }
+   ],
+   "hanging": [
+    {
+     "reach_px": 31.2,
+     "at": [
+      803,
+      522
+     ],
+     "pixels": 183,
+     "from_down_deg": 22.5
+    },
+    {
+     "reach_px": 30.4,
+     "at": [
+      791,
+      505
+     ],
+     "pixels": 155,
+     "from_down_deg": 33.2
+    },
+    {
+     "reach_px": 30.0,
+     "at": [
+      898,
+      619
+     ],
+     "pixels": 209,
+     "from_down_deg": 6.9
+    },
+    {
+     "reach_px": 5.4,
+     "at": [
+      766,
+      432
+     ],
+     "pixels": 24,
+     "from_down_deg": 20.7
+    }
+   ]
+  },
+  "back portrait": {
+   "gated": true,
+   "ok": true,
+   "over_margin": 0,
+   "max_reach_px": 2.0,
+   "tips": [
+    {
+     "reach_px": 2.0,
+     "at": [
+      890,
+      425
+     ],
+     "pixels": 17,
+     "from_down_deg": 161.6
+    },
+    {
+     "reach_px": 2.0,
+     "at": [
+      833,
+      600
+     ],
+     "pixels": 13,
+     "from_down_deg": 143.1
+    },
+    {
+     "reach_px": 1.0,
+     "at": [
+      801,
+      303
+     ],
+     "pixels": 9,
+     "from_down_deg": 90.0
+    }
+   ],
+   "hanging": [
+    {
+     "reach_px": 10.3,
+     "at": [
+      878,
+      498
+     ],
+     "pixels": 92,
+     "from_down_deg": 0.0
+    },
+    {
+     "reach_px": 5.0,
+     "at": [
+      756,
+      617
+     ],
+     "pixels": 32,
+     "from_down_deg": 70.8
+    },
+    {
+     "reach_px": 2.0,
+     "at": [
+      669,
+      449
+     ],
+     "pixels": 8,
+     "from_down_deg": 2.6
+    }
+   ]
+  }
+ }
+}
