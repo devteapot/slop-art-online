@@ -213,7 +213,7 @@ pub enum Kind {
     Tint = 6,
 }
 
-#[derive(Clone, Copy, Debug, Default, Reflect, bevy::render::render_resource::ShaderType)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Reflect, bevy::render::render_resource::ShaderType)]
 pub struct ToonParams {
     pub shadow: Vec4,
     pub rim: Vec4,
@@ -276,6 +276,10 @@ pub struct ToonParams {
     pub palette: Vec4,
     /// Per [`Surface`]: x 1 / tile size (1/m), y strength, z mapping (0 triplanar, 1 planar).
     pub layers: [Vec4; SURFACES],
+    /// A seated character's skirted piece (hem-ground, `characters::seat_clamp`): xyz the seat
+    /// plane's upward normal, w its offset, a margin up; the vertex shaders keep every vertex
+    /// where `dot(xyz, p) >= w` (`toon_light.wesl` `seat_clamp`). Zero (every shared toon): none.
+    pub seat: Vec4,
 }
 
 impl MaterialExtension for ToonExt {
@@ -592,6 +596,7 @@ impl Style {
             ink_shape: Vec4::ZERO,
             palette: Vec4::ZERO,
             layers: surface_layers(),
+            seat: Vec4::ZERO,
         }
     }
 
@@ -735,6 +740,7 @@ fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query
         m.extension.params.recolor = old.recolor;
         m.extension.params.recolor_from = old.recolor_from;
         m.extension.params.detail.x = old.detail.x;
+        m.extension.params.seat = old.seat;
     }
     let [r, g, b] = style.outline_color;
     for (kind, mut o) in &mut outlines {

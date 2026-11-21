@@ -11,7 +11,7 @@ import bevy_pbr::render::{
     view_transformations::position_world_to_clip,
     mesh_view_bindings::globals,
 };
-import living_game::toon_light::{toon, sway};
+import living_game::toon_light::{toon, sway, seat_clamp};
 
 @if(MORPH_TARGETS)
 fn morph_vertex(vertex_in: UncompressedVertex, instance_index: u32) -> UncompressedVertex {
@@ -65,7 +65,7 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 @if(VERTEX_POSITIONS) {
     out.world_position = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(vertex.position, 1.0));
     let tag = mesh_functions::get_tag(vertex_no_morph.instance_index);
-    out.world_position = vec4<f32>(sway(out.world_position.xyz, mesh_world_from_local[3].xyz, tag, globals.time), 1.0);
+    out.world_position = vec4<f32>(seat_clamp(sway(out.world_position.xyz, mesh_world_from_local[3].xyz, tag, globals.time)), 1.0);
     out.position = position_world_to_clip(out.world_position.xyz);
 }
 

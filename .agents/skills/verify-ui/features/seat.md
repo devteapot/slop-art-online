@@ -14,14 +14,20 @@ Staying seated (seat-glitches):
 
 At weight 0 the plane lies `SEAT_SINK` (0.25 m) under the ground and rises with the weight, so cloth is lifted out, never thrown. The anchor goes once the clips have the body off the ground. No server read, write or subscription is involved.
 
+The hem against the ground (hem-ground, `docs/seat-contact/hem-ground.md`) works on the same weighted plane, `SEAT_MARGIN` (3 mm) above it:
+
+- **The chains:** a cloth chain's root that the pose puts under the plane is lifted onto it in the spring step, its offset from its bone moved with it (`characters::Springs::pass`, the joint's `Transform.translation`). A coat's side chains, rooted on a thigh lying on the ground in the female sit, were 22–25 mm under it.
+- **The skinned cloth:** the seated character's skirted pieces (`characters::SKIRTED_PIECES`: coats, skirted smocks, aprons) are drawn with its own copy of their shared toon carrying the plane (`characters::seat_clamp`), and `toon_light.wesl` `seat_clamp` keeps every vertex above it in the main pass, the prepass and the shadows. Most of a coat's side panel at the seat rides the upper leg and hips, which no chain moves.
+- `LIVING_GAME_SEAT_HEM=0` turns both off and leaves the 2a contact.
+
 The body itself is placed by `characters::hips` (sit-hips, `docs/seat-contact/sit-hips.md`). In the ground clips' share of the pose (`anim::Anim::ground_share`), the hips' height goes from `hips_k` to 1 as the clip's hips come down from 0.45 to 0.17 of their rest height (`anim::ground_hips`). A short-legged child then rests on its seat, not 17 mm under it. Out of those clips the placement is unchanged. The asset view takes the same path for a ground clip's shot, and `cloth_check.py --terrain` places bodies the same way (`--compare-client` checks the hips and feet against a view's joint dump).
 
 What a sitter plays is resolved per body when its clips are bound (sit-f-select, `docs/seat-contact/sit-f-select.md`). A generated adult wearing `trousers-f` and `boots-f` plays `sit_ground_down_f`, `sit_ground_f` and `stand_up_ground_f`; everyone else plays the originals (`living/game/assets/characters/clip_variants.json`, `anim::variants`). Everything above keys off the logical names. The `seat: #ID sits on the ground …` line ends with `plays CLIP`, the seated loop's animation. `LIVING_GAME_CLIP_VARIANTS=0` plays the logical clips for everyone, for an A/B on one binary.
 
 ## Sub-features
 
-- `contact`: cloth tails stay at or above the ground while seated and getting up. Hair and every other group are untouched.
-- `release` requires a `seat: #ID is off the ground` line after `sync:up` for each fixture resident who sat before the wait.
+- `contact`: cloth tails stay at or above the ground while seated and getting up (at most 5 mm under). Hair and every other group are untouched. Whether a coated woman (`sit_ground_f`, coat chains rooted on her thighs) is simulated depends on the near-model cap (eight nearest the camera), so main passed or failed this by who was drawn near: −22 to −25 mm when she was, before hem-ground.
+- `release` requires, for each fixture resident who sat before the wait, a `seat: #ID is off the ground` line after `sync:up`, or a `seat: #ID leaves sight getting up, D m from me` line (at least one sitter must be let go in sight, and none may leave sight seated). The authority walks a rising resident off at once while its drawn body still gets up at its seat; one that sat near the edge of sight (11 m) can leave sight before the clips have it off the ground, and its seat then goes with its fading body. That race made `off` red on dev-box's render gate (`gate-1121003721-recheck-seat-render-isl`: #9 sat 8.7 m away and was dropped from sight 0.4–1.6 s into its rise; hem-ground).
 - `variants`: each sitter's `plays` is what its look line selects (`check.py`'s `seat_clips`, from the same `clip_variants.json`). The scene seats at least one variant sitter and one on the originals.
 - `segments`: one variant sitter is followed in the feet log (`LIVING_GAME_FEET`, `LIVING_GAME_FEET_ID`, its `hips_at`). `seat.json`'s `on.segments` gives each ground one-shot's peak speed of the hips and feet from the root, over the 0.12 s crossfade in and after it, and the hips' mean height over the ground in the loop. It is evidence, not a pass mark: compare with a run under `LIVING_GAME_CLIP_VARIANTS=0` (where the `variants` checks fail by design).
 - `renewal`: nobody seated rises across the authority's rest renewals (two in the scene; `doing` snapshots `held0` and `held1` show the row extended in place, a later `until_ms` with the same `since_ms` since doing-renew, or a new `since_ms` on older modules). The watched sitter's feet log has no one-shot over it and its hips stay under 0.35 m over the ground from the seated dump to `up`. Every sitter's one `seat: #ID gets up` line comes after `up`.
@@ -46,7 +52,7 @@ The scene is set up only through admin calls:
 - the camera goes Far (`notches:-30`), Near, Far and Near while they sit, about 18 s in all;
 - `sync:up` replaces their rest graphs with `set_behavior {"do": "goto", "target": "home"}`. The built-in home target resolves to each resident’s home on the island, and they rise without another placement.
 
-`LIVING_GAME_PERF=seat` logs each seated character's cloth against its ground every 3 s (`seat: NAME ENTITY: N cloth joints, lowest tail X mm above the ground`), and `springwake` logs each waking.
+`LIVING_GAME_PERF=seat` logs each seated character's cloth against its ground every 3 s (`seat: NAME ENTITY: N cloth joints, lowest tail X mm above the ground`), and `springwake` logs each waking. A sitter whose body leaves sight before it is let go logs `seat: #ID leaves sight seated|getting up, D m from me by the authority`.
 
 ## Evidence
 
@@ -57,7 +63,8 @@ The scene is set up only through admin calls:
 ## Limits
 
 - The camera is top-down: the stills show who sits, not the cloth against the ground. Use the asset view's side stills for that.
-- With today's assets (play-test 10's bundle) the skirts' tails do not reach the ground seated: lowest 34–78 mm above it. The rise brings them to 5–14 mm with the contact and −0.1–4.8 mm without. Coats have no spring chains yet, so the contact cannot move them (docs/seat-contact/COAT_CHAINS.md).
+- With play-test 10's bundle the skirts' tails did not reach the ground seated (lowest 34–78 mm above it). On the render gate's pinned set (`79072c65d37f`, coat chains v2) the coats carry chains; see hem-ground for what each sitter reports.
+- The check reads the chains' tails, not the drawn vertices: the vertex clamp is measured by `cloth_check.py --hem` (docs/seat-contact/hem-ground.md), not here.
 - Chairs and benches are not covered: they wait for seat markers in world data.
 - The fixture uses play-test 10's assets, whose smock and apron files carry `Skirt` spring groups. Linked skirt files without them give no seated cloth or wake samples, and three checks fail for that, on main as well (handmade-hair record).
 - The rise and settle-again first logged as "taking the camera far" (sit-f-select) was the 8 s rest renewal coinciding with the zoom. It is fixed above (seat-glitches).

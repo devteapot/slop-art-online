@@ -53,6 +53,11 @@ another band). It reports garment penetration against the flat floor in model-sp
 millimetres; `--heights OUT.csv` writes each pose's pelvis and lowest boots, trousers and
 skirted piece above it in world millimetres. `--seat-contact` implies `--springs` and
 applies the client's weighted ground plane to the cloth spring groups (`Skirt`, `Coat`).
+`--hem` (implies `--seat-contact`) adds the client's hem-against-ground constraint (hem-ground,
+docs/seat-contact/hem-ground.md): a cloth chain's root is lifted to `SEAT_MARGIN` above the
+weighted plane, and the skirted pieces' vertices (`OUTER`) are kept that far above it, as the toon
+vertex shaders keep a seated character's skirted pieces (`toon_light.wesl` `seat_clamp`).
+`--hem joints` applies the root lift alone, to show what the chains can do without the vertices.
 
 `--ground-clips` chooses the animations a logical clip plays, as the client resolves them per
 character (anim.rs `variants`, from `living/game/assets/characters/clip_variants.json`):
@@ -287,6 +292,7 @@ def terrain_fit(sk, bounds, line):
 STEP = 1.0 / 60.0  # characters.rs: the springs' fixed step
 CLOTH_GROUPS = ("skirt", "coat")  # characters.rs `CLOTH_GROUPS`: the spring groups a seat contact applies to
 SEAT_SINK = 0.25  # characters.rs: how far below the ground a contact at weight 0 lies
+SEAT_MARGIN = 0.003  # characters.rs: how far above the weighted plane a cloth chain's root and a skirted piece's vertices are kept (m, world)
 SEAT_DOWN_S, SEAT_UP_S, SEAT_RAMP_S = 1.2, 1.3, 0.2  # anim.rs: the ground seat's contact frames and ramp
 SEAT_RATE = {"sit_ground_down": 1.0, "sit_ground": 1.0, "stand_up_ground": 1.6}  # the rates the client plays them at (live.rs STAND_UP)
 
@@ -408,9 +414,10 @@ class Springs:
                     stack.extend(reversed(kids))
         self.out = {}
 
-    def step(self, sk, steps=1, fresh=False, contact=None):
+    def step(self, sk, steps=1, fresh=False, contact=None, lift=None):
         """`steps` fixed steps against the skeleton's pose now (`sk.frames`); each joint's frame goes to `self.out`.
-        `contact`: weighted ground plane height in model units, or None."""
+        `contact`: weighted ground plane height in model units, or None. `lift`: with a contact, a
+        cloth chain's root is kept this far above it (model units; characters.rs `Springs::pass`)."""
         centres = []
         for bone, off, r in self.spheres:
             s = sk.own_scale(bone)
@@ -429,6 +436,11 @@ class Springs:
                 sc = max(abs(ps[0]), 1e-6)
                 g = self.groups[j["group"]]
                 pos = (parent @ np.append(t, 1.0))[:3]
+                if lift is not None and contact is not None and g["cloth"] and j["up"] not in self.at and pos[1] < contact + lift:
+                    # A chain's root under the seat's plane is lifted onto it (along the plane's
+                    # normal, level here), its offset from the bone it hangs on moved with it.
+                    pos = pos + np.array([0.0, contact + lift - pos[1], 0.0])
+                    t = (np.linalg.inv(parent) @ np.append(pos, 1.0))[:3]
                 rest = pr @ j["r0"]
                 rest_dir = rest @ j["axis"]
                 length = j["len"] * sc
@@ -680,6 +692,7 @@ def main():
     ap.add_argument("--no-spring-scale", action="store_true", help="pose as a client from before the skirts' change does: a spring bone under a scaled bone does not take its scale")
     ap.add_argument("--terrain", action="store_true", help="in the ground seat's clips, place the body on the terrain as the client does and say how far the skirted pieces are under it")
     ap.add_argument("--seat-contact", action="store_true", help="give the cloth spring groups the client's ground contact in the ground seat's clips (implies --springs and --terrain)")
+    ap.add_argument("--hem", nargs="?", const="all", choices=("all", "joints"), help="with the seat contact, the client's hem-against-ground constraint: chain roots lifted onto the weighted plane and the skirted pieces' vertices kept above it (`all`), or the root lift alone (`joints`); implies --seat-contact")
     ap.add_argument("--compare-client", type=Path, metavar="JOINTS.jsonl", help="compare placement against one asset-view ground-clip joint dump row and exit")
     ap.add_argument("--client-root-y", type=float, metavar="METRES", help="the client root's measured world Y on the asset-view checker")
     ap.add_argument("--ground-hips", choices=("height", "legs", "contact"), default="height", help="with --terrain: how a ground seat's clip scales the hips' height: `height` (the client's since sit-hips: hips_k blended to 1 as the clip's hips come down to the seat), `legs` (hips_k throughout, as before), `contact` (blended by the cloth contact's clip-time weight)")
@@ -691,6 +704,8 @@ def main():
         if a.client_root_y is None or not np.isfinite(a.client_root_y):
             ap.error("--compare-client requires a finite --client-root-y")
         a.terrain = True
+    if a.hem:
+        a.seat_contact = True
     if a.seat_contact:
         a.springs = a.terrain = True
     doc = json.load(open(a.line))
@@ -786,7 +801,7 @@ def main():
                 for n in range(first + steps):
                     t = (n % steps) * STEP * rate
                     mats, joints = posed_at(name, tracks, t)
-                    out = springs.step(sk, 1, fresh=n == 0, contact=contact(name, t))
+                    out = springs.step(sk, 1, fresh=n == 0, contact=contact(name, t), lift=SEAT_MARGIN / scale if a.hem else None)
                     if n in want:
                         yield name, t, mats, joints, dict(out)
             else:
@@ -801,6 +816,13 @@ def main():
         count += 1
         axis = axis_points(joints)
         posed = {p.name: p.posed(mats, sprung) for p in pieces}
+        plane = contact(clip, t) if a.hem == "all" and clip in SEAT_RATE else None
+        if plane is not None:
+            # The toon vertex shaders' seat clamp (toon_light.wesl `seat_clamp`): a seated
+            # character's skirted pieces are kept SEAT_MARGIN above the weighted plane.
+            for p in pieces:
+                if p.name.startswith(OUTER):
+                    posed[p.name][:, 1] = np.maximum(posed[p.name][:, 1], plane + SEAT_MARGIN / scale)
         if sprung is not None and a.springs:
             # How far the springs carry the cloth from where it rides unsimulated.
             for p in pieces:

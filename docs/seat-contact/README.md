@@ -16,6 +16,9 @@ Status: **2a client side built (branch `seat-2a`); the coat chains are specified
   - **The women:** the average woman's seated boots go from +14.9 to −0.0 mm and her trousers from +30.3 to +0.5 mm; the short woman's from +14.0 to +0.1 and +29.3 to +1.9. These are dev-box's numbers, reproduced.
   - **Unchanged:** the man, the child and both elders (byte-identical placement), and every gait.
   - **Remaining:** the seated smock hems lie 22.6 / 13.2 mm under the terrain (garment work, dev-box).
+- [hem-ground.md](hem-ground.md): the hem against the ground (branch `hem-ground`, 2026-11-21). While a character sits on the ground and gets up, a cloth chain's root under the seat's plane is lifted onto it in the spring step, and its skirted pieces' vertices are kept 3 mm above the plane in the toon vertex shaders. The coat's side panel at the seat rides the upper leg and hips, which no chain moves.
+  - **Ground:** the 12 coat-chain v2 ground numbers go from up to 27 mm to 0 (`cloth_check.py --hem`), with gaits and layer crossings unchanged.
+  - **Seat gate:** the render gate's red `seat` had two causes. In the `on` arm, a coated woman's chain roots lay under the ground. In the `off` arm, a sitter near the edge of sight left it while getting up.
 
 ## Stage 2a: what was built (seat-2a)
 
