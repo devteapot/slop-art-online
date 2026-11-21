@@ -16,7 +16,16 @@ back with the widths, the eye's height and the eyes' spacing it was built with.
   centre 0.48 H, the eyes 0.067 m apart (0.278 H);
 - **a nose:** the front's midline vertex on the ring at 0.36 H, 0.015 m forward.
 
-Each width must come back to 0.001 H, the eye's height and spacing to 0.002 H. Exit status 1 on any failure.
+Each width must come back to 0.001 H, the eye's height and spacing to 0.002 H.
+
+**The taper's allowance** (`check_type`: a tapered type is held to its record times the taper it took, at most
+the cage's declared factor), on adult-f-b built with the port's `jaw` (S1's taper, S7's rise):
+- **as built:** within 0.03 H of its tapered record;
+- **a narrowing beyond the taper** (the cage's lower face, below 0.15 H, made 12% narrower only when the taper is
+  on, so the second, untapered build does not show it): it must fail, though the width it took is all "taper";
+- **a narrowing in both builds** (the same, taper or not: a plain defect): it must fail.
+
+Exit status 1 on any failure.
     python3 living/tools/characters/cage_accept_selftest.py
 """
 import os
@@ -94,6 +103,38 @@ def eye_quad_set(n, k0):
     return q
 
 
+def taper_cases():
+    """The taper's allowance end to end, on a real type: (label, got, want, tol) rows."""
+    import cage_head
+
+    os.environ["SLOP_PORT"] = "jaw"
+    t = face_types.load()["types"]["adult-f-b"]
+    out = []
+    fit = cage_head.Cage.fit
+
+    def narrowed(only_tapered):
+        def f(self, rounds=5):
+            if not only_tapered or self.t["jaw"].get("chin_taper"):
+                low = self.v[:, 2] < 0.15
+                self.v[low, 0] *= 0.88
+            return fit(self, rounds)
+        return f
+
+    with tempfile.TemporaryDirectory() as ref:
+        os.makedirs(os.path.join(ref, "npz"))
+        for label, patch, want in (("adult-f-b as built: within its tapered record", None, True),
+                                   ("a narrowing beyond the taper (only with it on) fails", narrowed(True), False),
+                                   ("a narrowing in both builds fails", narrowed(False), False)):
+            if patch:
+                cage_head.Cage.fit = patch
+            try:
+                ok, row = cage_accept.check_type(t, ref)
+            finally:
+                cage_head.Cage.fit = fit
+            out.append((f"{label} (worst {row['worst_width']:.3f} H of the tapered record, {row['worst_from_record']:.3f} H of the record)", ok, want, 0))
+    return out
+
+
 def main():
     global eye_quads
     zs = [round(k * 0.01, 2) for k in range(0, 101)]
@@ -118,9 +159,10 @@ def main():
         f, mm, a = KNOWN[z]
         checks += [(f"w15 at {z:.2f} H", m["w15"][i], round(2 * mm / H, 3), 0.001), (f"w30 at {z:.2f} H", m["w30"][i], round(2 * a / H, 3), 0.001)]
     checks += [("eye centre (H)", m["eye_z"], want_eye, 0.002), ("eyes apart (H)", m["eye_apart"], round(want_apart, 3), 0.002)]
+    checks += taper_cases()
     bad = 0
     for label, got, want, tol in checks:
-        ok = got is not None and abs(got - want) <= tol + 1e-9
+        ok = got == want if isinstance(want, bool) else (got is not None and abs(got - want) <= tol + 1e-9)
         bad += not ok
         print(f"{'ok  ' if ok else 'FAIL'} {label}: {got} (known {want})")
     print("cage_accept_selftest:", "PASS" if not bad else f"{bad} FAILED")
