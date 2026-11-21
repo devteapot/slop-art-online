@@ -27,7 +27,7 @@ From [s1/README.md](../s1/README.md), its checks table and the note under it:
 >
 > Plan §7 named `cage_accept.py` as S1's acceptance, but it fails on main. It is a measure here, not a gate. If the tapered lower face is accepted, the type records' 0.04 H and 0.12 H widths should follow it.
 
-And from S1's "What the tapers are" ([s1/README.md](../s1/README.md)): "Each is a fractional offset of the local half-width. The chin's applies below 0.095 H; the jaw's from 0.15 to 0.27 H."
+And from S1's section "`jaw`: per-class jaw and chin tapers" ([s1/README.md](../s1/README.md)): "Each is a fractional offset of the local half-width. The chin's applies below 0.095 H; the jaw's from 0.15 to 0.27 H."
 
 ## A: the jaw's side at the chin's height (`w30` at 0.04 H, built wider): a defect, to fix
 
