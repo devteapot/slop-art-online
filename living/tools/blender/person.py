@@ -1748,6 +1748,8 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
         tex, size, layout = hair.page_layout(verts, faces + lock_faces, uvs, near=HAIR_LAYOUT if FAR else None)
         uvs = [(float(x) / hair.PAGE_PX, 1.0 - float(y) / hair.PAGE_PX) for x, y in tex]
         page_hl = np.concatenate([np.zeros(base), hair.highlight(HF, h.v, h.nrm) if len(h.v) else np.zeros(0)])
+        for i, v in h.hl_marks.items():  # a master's own (the plait's crests)
+            page_hl[base + i] = max(page_hl[base + i], v)
         if not FAR:
             HAIR_LAYOUT = layout
             lines = []
@@ -1768,6 +1770,7 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
                     partings.append(dict(pts=[list(hw(q)) for q in P], out=[list(hair.unit(q - hair.ORIGIN)) for q in P]))
             with open(os.path.splitext(OUT_PATH)[0] + ".hairpage.json", "w") as fh:
                 json.dump(dict(size=list(size), density_mm=hair.TEXEL_M * 1000, range_px=hair.INK_RANGE_PX, creases=lines, partings=partings,
+                               tris=dict(cap=sum(len(f) - 2 for f in faces), **h.part_tris), measures=h.measures(), **(dict(master=h.master_vary) if hasattr(h, "master_vary") else {}),
                                parting=dict(width=hair.PARTING["width"], depth=hair.PARTING["depth"])), fh)
     ob = raw_object("Hair", verts, faces + lock_faces, weights, cols, MAT["hair"], arm, uvs=uvs)
     if page_hl is not None:

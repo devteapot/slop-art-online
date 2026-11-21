@@ -16,6 +16,21 @@ This follows the laptop's contract, [HANDMADE_COMPOSED.md](../../HANDMADE_COMPOS
 
 ![Rows](rows.png)
 
+> **Corrected in S6 step 4 (2026-11-21).** S5's calibration below was measured on `bob` alone. Its
+> strand bake left each style's mean B (the bands × 2B, 128 neutral) anywhere from 125 to 164 (`bob`
+> 152), so the palette, tuned on `bob`, was off on most other styles by up to about 15%.
+>
+> S6 step 4 made three changes:
+> 1. It holds each style's strands at a mean of 128, keeping their contrast. The audit fails a
+>    style off 128 by more than 2.
+> 2. It recalibrated the palette on six styles together: `bob`, `long`, `braid`, `swept`,
+>    `swept_braid` and `short`.
+> 3. It set the rule the GC chose for them:
+>    - mid, light and highlight within this rule's ±5 (and ±5 luma for near-neutrals);
+>    - the shade band within ±12, since the shade band lies partly in each style's own cast shadow.
+>
+> The numbers are in [../s6/step4/](../s6/step4/README.md). The tables below are S5's, on `bob`.
+
 ## The GC's decisions (2026-11-20)
 
 1. **Capacity:** three pages at 1 mm a texel, no contract change.

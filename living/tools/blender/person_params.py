@@ -420,7 +420,7 @@ def resolve(p):
     for k, v in WOMAN.items():
         prop[k] = prop.get(k, 1.0) * (1.0 + (v - 1.0) * fem)
     recipe = dict(height=b["height"], proportions={k: round(v, 3) for k, v in prop.items() if abs(v - 1) > 0.004})
-    for name, options in (("hair.style", HAIR_STYLES), ("outfit.coat", COATS), ("outfit.headwear", HEADWEAR)):
+    for name, options in (("hair.style", HAIR_STYLES + (MASTER_STYLES if _MASTERS else ())), ("outfit.coat", COATS), ("outfit.headwear", HEADWEAR)):
         a, k = name.split(".")
         if p[a][k] not in options:
             raise SystemExit(f"{name}: {p[a][k]!r} is not one of {options}")
@@ -434,7 +434,7 @@ def resolve(p):
         seed=seed, masc=masc, child=child, elder=elder, face=face, look=look, style=drawn, head_scale=1.08 * (1 + STYLE["head"] * drawn), girth=girth, limb=limb, belly=belly, chest=chest, woman_torso=fem > 0 and p.get("form") != "m",
         hair_style=hair_p["style"], hair_length=hair_p.get("length", 0.07), recede=0.024 * clip(hair_p.get("recede", 0.0), 0, 1),
         hair=dict(style=hair_p["style"], length=float(hair_p.get("length", 0.07)), parting=float(hair_p.get("parting", 0.0)), fringe=float(hair_p.get("fringe", 0.7)), volume=float(hair_p.get("volume", 0.5)),
-                  curl=float(hair_p.get("curl", 0.0)), fringe_style=hair_p.get("fringe_style", "auto")),
+                  curl=float(hair_p.get("curl", 0.0)), fringe_style=hair_p.get("fringe_style", "auto"), **({"_vary_scale": float(hair_p["_vary_scale"])} if "_vary_scale" in hair_p else {})),
         braid_ease=float(hair_p.get("back_ease", (.034 + .030 * max(0, w)) if male and age >= 15 else 0)),
         bald=smooth((clip(hair_p.get("recede", 0.0), 0, 1) - 0.55) / 0.40) if hair_p["style"] == "balding" else 0.0,
         beard=style if male else "none", coat=None if outfit["coat"] == "none" else outfit["coat"], headwear=None if outfit["headwear"] == "none" else outfit["headwear"],
@@ -634,11 +634,17 @@ def from_type(tid):
 
 
 STYLES = ("tousled", "short", "crop", "shag", "swept", "sides", "balding", "bob", "bob_parted", "braids", "tail", "long", "bun", "braid", "kerchief")
+# char-port-2 S6 (`SLOP_PORT=masters`): the hair masters, hair.MASTERS, written as styles too (no
+# resident draws one: HAIR_STYLES, which people are drawn from, does not list them).
+MASTER_STYLES = ("swept_braid",)
+_MASTERS = "masters" in {f.strip() for f in __import__("os").environ.get("SLOP_PORT", "").split(",")}
+if _MASTERS:
+    STYLES = STYLES + MASTER_STYLES
 CAPPED = ("tousled", "short", "crop", "shag", "swept", "sides", "balding")  # the styles also written as worn under a cap (`<style>.cap`)
 # The styles that hang past the collar are also written as worn over a coat (`<style>.collar`, each
 # cut): a shared style is combed over a smock's low collar and back, and a coat's collar stands
 # 4 cm higher and 3 cm wider, so hair that lies close on the one cuts through the other.
-COLLARED = ("long", "tail", "braid")
+COLLARED = ("long", "tail", "braid") + (("swept_braid",) if _MASTERS else ())
 # The styles that lie on the back and that men or children also wear are written a second time,
 # `<style>[.N][.collar].m`, combed over a man's back: a woman's back lies up to 5 cm further
 # forward under the same head, so one file cannot lie on both (docs/CHARACTERS.md, "The body").
@@ -668,6 +674,11 @@ def from_style(style):
         # The crown is bald by how far the hairline has receded, and at the standard figure's age
         # a seed draws almost none: until the sheets step this style's file had a full head of hair.
         hair["recede"] = (0.85, 1.0, 0.74)[cut - 1]
+    if style in MASTER_STYLES and cut == 1:
+        hair["_vary_scale"] = 0.0  # a master's first cut is the master itself (hair.MASTERS); its seed varies the others
+        # Parted as Cora's drawing is: on her left, the sweep across to her right. SLOP_MASTER_PARTING
+        # builds it on another side (the mirror check: the same seed parted either way).
+        hair["parting"] = float(__import__("os").environ.get("SLOP_MASTER_PARTING", -0.55))
     return dict(type=STYLE_HEAD, identity=dict(), seed=2000 + STYLES.index(style) + 100 * (cut - 1), sex="male" if male else "female", age=30, hair=hair, beard=dict(style="none", stubble=0.0),
                 build=dict(weight=0.0, muscle=0.0), outfit=dict(headwear="kerchief" if style == "kerchief" else (under or "none"), coat="coat" if collar else "smock"), **(dict(form="m") if man else {}))
 

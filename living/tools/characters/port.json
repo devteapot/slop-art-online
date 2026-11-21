@@ -62,6 +62,9 @@
   },
   "hair": {
    "about": "S5: hair styles laid out for the handmade-hair profile on the shared hair-mask pages (lookdev/styles/hair/hair-masks.png and -1, -2: 4096 at 1 mm a texel, docs/HANDMADE_COMPOSED.md): each piece its own UV island by its own lengths (hair.page_layout), a highlight on the upper hair and a pale parting (_HIGHLIGHT and the mask's R), lock lines grouped into locks from the notches between a sheet's points (G), main's strands under the bands at low contrast (B), and one tag-relative profile with anchors for black, brown, blond and grey (living/tools/characters/hair_page.py; docs/char-port-2/s5)."
+  },
+  "masters": {
+   "about": "S6: hair masters, a cut as a named set of parameters in the generator (hair.MASTERS): swept_braid, Cora's cut, its rear layers as stations, wide locks and companions joining a three-strand plait at staggered heights, the plait lifted at its start for the game camera and its crossings lit (docs/char-port-2/s6). Written as styles (`swept_braid`, its cuts and `.collar`) only with the flag."
   }
  }
 }

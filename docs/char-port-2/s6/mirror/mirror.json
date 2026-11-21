@@ -1,0 +1,161 @@
+{
+ "parted left (cut 1, Cora)": {
+  "parting": -0.55,
+  "spread": 2.136,
+  "spread_face": 1.829,
+  "crown_lift": 0.087,
+  "rear_depth": 0.567,
+  "parts_x": {
+   "front": [
+    -0.0108,
+    0.1452,
+    0.0968,
+    -0.0047
+   ],
+   "hooks": [
+    0.0545,
+    0.118,
+    0.0806,
+    0.0155
+   ],
+   "jaw strands": [
+    -0.1237,
+    0.1236,
+    -0.017,
+    -0.0442
+   ],
+   "mass": [
+    -0.1144,
+    0.1141,
+    0.0109,
+    0.0049
+   ],
+   "near section": [
+    -0.1327,
+    0.0082,
+    -0.0021,
+    0.1146
+   ],
+   "plait": [
+    -0.0706,
+    0.0733,
+    -0.0243,
+    -0.0025
+   ],
+   "rear layers": [
+    -0.1104,
+    0.1078,
+    0.0171,
+    0.0448
+   ],
+   "side groups": [
+    -0.1214,
+    0.1214,
+    0.0046,
+    0.0046
+   ]
+  }
+ },
+ "parted right": {
+  "parting": 0.55,
+  "spread": 2.136,
+  "spread_face": 1.829,
+  "crown_lift": 0.087,
+  "rear_depth": 0.567,
+  "parts_x": {
+   "front": [
+    -0.1452,
+    0.0108,
+    -0.0047,
+    0.0968
+   ],
+   "hooks": [
+    -0.118,
+    -0.0545,
+    0.0155,
+    0.0806
+   ],
+   "jaw strands": [
+    -0.1237,
+    0.1236,
+    -0.017,
+    -0.0442
+   ],
+   "mass": [
+    -0.1142,
+    0.1143,
+    0.0088,
+    0.0067
+   ],
+   "near section": [
+    -0.0082,
+    0.1327,
+    0.1146,
+    -0.0021
+   ],
+   "plait": [
+    -0.0706,
+    0.0733,
+    -0.0243,
+    -0.0025
+   ],
+   "rear layers": [
+    -0.1078,
+    0.1104,
+    0.0448,
+    0.0171
+   ],
+   "side groups": [
+    -0.1214,
+    0.1214,
+    0.0046,
+    0.0046
+   ]
+  }
+ },
+ "vertices": {
+  "note": "each front section isolated by building without it (SLOP_MASTER_DROP) and compared mirrored across x: sweep 754 and near section 544 vertices, 0 over 1 mm in both"
+ },
+ "image_at_idle_2s": {
+  "L": {
+   "style": "swept_braid",
+   "spread_face": 1.891,
+   "body": 1.809,
+   "hair_width_px": 208,
+   "body_width_px": 199,
+   "cheek_width_px": 110,
+   "cheek_px": [
+    135,
+    270
+   ],
+   "eye_spacing_px": 67.4,
+   "chin_row": 359,
+   "cheek_row": 284,
+   "target": {
+    "body": 1.82,
+    "tolerance": 0.1
+   },
+   "within": true
+  },
+  "R": {
+   "style": "swept_braid",
+   "spread_face": 1.627,
+   "body": 1.568,
+   "hair_width_px": 192,
+   "body_width_px": 185,
+   "cheek_width_px": 118,
+   "cheek_px": [
+    170,
+    270
+   ],
+   "eye_spacing_px": 56.7,
+   "chin_row": 360,
+   "cheek_row": 279,
+   "target": {
+    "body": 1.82,
+    "tolerance": 0.1
+   },
+   "within": false
+  }
+ }
+}
