@@ -132,7 +132,7 @@ Each measure here passed its known-answer test first (PLAN.md §7). All the chan
 **What changed:** `hair.MASTERS["swept_braid"]["profile"] = {t2: 0.65}`, the cut's own threshold between the mid and light bands (every other style keeps `hair_page.PROFILE`'s 0.4).
 - `person.py` writes it to the cut's `.hairpage.json`.
 - `hair_page.py` applies it to that cut's files, in its page and in its `--profile-only` rewrite.
-- **Built** (`SLOP_PORT=hair,masters`, the full set): the other 86 hair files are byte-identical to S6's set in their buffers, and their JSON differs only where `swept_braid`'s isn't involved. `swept_braid`'s six files differ only in t2.
+- **Built** (`SLOP_PORT=hair,masters`, the full set): the other 86 hair files equal S6's set as data, their buffers byte-identical and their JSON the same values. As files they differ only in key order, because S6's set had been through a `--profile-only` rewrite. `swept_braid`'s six files differ only in t2.
 
 **Measured consistently** (`calibrate_bins`, idle, the calibration frame, step 3's types; [t2-sweep.png](t2-sweep.png)):
 
