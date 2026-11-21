@@ -472,7 +472,7 @@ The scene gate's verify-ui `render` group draws with the game client's generated
   - `textures/`, `envs/<name>/`, and `view/` when present.
 
   From the composed bundle:
-  - the types, pages, styles, strands and `own-clips.glb`;
+  - the types, pages, styles, strands, and `own-clips.glb` with its sidecar `own-clips.clips.json` (every person's gaits, their speeds and foot-down markers: without it the client gives people walk and run only, [CLIP_MARKERS.md](CLIP_MARKERS.md));
   - the look book.
 - `bundle/`: the bundle as built, its `MANIFEST.txt` and the world look data it was checked against.
 - `SET-MANIFEST.txt`: every file's sha256.
@@ -489,6 +489,8 @@ The scene gate's verify-ui `render` group draws with the game client's generated
 **Stale or corrupt.** `check` compares a set with a checkout:
 - **corrupt** (exit 1): a file's sha256 differs, or a file is missing or extra;
 - **stale** (exit 2): the checkout's generator hash differs from the set's, or a world's look generation (`living/seeds/worlds/<w>/looks.json`) is not in the set's book.
+
+It also lists `warnings`, which change no verdict: a clip file under `lookdev/anim/` without its `.clips.json` sidecar (every set from `79072c65d37f` to `a7c606d204bb` lacks `own-clips.clips.json`). `build` refuses such a set, and one whose clips `marker_check.py` fails ([CLIP_MARKERS.md](CLIP_MARKERS.md)).
 
 **The generator hash** (schema 2, since `render-set-exclude`) is a sha256 over every file of `living/tools/{blender,characters,textures}` (`git ls-tree -r`: mode, blob and path), less the non-generating tools listed in [`living/tools/render_set_exclude.txt`](../living/tools/render_set_exclude.txt), together with that list's own sha256. `build`, `check` and the bundle match all compute it with one function, `gen_hash`.
 - **What it ignores.** A main commit outside those folders, or an edit to a listed check or measuring tool (`cloth_check.py`, `book_drift.py`, the reference's measuring tools, …), leaves a set `ok`.
@@ -509,7 +511,7 @@ just living-game-assets                                 # 1-2: bases, textures, 
 living/tools/blender/gen_types.sh                       # 3: the 21 types and their pages
 living/tools/blender/gen_styles.sh                      # 3: hair, outfit and overlay styles, strands.png
 python3 living/tools/characters/town.py .local/town --town living/seeds/cullet.json --models-only --no-pages --lod near --jobs 2   # 4: the 64 residents the checks need
-ONLY=present LOD=near living/tools/blender/gen_person.sh clips=man     # 5: the shared clip bake, own-clips.glb
+ONLY=present LOD=near living/tools/blender/gen_person.sh clips=man     # 5: the shared clip bake, own-clips.glb and own-clips.clips.json (marker_check must pass)
 python3 living/tools/characters/bundle.py OUT --name render-set --with-clips --book SHIPPED_LOOKS.json \
     [--allow-book-drift living/tools/characters/book-drift-<generation>.json]   # 6: the checks, PNG and KTX2 bundles
 python3 living/tools/render_set.py build --bundle OUT/render-set-<sha8>-ktx2.tar.gz   # 7: ~/slop-assets/<id>/, read-only

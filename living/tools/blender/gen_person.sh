@@ -182,6 +182,12 @@ for p in "${people[@]}"; do
     # (share.py clipfile). The builder's own copy beside it stays a whole person.
     if [ "$name" = own-clips ]; then
       python3 living/tools/characters/share.py clipfile "$dir/anim/$name.glb"
+      # Every gait's foot-down markers, as gen_anim.sh checks the VRoid bases': the client times
+      # the gaits and eases the legs by them (marker_check.py; fails only on a missing window or
+      # floor jerk). The sidecar travels with the bake (bundle.py --with-clips).
+      if [ "$clips_baked" = 1 ]; then
+        python3 living/tools/marker_check.py "$dir/anim/$name.glb" | grep -E "^markers|ERROR"
+      fi
     fi
   done
   rm -f "$log"
