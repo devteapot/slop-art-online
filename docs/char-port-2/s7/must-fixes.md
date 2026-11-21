@@ -173,3 +173,13 @@ The light, highlight and shade bands don't move with t2. brown.highlight's −5 
 - less stand-off at the hem.
 
 The band's tolerance is not widened.
+
+## The Cora arm: her resident line in its own resident hairstyle
+
+**What happened:** built from her resident line (`cora-stannard`: adult-f-c, auburn, seed 37053) in `swept_braid`, the master stops the build. It is out of its tolerances even unvaried: rear depth 0.67 against 0.49–0.57, spread 2.30. The master was fitted on adult-f-b, the shared styles' head, and her resident line's head is deeper. The face is not the cause: the clearance pass resolves every mouth key. It failed the same way in every final run.
+
+**The decision** (the coordinator's, 2026-11-21):
+- **(a):** the sheet shows her resident line in its own resident hairstyle, labelled as such.
+- **The tolerances are not widened.**
+
+**Candidate (c), recorded:** fit the master to the head's depth (its rear stations scaled by the head's own rear depth), so a deeper head keeps the cut within its tolerances. Whether (c) belongs in S8 depends on how many of the town's heads the master fails on. See the town check below.
