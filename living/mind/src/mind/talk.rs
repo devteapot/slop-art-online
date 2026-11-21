@@ -1446,7 +1446,7 @@ impl Minds {
         let reach = self.reach_now(me, other).await;
         let standing = reach.as_ref().map(|r| (r.x, r.y));
         let here = standing.unwrap_or(heard.at);
-        let places = self.places(me, standing, true);
+        let (places, seen) = self.places(me, standing, true);
         let near = self
             .conn
             .db
@@ -1571,6 +1571,7 @@ impl Minds {
             how: &how,
             between: &between,
             places: &places,
+            seen: &seen,
             placed: standing.is_some(),
             missed: ctx.missed,
         };

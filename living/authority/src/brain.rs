@@ -245,17 +245,22 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
 }
 
 /// Resolve a target for a deliberate act exactly as a graph leaf would (only what the
-/// character perceives, sight or smell, its own places and remembered people).
-pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Option<Resolved> {
-    let me = ctx.db.character().id().find(id)?;
-    let st = ctx.db.mind_state().id().find(id)?;
-    let body = ctx.db.body().id().find(id)?;
-    let vit = ctx.db.vitals().id().find(id)?;
-    let g = common::compiled(ctx, id, st.revision)?;
+/// character perceives, sight or smell, its own places and remembered people). Err: the
+/// outcome code and why, as a graph leaf is told it (`Ev::unresolved`).
+pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Result<Resolved, (&'static str, String)> {
+    let gone = || (living_rules::outcome::act::REFUSED, "you cannot act now".to_string());
+    let me = ctx.db.character().id().find(id).ok_or_else(gone)?;
+    let st = ctx.db.mind_state().id().find(id).ok_or_else(gone)?;
+    let body = ctx.db.body().id().find(id).ok_or_else(gone)?;
+    let vit = ctx.db.vitals().id().find(id).ok_or_else(gone)?;
+    let g = common::compiled(ctx, id, st.revision).ok_or_else(gone)?;
     let at = pos(&body, now);
     let needs = common::needs(&vit, now);
     let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false, done: None };
-    ev.sensed(t)
+    match ev.sensed(t) {
+        Some(r) => Ok(r),
+        None => Err(ev.unresolved(t)),
+    }
 }
 
 /// Re-anchor needs when their rate inputs change; handles death from needs. `cur` is the
@@ -703,7 +708,8 @@ impl<'a> Ev<'a> {
                                     return St::Run;
                                 }
                             }
-                            return self.leaf_fail(id, &format!("{}: no {} in sight", a.skill, graph::describe_target(t)));
+                            let (_, why) = self.unresolved(t);
+                            return self.leaf_fail(id, &format!("{}: {why}", a.skill));
                         }
                     },
                     None => Resolved::none(),
@@ -725,7 +731,10 @@ impl<'a> Ev<'a> {
                     Some(t) => match self.resolve(t) {
                         Some(r) if r.class == 3 => r.id as u32,
                         Some(_) => return self.say_failed(id, n, &format!("{} is not someone to speak to", graph::describe_target(t))),
-                        None => return self.say_failed(id, n, &format!("no {} in sight", graph::describe_target(t))),
+                        None => {
+                            let (_, why) = self.unresolved(t);
+                            return self.say_failed(id, n, &why);
+                        }
                     },
                     None => 0,
                 };
@@ -1081,6 +1090,10 @@ impl<'a> Ev<'a> {
                 Some(Resolved::point((self.me.home_x, self.me.home_y)))
             }
             Target::Wander => Some(Resolved::point(self.at)),
+            // `{"place": "home"}` is one's own home, as the `home` target is: one's own "home"
+            // row, else one's own home position (truthful-refusals); any other name only one's
+            // own place rows.
+            Target::Place(name) if name.trim().eq_ignore_ascii_case("home") => self.resolve(&Target::Home),
             Target::Place(name) => self.place(name),
             Target::At([x, y]) => Some(Resolved::point((*x, *y))),
             // An id is whatever the scene listed under it: a creature first, else a structure or
@@ -1111,6 +1124,65 @@ impl<'a> Ev<'a> {
             .filter(self.me.id)
             .find(|p| p.name.eq_ignore_ascii_case(name))
             .map(|p| Resolved { class: 4, id: p.id, at: (p.x, p.y), kind: "place".into(), name: p.name })
+    }
+
+    /// Why `t` did not resolve, in the character's own terms (docs/TRUTHFUL_REFUSALS.md):
+    /// called only after `sensed`/`resolve` gave nothing, for an act's refusal and a graph leaf's
+    /// failure alike. `unseen` only for a real not-in-sight; `unknown` for a target the character
+    /// knows of no one or nothing by (a place name it does not hold, a role nobody fills for it
+    /// now); `refused` for one it can tell is there and cannot be acted on (bare, dead).
+    /// Reads only what the character holds or perceives, as `resolve` does.
+    fn unresolved(&mut self, t: &Target) -> (&'static str, String) {
+        use living_rules::outcome::act::{REFUSED, UNKNOWN, UNSEEN};
+        let now = self.now;
+        let recent = |id: u32, at: u64| id != 0 && now.saturating_sub(at) < 60_000;
+        match t {
+            Target::Place(name) => (UNKNOWN, format!("you know no place called \"{}\"", name.trim())),
+            Target::Attacker if !recent(self.vit.hurt_by, self.vit.hurt_ms) => (UNKNOWN, "nobody has hurt you in the last minute".into()),
+            Target::Speaker if !recent(self.st.speaker, self.st.heard_ms) => (UNKNOWN, "nobody has spoken to you in the last minute".into()),
+            Target::Hailer if !self.hailed(60_000) => (UNKNOWN, "nobody has greeted you in the last minute".into()),
+            Target::Suitor => {
+                let window = (common::laws(self.ctx).bond_window_s * 1000.0) as u64;
+                let me = self.me.id;
+                match self.ctx.db.bond_offer().to().filter(me).any(|o| now.saturating_sub(o.at_ms) <= window) {
+                    false => (UNKNOWN, "nobody has offered to start a family with you lately".into()),
+                    true => (UNSEEN, "whoever offered to start a family with you is not in sight".into()),
+                }
+            }
+            Target::Partner => {
+                let me = self.me.id;
+                let db = &self.ctx.db;
+                let other = db.character().parent_a().filter(me).chain(db.character().parent_b().filter(me)).max_by_key(|c| c.born_ms).map(|y| if y.parent_a == me { y.parent_b } else { y.parent_a });
+                match other {
+                    None | Some(0) => (UNKNOWN, "you have no partner (the other parent of your youngest child)".into()),
+                    Some(_) => (UNSEEN, "your partner is not in sight".into()),
+                }
+            }
+            Target::Parent if self.me.parent_a == 0 && self.me.parent_b == 0 => (UNKNOWN, "you have no parent".into()),
+            Target::Sound => (UNKNOWN, "you hear nothing you cannot see".into()),
+            Target::Attacker => (UNSEEN, "whoever hurt you is not in sight".into()),
+            Target::Speaker => (UNSEEN, "whoever spoke to you is not in sight".into()),
+            Target::Hailer => (UNSEEN, "whoever greeted you is not in sight".into()),
+            Target::Commotion => (UNSEEN, "no fight or death in sight".into()),
+            Target::Named(name) => (UNSEEN, format!("you see no one you know as {}", name.trim())),
+            Target::Id(id) => {
+                // Dead, and its remains in sight: what one sees says so (a death out of sight is
+                // not known, so it stays "not in sight", as steering's "they are dead").
+                let dead = self.ctx.db.character().id().find(*id).is_some_and(|c| !c.alive);
+                if dead && self.structures().iter().any(|(s, _)| s.kind == "remains" && s.owner == *id) {
+                    return (REFUSED, format!("#{id} is dead: their remains lie in sight"));
+                }
+                (UNSEEN, format!("no #{id} in sight"))
+            }
+            Target::Nearest(f) if living_rules::catalog::kind_class(&f.kind) == Some(living_rules::catalog::KindClass::Resource) => {
+                let kind = f.kind.clone();
+                match self.resources().iter().any(|(n, _)| n.kind == kind) {
+                    true => (REFUSED, format!("every {} in sight is bare", kind.replace('_', " "))),
+                    false => (UNSEEN, format!("no {} in sight", kind.replace('_', " "))),
+                }
+            }
+            _ => (UNSEEN, format!("no {} in sight", graph::describe_target(t))),
+        }
     }
 
     fn nearest(&mut self, f: &Filter) -> Option<Resolved> {

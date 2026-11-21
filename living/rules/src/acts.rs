@@ -33,19 +33,74 @@ pub fn not_an_act(skill: &str, shapes: &crate::combat::Shapes) -> Option<String>
 
 /// A model-written act (flat `{"do": "give", ...}` or canonical form) as an action, normalized
 /// like a graph leaf (for a particular body, when given), under the rules' combat shapes.
+///
+/// What is not an act is refused naming what it was (truthful-refusals): speech, a
+/// behavior-graph node, a skill that does not exist, or keys that are neither.
 pub fn parse(v: Value, body: Option<&crate::species::Species>, shapes: &crate::combat::Shapes) -> Result<Action, String> {
-    let (g, _) = match body {
-        Some(sp) => graph::from_value_for(v, sp)?,
-        None => graph::from_value_lenient(v)?,
+    if let Some(why) = not_a_do(&v) {
+        return Err(why);
+    }
+    let parsed = match body {
+        Some(sp) => graph::from_value_for(v, sp),
+        None => graph::from_value_lenient(v),
     };
+    let (g, _) = parsed.map_err(|e| unknown_skill(&e).unwrap_or(e))?;
     let a = match g.root {
         Node::Do(a) => a,
-        _ => return Err("an act is a single {\"do\": skill, ...} node".into()),
+        Node::Say(_) => return Err(SPEECH.into()),
+        other => return Err(graph_node(node_name(&other))),
     };
     if let Some(why) = not_an_act(&a.skill, shapes) {
         return Err(why);
     }
     Ok(a)
+}
+
+const SPEECH: &str = "`say` is speech, not an act: speak it instead";
+const ONE_ACT: &str = "an act is one {\"do\": skill, ...}";
+/// The graph's node keys (`normalize`'s `NODES`), and the words some replies use for speech.
+const NODE_KEYS: &[&str] = &["first", "seq", "if", "wait", "think", "routine", "desires", "wants"];
+const SPEECH_KEYS: &[&str] = &["say", "speech", "speak", "talk"];
+
+fn graph_node(name: &str) -> String {
+    format!("`{name}` is a behavior-graph node, not a one-off act: {ONE_ACT}")
+}
+
+fn node_name(n: &Node) -> &'static str {
+    match n {
+        Node::First(_) => "first",
+        Node::Seq(_) => "seq",
+        Node::If(_) => "if",
+        Node::Do(_) => "do",
+        Node::Say(_) => "say",
+        Node::Wait(_) => "wait",
+        Node::Think(_) => "think",
+        Node::Routine(_) => "routine",
+        Node::Desires(_) => "desires",
+    }
+}
+
+/// A reply object without `do`: speech, a graph node, or keys that are neither, named.
+fn not_a_do(v: &Value) -> Option<String> {
+    let o = v.as_object()?;
+    if o.contains_key("do") {
+        return None;
+    }
+    if let Some(k) = NODE_KEYS.iter().find(|k| o.contains_key(**k)) {
+        return Some(graph_node(k));
+    }
+    if SPEECH_KEYS.iter().any(|k| o.contains_key(*k)) {
+        return Some(SPEECH.into());
+    }
+    let keys = o.keys().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(", ");
+    Some(if keys.is_empty() { format!("an empty object is not an act: {ONE_ACT}") } else { format!("{keys}: neither a skill nor a behavior-graph node, so not an act: {ONE_ACT}") })
+}
+
+/// The graph's "unknown skill `x`" error, said as what it was: no such skill.
+fn unknown_skill(e: &str) -> Option<String> {
+    let rest = e.split_once("unknown skill `")?.1;
+    let name = rest.split('`').next()?;
+    Some(format!("`{name}` is not a skill, so not an act"))
 }
 
 /// The canonical JSON of an act (a `do` node).
@@ -76,6 +131,16 @@ mod tests {
         assert!(parse(json!({"do": "flee", "target": {"nearest": "wolf"}}), None, &Default::default()).unwrap_err().contains("behavior graph"));
         assert!(parse(json!({"do": "goto", "target": {"place": "camp"}}), None, &Default::default()).is_ok());
         assert!(parse(json!({"first": [{"do": "eat", "item": "food"}]}), None, &Default::default()).is_err());
+        // What is not an act is refused naming what it was (truthful-refusals).
+        let d = &Default::default();
+        assert_eq!(parse(json!({"say": "Stop!"}), None, d).unwrap_err(), SPEECH);
+        assert!(parse(json!({"do": "say", "text": "Stop!"}), None, d).unwrap_err().starts_with("`say` is speech"));
+        assert!(parse(json!({"wait": 20}), None, d).unwrap_err().starts_with("`wait` is a behavior-graph node"));
+        assert!(parse(json!({"seq": [{"do": "eat", "item": "food"}]}), None, d).unwrap_err().starts_with("`seq` is a behavior-graph node"));
+        assert!(parse(json!({"do": "think", "reason": "x"}), None, d).unwrap_err().starts_with("`think` is a behavior-graph node"));
+        assert_eq!(parse(json!({"do": "call", "speech": "Stop!"}), None, d).unwrap_err(), "`call` is not a skill, so not an act");
+        assert!(parse(json!({"act": {"do": "back_off"}}), None, d).unwrap_err().starts_with("`act`: neither a skill nor a behavior-graph node"));
+        assert!(parse(json!({}), None, d).unwrap_err().starts_with("an empty object is not an act"));
         // Movement intents that end on their own may be acts; those held over time belong in a graph.
         let shapes = crate::combat::Shapes::default();
         let b = parse(json!({"do": "back_off", "target": {"id": 4}, "distance": 6}), None, &shapes).unwrap();
