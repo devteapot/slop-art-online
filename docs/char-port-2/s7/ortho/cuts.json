@@ -1,0 +1,62 @@
+{
+ "cut1": {
+  "pose": "bind",
+  "view": "ortho",
+  "rule": "landmark",
+  "body_over_eyes": 2.998,
+  "whole_over_eyes": 3.102,
+  "body": 1.683,
+  "hair_width_px": 329,
+  "body_width_px": 318,
+  "cheek_width_px": 189,
+  "eye_spacing_px": 106.1,
+  "chin_row": 394,
+  "cheek_row": 316,
+  "row_fraction": 0.2975,
+  "band": [
+   2.973,
+   3.319
+  ],
+  "within": true
+ },
+ "cut2": {
+  "pose": "bind",
+  "view": "ortho",
+  "rule": "landmark",
+  "body_over_eyes": 3.009,
+  "whole_over_eyes": 3.094,
+  "body": 1.688,
+  "hair_width_px": 328,
+  "body_width_px": 319,
+  "cheek_width_px": 189,
+  "eye_spacing_px": 106.0,
+  "chin_row": 395,
+  "cheek_row": 317,
+  "row_fraction": 0.2979,
+  "band": [
+   2.973,
+   3.319
+  ],
+  "within": true
+ },
+ "cut3": {
+  "pose": "bind",
+  "view": "ortho",
+  "rule": "landmark",
+  "body_over_eyes": 2.971,
+  "whole_over_eyes": 3.028,
+  "body": 1.667,
+  "hair_width_px": 321,
+  "body_width_px": 315,
+  "cheek_width_px": 189,
+  "eye_spacing_px": 106.0,
+  "chin_row": 395,
+  "cheek_row": 318,
+  "row_fraction": 0.301,
+  "band": [
+   2.973,
+   3.319
+  ],
+  "within": false
+ }
+}

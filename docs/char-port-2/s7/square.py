@@ -62,7 +62,7 @@ def square(skin, eyes):
     (ya, xa), (yb, xb) = sorted(eyes, key=lambda e: e[1])
     eye_y, spacing, ex = (ya + yb) / 2, abs(xb - xa), (xa + xb) / 2
     cx = int(round(ex))
-    chin, cheek_row, _, head_px = D.cheek_at(skin, eye_y, spacing, cx, skin.shape[1])
+    chin, cheek_row, _, head_px = D.cheek_at(skin, eye_y, spacing, cx, skin.shape[1], rule="spacing")  # its rows as first defined
     rr = runs(skin, cx, range(cheek_row, chin - 3))
     ys = np.array(sorted(rr), float)
     mids = np.array([(rr[y][0] + rr[y][1]) / 2 for y in sorted(rr)])
