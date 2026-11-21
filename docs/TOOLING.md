@@ -388,6 +388,24 @@ Two rules for any script, queue or agent shell that starts or restarts a Spaceti
 - **Its own systemd scope:** `systemd-run --user --scope --quiet podman start NAME`. Rootless podman's `conmon` and `fuse-overlayfs` otherwise join the caller's cgroup: started from an agent's shell, the overlay helper is lost within minutes (`podman exec` then fails with "transport endpoint is not connected"), and started from a systemd unit (the dev-box merge queue), stopping that unit kills the container's processes with it, a forced stop (dev-box, 2026-11-20). `~/.local/state/devbox-queue/run.sh` starts `coord-stdb` this way.
 - **No lock fd:** close the gate lock's descriptor in the command that starts the container, e.g. `systemd-run --user --scope --quiet podman start NAME 9>&-` for a lock held on fd 9 (`exec 9>~/.local/state/slop-build/gate.lock; flock -x 9`). A container started while a shell holds the lock inherits the descriptor in `conmon` and `fuse-overlayfs` and keeps the lock after the script exits: on 2026-11-20 a scratch server recycled inside a locked measurement held `gate.lock` for 70 minutes, stalling a merge gate for two hours and Blender's `flock -s` pause. Python's `subprocess` does not pass descriptors on by default (`close_fds=True`). To see who holds the lock: `fuser ~/.local/state/slop-build/gate.lock`, then `ps` on each pid; a container's `conmon` among them is this case, and stopping the (idle) container with `podman kill -s INT` releases it.
 
+
+### Blender during a gate
+
+On the dev-box, `blender` on `PATH` is [`living/tools/blender_gate.sh`](../living/tools/blender_gate.sh), installed as `~/.local/share/slop-tools/build-bin/blender` (`install -m 755 living/tools/blender_gate.sh ~/.local/share/slop-tools/build-bin/blender`). The real binary stays `/usr/bin/blender`. A scene gate holds `~/.local/state/slop-build/gate.lock` exclusively, and Blender gives the gate the machine:
+
+- **At start:** while the lock is held, the wrapper waits.
+- **While it runs:** Blender is in a process group of its own (`setsid`). Every 3 s (`SLOP_GATE_POLL_S`) the wrapper tests the lock without blocking, and while a gate holds it, stops the group (`SIGSTOP`). It continues the group (`SIGCONT`) when the gate lets the lock go. Before 2026-11-21 the wrapper checked only at start, so a 20-minute file ran straight through a gate: S6's batch loaded a render pass to 15–29.
+- **The cap:** a hold longer than `SLOP_GATE_PAUSE_CAP_S` (5,400 s, 90 minutes: longer than any gate with scenes and the render group) is taken for a leaked lock, as on 2026-11-20 (above). Blender is continued, a `WARNING` is logged, and it is not paused again during that hold. The wait at start has the same cap. A paused Blender holds its memory and its files; it does not hang a batch forever.
+- **No lock descriptor:**
+  - The wrapper never has the lock open; each test runs `flock` in a child process.
+  - A descriptor a caller passed down is closed before Blender starts. Such a caller holds the lock itself, so Blender then runs without pausing.
+- **Signals:**
+  - INT, TERM and HUP to the wrapper go to Blender's group, continued first so a stopped Blender acts on them.
+  - Blender gets the default INT and QUIT back (`env --default-signal`); a script's `&` child has them ignored.
+  - The exit code is Blender's.
+- **Switches:** `SLOP_GATE_WAIT=0` turns waiting and pausing off. The log is stderr and `~/.local/state/slop-build/blender-gate.log`.
+- **The selftest** (a fake Blender that counts ticks, on a test lock): `python3 living/tools/blender_gate_selftest.py`. It checks the pause and the resume, the cap, the exit code, INT on the whole group (also while paused), no lock descriptor in Blender (also one a caller passed down), the wait at start and `SLOP_GATE_WAIT=0`.
+
 ## Building the render asset set
 
 The scene gate's verify-ui `render` group draws with the game client's generated assets, which are git-ignored and made on the dev-box only (Blender, the clip library, the KTX2 encoder's AVX2 kernel). The gate therefore reads a fixed, read-only set: `~/slop-assets/<id>/`, with `~/slop-assets/current` linking to the pinned one. [`living/tools/render_set.py`](../living/tools/render_set.py) builds, checks, links and pins sets. How the gate uses one is under the scene gate, [Render asset set](#render-asset-set). In short, it runs `check` and then `link`: exit 1 means corrupt, exit 2 stale. Its fields change only by a name the gate asks for, not by a fork of the format.
