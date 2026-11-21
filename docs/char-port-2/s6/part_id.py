@@ -5,6 +5,7 @@ which pixels (plait_id.py, for any part).
 
     python3 part_id.py WITH.glb OUT.glb --part hooks=WITHOUT_HOOKS.glb [--part ...]
     python3 part_id.py WITH.glb OUT.glb --all                      # all its hair one colour
+    python3 part_id.py WITH.glb OUT.glb --none                     # no hair drawn: the face alone (image_spread.py's face)
 
 WITH is the cut; each WITHOUT the same cut built without that part (SLOP_MASTER_DROP=<part>).
 Every triangle of WITH's hair whose vertices WITHOUT does not have (by position, to 0.01 mm) is
@@ -44,10 +45,29 @@ def main():
     ap.add_argument("out")
     ap.add_argument("--part", action="append", default=[], help="NAME=WITHOUT.glb")
     ap.add_argument("--all", action="store_true")
+    ap.add_argument("--none", action="store_true")
     a = ap.parse_args()
     j, binary = read_glb(a.with_path)
     binary = bytearray(binary)
     hair = next(i for i, m in enumerate(j["materials"]) if "_HAIR" in m.get("name", ""))
+    if a.none:
+        # Every hair triangle but one, folded to a point at the first vertex: the file stays whole
+        # (its meshes, skins and nodes), and draws nothing.
+        for m in j["meshes"]:
+            for p in m["primitives"]:
+                if p.get("material") != hair:
+                    continue
+                data = np.zeros(3, np.uint32).tobytes()
+                while len(binary) % 4:
+                    binary.append(0)
+                j["bufferViews"].append(dict(buffer=0, byteOffset=len(binary), byteLength=len(data), target=34963))
+                binary.extend(data)
+                j["accessors"].append(dict(bufferView=len(j["bufferViews"]) - 1, componentType=5125, count=3, type="SCALAR"))
+                p["indices"] = len(j["accessors"]) - 1
+        j["buffers"][0]["byteLength"] = len(binary)
+        write_glb(a.out, j, binary)
+        print(f"part_id: no hair drawn in {a.out}")
+        return
     if a.all:
         j["materials"][hair] = fixed(j["materials"][hair], j["materials"][hair]["name"], COLOURS[0])
         write_glb(a.out, j, binary)

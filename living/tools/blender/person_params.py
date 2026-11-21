@@ -676,7 +676,9 @@ def from_style(style):
         hair["recede"] = (0.85, 1.0, 0.74)[cut - 1]
     if style in MASTER_STYLES and cut == 1:
         hair["_vary_scale"] = 0.0  # a master's first cut is the master itself (hair.MASTERS); its seed varies the others
-        hair["parting"] = -0.55  # parted as Cora's drawing is: on her left, the sweep across to her right
+        # Parted as Cora's drawing is: on her left, the sweep across to her right. SLOP_MASTER_PARTING
+        # builds it on another side (the mirror check: the same seed parted either way).
+        hair["parting"] = float(__import__("os").environ.get("SLOP_MASTER_PARTING", -0.55))
     return dict(type=STYLE_HEAD, identity=dict(), seed=2000 + STYLES.index(style) + 100 * (cut - 1), sex="male" if male else "female", age=30, hair=hair, beard=dict(style="none", stubble=0.0),
                 build=dict(weight=0.0, muscle=0.0), outfit=dict(headwear="kerchief" if style == "kerchief" else (under or "none"), coat="coat" if collar else "smock"), **(dict(form="m") if man else {}))
 

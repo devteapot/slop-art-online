@@ -23,7 +23,7 @@
   },
   "stage-1 targets front drawing": {
    "body_width_px": 233,
-   "body": 1.835,
+   "body": 1.82,
    "opening_px": 17,
    "eye_line_px": 148.1,
    "eye_spacing_px": 76.0,
@@ -34,39 +34,18 @@
     93,
     220
    ],
-   "cheek_width_px": 127,
+   "cheek_width_px": 128,
    "hair_px": [
     16,
     270
    ],
    "hair_width_px": 254,
-   "spread_face": 2.0
-  },
-  "game front portrait": {
-   "body_width_px": 201,
-   "body": 1.523,
-   "opening_px": 15,
-   "eye_line_px": 254.5,
-   "eye_spacing_px": 71.0,
-   "head_px": 236.6,
-   "chin_row": 361,
-   "cheek_row": 285,
-   "cheek_px": [
-    150,
-    282
-   ],
-   "cheek_width_px": 132,
-   "hair_px": [
-    114,
-    316
-   ],
-   "hair_width_px": 202,
-   "spread_face": 1.53
+   "spread_face": 1.984
   }
  },
  "drawing": {
-  "spread_face": 1.986,
-  "body": 1.823
+  "spread_face": 1.978,
+  "body": 1.816
  },
- "method": "- **The chin:** where the face's centre run of skin is narrowest (its ink point), between the\n  mouth and the neck.\n- **The eyes:** the two largest green-iris blobs; their centres give the eye line and the eye\n  spacing.\n- **The head's height:** the eye spacing over 0.30, stage-1's front ratio (eye spacing over head\n  height).\n- **The cheek row:** 0.030 m under the eye line, the generator's (`eye_z - 0.030`), in head\n  heights of the generator's standard head (0.030 / 0.2322, Cora's head height in metres).\n- **The cheek width:** the run of skin on that row that holds the face's centre column: the face\n  across the cheekbones, in front of the ears (the generator's, in front of the pinna).\n- **The spread:** the hair's (and its ink's) widest extent over all rows above the chin, over the\n  cheek width."
+ "method": "- **The chin:** where the face's centre run of skin is narrowest (its ink point), between the\n  mouth and the neck.\n- **The eyes:** the two largest green-iris blobs; their centres give the eye line and the eye\n  spacing.\n- **The head's height:** the eye spacing over 0.30, stage-1's front ratio (eye spacing over head\n  height).\n- **The cheek row:** 0.030 m under the eye line, the generator's (`eye_z - 0.030`), in head\n  heights of the generator's standard head (0.030 / 0.2322, Cora's head height in metres).\n- **The cheek width:** the run of skin on that row that holds the face's centre column: the face\n  across the cheekbones, in front of the ears (the generator's, in front of the pinna). Where hair\n  (not the face's ink outline) lies over one end, that half is taken as the other's, about the\n  eyes' middle.\n- **The spread:** the hair's (and its ink's) widest extent over all rows above the chin, over the\n  cheek width."
 }

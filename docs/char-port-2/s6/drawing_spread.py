@@ -31,7 +31,9 @@ ink lines are inside the hair's width either way).
 - **The cheek row:** 0.030 m under the eye line, the generator's (`eye_z - 0.030`), in head
   heights of the generator's standard head (0.030 / 0.2322, Cora's head height in metres).
 - **The cheek width:** the run of skin on that row that holds the face's centre column: the face
-  across the cheekbones, in front of the ears (the generator's, in front of the pinna).
+  across the cheekbones, in front of the ears (the generator's, in front of the pinna). Where hair
+  (not the face's ink outline) lies over one end, that half is taken as the other's, about the
+  eyes' middle.
 - **The spread:** the hair's (and its ink's) widest extent over all rows above the chin, over the
   cheek width.
 """
@@ -94,10 +96,10 @@ def measure(path, box):
     eye_y, spacing = (ya + yb) / 2, abs(xa - xb)
     cx = int(round((xa + xb) / 2))
     hair = (kind == "hair") | (kind == "ink")
-    return finish(im, hair, skin, eye_y, spacing, cx, w)
+    return finish(im, hair, skin, eye_y, spacing, cx, w, kind == "hair")
 
 
-def finish(im, hair, skin, eye_y, spacing, cx, w):
+def finish(im, hair, skin, eye_y, spacing, cx, w, covers):
     """The chin, the cheek row and width, and the hair's two spreads (the module's docstring)."""
     head_px = spacing / EYE_SPACING_H
     h = skin.shape[0]
@@ -117,11 +119,21 @@ def finish(im, hair, skin, eye_y, spacing, cx, w):
     chin = list(rows)[int(np.argmin(width))]
     cheek_row = int(round(eye_y + CHEEK_DROP_H * head_px))
     cheek = run(cheek_row)
+    # Where a lock lies over one cheek (a render's near section) the skin's run stops at the lock,
+    # not at the face's edge: an end with hair (not ink) just beyond it is covered, and that half
+    # is taken as the other's, about the eyes' middle.
+    cov = lambda x: any(covers[cheek_row, x + k] for k in (-2, -1, 1, 2) if 0 <= x + k < w)
+    left, right = cx - cheek[0], cheek[1] - cx
+    if cov(cheek[0] - 1) and not cov(cheek[1] + 1):
+        left = right
+    elif cov(cheek[1] + 1) and not cov(cheek[0] - 1):
+        right = left
+    cw = left + right
     hair = hair.copy()
     hair[chin:] = False
     big = blobs(hair)[0]  # the hair mass with its outline ink
     hx = (int(big[:, 1].min()), int(big[:, 1].max()))
-    spread = (hx[1] - hx[0]) / (cheek[1] - cheek[0])
+    spread = (hx[1] - hx[0]) / cw
     n = int(round(15 * head_px / 230)) | 1
     body = np.asarray(Image.fromarray((hair * 255).astype(np.uint8)).filter(ImageFilter.MinFilter(n)).filter(ImageFilter.MaxFilter(n))) > 0
     bx = np.nonzero(body.any(axis=0))[0]
@@ -133,21 +145,26 @@ def finish(im, hair, skin, eye_y, spacing, cx, w):
     d.line((0, chin, w, chin), fill=(0, 160, 0))
     d.line((bx.min(), chin, bx.min(), 0), fill=(255, 150, 0))
     d.line((bx.max(), chin, bx.max(), 0), fill=(255, 150, 0))
-    return dict(body_width_px=int(bx.max() - bx.min()), body=round(float((bx.max() - bx.min()) / (cheek[1] - cheek[0])), 3), opening_px=n, eye_line_px=round(float(eye_y), 1), eye_spacing_px=round(float(spacing), 1), head_px=round(float(head_px), 1), chin_row=chin,
-                cheek_row=cheek_row, cheek_px=cheek, cheek_width_px=cheek[1] - cheek[0], hair_px=hx, hair_width_px=hx[1] - hx[0], spread_face=round(float(spread), 3)), pic
+    return dict(body_width_px=int(bx.max() - bx.min()), body=round(float((bx.max() - bx.min()) / cw), 3), opening_px=n, eye_line_px=round(float(eye_y), 1), eye_spacing_px=round(float(spacing), 1), head_px=round(float(head_px), 1), chin_row=chin,
+                cheek_row=cheek_row, cheek_px=cheek, cheek_width_px=cw, hair_px=hx, hair_width_px=hx[1] - hx[0], spread_face=round(float(spread), 3)), pic
 
 
-def render(look, idp, box=(600, 160, 1000, 620)):
-    """A game front portrait, measured as the drawing is (the module's docstring)."""
+def render(look, idp, box=(600, 160, 1000, 620), face=None):
+    """A game front portrait, measured as the drawing is (the module's docstring). `face`: the
+    same frame with no hair drawn (part_id.py --none), whose skin and eyes give the face, so no lock
+    over a cheek or an eye can move it (image_spread.py)."""
     im = Image.open(look).convert("RGB").crop(box)
-    a = np.asarray(im).astype(float)
     i = np.asarray(Image.open(idp).convert("RGB").crop(box)).astype(int)
     hair = (i[..., 1] - i[..., 0] > 28) & (i[..., 1] - i[..., 2] > 28) & (i[..., 1] >= 60)
+    a = np.asarray(Image.open(face).convert("RGB").crop(box) if face else im).astype(float)
     r, g, b = a[..., 0], a[..., 1], a[..., 2]
-    skin = (r > g + 25) & (r > b + 40) & (r > 170) & ~hair
-    eyes = [e for e in blobs((g > r + 8) & (g > b) & ~hair) if 30 < len(e) < 3000][:2]
-    (ya, xa), (yb, xb) = (e.mean(axis=0) for e in eyes)
-    return finish(im, hair, skin, (ya + yb) / 2, abs(xa - xb), int(round((xa + xb) / 2)), a.shape[1])
+    skin = (r > g + 12) & (r > b + 25) & ~hair if face else (r > g + 25) & (r > b + 40) & (r > 170) & ~hair
+    # The eyes: every piece of iris (a blink leaves only slivers), split into the two eyes about
+    # their middle; the ground's green is far larger and is left out.
+    P = np.concatenate([e for e in blobs((g > r + 8) & (g > b) & ~hair) if 3 <= len(e) < 3000][:12])
+    mid = np.median(P[:, 1])
+    (ya, xa), (yb, xb) = P[P[:, 1] < mid].mean(axis=0), P[P[:, 1] >= mid].mean(axis=0)
+    return finish(im, hair, skin, (ya + yb) / 2, abs(xa - xb), int(round((xa + xb) / 2)), a.shape[1], hair)
 
 
 def main(out_json, out_png, look=None, idp=None):

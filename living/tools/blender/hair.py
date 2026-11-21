@@ -1008,6 +1008,13 @@ class Hair:
         out = dict(spread=round(float((hx.max() - hx.min()) / (0.5076 * H)), 3), spread_face=round(float((hx.max() - hx.min()) / cheek), 3), crown_lift=round(float((V[:, 2].max() - self.hf.top_z) / H), 3),
                    rear_depth=round(float((ear[1] - V[above, 1].min()) / H), 3) if len(above) else None)
         # Which part sets each (for tuning): the widest on each side, the highest, the furthest back.
+        # Each part's reach to either side (head frame, x): what a mirrored cut must match.
+        out["parts_x"] = {}
+        for n in sorted(set(part[head])):
+            sel = head[part[head] == n]
+            if len(sel):
+                lo, hi = sel[np.argmin(V[sel, 0])], sel[np.argmax(V[sel, 0])]
+                out["parts_x"][str(n)] = [round(float(V[lo, 0]), 4), round(float(V[hi, 0]), 4), round(float(V[lo, 2]), 4), round(float(V[hi, 2]), 4)]  # x min, x max, and their heights
         out["by"] = dict(left=str(part[head[np.argmin(hx)]]), right=str(part[head[np.argmax(hx)]]), top=str(part[int(np.argmax(V[:, 2]))]),
                          back=str(part[above[np.argmin(V[above, 1])]]) if len(above) else None)
         return out
@@ -1074,6 +1081,7 @@ class Hair:
         f = m["front"]
         H = self.hf.top_z - self.hf.chin_z
         s = -1.0 if self.parting < 0 else 1.0  # the far side: + the character's left (az +, -X)
+        self.master_s = s
         self.parting = -s * max(abs(self.parting), f["part"])  # the part on the near side
         part_az = -s * 22.0 * f["part"]
         ts = np.linspace(0, 1, 13)
@@ -1359,6 +1367,13 @@ class Hair:
 
     def _build(self):
         paths, touches = self._walk()
+        dbg = __import__("os").environ.get("SLOP_MASTER_DEBUG")
+        if dbg and self.detail >= 1:  # the mirror check: each front column's root, end and length (head frame)
+            import json
+            rows = [dict(part=k.get("part"), sheet=list(k["sheet"]) if "sheet" in k else None, p=[round(float(x), 5) for x in k["p"]], d=[round(float(x), 4) for x in k["d"]],
+                         z_end=round(float(k["z_end"]), 4), length=round(float(k["length"]), 4), tip_out=k["tip_out"], lift=k["lift"],
+                         end=[round(float(x), 5) for x in pa[-1]], steps=len(pa), path=np.round(pa, 5).tolist()) for k, pa in zip(self.locks, paths) if k.get("part") in ("front", "near section")]
+            open(dbg, "w").write(json.dumps(rows))
         spec = self.spec
         base, tipc, silver = np.array(spec["colour"]), np.array(spec["tip"]), np.array(spec["silver"])
         grey = float(spec.get("grey", 0.0))
@@ -1592,8 +1607,15 @@ class Hair:
             # One wave for the whole head, by height and the way round it, so sheets that lie
             # over one another wave as one and do not cut through each other.
             ph = 1.3 * np.sin(np.arctan2(-C[..., 0], C[..., 1]))
+            sway = 1.0
+            if hasattr(self, "master_s"):
+                # A master's cut parted the other way is its mirror (its silhouette measured the
+                # same): the wave's phase the same either side of the head's middle, and its sway
+                # across (SIDE, which a mirror turns round) turned with the part.
+                ph = 1.3 * np.sin(np.abs(np.arctan2(-C[..., 0], C[..., 1])))
+                sway = self.master_s
             wave = amp * smooth(S / np.maximum(0.35 * L, 1e-6)) * np.where(ON, 0.4, 1.0)
-            C = C + OUT * (wave * np.sin(-freq * C[..., 2] + ph))[..., None] + SIDE * (0.5 * wave * np.cos(-freq * C[..., 2] + ph))[..., None]
+            C = C + OUT * (wave * np.sin(-freq * C[..., 2] + ph))[..., None] + SIDE * (sway * 0.5 * wave * np.cos(-freq * C[..., 2] + ph))[..., None]
         if loop:
             E = np.ones(M)
         else:
