@@ -239,7 +239,7 @@ The commitlog archives can go to the store later as their own unit, once the own
 
 - **`trials.py`:**
   - **At publish:** each instance records `database_identity` (by name, `GET /v1/database/<name>`) and `replica` (by its module log, among replicas newer than the publish) in `state.json` and `summary.json`, and logs them.
-  - **`clean`** deletes the batch's databases from its own records (`batch_databases`), each paused first by `delete_db`; `spacetime list` is only a backstop.
+  - **`clean`** deletes the batch's databases from its own records (`batch_databases`), each paused first and read back as paused by SQL through `delete_db` and the shared `world_delete.py`; `spacetime list` is only a backstop.
   - **`dbs --batch B [--json]`:** a batch's databases, identities and replicas, for samplers.
   - **`reclaim` is now a classifier that removes nothing.** It covers every replica directory (live, paid, no-model, fake, verify, unknown), with sizes, commitlog sizes and lock times, and `--json`. It replaces the earlier `reclaim`, which deleted every idle replica with the server running, paid commitlogs included.
 - **`trial_scale.py`:** the batch's databases from its records.
