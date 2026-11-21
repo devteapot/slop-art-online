@@ -23,6 +23,11 @@ draws and housekeeping follow the tick count alone) and `det_stop` (pause after 
 Then it stops server A cleanly (SIGINT), copies its whole volume into the template volume, starts
 server A again and writes `<template>.json` beside nothing but the volume's name (printed).
 
+`run --candidate-law NAME=VALUE` sets a law on the candidate copy alone before both unpause (a
+negative control; the law must be one the template's installed script has). Acts sent from
+outside cannot be compared this way: a reducer called from outside the tick takes the wall clock
+as its time (`common::now_ms`), which differs between the copies.
+
 `run` copies the template into two new volumes and starts a server on each, the same way (a
 server resumes its sequences differently after a restart, so the two copies are treated alike).
 On one it publishes the base, on the other the candidate, each as an update with the data kept
@@ -367,6 +372,11 @@ def run(a):
             res["stop_tick"], res["ticks"] = a.stop, ticks
             for s in servers:
                 s.call(db, "set_world_law", ["det_stop", str(float(a.stop))])
+        for law in a.candidate_law:
+            # A negative control: a law set on the candidate copy alone.
+            name, value = law.split("=", 1)
+            Y.call(db, "set_world_law", [name, value])
+        res["candidate_laws"] = a.candidate_law
         for s in servers:
             s.call(db, "set_paused", [False])
         t_run = time.time()
@@ -455,6 +465,7 @@ def main():
     ap.add_argument("--keep-copies", action="store_true")
     ap.add_argument("--tag", default="", help="run: a suffix for the copies' names (two runs at once)")
     ap.add_argument("--stop", type=int, default=0, help="run: pause both copies at this tick instead of the template's det_stop")
+    ap.add_argument("--candidate-law", action="append", default=[], metavar="NAME=VALUE", help="run: a world law set on the candidate copy alone before unpausing (a negative control)")
     ap.add_argument("--cpus", default="0-4,10-14", help="run: the copies' cores (default the Spark's A725 cores, away from pinned measurements)")
     a = ap.parse_args()
     sys.path.insert(0, str(Path(__file__).resolve().parent))

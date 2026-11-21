@@ -131,7 +131,7 @@ class World:
     def meta(self):
         """What the report needs of the world in every phase.json."""
         return {"tiles_file": str(self.tiles_file), "W": self.W, "H": self.H,
-                "laws": {k: self.law_value(k) for k in ("nav_belief", "ground_sight_m", "unknown_cost", "road_speed", "known_cells_pass")}}
+                "laws": {k: self.law_value(k) for k in ("nav_belief", "ground_sight_m", "unknown_cost", "road_speed", "known_cells_pass", "mind_act_replaces")}}
 
     def bodies(self, ids):
         if not ids:
@@ -1070,6 +1070,8 @@ def main():
     ap.add_argument("--light", choices=["day", "night"], help="N4 only: select one light condition (default: both)")
     ap.add_argument("--out")
     ap.add_argument("--input-latency", action="store_true", help="record N1/N2 authority and observer timings")
+    ap.add_argument("--world-law", action="append", default=[], metavar="NAME=VALUE",
+                    help="set a world law (JSON value) before the phases, e.g. mind_act_replaces=true (docs/INPUT_LATENCY.md); phase.json records it")
     a = ap.parse_args()
     if a.light and a.arena != "n4":
         ap.error("--light is only available for N4")
@@ -1078,6 +1080,9 @@ def main():
     fn, variants = ARENAS[a.arena]
     world = World(a.run)
     world.input_latency = a.input_latency
+    for law in a.world_law:
+        name, value = law.split("=", 1)
+        world.law(name, json.loads(value))
     world.road = float(world.law_value("road_speed") or 1.4)
     world.unknown = float(world.law_value("unknown_cost") or 1.5)
     out = Path(a.out or ROOT / ".local/living/nav" / a.run)
