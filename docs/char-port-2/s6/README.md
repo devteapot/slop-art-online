@@ -53,9 +53,9 @@ S6 ports Cora's hand-made hair into the generator as a **master**: a named set o
 ### The rest of S6's acceptance
 
 - **The silhouette, as a generator guard** on seeded variation (not the acceptance), measured in 3D (`Hair.measures`):
-  - spread against this face's cheek width 1.87 ± 0.10;
-  - crown lift 0.096 ± 0.035;
-  - rear depth 0.53 ± 0.04.
+  - spread about the master's own, 2.006 ± 0.10. It was Cora's 3D 1.87 ± 0.10 until the volume step; this head's wide face takes the image acceptance to 2.0 in 3D;
+  - crown lift 0.096 ± 0.035 (Cora's);
+  - rear depth 0.53 ± 0.04 (Cora's).
 
   A cut out of these even unvaried stops the build.
 - **No flyaways:** the outline check (`back_views.py outline`) holds front, three-quarter and back to 4 px.
@@ -69,7 +69,28 @@ S6 ports Cora's hand-made hair into the generator as a **master**: a named set o
 - **Flag off:** byte-identical to main.
 - **Step 4:** calibration by the S5 rule, the luma bins at Middle, shimmer at the three stops, and the audit.
 
-## Where the cuts stand (before the volume step)
+## Where the cuts stand
+
+**After [the volume step](volume/README.md):** all three cuts are in band, each on its own side.
+
+| Cut | Body / eye spacing | In band | Cheek measure (report) |
+|---|---|---|---|
+| `swept_braid` (cut 1) | **3.119** | yes | 1.615 |
+| `.2` | **3.135** | yes | 1.622 |
+| `.3` | **3.077** | yes | 1.593 |
+
+The re-checks after the volume step all pass:
+- flyaways at front, three-quarter and back;
+- the plait's fit on 27 fittings;
+- the ears;
+- the plait's width and luma;
+- the tips (front 9, three-quarter 7);
+- the triangle budget;
+- flag off.
+
+The details are in [volume/README.md](volume/README.md).
+
+### Before the volume step
 
 Each cut is measured on its own parting side. Cut 1 parts as Cora's drawing does.
 

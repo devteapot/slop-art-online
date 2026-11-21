@@ -183,14 +183,14 @@ MASTERS = dict(swept_braid=dict(
     # part; heights above the chin in head heights.
     front=dict(
         part=0.55,  # how far off centre the part is (the seed decides the side; cut 1 is Cora's, person_params.from_style; the rear layers follow it)
-        flare=0.012,  # how far the sweep's points turn out from the head (the spread; held under the outline check's margin); the seed's variation moves the near section's by the same
-        sweep=dict(points=7, depth=0.024, el=(58.0, 112.0), drop=0.40, lean=1.4, thick=0.004, lift=0.020, fall=0.60),  # the big section: roots up the part (elevation from the hairline to the crown), its hem from the brow at the front to `drop` head heights lower behind
-        near=dict(points=4, depth=0.026, el=(60.0, 104.0), end_h=0.10, lean=1.8, thick=0.0035, lift=0.024, lift_back=0.012, flare=0.012),  # the near section: up the part too, falling to the near temple and down beside the face to the jaw in front of the ear; its stand-off at the temple (the sides' width) and behind, toward the crown (where more hides the plait's start and stands out as a ledge); its points' flare on the columns that reach the jaw# the near section: up the part too, falling to the near temple and down beside the face to the jaw
+        flare=0.006,  # how far the sweep's points turn out from the head (the spread; held under the outline check's margin); the seed's variation moves the near section's by the same
+        sweep=dict(points=7, depth=0.030, el=(58.0, 112.0), drop=0.40, lean=1.4, thick=0.004, lift=0.020, off=0.019, off_from=0.55, fall=0.60),  # the big section: roots up the part (elevation from the hairline to the crown), its hem from the brow at the front to `drop` head heights lower behind
+        near=dict(points=5, depth=0.030, el=(60.0, 104.0), end_h=0.10, lean=1.8, thick=0.0035, lift=0.024, lift_back=0.012, off=0.014, flare=0.012),  # the near section: up the part too, falling to the near temple and down beside the face to the jaw in front of the ear; its stand-off at the temple (the sides' width) and behind, toward the crown (where more hides the plait's start and stands out as a ledge); its points' flare on the columns that reach the jaw# the near section: up the part too, falling to the near temple and down beside the face to the jaw
         # Returning hooks off the sweep's outer edge: each bows out `out` from the hair and curls
         # back under, its tip lying on the hair `back` degrees nearer the face, `length` lower.
         hooks=[dict(az=62.0, h=0.90, length=0.100, width=0.022, out=0.020, back=12.0), dict(az=80.0, h=0.76, length=0.090, width=0.020, out=0.018, back=10.0)],
         ear=dict(top=0.022, front=0.45),  # the ear stays open (the drawing's, and char-port-1's ear rays): no section's hem below `top` over the eye line where it passes over the ear; the near section's columns from `front` back end there
-        jaw=dict(n=2, end_h=-0.03, width=0.022),  # long strands before the ears, to below the jaw
+        jaw=dict(n=3, end_h=-0.03, width=0.022),  # long strands before the ears, to below the jaw
         sides=dict(n=2, width=0.016, off=0.015),  # side groups: over the ear and round behind it to the nape, `off` over the scalp
     ),
     plait=dict(
@@ -202,7 +202,7 @@ MASTERS = dict(swept_braid=dict(
         scale=1.6,  # its radius over the styles' braid (0.085 of the head's width): the drawn rear's width at Near and Middle
         turns=3.9, taper=0.63, gain=0.55, gain_span=(0.15, 0.92), full_from=0.0,  # crossings root to tie (0.59 head heights each: Near and Middle luma closest to the drawn rear), its narrowing, the upper lobes' widening
         crest=__import__("os").environ.get("SLOP_MASTER_CREST", "1") != "0",
-        crest_up=(-0.28, 0.55), crest_lit=(0.70, 0.45),  # a lobe's normals: down below, up on its upper face (base, by facing); where its crest highlight starts (over, facing)
+        crest_up=(-0.20, 0.55), crest_lit=(0.70, 0.45),  # a lobe's normals: down below, up on its upper face (base, by facing); where its crest highlight starts (over, facing)
     ),
     # Seeded variation (a cut is the style from another seed, as for every style): each value
     # moves by up to its range, a draw per value from the seed, and the plait keeps its pitch.
@@ -210,7 +210,11 @@ MASTERS = dict(swept_braid=dict(
     # Cora's tolerances below, and the range halved until it holds (at none, the master itself).
     vary=dict(length_h=0.25, drop=0.06, lean=0.12, hook_az=4.0, hook_h=0.03, near_end=0.04, jaw_end=0.04, flare=0.002, part=0.06),
     highlight=dict(layers=(5, 6), band=(0.10, 0.42)),  # the highlight rule: the rear layers with one (Cora's upper groups), and where along the lock (root 0, tip 1)
-    tolerance=dict(spread_face=(1.77, 1.97), crown_lift=(0.061, 0.131), rear_depth=(0.49, 0.57)),  # Cora's: 1.87±0.10, 0.096±0.035, 0.53±0.04
+    # The seeded cuts' guard (master_scale), in 3D: crown lift and rear depth Cora's (0.096±0.035,
+    # 0.53±0.04); the spread about the master's own, 2.006±0.10. S6's acceptance is the front
+    # portrait's hair body over the eye spacing (docs/char-port-2/s6/README.md), which this head's
+    # wide face takes to 2.006 here, not Cora's 3D 1.87.
+    tolerance=dict(spread_face=(1.906, 2.106), crown_lift=(0.061, 0.131), rear_depth=(0.49, 0.57)),
     hair_tris=10700,  # the near mesh's budget, 12,000, less the scalp cap's 1,216 on the style head, with a margin
     # SLOP_MASTER_PLAIT=0 builds the cut without its plait: the visibility control (the plait's
     # pixels are where the two differ).
@@ -548,7 +552,7 @@ class Hair:
         return nodes
 
     def sheet(self, roots, dirs="down", z_end=None, length=0.9, points=3, depth=0.03, cols=9, hem=None, lift=0.006, g=30.0, chain=None, shade=0.0, bulge=None, tip_out=0.0,
-              target=None, thick=0.0045, closed=False, uneven=0.25, edges=(1.0, 1.0), hug=1.0, check=False, groove=1.0, tube=False, splay=0.0, even=0.0, off=0.0, gather=0.0, over_top=False, sharp=0.36):
+              target=None, thick=0.0045, closed=False, uneven=0.25, edges=(1.0, 1.0), hug=1.0, check=False, groove=1.0, tube=False, splay=0.0, even=0.0, off=0.0, gather=0.0, over_top=False, sharp=0.36, off_from=0.25):
         """A sheet of hair: one smooth surface from a line of roots on the scalp (`roots`, a
         polyline; `closed` when it runs all the way round), combed along `dirs` (one vector, one
         a root, `down` or `away`), ending in `points` points `depth` deep. It hangs to `z_end`
@@ -592,7 +596,7 @@ class Hair:
             sid = len(self.sheets)
             loop = closed and whole
             self.sheets.append(dict(u=[c[0] for c in run], k=[c[1] for c in run], q=[c[2] for c in run], W=W * (1.0 if loop else run[-1][0] - run[0][0]), loop=loop, thick=thick, shade=shade,
-                                    groove=groove, tube=tube, u0=u0, phase=phase, tone=tone, even=even, off=off, hang=gather > 0, top=over_top and closed))
+                                    groove=groove, tube=tube, u0=u0, phase=phase, tone=tone, even=even, off=off, **({"off_from": off_from} if off_from != 0.25 else {}), hang=gather > 0, top=over_top and closed))
             for j, (u, k, q, pt, _) in enumerate(run):
                 if dv is None:
                     d = DOWN.copy() if dirs == "down" else pt - self.whorl
@@ -1095,7 +1099,10 @@ class Hair:
         brow = self.hf.eye_z + self.hf.eye_up + self.hf.brow_up + 0.006
         ear_top = self.hf.eye_z + f["ear"]["top"]
         hem = lambda u: max(-sw["drop"] * H * smooth((u - 0.10) / 0.90), ear_top - brow)
-        self.sheet(roots, dirs, z_end=brow, points=sw["points"], depth=sw["depth"], hem=hem, lift=sw["lift"], g=30.0, shade=0.04, tip_out=f["flare"],
+        # Its volume at the sides (the drawing's, its body over the eye spacing): `off`, a stand-off
+        # that grows from the root over `off_from` of each column's length, so the columns rooted up
+        # the part lie close over the crown and stand out where they fall past the temple.
+        self.sheet(roots, dirs, z_end=brow, points=sw["points"], depth=sw["depth"], hem=hem, lift=sw["lift"], off=sw["off"], off_from=sw["off_from"], g=30.0, shade=0.04, tip_out=f["flare"],
                    edges=(0.3, 0.3), thick=sw["thick"], check=True, uneven=0.30, sharp=0.55)
         nr = f["near"]
         l0, s0 = len(self.locks), len(self.sheets)
@@ -1104,7 +1111,7 @@ class Hair:
         dirs = np.stack([s * nr["lean"] * np.ones(len(ts)), 0.25 - 0.45 * ts, -0.55 - 0.15 * ts], axis=1)
         z_near = self.hf.chin_z + nr["end_h"] * H
         near_hem = lambda u: 0.03 * u + (ear_top - z_near) * smooth((u - f["ear"]["front"]) / 0.25)
-        self.sheet(roots, dirs, z_end=z_near, points=nr["points"], depth=nr["depth"], hem=near_hem, lift=lambda u: lerp(nr["lift"], nr["lift_back"], smooth((u - f["ear"]["front"]) / 0.25)), g=40.0, shade=0.03,
+        self.sheet(roots, dirs, z_end=z_near, points=nr["points"], depth=nr["depth"], hem=near_hem, lift=lambda u: lerp(nr["lift"], nr["lift_back"], smooth((u - f["ear"]["front"]) / 0.25)), off=nr["off"], g=40.0, shade=0.03,
                    tip_out=lambda u: (nr["flare"] + f["flare"] - MASTERS["swept_braid"]["front"]["flare"]) * (1 - smooth((u - f["ear"]["front"]) / 0.25)),  # the columns ending above the ear turn no points out
                    edges=(0.3, 0.5), thick=nr["thick"], check=True, uneven=0.4, sharp=0.55)
         for x in self.locks[l0:] + self.sheets[s0:]:
@@ -1626,7 +1633,8 @@ class Hair:
         # A sheet's volume is over its length; on one that hangs down the back it is over the
         # head only, so the hair lies close below.
         swell = np.sin(np.pi * np.minimum(T / 0.40, 1.0)) if sp.get("hang") else np.sin(np.pi * np.minimum(T * 1.15, 1.0))
-        stand = sp["off"] * (smooth(T / 0.25) * (1 - 0.6 * smooth((T - 0.35) / 0.3)) if sp.get("hang") else smooth(T / 0.25))
+        ramp = sp.get("off_from", 0.25)  # the share of each column's length over which `off` comes in
+        stand = sp["off"] * (smooth(T / ramp) * (1 - 0.6 * smooth((T - 0.35) / 0.3)) if sp.get("hang") else smooth(T / ramp))
         rise = np.array([q[0]["bulge"] for q in cols])[:, None] * swell[None, :] + k0["tip_out"] * (T ** 2)[None, :] + stand[None, :]
         F = C + OUT * (rise + th)[..., None]
         B = C + OUT * (rise - 0.35 * th)[..., None]
