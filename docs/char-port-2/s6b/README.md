@@ -4,7 +4,7 @@
 - **The acceptance (2D):** every adult class's mean within 0.016 of 1.75, the children at 1.79, the variety kept ([below](#the-acceptance-the-2d-front-render-measure)).
 - **The must-fixes:** both done ([below](#the-two-must-fixes)).
 - **The full check list:** passes ([below](#the-final-checks)).
-- **The bundle:** [below](#the-bundle).
+- **The bundle:** PNG and KTX2 at `de6544b15`, both passing `pictures.py check`; the pages audit 0 / 0 ([below](#the-bundle)).
 - **The four bodies, before and after, for the GC:** [four-bodies-final.png](four-bodies-final.png): the woman, man, elder and girl at the portrait (front and three-quarter) and close, unnarrowed against S6b.
 
 Everything here is behind `SLOP_PORT=faceprop`, with S1–S4's port (`jaw,jaw_shell,paint,neck,ink`). With the flag off, a type (adult-f-b: its file and shadow map) and a body (the woman) are byte-identical to before; the body's file differs only in the names of its own pictures.
@@ -295,4 +295,19 @@ The 21 types `fp21j` and the four bodies `cp6m` ([final/](final/)).
 
 ## The bundle
 
-In progress: the PNG and KTX2 bundles from this commit, with the 21 `fp21j` types and S6's hair set installed (`bundle.py --port hair,ink`), and the pages audit on that installation.
+`bundle.py --port hair,ink` at `de6544b15`, with the 21 `fp21j` types (every S6b change) and S6's hair set installed (the whole set, four pages, the strands held, the joint palette); the book `c4-cbcc40bf`.
+
+Every bundle check passes:
+- eye colours, shade means and outfit slots;
+- skeletons (274 files), brows and fringes;
+- cloth on every tenth resident;
+- book drift: 791 lines the same.
+
+**The pages audit** on that installation (S4's, with the class check): **0 errors, 0 warnings** ([final/pages-audit.txt](final/pages-audit.txt)).
+
+| Bundle (dev-box, `.local/char-port-2/s6b/bundle/`) | Files | Size | `pictures.py check` | sha256 |
+|---|---|---|---|---|
+| `char-composed-s6b-de6544b1.tar.gz` (PNG) | 343 | 44.6 MB | 0 failures | `cf71541650f072a3f9b3bbf470e068c1b5762dc5aa44a3488c79045c554d0085` |
+| `char-composed-s6b-de6544b1-ktx2.tar.gz` (BC7 KTX2, 122 pictures) | 558 | 48.9 MB | 0 failures | `efc6d31852b711f9379cc82246c109526a674a381be4534015509841be473dc6` |
+
+The installed types, pages and hair are put back after, and checked equal.
