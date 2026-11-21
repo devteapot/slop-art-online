@@ -1587,9 +1587,17 @@ class Instance:
             # Same routing, every profile answered by the local fake server under the name
             # `fake-<model>`, so the journal shows which profile each call was routed to.
             port = self.shared["fake_port"]
-            m["profiles"] = {name: {"base_url": f"http://127.0.0.1:{port}/v1", "model": f"fake-{p['model']}", "key_env": "LIVING_VERIFY_FAKE_KEY",
-                                    "max_tokens": 512, "requests_per_minute": 6000, **{k: p[k] for k in ("overflow", "capacity_overflow") if p.get(k)}}
-                             for name, p in m["profiles"].items()}
+            if getattr(self.opts, "fake_real_profiles", False):
+                # `--fake-real-profiles`: each profile's own token limits and pacing (no fixed
+                # rate), which the mind's pacing reads; the effort map names the purpose, as the
+                # fake tells purposes apart by it (docs/POOL_STUDY.md).
+                m["profiles"] = {name: {**{k: x for k, x in p.items() if k not in ("api_key",)}, "base_url": f"http://127.0.0.1:{port}/v1", "model": f"fake-{p['model']}",
+                                        "key_env": "LIVING_VERIFY_FAKE_KEY", "reasoning_effort": {k: k for k in p.get("reasoning_effort", {})}}
+                                 for name, p in m["profiles"].items()}
+            else:
+                m["profiles"] = {name: {"base_url": f"http://127.0.0.1:{port}/v1", "model": f"fake-{p['model']}", "key_env": "LIVING_VERIFY_FAKE_KEY",
+                                        "max_tokens": 512, "requests_per_minute": 6000, **{k: p[k] for k in ("overflow", "capacity_overflow") if p.get(k)}}
+                                 for name, p in m["profiles"].items()}
         return m
 
     def start_mind(self, planned=False):
@@ -1629,6 +1637,9 @@ class Instance:
             for k in ("MISTRAL_API_KEY", "CARLID_NPC_API_KEY", "TYPESAFE_API_KEY"):
                 env[k] = ""
         env.update({k: str(x) for k, x in v.get("env", {}).items()})
+        if getattr(self.opts, "concurrency", None):
+            # `run --concurrency`: the batch's own pool size, over the trial's and the variant's.
+            env["LIVING_CONCURRENCY"] = str(self.opts.concurrency)
         if self.opts.fake and env.get("LIVING_RETHINK") == "jev":
             # The gate's Jev judge goes to the fake server's `/v1/systemone` too (fake_llm.py), never to TypeSafe.
             env["LIVING_RETHINK_URL"] = f"http://127.0.0.1:{self.shared['fake_port']}/v1/systemone"
@@ -2788,6 +2799,8 @@ def run(a):
     bdir.mkdir(parents=True, exist_ok=True)
     (bdir / "batch.json").write_text(json.dumps({"trials": a.trials, "variants": names, "replicates": a.replicates, "fake": a.fake,
                                                  "minutes": a.minutes, "keep_db": a.keep_db, "parallel": a.parallel, "sample_s": a.sample_s,
+                                                 "fake_script": getattr(a, "fake_script", None), "fake_real_profiles": getattr(a, "fake_real_profiles", False),
+                                                 "concurrency": getattr(a, "concurrency", None),
                                                  "commit": sh("git", "-C", ROOT, "rev-parse", "--short", "HEAD").stdout.strip(),
                                                  "dirty": bool(sh("git", "-C", ROOT, "status", "--porcelain", "living").stdout.strip()),
                                                  "started": time.strftime("%Y-%m-%dT%H:%M:%S")}, indent=1))
@@ -3329,6 +3342,8 @@ def main():
     p.add_argument("--minutes", type=float)
     p.add_argument("--fake", action="store_true", help="answer every model call from the local fake server (no provider keys)")
     p.add_argument("--fake-script", help="with --fake: the fake server's script (fake-llm.md), e.g. capacity 429s, or living/trials/fake/latency.json")
+    p.add_argument("--fake-real-profiles", action="store_true", help="with --fake: keep each profile's token limits and pacing settings (only the endpoint, model name and key change)")
+    p.add_argument("--concurrency", type=int, help="LIVING_CONCURRENCY for every instance, over the trial's `minds.concurrency` and its variants")
     p.add_argument("--parallel", type=int, default=18)
     p.add_argument("--keep-db", action="store_true")
     p.add_argument("--stagger", type=float, default=2, help="seconds between instance starts")
