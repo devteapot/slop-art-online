@@ -1,19 +1,68 @@
 #!/bin/bash
 # build-slot: run a heavy command (cargo release build, `just living-check`, a Blender bake) only
 # when one of the laptop's heavy-job slots is free. Usage: build-slot [--label NAME] <command...>
-# Slots are directories under .local/build-slots/slot-N holding the holder's pid and label;
-# a slot whose pid is gone is reclaimed. `build-slot --status` lists holders and waiters.
+# Slots are directories under .local/build-slots/slot-N holding the holder's pid, label and
+# process start time; waiters are files .local/build-slots/waiting/<pid> (a status line, then
+# `start=<process start time>`). A slot or waiter whose pid is gone, or whose pid now belongs to a
+# process with another start time (the pid was reused), is dropped wherever slots or waiters are
+# scanned or listed; a record without a start time (an older build-slot wrote it) is dropped only
+# when its pid is gone. `build-slot --status` lists holders and waiters.
+# Tracked at living/tools/build-slot; the laptop runs an installed copy (docs/TOOLING.md).
+# BUILD_SLOT_DIR moves the slot directory (the selftest uses a scratch one).
 # Play sessions: the launcher creates .local/build-slots/session/{pid,since} (mkdir, then the
 # files) when the game opens and removes the directory when it closes; while it exists with a
 # live pid, no new heavy job starts. Jobs already running are not interrupted.
 set -u
-DIR=/Users/carlid/dev/slop-art-online/.local/build-slots
+DIR=${BUILD_SLOT_DIR:-/Users/carlid/dev/slop-art-online/.local/build-slots}
 SLOTS=${BUILD_SLOTS:-3}
 mkdir -p "$DIR/waiting"
+# A process's start time, to tell a live pid from a reused one: the start in clock ticks since
+# boot on Linux (/proc/PID/stat field 22), `ps -o lstart=` in UTC elsewhere (macOS; the same text
+# play.py's proc_identity reads, spaces squeezed). Empty if no process.
+pid_start() {
+  local st
+  if [ -r "/proc/$1/stat" ]; then
+    st=$(cat "/proc/$1/stat" 2>/dev/null) || return 0
+    st=${st##*) }                    # drop "pid (comm) "; field 3 (state) is now the first word
+    set -- $st; echo "jiffies:${20}"
+  else
+    LC_ALL=C TZ=UTC ps -o lstart= -p "$1" 2>/dev/null | tr -s ' ' | sed 's/^ //; s/ $//'
+  fi
+}
+# gone_reason PID RECORDED_START: prints why the record is dead (and succeeds), or fails if it lives.
+gone_reason() {
+  [ -n "$1" ] || return 1                       # no pid yet: a holder still writing its files
+  if ! kill -0 "$1" 2>/dev/null; then echo "pid $1 is gone"; return 0; fi
+  [ -n "$2" ] || return 1                       # no recorded start (older record): the pid decides
+  local now; now=$(pid_start "$1")
+  if [ "$now" != "$2" ]; then echo "pid $1 was reused (started ${now:-?}, recorded $2)"; return 0; fi
+  return 1
+}
+# Drop slot holders and waiters whose process is dead or whose pid was reused; with a first
+# argument, say what was dropped.
+prune() {
+  local d w p why
+  for d in "$DIR"/slot-*; do
+    [ -d "$d" ] || continue
+    p=$(cat "$d/pid" 2>/dev/null)
+    if why=$(gone_reason "$p" "$(cat "$d/start" 2>/dev/null)"); then
+      rm -rf "$d"; [ -n "${1:-}" ] && echo "freed $(basename "$d"): $why"
+    fi
+  done
+  for w in "$DIR"/waiting/*; do
+    [ -f "$w" ] || continue
+    p=$(basename "$w")
+    if why=$(gone_reason "$p" "$(sed -n 's/^start=//p' "$w" 2>/dev/null)"); then
+      rm -f "$w"; [ -n "${1:-}" ] && echo "dropped waiter $p: $why"
+    fi
+  done
+  return 0
+}
 if [ "${1:-}" = "--status" ]; then
+  prune say
   [ -d "$DIR/session" ] && echo "session: the owner is playing (launcher pid $(cat "$DIR/session/pid" 2>/dev/null), since $(cat "$DIR/session/since" 2>/dev/null)); no new heavy jobs start"
   for d in "$DIR"/slot-*; do [ -d "$d" ] && echo "held  $(basename "$d"): pid $(cat "$d/pid" 2>/dev/null) $(cat "$d/label" 2>/dev/null) since $(cat "$d/since" 2>/dev/null)"; done
-  for w in "$DIR"/waiting/*; do [ -f "$w" ] && echo "wait  $(cat "$w")"; done
+  for w in "$DIR"/waiting/*; do [ -f "$w" ] && echo "wait  $(head -n 1 "$w")"; done
   exit 0
 fi
 LABEL="$(basename "$PWD")"
@@ -35,27 +84,32 @@ if [ -z "${RUSTC_WRAPPER:-}" ] && [ "${LIVING_SCCACHE:-1}" != 0 ] && [ "${BUILD_
   export SCCACHE_CACHE_SIZE="$SLOP_SCCACHE_SIZE" SCCACHE_SERVER_PORT="${SLOP_SCCACHE_PORT:-4237}"
   export SCCACHE_IGNORE_SERVER_IO_ERROR=1
 fi
-ME=$$; W="$DIR/waiting/$ME"; echo "pid $ME $LABEL since $(date '+%H:%M:%S'): $*" > "$W"
+ME=$$; W="$DIR/waiting/$ME"; MYSTART=$(pid_start "$ME"); SINCE=$(date '+%H:%M:%S')
+wait_note() { printf '%s\nstart=%s\n' "pid $ME $LABEL since $SINCE: $*" "$MYSTART" > "$W"; }
+trap 'rm -f "$W"' EXIT                  # a waiter that exits (or is stopped) takes its file with it
+wait_note "$@"
 MIN_FREE_GB=${BUILD_SLOT_MIN_FREE_GB:-25}
 free_gb() { df -g / | awk 'NR==2 {print $4}'; }
 SESSION="$DIR/session"   # held by the play launcher while the owner plays (pid in $SESSION/pid)
 session_on() { [ -d "$SESSION" ] && p=$(cat "$SESSION/pid" 2>/dev/null) && [ -n "$p" ] && kill -0 "$p" 2>/dev/null; }
 while :; do
+  prune                                 # dead or reused holders and waiters
+  wait_note "$@"                        # our own record, rewritten if another process pruned it
   # The owner is playing: no new heavy job until the session ends (a dead launcher's lock is ignored).
   if session_on; then
-    echo "pid $ME $LABEL since $(date '+%H:%M:%S'): $* [waiting: the owner is playing]" > "$W"
+    wait_note "$@" "[waiting: the owner is playing]"
     sleep 30; continue
   fi
   # Disk guard: a heavy job may grow a target dir by ~12 GB; start one only with room for it.
   if [ "$(free_gb)" -lt "$MIN_FREE_GB" ]; then
-    echo "pid $ME $LABEL since $(date '+%H:%M:%S'): $* [waiting for disk: $(free_gb) GB free, need $MIN_FREE_GB]" > "$W"
+    wait_note "$@" "[waiting for disk: $(free_gb) GB free, need $MIN_FREE_GB]"
     sleep 30; continue
   fi
   for i in $(seq 1 "$SLOTS"); do
     s="$DIR/slot-$i"
-    if [ -d "$s" ]; then p=$(cat "$s/pid" 2>/dev/null); if [ -n "$p" ] && ! kill -0 "$p" 2>/dev/null; then rm -rf "$s"; fi; fi
+    if [ -d "$s" ] && gone_reason "$(cat "$s/pid" 2>/dev/null)" "$(cat "$s/start" 2>/dev/null)" >/dev/null; then rm -rf "$s"; fi
     if mkdir "$s" 2>/dev/null; then
-      echo $ME > "$s/pid"; echo "$LABEL" > "$s/label"; date '+%H:%M:%S' > "$s/since"; rm -f "$W"
+      echo $ME > "$s/pid"; echo "$MYSTART" > "$s/start"; echo "$LABEL" > "$s/label"; date '+%H:%M:%S' > "$s/since"; rm -f "$W"
       trap 'rm -rf "$s"' EXIT
       "$@"; rc=$?
       exit $rc

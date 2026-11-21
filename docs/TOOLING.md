@@ -596,6 +596,20 @@ Two runs of a generator on the same code and the same Blender give byte-identica
 
 **To check a generator:** run it twice into two scratch out_roots and `cmp` every file. For a GLB that differs, compare its JSON, its vertex accessors and its triangles as a set (winding kept) before its index order: only an order difference points at an op like this one. A scratch `gen_buildings.sh` run rewrites the tracked `living/rules/data/buildings.json` ([above](#building-the-render-asset-set)); `git checkout` it afterwards.
 
+## build-slot, the laptop's heavy-job slots
+
+[`living/tools/build-slot`](../living/tools/build-slot) runs a heavy command (a release build, `just living-check`, a Blender bake) only when one of the laptop's slots is free, and starts nothing new while the owner plays (`.local/build-slots/session`, held by `play.py`; [Play with one command](LIVING_CORE.md)). Until 2026-11-21 it lived only as an untracked file in the main checkout's `.local/bin`; the tracked copy is that file plus the fix below. The laptop runs an installed copy, so a change here takes effect only after installing it:
+
+```bash
+install -m 0755 living/tools/build-slot /Users/carlid/dev/slop-art-online/.local/bin/build-slot
+```
+
+- **Where.** `BUILD_SLOT_DIR` (default `/Users/carlid/dev/slop-art-online/.local/build-slots`) holds `slot-N/` holders (`pid`, `start`, `label`, `since`) and `waiting/<pid>` files (a status line, then `start=<process start time>`). `BUILD_SLOTS` (3), `BUILD_SLOT_MIN_FREE_GB` (25) and `BUILD_SLOT_SCCACHE` are unchanged.
+- **Dead and reused pids.** A waiter killed while waiting used to leave `waiting/<pid>` forever, and `--status` kept listing it. Now every scan (`--status`, and each pass of a waiting job before it looks for a slot) drops a holder or waiter whose pid is gone, or whose pid now belongs to a process with another start time (the pid was reused). The start time is `ps -o lstart=` read with `LC_ALL=C TZ=UTC` on macOS (the same text `play.py`'s `proc_identity` reads, spaces squeezed) and field 22 of `/proc/PID/stat` on Linux. A record without a start time, from an older build-slot, is dropped only when its pid is gone. `--status` says what it dropped. `play.py`'s `held_slots` skips a slot whose recorded start differs from its pid's, so a reused pid does not hold the game back either. A waiter that exits normally removes its own file.
+- **Self-test.** `bash living/tools/build_slot_selftest.sh` (about 15 s, scratch `BUILD_SLOT_DIR` under `$TMPDIR`): a real holder and a real waiter behind it, a dead waiter in each format, a live pid recorded with another start time and a live old-format waiter; then a dead holder, a reused-pid holder and an old-format live holder, and a job that reclaims reused-pid slots. Only the dead and reused records go.
+- **Not fixed.** Two waiters can both judge the same slot dead and one can remove the other's fresh claim (unchanged from before; the slots are advisory).
+- **Other machines.** The Spark's merge queue uses its own copy (`~/slop-mq/build-slot`); it is not this file.
+
 ## Measurements (dev-box, 2026-11-11)
 
 All runs used `CARGO_BUILD_JOBS=12` on the 32-core dev-box while other workers were building. The load average at each run's start (and the range during it) is given because it moved the numbers more than anything else. Before/after arms on the same change are interleaved A B B A. The runs used a scratch clone of the repository and private target folders; reflink snapshots gave each warm arm the same starting state. The raw records are in each run's JSON (`check.py --json`) and the step logs.
