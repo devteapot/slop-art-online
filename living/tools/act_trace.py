@@ -74,17 +74,31 @@ def marks(path):
             yield dict(stage=stage, actor=int(actor), key=int(key), reducer_us=int(reducer), wall_ms=int(row["ts"]) / 1000, detail=detail)
 
 
-def done_at_start(rows, i):
-    """Whether the act started at `rows[i]` (`act_started`) was already done in its own transaction:
-    an act with nothing to do (a walk to where the body stands) completes inside `begin`, so its
-    `act_done` (age 0, key its start ms) is logged before its `act_started`, in the same transaction."""
-    m = rows[i]
-    for x in reversed(rows[max(0, i - 40):i]):
-        if x["reducer_us"] != m["reducer_us"]:
-            break
-        if x["actor"] == m["actor"] and x["stage"] == "act_done" and x["detail"] and x["detail"][-1] == "0":
-            return True
-    return False
+def survivors(rows):
+    """The indices of the `act_started` markers that leave an act under way after their
+    transaction. An act with nothing to do (a walk to where the body stands) completes inside
+    `begin`: its `act_done` (age 0) is logged first, then `acts::outcome` starts the next waiting
+    act, whose `act_started` is logged before the first act's own. So in one transaction (one
+    `reducer_us`) the starts are logged in reverse order of their beginning after the instant
+    completions, and the act left under way is the first started after the last instant `act_done`
+    (none when every start completed at once)."""
+    groups = {}
+    for i, m in enumerate(rows):
+        if m["stage"] in ("act_started", "act_done"):
+            groups.setdefault((m["actor"], m["reducer_us"]), []).append(i)
+    keep = set()
+    for idx in groups.values():
+        starts = [i for i in idx if rows[i]["stage"] == "act_started"]
+        if not starts:
+            continue
+        instant = [i for i in idx if rows[i]["stage"] == "act_done" and rows[i]["detail"] and rows[i]["detail"][-1] == "0"]
+        if not instant:
+            keep.add(starts[-1])
+        elif len(instant) < len(starts):
+            after = [i for i in starts if i > instant[-1]]
+            if after:
+                keep.add(after[0])
+    return keep
 
 
 def pct(values, q):
@@ -122,6 +136,8 @@ def report(path, actors=None, seconds=None, from_ms=None, to_ms=None):
     done_ok, done_fail = Counter(), Counter()
     never = Counter()
     started_skills = Counter()
+    alive = survivors(rows)
+    alive_tx = {(rows[j]["actor"], rows[j]["reducer_us"]) for j in alive}
     for i, m in enumerate(rows):
         a, st = m["actor"], m["stage"]
         if st == "act_submit":
@@ -134,9 +150,11 @@ def report(path, actors=None, seconds=None, from_ms=None, to_ms=None):
             q = queued.pop(m["key"], None)
             if q and q[3]:
                 waits["behind_act" if q[2] else "after_idle"].append(m["wall_ms"] - q[0])
-            # An act done in its own transaction (`done_at_start`) holds nothing afterwards.
-            if not done_at_start(rows, i):
+            # Only the act its transaction leaves under way holds the body (`survivors`).
+            if i in alive:
                 running[a] = (m["detail"][0] if m["detail"] else "?", m["wall_ms"])
+            elif (a, m["reducer_us"]) not in alive_tx:
+                running.pop(a, None)
             started_skills[m["detail"][0] if m["detail"] else "?"] += 1
         elif st in ("act_refused", "act_expired"):
             queued.pop(m["key"], None)

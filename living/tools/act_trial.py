@@ -517,6 +517,8 @@ def overlaps(trace, names, decided, actors, from_ms=None, to_ms=None):
     rows = sorted(act_trace.marks(trace), key=lambda m: (m["wall_ms"], m["reducer_us"]))
     if actors is not None:
         rows = [m for m in rows if m["actor"] in actors]
+    alive = act_trace.survivors(rows)
+    alive_tx = {(rows[j]["actor"], rows[j]["reducer_us"]) for j in alive}
     used = set()
     running = {}       # actor -> {"skill", "canon", "start_ms"}
     queued = {}        # queue id -> canon
@@ -576,6 +578,12 @@ def overlaps(trace, names, decided, actors, from_ms=None, to_ms=None):
             else:
                 kind = "queued_behind"
             out[f"overlap_then:{kind}"] += 1
+            # The same skill by the markers alone (the batch's first act queued against the act
+            # under way): a bound on "the same act" for overlaps no reply could be matched to.
+            q = next((x for x in rows[i + 1:i + 40] if x["actor"] == a and x["reducer_us"] == m["reducer_us"] and x["stage"] == "act_queued"), None)
+            if cur is not None and q is not None and len(q["detail"]) > 1:
+                out["overlap_same_skill_by_markers"] += q["detail"][1] == cur["skill"]
+                out["overlap_skill_known_by_markers"] += 1
             first = batch_of[a][0] if batch_of[a] else None
             if cur is None or first is None:
                 out["overlap_unmatched"] += 1
@@ -595,8 +603,10 @@ def overlaps(trace, names, decided, actors, from_ms=None, to_ms=None):
             queued[m["key"]] = canon(rest.pop(pick)) if pick is not None else None
         elif st == "act_started":
             c = queued.pop(m["key"], None)
-            if not act_trace.done_at_start(rows, i):
+            if i in alive:
                 running[a] = {"skill": m["detail"][0] if m["detail"] else "?", "canon": c, "start_ms": m["wall_ms"]}
+            elif (a, m["reducer_us"]) not in alive_tx:
+                running.pop(a, None)
         elif st == "act_continued":
             queued.pop(m["key"], None)
             if inside:
