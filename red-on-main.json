@@ -20,17 +20,5 @@
     "reason": "92/8 on the dev-box pinned render set 79072c65d37f with main's binary (leg-turn easing, steady leg offsets, strafe/backpedal play plain walk); 100/100 on the laptop's assets. Clip names all present (own-clips 87, VRoid bases 84 incl. walk_back, strafe_*); suspect the dev-box bake's markers: gen_anim marker_check fails on main (strafe_run_left_v48 both bases, run_diag_br_v48 Vivi)",
     "skill": "verify-ui",
     "times": 0
-  },
-  "seat": {
-    "case": "seat",
-    "first_main": "65bf3740b4853edd44ef9f03fd61c2b64be2541e",
-    "first_seen": "2026-11-20T23:54:01+01:00",
-    "last_evidence": "/home/carlid/.local/state/slop-merge/scene-gate/main/.local/living/verify/gate-1121003721-recheck-seat-render-isl/ui/checks-seat.json [check.py exit 1]",
-    "last_main": "7499c2707a57e408f00b8c6feca559c381763345",
-    "last_seen": "2026-11-21T00:42:35+01:00",
-    "owner": "laptop (coat chains v2 hem against ground: tails up to -25 mm vs the pre-chains 5 mm bound; release waits on ground_seat(); folded into the laptop's hem-against-ground constraint)",
-    "reason": null,
-    "skill": "verify-ui",
-    "times": 2
   }
 }
