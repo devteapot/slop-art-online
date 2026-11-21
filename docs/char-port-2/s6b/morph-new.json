@@ -1,0 +1,1229 @@
+{
+ "about": "Each expression's new crossing pairs on the face skin (in the expression at full weight, not at rest; neighbours by position), as [all, away from the ear root]; morph_new.py. unnarrowed = SLOP_PORT=jaw,jaw_shell,paint,neck,ink; faceprop = with faceprop before the fix; fixed = with faceprop and person.expression_clearance.",
+ "bodies": {
+  "unnarrowed woman": {
+   "rest": 551,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_EYE_Close_L": [
+    2,
+    2
+   ],
+   "Fcl_EYE_Close_R": [
+    1,
+    1
+   ],
+   "Fcl_EYE_Joy": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    18,
+    14
+   ],
+   "Fcl_MTH_I": [
+    0,
+    0
+   ],
+   "Fcl_MTH_U": [
+    0,
+    0
+   ],
+   "Fcl_MTH_E": [
+    0,
+    0
+   ],
+   "Fcl_MTH_O": [
+    18,
+    14
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "unnarrowed man": {
+   "rest": 771,
+   "Fcl_EYE_Close": [
+    8,
+    8
+   ],
+   "Fcl_EYE_Close_L": [
+    4,
+    4
+   ],
+   "Fcl_EYE_Close_R": [
+    4,
+    4
+   ],
+   "Fcl_EYE_Joy": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    2,
+    0
+   ],
+   "Fcl_MTH_I": [
+    2,
+    0
+   ],
+   "Fcl_MTH_U": [
+    2,
+    0
+   ],
+   "Fcl_MTH_E": [
+    2,
+    0
+   ],
+   "Fcl_MTH_O": [
+    2,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "unnarrowed elder": {
+   "rest": 782,
+   "Fcl_EYE_Close": [
+    18,
+    18
+   ],
+   "Fcl_EYE_Close_L": [
+    9,
+    9
+   ],
+   "Fcl_EYE_Close_R": [
+    9,
+    9
+   ],
+   "Fcl_EYE_Joy": [
+    8,
+    8
+   ],
+   "Fcl_MTH_A": [
+    6,
+    0
+   ],
+   "Fcl_MTH_I": [
+    0,
+    0
+   ],
+   "Fcl_MTH_U": [
+    4,
+    0
+   ],
+   "Fcl_MTH_E": [
+    4,
+    0
+   ],
+   "Fcl_MTH_O": [
+    6,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "unnarrowed girl": {
+   "rest": 1029,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_EYE_Close_L": [
+    2,
+    2
+   ],
+   "Fcl_EYE_Close_R": [
+    1,
+    1
+   ],
+   "Fcl_EYE_Joy": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    14,
+    0
+   ],
+   "Fcl_MTH_I": [
+    0,
+    0
+   ],
+   "Fcl_MTH_U": [
+    4,
+    0
+   ],
+   "Fcl_MTH_E": [
+    4,
+    0
+   ],
+   "Fcl_MTH_O": [
+    12,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "faceprop woman": {
+   "rest": 469,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_EYE_Close_L": [
+    2,
+    2
+   ],
+   "Fcl_EYE_Close_R": [
+    1,
+    1
+   ],
+   "Fcl_EYE_Joy": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    10,
+    0
+   ],
+   "Fcl_MTH_I": [
+    6,
+    0
+   ],
+   "Fcl_MTH_U": [
+    6,
+    0
+   ],
+   "Fcl_MTH_E": [
+    10,
+    0
+   ],
+   "Fcl_MTH_O": [
+    10,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "faceprop man": {
+   "rest": 682,
+   "Fcl_EYE_Close": [
+    8,
+    8
+   ],
+   "Fcl_EYE_Close_L": [
+    4,
+    4
+   ],
+   "Fcl_EYE_Close_R": [
+    4,
+    4
+   ],
+   "Fcl_EYE_Joy": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    17,
+    7
+   ],
+   "Fcl_MTH_I": [
+    4,
+    2
+   ],
+   "Fcl_MTH_U": [
+    9,
+    7
+   ],
+   "Fcl_MTH_E": [
+    10,
+    7
+   ],
+   "Fcl_MTH_O": [
+    15,
+    7
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "faceprop elder": {
+   "rest": 688,
+   "Fcl_EYE_Close": [
+    18,
+    18
+   ],
+   "Fcl_EYE_Close_L": [
+    9,
+    9
+   ],
+   "Fcl_EYE_Close_R": [
+    9,
+    9
+   ],
+   "Fcl_EYE_Joy": [
+    8,
+    8
+   ],
+   "Fcl_MTH_A": [
+    8,
+    0
+   ],
+   "Fcl_MTH_I": [
+    0,
+    0
+   ],
+   "Fcl_MTH_U": [
+    1,
+    0
+   ],
+   "Fcl_MTH_E": [
+    2,
+    0
+   ],
+   "Fcl_MTH_O": [
+    6,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "faceprop girl": {
+   "rest": 979,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_EYE_Close_L": [
+    2,
+    2
+   ],
+   "Fcl_EYE_Close_R": [
+    1,
+    1
+   ],
+   "Fcl_EYE_Joy": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    32,
+    0
+   ],
+   "Fcl_MTH_I": [
+    7,
+    0
+   ],
+   "Fcl_MTH_U": [
+    11,
+    0
+   ],
+   "Fcl_MTH_E": [
+    17,
+    0
+   ],
+   "Fcl_MTH_O": [
+    28,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "fixed woman": {
+   "rest": 469,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_EYE_Close_L": [
+    2,
+    2
+   ],
+   "Fcl_EYE_Close_R": [
+    1,
+    1
+   ],
+   "Fcl_EYE_Joy": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ],
+   "Fcl_MTH_I": [
+    0,
+    0
+   ],
+   "Fcl_MTH_U": [
+    0,
+    0
+   ],
+   "Fcl_MTH_E": [
+    0,
+    0
+   ],
+   "Fcl_MTH_O": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "fixed man": {
+   "rest": 682,
+   "Fcl_EYE_Close": [
+    8,
+    8
+   ],
+   "Fcl_EYE_Close_L": [
+    4,
+    4
+   ],
+   "Fcl_EYE_Close_R": [
+    4,
+    4
+   ],
+   "Fcl_EYE_Joy": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ],
+   "Fcl_MTH_I": [
+    0,
+    0
+   ],
+   "Fcl_MTH_U": [
+    0,
+    0
+   ],
+   "Fcl_MTH_E": [
+    0,
+    0
+   ],
+   "Fcl_MTH_O": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "fixed elder": {
+   "rest": 688,
+   "Fcl_EYE_Close": [
+    18,
+    18
+   ],
+   "Fcl_EYE_Close_L": [
+    9,
+    9
+   ],
+   "Fcl_EYE_Close_R": [
+    9,
+    9
+   ],
+   "Fcl_EYE_Joy": [
+    8,
+    8
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ],
+   "Fcl_MTH_I": [
+    0,
+    0
+   ],
+   "Fcl_MTH_U": [
+    0,
+    0
+   ],
+   "Fcl_MTH_E": [
+    0,
+    0
+   ],
+   "Fcl_MTH_O": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "fixed girl": {
+   "rest": 979,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_EYE_Close_L": [
+    2,
+    2
+   ],
+   "Fcl_EYE_Close_R": [
+    1,
+    1
+   ],
+   "Fcl_EYE_Joy": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ],
+   "Fcl_MTH_I": [
+    0,
+    0
+   ],
+   "Fcl_MTH_U": [
+    0,
+    0
+   ],
+   "Fcl_MTH_E": [
+    0,
+    0
+   ],
+   "Fcl_MTH_O": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  }
+ },
+ "types": {
+  "unnarrowed (installed)": {
+   "adult-f-a.glb": {
+    "rest": 695,
+    "Fcl_EYE_Close": [
+     3,
+     3
+    ],
+    "Fcl_MTH_A": [
+     20,
+     0
+    ]
+   },
+   "adult-f-b.glb": {
+    "rest": 551,
+    "Fcl_EYE_Close": [
+     3,
+     3
+    ],
+    "Fcl_MTH_A": [
+     18,
+     14
+    ]
+   },
+   "adult-f-c.glb": {
+    "rest": 493,
+    "Fcl_EYE_Close": [
+     0,
+     0
+    ],
+    "Fcl_MTH_A": [
+     46,
+     34
+    ]
+   },
+   "adult-m-a.glb": {
+    "rest": 813,
+    "Fcl_EYE_Close": [
+     17,
+     16
+    ],
+    "Fcl_MTH_A": [
+     4,
+     0
+    ]
+   },
+   "adult-m-b.glb": {
+    "rest": 693,
+    "Fcl_EYE_Close": [
+     8,
+     8
+    ],
+    "Fcl_MTH_A": [
+     6,
+     0
+    ]
+   },
+   "adult-m-c.glb": {
+    "rest": 525,
+    "Fcl_EYE_Close": [
+     8,
+     8
+    ],
+    "Fcl_MTH_A": [
+     2,
+     0
+    ]
+   },
+   "child-u-a.glb": {
+    "rest": 1029,
+    "Fcl_EYE_Close": [
+     3,
+     3
+    ],
+    "Fcl_MTH_A": [
+     14,
+     0
+    ]
+   },
+   "child-u-b.glb": {
+    "rest": 1115,
+    "Fcl_EYE_Close": [
+     3,
+     3
+    ],
+    "Fcl_MTH_A": [
+     29,
+     0
+    ]
+   },
+   "child-u-c.glb": {
+    "rest": 929,
+    "Fcl_EYE_Close": [
+     3,
+     3
+    ],
+    "Fcl_MTH_A": [
+     2,
+     2
+    ]
+   },
+   "elder-f-a.glb": {
+    "rest": 1047,
+    "Fcl_EYE_Close": [
+     8,
+     8
+    ],
+    "Fcl_MTH_A": [
+     7,
+     0
+    ]
+   },
+   "elder-f-b.glb": {
+    "rest": 927,
+    "Fcl_EYE_Close": [
+     8,
+     8
+    ],
+    "Fcl_MTH_A": [
+     3,
+     0
+    ]
+   },
+   "elder-f-c.glb": {
+    "rest": 911,
+    "Fcl_EYE_Close": [
+     8,
+     8
+    ],
+    "Fcl_MTH_A": [
+     30,
+     22
+    ]
+   },
+   "elder-m-a.glb": {
+    "rest": 809,
+    "Fcl_EYE_Close": [
+     18,
+     18
+    ],
+    "Fcl_MTH_A": [
+     18,
+     0
+    ]
+   },
+   "elder-m-b.glb": {
+    "rest": 703,
+    "Fcl_EYE_Close": [
+     18,
+     18
+    ],
+    "Fcl_MTH_A": [
+     10,
+     0
+    ]
+   },
+   "elder-m-c.glb": {
+    "rest": 521,
+    "Fcl_EYE_Close": [
+     18,
+     18
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "youth-f-a.glb": {
+    "rest": 773,
+    "Fcl_EYE_Close": [
+     3,
+     3
+    ],
+    "Fcl_MTH_A": [
+     18,
+     0
+    ]
+   },
+   "youth-f-b.glb": {
+    "rest": 577,
+    "Fcl_EYE_Close": [
+     3,
+     3
+    ],
+    "Fcl_MTH_A": [
+     12,
+     4
+    ]
+   },
+   "youth-f-c.glb": {
+    "rest": 489,
+    "Fcl_EYE_Close": [
+     3,
+     3
+    ],
+    "Fcl_MTH_A": [
+     32,
+     20
+    ]
+   },
+   "youth-m-a.glb": {
+    "rest": 847,
+    "Fcl_EYE_Close": [
+     10,
+     10
+    ],
+    "Fcl_MTH_A": [
+     4,
+     0
+    ]
+   },
+   "youth-m-b.glb": {
+    "rest": 689,
+    "Fcl_EYE_Close": [
+     8,
+     8
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "youth-m-c.glb": {
+    "rest": 503,
+    "Fcl_EYE_Close": [
+     10,
+     10
+    ],
+    "Fcl_MTH_A": [
+     10,
+     2
+    ]
+   }
+  },
+  "fixed": {
+   "adult-f-a.glb": {
+    "rest": 855,
+    "Fcl_EYE_Close": [
+     7,
+     7
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "adult-f-b.glb": {
+    "rest": 469,
+    "Fcl_EYE_Close": [
+     3,
+     3
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "adult-f-c.glb": {
+    "rest": 405,
+    "Fcl_EYE_Close": [
+     0,
+     0
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "adult-m-a.glb": {
+    "rest": 665,
+    "Fcl_EYE_Close": [
+     16,
+     16
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "adult-m-b.glb": {
+    "rest": 643,
+    "Fcl_EYE_Close": [
+     8,
+     8
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "adult-m-c.glb": {
+    "rest": 397,
+    "Fcl_EYE_Close": [
+     8,
+     8
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "child-u-a.glb": {
+    "rest": 979,
+    "Fcl_EYE_Close": [
+     3,
+     3
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "child-u-b.glb": {
+    "rest": 1041,
+    "Fcl_EYE_Close": [
+     3,
+     3
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "child-u-c.glb": {
+    "rest": 873,
+    "Fcl_EYE_Close": [
+     3,
+     3
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "elder-f-a.glb": {
+    "rest": 1029,
+    "Fcl_EYE_Close": [
+     14,
+     14
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "elder-f-b.glb": {
+    "rest": 755,
+    "Fcl_EYE_Close": [
+     8,
+     8
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "elder-f-c.glb": {
+    "rest": 633,
+    "Fcl_EYE_Close": [
+     8,
+     8
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "elder-m-a.glb": {
+    "rest": 825,
+    "Fcl_EYE_Close": [
+     18,
+     18
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "elder-m-b.glb": {
+    "rest": 643,
+    "Fcl_EYE_Close": [
+     18,
+     18
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "elder-m-c.glb": {
+    "rest": 477,
+    "Fcl_EYE_Close": [
+     18,
+     18
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "youth-f-a.glb": {
+    "rest": 797,
+    "Fcl_EYE_Close": [
+     7,
+     7
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "youth-f-b.glb": {
+    "rest": 485,
+    "Fcl_EYE_Close": [
+     3,
+     3
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "youth-f-c.glb": {
+    "rest": 395,
+    "Fcl_EYE_Close": [
+     3,
+     3
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "youth-m-a.glb": {
+    "rest": 743,
+    "Fcl_EYE_Close": [
+     10,
+     10
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "youth-m-b.glb": {
+    "rest": 757,
+    "Fcl_EYE_Close": [
+     8,
+     8
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   },
+   "youth-m-c.glb": {
+    "rest": 405,
+    "Fcl_EYE_Close": [
+     10,
+     10
+    ],
+    "Fcl_MTH_A": [
+     0,
+     0
+    ]
+   }
+  }
+ }
+}
