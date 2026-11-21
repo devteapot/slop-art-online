@@ -186,14 +186,22 @@ def hair_prims(j):
 
 
 def place(files):
-    """Each file's cells: [page, col, row, w, h]."""
-    pages, out = [], {}
-    for name, (w, h) in files:
+    """Each file's cells: [page, col, row, w, h]. `files`: (name, (w, h)) or (name, (w, h), group). A page holds one
+    group's files only: the client draws a page's files as one material, so a file whose own profile differs from the
+    shared one (a master's, hair.MASTERS[...]["profile"]) goes on a page of its own group (S7, the coordinator's
+    decision 2026-11-21; the pages audit holds a page to one profile)."""
+    pages, groups, out = [], [], {}
+    for item in files:
+        name, (w, h) = item[0], item[1]
+        grp = item[2] if len(item) > 2 else None
         if w > 2 or h > 2:
             raise SystemExit(f"hair_page: {name} needs {w} x {h} cells at {DENSITY_MM} mm a texel: over the hair budget (2 x 2)")
         for k in range(len(pages) + 1):
             if k == len(pages):
                 pages.append(np.zeros((GRID, GRID), bool))
+                groups.append(grp)
+            if groups[k] != grp:
+                continue
             g = pages[k]
             spot = next(((c, r) for r in range(GRID - h + 1) for c in range(GRID - w + 1) if not g[r:r + h, c:c + w].any()), None)
             if spot:
@@ -384,7 +392,7 @@ def main():
         files.append((os.path.basename(g), sp, (int(math.ceil(sp["size"][0] / CELL)), int(math.ceil(sp["size"][1] / CELL)))))
     if not files:
         raise SystemExit(f"hair_page: no file in {a.folder} has a .hairpage.json (build with SLOP_PORT=hair)")
-    cells, n_pages = place([(n, wh) for n, _, wh in files])
+    cells, n_pages = place([(n, wh, json.dumps(sp["profile"], sort_keys=True) if sp.get("profile") else None) for n, sp, wh in files])
     rng = files[0][1]["range_px"]
     R = [np.zeros((PAGE, PAGE), np.float32) for _ in range(n_pages)]
     # The strands (B) when any file carries their mapping; a page without them keeps B 0.
