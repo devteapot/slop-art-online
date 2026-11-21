@@ -397,22 +397,32 @@ Two rules for any script, queue or agent shell that starts or restarts a Spaceti
 - **No lock fd:** close the gate lock's descriptor in the command that starts the container, e.g. `systemd-run --user --scope --quiet podman start NAME 9>&-` for a lock held on fd 9 (`exec 9>~/.local/state/slop-build/gate.lock; flock -x 9`). A container started while a shell holds the lock inherits the descriptor in `conmon` and `fuse-overlayfs` and keeps the lock after the script exits: on 2026-11-20 a scratch server recycled inside a locked measurement held `gate.lock` for 70 minutes, stalling a merge gate for two hours and Blender's `flock -s` pause. Python's `subprocess` does not pass descriptors on by default (`close_fds=True`). To see who holds the lock: `fuser ~/.local/state/slop-build/gate.lock`, then `ps` on each pid; a container's `conmon` among them is this case, and stopping the (idle) container with `podman kill -s INT` releases it.
 
 
-### Blender during a gate
+### Heavy work during a gate
 
-On the dev-box, `blender` on `PATH` is [`living/tools/blender_gate.sh`](../living/tools/blender_gate.sh), installed as `~/.local/share/slop-tools/build-bin/blender` (`install -m 755 living/tools/blender_gate.sh ~/.local/share/slop-tools/build-bin/blender`). The real binary stays `/usr/bin/blender`. A scene gate holds `~/.local/state/slop-build/gate.lock` exclusively, and Blender gives the gate the machine:
+**The rule.** Any cargo build, Blender run or other multi-core build started by hand or by a worker while gates may run goes through [`living/tools/gate_pause.sh`](../living/tools/gate_pause.sh): `living/tools/gate_pause.sh -- CMD [ARGS…]`. It gives a scene gate the machine. On 2026-11-21 a 16-CPU wasm build run by hand in the middle of the `queue-fail-fast` gate helped fail it. Our scripts' heavy steps use it: `genesis_fuel.py`'s stepping build and the render set's build ([below](#building-the-render-asset-set)). The gate's own builds do not need it, and are never paused by it (below).
 
-- **At start:** while the lock is held, the wrapper waits.
-- **While it runs:** Blender is in a process group of its own (`setsid`). Every 3 s (`SLOP_GATE_POLL_S`) the wrapper tests the lock without blocking, and while a gate holds it, stops the group (`SIGSTOP`). It continues the group (`SIGCONT`) when the gate lets the lock go. Before 2026-11-21 the wrapper checked only at start, so a 20-minute file ran straight through a gate: S6's batch loaded a render pass to 15–29.
-- **The cap:** a hold longer than `SLOP_GATE_PAUSE_CAP_S` (5,400 s, 90 minutes: longer than any gate with scenes and the render group) is taken for a leaked lock, as on 2026-11-20 (above). Blender is continued, a `WARNING` is logged, and it is not paused again during that hold. The wait at start has the same cap. A paused Blender holds its memory and its files; it does not hang a batch forever.
+A scene gate holds `~/.local/state/slop-build/gate.lock` exclusively. The helper:
+
+- **At start:** while a gate holds the lock, waits.
+- **While it runs:** the command is in a process group of its own (`setsid`). Every 3 s (`SLOP_GATE_POLL_S`) the helper tests the lock without blocking, and while a gate holds it, stops the group (`SIGSTOP`). It continues the group (`SIGCONT`) when the gate lets the lock go. Before 2026-11-21 Blender's wrapper checked only at start, so a 20-minute file ran straight through a gate: S6's batch loaded a render pass to 15–29.
+- **The cap:** a hold longer than `SLOP_GATE_PAUSE_CAP_S` (5,400 s, 90 minutes: longer than any gate with scenes and the render group) is taken for a leaked lock, as on 2026-11-20 (above). The command is continued, a `WARNING` is logged, and it is not paused again during that hold. The wait at start has the same cap. A paused command holds its memory and its files; it does not hang a batch forever. A caller with a timeout allows for it (`genesis_fuel.py`: the build's hour plus 5,400 s).
+- **The gate's own work is never paused.** When the helper or any of its ancestors has the lock file open, the caller is the gate, and the command runs without waiting or pausing (logged: "the caller holds the gate lock"). This covers a gate's shell holding the descriptor (`gate-merge`), `flock -x gate.lock python3 scene_gate.py …` (the queue's render pass and recheck), and a gate's Python children, which do not inherit the descriptor (`subprocess` closes it). It is checked at start and before every pause, so a caller that takes the lock mid-run is not paused either.
 - **No lock descriptor:**
-  - The wrapper never has the lock open; each test runs `flock` in a child process.
-  - A descriptor a caller passed down is closed before Blender starts. Such a caller holds the lock itself, so Blender then runs without pausing.
+  - The helper never has the lock open; each test runs `flock` in a child process.
+  - A descriptor a caller passed down is closed before the command starts.
+- **Nested** (a step run through the helper starts Blender through its wrapper): the inner call runs its command straight, in the outer group, and the outer call pauses it all. A second `setsid` would put the inner command out of the outer pause's reach. `SLOP_GATE_PAUSE_OUTER` names the outer call while it lives.
 - **Signals:**
-  - INT, TERM and HUP to the wrapper go to Blender's group, continued first so a stopped Blender acts on them.
-  - Blender gets the default INT and QUIT back (`env --default-signal`); a script's `&` child has them ignored.
-  - The exit code is Blender's.
-- **Switches:** `SLOP_GATE_WAIT=0` turns waiting and pausing off. The log is stderr and `~/.local/state/slop-build/blender-gate.log`.
-- **The selftest** (a fake Blender that counts ticks, on a test lock): `python3 living/tools/blender_gate_selftest.py`. It checks the pause and the resume, the cap, the exit code, INT on the whole group (also while paused), no lock descriptor in Blender (also one a caller passed down), the wait at start and `SLOP_GATE_WAIT=0`.
+  - INT, TERM and HUP to the helper go to the command's group, continued first so a stopped command acts on them.
+  - The command gets the default INT and QUIT back (`env --default-signal`); a script's `&` child has them ignored.
+  - The exit code is the command's. A helper killed with `SIGKILL` cannot forward it, and leaves the group running.
+- **Switches:** `SLOP_GATE_WAIT=0` turns waiting and pausing off. Without `/proc` or `flock(1)` (macOS) the command runs straight. The log is stderr and `~/.local/state/slop-build/gate-pause.log` (`SLOP_GATE_LOG`).
+- **Blender.** On the dev-box, `blender` on `PATH` is [`living/tools/blender_gate.sh`](../living/tools/blender_gate.sh), a thin caller: `gate_pause.sh -- /usr/bin/blender "$@"`, logging to `~/.local/state/slop-build/blender-gate.log`. It finds the helper beside itself, then on `PATH`. Install both into `~/.local/share/slop-tools/build-bin/`, which is on `PATH` there:
+
+  ```bash
+  install -m 755 living/tools/gate_pause.sh ~/.local/share/slop-tools/build-bin/gate_pause.sh
+  install -m 755 living/tools/blender_gate.sh ~/.local/share/slop-tools/build-bin/blender
+  ```
+- **The selftest** (a fake command that counts ticks, on a test lock; a gate is another process holding it): `python3 living/tools/gate_pause_selftest.py`. It checks the exit code, the pause and the resume, the cap, INT on the whole group (also while paused), no lock descriptor in the command (also one a caller passed down), the caller holding the lock without passing it down (no wait, and no pause when taken mid-run), the wait at start, `SLOP_GATE_WAIT=0`, a call with no command, and nesting (through the helper and through Blender's wrapper). `python3 living/tools/blender_gate_selftest.py` runs the same cases through `blender_gate.sh`.
 
 ## Building the render asset set
 
@@ -458,14 +468,15 @@ The scene gate's verify-ui `render` group draws with the game client's generated
 
 ```bash
 mkdir -p .local/kimodo && ln -sfn ~/archive/clip-library .local/kimodo/library   # the full clip library, where the bakes look first
-just living-game-assets                                 # 1-2: bases, textures, scenery, the bases' clip bake (under assets_guard.py)
-living/tools/blender/gen_types.sh                       # 3: the 21 types and their pages
-living/tools/blender/gen_styles.sh                      # 3: hair, outfit and overlay styles, strands.png
-python3 living/tools/characters/town.py .local/town --town living/seeds/cullet.json --models-only --no-pages --lod near --jobs 2   # 4: the 64 residents the checks need
-ONLY=present LOD=near living/tools/blender/gen_person.sh clips=man     # 5: the shared clip bake, own-clips.glb
-python3 living/tools/characters/bundle.py OUT --name render-set --with-clips --book SHIPPED_LOOKS.json \
+G=living/tools/gate_pause.sh                            # every build step gives a scene gate the machine (Heavy work during a gate)
+$G -- just living-game-assets                           # 1-2: bases, textures, scenery, the bases' clip bake (under assets_guard.py)
+$G -- living/tools/blender/gen_types.sh                 # 3: the 21 types and their pages
+$G -- living/tools/blender/gen_styles.sh                # 3: hair, outfit and overlay styles, strands.png
+$G -- python3 living/tools/characters/town.py .local/town --town living/seeds/cullet.json --models-only --no-pages --lod near --jobs 2   # 4: the 64 residents the checks need
+$G -- env ONLY=present LOD=near living/tools/blender/gen_person.sh clips=man   # 5: the shared clip bake, own-clips.glb
+$G -- python3 living/tools/characters/bundle.py OUT --name render-set --with-clips --book SHIPPED_LOOKS.json \
     [--allow-book-drift living/tools/characters/book-drift-<generation>.json]   # 6: the checks, PNG and KTX2 bundles
-python3 living/tools/render_set.py build --bundle OUT/render-set-<sha8>-ktx2.tar.gz   # 7: ~/slop-assets/<id>/, read-only
+$G -- python3 living/tools/render_set.py build --bundle OUT/render-set-<sha8>-ktx2.tar.gz   # 7: ~/slop-assets/<id>/, read-only
 python3 living/tools/render_set.py check ~/slop-assets/<id>    # must print "ok"
 python3 living/tools/render_set.py pin ~/slop-assets/<id>      # then, and only then
 ```
