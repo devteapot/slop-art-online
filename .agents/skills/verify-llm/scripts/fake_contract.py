@@ -25,7 +25,7 @@ def main():
     directory = ROOT / '.local/living/verify' / args.run
     directory.mkdir(parents=True, exist_ok=False)
     results = []
-    for scenario in ('valid', '429', 'capacity', '500', 'malformed', 'repair', 'delay', 'timeout', 'outage', 'script'):
+    for scenario in ('valid', '429', 'capacity', '500', 'malformed', 'repair', 'delay', 'timeout', 'outage', 'script', 'samples'):
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0))
             port = sock.getsockname()[1]
@@ -38,6 +38,18 @@ def main():
                        {'purpose': 'talk', 'reply': {'say': 'scripted', 'to': 3}, 'usage': {'total_tokens': 100, 'prompt_tokens': 80, 'completion_tokens': 20, 'prompt_tokens_details': {'cached_tokens': 64}}},
                        {'purpose': 'consolidate', 'raw_http_body': 'broken envelope'}]}))
             command += ['--script', str(script)]
+        elif scenario == 'samples':
+            # Recorded calls (docs/POOL_STUDY.md): Ann's own in order, anyone else's from the pool.
+            usage = lambda n: {'prompt_tokens': n, 'completion_tokens': 10, 'total_tokens': n + 10, 'prompt_tokens_details': {'cached_tokens': 0}}
+            (directory / 'samples.json').write_text(json.dumps({'think': {
+                'Ann': [{'latency_ms': 300, 'usage': usage(1000), 'content': '{"thought": "ann one"}'},
+                        {'latency_ms': 10, 'usage': usage(2000), 'content': '{"thought": "ann two"}'}],
+                '*': [{'latency_ms': 10, 'usage': usage(3000), 'content': '{"thought": "pool"}'}]},
+                'consolidate': {'*': [{'latency_ms': 10, 'usage': usage(4000), 'content': None}]}}))
+            script = directory / 'samples-script.json'
+            script.write_text(json.dumps({'log_body': False, 'rules': [{'samples': str(directory / 'samples.json'), 'times': -1,
+                                                                        'headers': {'x-ratelimit-limit-tokens-minute': '10000000'}}]}))
+            command += ['--script', str(script)]
         else:
             command += ['--scenario', scenario, '--delay-s', '0.3']
         process = None
@@ -49,12 +61,14 @@ def main():
                     assert process.poll() is None, 'fake exited before readiness'
                     assert time.monotonic() < deadline, 'fake readiness timed out'
                     time.sleep(0.02)
-                def post(purpose, timeout=2):
+                def post(purpose, timeout=2, user='hello', headers=None):
                     request = urllib.request.Request(f'http://127.0.0.1:{port}/v1/chat/completions',
                           json.dumps({'model': 'contract', 'reasoning_effort': purpose,
-                                      'messages': [{'role': 'user', 'content': 'hello'}]}).encode(),
+                                      'messages': [{'role': 'user', 'content': user}]}).encode(),
                           {'Content-Type': 'application/json', 'Authorization': 'Bearer dummy-local-only'})
                     with urllib.request.urlopen(request, timeout=timeout) as response:
+                        if headers is not None:
+                            headers.update(response.headers.items())
                         return response.status, response.read().decode()
                 if scenario in ('429', '500'):
                     try:
@@ -99,6 +113,18 @@ def main():
                     assert talk['usage']['prompt_tokens_details']['cached_tokens'] == 64
                     assert talk['usage']['prompt_tokens'] + talk['usage']['completion_tokens'] == talk['usage']['total_tokens']
                     assert post('consolidate')[1] == 'broken envelope'
+                elif scenario == 'samples':
+                    said = lambda reply: (json.loads(reply['choices'][0]['message']['content']).get('thought'), reply['usage']['prompt_tokens'])
+                    started, seen = time.monotonic(), {}
+                    first = json.loads(post('think', user='# Who you are (Ann)\nhello', headers=seen)[1])
+                    assert time.monotonic() - started >= 0.29, 'the recorded latency was not waited'
+                    assert said(first) == ('ann one', 1000) and seen.get('x-ratelimit-limit-tokens-minute') == '10000000', (first, seen)
+                    assert said(json.loads(post('think', user='# Who you are (Ann)\nhello')[1])) == ('ann two', 2000)
+                    assert said(json.loads(post('think', user='# Who you are (Ann)\nhello')[1])) == ('ann one', 1000), 'replay starts again'
+                    assert said(json.loads(post('think', user='# Who you are (Bo)\nhello')[1])) == ('pool', 3000)
+                    memory = json.loads(post('consolidate')[1])
+                    assert memory['usage']['prompt_tokens'] == 4000 and 'summary' in json.loads(memory['choices'][0]['message']['content']), memory
+                    assert all(json.loads(line)['body'] is None for line in log.read_text().splitlines()), 'log_body false kept a body'
                 else:
                     for purpose in ('think', 'deliberate', 'consolidate', 'talk'):
                         envelope = json.loads(post(purpose)[1])
