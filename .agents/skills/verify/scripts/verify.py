@@ -245,6 +245,13 @@ def launch(a):
     wasm = "living_authority.wasm"
     base = (Path(tdir[1]) if Path(tdir[1]).is_absolute() else LIVING / tdir[1]) if tdir else LIVING / "target"
     built = base / "wasm32-unknown-unknown/release/living_authority.wasm"
+    # Every module this launches (the scene gate's included) must hold no host path: one that
+    # does was built around living/tools/rustc-remap and differs between machines (docs/TOOLING.md,
+    # "Byte-identical wasm"). The message names the module and its first paths, nothing else.
+    import host_paths
+    if not host_paths.check([str(built)]):
+        save(st)
+        sys.exit(f"refusing to publish {built}: it holds host paths (above)")
     mount = wasm_mount()
     if tdir or built.parent.resolve() != mount.resolve():
         wasm = f"living_authority_verify_{a.run.replace('-', '_')}.wasm"

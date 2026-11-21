@@ -17,4 +17,23 @@ if [ -z "${SLOP_SCCACHE:-}" ]; then
   SLOP_SCCACHE="$HOME/.local/share/slop-tools/bin/sccache"
   [ -x "$SLOP_SCCACHE" ] || SLOP_SCCACHE=sccache
 fi
+# Cargo runs `sccache-rustc <its rustc> ARGS`; its rustc is living/tools/rustc-remap
+# (.cargo/config.toml, build.rustc). sccache never runs that script: it finds a rustup proxy
+# behind it (`rustc-remap +stable` succeeds) and compiles with the toolchain's own rustc, from
+# `rustup which rustc` (sccache v0.19.0, src/compiler/compiler.rs, resolve_rust_compiler), so the
+# script's path remapping was lost and wasm modules kept host paths. So the script is replaced
+# here by plain `rustc`, as the script itself runs it, with its flags in the argv: sccache then
+# passes them to rustc and puts them in its key (docs/TOOLING.md, "Byte-identical wasm"). A
+# rustc-remap that predates --remap-flags (an older checkout) is passed through as before.
+case "${1:-}" in
+  */rustc-remap)
+    if grep -q -e '--remap-flags' "$1" 2>/dev/null; then
+      remap=$1
+      shift
+      flags=$("$remap" --remap-flags "$@") || exit 1
+      # Word splitting of $flags: rustc-remap's paths hold no whitespace.
+      # shellcheck disable=SC2086
+      set -- rustc "$@" $flags
+    fi ;;
+esac
 exec "$SLOP_SCCACHE" "$@"
