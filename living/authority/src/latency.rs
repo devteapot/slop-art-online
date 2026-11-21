@@ -23,6 +23,21 @@ pub fn nav(ctx: &ReducerContext, actor: u32, stage: &str, key: u64, detail: Argu
     }
 }
 
+/// A deliberate act's course (`acts.rs`): under `latency_acts` for every character, else as
+/// `nav` (the arena's subjects).
+pub fn acts(ctx: &ReducerContext, actor: u32, stage: &str, key: u64, detail: Arguments<'_>) {
+    if acts_on(ctx, actor) {
+        mark(ctx, actor, stage, key, detail);
+    }
+}
+
+/// Whether `acts` would log for `actor` (to skip working out what only a marker reads).
+pub fn acts_on(ctx: &ReducerContext, actor: u32) -> bool {
+    let laws = crate::common::laws(ctx);
+    let from = laws.latency_nav_from;
+    laws.latency_acts || (from != 0 && (actor == 0 || actor >= from))
+}
+
 pub fn fast(ctx: &ReducerContext, actor: u32, stage: &str, key: u64, detail: Arguments<'_>) {
     if crate::common::laws(ctx).latency_fast {
         mark(ctx, actor, stage, key, detail);
