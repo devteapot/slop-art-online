@@ -1,0 +1,75 @@
+# Files in living/tools/{blender,characters,textures} that only check, measure or photograph:
+# the render asset set's generator hash leaves them out (living/tools/render_set.py; docs/TOOLING.md,
+# "Building the render asset set"). One path a line, relative to living/tools/, no globs: a new tool
+# stays a generator input until it is read and listed here. Reviewed 2026-11-21 (render-set-exclude):
+# none of these is imported by a file that is not listed (render_set.py refuses the list otherwise),
+# none writes a generated asset, and a check that a generator runs (gen_types.sh's brow_check,
+# bundle.py's checks) can stop a build but not change its output. Kept as inputs although they
+# check or measure in part: eye_colours.py (compose.py imports it), shade_mean.py and
+# look_lines.py (they also write files), pictures.py (its check is part of the bundle step),
+# calibrate.py and composed_audit.py (ink_field.py, which writes ink maps, imports calibrate.py).
+# Changing this file changes the hash: a pinned set reads stale until it is re-packed.
+
+# blender: measurements and check renders
+blender/clip_check.py
+blender/outfits_check.py
+# blender/authored: counts, photographs and their sheets (the masters' generators stay)
+blender/authored/audit.py
+blender/authored/proof.py
+blender/authored/sheet.py
+blender/authored/variation_grid.py
+
+# characters: checks
+characters/book_drift.py
+characters/brow_check.py
+characters/cloth_check.py
+characters/colour_check.py
+characters/compose_check.py
+characters/fringe_check.py
+characters/person_check.py
+characters/rig_check.py
+characters/skeleton_check.py
+characters/pictures_selftest.py
+# characters: measurements, comparisons and check pages
+characters/bone_reach.py
+characters/cage_accept.py
+characters/clips_compare.py
+characters/crowd.py
+characters/hair_shimmer.py
+characters/ink_shimmer.py
+characters/live_crowd.py
+characters/piece_tones.py
+characters/pictures_stills.py
+characters/capture.sh
+characters/media.py
+characters/page.py
+characters/report.py
+# characters/reference: the VRoid reference's measuring tools (face_types.py `measure` reads their
+# output into types.json, which stays a generator input)
+characters/reference/analyse.py
+characters/reference/body.py
+characters/reference/body_table.py
+characters/reference/brow.py
+characters/reference/diff.py
+characters/reference/dump.py
+characters/reference/eyesec.py
+characters/reference/face.py
+characters/reference/geo.py
+characters/reference/grid.py
+characters/reference/hand.py
+characters/reference/lib.py
+characters/reference/measure.py
+characters/reference/neck.py
+characters/reference/pil.py
+characters/reference/plot.py
+characters/reference/render.py
+characters/reference/render2.py
+characters/reference/render3.py
+characters/reference/rig.py
+characters/reference/run.sh
+characters/reference/sheet.py
+characters/reference/tex.py
+characters/reference/turn.py
+
+# textures: measurement
+textures/surface_share.py

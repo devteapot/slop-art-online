@@ -218,7 +218,7 @@ WARN lines never fail (ShadowLodOrigin, bevy_egui's bindless, winit's Destroyed,
 
 The render group needs the game client's git-ignored assets. The gate does not generate them: it reads one pinned, read-only **asset set**, built on dev-box by [`render_set.py`](../living/tools/render_set.py) (its docstring is the format), and links it into its checkout. Sets are built on dev-box because the composed bundle's KTX2 pictures are byte-identical only on dev-box's kernel ([CHARACTERS.md § Pictures as KTX2](CHARACTERS.md#pictures-as-ktx2)).
 
-- **Build:** `render_set.py build --bundle <KTX2 bundle> [--pin]` from a clean checkout of a main commit with its generated assets built, and the composed bundle of the same commit (`living/tools/characters/bundle.py --with-clips`). It writes `~/slop-assets/<id>/` (`<id>` the first 12 hex digits of the bundle's sha256), read-only: `assets/` laid out as `living/game/assets` (the VRoid and KayKit bases, the animated bases, the composed characters and `own-clips.glb`, `view/`, `textures/`, `envs/<name>/`, `characters/looks.json`), `bundle/` (the bundle as built, its `MANIFEST.txt`, the world look data), `SET-MANIFEST.txt` (every file under `assets/` with its sha256) and `set.json` (schema 1: `id`, `bundle` {file, sha256, commit, port, pictures}, `main_commit`, `generator_trees` and their one `generator_tree`, `looks` {book, generations, worlds}, `clips`, `files`, `bytes`, `built`, `build_seconds`). `--pin` (or `pin SET`) moves `~/slop-assets/current` to it atomically.
+- **Build:** `render_set.py build --bundle <KTX2 bundle> [--pin]` from a clean checkout of a main commit with its generated assets built, and the composed bundle of the same commit (`living/tools/characters/bundle.py --with-clips`). It writes `~/slop-assets/<id>/` (`<id>` the first 12 hex digits of the bundle's sha256), read-only: `assets/` laid out as `living/game/assets` (the VRoid and KayKit bases, the animated bases, the composed characters and `own-clips.glb`, `view/`, `textures/`, `envs/<name>/`, `characters/looks.json`), `bundle/` (the bundle as built, its `MANIFEST.txt`, the world look data), `SET-MANIFEST.txt` (every file under `assets/` with its sha256) and `set.json` (schema 2: `id`, `bundle` {file, sha256, commit, port, pictures}, `main_commit`, `generator_trees`, `generator_tree` (the generator hash, which leaves out the listed non-generating tools: [Building the render asset set](#building-the-render-asset-set)), `generator_exclude`, `looks` {book, generations, worlds}, `clips`, `files`, `bytes`, `built`, `build_seconds`). `--pin` (or `pin SET`) moves `~/slop-assets/current` to it atomically.
 - **Where the gate looks:** `LIVING_GATE_RENDER_ASSETS`, default `~/slop-assets/current`. A host without it does not run the render group; a dangling `current` counts as a set, and a broken one.
 - **Check** (`render_set.py check [SET] --repo <checkout>`, one JSON verdict), mapped by the gate, each a setup failure (exit 2) that does not blame the merge:
   - `corrupt` (exit 1, or a check that cannot run): a file's sha256 is not `SET-MANIFEST.txt`'s, or a file is missing or extra. The gate says `asset set corrupt`.
@@ -406,7 +406,7 @@ The scene gate's verify-ui `render` group draws with the game client's generated
 - `set.json`:
   - `bundle`: file, sha256, commit, port and pictures;
   - `main_commit`, for provenance only;
-  - `generator_trees` and their one `generator_tree`;
+  - `generator_trees` (provenance), `generator_tree` (the generator hash) and `generator_exclude` (the list's file, sha256 and count);
   - `looks`: the book's generations and each world's;
   - `clips`;
   - `book_drift`.
@@ -415,9 +415,18 @@ The scene gate's verify-ui `render` group draws with the game client's generated
 
 **Stale or corrupt.** `check` compares a set with a checkout:
 - **corrupt** (exit 1): a file's sha256 differs, or a file is missing or extra;
-- **stale** (exit 2): the checkout's generator tree hash differs (`git rev-parse <commit>:living/tools/{blender,characters,textures}`), or a world's look generation (`living/seeds/worlds/<w>/looks.json`) is not in the set's book.
+- **stale** (exit 2): the checkout's generator hash differs from the set's, or a world's look generation (`living/seeds/worlds/<w>/looks.json`) is not in the set's book.
 
-The test is content-addressed, so a main commit outside those three folders never makes a set stale. Any edit inside them does, even one that changes no output: rebuild and pin again after it lands.
+**The generator hash** (schema 2, since `render-set-exclude`) is a sha256 over every file of `living/tools/{blender,characters,textures}` (`git ls-tree -r`: mode, blob and path), less the non-generating tools listed in [`living/tools/render_set_exclude.txt`](../living/tools/render_set_exclude.txt), together with that list's own sha256. `build`, `check` and the bundle match all compute it with one function, `gen_hash`.
+- **What it ignores.** A main commit outside those folders, or an edit to a listed check or measuring tool (`cloth_check.py`, `book_drift.py`, the reference's measuring tools, …), leaves a set `ok`.
+- **What makes a set stale.** Any other edit inside them does, even one that changes no output: rebuild, or re-pack (below), and pin again after it lands. Changing the list itself does too, so it cannot be widened quietly.
+- **How the list is kept.**
+  - It holds explicit paths, no globs, each read before it was listed. A new tool stays a generator input until it is listed.
+  - A file a generator imports is never listed: `build` refuses a list whose files a non-listed file imports (`exclusion_imported`), and a listed path that is not in the trees.
+  - A file that both generates and checks (`pictures.py`, `shade_mean.py`) stays an input. Its check moves to a file of its own first, if it should be left out.
+- **The selftest:** `python3 living/tools/render_set_selftest.py`.
+
+**Re-pack, no Blender** (when only listed tools changed, or the hash's definition did). `bundle.py` and `render_set.py build` again, from a worktree at the new main with the last set's generated files in place. First restore the checkout-sourced files from the pinned set if anything rewrote them: `gen_buildings.sh` is not byte-reproducible. About 3 minutes. The assets come out identical (compare the two `SET-MANIFEST.txt`), with a new id and generator hash.
 
 **Rebuild and pin** (dev-box, about 41 minutes beside other Blender work at `JOBS=2`; 2026-11-20: 2,768 files, 407 MB). Work in a worktree at main, with no tracked changes. Use the full clip library, `~/archive/clip-library`. `animate.py` and `gen_person.sh` read it from `.local/kimodo/library` first. The coordinator's `.local/kimodo/outputs/library` is partial.
 

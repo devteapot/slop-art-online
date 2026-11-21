@@ -30,7 +30,12 @@ set.json:
   bundle              {file, sha256, commit, port, pictures}: the composed bundle (bundle.py)
   main_commit         the commit the set was built from (provenance only)
   generator_trees     {blender, characters, textures}: `git rev-parse <commit>:living/tools/<dir>`
-  generator_tree      one hash of the three (sha256 of "blender=…\\ncharacters=…\\ntextures=…\\n")
+                      (provenance)
+  generator_tree      the generator hash: sha256 over the three trees' files (`git ls-tree -r`:
+                      mode, blob, path) less the non-generating tools listed in
+                      living/tools/render_set_exclude.txt, with that list's own sha256 (schema 2;
+                      schema 1 hashed the three tree ids)
+  generator_exclude   {file, sha256, paths}: the exclusion list the hash was made with
   book_drift          null, or {file, sha256, differences}: the reviewed list of known book
                       differences the bundle was allowed (bundle.py --allow-book-drift)
   looks               {book, generations: [...], worlds: {name: generation}}
@@ -90,10 +95,66 @@ def sha256(path):
     return h.hexdigest()
 
 
+EXCLUDE = "living/tools/render_set_exclude.txt"
+
+
+def exclusion(repo, commit="HEAD"):
+    """The listed non-generating tools at a commit ({paths relative to living/tools/}) and the
+    list file's sha256 (of no file: of nothing)."""
+    r = subprocess.run(["git", "show", f"{commit}:{EXCLUDE}"], cwd=repo, capture_output=True)
+    text = r.stdout if r.returncode == 0 else b""
+    paths = {ln.strip() for ln in text.decode().splitlines() if ln.strip() and not ln.lstrip().startswith("#")}
+    return paths, hashlib.sha256(text).hexdigest()
+
+
+def gen_hash(repo, commit="HEAD"):
+    """The generator hash: every file of living/tools/{blender,characters,textures} at a commit
+    (mode, blob, path), less the listed non-generating tools, with the list's own sha256. A listed
+    path that is not in the trees is refused (the list is kept honest). Returns (hash, list sha256,
+    paths listed)."""
+    paths, exsha = exclusion(repo, commit)
+    out = sh("git", "ls-tree", "-r", "--full-tree", commit, "--", *(f"living/tools/{d}" for d in GEN_DIRS), cwd=repo)
+    rows, seen = [], set()
+    for ln in out.splitlines():
+        meta, path = ln.split("\t", 1)
+        rel = path[len("living/tools/"):]
+        if rel in paths:
+            seen.add(rel)
+            continue
+        rows.append(f"{meta}\t{path}")
+    missing = sorted(paths - seen)
+    if missing:
+        sys.exit(f"render_set: {EXCLUDE} lists paths not in the generator trees at {commit}: {missing[:5]}")
+    h = hashlib.sha256((f"exclude={exsha}\n" + "\n".join(rows) + "\n").encode()).hexdigest()
+    return h, exsha, len(paths)
+
+
+def exclusion_imported(repo, commit="HEAD"):
+    """Listed files that a file not listed imports (Python `import`/`from`): those are generator
+    inputs, and the list may not leave them out. Returns [(importer, excluded)]."""
+    import re
+    paths, _ = exclusion(repo, commit)
+    stems = {Path(p).stem: p for p in paths if p.endswith(".py")}
+    out = sh("git", "ls-tree", "-r", "--name-only", "--full-tree", commit, "--", *(f"living/tools/{d}" for d in GEN_DIRS), cwd=repo)
+    bad = []
+    for path in out.splitlines():
+        rel = path[len("living/tools/"):]
+        if rel in paths or not path.endswith(".py"):
+            continue
+        src = subprocess.run(["git", "show", f"{commit}:{path}"], cwd=repo, capture_output=True, text=True).stdout
+        for m in re.finditer(r"^\s*(?:from\s+([\w\.]+)\s+import|import\s+([\w\., ]+))", src, re.M):
+            for mod in (m.group(1) or m.group(2)).replace(" ", "").split(","):
+                stem = mod.split(".")[-1] if mod.startswith(".") else mod.split(".")[0]
+                if stem in stems:
+                    bad.append((rel, stems[stem]))
+    return sorted(set(bad))
+
+
 def trees(repo, commit="HEAD"):
+    """({blender, characters, textures}: each tree's git id, for provenance), and the generator hash
+    (gen_hash) that staleness reads."""
     t = {d: sh("git", "rev-parse", f"{commit}:living/tools/{d}", cwd=repo) for d in GEN_DIRS}
-    one = hashlib.sha256("".join(f"{d}={t[d]}\n" for d in GEN_DIRS).encode()).hexdigest()
-    return t, one
+    return t, gen_hash(repo, commit)[0]
 
 
 def clip_count(path):
@@ -125,7 +186,11 @@ def build(a):
     if sh("git", "status", "--porcelain", "--untracked-files=no", cwd=repo):
         sys.exit("render_set: tracked files differ from HEAD in --repo (a set is of a commit)")
     commit = sh("git", "rev-parse", "HEAD", cwd=repo)
+    used = exclusion_imported(repo)
+    if used:
+        sys.exit(f"render_set: {EXCLUDE} leaves out files a generator file imports: {used[:5]}")
     gtrees, gtree = trees(repo)
+    _, exsha, nex = gen_hash(repo)
     bsha = sha256(a.bundle)
     sid = bsha[:12]
     root = Path(a.root)
@@ -164,8 +229,12 @@ def build(a):
             drift = {"file": w[2], "sha256": w[4], "differences": int(w[5].lstrip("("))}
         # One generator: the bundle's trees are --repo's (the staleness rule's own test); the
         # commits may differ by changes outside living/tools/{blender,characters,textures}.
-        if "generator trees: " + " ".join(f"{d}={gtrees[d]}" for d in GEN_DIRS) not in head:
-            sys.exit(f"render_set: the bundle's generator trees (commit {bcommit}) are not --repo's (at {commit})")
+        same_trees = "generator trees: " + " ".join(f"{d}={gtrees[d]}" for d in GEN_DIRS) in head
+        if not same_trees:
+            # Trees that differ only in listed non-generating tools are one generator.
+            known = subprocess.run(["git", "cat-file", "-e", f"{bcommit}^{{commit}}"], cwd=repo).returncode == 0
+            if not known or gen_hash(repo, bcommit)[0] != gtree:
+                sys.exit(f"render_set: the bundle's generator (commit {bcommit}) is not --repo's (at {commit})")
         # The checkout's generated files.
         src = repo / ASSETS
         n = 0
@@ -204,9 +273,10 @@ def build(a):
         (work / "SET-MANIFEST.txt").write_text("\n".join(lines) + "\n")
         size = sum(p.stat().st_size for p in assets.rglob("*") if p.is_file())
         meta = {
-            "schema": 1, "id": sid,
+            "schema": 2, "id": sid,
             "bundle": {"file": Path(a.bundle).name, "sha256": bsha, "commit": bcommit, "port": hv("port"), "pictures": hv("pictures")},
             "main_commit": commit, "generator_trees": gtrees, "generator_tree": gtree,
+            "generator_exclude": {"file": EXCLUDE, "sha256": exsha, "paths": nex},
             "book_drift": drift,
             "looks": {"book": book["generation"], "generations": book.get("generations") or [book["generation"]], "worlds": worlds},
             "clips": {"own_clips": clip_count(assets / "lookdev/anim/own-clips.glb"),
@@ -268,7 +338,8 @@ def check(a):
         repo = Path(a.repo).resolve()
         _, gtree = trees(repo)
         if gtree != meta["generator_tree"]:
-            reasons.append(f"generator tree {gtree[:12]} at {sh('git', 'rev-parse', '--short', 'HEAD', cwd=repo)}, set's {meta['generator_tree'][:12]} (built at {meta['main_commit'][:9]})")
+            reasons.append(f"generator tree {gtree[:12]} at {sh('git', 'rev-parse', '--short', 'HEAD', cwd=repo)}, set's {meta['generator_tree'][:12]} (built at {meta['main_commit'][:9]})"
+                           + ("; the set predates the exclusion list (schema 1): re-pack it" if meta.get("schema", 1) < 2 else ""))
         held = set(meta["looks"]["generations"]) | {meta["looks"]["book"]}
         for w, g in world_generations(repo).items():
             if g not in held:
