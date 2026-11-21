@@ -777,6 +777,38 @@ fn intent_check(ctx: &ReducerContext, id: u32, skill: &str, target: &Resolved, s
     Ok(())
 }
 
+/// Whether deliberate act `a`, aimed at `target`, is the act `cur` under way again (the same
+/// skill, target, item, amount, words, offer and pace; `act_same_continues`): then `cur` goes on
+/// instead of starting over, a follow for its time again from now (as a new follow would). A
+/// movement intent naming its distances, or any other intent, starts afresh, as in `begin`
+/// (its distances are its steering's, not the activity's).
+pub fn continues(ctx: &ReducerContext, cur: &Activity, a: &living_rules::graph::Action, target: &Resolved, now: u64) -> bool {
+    let sp = a.spacing();
+    let spaced = sp.min.is_some() || sp.max.is_some() || sp.radius.is_some() || sp.side.is_some() || sp.distance.is_some() || sp.apart.is_some();
+    let intent = living_rules::steer::INTENTS.contains(&a.skill.as_str()) && (a.skill != "follow" || spaced);
+    let same_target = cur.target.class == target.class && cur.target.id == target.id && (target.class != 4 || dist((cur.target.x, cur.target.y), target.at) < 0.05);
+    let same = !intent
+        && cur.skill == a.skill
+        && same_target
+        && cur.item == a.item.as_deref().unwrap_or("")
+        && cur.qty == a.qty.unwrap_or(0)
+        && cur.text == a.text.as_deref().unwrap_or("")
+        && cur.topic == a.topic.as_deref().unwrap_or("")
+        && cur.want == a.want.as_deref().unwrap_or("")
+        && cur.want_qty == a.want_qty.unwrap_or(0)
+        && cur.offer == a.offer.unwrap_or(0)
+        && cur.record == a.record.unwrap_or(0)
+        && a.run.map_or(true, |r| r == motion::runs(ctx, cur.id));
+    if !same {
+        return false;
+    }
+    if cur.skill == "follow" && cur.ends_ms != IDLE {
+        let secs = if cur.qty > 0 { cur.qty as f32 } else { common::laws(ctx).follow_s };
+        ctx.db.activity().id().update(Activity { ends_ms: now + (secs * 1000.0) as u64, ..cur.clone() });
+    }
+    true
+}
+
 /// Start an action for behavior node `node`. `cur` is the current activity, if any.
 #[allow(clippy::too_many_arguments)]
 /// Whether the rules would let a skill go ahead now (the `can` condition): the check an action
@@ -1104,7 +1136,10 @@ pub fn begin_with(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill
     }
     let _started = common::detail_span("begin.start");
     if let Some(a) = cur {
-        if matches!(a.skill.as_str(), "goto" | "follow") && matches!(skill, "goto" | "follow") && now.saturating_sub(a.started_ms) < 3_000 && a.label != act.label {
+        // One deliberate act replacing another is counted under `act_turned_back` (it reaches
+        // here only under `act_replace_checks`; before, the act under way was broken off first).
+        let counted = !(a.node == ACT && node == ACT) || common::laws(ctx).act_turned_back;
+        if counted && matches!(a.skill.as_str(), "goto" | "follow") && matches!(skill, "goto" | "follow") && now.saturating_sub(a.started_ms) < 3_000 && a.label != act.label {
             turned_back(ctx, id, &a.label, &act.label, now);
         }
         cancel(ctx, a, now, None);

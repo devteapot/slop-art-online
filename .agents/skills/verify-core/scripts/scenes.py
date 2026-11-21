@@ -7711,5 +7711,115 @@ def act_replace(s):
 
 SCENES["act_replace"] = act_replace
 
+def act_gaps(s):
+    """The three gaps a replacing act had for a player and, under `mind_act_replaces`, for a mind
+    (docs/INPUT_LATENCY.md, "Act replacement gaps"), driven here through a mind's `mind_act`
+    (verify-player `act_gaps.py` drives the same through `human_act`), each beside its law off:
+
+    1. `act_replace_checks`: a replacement refused as it would start (eating cooked meat one does
+       not carry) leaves the walk under way running and is told; off, the walk is broken off first
+       and the body stands idle.
+    2. `act_input_cost`: a burst of 40 acts sent at once is cut at the input bucket (`input_burst`
+       15 plus what `input_hz` 30/s refills during the burst), the rest refused "too many inputs"
+       with nothing written; a second later acts go through again; off, all 40 go through.
+    3. `act_turned_back`: seven walks each given up within 3 s for another the other way are
+       noticed; the sixth in 20 s is told, "You keep turning back and forth"; off, nothing is told.
+    4. `act_same_continues` (off as shipped): the same walk again while it runs goes on (its start
+       unchanged); off, it starts over.
+
+    `mind_act_replaces` is on for the scene; every law is set back at the end."""
+    a, = s.people(1)
+    line = open_line(s, 30)
+    start, far, back = line[0], line[-1], line[14]
+    goto = lambda p: {"do": "goto", "target": {"at": [p[0], p[1]]}}
+    eat = {"do": {"skill": "eat", "item": "cooked_meat"}}
+    doing = lambda: (s.http_rows(f"SELECT skill, node, started_ms, label FROM activity WHERE id = {a}") or [None])[0]
+    told = lambda: [r for r in s.http_rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}")]
+
+    def walking_far():
+        s.call("place_at", a, *start)
+        time.sleep(0.5)
+        s.act(a, goto(far))
+        return s.wait(lambda: (d := doing()) and d["skill"] == "goto" and d["node"] == 65534 and d, 10)
+
+    set_law(s, "mind_act_replaces", True)
+    try:
+        # 1. A refused replacement.
+        for checks in (True, False):
+            set_law(s, "act_replace_checks", checks)
+            first = walking_far()
+            n = len(told())
+            time.sleep(0.5)
+            s.act(a, eat)
+            now = doing()
+            refusal = [r["text"] for r in told()[n:] if r["kind"] == "act" and "cooked_meat" in r["text"]]
+            if checks:
+                s.expect("checks on: a refused replacement leaves the walk under way running", now and now["started_ms"] == first["started_ms"] and now["skill"] == "goto", {"first": first, "now": now})
+            else:
+                s.expect("checks off (control): the walk is broken off before the refusal, the body idle", not now or now["started_ms"] != first["started_ms"], {"first": first, "now": now})
+            s.expect(f"checks {'on' if checks else 'off'}: the refusal is told", any("did not work out" in t for t in refusal), refusal)
+        set_law(s, "act_replace_checks", True)
+
+        # 2. The input bucket.
+        import concurrent.futures
+        def burst(n):
+            body = [json.dumps(goto(far))]
+            t0 = time.monotonic()
+            with concurrent.futures.ThreadPoolExecutor(n) as pool:
+                res = list(pool.map(lambda _: s.http_call("mind_act", [a, body, "verify-core"], check=False), range(n)))
+            return [(r.returncode, r.stdout.strip()) for r in res], time.monotonic() - t0
+        for cost in (True, False):
+            set_law(s, "act_input_cost", cost)
+            s.call("place_at", a, *start)
+            time.sleep(1.5)  # the bucket full again
+            res, secs = burst(40)
+            ok = sum(1 for c, _ in res if c == 0)
+            refused = [b for c, b in res if c != 0]
+            detail = {"accepted": ok, "refused": len(refused), "burst_s": round(secs, 3), "refusals": sorted(set(refused))[:3]}
+            if cost:
+                s.expect("input cost on: a burst of 40 acts is cut at the bucket (15 plus 30/s refill), the rest refused 'too many inputs'",
+                         15 <= ok <= 15 + 30 * secs + 1 and refused and all("too many inputs" in b for b in refused), detail)
+                time.sleep(1.0)
+                again = s.http_call("mind_act", [a, [json.dumps(goto(back))], "verify-core"], check=False)
+                s.expect("input cost on: a second later an act goes through again", again.returncode == 0, again.stdout.strip())
+            else:
+                s.expect("input cost off (control): all 40 go through", ok == 40 and not refused, detail)
+        set_law(s, "act_input_cost", True)
+
+        # 3. Turning back and forth (off first: nothing is counted, so the window starts clean).
+        for counted in (False, True):
+            set_law(s, "act_turned_back", counted)
+            s.call("place_at", a, *line[14])
+            time.sleep(0.5)
+            n = len(told())
+            for i in range(7):
+                s.act(a, goto(far if i % 2 == 0 else start))
+                time.sleep(0.4)
+            time.sleep(0.5)
+            dither = [r["text"] for r in told()[n:] if r["kind"] == "self" and "turning back and forth" in r["text"]]
+            if counted:
+                s.expect("turned back on: seven walks given up for one the other way are noticed and told once", len(dither) == 1, dither)
+            else:
+                s.expect("turned back off (control): nothing is told", not dither, dither)
+
+        # 4. The same act again.
+        for same in (True, False):
+            set_law(s, "act_same_continues", same)
+            first = walking_far()
+            time.sleep(1.0)
+            s.act(a, goto(far))
+            now = doing()
+            if same:
+                s.expect("same continues on: the same walk again goes on (its start unchanged)", now and now["started_ms"] == first["started_ms"], {"first": first, "now": now})
+            else:
+                s.expect("same continues off (as shipped): the same walk again starts over", now and now["started_ms"] != first["started_ms"] and now["skill"] == "goto", {"first": first, "now": now})
+    finally:
+        for law, value in (("mind_act_replaces", False), ("act_replace_checks", True), ("act_input_cost", True), ("act_turned_back", True), ("act_same_continues", False)):
+            set_law(s, law, value, check=False)
+        s.graph(a, {"wait": 120})
+
+
+SCENES["act_gaps"] = act_gaps
+
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -679,6 +679,22 @@ pub struct Laws {
     /// replace"). Only a batch with at least one act for the body replaces (a gaze change alone
     /// does not). Off: a mind's acts wait for the act in progress to end, as before.
     pub mind_act_replaces: bool,
+    /// A replacing act (a player's `human_act`; a mind's under `mind_act_replaces`) is checked
+    /// before the act in progress is broken off: `act::begin` meets the act under way as it meets
+    /// a graph's, so a refused replacement leaves it running and the refusal is told
+    /// (docs/INPUT_LATENCY.md, "Act replacement gaps"). Off: the act under way is broken off first.
+    pub act_replace_checks: bool,
+    /// Each `human_act`, `mind_act` and `mind_act_checked` call spends one token of the actor's
+    /// input bucket (`input_hz`/`input_burst`, shared with movement and skill use); an empty
+    /// bucket refuses it ("too many inputs"). Off: acts cost no input.
+    pub act_input_cost: bool,
+    /// A walk given up within 3 s for another, when one deliberate act replaces another, is
+    /// noticed as a graph's is (`act::turned_back`; the sixth in 20 s is told and asks for a
+    /// thought). Needs `act_replace_checks`. Off: a replacing act's walks are not counted.
+    pub act_turned_back: bool,
+    /// The same act again (skill, target, item, amount, words) while it runs continues it instead
+    /// of starting it over (a held movement's time is renewed). Needs `act_replace_checks`.
+    pub act_same_continues: bool,
     /// A move's check before it starts is given a context of the fields the check reads alone
     /// (its plan; docs/BATTLE_SCALE.md, battle-cheap path 1): the same answer, without gathering
     /// what it never reads (kin near, practice, community and home, warmth). Off: the whole context.
@@ -905,6 +921,10 @@ impl Default for Laws {
             latency_fast: false,
             latency_acts: false,
             mind_act_replaces: false,
+            act_replace_checks: true,
+            act_input_cost: true,
+            act_turned_back: true,
+            act_same_continues: false,
             check_ctx_plan: true,
             check_ctx_check: false,
             alarm_cells: true,
@@ -3268,6 +3288,10 @@ impl Scripts {
             latency_fast: flag("latency_fast", l.latency_fast),
             latency_acts: flag("latency_acts", l.latency_acts),
             mind_act_replaces: flag("mind_act_replaces", l.mind_act_replaces),
+            act_replace_checks: flag("act_replace_checks", l.act_replace_checks),
+            act_input_cost: flag("act_input_cost", l.act_input_cost),
+            act_turned_back: flag("act_turned_back", l.act_turned_back),
+            act_same_continues: flag("act_same_continues", l.act_same_continues),
             check_ctx_plan: flag("check_ctx_plan", l.check_ctx_plan),
             check_ctx_check: flag("check_ctx_check", l.check_ctx_check),
             alarm_cells: flag("alarm_cells", l.alarm_cells),
@@ -3528,7 +3552,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 22] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 26] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3557,6 +3581,11 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 22] = [
     // act markers at their next call.
     ("mind_act_replaces", ValueOnly::Delivery),
     ("latency_acts", ValueOnly::Delivery),
+    // act-replace-gaps (docs/INPUT_LATENCY.md, "Act replacement gaps"), read at the next act.
+    ("act_replace_checks", ValueOnly::Delivery),
+    ("act_input_cost", ValueOnly::Delivery),
+    ("act_turned_back", ValueOnly::Delivery),
+    ("act_same_continues", ValueOnly::Delivery),
     ("cover_sight_on", ValueOnly::Cover),
     ("cover_eye_height_m", ValueOnly::Cover),
     ("cover_brush_on", ValueOnly::Cover),
@@ -4384,6 +4413,7 @@ mod tests {
         assert!(!l.sweep_keep_memory && !l.sweep_keep_check, "sweeps read heard rows and health afresh by default");
         assert!(l.fighter_bystander_wakes, "a fighter is woken as any bystander by default (docs/COMBAT_PHASE.md)");
         assert!(!l.mind_act_replaces && !l.latency_acts, "a mind's acts wait for the act in progress, unlogged, by default (docs/INPUT_LATENCY.md)");
+        assert!(l.act_replace_checks && l.act_input_cost && l.act_turned_back && !l.act_same_continues, "a replacing act is checked first, costs an input and is counted for turning back; the same act again restarts (docs/INPUT_LATENCY.md)");
         assert_eq!((l.combat_eval_hz, l.combat_every_ticks()), (15.0, 4), "fighters evaluated every 4th tick by default");
         assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
         assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");
