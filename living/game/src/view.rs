@@ -27,7 +27,10 @@
 //!   the game does (daylight.rs): light, sky, fog, grading and glow, so a night shot is night.
 //!   Without it the view keeps its fixed mood and the hour only moves the sun.
 //! - `LIVING_GAME_VIEW_CLIP=<name>[,<name>…]`: the clips to play and photograph (default: the
-//!   first four).
+//!   first four). `LIVING_GAME_VIEW_CLIP=bind`: no clip and no procedural motion, so each model
+//!   stands in its file's bind pose (the face still blinks): a pose square to the camera, to tell
+//!   what a clip's pose does from what the drawing does (the hair mirror check,
+//!   docs/char-port-2/hair-mirror/README.md: the idle turns the head 12° at 2 s).
 //!
 //! - `recipe:<name>` or `recipe:<folk>:<seed>` in `LIVING_GAME_VIEW` shows a character recipe
 //!   (`assets/characters/recipes.json`; folks `adult`, `giant`, `small`) at its own height; a
@@ -59,6 +62,14 @@ use std::path::{Path, PathBuf};
 
 pub fn enabled() -> bool {
     std::env::var("LIVING_GAME_VIEW").is_ok_and(|v| !v.is_empty())
+}
+
+/// Whether the view shows its models in their bind pose (`LIVING_GAME_VIEW_CLIP=bind`, with the
+/// asset view on): no clip plays and `lookdev::animate` leaves the body alone.
+pub fn bind_pose() -> bool {
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| enabled() && std::env::var("LIVING_GAME_VIEW_CLIP").is_ok_and(|v| v.trim() == "bind"))
 }
 
 /// Whether the view is lit by the day curve (`LIVING_GAME_VIEW_ATMO=1`, with the asset view on).
@@ -347,7 +358,14 @@ pub fn setup(
         let json = glb_json(file);
         // A generated person's clips may come from the shared clip file (`anim::clip_file`).
         let clip_src = crate::anim::clip_file(file);
-        let clips = if clip_src == *file { json.as_ref().map(clip_list) } else { glb_json(&clip_src).as_ref().map(clip_list) }.unwrap_or_default();
+        // The bind pose plays none (`bind_pose`).
+        let clips = if bind_pose() {
+            vec![]
+        } else if clip_src == *file {
+            json.as_ref().map(clip_list).unwrap_or_default()
+        } else {
+            glb_json(&clip_src).as_ref().map(clip_list).unwrap_or_default()
+        };
         let is_vrm = file.ends_with(".vrm") || file.contains("vroid-") || json.as_ref().is_some_and(|j| j["extensions"]["VRM"].is_object() || j["extensions"]["VRMC_vrm"].is_object());
         // VRM 0.x models face −Z; turn them to face the camera. Models with clips aren't given
         // the procedural rig (`vrm: false`), so their own animation plays.

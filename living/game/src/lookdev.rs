@@ -1127,7 +1127,8 @@ pub fn animate(look: Res<Lookdev>, roam: Res<crate::envs::Roam>, rigs: Query<(En
         };
         let walk = look.act == Act::Walk || (is_player && roam.moving);
         let phase = t * 6.0;
-        if rig.clips {
+        // A file with clips plays them; the asset view's bind pose keeps the body still.
+        if rig.clips || crate::view::bind_pose() {
             face(rig, &look, &mut morphs, t, speaking);
             continue;
         }
