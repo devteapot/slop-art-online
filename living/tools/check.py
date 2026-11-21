@@ -266,7 +266,50 @@ def remaining_check_cost(target, cold_cost):
     return max(2 * GIB, cold_cost - size), size
 
 
-def disk_threshold(target, env):
+# The disk a step's build takes when it runs alone on an empty target folder, rounded up to the
+# next 0.5 GiB (dev-box, main 9401135c1, 2026-11-21: `check.py --full --steps NAME` into an empty
+# CARGO_TARGET_DIR, allocated size afterwards, MiB: authority 389, authority-tests 359, game 2,685,
+# game-tests 2,560, rules-tests 2,868, mind+viewer 8,381, viewer-wasm 2,123, script-gate 914;
+# docs/TOOLING.md, "Disk"). Steps share build directories and dependencies, so the whole check
+# takes less than the sum (about 19.8 GiB): a charge never exceeds the full one
+# (SLOP_CHECK_COST_GB, less what the target already holds).
+STEP_COST_GB = {"authority": 0.5, "authority-tests": 0.5, "game": 3.0, "game-tests": 3.0, "rules-tests": 3.0,
+                "mind+viewer": 8.5, "viewer-wasm": 2.5, "script-gate": 1.0}
+
+
+def store_readable():
+    """The stamp store answers: its stamps directory exists and can be listed (a missing or
+    unreadable store would turn every step into a run, which the full charge covers)."""
+    try:
+        os.listdir(os.path.join(STORE, "stamps"))
+        return True
+    except OSError:
+        return False
+
+
+def charge(run, target, cold_cost, unsure=None):
+    """(bytes, why): the disk the steps in `run` (names) take, the one prediction living-check's
+    disk wait, living-merge and gate-merge share (docs/TOOLING.md, "Disk"). `unsure` names any
+    doubt (a step that cannot be keyed, an unreadable store): then the full charge, the greater
+    of 2 GiB and cold_cost less what the target folder already holds. No step to run: nothing."""
+    full, size = remaining_check_cost(target, cold_cost)
+    full_why = f"max of 2 GiB and {cold_cost / GIB:g} GiB minus {size / GIB:.2f} GiB already in the target"
+    if unsure:
+        return full, f"full charge ({unsure}): {full_why}"
+    if not run:
+        return 0, "no step to run (every step stamped)"
+    unknown = [n for n in run if n not in STEP_COST_GB]
+    if unknown:
+        return full, f"full charge (no cost known for {', '.join(unknown)}): {full_why}"
+    part = sum(STEP_COST_GB[n] for n in run) * GIB
+    if part >= full:
+        return full, f"full charge ({', '.join(run)} would run; {part / GIB:g} GiB alone): {full_why}"
+    return part, f"{', '.join(run)} would run: {' + '.join(f'{STEP_COST_GB[n]:g}' for n in run)} GiB"
+
+
+def disk_threshold(target, env, run=None, unsure=None):
+    """(bytes, why) free space needed before building: the floor plus charge() for `run` (the
+    names of the steps that will run; None: every step, the full charge)."""
     def gb(name, default):
         value = int(env.get(name) or default)
         if value < 0:
@@ -279,16 +322,15 @@ def disk_threshold(target, env):
 
     floor = gb("SLOP_DISK_FLOOR_GB", 45)
     cold_cost = gb("SLOP_CHECK_COST_GB", 18)
-    cost, size = remaining_check_cost(target, cold_cost * GIB)
-    return floor * GIB + cost, (
-        f"{floor} GiB floor + {cost / GIB:.2f} GiB cost "
-        f"(max of 2 GiB and {cold_cost} GiB minus {size / GIB:.2f} GiB already in target)"
-    )
+    if run is None:
+        unsure = unsure or "every step"
+    cost, why = charge(run or [], target, cold_cost * GIB, unsure)
+    return floor * GIB + cost, f"{floor} GiB floor + {cost / GIB:.2f} GiB cost ({why})"
 
 
-def wait_for_disk(target, env):
+def wait_for_disk(target, env, run=None, unsure=None):
     target = os.path.realpath(target)
-    required, reason = disk_threshold(target, env)
+    required, reason = disk_threshold(target, env, run, unsure)
     if not required:
         return
     # The target may not exist yet. Check the filesystem that will hold it.
@@ -1016,15 +1058,23 @@ def main(argv):
             say(f"{s['name']}: run{' (--full)' if full else ''} [{d[:12]}]")
         for line in xfail_banner(s):
             say(line)
+    run_names = [s["name"] for s, d, inputs, files, st in plan if not st]
+    unkeyed = [s["name"] for s, d, inputs, files, st in plan if d is None]
+    unsure = (f"{', '.join(unkeyed)} cannot be keyed" if unkeyed else
+              None if full or store_readable() else f"the stamp store {STORE} cannot be read")
     if plan_only:
         if json_out:
+            cold = int(os.environ.get("SLOP_CHECK_COST_GB") or 18)
+            cost, why = charge(run_names, target, cold * GIB, unsure)
             write_json(json_out, {"plan": [{"name": s["name"], "digest": d, "skip": bool(st), "inputs": inputs, "why": None if d else files}
-                                           for s, d, inputs, files, st in plan]})
+                                           for s, d, inputs, files, st in plan],
+                                  "charge": {"bytes": cost, "why": why, "run": run_names, "unsure": unsure, "target": target,
+                                             "full": full, "steps": [s["name"] for s in steps]}})
         return 0
 
     todo = [x for x in plan if not x[4]]
     if todo:
-        wait_for_disk(target, os.environ)
+        wait_for_disk(target, os.environ, run_names, unsure)
 
     env_extra, exe, how = sccache_env(root) if use_sccache else ({}, None, "off (--no-sccache)")
     env = {**os.environ, **env_extra}

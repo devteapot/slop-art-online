@@ -36,7 +36,7 @@ None since 2026-11-21. Branch `trials-laws-selftest` fixed the first entry, [`tr
 
 Three things are new:
 
-- **Disk space before building.** When any step needs to run, the check looks at free space on the filesystem holding Cargo's target directory (`CARGO_TARGET_DIR` or Cargo's configured target, normally `living/target`). Required free space is `SLOP_DISK_FLOOR_GB` (default 45) plus the greater of 2 GiB and the remaining cost (`SLOP_CHECK_COST_GB`, default 18, minus the space already occupied by the target tree). A fresh tree needs 63 GiB by default. `SLOP_CHECK_START_GB` overrides the total and `0` disables the guard. All three settings are whole GiB. Below the threshold, the check reports free space and how it calculated the threshold, lists up to six of the largest build trees under `~/.t3/worktrees/*/*/living/target` and `~/.t3/worktrees/*/*/.local/*/target`, then polls free space every 60 seconds. Waiting never deletes files. Plans and runs fully served by stamps skip the disk check.
+- **Disk space before building.** When any step needs to run, the check looks at free space on the filesystem holding Cargo's target directory (`CARGO_TARGET_DIR` or Cargo's configured target, normally `living/target`). Required free space is `SLOP_DISK_FLOOR_GB` (default 45) plus the charge of the steps that will run ([The disk charge](#the-disk-charge)): their measured cost, never more than the full charge, the greater of 2 GiB and the remaining cost (`SLOP_CHECK_COST_GB`, default 18, minus the space already occupied by the target tree). A fresh tree running every step needs 63 GiB by default; a check that runs only the script bench needs 46. `SLOP_CHECK_START_GB` overrides the total and `0` disables the guard. All three settings are whole GiB. Below the threshold, the check reports free space and how it calculated the threshold, lists up to six of the largest build trees under `~/.t3/worktrees/*/*/living/target` and `~/.t3/worktrees/*/*/.local/*/target`, then polls free space every 60 seconds. Waiting never deletes files. Plans and runs fully served by stamps skip the disk check.
 - **Lanes at once.** Cargo locks each build directory (`target/debug`, `target/release` and the wasm ones), so steps that use different directories can run together. The four lanes run in parallel, each lane's steps in the order above. The script bench is a cargo workspace of its own, built into `<target>/script-bench`, so its lane locks nothing the others use. One make-style jobserver (a fifo that every cargo joins) caps the lanes together at `CARGO_BUILD_JOBS` jobs (default: all cores). Each step's output goes to `<target>/living-check/<step>.log`, and a failing step's log is printed. After a failure no new step starts. `LIVING_CHECK_SERIAL=1` (or `--serial`) runs the steps one by one, with cargo's output on the terminal.
 - **Step stamps.** A step's inputs are:
   - the files of the packages it builds and their path dependencies (from `cargo metadata`); a path package that is no workspace member, such as a `[patch]` path, leaves the step unstampable until it is mapped;
@@ -174,7 +174,7 @@ set -o pipefail; just living-merge plan-3 -m "Merge plan-3: what it brings"
 
 `--no-push` stops after a passing check. `python3 living/tools/merge_selftest.py` drives these cases against a throwaway remote.
 
-- fake `df` and `du` for cold and warm targets, the 2 GB minimum, a retry at 48.8 GB free, separate target and trial filesystems, and the overrides;
+- fake `df` and `du` for cold and warm targets, the 2 GB minimum, a retry at 48.8 GB free, separate target and trial filesystems, and the overrides; the floor alone before the fetch; the charge after the merge from the merged tree's own plan (a stand-in `check.py`: every step stamped reaches the check at the floor plus nothing, a 3 GB plan is refused 1 GB short), the full charge when the tree has no plan; the scene reserve only when the merge touches a behavioural path;
 - the dirty-worktree, local-commit, conflict, failing-check and dirtying-check refusals;
 - a failing and a passing scene gate (a stand-in command), and a failed gate's genesis fuel per seed in the summary;
 - a stale seed stopping the merge before the check (a stand-in command);
@@ -328,7 +328,34 @@ A block listed red on main as `seeds:<seed>:<block>` is reported and does not fa
 
 When the folders that may go are gone and free space is still under the floor, the report says so (exit 3), and the list shows what holds the rest.
 
-**Merge pre-check.** `living-merge` requires the floor plus the remaining check allowance on each filesystem holding its worktree or Cargo target. On each attempt, including automatic retries, it subtracts the space already allocated in the resolved Cargo target from the 18 GB cold allowance and reserves at least 2 GB. This uses the same calculation as the check’s start guard. The merge tool reads the cleaner's installed `--floor-gb` from the systemd user service or launchd agent and uses 45 GB when there is no installed floor. A cold target requires 63 GB with the fallback floor or 78 GB with the Spark's installed 60 GB floor. Units match the cleaner (1 GB = 1,024³ bytes).
+**Merge pre-check.** `living-merge` requires the floor alone before it fetches, and after each attempt's merge, including automatic retries, the floor plus the merged tree's predicted charge ([below](#the-disk-charge)) on each filesystem holding its worktree or Cargo target. A refusal then restores HEAD (exit 12). The merge tool reads the cleaner's installed `--floor-gb` from the systemd user service or launchd agent and uses 45 GB when there is no installed floor (the dev-box's is 40, whatever the charge). A merge running every step on a cold target requires 63 GB with the fallback floor or 78 GB with the Spark's installed 60 GB floor; a docs-only merge whose steps are all stamped requires the floor alone. Units match the cleaner (1 GB = 1,024³ bytes).
+
+#### The disk charge
+
+Until 2026-11-21 every merge needed the floor plus 18 GB plus 1 GB for scenes, whatever it changed: that night a docs-only branch waited over half an hour on the dev-box for 18 GB its check would never use, since the stamps skipped every step. The charge now comes from the stamps themselves ([`check.charge`](../living/tools/check.py), [`disk_charge.py`](../living/tools/disk_charge.py)), one function for the check's own wait, `living-merge` and `gate-merge`:
+
+- **The check's part.** `check.py --plan` on the merged tree keys every step from its inputs exactly as the check will, against the same stamp store. A step whose stamp is there costs nothing. A step that will run costs its measured cold size (`STEP_COST_GB`). The total is never more than the full charge: the greater of 2 GB and 18 GB less what the Cargo target already holds.
+- **Any doubt charges the full allowance:** the plan fails or is missing (a tree from before this), a step cannot be keyed, the stamp store cannot be read, a step has no known cost, or the branch does not merge cleanly.
+- **The scenes' part.** 1 GB, on a filesystem shared with the trial server, only with `--scenes` and only when the merge touches a path the scene gate runs scenes for (`scene_gate.behavioural` or `scene_gate.rendering`): no scenes selected, no scene charge.
+- **The floor never moves.** The charge is added to it. There are two floors, and they differ on purpose; do not align them (general coordinator, 2026-11-21):
+  - **45 GB** for `gate_merge.sh`'s start wait and `check.py`'s own disk wait (`SLOP_DISK_FLOOR_GB`): headroom for builds already in flight when a gate or a check starts.
+  - **40 GB**, the disk cleaner's floor (its installed `--floor-gb` on the dev-box), for `merge.py`'s pre-check and per-attempt check.
+- **`gate-merge`** waits before `living-merge` has merged, so `disk_charge.py start-gb <living-merge's arguments>` makes the same prediction on the branch merged onto the fetched main as a commit object (`git merge-tree`, no ref written), checked out in one persistent prediction checkout (`~/.local/state/slop-merge/disk-charge-<repo>`, reused, never edited), with the real Cargo target's credit. Its default start is `SLOP_DISK_FLOOR_GB` (45, as before) plus that charge; `SLOP_GATE_START_GB` still overrides it, and a prediction that fails falls back to floor plus 18.
+
+The cost of each step alone, on an empty target folder (dev-box, main `9401135c1`, 2026-11-21, `check.py --full --steps NAME`, allocated size after; `STEP_COST_GB` rounds each up to the next 0.5 GB):
+
+| Step | Alone | Charged |
+| --- | ---: | ---: |
+| `authority` | 0.38 GB | 0.5 GB |
+| `authority-tests` | 0.35 GB | 0.5 GB |
+| `game` | 2.62 GB | 3 GB |
+| `game-tests` | 2.50 GB | 3 GB |
+| `rules-tests` | 2.80 GB | 3 GB |
+| `mind+viewer` | 8.18 GB | 8.5 GB |
+| `viewer-wasm` | 2.07 GB | 2.5 GB |
+| `script-gate` | 0.89 GB | 1 GB |
+
+They sum to 19.8 GB: the steps share build directories and dependencies, so a check running all of them takes less (17.6 GB measured on the Spark, below), and the cap is the full charge. So a docs-only branch whose steps are stamped needs the floor alone; a branch touching only `living/authority` reruns `authority` and `authority-tests`, 1 GB; one touching a shared input (the workspace manifest or lock, `living/seeds`, `living/scripts`) reruns every step, the full charge. The self-test, `python3 living/tools/disk_charge_selftest.py`, runs the real plan in a clone with a scratch store: an empty store, everything stamped, docs only, a tool no step reads, the script bench, `living/authority`, every stamp stale, an unkeyable step, the scene charge, and `start-gb` through a remote (docs only, authority with scenes, the prediction checkout reused, a branch that does not merge cleanly).
 
 On the Spark on 2026-11-19, `just living-check` passed in 949 s from a fresh worktree at `49adf9a3`, with an empty private `CARGO_TARGET_DIR`, eight Cargo jobs, the Spark sysroot and stamps forced off. The worktree and target grew by a sampled peak of 17.62 GB (18,915,008,512 allocated bytes), measured with `du -sk` during the check.
 

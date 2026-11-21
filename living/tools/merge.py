@@ -46,10 +46,14 @@ were not regenerated (or the bindings check could not run), 12 refused (disk), 1
 14 the scene gate's server is unreachable (gate_server.py check: a dead container fails the gate before the check, not after it;
 LIVING_MERGE_GATE_PROBE=off skips the probe, for tests).
 
-Disk: SLOP_MERGE_FLOOR_GB overrides the installed disk cleaner's floor (45 GB without
-an installed floor). SLOP_MERGE_CHECK_GB overrides the cold check allowance (18 GB).
-Each attempt subtracts allocated Cargo target space, with a 2 GB minimum allowance.
-SLOP_MERGE_DISK_CHECK=0 disables the pre-check and prints a warning.
+Disk: before anything, the floor alone; after each attempt's merge, the floor plus the merged
+tree's predicted charge (disk_charge.py): the check's own plan (`check.py --plan` against its
+stamps) charges only the steps that would run, at their measured cold cost (check.STEP_COST_GB),
+never more than the full allowance (18 GB less what the Cargo target holds, at least 2 GB),
+which any doubt charges; the scenes' 1 GB only when the merge selects scenes. A docs-only merge
+whose steps are all stamped needs the floor alone. SLOP_MERGE_FLOOR_GB overrides the installed
+disk cleaner's floor (45 GB without an installed floor). SLOP_MERGE_CHECK_GB overrides the cold
+check allowance (18 GB). SLOP_MERGE_DISK_CHECK=0 disables the check and prints a warning.
 
 The push is a compare-and-swap (--force-with-lease on the main it merged onto): it lands only
 when main is still exactly the commit that was merged and checked, never over a main that
@@ -69,7 +73,8 @@ import sys
 import time
 from xml.parsers.expat import ExpatError
 
-from check import remaining_check_cost, target_dir
+from check import target_dir
+import disk_charge
 from disk_clean import GB
 
 HOME = os.path.expanduser("~")
@@ -207,7 +212,10 @@ def gate_server_alive(scenes):
         refuse(GATE_UNREACHABLE, f"the scene gate's server is unreachable: {why} (start it: living/tools/gate_server.py start)")
 
 
-def check_disk(root, budget, scenes):
+def check_disk(root, budget, scenes, base=None, head=None):
+    """A refusal, or None. Before the merge (head None): the floor alone. After it: the floor plus
+    the predicted charge of the merged tree (disk_charge.py: living-check's own plan, against its
+    stamps; the scene charge only when the merge selects scenes)."""
     floor, cold_cost = budget
     try:
         # Use the same Cargo resolution as living-check, including Cargo configuration.
@@ -215,9 +223,14 @@ def check_disk(root, budget, scenes):
             target = target_dir(root)
         else:
             target = os.path.join(root, "living/target")
-        cost_bytes, target_bytes = remaining_check_cost(target, cold_cost * GB)
-        cost = cost_bytes / GB
-        scene_fs = scene_filesystem(scenes)
+        if head is None:
+            cost, why, scene_gb, scene_why = 0.0, "before the merge: the floor alone", 0, "before the merge"
+        else:
+            c = disk_charge.check_charge(root, cold_cost, target=target)
+            cost, why = c["bytes"] / GB, c["why"]
+            scene_gb, scene_why = disk_charge.scene_charge(root, base, head, scenes)
+            done.append(f"disk charge: check {round(cost, 2):g} GB ({why}); scenes {scene_gb:g} GB ({scene_why})")
+        scene_fs = scene_filesystem(scenes) if scene_gb else None
         paths = {"worktree": root, "Cargo target": target}
         checked = set()
         for label, path in paths.items():
@@ -228,14 +241,13 @@ def check_disk(root, budget, scenes):
                 continue
             checked.add(probe)
             fs, free, mount = disk_free("df", "-Pk", str(probe))
-            scene_cost = SCENE_GB if fs == scene_fs else 0
+            scene_cost = scene_gb if scene_fs is not None and fs == scene_fs else 0
             need = floor + cost + scene_cost
             if free < need * GB:
                 scene_note = f" + {scene_cost:g} GB scenes" if scene_cost else ""
                 return (f"disk: {label} at {path} ({fs[0]} on {mount}) has {free / GB:.2f} GB free; "
-                        f"need {need:g} GB ({floor:g} GB floor + {cost:g} GB check{scene_note}); "
-                        f"check cost is max of 2 GB and {cold_cost:g} GB minus "
-                        f"{target_bytes / GB:.2f} GB already in Cargo target {target}")
+                        f"need {round(need, 2):g} GB ({floor:g} GB floor + {round(cost, 2):g} GB check{scene_note}); "
+                        f"check: {why}; Cargo target {target}")
     except (OSError, ValueError, IndexError, subprocess.CalledProcessError, RuntimeError) as e:
         return f"disk: could not determine free space for the worktree and Cargo target: {e}"
     return None
@@ -541,6 +553,11 @@ def run(argv):
             restored = reset_to(start_head, "after the odd merge")
             summary(f"no merge commit was made; nothing pushed{'' if restored else '; HEAD NOT restored, see above'}")
             return 9
+        if budget is not None:
+            problem = check_disk(root, budget, scenes, base, merge_sha)
+            if problem:
+                reset_to(start_head, "after the disk refusal")
+                refuse(DISK_REFUSED, problem)
         fresh = seeds_check(merge_sha, log_path, start_head, attempt)
         if fresh is not None:
             return fresh
