@@ -47,6 +47,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cli_login  # noqa: E402
 import ooc  # noqa: E402
 import trial_archive  # noqa: E402
 from trial_activity import running_trial  # noqa: E402
@@ -347,9 +348,9 @@ def up(_a=None):
         time.sleep(2)
     else:
         sys.exit(f"{CONTAINER} did not answer {URL}/v1/ping")
-    if "not logged in" in sh("docker", "exec", CONTAINER, "spacetime", "login", "show", check=False).stdout.lower():
-        sh("docker", "exec", CONTAINER, "spacetime", "server", "set-default", "local")
-        sh("docker", "exec", CONTAINER, "spacetime", "login", "--server-issued-login", "local")
+    # The first login once, under a lock per container (cli_login.py).
+    cli_login.ensure(CONTAINER, lambda *args: sh("docker", "exec", CONTAINER, "spacetime", *args, check=False),
+                     setup=[("server", "set-default", "local")])
     state = docker_state(NEO4J)
     if state is None:
         sh("docker", "run", "-d", "--name", NEO4J, "--restart", "no", "-p", f"127.0.0.1:{NEO4J_PORT}:7687",

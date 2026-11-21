@@ -45,6 +45,7 @@ LIVING = ROOT / "living"
 # The seed's script, composed as the authority composes a seed's laws at creation (one Python
 # copy of `floors::compose`, shared with living/tools/trials.py).
 sys.path.insert(0, str(LIVING / "tools"))
+import cli_login  # noqa: E402
 import trial_archive  # noqa: E402
 import world_guard  # noqa: E402
 from install_script import OVERLAY_MARK, installed, same_script, seed_json, seed_script, without_world_laws  # noqa: E402
@@ -431,10 +432,14 @@ def player(a):
 
 def admin_token(*, initialize=False):
     """The world admin's token (the in-container CLI identity). Kept in memory only."""
+    if initialize:
+        # The first login once, under a lock per container: launches that each logged a fresh
+        # CLI in kept different identities (cli_login.py; SKILL.md, Launch, 2026-11-21).
+        try:
+            cli_login.ensure(CONTAINER, lambda *args: stdb(*args, check=False))
+        except RuntimeError as e:
+            sys.exit(str(e))
     result = stdb("login", "show", "--token", check=False)
-    if initialize and "not logged in" in (result.stdout + result.stderr).lower():
-        stdb("login", "--server-issued-login", "local")
-        result = stdb("login", "show", "--token")
     out = result.stdout
     for line in out.splitlines():
         if "auth token" in line and " is " in line:
