@@ -149,15 +149,7 @@ for _s in STEPS:
 # check prints each entry with its owner and date, whether the step runs or is skipped, and its
 # last line names them. Keep an entry only while its owner is on it; it is also on the scene
 # gate's red-on-main list.
-AUTHORITY_TEST_XFAIL: dict[str, dict[str, str]] = {
-    "look::tests::the_island_wears_the_pool": {
-        "owner": "dev-box (char-4 track; parked until 2026-11-25)",
-        "since": "2026-11-20",
-        "reason": "the island's look data is generation c4-e61b01c0 (living/seeds/island.json, worlds/island/looks.json) while "
-                  "Cullet's looks.json is c4-cbcc40bf; fix: regenerate the island's looks (look_lines.py), recompile "
-                  "(author_world.py island --compile-only)",
-    },
-}
+AUTHORITY_TEST_XFAIL: dict[str, dict[str, str]] = {}
 for _s in STEPS:
     if _s["name"] == "authority-tests":
         _s["xfail"] = AUTHORITY_TEST_XFAIL
