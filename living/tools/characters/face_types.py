@@ -646,17 +646,26 @@ FP_LOW, FP_HIGH, FP_HIGH_FRONT = (0.04, 0.14), (0.30, 0.46), (0.26, 0.40)
 
 def faceprop(t):
     """A type's sections narrowed by its class's factor (`faceprop.width`, port.json) over the
-    cheeks: w15, w30 and wide at each height times 1 - (1 - k) x the band's weight there."""
+    cheeks: w30 and wide at each height times 1 - (1 - k) x the band's weight there. The front
+    plane (w15) loses as much width as the head within 0.30 H (w30) does at its own weight, not the
+    same share: narrowed by a share, its margin under w30 shrank with it, and a value's fixed
+    widening of the front (`front_breadth`) then put it past w30 at 0.20 H on the men's narrow
+    lines (face_types.py check)."""
     k = t.get("faceprop", {}).get("width", 1.0)
     if k == 1.0:
         return
     s = t["sections"]
     for i, z in enumerate(s["z"]):
         low = smooth((z - FP_LOW[0]) / (FP_LOW[1] - FP_LOW[0]))
+        w30 = s["w30"][i]
         for key in ("w15", "w30", "wide"):
             hi = FP_HIGH_FRONT if key == "w15" else FP_HIGH
             w = low * (1 - smooth((z - hi[0]) / (hi[1] - hi[0])))
-            if s[key][i] is not None:
+            if s[key][i] is None:
+                continue
+            if key == "w15" and w30 is not None:
+                s[key][i] = round(s[key][i] - (1 - k) * w * w30, 4)
+            else:
                 s[key][i] = round(s[key][i] * (1 - (1 - k) * w), 4)
 
 

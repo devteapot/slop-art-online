@@ -1,9 +1,11 @@
 # char-port-2 · S6b · Face proportions: the ears and the final checks, and a measure corrected
 
-**Status (2026-11-21): not final.**
-- **The GC's acceptance:** the 2D front-render measure, ears masked by the ID render ([below](#the-acceptance-the-2d-front-render-measure)).
-- **Done:** the known-answer tests, and the factors re-derived on it. The blink and ears steps are done.
-- **Next:** the two must-fixes (the lid-ink density warnings, the 7 value-end faults), the hair-over-cheek re-check per S6 cut, the full check list on the re-derived factors, the four-body portraits, and the bundle.
+**Status (2026-11-21): the S6b package, on the re-derived factors.** The build the bundle carries is the 21 types `fp21j` and the bodies `cp6m`: every S6b change, on the factors from the GC's 2D measure.
+- **The acceptance (2D):** every adult class's mean within 0.016 of 1.75, the children at 1.79, the variety kept ([below](#the-acceptance-the-2d-front-render-measure)).
+- **The must-fixes:** both done ([below](#the-two-must-fixes)).
+- **The full check list:** passes ([below](#the-final-checks)).
+- **The bundle:** [below](#the-bundle).
+- **The four bodies, before and after, for the GC:** [four-bodies-final.png](four-bodies-final.png): the woman, man, elder and girl at the portrait (front and three-quarter) and close, unnarrowed against S6b.
 
 Everything here is behind `SLOP_PORT=faceprop`, with S1–S4's port (`jaw,jaw_shell,paint,neck,ink`). With the flag off, a type (adult-f-b: its file and shadow map) and a body (the woman) are byte-identical to before; the body's file differs only in the names of its own pictures.
 
@@ -35,6 +37,7 @@ Everything here is behind `SLOP_PORT=faceprop`, with S1–S4's port (`jaw,jaw_sh
 - **Every adult class's mean is within 0.015 of 1.75;** the children 1.792.
 - **The women's a lines read 1.707 with no narrowing,** against 1.721 unnarrowed: the ears step's longer ears reach the cheek row further forward.
 - **Variety:** over the 21 types, 1.721–1.889 (standard deviation 0.050) unnarrowed, **1.671–1.829 (0.047)** re-derived. The lines keep their order, a < b < c, in every class.
+- **The final build** (`fp21j`: these factors, and the front plane narrowed by w30's amount, the second must-fix) moves each by at most 0.003: **1.668–1.829, mean 1.749, standard deviation 0.046**; class means 1.734 (adult-m) to 1.754 (youth-m), the children 1.791 ([ratios-2d.json](ratios-2d.json) `final_2d`).
 
 ## The face-width measure, corrected (3D; superseded as the acceptance by the 2D measure above)
 
@@ -229,6 +232,8 @@ The two measures now agree, as the GC expected once the face narrowed. A caution
   - the lower lid is left as built: lifted the same way, its line drew darker and fuller than the unnarrowed type's.
 - **After it, the wing is whole** at every stage of the blink on both women, as on the unnarrowed types (the third column of [blink-corners.png](blink-corners.png); the right column of [blink.png](blink.png)).
 
+**With the re-derived factors** the women are not narrowed, and the round-line women's blink-corner pairs are gone with it; the wing clearance stays (it holds the wing in front of the skin on every type). The close-ups above are of the face step's narrowed adult-f-a.
+
 **The verdict: (a).** The new pairs in the skin are the closing lid meeting the skin under the outer corner, of the same kind as the lid contact every unnarrowed type has. Nothing shows of them at the corner.
 
 **Two differences that remain, reported:**
@@ -258,28 +263,36 @@ The two measures now agree, as the GC expected once the face narrowed. A caution
 - **Out:** the c lines and the men's b lines run short (0.56–0.60); adult-f-a, youth-f-a and the children's a and b run long (0.65–0.70).
 - **Both ears are alike on every type.**
 
-## The final checks (every S6b change, the 21 types `fp21h` and the four bodies)
+## The two must-fixes
+
+**The lid ink's texel density** (3 warnings, on adult-f-a, elder-f-a and youth-f-a):
+- **The cause:** the class's ink layout is drawn from its line b, and line a's carrier is projected on its own head. Narrowed, line a's temple turned away sooner past the outer corner, and the ribbon's run-out there stretched in depth (one triangle 7.4× the median): 12% of the lid ink's triangles fell outside 25% of the median density.
+- **Gone with the re-derived factors:** the women are not narrowed, and elder-f's factor is 0.957 (it was 0.865). adult-f-a 0.942, elder-f-a 0.924, youth-f-a 0.935 within 25% (installed: adult-f-a 0.940). The audit is 0 / 0 on all 25 files.
+
+**`face_types.py check`'s value ends at 0.20 H** (7 faults; 4 on the re-derived factors):
+- **The cause:** the men's narrow lines with `front_breadth` +1 and `cheeks` or `jaw_square` −1: the front plane (`w15`) came out 0.004–0.007 H wider than the head within 0.30 H (`w30`). Narrowed by the same share as `w30`, the front plane's margin under it shrank with it, and `front_breadth` widens the front by a fixed amount.
+- **The fix** (`face_types.faceprop`): the front plane loses as much width as `w30` does at each height (at its own band's weight), not the same share, so where both are narrowed in full (0.14–0.26 H) the margin between them is the unnarrowed type's. **60,648 of 60,648 valid**, as with the flag off. The 2D ratios move by at most 0.003.
+
+## The final checks
+
+The 21 types `fp21j` and the four bodies `cp6m` ([final/](final/)).
 
 | Check | Result |
 |---|---|
-| Crossings, mouth shapes | **0 new pairs** on the four bodies (every mouth shape) and the 21 types (`MTH_A`) ([morph-new.json](morph-new.json) `bodies_final`, `types_final`) |
-| Crossings, eye shapes | as unnarrowed on the bodies; the three round-line women's blink-corner pairs, accepted as lid contact (above) |
+| Known-answer tests | `measure3d_selftest.py` and `drawing_spread_selftest.py` pass |
+| The acceptance, 2D | class means 1.734–1.754, children 1.791 (above) |
+| Crossings | **0 new pairs** in every mouth shape on the four bodies, and in `MTH_A` on the 21 types; **no type has more blink pairs than unnarrowed** (the round-line women's corner pairs went with their narrowing) ([morph-new.json](morph-new.json) `bodies_final`, `types_final`) |
 | `brow_check` | 21 types, every brow at least 0.3 mm before the skin in every pose |
-| `eye_colours` | passes |
-| Ink page | 237 strokes for 7 classes |
-| The S4 audit, types and bodies ([final/audit.txt](final/audit.txt)) | 0 errors; **3 warnings**: the lid ink's texel density on adult-f-a, elder-f-a and youth-f-a (87.5–88.4% of its triangles within 25% of the median). It comes with faceprop (adult-f-a: 0.940 unnarrowed, 0.882 with faceprop, 0.875 with the wing clearance), at the wing's run-out where the ribbon wraps the temple. Not waived: open. |
-| The S4 audit, pages | not yet: the installed hair pages are the old ones (86 errors, all the strand means S6 corrected); it runs with the bundle, on S6's hair set |
-| Shimmer (S4's, eyes) | **passes** on the woman, man and girl: faded at Near, Middle and Far; portrait and close-up pan and zoom ≤ 0.84 ([final/](final/)) |
-| `face_types.py check` | every type ok, 200 of 200 people valid; value ends 60,641 of 60,648 valid: **7 faults, "at 0.20 the front is wider than the head within 0.30 H", new with faceprop** (flag off 60,648 of 60,648). A value's fixed offset (`front_breadth`) outweighs the margin the narrowing left between the two planes. Open. |
-| `cage_accept.py` ([final/](final/)) | **14 of 21** within 0.03 H with faceprop, against 3 of 21 flag off and 1 of 21 with no port at all: the tool fails without S6b too. The seven failures (the women's a and c lines, adult-f-b) are at 0.04 and 0.12 H, the chin and jaw rows S1's taper reshaped, by 0.034–0.046 H. |
-| Jaw lines ([jaw.json](jaw.json)) | the order holds at every height in every class |
-| Flag off | a type and a body byte-identical (the body's own picture names aside) |
+| `eye_colours`, the ink page | pass; 237 strokes for 7 classes |
+| The S4 audit | **0 errors, 0 warnings** on the 21 types and the four bodies ([final/audit-types.txt](final/audit-types.txt)); the pages: with the bundle (below) |
+| Shimmer (eyes) | **passes** on the woman, man and girl: faded at Near, Middle and Far; portrait and close pan and zoom pass ([final/](final/)) |
+| `face_types.py check` | every type ok; value ends **60,648 of 60,648** |
+| `cage_accept.py` | 8 of 21 within 0.03 H, against 3 flag off and 1 with no port: it fails without S6b, at the chin and jaw rows S1's taper reshaped ([final/cage_accept.txt](final/cage_accept.txt)) |
+| Jaw lines | the order holds at every height in every class ([jaw.json](jaw.json)) |
+| Ears | bottoms 21 of 21 within 0.47 ± 3%, tops kept; heights reported ([ears.json](ears.json)) |
+| Hair over the cheek, per S6 cut ([final/cuts/](final/cuts/)) | body over eye spacing 3.119 / 3.135 / 3.077, all in band (2.973–3.319); body over cheek 1.603 / 1.61 / 1.581 (report only; the drawing 1.823; S6's 1.615 / 1.622 / 1.593). The woman is adult-f-b, which is not narrowed now; the cheek measure takes in the ears, which the ears step lengthened. |
+| Flag off | a type (adult-m-b: file and shadow map) and a body (the man) byte-identical, the body's picture names aside |
 
-## Not yet
+## The bundle
 
-- **The face step's acceptance by the corrected measure:** the GC's decision.
-- **Open:**
-  - the lid-ink density warning on three types;
-  - the 7 value-end faults at 0.20 H;
-  - the ears' heights where the top is kept.
-- **The book and both bundles** (PNG and KTX2, with `pictures.py check`) and the pages audit: after the decision.
+In progress: the PNG and KTX2 bundles from this commit, with the 21 `fp21j` types and S6's hair set installed (`bundle.py --port hair,ink`), and the pages audit on that installation.

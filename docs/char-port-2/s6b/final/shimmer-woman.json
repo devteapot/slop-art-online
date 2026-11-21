@@ -1,5 +1,5 @@
 {
-  "file": "lookdev/own-cp6k-woman.glb",
+  "file": "lookdev/own-cp6m-woman.glb",
   "slot": "eyes",
   "material": null,
   "ink": {
@@ -73,34 +73,34 @@
     },
     {
       "sequence": "portrait pan",
-      "f_ink": 0.07,
-      "f_edge": 0.182,
-      "ratio": 0.38,
-      "ink_px": 275.6,
+      "f_ink": 0.06,
+      "f_edge": 0.231,
+      "ratio": 0.26,
+      "ink_px": 227.5,
       "result": "pass"
     },
     {
       "sequence": "portrait zoom",
-      "f_ink": 0.219,
-      "f_edge": 0.562,
-      "ratio": 0.39,
-      "ink_px": 233.9,
+      "f_ink": 0.226,
+      "f_edge": 0.664,
+      "ratio": 0.34,
+      "ink_px": 233.7,
       "result": "pass"
     },
     {
       "sequence": "0_8_0.18_0.86 pan",
-      "f_ink": 0.078,
-      "f_edge": 0.227,
-      "ratio": 0.35,
-      "ink_px": 1298.8,
+      "f_ink": 0.095,
+      "f_edge": 0.242,
+      "ratio": 0.39,
+      "ink_px": 1430.4,
       "result": "pass"
     },
     {
       "sequence": "0_8_0.18_0.86 zoom",
-      "f_ink": 0.345,
-      "f_edge": 0.758,
-      "ratio": 0.46,
-      "ink_px": 1232.8,
+      "f_ink": 0.343,
+      "f_edge": 0.714,
+      "ratio": 0.48,
+      "ink_px": 1255.2,
       "result": "pass"
     }
   ]

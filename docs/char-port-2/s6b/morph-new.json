@@ -1,5 +1,5 @@
 {
- "about": "Each expression's new crossing pairs on the face skin (in the expression at full weight, not at rest; neighbours by position), as [all, away from the ear root]; morph_new.py. unnarrowed = SLOP_PORT=jaw,jaw_shell,paint,neck,ink; faceprop = with faceprop before the fix; fixed = with faceprop and person.expression_clearance. bodies_final / types_final: every S6b change (faceprop, the expression clearance, the ears, the wing clearance).",
+ "about": "Each expression's new crossing pairs on the face skin (in the expression at full weight, not at rest; neighbours by position), as [all, away from the ear root]; morph_new.py. unnarrowed = SLOP_PORT=jaw,jaw_shell,paint,neck,ink; faceprop = with faceprop before the fix; fixed = with faceprop and person.expression_clearance. bodies_final / types_final: the final build (fp21j; bodies cp6m): every S6b change on the re-derived factors.",
  "bodies": {
   "unnarrowed woman": {
    "rest": 551,
@@ -1479,8 +1479,8 @@
     0
    ]
   },
-  "own-cp6k-woman.glb": {
-   "rest": 477,
+  "own-cp6m-woman.glb": {
+   "rest": 599,
    "Fcl_EYE_Close": [
     3,
     3
@@ -1542,8 +1542,8 @@
     0
    ]
   },
-  "own-cp6k-man.glb": {
-   "rest": 666,
+  "own-cp6m-man.glb": {
+   "rest": 727,
    "Fcl_EYE_Close": [
     8,
     8
@@ -1605,8 +1605,8 @@
     0
    ]
   },
-  "own-cp6k-elder.glb": {
-   "rest": 684,
+  "own-cp6m-elder.glb": {
+   "rest": 755,
    "Fcl_EYE_Close": [
     18,
     18
@@ -1668,8 +1668,8 @@
     0
    ]
   },
-  "own-cp6k-girl.glb": {
-   "rest": 931,
+  "own-cp6m-girl.glb": {
+   "rest": 995,
    "Fcl_EYE_Close": [
     3,
     3
@@ -1734,10 +1734,10 @@
  },
  "types_final": {
   "adult-f-a.glb": {
-   "rest": 865,
+   "rest": 741,
    "Fcl_EYE_Close": [
-    7,
-    7
+    3,
+    3
    ],
    "Fcl_MTH_A": [
     0,
@@ -1745,7 +1745,7 @@
    ]
   },
   "adult-f-b.glb": {
-   "rest": 477,
+   "rest": 599,
    "Fcl_EYE_Close": [
     3,
     3
@@ -1756,7 +1756,7 @@
    ]
   },
   "adult-f-c.glb": {
-   "rest": 399,
+   "rest": 491,
    "Fcl_EYE_Close": [
     0,
     0
@@ -1767,7 +1767,7 @@
    ]
   },
   "adult-m-a.glb": {
-   "rest": 657,
+   "rest": 1077,
    "Fcl_EYE_Close": [
     16,
     16
@@ -1778,7 +1778,7 @@
    ]
   },
   "adult-m-b.glb": {
-   "rest": 629,
+   "rest": 673,
    "Fcl_EYE_Close": [
     8,
     8
@@ -1789,7 +1789,7 @@
    ]
   },
   "adult-m-c.glb": {
-   "rest": 389,
+   "rest": 457,
    "Fcl_EYE_Close": [
     8,
     8
@@ -1800,7 +1800,7 @@
    ]
   },
   "child-u-a.glb": {
-   "rest": 931,
+   "rest": 995,
    "Fcl_EYE_Close": [
     3,
     3
@@ -1811,7 +1811,7 @@
    ]
   },
   "child-u-b.glb": {
-   "rest": 1013,
+   "rest": 1059,
    "Fcl_EYE_Close": [
     3,
     3
@@ -1822,7 +1822,7 @@
    ]
   },
   "child-u-c.glb": {
-   "rest": 795,
+   "rest": 859,
    "Fcl_EYE_Close": [
     3,
     3
@@ -1833,10 +1833,10 @@
    ]
   },
   "elder-f-a.glb": {
-   "rest": 1035,
+   "rest": 1057,
    "Fcl_EYE_Close": [
-    14,
-    14
+    8,
+    8
    ],
    "Fcl_MTH_A": [
     0,
@@ -1844,7 +1844,7 @@
    ]
   },
   "elder-f-b.glb": {
-   "rest": 763,
+   "rest": 863,
    "Fcl_EYE_Close": [
     8,
     8
@@ -1855,7 +1855,7 @@
    ]
   },
   "elder-f-c.glb": {
-   "rest": 643,
+   "rest": 859,
    "Fcl_EYE_Close": [
     8,
     8
@@ -1866,7 +1866,7 @@
    ]
   },
   "elder-m-a.glb": {
-   "rest": 817,
+   "rest": 967,
    "Fcl_EYE_Close": [
     18,
     18
@@ -1877,7 +1877,7 @@
    ]
   },
   "elder-m-b.glb": {
-   "rest": 635,
+   "rest": 651,
    "Fcl_EYE_Close": [
     18,
     18
@@ -1888,7 +1888,7 @@
    ]
   },
   "elder-m-c.glb": {
-   "rest": 467,
+   "rest": 487,
    "Fcl_EYE_Close": [
     18,
     18
@@ -1899,10 +1899,10 @@
    ]
   },
   "youth-f-a.glb": {
-   "rest": 799,
+   "rest": 819,
    "Fcl_EYE_Close": [
-    7,
-    7
+    3,
+    3
    ],
    "Fcl_MTH_A": [
     0,
@@ -1910,7 +1910,7 @@
    ]
   },
   "youth-f-b.glb": {
-   "rest": 493,
+   "rest": 621,
    "Fcl_EYE_Close": [
     3,
     3
@@ -1921,7 +1921,7 @@
    ]
   },
   "youth-f-c.glb": {
-   "rest": 387,
+   "rest": 489,
    "Fcl_EYE_Close": [
     3,
     3
@@ -1932,7 +1932,7 @@
    ]
   },
   "youth-m-a.glb": {
-   "rest": 747,
+   "rest": 881,
    "Fcl_EYE_Close": [
     10,
     10
@@ -1943,7 +1943,7 @@
    ]
   },
   "youth-m-b.glb": {
-   "rest": 749,
+   "rest": 697,
    "Fcl_EYE_Close": [
     8,
     8
@@ -1954,7 +1954,7 @@
    ]
   },
   "youth-m-c.glb": {
-   "rest": 397,
+   "rest": 421,
    "Fcl_EYE_Close": [
     10,
     10

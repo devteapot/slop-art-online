@@ -19,4 +19,4 @@ elder-f-c    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid onc
 elder-m-a    ok; 200 of 200 people valid as drawn (furthest 0.41); all valid once pulled back
 elder-m-b    ok; 200 of 200 people valid as drawn (furthest 0.41); all valid once pulled back
 elder-m-c    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
-value ends alone and in pairs: 60641 of 60648 valid; faults: at 0.20 the front ×7
+value ends alone and in pairs: 60648 of 60648 valid

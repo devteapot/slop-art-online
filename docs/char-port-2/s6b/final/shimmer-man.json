@@ -1,5 +1,5 @@
 {
-  "file": "lookdev/own-cp6k-man.glb",
+  "file": "lookdev/own-cp6m-man.glb",
   "slot": "eyes",
   "material": null,
   "ink": {
@@ -73,34 +73,34 @@
     },
     {
       "sequence": "portrait pan",
-      "f_ink": 0.029,
-      "f_edge": 0.244,
-      "ratio": 0.12,
-      "ink_px": 137.8,
+      "f_ink": 0.059,
+      "f_edge": 0.198,
+      "ratio": 0.3,
+      "ink_px": 202.5,
       "result": "pass"
     },
     {
       "sequence": "portrait zoom",
-      "f_ink": 0.157,
-      "f_edge": 0.496,
-      "ratio": 0.32,
-      "ink_px": 164.2,
+      "f_ink": 0.166,
+      "f_edge": 0.206,
+      "ratio": 0.81,
+      "ink_px": 143.2,
       "result": "pass"
     },
     {
       "sequence": "0_8_0.18_0.86 pan",
       "f_ink": 0.046,
-      "f_edge": 0.266,
-      "ratio": 0.17,
-      "ink_px": 914.6,
+      "f_edge": 0.264,
+      "ratio": 0.18,
+      "ink_px": 924.6,
       "result": "pass"
     },
     {
       "sequence": "0_8_0.18_0.86 zoom",
-      "f_ink": 0.238,
-      "f_edge": 0.689,
-      "ratio": 0.34,
-      "ink_px": 879.5,
+      "f_ink": 0.234,
+      "f_edge": 0.625,
+      "ratio": 0.37,
+      "ink_px": 876.6,
       "result": "pass"
     }
   ]
