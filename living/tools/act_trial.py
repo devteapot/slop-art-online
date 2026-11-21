@@ -9,7 +9,7 @@ prompt, cached and completion tokens).
                      [--margin USD] [--price MODEL=IN,OUT,CACHED ...] [--interval 30]
                      [--url URL --container C --db DB --minds N] [--diag FILE --collapse-below TPS]
   act_trial.py town-side --instance DIR --url URL --container C [--bench-at MIN ...]
-  act_trial.py report-town --instance DIR [--out FILE]
+  act_trial.py report-town --instance DIR [--until-s S] [--out FILE]
   act_trial.py report-battle --run-dir DIR [--skip-s 120] [--until-s S] [--out FILE]
   act_trial.py ledger --ledger FILE
 
@@ -678,13 +678,22 @@ def cmd_report_town(a):
     chars = {c["id"]: c for c in json.loads((side / "characters.json").read_text())}
     names = {i: journal_name(chars[i]["name"]) for i in ids if i in chars}
     t0 = int(sh["t0"] * 1000)
-    t1 = sh["ended_ms"]
+    t1 = min(sh["ended_ms"], t0 + a.until_s * 1000) if a.until_s else sh["ended_ms"]
     seconds = (t1 - t0) / 1000
     trace = side / "act-trace.jsonl"
     acts = act_trace.report(trace, residents, seconds, t0, t1)
     jdirs = [inst / "journal"]
     import act_town
-    activity = act_town.tasks(side / "activities.jsonl.gz", residents)
+    samples = side / "activities.jsonl.gz"
+    if a.until_s:
+        # The samples up to the window's end (routine outcomes are whole-run: start and end reads).
+        cut = side / f"activities-until-{int(a.until_s)}.jsonl.gz"
+        with gzip.open(samples, "rt") as f, gzip.open(cut, "wt") as g:
+            for line in f:
+                if json.loads(line)["at_ms"] <= t1:
+                    g.write(line)
+        samples = cut
+    activity = act_town.tasks(samples, residents)
     hours = seconds / 3600
     gather = activity["by_skill"].get("graph:gather", {})
     r0 = {r["id"]: r for r in json.loads((side / "routine-stat-0.json").read_text())}
@@ -696,7 +705,9 @@ def cmd_report_town(a):
             delta["ok"] += r["ok"] - b["ok"]
             delta["failed"] += r["failed"] - b["failed"]
     selfs = [r for r in json.loads((side / "self-lines.json").read_text()) if "turning back and forth" in r["text"] and t0 <= r["at_ms"] <= t1]
-    out = {"instance": str(inst), "variant": summary.get("variant"), "stopped_by": summary.get("stopped_by"),
+    if a.until_s:
+        delta = Counter({"whole_run_only": 1})
+    out = {"instance": str(inst), "variant": summary.get("variant"), "stopped_by": summary.get("stopped_by"), "until_s": a.until_s,
            "world_laws": summary.get("world_laws"), "residents": len(ids), "seconds": round(seconds, 1),
            "money": money(jdirs, t0, t1),
            "acts": acts,
@@ -832,6 +843,7 @@ def main():
     s.add_argument("--bench-at", type=float, action="append")
     s = sub.add_parser("report-town")
     s.add_argument("--instance", required=True)
+    s.add_argument("--until-s", type=float, help="measure only the first S seconds (to compare with a partial arm)")
     s.add_argument("--out")
     s = sub.add_parser("report-battle")
     s.add_argument("--run-dir", required=True)
