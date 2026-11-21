@@ -12,7 +12,7 @@ Each measure here passed its known-answer test first (PLAN.md §7). All the chan
 | youth-f | 1.774 | 0.987 |
 | adult-m | 1.822 | 0.961 |
 | youth-m | 1.814 | 0.965 |
-| elder-m | 1.804 | 0.970 |
+| elder-m | 1.804 | **0.962** (the formula's 0.970 takes elder-m-a's chin to 0.031 H in `cage_accept`, over its 0.030; 0.962 is the widest that holds) |
 | elder-f | 1.871 | 0.936 |
 | child-u | 1.873 | 0.961 (to 1.80) |
 
