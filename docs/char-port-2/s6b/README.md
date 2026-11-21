@@ -290,8 +290,23 @@ The 21 types `fp21j` and the four bodies `cp6m` ([final/](final/)).
 | `cage_accept.py` | 8 of 21 within 0.03 H, against 3 flag off and 1 with no port: it fails without S6b, at the chin and jaw rows S1's taper reshaped ([final/cage_accept.txt](final/cage_accept.txt)) |
 | Jaw lines | the order holds at every height in every class ([jaw.json](jaw.json)) |
 | Ears | bottoms 21 of 21 within 0.47 ± 3%, tops kept; heights reported ([ears.json](ears.json)) |
-| Hair over the cheek, per S6 cut ([final/cuts/](final/cuts/)) | body over eye spacing 3.119 / 3.135 / 3.077, all in band (2.973–3.319); body over cheek 1.603 / 1.61 / 1.581 (report only; the drawing 1.823; S6's 1.615 / 1.622 / 1.593). The woman is adult-f-b, which is not narrowed now; the cheek measure takes in the ears, which the ears step lengthened. |
+| Hair over the cheek, per S6 cut | body over eye spacing 3.118 / 3.135 / 3.077, all in band (2.973–3.319). **Body over the ear-masked cheek: 1.787 / 1.810 / 1.762** (the drawing 1.823), below |
 | Flag off | a type (adult-m-b: file and shadow map) and a body (the man) byte-identical, the body's picture names aside |
+
+## Hair over the cheek, like with like
+
+**The question:** S6's cheek measure (the hair body over the face's width at the cheek row) compared unlike things: on our renders the cheek's width took in the ears, which join the outline there, and on the drawing it does not (her ears are hidden, past an inked line).
+
+**The measure, ears masked:** the same image_spread.py run per cut, with adult-f-b's ear-ID copy ([ear_id.py](ear_id.py)) installed in place of its type file. The no-hair frame's ears are then magenta, which its skin rule leaves out, so the cheek run stops at the ear as the drawing's does. The selftest holds this path ([../s6/drawing_spread_selftest.py](../s6/drawing_spread_selftest.py), "render with the ear-ID frame": 18 checks pass). ([final/cuts-earid/](final/cuts-earid/))
+
+| Cut | Body over the cheek, ears in (S6's report) | **Body over the cheek, ears masked** | Cheek px (ears in / masked) | Body over eye spacing |
+|---|---|---|---|---|
+| `swept_braid` | 1.603 | **1.787** | 136 / 122 | 3.118 |
+| `.2` | 1.610 | **1.810** | 136 / 121 | 3.135 |
+| `.3` | 1.581 | **1.762** | 136 / 122 | 3.077 |
+| Drawing | | **1.823** | | 3.146 |
+
+**The loop closes:** with the ears out of the cheek, the hair over the cheek is 1.76–1.81 (mean 1.786, 2% under the drawing's 1.823, within the cheek measure's old ±0.10). The woman's face is unnarrowed (adult-f at factor 1.0), so the S6 hair, measured like with like, already stands to the face as Cora's does.
 
 ## The bundle
 

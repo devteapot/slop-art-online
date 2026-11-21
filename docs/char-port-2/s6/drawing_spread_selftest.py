@@ -19,6 +19,8 @@ The cases:
   hair body 160 px.
 - **the acceptance** (face_render): the same no-hair frame drawn with the ear-ID copy, the ears magenta. Known: the
   face alone, 100 px over 60; and with no ear on the row, the same.
+- **render() with the ear-ID frame** (image_spread.py run with the ear-ID type installed): its cheek stops at the
+  ears too. Known: the cheek 100 px, the hair body over it 1.6.
 
 Each must return the known answer exactly (whole pixels) or to 0.001 (ratios). Exit status 1 on any failure.
     python3 drawing_spread_selftest.py
@@ -92,6 +94,14 @@ def main():
                    ("render: hair body over eyes", r["body_over_eyes"], round(160 / 60, 3), 0.001)]
         # The acceptance (face_render): the no-hair frame with the ear-ID copy.
         eid = face(canvas(grey), rskin, ears=(225, 30, 225))
+        # render() (image_spread.py) given that ear-ID frame as its face: its cheek path stops at the ears too, so
+        # the hair body over the cheek compares like with like (the drawing's cheek has no ears in it).
+        look_e, id_e = eid.copy(), eid.copy()
+        look_e[60:141, 120:281] = (110, 60, 40)
+        id_e[60:141, 120:281] = (0, 255, 0)
+        r, _ = D.render(save(look_e, d, "look_e.png"), save(id_e, d, "id_e.png"), box=box, face=save(eid, d, "none_e.png"))
+        checks += [("render with the ear-ID frame: cheek width px (ears masked)", r["cheek_width_px"], 100, 0), ("render with the ear-ID frame: hair body over cheek", r["body"], round(160 / 100, 3), 0.001),
+                   ("render with the ear-ID frame: hair body over eyes", r["body_over_eyes"], round(160 / 60, 3), 0.001)]
         r, _ = D.face_render(save(eid, d, "earid.png"), box=box)
         checks += [("face_render: cheek width px (ears masked)", r["cheek_width_px"], 100, 0), ("face_render: face over eyes", r["face_over_eyes"], round(100 / 60, 3), 0.001),
                    ("face_render: ear on the cheek row", r["ear_on_cheek_row"], True, 0)]
