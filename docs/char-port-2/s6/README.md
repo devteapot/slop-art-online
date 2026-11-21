@@ -11,6 +11,30 @@ S6 ports Cora's hand-made hair into the generator as a **master**: a named set o
 - [the mirror check](mirror/README.md);
 - [the spread re-derived from the drawing](spread/spread.json).
 
+## Status (2026-11-21): the S6 package
+
+| Acceptance | Result | Where |
+|---|---|---|
+| Hair body over eye spacing (band 2.973–3.319) | cut 1 **3.119**, `.2` **3.135**, `.3` **3.077** | [volume/](volume/README.md) |
+| Cheek measure (report only) | 1.615 / 1.622 / 1.593 (drawing 1.823) | [volume/](volume/README.md) |
+| No flyaways (outline check, 4 px) | front 1.0, three-quarter 1.0, back 1.4 px | [volume/](volume/README.md) |
+| Tips (front 10 ± 2, three-quarter 7–8) | 9 and 7 | [volume/tips.png](volume/tips.png) |
+| The plait at play distance | width 7.18 / 4.70 px (drawn 7.4 / 4.6); luma 66.7 / 69.4 (drawn 69.1) | [volume/](volume/README.md) |
+| The fit (9 female types × 3 cuts) | 0 collar contacts, root ≤ 0.906 mm, ears 3/3 | [volume/](volume/README.md) |
+| Triangles (≤ 12,000) | ≤ 11,632 | [volume/](volume/README.md) |
+| Calibration on six styles (mid, light, highlight ±5; shade ±12) | bob, long, braid, swept, short **pass**; **swept_braid's dark and brown mid fail** (−5.7 luma, −7 blue): the mass under the sweep's lifted hem, in its shadow (reported, not fixed) | [step4/](step4/README.md) |
+| Luma bins at Middle (S5's margins), six styles | all pass | [step4/](step4/README.md) |
+| Shimmer at the three stops | all pass; faded at Near, Middle, Far | [step4/](step4/README.md) |
+| The audit | 0 / 0 on 92 files and four pages, strand means included | [step4/](step4/README.md) |
+| Flag off | ten styles byte-identical to main | [volume/](volume/README.md) |
+| The bundle (PNG and KTX2) | both pass every check | [step4/](step4/README.md) |
+| The mirror | the generator's output an exact mirror; the client's own fault is the laptop's track | [mirror/](mirror/README.md) |
+
+**Found and corrected on the way:**
+- **S5's strands and calibration:** S5's strand bake and its `bob`-only calibration (step 4).
+- **The ear opening:** the drawing shows the ears; the master had covered them.
+- **The mirror:** the curl wave in the generator.
+
 ## Acceptance
 
 ### The spread: hair body over eye spacing (the GC's choice, 2026-11-21)

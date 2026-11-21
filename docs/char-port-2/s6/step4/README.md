@@ -79,7 +79,24 @@
 
 **Flag off:** ten styles byte-identical to main. Every change here is behind `SLOP_PORT=hair`.
 
-## Not yet
+## The bundle
 
-- The bundle (`bundle.py --port hair,ink`, PNG and KTX2).
-- The full S6 package.
+`bundle.py --port hair,ink` at `25ac5cf3b`. It contains:
+- the whole hair set (`SLOP_PORT=hair,masters`, four pages, the strands held, the joint palette);
+- S4's ink types, as installed;
+- the book `c4-cbcc40bf`.
+
+Every bundle check passes:
+- eye colours, shade means and outfit slots;
+- skeletons, brows and fringes;
+- cloth on every tenth resident;
+- book drift: 791 lines the same.
+
+| Bundle (dev-box, `.local/char-port-2/s6/bundle/`) | Files | Size | `pictures.py check` | sha256 |
+|---|---|---|---|---|
+| `char-composed-s6-25ac5cf3.tar.gz` (PNG) | 343 | 44.6 MB | 0 failures | `ef9dfb552412ab5339ce771e0a6e84373f0be505aaf7f212f705c645aca4d04f` |
+| `char-composed-s6-25ac5cf3-ktx2.tar.gz` (BC7 KTX2, 122 pictures) | 558 | 48.9 MB | 0 failures | `dc8f010db9379f18c65a92b70b10582052e8e5cd93b4dea5e10497ed1b46039a` |
+
+**Two tool fixes it needed:**
+- **`bundle.py`** packed `strands.png` though no profile-hair file names it any more (the strands are the page's B), and `pictures.py` refused the orphan. It now packs the picture only when a packed file names it; main's builds still do.
+- **`pictures.py`:** the sidecar pattern `hair-masks*.png` matched the converted pages' own `.thumb.png`, so the KTX2 bundle failed each hair page's thumbnail as "left as PNG". That is the bug noted from the `bundle.py --port` dry run. A pattern now leaves the thumbnails out.
