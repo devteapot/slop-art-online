@@ -76,11 +76,23 @@ The class means are S7's set; S6b's are the same except where noted.
 - **The class order flips.** S6b narrowed the men (factors 0.935–0.95) because in idle they read wider than the drawing. In bind the men are the *widest* classes, and women and children the narrowest. S6b's per-class factors were derived from a pose artefact.
 - **child-u-a's 1.724 against S6b's 1.764 was the idle pose.** In bind S6b's and S7's sets give the same number (1.379 at p8, 1.487 at p0); the jaw rise doesn't touch the cheek row. The "known measuring artefact" note in must-fixes.md becomes "an idle-pose artefact, gone in bind".
 - **S7's set equals S6b's** on 19 of 21 types in bind. The exceptions are youth-f-a (p0 +0.027) and youth-f-c (p8 −0.013).
-- **A cross-check against the 3D measure:**
-  - `face_width.py` takes the whole skin cut at that height. That includes the skull behind the ear root, which the front view hides behind the ear. For adult-f-b it gives 1.787 (S6b's 3D "ears excluded").
-  - Taking only the cut in front of the ear's front edge gives adult-f-b 1.695, child-u-a 1.499, adult-m-a 1.696.
-  - The 2D bind·p0 values are 1.500, 1.487 and 1.559.
-  - The camera stands about 1 m off, so perspective makes the eyes, which sit forward, read about 4% wider apart than the cheek's outline. That accounts for part of adult-f-b's gap. The rest, about 7% on adult-f-b, isn't explained yet.
+- **The 3D measure against the 2D: the cheek row is at different heights** (corrected; the first version of this note took the "front" of the head as +z, when the face looks down −z, and its "in front of the ear" values were wrong):
+  - **3D** (`face_width.py`) cuts the head 0.030 m under the irises' centres.
+  - **2D** (`drawing_spread.cheek_at`) drops 0.030 m in head heights of Cora's standard head, with the head's height taken from the eye spacing by the drawing's ratio (spacing = 0.30 of head height). On our heads the spacing is 0.38 of head height (adult-f-b: 97.8 mm against 256 mm), so the 2D row lands 0.43 × spacing under the eyes: **42 mm, not 30 mm**. That is lower on a face that narrows toward the jaw.
+  - **At the 2D row's own height, the 3D and 2D agree:**
+
+    | Type | 3D at 30 mm | 3D at the 2D row | 2D bind·p0 | Remainder |
+    |---|---|---|---|---|
+    | adult-f-b | 1.787 | 1.533 (42 mm) | 1.500 | −2.2% |
+    | child-u-a | 1.708 | 1.498 (44 mm) | 1.487 | −0.7% |
+    | adult-m-a | 1.702 | 1.566 in front of the ear, 1.613 whole (41 mm) | 1.559 | −0.4% |
+
+  - **What the remainder is made of** (not separated yet; the ortho view will separate the perspective term):
+    - **Perspective:** about 1 m off, the eyes (in front) read wider apart than the cheek's outline (further back), which makes the 2D smaller.
+    - **The outline ink and anti-aliasing:** one ink pixel and one blended pixel a side, which also makes it smaller.
+    - **The eye centres:** 2D takes the visible iris's centroid, 3D the iris mesh's centre.
+  - **The ear mask takes no cheek pixels** at pitch 0. The run ends at the face's own ink, and the ear's ID lies beyond a gap of background (adult-m-a: `EEEEsk.k|sss`).
+  - **The landmarks don't agree across the measures either.** The drawing's cheek row is 0.30 of its eye-to-chin (review.jpg 0.297, stage-1 0.307), and the 3D's 30 mm is 0.295 of adult-f-b's. On our renders, though, the 2D row is 0.34 (adult-f-b) and 0.38 (child-u-a) of the 2D eye-to-chin, and the 2D chin (the narrowest run under the mouth) and the 3D chin (the lowest skin by the midline) disagree too: eye-to-chin over spacing is 1.26 in 2D and 1.04 in 3D on adult-f-b, against the drawing's 1.45. Step 2 (a row defined by landmarks the same way on both) starts here.
 
 ## 4. The S6 cuts: hair body over eyes, and over the ear-masked cheek
 

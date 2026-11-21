@@ -95,7 +95,7 @@
    "about": "S6: hair masters, a cut as a named set of parameters in the generator (hair.MASTERS): swept_braid, Cora's cut, its rear layers as stations, wide locks and companions joining a three-strand plait at staggered heights, the plait lifted at its start for the game camera and its crossings lit (docs/char-port-2/s6). Written as styles (`swept_braid`, its cuts and `.collar`) only with the flag."
   },
   "faceprop": {
-   "about": "S6b: the face's width against its eyes toward Cora's drawing (the face's outline at the cheek row, 0.030 m under the eyes, over the eye spacing, iris to iris, the ears left out: 1.75; docs/char-port-2/s6b). One width factor a class on the type's sections (w15, w30, wide), whole over the cheeks and fading to none by the chin and above the eyes (face_types.faceprop); the eyes, nose and mouth as they are, the ears carried in with the skull's side. A class's three lines take the same factor, so their differences stay.",
+   "about": "S6b: the face's width against its eyes toward Cora's drawing (the face's outline at the cheek row, 0.030 m under the eyes, over the eye spacing, iris to iris, the ears left out: 1.75; docs/char-port-2/s6b). One width factor a class on the type's sections (w15, w30, wide), whole over the cheeks and fading to none by the chin and above the eyes (face_types.faceprop); the eyes, nose and mouth as they are, the ears carried in with the skull's side. A class's three lines take the same factor, so their differences stay. **Interim neutral (S7, the GC 2026-11-21): every class at 1.0, pending the ortho re-measure** (S6b's 0.935-0.973 were derived on idle frames, a turned head; docs/char-port-2/s7/bind/README.md).",
    "classes": {
     "adult-f": {
      "faceprop": {
@@ -104,22 +104,22 @@
     },
     "adult-m": {
      "faceprop": {
-      "width": 0.935
+      "width": 1.0
      }
     },
     "child-u": {
      "faceprop": {
-      "width": 0.973
+      "width": 1.0
      }
     },
     "elder-f": {
      "faceprop": {
-      "width": 0.957
+      "width": 1.0
      }
     },
     "elder-m": {
      "faceprop": {
-      "width": 0.961
+      "width": 1.0
      }
     },
     "youth-f": {
@@ -129,7 +129,7 @@
     },
     "youth-m": {
      "faceprop": {
-      "width": 0.95
+      "width": 1.0
      }
     }
    }

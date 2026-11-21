@@ -2,6 +2,13 @@
 
 Each measure here passed its known-answer test first (PLAN.md §7). All the changes are behind port flags: `jaw` (S1's, extended), and two new ones, `eyes` and `beard`. With no port, `cage_accept` and `face_types check` give the same numbers as main; flag-off parity in full is frame-views' run before the merge.
 
+## The face factors: interim neutral, pending the ortho re-measure
+
+**The decision** (the GC's, 2026-11-21, after the [bind re-measure](bind/README.md)): every class's `faceprop` width is now 1.0 in `port.json`. S6b's 0.935–0.973 were derived on idle frames, which turn the head 11–12° and widen the face's outline at the cheek row.
+- **What keeps the faceprop flag:** the ears' lower end (0.47), the expression clearance and the lid ink clearance. All of these are reopened in step 3, not now.
+- **What stays as landed:** the jaw fix and `cage_accept` (3D).
+- **Nothing builds on the narrowing:** no §6 cost runs and no bundle until step 3, the combined re-tune after the ortho known-answer test.
+
 ## 4. `cage_accept.py`: fixed (A) and re-baselined (B)
 
 [cage-accept.md](cage-accept.md) has the diagnosis and S1's quoted intent; [cage/after-fp.json](cage/after-fp.json) the run.
@@ -35,6 +42,7 @@ Each measure here passed its known-answer test first (PLAN.md §7). All the chan
   - the rise moves the face's sample rows up the side of the face in the columns behind the chin;
   - the surface's width at the cheek row is the same, but on a child's short face the outline the camera sees from slightly above ends 3 px sooner on one side, short of the ear;
   - repeatable to the pixel over three runs.
+  - **Since the bind re-measure: an idle-pose artefact.** In bind S6b's and S7's child-u-a read the same (1.379 at pitch 8, 1.487 at pitch 0; [bind/](bind/README.md)). The turned head showed the jaw's side; square-on, the rise doesn't reach the cheek row.
 - **One trap found on the way:** rebuilding one type alone re-writes the shared tint page for all of them, and it read as a second 2D move. All measures here are on sets built in one go.
 
 **And one build fix it needed:** `person.expression_clearance` (S6b's mouth clearance) stopped youth-m-a's build after the rise, on a rounding sliver in its head-frame stage. That stage now hands over to the file-frame stage, which already holds such slivers still. Only the file-frame stage may stop a build. Types that converged before are unchanged.
