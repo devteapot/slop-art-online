@@ -206,7 +206,7 @@ def report(a):
         waiting.append(n_wait)
     errors = Counter((r["purpose"], str(r["error"])[:60]) for r in win if r.get("error"))
     purposes = Counter(r["purpose"] for r in win if not r.get("error"))
-    out = {"window_min": round(minutes, 2), "calls": len(win), "errors": sum(errors.values()), "error_kinds": dict(errors.most_common(5)),
+    out = {"window_ms": [int(t0), int(t1)], "window_min": round(minutes, 2), "calls": len(win), "errors": sum(errors.values()), "error_kinds": dict(errors.most_common(5)),
            "lanes": table, "throughput": throughput,
            "in_flight": {"mean": round(sum(inflight) / max(1, len(inflight)), 1), "p90": pct(inflight, 90), "max": max(inflight, default=0)},
            "waiting": {"mean": round(sum(waiting) / max(1, len(waiting)), 1), "p90": pct(waiting, 90), "max": max(waiting, default=0)}}
