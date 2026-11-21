@@ -340,6 +340,8 @@ def main():
                     help="set the diagnostic law latency_acts and keep each deliberate act's course from the replica's module log in act-trace.jsonl (act_trace.py)")
     ap.add_argument("--law", action="append", default=[], metavar="NAME=VALUE",
                     help="set a world law after launch (JSON value), e.g. witness_fold_ms=0 or profile_detail=true")
+    ap.add_argument("--fast-frame", choices=["first", "balanced"], default="first",
+                    help="LIVING_FAST_FRAME for the mind service: the fast lane's prompt frame (docs/FAST_LANE_FRAME.md); first is the default frame")
     ap.add_argument("--input-latency", action="store_true",
                     help="record authority and mind timing plus database metrics for a fake-model fast-lane run")
     ap.add_argument("--real-minds", action="store_true",
@@ -578,6 +580,8 @@ def main():
                 ids = [i for i in ids if i not in set(made[a.battle:])]
             else:
                 models = vm.model(run, script)
+            if a.fast_frame != "first":
+                env["LIVING_FAST_FRAME"] = a.fast_frame
             if a.input_latency:
                 env["LIVING_INPUT_LATENCY"] = "1"
             if fixed:
@@ -650,7 +654,7 @@ def main():
                 time.sleep(min(0.5, a.refill_gap))
 
         keeper = threading.Thread(target=keep_battle, daemon=True)
-        head = {"arm": a.arm, "fast_real": a.fast_real, "real_minds": a.real_minds, "fake_provider": a.fake_provider, "concurrency": a.concurrency, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane, "fake_acts": a.fake_acts, "act_trace": a.act_trace,
+        head = {"arm": a.arm, "fast_real": a.fast_real, "real_minds": a.real_minds, "fake_provider": a.fake_provider, "concurrency": a.concurrency, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane, "fast_frame": a.fast_frame, "fake_acts": a.fake_acts, "act_trace": a.act_trace,
                 "nproc": os.cpu_count(), "db_identity": ident, "world_seed": seed["seed"],
                 "layout": [{"id": id, "at": bodies[id]} for id in fighters],
                 "walker_layout": [{"id": id, "at": bodies[id]} for id in made[a.battle:]],

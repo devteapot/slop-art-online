@@ -121,9 +121,13 @@ impl Minds {
         let outline = brain.as_ref().and_then(|b| living_rules::graph::parse(&b.graph).ok()).map(|g| living_rules::graph::outline(&g.root)).unwrap_or_default();
         let plan = brain.as_ref().map(|b| b.plan.clone()).unwrap_or_default();
         let persona = format!("{}{}", self.persona_text(actor), self.own_timings(actor));
+        // The frame (`LIVING_FAST_FRAME`); the balanced one also tells how the asker's own body
+        // feels, as its think prompt does.
+        let f = prompts::fast_frame();
+        let felt = if f == prompts::FastFrame::Balanced { self.body_text(actor) } else { String::new() };
         let msgs = vec![
-            Msg { role: "system", content: prompts::fast_system() },
-            Msg { role: "user", content: prompts::fast_user(&ask.reason, &persona, &experiences, &plan, &outline, &self.repertoire_text(actor)) },
+            Msg { role: "system", content: prompts::fast_system_v(f) },
+            Msg { role: "user", content: prompts::fast_user_v(f, &ask.reason, &persona, &experiences, &plan, &outline, &self.repertoire_text(actor), &felt) },
         ];
         if let Some(trace) = trace.as_deref_mut() {
             trace["model_start_ms"] = json!(llm::now_ms());
@@ -243,6 +247,159 @@ fn change_of(v: &Value, routines: &[String]) -> Change {
     Change::Keep("no usable answer".into())
 }
 
+/// One saved fast request from a run's journal (`<run>/journal/<name>.jsonl`, purpose `fast`):
+/// the system prompt it was sent with (`journal/system/<hash>.txt`) and its user prompt.
+struct Saved {
+    run: String,
+    actor: String,
+    idx: usize,
+    at_ms: u64,
+    system: String,
+    user: String,
+    reply: Value,
+}
+
+/// The saved fast requests of a run, in journal order per character, at most `per_actor` each.
+fn saved(dir: &Path, per_actor: usize) -> Result<Vec<Saved>> {
+    let mut out = Vec::new();
+    let mut files: Vec<_> = std::fs::read_dir(dir.join("journal"))?.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "jsonl")).collect();
+    files.sort();
+    for f in files {
+        let mut n = 0;
+        for line in std::fs::read_to_string(&f)?.lines() {
+            let Ok(r) = serde_json::from_str::<Value>(line) else { continue };
+            if r["purpose"] != "fast" || r["request"].is_null() || r["reply"].is_null() {
+                continue;
+            }
+            let msgs = &r["request"]["messages"];
+            let (Some(sref), Some(user)) = (msgs[0]["content_ref"].as_str(), msgs[1]["content"].as_str()) else { continue };
+            let system = std::fs::read_to_string(dir.join("journal").join(sref))?;
+            if n >= per_actor {
+                break;
+            }
+            out.push(Saved {
+                run: dir.file_name().map(|x| x.to_string_lossy().to_string()).unwrap_or_default(),
+                actor: r["actor"].as_str().unwrap_or_default().to_string(),
+                idx: n,
+                at_ms: r["at_ms"].as_u64().unwrap_or(0),
+                system,
+                user: user.to_string(),
+                reply: llm::parse_json(r["reply"].as_str().unwrap_or_default()).unwrap_or(Value::Null),
+            });
+            n += 1;
+        }
+    }
+    Ok(out)
+}
+
+/// The routines a saved user prompt lists (`## name — …` under Your routines), normalized.
+fn routines_in(user: &str) -> Vec<String> {
+    let Some(rest) = user.split("\n# Your routines\n").nth(1) else { return Vec::new() };
+    let section = rest.split("\n# Why now").next().unwrap_or_default();
+    section.lines().filter_map(|l| l.strip_prefix("## ")).map(|l| living_rules::normalize::routine_name(l.split(" — ").next().unwrap_or(l))).collect()
+}
+
+/// A reply as the live fast lane would take it: what it changes, and the graph it would send.
+fn replay_row(v: &Value, routines: &[String]) -> Value {
+    match change_of(v, routines) {
+        Change::Keep(why) => json!({"change": if v["keep"].as_bool() == Some(true) { "keep" } else { "unusable" }, "why": why}),
+        Change::Patch { target, graph, what } => {
+            let kind = if v["patch"].is_object() { "patch" } else if v["routine"].is_object() { "routine" } else { "switch" };
+            json!({"change": kind, "target": target, "graph": serde_json::from_str::<Value>(&graph).unwrap_or(Value::Null), "what": what})
+        }
+    }
+}
+
+/// `living-mind fast-replay --frame first|balanced --out FILE [--per-actor K] [--limit N]
+/// [--concurrency C] [--route PROFILE] [--prompts-only] RUN_DIR...`: the fast lane's saved
+/// requests sent again, in the first or the balanced frame (docs/FAST_LANE_FRAME.md). The first
+/// frame sends each saved system prompt as it was; the balanced one swaps only its frame text,
+/// so the world's rules and the grammar are the saved bytes in both arms, and the user prompt is
+/// the saved one in both (a saved request has no felt body, so How you are now is not given).
+/// `--prompts-only` writes the prompts and makes no call. Calls go to the fast route (or
+/// `--route`) through the models config (`LIVING_MODELS`), journaled under `<out>.journal/`.
+pub async fn replay_main(root: &Path, args: Vec<String>) -> Result<()> {
+    let mut f = prompts::FastFrame::First;
+    let (mut out, mut per_actor, mut limit, mut conc, mut route, mut prompts_only, mut dirs) = (None, usize::MAX, usize::MAX, 8usize, None, false, Vec::new());
+    let mut it = args.into_iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--frame" => f = prompts::FastFrame::parse(it.next().as_deref()).map_err(anyhow::Error::msg)?,
+            "--out" => out = it.next().map(std::path::PathBuf::from),
+            "--per-actor" => per_actor = it.next().and_then(|x| x.parse().ok()).unwrap_or(usize::MAX),
+            "--limit" => limit = it.next().and_then(|x| x.parse().ok()).unwrap_or(usize::MAX),
+            "--concurrency" => conc = it.next().and_then(|x| x.parse().ok()).unwrap_or(8),
+            "--route" => route = it.next(),
+            "--prompts-only" => prompts_only = true,
+            d => dirs.push(std::path::PathBuf::from(d)),
+        }
+    }
+    let out = out.ok_or_else(|| anyhow!("--out FILE is required"))?;
+    prompts::set_rules(1, include_str!("../../../scripts/skills.rhai"));
+    let first = prompts::fast_frame_text(prompts::FastFrame::First, prompts::frame());
+    let mine = prompts::fast_frame_text(f, prompts::frame());
+    let mut items = Vec::new();
+    for d in &dirs {
+        items.extend(saved(d, per_actor)?);
+    }
+    items.truncate(limit);
+    // The saved system prompts must open with the first frame's text exactly: only then is
+    // swapping the frame all that differs.
+    for s in &items {
+        if !s.system.starts_with(&first) {
+            return Err(anyhow!("{} {}#{}: its saved system prompt does not open with this build's first frame; not replayed", s.run, s.actor, s.idx));
+        }
+    }
+    let route = route.unwrap_or_else(|| Config::load(root).route);
+    let llm = if prompts_only {
+        None
+    } else {
+        let models: llm::ModelsFile = serde_json::from_str(&std::fs::read_to_string(std::env::var("LIVING_MODELS").map(std::path::PathBuf::from).unwrap_or_else(|_| root.join("living/configs/models.json")))?)?;
+        let journal = out.with_extension("journal");
+        std::fs::create_dir_all(&journal)?;
+        Some(Arc::new(llm::Llm::new(models, journal)?))
+    };
+    let sem = Arc::new(tokio::sync::Semaphore::new(conc.max(1)));
+    let mut tasks = tokio::task::JoinSet::new();
+    for s in items {
+        let system = format!("{mine}{}", &s.system[first.len()..]);
+        let (llm, sem, route) = (llm.clone(), sem.clone(), route.clone());
+        tasks.spawn(async move {
+            let routines = routines_in(&s.user);
+            let mut row = json!({"run": s.run, "actor": s.actor, "idx": s.idx, "at_ms": s.at_ms, "frame": f.name(),
+                "saved": replay_row(&s.reply, &routines), "system_chars": system.len(), "user_chars": s.user.len()});
+            let Some(llm) = llm else {
+                row["system"] = json!(system);
+                row["user"] = json!(s.user);
+                return row;
+            };
+            let _permit = sem.acquire().await;
+            let msgs = vec![Msg { role: "system", content: system }, Msg { role: "user", content: s.user.clone() }];
+            match llm.chat_in_lane(&route, Attention::OnStage, "fast", &s.actor, &msgs, Lane::Fast).await {
+                Ok(r) => {
+                    let v = llm::parse_json(&r.content).unwrap_or(Value::Null);
+                    row["reply"] = v.clone();
+                    row["model"] = json!(r.model);
+                    row["latency_ms"] = json!(r.latency_ms);
+                    row["replayed"] = replay_row(&v, &routines);
+                }
+                Err(e) => row["error"] = json!(format!("{e:#}")),
+            }
+            row
+        });
+    }
+    let mut rows = Vec::new();
+    while let Some(r) = tasks.join_next().await {
+        rows.push(r?);
+    }
+    rows.sort_by(|a, b| (a["run"].as_str(), a["actor"].as_str(), a["idx"].as_u64()).cmp(&(b["run"].as_str(), b["actor"].as_str(), b["idx"].as_u64())));
+    std::fs::write(&out, rows.iter().map(|r| format!("{r}\n")).collect::<String>())?;
+    let count = |k: &str| rows.iter().filter(|r| r["replayed"]["change"] == k).count();
+    println!("{} requests in frame {}: keep {}, patch {}, routine {}, switch {}, unusable {}, failed {} → {}",
+        rows.len(), f.name(), count("keep"), count("patch"), count("routine"), count("switch"), count("unusable"), rows.iter().filter(|r| !r["error"].is_null()).count(), out.display());
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -282,6 +439,80 @@ mod tests {
                 assert!(!text.to_lowercase().contains(tactic), "tactic text {tactic:?} in the fast lane's prompt");
             }
         }
+    }
+
+    #[test]
+    fn the_first_frame_is_the_default_and_unchanged() {
+        assert_eq!(prompts::FastFrame::parse(None), Ok(prompts::FastFrame::First));
+        assert_eq!(prompts::FastFrame::parse(Some("")), Ok(prompts::FastFrame::First));
+        assert!(prompts::FastFrame::parse(Some("balance")).is_err(), "a misspelt frame stops the service");
+        // The default system and user prompts are the first frame's, byte for byte. (The rules
+        // text after the frame is global state other tests change: compared on real journals by
+        // `fast-replay`, whose first arm sends each saved system prompt unchanged.)
+        assert_eq!(prompts::fast_frame(), prompts::FastFrame::First);
+        assert!(prompts::fast_system().starts_with(&prompts::fast_frame_text(prompts::FastFrame::First, prompts::frame())));
+        let exps = vec!["A stranger attacked you (9 damage)".to_string()];
+        let old = prompts::fast_user("A stranger winds up a strike at you", "Wren", &exps, "test", " 0 first", "- stay safe");
+        assert_eq!(prompts::fast_user_v(prompts::FastFrame::First, "A stranger winds up a strike at you", "Wren", &exps, "test", " 0 first", "- stay safe", "badly hurt"), old, "the first frame tells no felt body");
+        let balanced = prompts::fast_user_v(prompts::FastFrame::Balanced, "A stranger winds up a strike at you", "Wren", &exps, "test", " 0 first", "- stay safe", "badly hurt");
+        assert_eq!(balanced, format!("{old}\n# How you are now\nHow your body feels: badly hurt\n"));
+        assert_eq!(prompts::fast_user_v(prompts::FastFrame::Balanced, "x", "Wren", &exps, "test", " 0 first", "", " "), prompts::fast_user("x", "Wren", &exps, "test", " 0 first", ""), "nothing said of a body not known");
+    }
+
+    #[test]
+    fn the_balanced_frame_shows_six_ways_alike() {
+        prompts::set_rules(1, include_str!("../../../scripts/skills.rhai"));
+        // Only the frame differs: both are the frame, then the world's rules and the grammar.
+        let f2 = prompts::fast_frame_text(prompts::FastFrame::Balanced, prompts::frame());
+        let balanced = prompts::fast_system_v(prompts::FastFrame::Balanced);
+        assert!(balanced.starts_with(&format!("{f2}\n\n")), "the balanced system prompt opens with its frame");
+        // The fake model still knows it as a fast request (fake_llm.py `purpose_of`).
+        assert!(f2.contains("Something has just happened to you (see Why now)"));
+        // Every way is shown, each a legal line ahead of a fight, none much longer than another.
+        let lens: Vec<usize> = prompts::FAST_WAYS.iter().map(|(_, l)| l.len()).collect();
+        assert!(lens.iter().max().unwrap() - lens.iter().skip(1).min().unwrap() < 60, "{lens:?}");
+        for (name, line) in prompts::FAST_WAYS.iter() {
+            assert!(f2.contains(&format!("- {name}: {line}")), "{name}");
+            let v: Value = serde_json::from_str(line).unwrap();
+            if v.get("keep").is_some() {
+                assert!(matches!(change_of(&v, &[]), Change::Keep(_)));
+                continue;
+            }
+            let fight = json!({"first": [v, {"do": "strike", "target": {"nearest": "person"}}]});
+            let (_, warnings) = living_rules::normalize::graph(fight.clone()).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(warnings.is_empty(), "{name}: {warnings:?}");
+            assert!(matches!(change_of(&json!({"patch": {"label": "combat", "graph": fight}}), &[]), Change::Patch { .. }), "{name}");
+        }
+        // Keeping comes first among the replies, as among the ways.
+        let replies = f2.split("Reply with ONE JSON object, one of:\n").nth(1).unwrap();
+        assert!(replies.starts_with("{\"keep\": true"), "{replies}");
+        // The triggering event is set apart from what else is perceived.
+        assert!(f2.contains("Why now is that one event as you perceived it"));
+        assert!(f2.contains("Your `combat` branch stays as it is unless you change it."));
+    }
+
+    /// The prompt audit (docs/FAST_LANE_FRAME.md): outside the six shared ways, the balanced
+    /// frame adds no word of fighting or of getting away, and no advice.
+    #[test]
+    fn the_balanced_frame_adds_no_tactic_beyond_the_shared_ways() {
+        let mut f2 = prompts::fast_frame_text(prompts::FastFrame::Balanced, prompts::frame());
+        for (name, line) in prompts::FAST_WAYS.iter() {
+            f2 = f2.replace(&format!("- {name}: {line}"), "");
+        }
+        // Counted against the first frame's own text: the balanced one may say no such word more often.
+        let f1 = prompts::fast_frame_text(prompts::FastFrame::First, prompts::frame());
+        let (lower, before) = (f2.to_lowercase(), f1.to_lowercase());
+        for word in ["strike", "block", "dodge", "flee", "back_off", "back off", "retreat", "escape", "run away", "safe", "survive", "danger", "should", "better", "best", "must", "wise", "outrun", "miss", "attacker", "enemy", "opening", "counter", "windup", "win", "lose", "kill", "hurt", "health", "breath", "stamina"] {
+            assert!(lower.matches(word).count() <= before.matches(word).count(), "{word:?} added outside the shared ways: {f2}");
+        }
+        // The first frame's own words are unchanged by this branch (the replicates' and the frame trial's).
+        assert!(f1.contains("You may rewrite your `combat` branch, rewrite one of the routines listed under Your routines, switch your `combat` branch to one of them, or keep everything as it is."));
+    }
+
+    #[test]
+    fn a_saved_prompt_lists_its_routines() {
+        let user = "# Who you are\nW\n\n# Your routines\n## stay safe — not tried yet [habit (forager)]\n 0 first\n## Be With People — tried 2 times\n\n# Why now\nx\n";
+        assert_eq!(routines_in(user), vec!["stay safe".to_string(), living_rules::normalize::routine_name("Be With People")]);
     }
 
     fn regex_like_count(t: &str) -> bool {
