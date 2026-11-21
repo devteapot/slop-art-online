@@ -1,15 +1,4 @@
 {
-  "living-authority::look::tests::the_island_wears_the_pool": {
-    "case": "living-authority::look::tests::the_island_wears_the_pool",
-    "first_main": "07f37b927",
-    "first_seen": "2026-11-20T06:17:03+01:00",
-    "last_main": "07f37b927",
-    "last_seen": "2026-11-20T06:17:03+01:00",
-    "owner": "dev-box (char-4 track; parked until Astra returns 2026-11-25)",
-    "reason": "authority unit test, not run by living-check: the island's look data is generation c4-e61b01c0 (living/seeds/worlds/island/looks.json and island.json) while Cullet's looks.json and the laptop's bundles are c4-cbcc40bf; fix: regenerate the island's look data (look_lines.py) and recompile (author_world.py island --compile-only). Found by frame-views on bv-defaults-on, 2026-11-20",
-    "skill": "verify-core",
-    "times": 0
-  },
   "look-walk": {
     "case": "look-walk",
     "first_main": "b20dea4b7",
