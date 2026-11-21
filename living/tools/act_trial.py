@@ -493,7 +493,9 @@ def decisions(journal_dirs):
                         r = json.loads(strip_fences(e["reply"]))
                     except ValueError:
                         continue
-                    acts = r.get("acts") if isinstance(r, dict) else None
+                    # An act repair (mind.rs `repaired_acts`) answers with `replacements`, the
+                    # refused slots in order; what it resubmits are the objects among them.
+                    acts = (r.get("replacements") if e.get("purpose") == "act_repair" else r.get("acts")) if isinstance(r, dict) else None
                     if not isinstance(acts, list) or not acts:
                         continue
                     acts = [x for x in acts if isinstance(x, dict) and x.get("do") != "gaze"]
