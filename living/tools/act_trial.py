@@ -506,7 +506,14 @@ def decisions(journal_dirs):
 
 def overlaps(trace, names, decided, actors, from_ms=None, to_ms=None):
     """Batches decided while another of the mind's acts ran, and whether the batch's first act is
-    the act under way again. `names`: actor id -> journal name (as llm.rs names the file)."""
+    the act under way again. `names`: actor id -> journal name (as llm.rs names the file).
+
+    Whether an act was under way is read from the submitting transaction itself (its markers share
+    `reducer_us`), not from the markers' running state alone, since an act can end without an
+    `act_done` marker (a walk; see the report): with the law on (`replace` 1 in `act_submit`) an
+    `act_replaced` or `act_continued` there, or acts refused there while the act under way kept
+    running (`act_replace_checks`); with it off, acts queued there and neither started nor refused
+    (they wait behind the act under way)."""
     rows = sorted(act_trace.marks(trace), key=lambda m: (m["wall_ms"], m["reducer_us"]))
     if actors is not None:
         rows = [m for m in rows if m["actor"] in actors]
@@ -518,11 +525,12 @@ def overlaps(trace, names, decided, actors, from_ms=None, to_ms=None):
     out = Counter()
     same_examples = []
     ages = []
-    for m in rows:
+    for i, m in enumerate(rows):
         a, st = m["actor"], m["stage"]
         inside = (from_ms is None or m["wall_ms"] >= from_ms) and (to_ms is None or m["wall_ms"] <= to_ms)
         if st == "act_submit":
             source = m["detail"][0] if m["detail"] else "?"
+            replace = len(m["detail"]) > 2 and m["detail"][2] == "1"
             name = names.get(a)
             match = None
             for k, (at, purpose, acts) in enumerate(decided.get(name, [])):
@@ -537,33 +545,58 @@ def overlaps(trace, names, decided, actors, from_ms=None, to_ms=None):
                 batch_of[a] = list(match[3])
             else:
                 batch_of[a] = []
+            tx = Counter(x["stage"] for x in rows[i + 1:i + 40] if x["actor"] == a and x["reducer_us"] == m["reducer_us"])
+            cur = running.get(a)
+            if not (tx["act_queued"] or tx["act_continued"]):
+                # Nothing in the batch could be read as an act for the body: it says nothing of
+                # the act under way, and is no decision to compare.
+                if inside:
+                    out["submits_without_a_readable_act"] += 1
+                continue
+            if replace:
+                busy = bool(tx["act_replaced"] or tx["act_continued"]
+                            or (cur is not None and not tx["act_started"] and (tx["act_refused"] or tx["act_queued"])))
+            else:
+                busy = bool(tx["act_queued"] and not tx["act_started"] and not tx["act_refused"])
+            if cur is not None and not busy:
+                running.pop(a)          # it had ended without a marker
+                if inside:
+                    out["stale_running_cleared"] += 1
+                cur = None
             if not inside:
                 continue
             out["submits"] += 1
             out[f"submits_from:{source}"] += 1
             out["submits_matched_to_a_reply"] += bool(match)
-            cur = running.get(a)
-            if cur is None:
+            if not busy:
                 continue
             out["submits_while_an_act_ran"] += 1
-            ages.append(m["wall_ms"] - cur["start_ms"])
+            if replace:
+                kind = "replaced" if tx["act_replaced"] else "continued" if tx["act_continued"] else "refused_kept_running" if tx["act_refused"] else "queued_behind_committed"
+            else:
+                kind = "queued_behind"
+            out[f"overlap_then:{kind}"] += 1
             first = batch_of[a][0] if batch_of[a] else None
-            if first is None:
+            if cur is None or first is None:
                 out["overlap_unmatched"] += 1
                 continue
+            ages.append(m["wall_ms"] - cur["start_ms"])
             same_skill = act_skill(first) == cur["skill"]
             same = cur["canon"] is not None and canon(first) == cur["canon"]
+            out["overlap_compared"] += 1
             out["overlap_same_skill"] += same_skill
             out["overlap_same_act"] += same
             if same and len(same_examples) < 12:
-                same_examples.append({"actor": a, "name": names.get(a), "act": first, "age_ms": round(m["wall_ms"] - cur["start_ms"]), "source": source})
+                same_examples.append({"actor": a, "name": names.get(a), "act": first, "age_ms": round(m["wall_ms"] - cur["start_ms"]), "source": source, "then": kind})
         elif st == "act_queued":
             skill = m["detail"][1] if len(m["detail"]) > 1 else None
             rest = batch_of.get(a, [])
             pick = next((i for i, x in enumerate(rest) if act_skill(x) == skill), None)
             queued[m["key"]] = canon(rest.pop(pick)) if pick is not None else None
         elif st == "act_started":
-            running[a] = {"skill": m["detail"][0] if m["detail"] else "?", "canon": queued.pop(m["key"], None), "start_ms": m["wall_ms"]}
+            c = queued.pop(m["key"], None)
+            if not act_trace.done_at_start(rows, i):
+                running[a] = {"skill": m["detail"][0] if m["detail"] else "?", "canon": c, "start_ms": m["wall_ms"]}
         elif st == "act_continued":
             queued.pop(m["key"], None)
             if inside:
@@ -577,7 +610,8 @@ def overlaps(trace, names, decided, actors, from_ms=None, to_ms=None):
                 if int(m["detail"][2]) < 3000:
                     out["replaced_within_3s_of_start"] += 1
         elif st == "act_done":
-            running.pop(a, None)
+            if running.get(a, {}).get("start_ms") is not None:
+                running.pop(a, None)
     runs = 0
     for a, ts in replaced_times.items():
         k = 0
@@ -591,8 +625,9 @@ def overlaps(trace, names, decided, actors, from_ms=None, to_ms=None):
     res = dict(out)
     s = out["submits"]
     o = out["submits_while_an_act_ran"]
+    c = out["overlap_compared"]
     res["overlap_rate"] = round(o / s, 4) if s else None
-    res["same_act_share_of_overlaps"] = round(out["overlap_same_act"] / o, 4) if o else None
+    res["same_act_share_of_compared_overlaps"] = round(out["overlap_same_act"] / c, 4) if c else None
     res["same_act_share_of_submits"] = round(out["overlap_same_act"] / s, 4) if s else None
     res["age_of_act_under_way_at_overlap_ms"] = act_trace.dist(ages)
     res["same_act_examples"] = same_examples

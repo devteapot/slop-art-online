@@ -74,6 +74,19 @@ def marks(path):
             yield dict(stage=stage, actor=int(actor), key=int(key), reducer_us=int(reducer), wall_ms=int(row["ts"]) / 1000, detail=detail)
 
 
+def done_at_start(rows, i):
+    """Whether the act started at `rows[i]` (`act_started`) was already done in its own transaction:
+    an act with nothing to do (a walk to where the body stands) completes inside `begin`, so its
+    `act_done` (age 0, key its start ms) is logged before its `act_started`, in the same transaction."""
+    m = rows[i]
+    for x in reversed(rows[max(0, i - 40):i]):
+        if x["reducer_us"] != m["reducer_us"]:
+            break
+        if x["actor"] == m["actor"] and x["stage"] == "act_done" and x["detail"] and x["detail"][-1] == "0":
+            return True
+    return False
+
+
 def pct(values, q):
     v = sorted(values)
     if not v:
@@ -109,7 +122,7 @@ def report(path, actors=None, seconds=None, from_ms=None, to_ms=None):
     done_ok, done_fail = Counter(), Counter()
     never = Counter()
     started_skills = Counter()
-    for m in rows:
+    for i, m in enumerate(rows):
         a, st = m["actor"], m["stage"]
         if st == "act_submit":
             busy_at[a] = a in running
@@ -121,7 +134,9 @@ def report(path, actors=None, seconds=None, from_ms=None, to_ms=None):
             q = queued.pop(m["key"], None)
             if q and q[3]:
                 waits["behind_act" if q[2] else "after_idle"].append(m["wall_ms"] - q[0])
-            running[a] = (m["detail"][0] if m["detail"] else "?", m["wall_ms"])
+            # An act done in its own transaction (`done_at_start`) holds nothing afterwards.
+            if not done_at_start(rows, i):
+                running[a] = (m["detail"][0] if m["detail"] else "?", m["wall_ms"])
             started_skills[m["detail"][0] if m["detail"] else "?"] += 1
         elif st in ("act_refused", "act_expired"):
             queued.pop(m["key"], None)
