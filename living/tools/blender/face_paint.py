@@ -343,10 +343,11 @@ def paint_skin(hf, look, rng, layer=None):
         tone = 0.62 + 0.76 * hairs
         hair = bc[None, None, :] * tone[..., None] + (0.10 * np.clip(tone - 1.0, 0, 1))[..., None]
         if BEARD:
-            # The short beard shows its hair colour through the core; its mask gives the cheek taper and the
-            # opening round the lips. A full beard is drawn in hairs at its density.
+            # The short and full beards show their hair colour through the core (the GC's choice in S7: drawn
+            # at a density, a dark full beard read pale); the mask gives the soft edge, the cheek taper and the
+            # opening round the lips. Other shapes are drawn in hairs at their density.
             density = 0.90 if beard == "full" else 0.76
-            opacity = (0.95 + 0.05 * hairs) if beard == "short" else density * (0.30 + 0.70 * hairs)
+            opacity = (0.95 + 0.05 * hairs) if beard in ("short", "full") else density * (0.30 + 0.70 * hairs)
             a = np.clip(cover * look.get("beard_density", 1.0) * opacity, 0, 1)
             whiskers = a
         else:
