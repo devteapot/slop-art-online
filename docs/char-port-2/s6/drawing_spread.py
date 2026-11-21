@@ -13,6 +13,12 @@ ID's green and its skin warm (R over G by 25 and over B by 40), inside the portr
 (every part narrower than the outline check's 15 px, scaled by head size, taken off): the width
 without the curls and thin locks, as the outline check holds the hair to it.
 
+**The acceptance (the GC's, after step 3):** `body_over_eyes`, the hair body's width over the eye
+spacing (iris centre to iris centre), which no face's width enters; its band is the drawing's
+value ± 0.10/1.82 of it (the cheek measure's ±0.10 about 1.82, in proportion). `body` (over the
+cheek width) is reported, not held: a face wider than the drawing's for its eyes (ours, 1.86
+against 1.75 at the GC's count) would charge the face's width to the hair.
+
 **The drawing:** the front drawing in docs/char-live-2/hair/final/review.jpg (its largest copy),
 checked against the copy in docs/char-live-2/stage-1-targets.jpg.
 
@@ -24,8 +30,8 @@ ink lines are inside the hair's width either way).
 **The measure:**
 - **The chin:** where the face's centre run of skin is narrowest (its ink point), between the
   mouth and the neck.
-- **The eyes:** the two largest green-iris blobs; their centres give the eye line and the eye
-  spacing.
+- **The eyes:** the iris pieces parted into two eyes at the widest gap across (`two_eyes`); their
+  centres give the eye line and the eye spacing.
 - **The head's height:** the eye spacing over 0.30, stage-1's front ratio (eye spacing over head
   height).
 - **The cheek row:** 0.030 m under the eye line, the generator's (`eye_z - 0.030`), in head
@@ -86,14 +92,23 @@ def blobs(mask):
     return sorted(out, key=len, reverse=True)
 
 
+def two_eyes(iris):
+    """The two eyes' centres (y, x): every piece of iris (the pupil and a lid cut it into pieces;
+    a blink leaves only slivers), parted into two at the widest gap across between the pieces. The
+    largest twelve under 3000 px: a render's ground is far larger and is left out."""
+    pcs = sorted((e for e in blobs(iris) if 3 <= len(e) < 3000), key=len, reverse=True)[:12]
+    pcs.sort(key=lambda e: e[:, 1].mean())
+    cut = int(np.argmax(np.diff([e[:, 1].mean() for e in pcs]))) + 1
+    return np.concatenate(pcs[:cut]).mean(axis=0), np.concatenate(pcs[cut:]).mean(axis=0)
+
+
 def measure(path, box):
     im = Image.open(path).convert("RGB").crop(box)
     a = np.asarray(im).astype(float)
     kind = classify(a)
     w = kind.shape[1]
     skin = kind == "skin"
-    eyes = blobs(kind == "iris")[:2]
-    (ya, xa), (yb, xb) = (e.mean(axis=0) for e in eyes)
+    (ya, xa), (yb, xb) = two_eyes(kind == "iris")
     eye_y, spacing = (ya + yb) / 2, abs(xa - xb)
     cx = int(round((xa + xb) / 2))
     hair = (kind == "hair") | (kind == "ink")
@@ -139,7 +154,8 @@ def finish(im, hair, skin, eye_y, spacing, cx, w):
     d.line((0, chin, w, chin), fill=(0, 160, 0))
     d.line((bx.min(), chin, bx.min(), 0), fill=(255, 150, 0))
     d.line((bx.max(), chin, bx.max(), 0), fill=(255, 150, 0))
-    return dict(body_width_px=int(bx.max() - bx.min()), body=round(float((bx.max() - bx.min()) / cw), 3), opening_px=n, eye_line_px=round(float(eye_y), 1), eye_spacing_px=round(float(spacing), 1), head_px=round(float(head_px), 1), chin_row=chin,
+    return dict(body_over_eyes=round(float((bx.max() - bx.min()) / spacing), 3), whole_over_eyes=round(float((hx[1] - hx[0]) / spacing), 3),
+                body_width_px=int(bx.max() - bx.min()), body=round(float((bx.max() - bx.min()) / cw), 3), opening_px=n, eye_line_px=round(float(eye_y), 1), eye_spacing_px=round(float(spacing), 1), head_px=round(float(head_px), 1), chin_row=chin,
                 cheek_row=cheek_row, cheek_px=cheek, cheek_width_px=cw, hair_px=hx, hair_width_px=hx[1] - hx[0], spread_face=round(float(spread), 3)), pic
 
 
@@ -153,11 +169,10 @@ def render(look, idp, box=(600, 160, 1000, 620), face=None):
     a = np.asarray(Image.open(face).convert("RGB").crop(box) if face else im).astype(float)
     r, g, b = a[..., 0], a[..., 1], a[..., 2]
     skin = (r > g + 12) & (r > b + 25) if face else (r > g + 25) & (r > b + 40) & (r > 170) & ~hair  # the hairless frame: nothing over the face
-    # The eyes: every piece of iris (a blink leaves only slivers), split into the two eyes about
-    # their middle; the ground's green is far larger and is left out.
-    P = np.concatenate([e for e in blobs((g > r + 8) & (g > b) & (True if face else ~hair)) if 3 <= len(e) < 3000][:12])
-    mid = np.median(P[:, 1])
-    (ya, xa), (yb, xb) = P[P[:, 1] < mid].mean(axis=0), P[P[:, 1] >= mid].mean(axis=0)
+    # The eyes: every piece of iris (the pupil and a lid cut it into pieces; a blink leaves only
+    # slivers), parted into the two eyes at the widest gap across between the pieces; the
+    # ground's green is far larger and is left out.
+    (ya, xa), (yb, xb) = two_eyes((g > r + 8) & (g > b) & (True if face else ~hair))
     return finish(im, hair, skin, (ya + yb) / 2, abs(xa - xb), int(round((xa + xb) / 2)), a.shape[1])
 
 
@@ -178,7 +193,9 @@ def main(out_json, out_png, look=None, idp=None):
         x += p.width + 10
     S.save(out_png)
     drawn = [r for n, r in res.items() if n != "game front portrait"]
-    Path(out_json).write_text(json.dumps(dict(sources=res, drawing=dict(spread_face=round(float(np.mean([r["spread_face"] for r in drawn])), 3), body=round(float(np.mean([r["body"] for r in drawn])), 3)),
+    boe = float(np.mean([r["body_over_eyes"] for r in drawn]))
+    Path(out_json).write_text(json.dumps(dict(sources=res, drawing=dict(spread_face=round(float(np.mean([r["spread_face"] for r in drawn])), 3), body=round(float(np.mean([r["body"] for r in drawn])), 3),
+                                                                        body_over_eyes=round(boe, 3), band=[round(boe * (1 - 0.10 / 1.82), 3), round(boe * (1 + 0.10 / 1.82), 3)]),
                                               method=__doc__.split("**The measure:**")[1].strip()), indent=1))
 
 

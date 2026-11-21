@@ -16,7 +16,10 @@ the same pose: the view's pose without a clip is whatever moment its photograph 
 **The measure** (drawing_spread.render): the face (the eyes, the chin, the cheek row and its
 width) from the frame with no hair, so a lock over a cheek or an eye cannot move it; the hair from
 the ID's green; the hair's whole width and its body width above the chin, as on the drawing.
-Writes OUT/spread.json (the acceptance: body 1.82 ± 0.10, the drawing's).
+Writes OUT/spread.json. **The acceptance** (the GC's): `body_over_eyes`, the hair body's width
+over the eye spacing, within the drawing's band (docs/char-port-2/s6/spread/spread.json,
+`drawing.band`: its value ± 0.10/1.82 of it). The cheek measure (`body`, over the face's width at
+the cheekbones) is reported, not held.
 """
 import argparse
 import json
@@ -61,10 +64,13 @@ def main():
     face = render(a.out / "none", a.binary, a.none)[0]
     r, pic = drawing_spread.render(look, idp, face=face)
     pic.save(a.out / "spread.png")
-    res = dict(style=a.style, **{k: r[k] for k in ("spread_face", "body", "hair_width_px", "body_width_px", "cheek_width_px", "cheek_px", "eye_spacing_px", "chin_row", "cheek_row")},
-               target=dict(body=1.82, tolerance=0.10), within=abs(r["body"] - 1.82) <= 0.10)
+    drawn = json.loads((HERE / "spread/spread.json").read_text())["drawing"]
+    lo, hi = drawn["band"]
+    res = dict(style=a.style, **{k: r[k] for k in ("body_over_eyes", "whole_over_eyes", "spread_face", "body", "hair_width_px", "body_width_px", "cheek_width_px", "cheek_px", "eye_spacing_px", "chin_row", "cheek_row")},
+               target=dict(body_over_eyes=drawn["body_over_eyes"], band=[lo, hi]), within=lo <= r["body_over_eyes"] <= hi,
+               report_only=dict(body_over_cheek=r["body"], cheek_over_eyes=round(r["cheek_width_px"] / r["eye_spacing_px"], 3), drawing_body_over_cheek=drawn["body"]))
     (a.out / "spread.json").write_text(json.dumps(res, indent=1))
-    print(json.dumps({k: res[k] for k in ("style", "spread_face", "body", "within", "hair_width_px", "body_width_px", "cheek_width_px")}))
+    print(json.dumps({k: res[k] for k in ("style", "body_over_eyes", "within", "body", "body_width_px", "eye_spacing_px", "cheek_width_px")}))
 
 
 if __name__ == "__main__":
