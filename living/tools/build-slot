@@ -1,0 +1,65 @@
+#!/bin/bash
+# build-slot: run a heavy command (cargo release build, `just living-check`, a Blender bake) only
+# when one of the laptop's heavy-job slots is free. Usage: build-slot [--label NAME] <command...>
+# Slots are directories under .local/build-slots/slot-N holding the holder's pid and label;
+# a slot whose pid is gone is reclaimed. `build-slot --status` lists holders and waiters.
+# Play sessions: the launcher creates .local/build-slots/session/{pid,since} (mkdir, then the
+# files) when the game opens and removes the directory when it closes; while it exists with a
+# live pid, no new heavy job starts. Jobs already running are not interrupted.
+set -u
+DIR=/Users/carlid/dev/slop-art-online/.local/build-slots
+SLOTS=${BUILD_SLOTS:-3}
+mkdir -p "$DIR/waiting"
+if [ "${1:-}" = "--status" ]; then
+  [ -d "$DIR/session" ] && echo "session: the owner is playing (launcher pid $(cat "$DIR/session/pid" 2>/dev/null), since $(cat "$DIR/session/since" 2>/dev/null)); no new heavy jobs start"
+  for d in "$DIR"/slot-*; do [ -d "$d" ] && echo "held  $(basename "$d"): pid $(cat "$d/pid" 2>/dev/null) $(cat "$d/label" 2>/dev/null) since $(cat "$d/since" 2>/dev/null)"; done
+  for w in "$DIR"/waiting/*; do [ -f "$w" ] && echo "wait  $(cat "$w")"; done
+  exit 0
+fi
+LABEL="$(basename "$PWD")"
+if [ "${1:-}" = "--label" ]; then LABEL=$2; shift 2; fi
+[ $# -gt 0 ] || { echo "usage: build-slot [--label NAME] <command...>" >&2; exit 2; }
+# Shared compile cache (tool-7, docs/TOOLING.md): every job runs rustc through sccache with
+# the same cache, cap and server as `living/tools/check.py`, unless the caller set
+# RUSTC_WRAPPER or turned the cache off (LIVING_SCCACHE=0 or BUILD_SLOT_SCCACHE=0). The
+# wrapper is a stable copy of living/tools/sccache-rustc (it drops CARGO_TARGET_DIR and the
+# like from the cache key, so private target dirs still share registry crates). check.py
+# leaves a pre-set wrapper alone, so under build-slot it compiles through this cache but
+# records no sccache stats. Cap: 10G on the laptop (TOOLING.md's default is 20G).
+SLOP_BIN=$HOME/.local/share/slop-tools/bin
+if [ -z "${RUSTC_WRAPPER:-}" ] && [ "${LIVING_SCCACHE:-1}" != 0 ] && [ "${BUILD_SLOT_SCCACHE:-1}" != 0 ] \
+   && [ -x "$SLOP_BIN/sccache" ] && [ -x "$SLOP_BIN/sccache-rustc" ]; then
+  export RUSTC_WRAPPER="$SLOP_BIN/sccache-rustc" SLOP_SCCACHE="$SLOP_BIN/sccache"
+  export SLOP_SCCACHE_SIZE="${SLOP_SCCACHE_SIZE:-10G}"
+  export SCCACHE_DIR="${SLOP_SCCACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/slop-sccache}"
+  export SCCACHE_CACHE_SIZE="$SLOP_SCCACHE_SIZE" SCCACHE_SERVER_PORT="${SLOP_SCCACHE_PORT:-4237}"
+  export SCCACHE_IGNORE_SERVER_IO_ERROR=1
+fi
+ME=$$; W="$DIR/waiting/$ME"; echo "pid $ME $LABEL since $(date '+%H:%M:%S'): $*" > "$W"
+MIN_FREE_GB=${BUILD_SLOT_MIN_FREE_GB:-25}
+free_gb() { df -g / | awk 'NR==2 {print $4}'; }
+SESSION="$DIR/session"   # held by the play launcher while the owner plays (pid in $SESSION/pid)
+session_on() { [ -d "$SESSION" ] && p=$(cat "$SESSION/pid" 2>/dev/null) && [ -n "$p" ] && kill -0 "$p" 2>/dev/null; }
+while :; do
+  # The owner is playing: no new heavy job until the session ends (a dead launcher's lock is ignored).
+  if session_on; then
+    echo "pid $ME $LABEL since $(date '+%H:%M:%S'): $* [waiting: the owner is playing]" > "$W"
+    sleep 30; continue
+  fi
+  # Disk guard: a heavy job may grow a target dir by ~12 GB; start one only with room for it.
+  if [ "$(free_gb)" -lt "$MIN_FREE_GB" ]; then
+    echo "pid $ME $LABEL since $(date '+%H:%M:%S'): $* [waiting for disk: $(free_gb) GB free, need $MIN_FREE_GB]" > "$W"
+    sleep 30; continue
+  fi
+  for i in $(seq 1 "$SLOTS"); do
+    s="$DIR/slot-$i"
+    if [ -d "$s" ]; then p=$(cat "$s/pid" 2>/dev/null); if [ -n "$p" ] && ! kill -0 "$p" 2>/dev/null; then rm -rf "$s"; fi; fi
+    if mkdir "$s" 2>/dev/null; then
+      echo $ME > "$s/pid"; echo "$LABEL" > "$s/label"; date '+%H:%M:%S' > "$s/since"; rm -f "$W"
+      trap 'rm -rf "$s"' EXIT
+      "$@"; rc=$?
+      exit $rc
+    fi
+  done
+  sleep 15
+done
