@@ -46,6 +46,8 @@ Checks, per preset (27 each; fewer only when a segment's drawn-speed check is sk
 
 ## Gotchas
 
+- People take their gaits from `lookdev/anim/own-clips.clips.json`. Without it (render sets `79072c65d37f` to `a7c606d204bb`) every person has walk and run only: strafe and backpedal play `walk`, the legs snap round and settle square on the travel, and this scenario fails 8 checks (92/8: leg-turn easing for each preset, one steady leg offset each, the cursor's two directional gaits). `render_set.py check` warns about such a set; [CLIP_MARKERS.md](../../../../docs/CLIP_MARKERS.md).
+
 - The feet log's yaws are Bevy's, each bone's +Z on the ground, which is the sim angle + 180°. The checks compare differences, and the legs against `heading` + 180°.
 - `heading` is the authority's segment heading, the direction of motion: the legs are drawn on it. With look-2 it stays on the keys whatever the look; the facing is `face_off` and its turn on the same row.
 - A look stays held on the authority when a client quits, so the next drive's first frames already draw a facing. Each drive therefore sets its preset from the first frame (`LIVING_GAME_LOOK_WALK`).

@@ -78,8 +78,8 @@ def build_stepping(seed):
     # holds gate.lock; one the gate starts itself (scene_gate.py's genesis check) is never paused
     # (docs/TOOLING.md, "Heavy work during a gate").
     r = subprocess.run(["bash", str(ROOT / "living/tools/gate_pause.sh"), "--", "cargo", "build", "--manifest-path", str(ROOT / "living/Cargo.toml"), "-p", "living-authority",
-                        "--target", "wasm32-unknown-unknown", "--release"], env=env, capture_output=True, text=True,
-                        timeout=3600 + 5400)  # the build, plus gate_pause.sh's longest pause
+                        "--target", "wasm32-unknown-unknown", "--release"], cwd=ROOT, env=env, capture_output=True, text=True,
+                        timeout=3600 + 5400)  # the build, plus gate_pause.sh's longest pause; cwd: cargo reads the checkout's .cargo/config.toml (path remapping) from it
     if r.returncode:
         raise SystemExit(f"genesis_fuel: the stepping build of {seed} failed:\n{r.stderr[-2000:]}")
     return target / "wasm32-unknown-unknown/release/living_authority.wasm"

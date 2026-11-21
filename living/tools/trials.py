@@ -490,7 +490,7 @@ def build_module(name, rel):
     # One target dir for every trial world: a seed change rebuilds only the authority crate.
     env = dict(os.environ, CARGO_TARGET_DIR=str(TARGET / "trials-wasm"), LIVING_SEED=rel)
     sh("cargo", "build", "--manifest-path", ROOT / "living/Cargo.toml", "-p", "living-authority",
-       "--target", "wasm32-unknown-unknown", "--release", env=env, timeout=3600)
+       "--target", "wasm32-unknown-unknown", "--release", cwd=ROOT, env=env, timeout=3600)  # cwd: .cargo/config.toml
     out = OUT / "wasm" / f"{name}.wasm"
     out.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(TARGET / "trials-wasm/wasm32-unknown-unknown/release/living_authority.wasm", out)

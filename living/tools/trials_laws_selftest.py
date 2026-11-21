@@ -7,18 +7,23 @@ after the install must be the source sent; for a seed with laws (Cullet's, the h
 world's creation-time composition must equal the runner's and `world.day_ms` the seed's
 `day_minutes`; a `keep_laws` variant (no install) must find the composition in the row. Each
 mismatch is planted here and must be refused: `publish` raises, logs and emits an `error` event,
-before any mind starts. No server, no network: `publish` runs against a fake database.
+before any mind starts. No server, no network: `publish` runs against a fake database, which also
+answers staged genesis's wait (living/tools/genesis_wait.py). Every socket connect is refused while
+`Publish` runs, so a call that escapes the fake fails the test by name instead of reaching the
+trial server's real port.
 
 Usage: python3 living/tools/trials_laws_selftest.py [-v]
 """
 import json
 import os
+import socket
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import genesis_wait  # noqa: E402
 import install_script  # noqa: E402
 import trials  # noqa: E402
 
@@ -86,10 +91,16 @@ class Composition(unittest.TestCase):
 
 
 class FakeDb:
-    """The rows `publish` reads, and what `install_script` writes."""
+    """The rows `publish` reads, what `install_script` writes, and the `genesis` row it waits on."""
 
     def __init__(self, creation, day_ms, write=None):
         self.script, self.day_ms, self.write, self.installs = creation, day_ms, write, []
+        self.genesis_reads = []
+
+    def genesis_row(self, url, db, token):
+        """`genesis_wait.genesis_row`: the world's `genesis` row, made (staged genesis done)."""
+        self.genesis_reads.append(db)
+        return {"done": True, "step": 3, "steps": 3, "label": "done"}
 
     def http(self, path, body=None, token=None, raw=False, timeout=30, method=None):
         if path.endswith("/call/install_script"):
@@ -118,8 +129,26 @@ class FakeDb:
         raise AssertionError(query)
 
 
+class NetworkEscaped(AssertionError):
+    pass
+
+
+def no_network(escapes):
+    """Refuse every socket connect, recording it: `trials.http` turns an OSError into status 0, so
+    an escape must not be one, and the record catches an escape a caller swallowed anyway."""
+    def refuse(*args, **kwargs):
+        escapes.append(repr(args[1:] if args and isinstance(args[0], socket.socket) else args)[:200])
+        raise NetworkEscaped(f"network call escaped the fake database: {escapes[-1]}")
+    return refuse
+
+
 class Publish(unittest.TestCase):
     """`Instance.publish` on a fake database: the guard refuses before the instance goes on."""
+
+    def use(self, db):
+        """Route the runner's HTTP and staged genesis's wait to `db`."""
+        trials.http = db.http
+        genesis_wait.genesis_row = db.genesis_row
 
     def instance(self, db, variant=None):
         inst = trials.Instance.__new__(trials.Instance)
@@ -134,14 +163,24 @@ class Publish(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.saved = trials.sh, trials.http, trials.served_name, trials.world_guard.arm
+        self.saved = trials.sh, trials.http, trials.served_name, trials.world_guard.arm, genesis_wait.genesis_row
+        self.sockets = socket.socket.connect, socket.socket.connect_ex, socket.create_connection
+        self.escapes = []
+        refuse = no_network(self.escapes)
+        socket.socket.connect = socket.socket.connect_ex = socket.create_connection = refuse
         trials.sh = lambda *a, **k: None
         trials.served_name = lambda n: n
         trials.world_guard.arm = lambda *a, **k: {"identity": "c200selftest", "epoch": 1}
 
+        def unrouted(*a, **k):
+            raise AssertionError("genesis_wait.genesis_row called before the test routed it to a fake (self.use)")
+        genesis_wait.genesis_row = unrouted
+
     def tearDown(self):
-        trials.sh, trials.http, trials.served_name, trials.world_guard.arm = self.saved
+        trials.sh, trials.http, trials.served_name, trials.world_guard.arm, genesis_wait.genesis_row = self.saved
+        socket.socket.connect, socket.socket.connect_ex, socket.create_connection = self.sockets
         self.tmp.cleanup()
+        self.assertEqual(self.escapes, [], "network calls escaped the fake database")
 
     def events(self):
         p = Path(self.tmp.name) / "events.jsonl"
@@ -149,43 +188,71 @@ class Publish(unittest.TestCase):
 
     def test_passes_on_a_world_running_its_laws(self):
         db = FakeDb(COMPOSED, DAY)
-        trials.http = db.http
+        self.use(db)
         self.instance(db).publish()
         self.assertEqual(db.installs, [COMPOSED])
+        self.assertEqual(db.genesis_reads, ["verify-trial-selftest-none"])
         self.assertEqual(self.events(), [])
         self.assertIn("laws guard passed", (Path(self.tmp.name) / "actions.log").read_text())
 
     def test_refuses_a_bare_world(self):
         # A world whose creation dropped its laws: the runner's composition differs from it.
         db = FakeDb(TREE, DAY)
-        trials.http = db.http
+        self.use(db)
         with self.assertRaisesRegex(RuntimeError, "laws guard: .*creation-time composition"):
             self.instance(db).publish()
         self.assertTrue(any("creation-time composition" in e.get("error", "") for e in self.events()))
 
     def test_refuses_an_install_the_row_does_not_hold(self):
         db = FakeDb(COMPOSED, DAY, write=lambda src: TREE)
-        trials.http = db.http
+        self.use(db)
         with self.assertRaisesRegex(RuntimeError, "laws guard: .*read back"):
             self.instance(db).publish()
         self.assertTrue(any("read back" in e.get("error", "") for e in self.events()))
 
     def test_refuses_a_wrong_day(self):
         db = FakeDb(COMPOSED, trials.DEFAULT_DAY_MS)
-        trials.http = db.http
+        self.use(db)
         with self.assertRaisesRegex(RuntimeError, "laws guard: .*day_ms"):
             self.instance(db).publish()
 
     def test_keep_laws_variant(self):
         db = FakeDb(COMPOSED, DAY)
-        trials.http = db.http
+        self.use(db)
         self.instance(db, {"keep_laws": True}).publish()
         self.assertEqual(db.installs, [])
         db = FakeDb(TREE, DAY)
-        trials.http = db.http
+        self.use(db)
         with self.assertRaisesRegex(RuntimeError, "keeps its own laws"):
             self.instance(db, {"keep_laws": True}).publish()
         self.assertEqual(db.installs, [])
+
+
+class Guard(unittest.TestCase):
+    """The guard itself: while `Publish` runs, a call that would leave the process fails loudly."""
+
+    def test_an_escape_fails_loudly(self):
+        pub = Publish("test_passes_on_a_world_running_its_laws")
+        pub.setUp()
+        try:
+            with self.assertRaises(NetworkEscaped):
+                socket.create_connection(("127.0.0.1", trials.PORT), timeout=1)
+            # The real `trials.http` turns an OSError into status 0; the guard's error is not one.
+            with self.assertRaises(NetworkEscaped):
+                trials.http("/v1/ping")
+            # The real `genesis_wait.genesis_row` (urllib straight to the server) is refused.
+            with self.assertRaises(NetworkEscaped):
+                pub.saved[4](trials.URL, "verify-trial-selftest-none", "x")
+            # A test that forgets to route the wait to its fake is told so by name.
+            with self.assertRaisesRegex(AssertionError, "before the test routed it"):
+                genesis_wait.wait_ready(trials.URL, "verify-trial-selftest-none", "x")
+        finally:
+            # The escapes above were recorded: tearDown fails even if a caller had swallowed them.
+            with self.assertRaisesRegex(AssertionError, "escaped the fake database"):
+                pub.tearDown()
+        self.assertEqual(len(pub.escapes), 3, pub.escapes)
+        self.assertIs(socket.create_connection, pub.sockets[2])
+        self.assertIs(genesis_wait.genesis_row, pub.saved[4])
 
 
 if __name__ == "__main__":
