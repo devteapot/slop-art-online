@@ -15,7 +15,7 @@ Everything here is behind `SLOP_PORT=faceprop`, with S1–S4's port (`jaw,jaw_sh
 - **The 3D slice** ([face_width.py](face_width.py)) is reported. It reads higher (mean 1.818 against 1.749 on the re-derived types): it takes in the head's side behind the ear's front edge, which the front view hides behind the ear.
 
 **Known-answer tests** (the GC's standing rule, now in [PLAN.md](../PLAN.md) §7): every tool here passes one before its numbers are used.
-- [measure3d_selftest.py](measure3d_selftest.py): `face_width.py`, `jaw.py`, `ears.py` and `ear_id.py`, on synthetic heads of analytic width with ears (across the cheek row and above it), a nose and irises: 29 checks pass. It caught one assumption on the way, now written into `measure3d.chin`: the chin is found in front of the irises, so the irises must sit behind the face's front, as the generator's do.
+- [measure3d_selftest.py](measure3d_selftest.py): `face_width.py`, `jaw.py`, `ears.py` and `ear_id.py`, on synthetic heads of analytic width with ears (across the cheek row and above it), a nose and irises: 32 checks pass. It caught one assumption on the way, now written into `measure3d.chin`: the chin is found in front of the irises, so the irises must sit behind the face's front, as the generator's do.
 - [../s6/drawing_spread_selftest.py](../s6/drawing_spread_selftest.py): `drawing_spread.py`'s drawing measure, `render` (image_spread.py's) and `face_render`, on synthetic pictures (a drawing with ink lines before the ears; a render with the ears joined; its ear-ID copy, shaded and plain; no ears): 15 checks pass. The S6 drawing results are unchanged by the refactor.
 
 **The factors, re-derived** ([ratios-2d.json](ratios-2d.json)):
