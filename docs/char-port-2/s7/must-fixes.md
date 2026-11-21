@@ -2,7 +2,25 @@
 
 Each measure here passed its known-answer test first (PLAN.md §7). All the changes are behind port flags: `jaw` (S1's, extended), and two new ones, `eyes` and `beard`. With no port, `cage_accept` and `face_types check` give the same numbers as main; flag-off parity in full is frame-views' run before the merge.
 
-## The face factors: interim neutral, pending the ortho re-measure
+## The face factors: re-derived in the measuring view (step 3)
+
+**The GC's step 3** (2026-11-21): each class's factor is 1.751 over its mean at 1.0, measured in the measuring view at the landmark row ([ortho/](ortho/README.md)). The children aim at 1.80 (rounder).
+
+| Class | Mean at 1.0 | Factor |
+|---|---|---|
+| adult-f | 1.774 | 0.987 |
+| youth-f | 1.774 | 0.987 |
+| adult-m | 1.822 | 0.961 |
+| youth-m | 1.814 | 0.965 |
+| elder-m | 1.804 | 0.970 |
+| elder-f | 1.871 | 0.936 |
+| child-u | 1.873 | 0.961 (to 1.80) |
+
+**The acceptance:** each class within ±2% of its target; `cage_accept` 21/21; the jaw order and `face_types check` unchanged; the eye spacing unmoved.
+
+**The ears' lower end at 1.0, in the measuring view:** 0.462–0.480 of eye-to-chin under the eye line, 42 of 42 ears within 0.47 ± 3% ([ortho/ears.json](ortho/ears.json)). Nothing changes there.
+
+### Before: interim neutral, pending the ortho re-measure
 
 **The decision** (the GC's, 2026-11-21, after the [bind re-measure](bind/README.md)): every class's `faceprop` width is now 1.0 in `port.json`. S6b's 0.935–0.973 were derived on idle frames, which turn the head 11–12° and widen the face's outline at the cheek row.
 - **What keeps the faceprop flag:** the ears' lower end (0.47), the expression clearance and the lid ink clearance. All of these are reopened in step 3, not now.

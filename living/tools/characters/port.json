@@ -95,41 +95,41 @@
    "about": "S6: hair masters, a cut as a named set of parameters in the generator (hair.MASTERS): swept_braid, Cora's cut, its rear layers as stations, wide locks and companions joining a three-strand plait at staggered heights, the plait lifted at its start for the game camera and its crossings lit (docs/char-port-2/s6). Written as styles (`swept_braid`, its cuts and `.collar`) only with the flag."
   },
   "faceprop": {
-   "about": "S6b: the face's width against its eyes toward Cora's drawing (the face's outline at the cheek row, 0.030 m under the eyes, over the eye spacing, iris to iris, the ears left out: 1.75; docs/char-port-2/s6b). One width factor a class on the type's sections (w15, w30, wide), whole over the cheeks and fading to none by the chin and above the eyes (face_types.faceprop); the eyes, nose and mouth as they are, the ears carried in with the skull's side. A class's three lines take the same factor, so their differences stay. **Interim neutral (S7, the GC 2026-11-21): every class at 1.0, pending the ortho re-measure** (S6b's 0.935-0.973 were derived on idle frames, a turned head; docs/char-port-2/s7/bind/README.md).",
+   "about": "S6b: the face's width against its eyes toward Cora's drawing (the face's outline at the cheek row, 0.030 m under the eyes, over the eye spacing, iris to iris, the ears left out: 1.75; docs/char-port-2/s6b). One width factor a class on the type's sections (w15, w30, wide), whole over the cheeks and fading to none by the chin and above the eyes (face_types.faceprop); the eyes, nose and mouth as they are, the ears carried in with the skull's side. A class's three lines take the same factor, so their differences stay. **S7 step 3 (the GC's, 2026-11-21): 1.751 over each class's mean at 1.0 in the measuring view (orthographic, bind, level) at the landmark row (0.2967 of eye line to chin, the chin by the chin-ID); the children aimed at 1.80, rounder** (docs/char-port-2/s7/ortho/README.md). S6b's 0.935-0.973 were derived on idle frames, a turned head.",
    "classes": {
     "adult-f": {
      "faceprop": {
-      "width": 1.0
+      "width": 0.987
      }
     },
     "adult-m": {
      "faceprop": {
-      "width": 1.0
+      "width": 0.961
      }
     },
     "child-u": {
      "faceprop": {
-      "width": 1.0
+      "width": 0.961
      }
     },
     "elder-f": {
      "faceprop": {
-      "width": 1.0
+      "width": 0.936
      }
     },
     "elder-m": {
      "faceprop": {
-      "width": 1.0
+      "width": 0.97
      }
     },
     "youth-f": {
      "faceprop": {
-      "width": 1.0
+      "width": 0.987
      }
     },
     "youth-m": {
      "faceprop": {
-      "width": 1.0
+      "width": 0.965
      }
     }
    }
