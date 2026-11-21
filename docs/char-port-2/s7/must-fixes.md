@@ -103,7 +103,7 @@ Each measure here passed its known-answer test first (PLAN.md §7). All the chan
 **The fix:** that plane is the open eye's in every state (`CageFace._eye`). Open eyes are unchanged by construction.
 
 **After** ([eyes-after.json](eyes-after.json), [eye-joy.png](eye-joy.png)):
-- **0 eye pixels in every closing key** (blink, left, right, eye-joy), front and three-quarter, **on all 25 heads**: the 21 types and the four bodies, with every S7 port on;
+- **0 eye pixels in every closing key** (blink, left, right, eye-joy), front and three-quarter, **on all 25 heads**: the 21 types and the four bodies, with every S7 port on. For the one-eye keys (`Close_L`, `Close_R`), the count is the closing eye's side of the frame, split at the gap between the eyes in the open still; the other eye stays open and shows its open count. Corrected at the final run: the earlier summary gave 0 for left and right without saying it counted one side, and the whole-frame counts (eyes.json) show the open eye. Final run: [final/eyes-sides.json](final/eyes-sides.json), 0 on the closing side on all 25 heads;
 - the open eye, the control, shows 608 px or more on each.
 
 ## 3. The beard: ported (port `beard`); one look for the GC

@@ -1,0 +1,22 @@
+child-u-a    ok; 200 of 200 people valid as drawn (furthest 0.41); all valid once pulled back
+child-u-b    ok; 200 of 200 people valid as drawn (furthest 0.41); all valid once pulled back
+child-u-c    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
+youth-f-a    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
+youth-f-b    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
+youth-f-c    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
+youth-m-a    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
+youth-m-b    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
+youth-m-c    ok; 200 of 200 people valid as drawn (furthest 0.41); all valid once pulled back
+adult-f-a    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
+adult-f-b    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
+adult-f-c    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
+adult-m-a    ok; 200 of 200 people valid as drawn (furthest 0.41); all valid once pulled back
+adult-m-b    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
+adult-m-c    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
+elder-f-a    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
+elder-f-b    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
+elder-f-c    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
+elder-m-a    ok; 200 of 200 people valid as drawn (furthest 0.41); all valid once pulled back
+elder-m-b    ok; 200 of 200 people valid as drawn (furthest 0.41); all valid once pulled back
+elder-m-c    ok; 200 of 200 people valid as drawn (furthest 0.42); all valid once pulled back
+value ends alone and in pairs: 60648 of 60648 valid
