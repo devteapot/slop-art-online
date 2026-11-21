@@ -498,9 +498,9 @@ Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}
   {{\"can\": {{\"do\": \"eat\", \"item\": \"food\"}}}} whether a skill could go ahead now by the world's rules (what it takes is at hand; its target in sight), e.g. {{\"can\": {{\"do\": \"cook\", \"target\": {{\"nearest\": \"campfire\"}}, \"item\": \"fish\"}}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
 Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"sound\" (toward what you hear and cannot see, when sight depends on facing) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|family, stranger {stranger}, or any label you gave a relationship, e.g. partner)
-  {{\"nearest\": {{\"kind\": \"storage\", \"mine\": true}}}} {{\"nearest\": {{\"kind\": \"remains\", \"holds\": \"meat\"}}}} {{\"id\": 6}} {{\"named\": \"Oren\"}} {{\"place\": \"name of a place you remember\"}} {{\"at\": [x, y]}}
+  {{\"nearest\": {{\"kind\": \"storage\", \"mine\": true}}}} {{\"nearest\": {{\"kind\": \"remains\", \"holds\": \"meat\"}}}} {{\"id\": 6}} {{\"named\": \"Oren\"}} {{\"place\": \"a quoted name under Places you remember\"}} {{\"at\": [x, y]}}
   Kinds: berry_bush tree boulder reeds fishing_spot clay_bank | campfire shelter house storage sign gate remains | person deer wolf | grass forest (the nearest tile of that ground in sight).
-  People/creature/resource targets resolve only when currently in sight; places and coordinates always resolve. A do-node whose target is missing fails, so \"first\" moves on.
+  People/creature/resource targets resolve only when currently in sight. A place resolves only by a quoted name under Places you remember (\"home\" is your own home); coordinates always resolve: reach a resource listed under Resources you have seen, or any spot, with {{\"at\": [x, y]}}. A do-node whose target is missing fails, so \"first\" moves on.
 Skills:
 {}
 - {{\"routine\": \"name\"}} runs one of your routines (named graphs you keep and can rewrite; see below).
@@ -957,7 +957,10 @@ pub struct Ctx<'a> {
     pub mind: Vec<String>,
     pub memories: Vec<String>,
     pub judgments: Vec<String>,
+    /// One's named places (`place` rows), the names a `{"place": name}` target takes.
     pub places: Vec<String>,
+    /// The resources one remembers seeing (`seen_stock`), with where: not places (truthful-refusals).
+    pub seen: Vec<String>,
     pub experiences: Vec<String>,
     /// Agreements, demands and one's people's standing, as the world keeps them (its records).
     pub dealings: Vec<String>,
@@ -1021,6 +1024,12 @@ fn common(c: &Ctx, out: &mut Segments) {
     }
     for p in &c.places {
         out.push(Stability::Character, format!("- {p}\n"));
+    }
+    if !c.seen.is_empty() {
+        out.push(Stability::Dynamic, "\n# Resources you have seen (not places: reach one with {\"at\": [x, y]})\n");
+        for p in &c.seen {
+            out.push(Stability::Dynamic, format!("- {p}\n"));
+        }
     }
 }
 
@@ -1327,6 +1336,8 @@ pub struct TalkUser<'a> {
     /// The places one knows and the resources one remembers (`Minds::places`), with the way
     /// from where one stands when that is known (`placed`); empty: no section (talk-places).
     pub places: &'a [String],
+    /// The resources one remembers seeing, likewise with the way (not places; truthful-refusals).
+    pub seen: &'a [String],
     pub placed: bool,
     /// What came of one's own last words when the other could not have heard them (the
     /// authority's `silence`, verbatim; reply-timing): told in place of a line to answer.
@@ -1367,6 +1378,12 @@ pub fn talk_user(t: &TalkUser) -> String {
     if !t.places.is_empty() {
         out.push(Stability::Dynamic, if t.placed { "\n# Places you know, from where you stand\n" } else { "\n# Places you know\n" });
         for p in t.places {
+            out.push(Stability::Dynamic, format!("- {p}\n"));
+        }
+    }
+    if !t.seen.is_empty() {
+        out.push(Stability::Dynamic, if t.placed { "\n# Resources you have seen, from where you stand\n" } else { "\n# Resources you have seen\n" });
+        for p in t.seen {
             out.push(Stability::Dynamic, format!("- {p}\n"));
         }
     }
@@ -1428,7 +1445,7 @@ mod tests {
         let t = |missed| {
             talk_user(&TalkUser {
                 name: "Agnes", identity: "", pacing: "", other: "Fern", other_id: 7, other_body: "", feeling: "", mind: &[], memories: &[], lately: &[], earlier: None,
-                scene: "Now.", body: "", conversation: &["You: “Morning!”".into()], heard: "Hello Agnes", how: "", between: &[], places: &[], placed: false, missed,
+                scene: "Now.", body: "", conversation: &["You: “Morning!”".into()], heard: "Hello Agnes", how: "", between: &[], places: &[], seen: &[], placed: false, missed,
             })
         };
         let missed = t(Some(silence));
@@ -1519,6 +1536,7 @@ mod tests {
             memories: vec![format!("dynamic-memory-{name}")],
             judgments: vec![format!("dynamic-stance-{name}")],
             places: vec![format!("place-{name}")],
+            seen: vec![format!("dynamic-seen-{name}")],
             experiences: vec![format!("dynamic-experience-{name}")],
             dealings: vec![format!("dynamic-dealing-{name}")],
             cues: None,
@@ -1596,6 +1614,7 @@ mod tests {
                     between: &["dynamic-offer".into()],
                     // Dynamic: the way to each place depends on where one stands now.
                     places: &["dynamic-place".into()],
+                    seen: &["dynamic-seen".into()],
                     placed: true,
                     missed: None,
                 }),
@@ -1849,6 +1868,26 @@ mod tests {
         }
         for needed in ["AI playing", "other players, human and AI", "body, needs and death are real", "world's rules hold", "your own choice", "says or writes", "out of character"] {
             assert!(PLAYER_FRAME.contains(needed), "the frame lacks {needed:?}");
+        }
+    }
+
+    /// Named places and remembered resources are listed apart, and the grammar says which
+    /// target reaches each (truthful-refusals): a place only by its quoted name, a resource by
+    /// its position.
+    #[test]
+    fn places_and_seen_resources_are_apart() {
+        for purpose in ["think", "deliberate", "consolidate"] {
+            let (system, user) = fixture(purpose, "Aria", "person");
+            let places = user.split("# Places you remember\n").nth(1).unwrap().split("\n#").next().unwrap();
+            assert!(places.contains("- place-Aria") && !places.contains("seen"), "{purpose}: {places}");
+            let seen = user.split("# Resources you have seen (not places: reach one with {\"at\": [x, y]})\n").nth(1).unwrap_or_else(|| panic!("{purpose}: {user}"));
+            assert!(seen.starts_with("- dynamic-seen-Aria\n"), "{purpose}: {seen}");
+            // The graph grammar is the compile's (and the fast lane's) to read.
+            if purpose == "deliberate" {
+                assert!(system.contains("A place resolves only by a quoted name under Places you remember"), "{purpose}");
+                assert!(system.contains("reach a resource listed under Resources you have seen, or any spot, with {\"at\": [x, y]}"), "{purpose}");
+                assert!(!system.contains("places and coordinates always resolve"), "{purpose}");
+            }
         }
     }
 

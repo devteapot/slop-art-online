@@ -44,6 +44,10 @@ pub mod act {
     /// It was broken off because its maker moved before it was done (a player's move; a skill
     /// whose spec says `on_the_move` is not). Its words are the rules' `moved_off(skill)`.
     pub const MOVED: &str = "moved";
+    /// Its target is none the actor knows of (truthful-refusals): a place name it does not hold,
+    /// or a role nobody fills for it now (no one hurt, spoke to, greeted or courted it lately; no
+    /// parent, no partner; nothing heard). Not a matter of sight: `unseen` stays for that.
+    pub const UNKNOWN: &str = "unknown";
     /// Acts still waiting were dropped when a reflex took the body back (no skill).
     pub const SET_ASIDE: &str = "set_aside";
 }
@@ -63,7 +67,7 @@ pub mod death {
     pub const OTHER: &str = "other";
 }
 
-pub const ACT_CODES: &[&str] = &[act::DONE, act::UNREADABLE, act::BUSY, act::EXPIRED, act::UNSEEN, act::CHECK, act::TIMING, act::REACH, act::REFUSED, act::FAILED, act::BROKEN_OFF, act::SET_ASIDE, act::MOVED];
+pub const ACT_CODES: &[&str] = &[act::DONE, act::UNREADABLE, act::BUSY, act::EXPIRED, act::UNSEEN, act::CHECK, act::TIMING, act::REACH, act::REFUSED, act::FAILED, act::BROKEN_OFF, act::SET_ASIDE, act::MOVED, act::UNKNOWN];
 pub const DEATH_CODES: &[&str] = &[death::STARVED, death::COLD, death::EXHAUSTED, death::OLD_AGE, death::KILLED, death::KILLED_YIELDING, death::OTHER];
 
 /// A death's words for the one who died, by its code: `by` is how they knew their killer (a
@@ -88,7 +92,7 @@ mod tests {
     /// rename, reorder or remove one.
     #[test]
     fn the_codes_only_grow() {
-        let acts = ["done", "unreadable", "busy", "expired", "unseen", "check", "timing", "reach", "refused", "failed", "broken_off", "set_aside"];
+        let acts = ["done", "unreadable", "busy", "expired", "unseen", "check", "timing", "reach", "refused", "failed", "broken_off", "set_aside", "moved", "unknown"];
         let deaths = ["starved", "cold", "exhausted", "old_age", "killed", "killed_yielding", "other"];
         let kinds = ["act", "own", "death"];
         assert_eq!(&ACT_CODES[..acts.len()], &acts[..]);

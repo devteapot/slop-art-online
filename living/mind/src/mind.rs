@@ -2166,8 +2166,10 @@ impl Minds {
         self.conn.db.judgment().iter().filter(|j| j.actor == actor).map(|j| format!("{} = {:.2} ({})", j.key, j.value, j.why)).collect()
     }
 
-    /// The places a character knows and what it remembers of resources (its `seen_stock`), one
-    /// line each (talk-places, docs/COMMUNICATION.md §20). With `near`, remembered resources are
+    /// The places a character knows (its `place` rows) and, apart, what it remembers of resources
+    /// (its `seen_stock`): one line each (talk-places, docs/COMMUNICATION.md §20). The two are
+    /// listed in their own sections, since only a named place is a `{"place": name}` target and a
+    /// remembered resource is reached by its position (truthful-refusals). With `near`, remembered resources are
     /// the nearest to it, else the latest seen; at most [`STOCK_SHOWN`]. With `say_way` too, each
     /// line says how far and which way from `near` (`living_rules::bearing`, the scene's words):
     /// "\"inn\" at [404, 285], 50 m south", "10 berry bush around [416, 239], 9 m east: seen day 1
@@ -2175,10 +2177,10 @@ impl Minds {
     /// seen day 1 15:03)". A talk turn says the way from where one stands; a deliberation does not,
     /// since its scene's `places` already give each place's way (known-ground, docs/MOVEMENT_MIND.md
     /// step 3), so the way is not shown twice; player memory has no place and no way.
-    pub(crate) fn places(&self, actor: u32, near: Option<(f32, f32)>, say_way: bool) -> Vec<String> {
+    pub(crate) fn places(&self, actor: u32, near: Option<(f32, f32)>, say_way: bool) -> (Vec<String>, Vec<String>) {
         let at = near;
         let way = |x: f32, y: f32| at.filter(|_| say_way).map(|a| format!(", {}", living_rules::bearing::from_here(a, (x, y)))).unwrap_or_default();
-        let mut out: Vec<String> = self.conn.db.place().iter().filter(|p| p.actor == actor).map(|p| format!("\"{}\" at [{:.0}, {:.0}]{}", p.name, p.x, p.y, way(p.x, p.y))).collect();
+        let named: Vec<String> = self.conn.db.place().iter().filter(|p| p.actor == actor).map(|p| format!("\"{}\" at [{:.0}, {:.0}]{}", p.name, p.x, p.y, way(p.x, p.y))).collect();
         let mut stock: Vec<SeenStock> = self.conn.db.seen_stock().iter().filter(|s| s.actor == actor).collect();
         match at {
             Some(a) => {
@@ -2188,6 +2190,7 @@ impl Minds {
             None => stock.sort_by_key(|s| std::cmp::Reverse(s.seen_ms.max(s.gone_ms))),
         }
         let fmt = self.fmt_time();
+        let mut out = Vec::new();
         for s in stock.iter().take(STOCK_SHOWN) {
             let kind = s.kind.replace('_', " ");
             out.push(if s.gone_ms == 0 {
@@ -2196,7 +2199,7 @@ impl Minds {
                 format!("{kind} around [{:.0}, {:.0}]{}: gone when you were last here, {} ({} seen {})", s.x, s.y, way(s.x, s.y), fmt(s.gone_ms), s.count, fmt(s.seen_ms))
             });
         }
-        out
+        (named, out)
     }
 
     /// Where a scene puts its character (`you.at`).
@@ -2289,6 +2292,7 @@ impl Minds {
         for id in &missed {
             reason.push_str(&format!("\n(You went by what you remembered of #{id}, and it was not there to act on where you were; that memory feels less sure now.)"));
         }
+        let places = self.places(actor, Self::scene_at(&scene), false);
         let ctx = prompts::Ctx {
             name: &c.name,
             clock: fmt(llm::now_ms()),
@@ -2298,7 +2302,8 @@ impl Minds {
             mind,
             memories,
             judgments: recalled.judgments,
-            places: self.places(actor, Self::scene_at(&scene), false),
+            places: places.0,
+            seen: places.1,
             experiences,
             dealings: self.dealings(actor),
             cues: self.cue_lines(actor),
@@ -2664,6 +2669,7 @@ impl Minds {
         // What these experiences bring to mind: what they may confirm, contradict or update.
         let recalled = self.recall_for(actor, &self.experience_cues(actor, &meaningful), 32, 6, "consolidate").await;
         let (mind, memories) = (recalled.mind, recalled.memories);
+        let places = self.places(actor, None, false);
         let ctx = prompts::Ctx {
             name: &c.name,
             clock: fmt(llm::now_ms()),
@@ -2673,7 +2679,8 @@ impl Minds {
             mind,
             memories,
             judgments: recalled.judgments,
-            places: self.places(actor, None, false),
+            places: places.0,
+            seen: places.1,
             experiences: meaningful.iter().map(|e| self.exp_line(e, &fmt, true)).collect(),
             dealings: self.dealings(actor),
             cues: self.cue_lines(actor),

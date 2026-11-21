@@ -327,6 +327,7 @@ impl Minds {
             Some(_) => self.persona_text(actor),
             None => format!("(played by a person: who they are shows only in what they do)\n{}", self.body_line(actor)).trim_end().to_string(),
         };
+        let places = self.places(actor, None, false);
         let ctx = prompts::Ctx {
             name: &c.name,
             clock: fmt(llm::now_ms()),
@@ -336,7 +337,8 @@ impl Minds {
             mind: recalled.mind,
             memories: recalled.memories,
             judgments: recalled.judgments,
-            places: self.places(actor, None, false),
+            places: places.0,
+            seen: places.1,
             experiences: meaningful.iter().map(|e| format!("{}{}", self.exp_line(e, &fmt, true), self.lived_where(e))).collect(),
             dealings: self.dealings(actor),
             cues: None,

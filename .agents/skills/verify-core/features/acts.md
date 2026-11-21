@@ -9,6 +9,7 @@
 - Rework creates a routine and refuses premature revision.
 - A mind's act decided while one of its acts runs waits for it in `act_queue` (as shipped), or, under the value-only law `mind_act_replaces`, replaces it exactly as a player's `human_act` does ([below](#mind-acts-replace)).
 - A target `{"id": n}` is what the scene lists under that id: a creature first, else a structure or a resource in sight (`brain.rs` `visible_thing`, since `feedback-1`). A depleted bush still resolves, so the gather rule answers ("the berry_bush is depleted"); only a thing out of sight is "no #n in sight". Proved through a real mind in `verify-minds` `acts`.
+- A target that does not resolve is refused saying why (since `truthful-refusals`, [below](#truthful-refusals)); "no … in sight" only for sight. What is not an act is named for what it is.
 
 ## How to get to it (user POV)
 
@@ -34,6 +35,22 @@ The diagnostic law `latency_acts` logs each act's course (`input_latency act_sub
 - `act_same_continues` (off as shipped): the same walk again 1 s into it. On, its `started_ms` is unchanged; off, it starts over.
 
 Every law is set back to its shipped value at the end, `mind_act_replaces` off.
+
+## Truthful refusals
+
+Since `truthful-refusals` (2026-11-22, [docs/TRUTHFUL_REFUSALS.md](../../../../docs/TRUTHFUL_REFUSALS.md)). `brain::resolve_for` returns `Err((code, why))` from `Ev::unresolved` when a target does not resolve; `acts.rs` `next_reporting` tells that why with that code (`act_outcome.code` for a played character: `unknown`, `unseen` or `refused`), and the graph's `do` and `say` leaves fail with the same words. `living_rules::acts::parse` names a non-act (code `unreadable`).
+
+`scenes.py truthful_refusals --run "$R"` (default seed, about 1.5 min; three spawned people A, B beside A, C 40 m off) drives A through `mind_act` and its graph and reads A's `act` lines (a mind has no `act_outcome` row; verify-player `refusals.py` checks the codes through `human_act`):
+
+- Not acts: `{"say": …}` "`say` is speech, not an act: speak it instead"; `{"wait": 20}` "`wait` is a behavior-graph node, not a one-off act"; `{"do": "call"}` "`call` is not a skill, so not an act"; `{"act": {…}}` "`act`: neither a skill nor a behavior-graph node".
+- Roles nobody fills: a wave at `attacker`, `speaker`, `hailer`, `suitor`, `partner`, `parent` ("nobody has hurt you in the last minute", …, "you have no parent").
+- Places, own rows only: "verify nowhere", a place only B holds and a remembered-resource line as a name are each "you know no place called …"; controls: A's own place (`mind_update`) and `{"place": "home"}` with no "home" row start a walk whose `steer` goal is that place and A's own home position.
+- Sight: a wave at C (beyond sight) "no #C in sight"; control: a wave at B is done.
+- Graph leaves: a `goto` to an unknown place leaves A "stuck: goto: you know no place called …"; a `say` to the speaker is told "nobody has spoken to you in the last minute".
+- Bare: a bush placed by A (`place_resource`), gathered (control: the act starts), stripped by A's graph, then "every berry bush in sight is bare".
+- Dead: B killed beside A, "#B is dead: their remains lie in sight"; C killed out of sight stays "no #C in sight".
+
+Evidence: `truthful_refusals-results.json`, `truthful_refusals-evidence.json`.
 
 ## Gotchas
 

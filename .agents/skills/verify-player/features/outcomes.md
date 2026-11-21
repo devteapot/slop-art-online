@@ -25,6 +25,7 @@ The default seed. Admin calls set the scene only: `grant_items`, `kill`. About 4
 
 ## Not covered
 
+- `unknown` (since `truthful-refusals`: a place name or a role the character does not have), `unseen` and `refused` for a target are `refusals.py`'s ([refusals.md](refusals.md)).
 - `unreadable`, `busy`, `expired`, `timing`, `reach`, `broken_off` and `set_aside` live: the same write path as the codes above; `unreadable` cannot come from `human_act` (its parse error is a reducer error).
 - `starved`, `cold`, `exhausted` and `old_age` live: set at their `die` call sites.
 - The game client drawing from the rows: the laptop's client change (`verify-ui`).
