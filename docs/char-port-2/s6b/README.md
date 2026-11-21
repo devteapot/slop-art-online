@@ -1,13 +1,51 @@
-# char-port-2 · S6b · Face proportions: checkpoint after the face step and its fixes
+# char-port-2 · S6b · Face proportions: the ears and the final checks, and a measure corrected
 
-**Status:** the face step is done and checked, with the GC's three answers applied:
-- the men's classes accepted as they are;
-- elder-f's jaw-line swap (a measuring fault, below);
-- the open-mouth fold fixed.
+**Status (2026-11-21): not final.**
+- **Done:** the blink close-up (the GC's (a), with a fix in the eye ink), the ears step, and the final checks below.
+- **The face-width measure was wrong, so the face step's acceptance must be decided again ([below](#the-face-width-measure-corrected)).** By the corrected measure the face step narrowed the faces too far: mean 1.69 against the target's 1.75, and the round line's women to 1.49.
+- **The bundle is not built:** it waits for that decision.
 
-The ears, S6b's second step, come next.
+Everything here is behind `SLOP_PORT=faceprop`, with S1–S4's port (`jaw,jaw_shell,paint,neck,ink`). With the flag off, a type (adult-f-b: its file and shadow map) and a body (the woman) are byte-identical to before; the body's file differs only in the names of its own pictures.
 
-The change is behind `SLOP_PORT=faceprop`, with S1–S4's port (`jaw,jaw_shell,paint,neck,ink`). With the flag off, the types are byte-identical: adult-f-b's file and shadow map compared with the installed ones.
+## The face-width measure, corrected
+
+**What was wrong:** the first [face_width.py](face_width.py) left the ears out by their bone weights: the vertices within 3 mm of the cheek row weighing under 0.5 on the ear bones counted as face.
+- The ear's own lower front vertices weigh less than that.
+- On adult-f-a the widest "face" point the tool found was an ear vertex (weight 0.43), 83 mm behind the irises.
+- So the ratio the face step was tuned on, and the GC's decisions on it, included part of the ear.
+
+**The corrected measure:**
+- the level plane at the cheek row cuts the skin's triangles (not the vertices near it);
+- the ears are left out whole: the face skin's two small connected pieces;
+- the outline it then finds is the jaw's back, 68 mm behind the irises, in front of the ear.
+
+[ratios-corrected.json](ratios-corrected.json); the target is 1.75.
+
+| Class | Before (a / b / c) | After the face step | The old tool said | With the ears step, ears included |
+|---|---|---|---|---|
+| adult-f | 1.67 / 1.79 / 1.91 | **1.49 / 1.58 / 1.72** | 1.78 / 1.75 / 1.80 | 1.82 / 1.89 / 1.96 |
+| adult-m | 1.79 / 1.87 / 1.94 | **1.60 / 1.69 / 1.79** | 1.78 / 1.84 / 1.89 | 1.93 / 1.99 / 2.06 |
+| child-u | 1.75 / 1.81 / 2.08 | **1.64 / 1.69 / 1.94** | 1.87 / 1.91 / 1.93 | 1.93 / 2.00 / 2.07 |
+| elder-f | 1.87 / 2.04 / 2.11 | **1.62 / 1.77 / 1.86** | 1.73 / 1.76 / 1.82 | 1.87 / 1.94 / 2.00 |
+| elder-m | 1.79 / 1.87 / 1.93 | **1.65 / 1.73 / 1.81** | 1.74 / 1.82 / 1.87 | 1.95 / 2.01 / 2.07 |
+| youth-f | 1.67 / 1.77 / 1.91 | **1.49 / 1.56 / 1.72** | 1.78 / 1.75 / 1.80 | 1.82 / 1.88 / 1.96 |
+| youth-m | 1.78 / 1.86 / 1.93 | **1.59 / 1.67 / 1.78** | 1.77 / 1.83 / 1.88 | 1.91 / 1.98 / 2.05 |
+
+| Over the 21 types | Min | Max | Mean | Standard deviation |
+|---|---|---|---|---|
+| Before | 1.668 | 2.111 | 1.864 | 0.116 |
+| After the face step (and the ears step: the same) | 1.486 | 1.939 | 1.686 | 0.114 |
+
+**What this means:**
+- **The unnarrowed faces were about 6% wider than the drawing,** not the 11% the old tool showed.
+- **The face step overshot:** every class's b line is under 1.75 but elder-f-b (1.77), and the round lines are at 1.49–1.65.
+- **The decisions taken on the old numbers need taking again:**
+  - the men "stopping short of 1.75" as a deliberate male difference: by the corrected measure the men are at 1.59–1.81, not short of it;
+  - the factors themselves, which were set on the old tool's numbers: by this one they leave the b lines at 1.56–1.77.
+- **The narrowing keeps the variety** (the standard deviation 0.116 before, 0.114 after) and the three jaw lines' order.
+- **Two other measures here leave the ears out the same corrected way:** [jaw.py](jaw.py) (its numbers are unchanged: the ears don't reach the jaw's rows) and [ears.py](ears.py).
+
+## The face step as first measured (superseded by the section above)
 
 ## The measure (the GC's: ears excluded)
 
@@ -57,7 +95,7 @@ The change is behind `SLOP_PORT=faceprop`, with S1–S4's port (`jaw,jaw_shell,p
 | youth-m | 1.88 / 1.94 / 1.98 | **1.77 / 1.83 / 1.88** | 1.88 / 1.97 / 2.04 |
 
 - **The eye spacing is unchanged** on every type.
-- **The men's classes stop short of 1.75** (means 1.81–1.84). **This is a deliberate male difference (the GC's, 2026-11-21):** once the cheek narrows, the back of the jaw (at the jaw angle, about 80 mm behind the irises) sets the outline. A stronger factor would mostly make the lines alike (below).
+- **The men's classes stop short of 1.75** (means 1.81–1.84). The GC took this as a deliberate male difference (2026-11-21). By the corrected measure above they are at 1.59–1.81, so the decision needs taking again.
 
 **Variety across the 21 types:**
 
@@ -143,10 +181,76 @@ The town keeps its spread of widths.
 | `.2` | **1.840** | 1.622 | 3.127 |
 | `.3` | **1.792** | 1.593 | 3.071 |
 
-The two measures now agree, as the GC expected once the face narrowed.
+The two measures now agree, as the GC expected once the face narrowed. A caution with the correction above: on our renders the cheek measure's width at the cheek row takes in the ears (S6's README: at this head's cheek row the ears join the outline), so this agreement is not a measure of the face alone.
+
+## The blink: the close-up and the verdict
+
+**The GC's rule:** (a), accept the new blink pairs as lid contact, if a close-up shows nothing at the outer corner; (c) if it shows anything; never (b).
+
+**What the close-up showed** ([blink.png](blink.png): adult-f-a, blink 0, 0.5 and 1.0, front and three-quarter, unnarrowed against faceprop; [blink-corners.png](blink-corners.png): the outer corner at 4×, adult-f-a and adult-f-b):
+- **With faceprop the eyeliner's wing broke at the outer corner:** at half a blink in three-quarter its end stood apart from the lid line, and at full closure it was ragged. With the eyes open it was whole.
+- **adult-f-b showed it too, faintly** (a 1–2 px gap near the wing's tip). So it is not the round line's alone.
+- **(c) did not touch it:** the band ended at the eyes (0.26–0.38 H) on the three round-line women left the blink pairs (7 / 14 / 7) and the break as they were, and cost 0.045 in ratio. The skin at the corner is the same in every build: the same vertices, motion and lid travel.
+- **The cause is the ink, not the skin's pairs:**
+  - each vertex of the lid's ink ribbon is projected onto the head and lifted 1.4 mm, with flat quads between;
+  - at the wing's end the temple turns away, sooner once the face is narrowed, and the quads' middles sank behind the skin: up to 2.5 mm on adult-f-a and 2.8 mm on adult-f-b, against 1.8 and 0.8 mm unnarrowed, over 2–3.7% of the ribbon against 0.6–1.5%.
+- **The fix** (`ink_carriers.clear_of_skin`, under `faceprop`, the upper lid and its wing only):
+  - each ribbon corner is raised along its normal by the most any of its quads lacks to stand 0.7 mm before the skin, sampled across the quad, against the skin facing the same way;
+  - behind the skin it leaves 0.16–0.86% of the ribbon on adult-f-a and 0.46–0.82% on adult-f-b, at or under the unnarrowed types' own;
+  - the lower lid is left as built: lifted the same way, its line drew darker and fuller than the unnarrowed type's.
+- **After it, the wing is whole** at every stage of the blink on both women, as on the unnarrowed types (the third column of [blink-corners.png](blink-corners.png); the right column of [blink.png](blink.png)).
+
+**The verdict: (a).** The new pairs in the skin are the closing lid meeting the skin under the outer corner, of the same kind as the lid contact every unnarrowed type has. Nothing shows of them at the corner.
+
+**Two differences that remain, reported:**
+- **At half a blink, front,** the faceprop lower lid's line stays whole where the unnarrowed type's is partly covered by skin. It does so with or without the clearance.
+- **The audit's ink-density warning on three types** (below).
+
+**A note on the stills:** a person file reads the installed types' ink page. Rendered with the unnarrowed page, a faceprop face drew heavy black brows and a broken lid line; [expressions.png](expressions.png) of the face step has that fault. Every still here uses its own build's page.
+
+## The ears
+
+**The GC's targets:** height 0.62 of eye-to-chin, the lower end 0.47 under the eye line, the top kept, each ±3%.
+
+**The rule** (under `faceprop`): `cage_head` sets the lobe's height (`EAR_LOW` 0.47 of eye-to-chin under the eye line), and `head_mesh._ears` draws the whole ear out downward to it from its top. The far head's ears are made the same way.
+
+**The measure was corrected here too** ([ears.py](ears.py)): each ear's own shell. The first measure (vertices weighing 0.5 or more on the ear bones) cut the ear off where the bone's reach fades. It gave heights of 0.39–0.51, where the shells' are 0.48–0.63.
+
+[ears.json](ears.json) · [ears.png](ears.png): the four bodies before and after the ears, front, three-quarter and profile.
+
+| | Top over the eye line | Bottom under it | Height |
+|---|---|---|---|
+| Drawing | 0.15 | 0.47 | 0.62 |
+| Before | 0.085–0.242 | 0.375–0.470 | 0.477–0.632 |
+| After | **kept, to the digit** | **0.461–0.478: 21 of 21 in band** | 0.560–0.703: **8 of 21 in band** |
+
+- **The height can't hold with the top kept:** height = top + bottom, and the tops run 0.085–0.242 by line (about 0.18 on a, 0.13 on b, 0.09 on c; the children's higher). Only a top of 0.13–0.17 gives 0.62 ± 3% with the bottom at 0.47.
+- **In band on height:** adult-f-b, adult-m-a, child-u-c, elder-f-a, elder-f-b, elder-m-a, youth-f-b and youth-m-a.
+- **Out:** the c lines and the men's b lines run short (0.56–0.60); adult-f-a, youth-f-a and the children's a and b run long (0.65–0.70).
+- **Both ears are alike on every type.**
+
+## The final checks (every S6b change, the 21 types `fp21h` and the four bodies)
+
+| Check | Result |
+|---|---|
+| Crossings, mouth shapes | **0 new pairs** on the four bodies (every mouth shape) and the 21 types (`MTH_A`) ([morph-new.json](morph-new.json) `bodies_final`, `types_final`) |
+| Crossings, eye shapes | as unnarrowed on the bodies; the three round-line women's blink-corner pairs, accepted as lid contact (above) |
+| `brow_check` | 21 types, every brow at least 0.3 mm before the skin in every pose |
+| `eye_colours` | passes |
+| Ink page | 237 strokes for 7 classes |
+| The S4 audit, types and bodies ([final/audit.txt](final/audit.txt)) | 0 errors; **3 warnings**: the lid ink's texel density on adult-f-a, elder-f-a and youth-f-a (87.5–88.4% of its triangles within 25% of the median). It comes with faceprop (adult-f-a: 0.940 unnarrowed, 0.882 with faceprop, 0.875 with the wing clearance), at the wing's run-out where the ribbon wraps the temple. Not waived: open. |
+| The S4 audit, pages | not yet: the installed hair pages are the old ones (86 errors, all the strand means S6 corrected); it runs with the bundle, on S6's hair set |
+| Shimmer (S4's, eyes) | **passes** on the woman, man and girl: faded at Near, Middle and Far; portrait and close-up pan and zoom ≤ 0.84 ([final/](final/)) |
+| `face_types.py check` | every type ok, 200 of 200 people valid; value ends 60,641 of 60,648 valid: **7 faults, "at 0.20 the front is wider than the head within 0.30 H", new with faceprop** (flag off 60,648 of 60,648). A value's fixed offset (`front_breadth`) outweighs the margin the narrowing left between the two planes. Open. |
+| `cage_accept.py` ([final/](final/)) | **14 of 21** within 0.03 H with faceprop, against 3 of 21 flag off and 1 of 21 with no port at all: the tool fails without S6b too. The seven failures (the women's a and c lines, adult-f-b) are at 0.04 and 0.12 H, the chin and jaw rows S1's taper reshaped, by 0.034–0.046 H. |
+| Jaw lines ([jaw.json](jaw.json)) | the order holds at every height in every class |
+| Flag off | a type and a body byte-identical (the body's own picture names aside) |
 
 ## Not yet
 
-- **The blink-corner pairs** above: the GC's decision.
-- **The ears** (the GC's second step): height 0.62 of eye-to-chin, lower end 0.47 under the eye line, the top kept, ±3%. Ours are 0.39–0.51 and 0.28–0.37.
-- **Not yet run:** `cage_accept.py` and `face_types.py check` on all 21, the S4 audit and shimmer on the new types, the book and the bundle. They come with the ears.
+- **The face step's acceptance by the corrected measure:** the GC's decision.
+- **Open:**
+  - the lid-ink density warning on three types;
+  - the 7 value-end faults at 0.20 H;
+  - the ears' heights where the top is kept.
+- **The book and both bundles** (PNG and KTX2, with `pictures.py check`) and the pages audit: after the decision.

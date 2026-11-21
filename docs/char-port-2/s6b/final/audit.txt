@@ -1,0 +1,193 @@
+calibrate: lookdev/types/adult-f-a.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.07383, 'density_within_25pct': 0.875, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02944, 'density_within_25pct': 1.0, 'carrier': True}}
+  WARN: material 'M00_000_00_LidInk_00_FACE': ink: width "uv" but only 88% of the triangles' texel densities lie within 25% of the median 1.0738 m/UV: strokes on stretched or scaled islands draw at the wrong width
+  audit: 0 error(s), 1 warning(s)
+calibrate: lookdev/types/adult-f-b.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.01583, 'density_within_25pct': 0.953, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02308, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/adult-f-c.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 0.9657, 'density_within_25pct': 0.924, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.01775, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/adult-m-a.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.09439, 'density_within_25pct': 0.935, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.04445, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/adult-m-b.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02112, 'density_within_25pct': 0.989, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02358, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/adult-m-c.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 0.97496, 'density_within_25pct': 0.991, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.01746, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/child-u-a.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.0726, 'density_within_25pct': 0.942, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.03049, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/child-u-b.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.01936, 'density_within_25pct': 0.991, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02302, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/child-u-c.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 0.97628, 'density_within_25pct': 0.993, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02419, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/elder-f-a.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.08351, 'density_within_25pct': 0.884, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.03402, 'density_within_25pct': 1.0, 'carrier': True}}
+  WARN: material 'M00_000_00_LidInk_00_FACE': ink: width "uv" but only 88% of the triangles' texel densities lie within 25% of the median 1.0835 m/UV: strokes on stretched or scaled islands draw at the wrong width
+  audit: 0 error(s), 1 warning(s)
+calibrate: lookdev/types/elder-f-b.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.01759, 'density_within_25pct': 0.958, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02363, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/elder-f-c.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 0.96956, 'density_within_25pct': 0.94, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.0103, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/elder-m-a.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.10406, 'density_within_25pct': 0.96, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.05459, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/elder-m-b.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02258, 'density_within_25pct': 0.991, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02263, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/elder-m-c.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 0.98096, 'density_within_25pct': 0.991, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.01585, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/youth-f-a.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.07711, 'density_within_25pct': 0.877, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.03257, 'density_within_25pct': 1.0, 'carrier': True}}
+  WARN: material 'M00_000_00_LidInk_00_FACE': ink: width "uv" but only 88% of the triangles' texel densities lie within 25% of the median 1.0771 m/UV: strokes on stretched or scaled islands draw at the wrong width
+  audit: 0 error(s), 1 warning(s)
+calibrate: lookdev/types/youth-f-b.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.01563, 'density_within_25pct': 0.951, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02311, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/youth-f-c.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 0.96506, 'density_within_25pct': 0.92, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02032, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/youth-m-a.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.10118, 'density_within_25pct': 0.953, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.0377, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/youth-m-b.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.01978, 'density_within_25pct': 0.989, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02381, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/youth-m-c.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 0.97225, 'density_within_25pct': 0.993, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.01795, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/own-cp6k-woman.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.01583, 'density_within_25pct': 0.953, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02308, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/own-cp6k-man.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02112, 'density_within_25pct': 0.989, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02358, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/own-cp6k-elder.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02258, 'density_within_25pct': 0.991, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.02263, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/own-cp6k-girl.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.0726, 'density_within_25pct': 0.942, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 352, 'R': [0, 134], 'm_uv': 1.03049, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: pages of lookdev
+  hair_page: [{'page': 'lookdev/styles/hair/hair-masks.png', 'files': 33, 'cells_used': 33, 'strands': True}, {'page': 'lookdev/styles/hair/hair-masks-1.png', 'files': 21, 'cells_used': 21, 'strands': True}, {'page': 'lookdev/styles/hair/hair-masks-2.png', 'files': 32, 'cells_used': 32, 'strands': True}]
+  ink_page: {'pages': {'eyes': 'lookdev/types/types.eyes.ink.png'}, 'classes': {'adult-f': True, 'adult-m': True, 'child-u': True, 'elder-f': True, 'elder-m': True, 'youth-f': True, 'youth-m': True}, 'carrier_materials': ['M00_000_00_FaceBrowInk_00_FACE', 'M00_000_00_LidInk_00_FACE']}
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': balding.2.glb's strands average 160.2, not 128 ± 2.0 (its bands drawn 1.26 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': balding.3.glb's strands average 160.2, not 128 ± 2.0 (its bands drawn 1.26 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': balding.cap.glb's strands average 125.7, not 128 ± 2.0 (its bands drawn 0.99 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': balding.glb's strands average 160.0, not 128 ± 2.0 (its bands drawn 1.25 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': bob.2.glb's strands average 155.2, not 128 ± 2.0 (its bands drawn 1.22 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': bob.3.glb's strands average 153.8, not 128 ± 2.0 (its bands drawn 1.21 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': bob.glb's strands average 152.5, not 128 ± 2.0 (its bands drawn 1.20 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': bob_parted.2.glb's strands average 148.0, not 128 ± 2.0 (its bands drawn 1.16 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': bob_parted.3.glb's strands average 148.6, not 128 ± 2.0 (its bands drawn 1.17 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': bob_parted.glb's strands average 147.7, not 128 ± 2.0 (its bands drawn 1.16 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.2.collar.full.glb's strands average 132.4, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.2.collar.glb's strands average 132.7, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.2.collar.m.glb's strands average 132.5, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.2.full.glb's strands average 132.5, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.2.glb's strands average 132.8, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.2.m.glb's strands average 132.5, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.3.collar.full.glb's strands average 132.9, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.3.collar.glb's strands average 133.1, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.3.collar.m.glb's strands average 132.9, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.3.full.glb's strands average 132.8, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.3.glb's strands average 133.1, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.3.m.glb's strands average 132.9, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.collar.full.glb's strands average 132.9, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.collar.glb's strands average 133.1, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.collar.m.glb's strands average 132.9, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.full.glb's strands average 132.9, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.glb's strands average 133.2, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braid.m.glb's strands average 132.9, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braids.2.glb's strands average 136.2, not 128 ± 2.0 (its bands drawn 1.07 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braids.2.m.glb's strands average 136.2, not 128 ± 2.0 (its bands drawn 1.07 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braids.3.glb's strands average 136.4, not 128 ± 2.0 (its bands drawn 1.07 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': braids.3.m.glb's strands average 136.4, not 128 ± 2.0 (its bands drawn 1.07 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks.png': kerchief.glb's strands average 125.4, not 128 ± 2.0 (its bands drawn 0.98 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': braids.glb's strands average 134.5, not 128 ± 2.0 (its bands drawn 1.06 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': braids.m.glb's strands average 134.6, not 128 ± 2.0 (its bands drawn 1.06 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': bun.2.glb's strands average 131.6, not 128 ± 2.0 (its bands drawn 1.03 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': bun.3.glb's strands average 132.1, not 128 ± 2.0 (its bands drawn 1.04 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': bun.glb's strands average 134.8, not 128 ± 2.0 (its bands drawn 1.06 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': crop.2.glb's strands average 161.1, not 128 ± 2.0 (its bands drawn 1.26 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': crop.3.glb's strands average 161.5, not 128 ± 2.0 (its bands drawn 1.27 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': crop.cap.glb's strands average 162.0, not 128 ± 2.0 (its bands drawn 1.27 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': crop.glb's strands average 162.0, not 128 ± 2.0 (its bands drawn 1.27 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': long.2.collar.glb's strands average 138.2, not 128 ± 2.0 (its bands drawn 1.08 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': long.2.collar.m.glb's strands average 138.1, not 128 ± 2.0 (its bands drawn 1.08 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': long.2.glb's strands average 138.2, not 128 ± 2.0 (its bands drawn 1.08 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': long.2.m.glb's strands average 138.1, not 128 ± 2.0 (its bands drawn 1.08 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': long.3.collar.glb's strands average 137.5, not 128 ± 2.0 (its bands drawn 1.08 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': long.3.collar.m.glb's strands average 137.3, not 128 ± 2.0 (its bands drawn 1.08 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': long.3.glb's strands average 137.5, not 128 ± 2.0 (its bands drawn 1.08 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': long.3.m.glb's strands average 137.3, not 128 ± 2.0 (its bands drawn 1.08 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': long.collar.glb's strands average 138.6, not 128 ± 2.0 (its bands drawn 1.09 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': long.collar.m.glb's strands average 138.7, not 128 ± 2.0 (its bands drawn 1.09 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': long.glb's strands average 138.6, not 128 ± 2.0 (its bands drawn 1.09 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-1.png': shag.2.glb's strands average 147.2, not 128 ± 2.0 (its bands drawn 1.15 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': long.m.glb's strands average 138.6, not 128 ± 2.0 (its bands drawn 1.09 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': shag.3.glb's strands average 144.8, not 128 ± 2.0 (its bands drawn 1.14 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': shag.cap.glb's strands average 162.5, not 128 ± 2.0 (its bands drawn 1.27 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': shag.glb's strands average 146.9, not 128 ± 2.0 (its bands drawn 1.15 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': short.2.glb's strands average 160.2, not 128 ± 2.0 (its bands drawn 1.26 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': short.3.glb's strands average 159.5, not 128 ± 2.0 (its bands drawn 1.25 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': short.cap.glb's strands average 162.0, not 128 ± 2.0 (its bands drawn 1.27 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': short.glb's strands average 158.1, not 128 ± 2.0 (its bands drawn 1.24 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': sides.2.glb's strands average 162.4, not 128 ± 2.0 (its bands drawn 1.27 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': sides.3.glb's strands average 162.8, not 128 ± 2.0 (its bands drawn 1.28 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': sides.cap.glb's strands average 162.6, not 128 ± 2.0 (its bands drawn 1.27 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': sides.glb's strands average 163.0, not 128 ± 2.0 (its bands drawn 1.28 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': swept.2.glb's strands average 161.1, not 128 ± 2.0 (its bands drawn 1.26 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': swept.3.glb's strands average 161.5, not 128 ± 2.0 (its bands drawn 1.27 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': swept.cap.glb's strands average 163.9, not 128 ± 2.0 (its bands drawn 1.29 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': swept.glb's strands average 160.9, not 128 ± 2.0 (its bands drawn 1.26 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tail.2.collar.glb's strands average 142.9, not 128 ± 2.0 (its bands drawn 1.12 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tail.2.collar.m.glb's strands average 142.9, not 128 ± 2.0 (its bands drawn 1.12 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tail.2.glb's strands average 142.9, not 128 ± 2.0 (its bands drawn 1.12 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tail.2.m.glb's strands average 142.9, not 128 ± 2.0 (its bands drawn 1.12 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tail.3.collar.glb's strands average 141.5, not 128 ± 2.0 (its bands drawn 1.11 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tail.3.collar.m.glb's strands average 141.5, not 128 ± 2.0 (its bands drawn 1.11 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tail.3.glb's strands average 141.5, not 128 ± 2.0 (its bands drawn 1.11 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tail.3.m.glb's strands average 141.5, not 128 ± 2.0 (its bands drawn 1.11 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tail.collar.glb's strands average 142.1, not 128 ± 2.0 (its bands drawn 1.11 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tail.collar.m.glb's strands average 142.1, not 128 ± 2.0 (its bands drawn 1.11 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tail.glb's strands average 142.1, not 128 ± 2.0 (its bands drawn 1.11 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tail.m.glb's strands average 142.1, not 128 ± 2.0 (its bands drawn 1.11 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tousled.2.glb's strands average 158.9, not 128 ± 2.0 (its bands drawn 1.25 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tousled.3.glb's strands average 157.0, not 128 ± 2.0 (its bands drawn 1.23 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tousled.cap.glb's strands average 162.0, not 128 ± 2.0 (its bands drawn 1.27 x, off the palette's calibration)
+  ERROR: hair page 'lookdev/styles/hair/hair-masks-2.png': tousled.glb's strands average 156.7, not 128 ± 2.0 (its bands drawn 1.23 x, off the palette's calibration)
+  pages audit: 86 error(s), 0 warning(s)

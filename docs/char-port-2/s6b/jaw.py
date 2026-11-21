@@ -1,5 +1,5 @@
-"""S6b: the three jaw lines stay distinct. The face's width with the ears excluded (triangles whose corners are all under 0.5
-on the ear bones) where the plane chin + r H cuts its skin triangles, at 0.08, 0.12, 0.15, 0.18 and 0.20 H; per class,
+"""S6b: the three jaw lines stay distinct. The face's width with the ears excluded (the face skin's two small connected
+pieces, welded by position, left out whole) where the plane chin + r H cuts its skin triangles, at 0.08, 0.12, 0.15, 0.18 and 0.20 H; per class,
 the lines a/b/c before and after. It slices the surface: the first version took the vertices within 3 mm of the
 height, and where no vertex row of the jaw's back fell in that band (elder-f-b at 0.15 H) it read the jaw 11.8 mm
 narrow and showed a swap that is not there.
@@ -21,7 +21,15 @@ def widths(path,H):
             earw=sum(np.where(J==e,W,0).sum(1) for e in ears)
         if 'EyeIris' in mn: I=arr(j,b,a['POSITION']).reshape(-1,3)
     front=P[(np.abs(P[:,0])<0.006)&(P[:,2]<I[:,2].mean())]; chin=front[:,1].min()
-    Tr=Tr[(earw[Tr]<0.5).all(1)]
+    at=np.unique(np.round(P*1e6).astype(np.int64),axis=0,return_inverse=True)[1].ravel(); par=list(range(at.max()+1))
+    def root(x):
+        while par[x]!=x: par[x]=par[par[x]]; x=par[x]
+        return x
+    for t in at[Tr]:
+        r=root(t[0])
+        for v in t[1:]: par[root(v)]=r
+    comp=np.array([root(a) for a in at]); ids,cnt=np.unique(comp,return_counts=True); ear_shells=ids[np.argsort(-cnt)[1:3]]
+    Tr=Tr[~np.isin(comp[Tr[:,0]],ear_shells)]
     out=[]
     for r in ROWS:
         h=chin+r*H; xs=[]

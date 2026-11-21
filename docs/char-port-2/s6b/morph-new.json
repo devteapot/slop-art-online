@@ -1,5 +1,5 @@
 {
- "about": "Each expression's new crossing pairs on the face skin (in the expression at full weight, not at rest; neighbours by position), as [all, away from the ear root]; morph_new.py. unnarrowed = SLOP_PORT=jaw,jaw_shell,paint,neck,ink; faceprop = with faceprop before the fix; fixed = with faceprop and person.expression_clearance.",
+ "about": "Each expression's new crossing pairs on the face skin (in the expression at full weight, not at rest; neighbours by position), as [all, away from the ear root]; morph_new.py. unnarrowed = SLOP_PORT=jaw,jaw_shell,paint,neck,ink; faceprop = with faceprop before the fix; fixed = with faceprop and person.expression_clearance. bodies_final / types_final: every S6b change (faceprop, the expression clearance, the ears, the wing clearance).",
  "bodies": {
   "unnarrowed woman": {
    "rest": 551,
@@ -1224,6 +1224,745 @@
      0
     ]
    }
+  }
+ },
+ "bodies_final": {
+  "own-cp6b-woman.glb": {
+   "rest": 551,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_EYE_Close_L": [
+    2,
+    2
+   ],
+   "Fcl_EYE_Close_R": [
+    1,
+    1
+   ],
+   "Fcl_EYE_Joy": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    18,
+    14
+   ],
+   "Fcl_MTH_I": [
+    0,
+    0
+   ],
+   "Fcl_MTH_U": [
+    0,
+    0
+   ],
+   "Fcl_MTH_E": [
+    0,
+    0
+   ],
+   "Fcl_MTH_O": [
+    18,
+    14
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "own-cp6b-man.glb": {
+   "rest": 771,
+   "Fcl_EYE_Close": [
+    8,
+    8
+   ],
+   "Fcl_EYE_Close_L": [
+    4,
+    4
+   ],
+   "Fcl_EYE_Close_R": [
+    4,
+    4
+   ],
+   "Fcl_EYE_Joy": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    2,
+    0
+   ],
+   "Fcl_MTH_I": [
+    2,
+    0
+   ],
+   "Fcl_MTH_U": [
+    2,
+    0
+   ],
+   "Fcl_MTH_E": [
+    2,
+    0
+   ],
+   "Fcl_MTH_O": [
+    2,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "own-cp6b-elder.glb": {
+   "rest": 782,
+   "Fcl_EYE_Close": [
+    18,
+    18
+   ],
+   "Fcl_EYE_Close_L": [
+    9,
+    9
+   ],
+   "Fcl_EYE_Close_R": [
+    9,
+    9
+   ],
+   "Fcl_EYE_Joy": [
+    8,
+    8
+   ],
+   "Fcl_MTH_A": [
+    6,
+    0
+   ],
+   "Fcl_MTH_I": [
+    0,
+    0
+   ],
+   "Fcl_MTH_U": [
+    4,
+    0
+   ],
+   "Fcl_MTH_E": [
+    4,
+    0
+   ],
+   "Fcl_MTH_O": [
+    6,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "own-cp6b-girl.glb": {
+   "rest": 1029,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_EYE_Close_L": [
+    2,
+    2
+   ],
+   "Fcl_EYE_Close_R": [
+    1,
+    1
+   ],
+   "Fcl_EYE_Joy": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    14,
+    0
+   ],
+   "Fcl_MTH_I": [
+    0,
+    0
+   ],
+   "Fcl_MTH_U": [
+    4,
+    0
+   ],
+   "Fcl_MTH_E": [
+    4,
+    0
+   ],
+   "Fcl_MTH_O": [
+    12,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "own-cp6k-woman.glb": {
+   "rest": 477,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_EYE_Close_L": [
+    2,
+    2
+   ],
+   "Fcl_EYE_Close_R": [
+    1,
+    1
+   ],
+   "Fcl_EYE_Joy": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ],
+   "Fcl_MTH_I": [
+    0,
+    0
+   ],
+   "Fcl_MTH_U": [
+    0,
+    0
+   ],
+   "Fcl_MTH_E": [
+    0,
+    0
+   ],
+   "Fcl_MTH_O": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "own-cp6k-man.glb": {
+   "rest": 666,
+   "Fcl_EYE_Close": [
+    8,
+    8
+   ],
+   "Fcl_EYE_Close_L": [
+    4,
+    4
+   ],
+   "Fcl_EYE_Close_R": [
+    4,
+    4
+   ],
+   "Fcl_EYE_Joy": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ],
+   "Fcl_MTH_I": [
+    0,
+    0
+   ],
+   "Fcl_MTH_U": [
+    0,
+    0
+   ],
+   "Fcl_MTH_E": [
+    0,
+    0
+   ],
+   "Fcl_MTH_O": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "own-cp6k-elder.glb": {
+   "rest": 684,
+   "Fcl_EYE_Close": [
+    18,
+    18
+   ],
+   "Fcl_EYE_Close_L": [
+    9,
+    9
+   ],
+   "Fcl_EYE_Close_R": [
+    9,
+    9
+   ],
+   "Fcl_EYE_Joy": [
+    8,
+    8
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ],
+   "Fcl_MTH_I": [
+    0,
+    0
+   ],
+   "Fcl_MTH_U": [
+    0,
+    0
+   ],
+   "Fcl_MTH_E": [
+    0,
+    0
+   ],
+   "Fcl_MTH_O": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  },
+  "own-cp6k-girl.glb": {
+   "rest": 931,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_EYE_Close_L": [
+    2,
+    2
+   ],
+   "Fcl_EYE_Close_R": [
+    1,
+    1
+   ],
+   "Fcl_EYE_Joy": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ],
+   "Fcl_MTH_I": [
+    0,
+    0
+   ],
+   "Fcl_MTH_U": [
+    0,
+    0
+   ],
+   "Fcl_MTH_E": [
+    0,
+    0
+   ],
+   "Fcl_MTH_O": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Fun": [
+    0,
+    0
+   ],
+   "Fcl_MTH_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Angry": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Sorrow": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Surprised": [
+    0,
+    0
+   ],
+   "Fcl_BRW_Fun": [
+    0,
+    0
+   ]
+  }
+ },
+ "types_final": {
+  "adult-f-a.glb": {
+   "rest": 865,
+   "Fcl_EYE_Close": [
+    7,
+    7
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "adult-f-b.glb": {
+   "rest": 477,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "adult-f-c.glb": {
+   "rest": 399,
+   "Fcl_EYE_Close": [
+    0,
+    0
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "adult-m-a.glb": {
+   "rest": 657,
+   "Fcl_EYE_Close": [
+    16,
+    16
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "adult-m-b.glb": {
+   "rest": 629,
+   "Fcl_EYE_Close": [
+    8,
+    8
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "adult-m-c.glb": {
+   "rest": 389,
+   "Fcl_EYE_Close": [
+    8,
+    8
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "child-u-a.glb": {
+   "rest": 931,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "child-u-b.glb": {
+   "rest": 1013,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "child-u-c.glb": {
+   "rest": 795,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "elder-f-a.glb": {
+   "rest": 1035,
+   "Fcl_EYE_Close": [
+    14,
+    14
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "elder-f-b.glb": {
+   "rest": 763,
+   "Fcl_EYE_Close": [
+    8,
+    8
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "elder-f-c.glb": {
+   "rest": 643,
+   "Fcl_EYE_Close": [
+    8,
+    8
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "elder-m-a.glb": {
+   "rest": 817,
+   "Fcl_EYE_Close": [
+    18,
+    18
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "elder-m-b.glb": {
+   "rest": 635,
+   "Fcl_EYE_Close": [
+    18,
+    18
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "elder-m-c.glb": {
+   "rest": 467,
+   "Fcl_EYE_Close": [
+    18,
+    18
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "youth-f-a.glb": {
+   "rest": 799,
+   "Fcl_EYE_Close": [
+    7,
+    7
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "youth-f-b.glb": {
+   "rest": 493,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "youth-f-c.glb": {
+   "rest": 387,
+   "Fcl_EYE_Close": [
+    3,
+    3
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "youth-m-a.glb": {
+   "rest": 747,
+   "Fcl_EYE_Close": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "youth-m-b.glb": {
+   "rest": 749,
+   "Fcl_EYE_Close": [
+    8,
+    8
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
+  },
+  "youth-m-c.glb": {
+   "rest": 397,
+   "Fcl_EYE_Close": [
+    10,
+    10
+   ],
+   "Fcl_MTH_A": [
+    0,
+    0
+   ]
   }
  }
 }

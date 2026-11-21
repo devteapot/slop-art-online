@@ -1,0 +1,553 @@
+{
+ "about": "Each ear's top over and bottom under the eye line, and its height, as shares of eye-to-chin (ears.py). before = faceprop types without the ears step (fp21f); after = with it (fp21h). The drawing: top 0.15, bottom 0.47, height 0.62.",
+ "before": {
+  "adult-f-a": {
+   "eye_to_chin_mm": 97.7,
+   "R": {
+    "top": 0.183,
+    "bottom": 0.411,
+    "height": 0.593
+   },
+   "L": {
+    "top": 0.183,
+    "bottom": 0.411,
+    "height": 0.593
+   }
+  },
+  "adult-f-b": {
+   "eye_to_chin_mm": 101.5,
+   "R": {
+    "top": 0.141,
+    "bottom": 0.43,
+    "height": 0.571
+   },
+   "L": {
+    "top": 0.141,
+    "bottom": 0.43,
+    "height": 0.571
+   }
+  },
+  "adult-f-c": {
+   "eye_to_chin_mm": 109.0,
+   "R": {
+    "top": 0.092,
+    "bottom": 0.44,
+    "height": 0.532
+   },
+   "L": {
+    "top": 0.092,
+    "bottom": 0.44,
+    "height": 0.532
+   }
+  },
+  "adult-m-a": {
+   "eye_to_chin_mm": 112.8,
+   "R": {
+    "top": 0.139,
+    "bottom": 0.375,
+    "height": 0.514
+   },
+   "L": {
+    "top": 0.139,
+    "bottom": 0.375,
+    "height": 0.514
+   }
+  },
+  "adult-m-b": {
+   "eye_to_chin_mm": 115.2,
+   "R": {
+    "top": 0.118,
+    "bottom": 0.385,
+    "height": 0.504
+   },
+   "L": {
+    "top": 0.118,
+    "bottom": 0.385,
+    "height": 0.504
+   }
+  },
+  "adult-m-c": {
+   "eye_to_chin_mm": 121.5,
+   "R": {
+    "top": 0.085,
+    "bottom": 0.392,
+    "height": 0.477
+   },
+   "L": {
+    "top": 0.085,
+    "bottom": 0.392,
+    "height": 0.477
+   }
+  },
+  "child-u-a": {
+   "eye_to_chin_mm": 91.8,
+   "R": {
+    "top": 0.242,
+    "bottom": 0.39,
+    "height": 0.632
+   },
+   "L": {
+    "top": 0.242,
+    "bottom": 0.39,
+    "height": 0.632
+   }
+  },
+  "child-u-b": {
+   "eye_to_chin_mm": 95.4,
+   "R": {
+    "top": 0.197,
+    "bottom": 0.41,
+    "height": 0.608
+   },
+   "L": {
+    "top": 0.197,
+    "bottom": 0.41,
+    "height": 0.608
+   }
+  },
+  "child-u-c": {
+   "eye_to_chin_mm": 103.0,
+   "R": {
+    "top": 0.14,
+    "bottom": 0.423,
+    "height": 0.563
+   },
+   "L": {
+    "top": 0.14,
+    "bottom": 0.423,
+    "height": 0.563
+   }
+  },
+  "elder-f-a": {
+   "eye_to_chin_mm": 101.1,
+   "R": {
+    "top": 0.166,
+    "bottom": 0.454,
+    "height": 0.62
+   },
+   "L": {
+    "top": 0.166,
+    "bottom": 0.454,
+    "height": 0.62
+   }
+  },
+  "elder-f-b": {
+   "eye_to_chin_mm": 104.6,
+   "R": {
+    "top": 0.13,
+    "bottom": 0.469,
+    "height": 0.599
+   },
+   "L": {
+    "top": 0.13,
+    "bottom": 0.469,
+    "height": 0.599
+   }
+  },
+  "elder-f-c": {
+   "eye_to_chin_mm": 110.5,
+   "R": {
+    "top": 0.097,
+    "bottom": 0.47,
+    "height": 0.567
+   },
+   "L": {
+    "top": 0.097,
+    "bottom": 0.47,
+    "height": 0.567
+   }
+  },
+  "elder-m-a": {
+   "eye_to_chin_mm": 114.8,
+   "R": {
+    "top": 0.134,
+    "bottom": 0.412,
+    "height": 0.546
+   },
+   "L": {
+    "top": 0.134,
+    "bottom": 0.412,
+    "height": 0.546
+   }
+  },
+  "elder-m-b": {
+   "eye_to_chin_mm": 116.5,
+   "R": {
+    "top": 0.119,
+    "bottom": 0.419,
+    "height": 0.538
+   },
+   "L": {
+    "top": 0.119,
+    "bottom": 0.419,
+    "height": 0.538
+   }
+  },
+  "elder-m-c": {
+   "eye_to_chin_mm": 122.9,
+   "R": {
+    "top": 0.087,
+    "bottom": 0.423,
+    "height": 0.51
+   },
+   "L": {
+    "top": 0.087,
+    "bottom": 0.423,
+    "height": 0.51
+   }
+  },
+  "youth-f-a": {
+   "eye_to_chin_mm": 97.5,
+   "R": {
+    "top": 0.183,
+    "bottom": 0.412,
+    "height": 0.595
+   },
+   "L": {
+    "top": 0.183,
+    "bottom": 0.412,
+    "height": 0.595
+   }
+  },
+  "youth-f-b": {
+   "eye_to_chin_mm": 101.2,
+   "R": {
+    "top": 0.143,
+    "bottom": 0.43,
+    "height": 0.573
+   },
+   "L": {
+    "top": 0.143,
+    "bottom": 0.43,
+    "height": 0.573
+   }
+  },
+  "youth-f-c": {
+   "eye_to_chin_mm": 108.6,
+   "R": {
+    "top": 0.093,
+    "bottom": 0.441,
+    "height": 0.534
+   },
+   "L": {
+    "top": 0.093,
+    "bottom": 0.441,
+    "height": 0.534
+   }
+  },
+  "youth-m-a": {
+   "eye_to_chin_mm": 109.9,
+   "R": {
+    "top": 0.149,
+    "bottom": 0.379,
+    "height": 0.528
+   },
+   "L": {
+    "top": 0.149,
+    "bottom": 0.379,
+    "height": 0.528
+   }
+  },
+  "youth-m-b": {
+   "eye_to_chin_mm": 112.7,
+   "R": {
+    "top": 0.123,
+    "bottom": 0.392,
+    "height": 0.515
+   },
+   "L": {
+    "top": 0.123,
+    "bottom": 0.392,
+    "height": 0.515
+   }
+  },
+  "youth-m-c": {
+   "eye_to_chin_mm": 119.0,
+   "R": {
+    "top": 0.09,
+    "bottom": 0.397,
+    "height": 0.487
+   },
+   "L": {
+    "top": 0.09,
+    "bottom": 0.397,
+    "height": 0.487
+   }
+  }
+ },
+ "after": {
+  "adult-f-a": {
+   "eye_to_chin_mm": 97.7,
+   "R": {
+    "top": 0.183,
+    "bottom": 0.463,
+    "height": 0.646
+   },
+   "L": {
+    "top": 0.183,
+    "bottom": 0.463,
+    "height": 0.646
+   }
+  },
+  "adult-f-b": {
+   "eye_to_chin_mm": 101.5,
+   "R": {
+    "top": 0.141,
+    "bottom": 0.473,
+    "height": 0.614
+   },
+   "L": {
+    "top": 0.141,
+    "bottom": 0.473,
+    "height": 0.614
+   }
+  },
+  "adult-f-c": {
+   "eye_to_chin_mm": 109.0,
+   "R": {
+    "top": 0.092,
+    "bottom": 0.477,
+    "height": 0.57
+   },
+   "L": {
+    "top": 0.092,
+    "bottom": 0.477,
+    "height": 0.57
+   }
+  },
+  "adult-m-a": {
+   "eye_to_chin_mm": 112.8,
+   "R": {
+    "top": 0.139,
+    "bottom": 0.474,
+    "height": 0.613
+   },
+   "L": {
+    "top": 0.139,
+    "bottom": 0.474,
+    "height": 0.613
+   }
+  },
+  "adult-m-b": {
+   "eye_to_chin_mm": 115.2,
+   "R": {
+    "top": 0.118,
+    "bottom": 0.475,
+    "height": 0.593
+   },
+   "L": {
+    "top": 0.118,
+    "bottom": 0.475,
+    "height": 0.593
+   }
+  },
+  "adult-m-c": {
+   "eye_to_chin_mm": 121.5,
+   "R": {
+    "top": 0.085,
+    "bottom": 0.474,
+    "height": 0.56
+   },
+   "L": {
+    "top": 0.085,
+    "bottom": 0.474,
+    "height": 0.56
+   }
+  },
+  "child-u-a": {
+   "eye_to_chin_mm": 91.8,
+   "R": {
+    "top": 0.242,
+    "bottom": 0.461,
+    "height": 0.703
+   },
+   "L": {
+    "top": 0.242,
+    "bottom": 0.461,
+    "height": 0.703
+   }
+  },
+  "child-u-b": {
+   "eye_to_chin_mm": 95.4,
+   "R": {
+    "top": 0.197,
+    "bottom": 0.47,
+    "height": 0.668
+   },
+   "L": {
+    "top": 0.197,
+    "bottom": 0.47,
+    "height": 0.668
+   }
+  },
+  "child-u-c": {
+   "eye_to_chin_mm": 103.0,
+   "R": {
+    "top": 0.14,
+    "bottom": 0.476,
+    "height": 0.616
+   },
+   "L": {
+    "top": 0.14,
+    "bottom": 0.476,
+    "height": 0.616
+   }
+  },
+  "elder-f-a": {
+   "eye_to_chin_mm": 101.1,
+   "R": {
+    "top": 0.166,
+    "bottom": 0.471,
+    "height": 0.637
+   },
+   "L": {
+    "top": 0.166,
+    "bottom": 0.471,
+    "height": 0.637
+   }
+  },
+  "elder-f-b": {
+   "eye_to_chin_mm": 104.6,
+   "R": {
+    "top": 0.13,
+    "bottom": 0.478,
+    "height": 0.608
+   },
+   "L": {
+    "top": 0.13,
+    "bottom": 0.478,
+    "height": 0.608
+   }
+  },
+  "elder-f-c": {
+   "eye_to_chin_mm": 110.5,
+   "R": {
+    "top": 0.097,
+    "bottom": 0.476,
+    "height": 0.573
+   },
+   "L": {
+    "top": 0.097,
+    "bottom": 0.476,
+    "height": 0.573
+   }
+  },
+  "elder-m-a": {
+   "eye_to_chin_mm": 114.8,
+   "R": {
+    "top": 0.134,
+    "bottom": 0.475,
+    "height": 0.609
+   },
+   "L": {
+    "top": 0.134,
+    "bottom": 0.475,
+    "height": 0.609
+   }
+  },
+  "elder-m-b": {
+   "eye_to_chin_mm": 116.5,
+   "R": {
+    "top": 0.119,
+    "bottom": 0.474,
+    "height": 0.593
+   },
+   "L": {
+    "top": 0.119,
+    "bottom": 0.474,
+    "height": 0.593
+   }
+  },
+  "elder-m-c": {
+   "eye_to_chin_mm": 122.9,
+   "R": {
+    "top": 0.087,
+    "bottom": 0.473,
+    "height": 0.561
+   },
+   "L": {
+    "top": 0.087,
+    "bottom": 0.473,
+    "height": 0.561
+   }
+  },
+  "youth-f-a": {
+   "eye_to_chin_mm": 97.5,
+   "R": {
+    "top": 0.183,
+    "bottom": 0.463,
+    "height": 0.647
+   },
+   "L": {
+    "top": 0.183,
+    "bottom": 0.463,
+    "height": 0.647
+   }
+  },
+  "youth-f-b": {
+   "eye_to_chin_mm": 101.2,
+   "R": {
+    "top": 0.143,
+    "bottom": 0.472,
+    "height": 0.615
+   },
+   "L": {
+    "top": 0.143,
+    "bottom": 0.472,
+    "height": 0.615
+   }
+  },
+  "youth-f-c": {
+   "eye_to_chin_mm": 108.6,
+   "R": {
+    "top": 0.093,
+    "bottom": 0.477,
+    "height": 0.57
+   },
+   "L": {
+    "top": 0.093,
+    "bottom": 0.477,
+    "height": 0.57
+   }
+  },
+  "youth-m-a": {
+   "eye_to_chin_mm": 109.9,
+   "R": {
+    "top": 0.149,
+    "bottom": 0.472,
+    "height": 0.621
+   },
+   "L": {
+    "top": 0.149,
+    "bottom": 0.472,
+    "height": 0.621
+   }
+  },
+  "youth-m-b": {
+   "eye_to_chin_mm": 112.7,
+   "R": {
+    "top": 0.123,
+    "bottom": 0.475,
+    "height": 0.598
+   },
+   "L": {
+    "top": 0.123,
+    "bottom": 0.475,
+    "height": 0.598
+   }
+  },
+  "youth-m-c": {
+   "eye_to_chin_mm": 119.0,
+   "R": {
+    "top": 0.09,
+    "bottom": 0.475,
+    "height": 0.565
+   },
+   "L": {
+    "top": 0.09,
+    "bottom": 0.475,
+    "height": 0.565
+   }
+  }
+ }
+}

@@ -449,12 +449,53 @@ def add(m, face, side, state, cage_head, face_types, head_mesh, colours):
         uv = lay["uv"][name].reshape(-1, 2)
         faces = [(k * J + j, k * J + j + 1, (k + 1) * J + j + 1, (k + 1) * J + j) for k in range(S - 1) for j in range(J - 1)]
         lift = (off + LIFT * np.abs(rib.rows)).reshape(-1, 1)
-        m.add(p + nr * lift, (1.0, 1.0, 1.0), [(u, 1.0 - v) for u, v in uv], faces, mat, facing=head_mesh.FORWARD)
+        P = p + nr * lift
+        if "faceprop" in PORT and name == "lid":
+            P = clear_of_skin(m, P, nr, faces, 0.5 * off)
+        m.add(P, (1.0, 1.0, 1.0), [(u, 1.0 - v) for u, v in uv], faces, mat, facing=head_mesh.FORWARD)
     top, bot = core_strip(lid)
     n = len(top)
     pts = np.vstack([top, bot]) * np.array([side, 1.0])
     p, nr = hf.project_front(pts)
     m.add(p + nr * OFF["core"], colours["core"], None, [(i, i + 1, n + i + 1, n + i) for i in range(n - 1)], "line", facing=head_mesh.FORWARD)
+
+
+def clear_of_skin(m, P, nr, faces, need, rounds=4):
+    """Port `faceprop` (S6b), the upper lid and its wing only: a ribbon's quads in front of the skin
+    by `need` over their whole face, not only at their corners. Each vertex is projected onto the
+    head and lifted, and a flat quad between lifted corners can dip behind a skin that turns away
+    fast under it: the wing's end at the temple, sharper once the face is narrowed, sank up to
+    2.8 mm behind it and broke the drawn wing at half a blink. Each corner is raised along its
+    normal by the most any of its quads lacks, sampled over the quad against the skin facing the
+    same way (not the eye opening's turned-in rim), round after round. The lower lid is left as
+    built: lifted the same way, its line drew darker and fuller than the unnarrowed type's."""
+    try:
+        from mathutils import Vector
+        from mathutils.bvhtree import BVHTree
+    except ImportError:  # outside Blender (cage_accept.py measures the skin alone)
+        return P
+
+    V = np.array(m.v)
+    tree = BVHTree.FromPolygons(V.tolist(), [f for f, k in zip(m.f, m.fm) if k == "face"])
+    P = np.array(P, float)
+    grid = [(a, b) for a in (0.0, 0.25, 0.5, 0.75, 1.0) for b in (0.0, 0.25, 0.5, 0.75, 1.0)]
+    for _ in range(rounds):
+        push = np.zeros(len(P))
+        for f in faces:
+            A, B, C, D = P[list(f)]
+            n = nr[list(f)].mean(axis=0)
+            for a, b in grid:
+                q = (1 - a) * (1 - b) * A + a * (1 - b) * B + a * b * C + (1 - a) * b * D
+                co, sn, _, _ = tree.find_nearest(Vector(q))
+                if co is None or float(np.dot(np.array(sn), n)) < 0.5:
+                    continue
+                lack = need - float(np.dot(q - np.array(co), np.array(sn)))
+                if lack > 0:
+                    push[list(f)] = np.maximum(push[list(f)], lack)
+        if push.max() < 1e-6:
+            break
+        P = P + nr * push[:, None]
+    return P
 
 
 def page_strokes(types, cage_head, face_types, head_mesh):
