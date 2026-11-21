@@ -182,7 +182,7 @@ MASTERS = dict(swept_braid=dict(
     # the generator's terms. Angles round the head from the front, + toward the far side of the
     # part; heights above the chin in head heights.
     front=dict(
-        part=0.55,  # how far off centre the part is (the seed decides the side; the rear layers' asymmetry does not follow it yet: step 3's open point)
+        part=0.55,  # how far off centre the part is (the seed decides the side; cut 1 is Cora's, person_params.from_style; the rear layers follow it)
         flare=0.012,  # how far the sweep's points turn out from the head (the spread; held under the outline check's margin); the seed's variation moves the near section's by the same
         sweep=dict(points=7, depth=0.024, el=(58.0, 112.0), drop=0.40, lean=1.4, thick=0.004, lift=0.020, fall=0.60),  # the big section: roots up the part (elevation from the hairline to the crown), its hem from the brow at the front to `drop` head heights lower behind
         near=dict(points=4, depth=0.026, el=(60.0, 104.0), end_h=0.10, lean=1.8, thick=0.0035, lift=0.024, lift_back=0.012, flare=0.012),  # the near section: up the part too, falling to the near temple and down beside the face to the jaw in front of the ear; its stand-off at the temple (the sides' width) and behind, toward the crown (where more hides the plait's start and stands out as a ledge); its points' flare on the columns that reach the jaw# the near section: up the part too, falling to the near temple and down beside the face to the jaw
@@ -1027,6 +1027,7 @@ class Hair:
         laid over the back of the head `over` off the scalp with the layer's own swell; the pair
         offset by the part's asymmetry and tucked a little at the sides (Cora's fit, generator
         units). A companion, narrower, lies beside the wide lock over the middle of its length."""
+        ps = -1.0 if self.parting < 0 else 1.0  # the part's side in the head's x (front_master's `s`: the sweep goes the other way round the head)
         H = self.hf.top_z - self.hf.chin_z
         cr = m["cheek"] * H
         n = m["rings"]
@@ -1044,8 +1045,11 @@ class Hair:
                 pts, widths = [], []
                 for t in ts:
                     x, h, w = station(rows, t)
-                    x = side * x * cr + m["part_asymmetry"] * cr * math.sin(t * math.pi + g * 0.8)
-                    z = self.hf.chin_z + H * (h + m["side_tuck"][1 if side > 0 else 0] * 0.23 * math.sin(math.pi * t + g * 0.47))
+                    # Cora's offset leans toward her part and her tuck's second value is the part's
+                    # side (her fit: +X, her left, in Blender's frame). Here they follow this cut's
+                    # part: on the side of the head's x that is `ps` (the head frame's -X is the left).
+                    x = side * x * cr + ps * m["part_asymmetry"] * cr * math.sin(t * math.pi + g * 0.8)
+                    z = self.hf.chin_z + H * (h + m["side_tuck"][1 if side * ps > 0 else 0] * 0.23 * math.sin(math.pi * t + g * 0.47))
                     off = m["over"] + (m["lift"][0] + m["lift"][1] * (g % 3)) * math.sin(math.pi * t)
                     pts.append(self._back_point(x, z, off))
                     widths.append(max(0.00035, w * cr))
