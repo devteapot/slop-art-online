@@ -625,7 +625,9 @@ pub fn mind_act(ctx: &ReducerContext, actor: u32, acts: Vec<String>, source: Str
     crate::floor::ready(ctx)?;
     require_live_controller(ctx, actor)?;
     crate::latency::nav(ctx, actor, "mind_act", 0, format_args!(""));
-    crate::acts::submit_mind(ctx, actor, &acts, &source, common::now_ms(ctx));
+    let now = common::now_ms(ctx);
+    crate::acts::spend_input(ctx, actor, now)?;
+    crate::acts::submit_mind(ctx, actor, &acts, &source, now);
     Ok(())
 }
 
@@ -636,7 +638,9 @@ pub fn mind_act_checked(ctx: &mut spacetimedb::ProcedureContext, actor: u32, act
     ctx.try_with_tx(|tx| {
         crate::floor::ready(tx)?;
         require_live_controller(tx, actor)?;
-        Ok(crate::acts::submit_checked(tx, actor, &acts, &source, common::now_ms(tx)))
+        let now = common::now_ms(tx);
+        crate::acts::spend_input(tx, actor, now)?;
+        Ok(crate::acts::submit_checked(tx, actor, &acts, &source, now))
     })
 }
 

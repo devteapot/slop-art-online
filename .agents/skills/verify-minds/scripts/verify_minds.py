@@ -28,6 +28,18 @@ spec.loader.exec_module(shared)
 CASES = {}
 
 
+def player_token(run):
+    """The run's player token: in its private credentials file since verify-credentials
+    (`verify.py load` merges it), else in an older run's state.json."""
+    sys.path.insert(0, str(ROOT / 'living/tools'))
+    from verify_credentials import private_dir
+    st = json.loads((run.directory / 'state.json').read_text())
+    credentials = private_dir(ROOT) / f'{run.name}-players.json'
+    if credentials.exists():
+        st.update(json.loads(credentials.read_text()))
+    return st['token']
+
+
 def case(*names, **fixed):
     """Register the decorated function as the case(s) NAMES. It is called with the case's run and
     FIXED, and with case=NAME when it takes a `case` argument (one body serving several cases)."""
@@ -3269,7 +3281,7 @@ def alongside_case(run):
     def say_now(text):
         # Straight over HTTP with the player's token (from the run's state.json): a line that must
         # land within 2 s of a deliberation's prompt cannot wait for a harness subprocess under load.
-        token = json.loads((run.directory / 'state.json').read_text())['token']
+        token = player_token(run)
         req = urllib.request.Request(f"{shared.STDB_URL}/v1/database/{run.db}/call/human_say", data=json.dumps([text, actor]).encode(),
                                      headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'}, method='POST')
         with urllib.request.urlopen(req, timeout=10) as r:
@@ -3819,7 +3831,7 @@ def queued_case(run):
                           # Not `end`: a settled pair takes no turn on a line like the last (minds-struth9-queued).
                           'talk': {'thought': 'I answer them.', 'say': 'verify minds talk reply', 'settled': None, 'end': False}}}
     models = model(run, script)
-    token = json.loads((run.directory / 'state.json').read_text())['token']
+    token = player_token(run)
 
     def as_player(reducer, args):
         # Over HTTP with the player's token: a harness subprocess takes seconds under load.
@@ -4476,7 +4488,7 @@ def act_repair_case(run, case):
     run.harness('player', 'join', 'RepairReceiver')
     receiver = run.sql("SELECT id FROM character WHERE name = 'RepairReceiver'", 'receiver')[0]['id']
     # The procedure returns its typed denial to the caller and must make no act for this NPC.
-    player = json.loads((run.directory / 'state.json').read_text())['token']
+    player = player_token(run)
     request = urllib.request.Request(f'{shared.STDB_URL}/v1/database/{run.db}/call/mind_act_checked',
                                      data=json.dumps([actor, [], 'verify']).encode(),
                                      headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {player}'})

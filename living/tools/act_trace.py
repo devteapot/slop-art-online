@@ -19,7 +19,10 @@ character's acts through them, one act in progress at a time:
   acts that were waiting when a replacing batch came), `act_queued` (key: queue id),
   `act_started` (key: queue id), `act_refused` / `act_expired` (key: queue id), `act_replaced`
   (key: the act's start ms; detail: skill, phase, age ms, source), `act_done` (key: start ms;
-  detail: ok, code, skill, phase, age ms), `act_set_aside` (a reflex dropped what was waiting).
+  detail: ok, code, skill, phase, age ms), `act_set_aside` (a reflex dropped what was waiting),
+  `act_continued` (key: queue id; the same act again went on, `act_same_continues`) and
+  `act_rate_refused` (a call refused by the input bucket, `act_input_cost`: nothing queued).
+  Since act-replace-gaps `act_replaced` comes after the new act's `act_queued`, when it starts.
 
 It reports the queue wait of each batch's first act (queued → started, wall ms of the log
 records) split by whether another act was in progress when the batch came; the fate of every started act (done, failed by code,
@@ -123,6 +126,10 @@ def report(path, actors=None, seconds=None, from_ms=None, to_ms=None):
         elif st in ("act_refused", "act_expired"):
             queued.pop(m["key"], None)
             never[st] += 1
+        elif st == "act_continued":
+            # The same act again while it ran, absorbed by it (`act_same_continues`): not a start.
+            queued.pop(m["key"], None)
+            fates["continued_by_the_same"] += 1
         elif st in ("act_dropped", "act_set_aside"):
             never["dropped_by_replacement" if st == "act_dropped" else "set_aside_by_reflex"] += m["key"]
             for q in [q for q, v in queued.items() if v[1] == a]:

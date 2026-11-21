@@ -831,23 +831,27 @@ fn my_character(ctx: &ReducerContext) -> Result<Character, String> {
 
 /// Perform one action (behavior graph node JSON, e.g. `{"do":{"skill":"gather","target":{"nearest":"tree"}}}`).
 /// A single deliberate act (give, offer, conceive, teach...) runs through the same act path as
-/// a mind's decisions (see `acts.rs`), replacing whatever the player commanded before; any
-/// other node becomes the character's behavior.
+/// a mind's decisions (see `acts.rs`), replacing whatever the player commanded before once it
+/// passes its checks (`act_replace_checks`); any other node becomes the character's behavior.
+/// Each call spends an input as moving does (`act_input_cost`; "too many inputs" when spent).
 #[spacetimedb::reducer]
 pub fn human_act(ctx: &ReducerContext, node: String) -> Result<(), String> {
     crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     latency::nav(ctx, me.id, "human_act", 0, format_args!(""));
     let g = living_rules::graph::parse(&node)?;
+    let now = common::now_ms(ctx);
+    // Every command is an input, as a movement or a skill use is (`act_input_cost`).
+    acts::spend_input(ctx, me.id, now)?;
     if let living_rules::graph::Node::Do(a) = &g.root {
         if living_rules::acts::not_an_act(&a.skill, common::scripts(ctx).shapes()).is_none() {
-            acts::submit_player(ctx, me.id, &[g.to_json()], "human", common::now_ms(ctx));
+            acts::submit_player(ctx, me.id, &[g.to_json()], "human", now);
             return Ok(());
         }
     }
     // It runs once: when it ends, done or failed, the character waits for its person again
     // (`command_done`).
-    mind::set_graph(ctx, me.id, &g.to_json(), COMMAND, "human", common::now_ms(ctx)).map(|_| ())
+    mind::set_graph(ctx, me.id, &g.to_json(), COMMAND, "human", now).map(|_| ())
 }
 
 /// A played character's plan while it waits for its person, and the graph it waits with.

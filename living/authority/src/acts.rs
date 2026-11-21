@@ -27,6 +27,18 @@ fn feedback(ctx: &ReducerContext, actor: u32, now: u64, text: String, salience: 
     }
 }
 
+/// Spend one input for an act call (`human_act`, `mind_act`, `mind_act_checked`) from the actor's
+/// input bucket, the one moving and skill use spend from (`input_hz`/`input_burst`), under the
+/// `act_input_cost` law: the same limit for a person and a mind. An empty bucket refuses the call
+/// before anything is written.
+pub fn spend_input(ctx: &ReducerContext, actor: u32, now: u64) -> Result<(), String> {
+    if common::laws(ctx).act_input_cost && !crate::motion::spend_input(ctx, actor, now) {
+        crate::latency::acts(ctx, actor, "act_rate_refused", 0, format_args!(""));
+        return Err("too many inputs".into());
+    }
+    Ok(())
+}
+
 /// Queue a player's act (`human_act`): it replaces what was waiting and stops the act in
 /// progress, unless that is a committed move.
 pub fn submit_player(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str, now: u64) {
@@ -72,6 +84,9 @@ fn submit_inner(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str,
     if crate::latency::acts_on(ctx, actor) {
         crate::latency::acts(ctx, actor, "act_submit", acts.len() as u64, format_args!("{source} {} {}", u8::from(player), u8::from(replace)));
     }
+    // The act under way that the first of these acts able to start replaces (under
+    // `act_replace_checks`: it keeps running if every one is refused).
+    let mut replacing = None;
     if replace {
         if crate::latency::acts_on(ctx, actor) {
             let waiting = ctx.db.act_queue().actor().filter(actor).count();
@@ -82,8 +97,12 @@ fn submit_inner(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str,
         ctx.db.act_queue().actor().delete(actor);
         // A committed move under way runs its course (`combat::committed`).
         if let Some(a) = ctx.db.activity().id().find(actor).filter(|a| a.node == ACT && !crate::combat::committed(&common::scripts(ctx), a)) {
-            crate::latency::acts(ctx, actor, "act_replaced", a.started_ms, format_args!("{} {} {} {source}", a.skill, a.phase, now.saturating_sub(a.started_ms)));
-            act::cancel(ctx, a, now, None);
+            if common::laws(ctx).act_replace_checks {
+                replacing = Some(a);
+            } else {
+                crate::latency::acts(ctx, actor, "act_replaced", a.started_ms, format_args!("{} {} {} {source}", a.skill, a.phase, now.saturating_sub(a.started_ms)));
+                act::cancel(ctx, a, now, None);
+            }
         }
     }
     let mut results = Vec::new();
@@ -130,10 +149,10 @@ fn submit_inner(ctx: &ReducerContext, actor: u32, acts: &[String], source: &str,
         results.push((Some(queued.id), None));
     }
     if !checked {
-        next(ctx, actor, now);
+        next_reporting(ctx, actor, now, replacing.as_ref(), |_, _| false);
         return Vec::new();
     }
-    next_reporting(ctx, actor, now, |id, why| {
+    next_reporting(ctx, actor, now, replacing.as_ref(), |id, why| {
         if let Some((_, refusal)) = results.iter_mut().find(|(queued, _)| *queued == Some(id)) {
             *refusal = Some(why.to_owned());
             true
@@ -157,12 +176,16 @@ fn refusal_with_names(ctx: &ReducerContext, why: &str) -> String {
 
 /// Start the next waiting act unless one is in progress.
 pub fn next(ctx: &ReducerContext, actor: u32, now: u64) {
-    next_reporting(ctx, actor, now, |_, _| false);
+    next_reporting(ctx, actor, now, None, |_, _| false);
 }
 
-fn next_reporting(ctx: &ReducerContext, actor: u32, now: u64, mut report_refusal: impl FnMut(u64, &str) -> bool) {
+/// `replacing`: the act under way that a new act may take the body from (`act_replace_checks`).
+/// `act::begin` meets it as it meets a graph's activity: it is broken off only once the new act
+/// passes every check before its start, so while each waiting act is refused it keeps running.
+fn next_reporting(ctx: &ReducerContext, actor: u32, now: u64, replacing: Option<&Activity>, mut report_refusal: impl FnMut(u64, &str) -> bool) {
     loop {
-        if ctx.db.activity().id().find(actor).map_or(false, |a| a.node == ACT) {
+        let under_way = ctx.db.activity().id().find(actor).filter(|a| a.node == ACT);
+        if under_way.as_ref().is_some_and(|a| replacing.map_or(true, |r| r.started_ms != a.started_ms || r.skill != a.skill)) {
             return;
         }
         if !ctx.db.character().id().find(actor).map_or(false, |c| c.alive) {
@@ -193,9 +216,18 @@ fn next_reporting(ctx: &ReducerContext, actor: u32, now: u64, mut report_refusal
             None => act::Resolved::none(),
         };
         let revision = ctx.db.mind_state().id().find(actor).map(|s| s.revision).unwrap_or(0);
+        if let Some(cur) = under_way.as_ref().filter(|_| common::laws(ctx).act_same_continues) {
+            if act::continues(ctx, cur, &a, &target, now) {
+                crate::latency::acts(ctx, actor, "act_continued", p.id, format_args!("{} {} {}", a.skill, cur.phase, now.saturating_sub(cur.started_ms)));
+                return;
+            }
+        }
         let want = (a.want.clone().unwrap_or_default(), a.want_qty.unwrap_or(0));
         match act::begin(ctx, actor, ACT, revision, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), a.text.as_deref().unwrap_or(""), a.topic.as_deref().unwrap_or(""), (&want.0, want.1), (a.offer.unwrap_or(0), a.record.unwrap_or(0)), a.run, a.spacing(), now) {
             Ok(()) => {
+                if let Some(r) = &under_way {
+                    crate::latency::acts(ctx, actor, "act_replaced", r.started_ms, format_args!("{} {} {} {}", r.skill, r.phase, now.saturating_sub(r.started_ms), p.source));
+                }
                 crate::latency::acts(ctx, actor, "act_started", p.id, format_args!("{}", a.skill));
                 common::wake(ctx, actor);
                 return;

@@ -428,6 +428,9 @@ def scene_bow(st):
     before = {r["id"]: r["hp"] for r in sql(st, "SELECT id, hp FROM vitals")}
     t0 = int(time.time() * 1000)
     ready(st, "bowshot")
+    # After the strike and kill scenes in `--scene all` the shooter can be out of breath: wait
+    # for it to come back, as the later scenes do (a bowshot costs breath).
+    full_breath(st, 30.0)
     arrows0 = sum(r["qty"] for r in sql(st, f"SELECT qty FROM inventory WHERE owner = {cid} AND item = 'arrow'"))
     call(st, "use_skill", ["bowshot", 0, at[0], at[1]])
     u = wait_outcome(st, "bowshot", 3)
