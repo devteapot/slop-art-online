@@ -127,7 +127,7 @@ It deletes `verify-<run>`; the evidence stays in `.local/living/verify/<run>/`. 
 
 ## In the scene gate
 
-The merge's scene gate runs `looks`, `hair`, `seat`, `camera-faces`, `camera-lod` and `far` when a merge changes how the client draws, on dev-box's pinned render asset set (`living/tools/render_set.py`), and `render-smoke` on a host without one ([verify's "Scene gate"](../verify/SKILL.md#scene-gate), docs/TOOLING.md "The render group"). Its runs are `gate-*` on `verify-gate-*` worlds, which `check.py` and `drive.py` accept beside `ui-*`. A change to these scenarios' names, worlds or what they need changes the gate: keep `CASES` in `scene_gate.py` in step. A case's client logs fail it on shader, pipeline, `bevy_asset` or panic ERROR lines, so a scenario that provokes one on purpose must say so there.
+The merge's scene gate runs `looks`, `hair` and `seat` when a merge changes how characters are drawn, `camera-faces`, `camera-lod` and `far` when it changes the camera, LOD or sight, and all six for a shader, the client's manifest or these drivers, on dev-box's pinned render asset set (`living/tools/render_set.py`), and `render-smoke` on a host without one ([verify's "Scene gate"](../verify/SKILL.md#scene-gate), docs/TOOLING.md "The render group"). Its runs are `gate-*` on `verify-gate-*` worlds, which `check.py` and `drive.py` accept beside `ui-*`. A change to these scenarios' names, worlds or what they need changes the gate: keep `CASES` in `scene_gate.py` in step. A case's client logs fail it on shader, pipeline, `bevy_asset` or panic ERROR lines, so a scenario that provokes one on purpose must say so there.
 
 ## What this skill does not prove
 
