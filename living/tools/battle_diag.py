@@ -61,6 +61,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import input_latency
+from trial_activity import running_trial
 
 from verify_steering import pose
 
@@ -837,4 +838,5 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    with running_trial(os.environ.get("LIVING_STDB_CONTAINER")):
+        sys.exit(main())

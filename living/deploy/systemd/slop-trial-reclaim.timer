@@ -1,0 +1,10 @@
+[Unit]
+Description=Check hourly for a quiet trial reclaim window
+
+[Timer]
+OnCalendar=*-*-* *:20:00
+AccuracySec=1min
+Unit=slop-trial-reclaim.service
+
+[Install]
+WantedBy=timers.target
