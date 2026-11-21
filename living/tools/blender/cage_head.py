@@ -702,6 +702,9 @@ class CageHead(head_form.Head):
         self.lip = m["lips"] / 0.026
         self.mouth_curve = m.get("curve", 0.0) * H
         self.ear_size, self.ear_out = ear["size"] / 0.235 * (H / 0.246) * 0.92, ear["out_deg"]
+        # Port `faceprop` (S6b): the lobe where Cora's drawing has it, EAR_LOW of eye-to-chin under
+        # the eye line; head_mesh draws the ear out to it from its top, which stays.
+        self.ear_bottom = hz(e["z"]) - EAR_LOW * e["z"] * H if "faceprop" in PORT else None
         self.cheek = self.jowl = self.chin_f = 0.0
         # The whole head, eyes and mouth filled in: what hair, beards, headwear and paint lie on.
         cage = Cage(t, closed=True)
@@ -962,6 +965,9 @@ def far_jaw_line(m, hf, look):
 # char-port-2 features on in this process (`SLOP_PORT=jaw_shell,…`, face_types.port_features).
 PORT = {f.strip() for f in os.environ.get("SLOP_PORT", "").split(",") if f.strip()}
 JAW_SHELL = "jaw_shell" in PORT
+# `faceprop` (S6b): where an ear's lobe ends, under the eye line, as a share of eye-to-chin (Cora's
+# drawing: 0.47; docs/char-port-2/s6b).
+EAR_LOW = 0.47
 # `neck` (S2): the shade under the jaw as Cora's (char-live-3 ink-batch/fit.py neck_shade): full
 # right under the jaw, fading down the neck, a multiply of the skin. The skin under the jaw takes
 # it whole; person.make_neck the fade.

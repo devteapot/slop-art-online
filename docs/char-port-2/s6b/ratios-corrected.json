@@ -1,0 +1,383 @@
+{
+ "about": "The face's width at the cheek row over the eye spacing, by face_width.py as corrected (a surface slice, the ear shells left out whole; with_ears includes them). before = the installed types (flag off); face_step = faceprop as at 423d0e5fb; final = with the ears. old_tool_face_step = the first face_width.py's ears-excluded value on the face step's build (vertices within 3 mm, ear weight under 0.5), which counted part of the ear as face.",
+ "types": {
+  "adult-f-a": {
+   "before": {
+    "spacing_mm": 100.8,
+    "with_ears": 1.945,
+    "ears_excluded": 1.668
+   },
+   "face_step": {
+    "spacing_mm": 100.8,
+    "with_ears": 1.805,
+    "ears_excluded": 1.486
+   },
+   "final": {
+    "spacing_mm": 100.8,
+    "with_ears": 1.822,
+    "ears_excluded": 1.486
+   },
+   "old_tool_face_step": 1.783
+  },
+  "adult-f-b": {
+   "before": {
+    "spacing_mm": 97.8,
+    "with_ears": 2.016,
+    "ears_excluded": 1.787
+   },
+   "face_step": {
+    "spacing_mm": 97.8,
+    "with_ears": 1.871,
+    "ears_excluded": 1.581
+   },
+   "final": {
+    "spacing_mm": 97.8,
+    "with_ears": 1.886,
+    "ears_excluded": 1.581
+   },
+   "old_tool_face_step": 1.755
+  },
+  "adult-f-c": {
+   "before": {
+    "spacing_mm": 96.1,
+    "with_ears": 2.089,
+    "ears_excluded": 1.913
+   },
+   "face_step": {
+    "spacing_mm": 96.1,
+    "with_ears": 1.956,
+    "ears_excluded": 1.72
+   },
+   "final": {
+    "spacing_mm": 96.1,
+    "with_ears": 1.963,
+    "ears_excluded": 1.72
+   },
+   "old_tool_face_step": 1.802
+  },
+  "adult-m-a": {
+   "before": {
+    "spacing_mm": 95.5,
+    "with_ears": 2.001,
+    "ears_excluded": 1.788
+   },
+   "face_step": {
+    "spacing_mm": 95.5,
+    "with_ears": 1.895,
+    "ears_excluded": 1.603
+   },
+   "final": {
+    "spacing_mm": 95.5,
+    "with_ears": 1.925,
+    "ears_excluded": 1.603
+   },
+   "old_tool_face_step": 1.781
+  },
+  "adult-m-b": {
+   "before": {
+    "spacing_mm": 92.5,
+    "with_ears": 2.073,
+    "ears_excluded": 1.866
+   },
+   "face_step": {
+    "spacing_mm": 92.5,
+    "with_ears": 1.964,
+    "ears_excluded": 1.688
+   },
+   "final": {
+    "spacing_mm": 92.5,
+    "with_ears": 1.989,
+    "ears_excluded": 1.688
+   },
+   "old_tool_face_step": 1.837
+  },
+  "adult-m-c": {
+   "before": {
+    "spacing_mm": 90.7,
+    "with_ears": 2.144,
+    "ears_excluded": 1.942
+   },
+   "face_step": {
+    "spacing_mm": 90.7,
+    "with_ears": 2.047,
+    "ears_excluded": 1.793
+   },
+   "final": {
+    "spacing_mm": 90.7,
+    "with_ears": 2.065,
+    "ears_excluded": 1.793
+   },
+   "old_tool_face_step": 1.885
+  },
+  "child-u-a": {
+   "before": {
+    "spacing_mm": 101.3,
+    "with_ears": 1.996,
+    "ears_excluded": 1.754
+   },
+   "face_step": {
+    "spacing_mm": 101.3,
+    "with_ears": 1.898,
+    "ears_excluded": 1.636
+   },
+   "final": {
+    "spacing_mm": 101.3,
+    "with_ears": 1.928,
+    "ears_excluded": 1.636
+   },
+   "old_tool_face_step": 1.874
+  },
+  "child-u-b": {
+   "before": {
+    "spacing_mm": 98.3,
+    "with_ears": 2.075,
+    "ears_excluded": 1.814
+   },
+   "face_step": {
+    "spacing_mm": 98.3,
+    "with_ears": 1.979,
+    "ears_excluded": 1.692
+   },
+   "final": {
+    "spacing_mm": 98.3,
+    "with_ears": 2.0,
+    "ears_excluded": 1.692
+   },
+   "old_tool_face_step": 1.906
+  },
+  "child-u-c": {
+   "before": {
+    "spacing_mm": 96.3,
+    "with_ears": 2.143,
+    "ears_excluded": 2.082
+   },
+   "face_step": {
+    "spacing_mm": 96.3,
+    "with_ears": 2.052,
+    "ears_excluded": 1.939
+   },
+   "final": {
+    "spacing_mm": 96.3,
+    "with_ears": 2.069,
+    "ears_excluded": 1.939
+   },
+   "old_tool_face_step": 1.934
+  },
+  "elder-f-a": {
+   "before": {
+    "spacing_mm": 99.9,
+    "with_ears": 2.037,
+    "ears_excluded": 1.867
+   },
+   "face_step": {
+    "spacing_mm": 99.9,
+    "with_ears": 1.862,
+    "ears_excluded": 1.619
+   },
+   "final": {
+    "spacing_mm": 99.9,
+    "with_ears": 1.868,
+    "ears_excluded": 1.619
+   },
+   "old_tool_face_step": 1.729
+  },
+  "elder-f-b": {
+   "before": {
+    "spacing_mm": 96.9,
+    "with_ears": 2.113,
+    "ears_excluded": 2.038
+   },
+   "face_step": {
+    "spacing_mm": 96.9,
+    "with_ears": 1.934,
+    "ears_excluded": 1.775
+   },
+   "final": {
+    "spacing_mm": 96.9,
+    "with_ears": 1.936,
+    "ears_excluded": 1.775
+   },
+   "old_tool_face_step": 1.765
+  },
+  "elder-f-c": {
+   "before": {
+    "spacing_mm": 95.1,
+    "with_ears": 2.164,
+    "ears_excluded": 2.111
+   },
+   "face_step": {
+    "spacing_mm": 95.1,
+    "with_ears": 1.998,
+    "ears_excluded": 1.864
+   },
+   "final": {
+    "spacing_mm": 95.1,
+    "with_ears": 2.0,
+    "ears_excluded": 1.864
+   },
+   "old_tool_face_step": 1.82
+  },
+  "elder-m-a": {
+   "before": {
+    "spacing_mm": 95.0,
+    "with_ears": 2.021,
+    "ears_excluded": 1.795
+   },
+   "face_step": {
+    "spacing_mm": 95.0,
+    "with_ears": 1.93,
+    "ears_excluded": 1.651
+   },
+   "final": {
+    "spacing_mm": 95.0,
+    "with_ears": 1.946,
+    "ears_excluded": 1.651
+   },
+   "old_tool_face_step": 1.741
+  },
+  "elder-m-b": {
+   "before": {
+    "spacing_mm": 92.0,
+    "with_ears": 2.093,
+    "ears_excluded": 1.87
+   },
+   "face_step": {
+    "spacing_mm": 92.0,
+    "with_ears": 2.001,
+    "ears_excluded": 1.73
+   },
+   "final": {
+    "spacing_mm": 92.0,
+    "with_ears": 2.013,
+    "ears_excluded": 1.73
+   },
+   "old_tool_face_step": 1.823
+  },
+  "elder-m-c": {
+   "before": {
+    "spacing_mm": 90.2,
+    "with_ears": 2.149,
+    "ears_excluded": 1.931
+   },
+   "face_step": {
+    "spacing_mm": 90.2,
+    "with_ears": 2.063,
+    "ears_excluded": 1.811
+   },
+   "final": {
+    "spacing_mm": 90.2,
+    "with_ears": 2.074,
+    "ears_excluded": 1.811
+   },
+   "old_tool_face_step": 1.872
+  },
+  "youth-f-a": {
+   "before": {
+    "spacing_mm": 100.8,
+    "with_ears": 1.945,
+    "ears_excluded": 1.671
+   },
+   "face_step": {
+    "spacing_mm": 100.8,
+    "with_ears": 1.803,
+    "ears_excluded": 1.489
+   },
+   "final": {
+    "spacing_mm": 100.8,
+    "with_ears": 1.82,
+    "ears_excluded": 1.489
+   },
+   "old_tool_face_step": 1.781
+  },
+  "youth-f-b": {
+   "before": {
+    "spacing_mm": 97.8,
+    "with_ears": 2.016,
+    "ears_excluded": 1.768
+   },
+   "face_step": {
+    "spacing_mm": 97.8,
+    "with_ears": 1.87,
+    "ears_excluded": 1.565
+   },
+   "final": {
+    "spacing_mm": 97.8,
+    "with_ears": 1.883,
+    "ears_excluded": 1.565
+   },
+   "old_tool_face_step": 1.753
+  },
+  "youth-f-c": {
+   "before": {
+    "spacing_mm": 96.1,
+    "with_ears": 2.089,
+    "ears_excluded": 1.911
+   },
+   "face_step": {
+    "spacing_mm": 96.1,
+    "with_ears": 1.954,
+    "ears_excluded": 1.717
+   },
+   "final": {
+    "spacing_mm": 96.1,
+    "with_ears": 1.961,
+    "ears_excluded": 1.717
+   },
+   "old_tool_face_step": 1.8
+  },
+  "youth-m-a": {
+   "before": {
+    "spacing_mm": 96.2,
+    "with_ears": 1.992,
+    "ears_excluded": 1.78
+   },
+   "face_step": {
+    "spacing_mm": 96.2,
+    "with_ears": 1.878,
+    "ears_excluded": 1.586
+   },
+   "final": {
+    "spacing_mm": 96.2,
+    "with_ears": 1.908,
+    "ears_excluded": 1.586
+   },
+   "old_tool_face_step": 1.768
+  },
+  "youth-m-b": {
+   "before": {
+    "spacing_mm": 93.2,
+    "with_ears": 2.068,
+    "ears_excluded": 1.859
+   },
+   "face_step": {
+    "spacing_mm": 93.2,
+    "with_ears": 1.951,
+    "ears_excluded": 1.673
+   },
+   "final": {
+    "spacing_mm": 93.2,
+    "with_ears": 1.975,
+    "ears_excluded": 1.673
+   },
+   "old_tool_face_step": 1.826
+  },
+  "youth-m-c": {
+   "before": {
+    "spacing_mm": 91.4,
+    "with_ears": 2.138,
+    "ears_excluded": 1.934
+   },
+   "face_step": {
+    "spacing_mm": 91.4,
+    "with_ears": 2.036,
+    "ears_excluded": 1.779
+   },
+   "final": {
+    "spacing_mm": 91.4,
+    "with_ears": 2.053,
+    "ears_excluded": 1.779
+   },
+   "old_tool_face_step": 1.876
+  }
+ }
+}

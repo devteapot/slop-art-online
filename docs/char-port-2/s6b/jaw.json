@@ -1,0 +1,515 @@
+{
+ "rows_h": [
+  0.08,
+  0.12,
+  0.15,
+  0.18,
+  0.2
+ ],
+ "classes": {
+  "adult-f": {
+   "0.08": {
+    "before": [
+     80.7,
+     72.9,
+     67.1
+    ],
+    "after": [
+     80.7,
+     72.9,
+     67.1
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.12": {
+    "before": [
+     100.2,
+     93.2,
+     87.6
+    ],
+    "after": [
+     100.2,
+     93.2,
+     87.6
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.15": {
+    "before": [
+     114.2,
+     105.8,
+     101.8
+    ],
+    "after": [
+     114.2,
+     105.8,
+     101.8
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.18": {
+    "before": [
+     128.3,
+     117.7,
+     115.2
+    ],
+    "after": [
+     128.3,
+     117.7,
+     115.2
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.2": {
+    "before": [
+     135.8,
+     124.7,
+     123.1
+    ],
+    "after": [
+     135.8,
+     124.7,
+     123.1
+    ],
+    "order_before": true,
+    "order_after": true
+   }
+  },
+  "adult-m": {
+   "0.08": {
+    "before": [
+     97.8,
+     87.7,
+     80.8
+    ],
+    "after": [
+     93.5,
+     84.2,
+     77.9
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.12": {
+    "before": [
+     114.6,
+     103.4,
+     98.4
+    ],
+    "after": [
+     108.4,
+     99.2,
+     94.4
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.15": {
+    "before": [
+     127.1,
+     113.8,
+     111.0
+    ],
+    "after": [
+     119.4,
+     109.1,
+     106.4
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.18": {
+    "before": [
+     135.9,
+     123.5,
+     123.1
+    ],
+    "after": [
+     127.3,
+     118.3,
+     117.9
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.2": {
+    "before": [
+     141.6,
+     130.7,
+     129.4
+    ],
+    "after": [
+     132.5,
+     123.9,
+     123.5
+    ],
+    "order_before": true,
+    "order_after": true
+   }
+  },
+  "child-u": {
+   "0.08": {
+    "before": [
+     97.4,
+     80.8,
+     73.7
+    ],
+    "after": [
+     95.6,
+     79.3,
+     72.3
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.12": {
+    "before": [
+     116.8,
+     100.6,
+     93.8
+    ],
+    "after": [
+     114.3,
+     98.3,
+     91.9
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.15": {
+    "before": [
+     131.2,
+     115.3,
+     107.0
+    ],
+    "after": [
+     128.0,
+     112.5,
+     105.0
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.18": {
+    "before": [
+     144.8,
+     129.8,
+     119.9
+    ],
+    "after": [
+     141.1,
+     126.4,
+     117.7
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.2": {
+    "before": [
+     152.2,
+     138.8,
+     127.9
+    ],
+    "after": [
+     148.3,
+     135.2,
+     125.3
+    ],
+    "order_before": true,
+    "order_after": true
+   }
+  },
+  "elder-f": {
+   "0.08": {
+    "before": [
+     84.9,
+     74.8,
+     69.0
+    ],
+    "after": [
+     82.6,
+     72.5,
+     66.9
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.12": {
+    "before": [
+     104.3,
+     95.2,
+     89.5
+    ],
+    "after": [
+     100.7,
+     92.2,
+     86.8
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.15": {
+    "before": [
+     118.7,
+     109.4,
+     105.3
+    ],
+    "after": [
+     114.1,
+     106.1,
+     102.2
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.18": {
+    "before": [
+     132.9,
+     122.7,
+     120.4
+    ],
+    "after": [
+     127.5,
+     119.1,
+     117.0
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.2": {
+    "before": [
+     141.7,
+     130.6,
+     129.5
+    ],
+    "after": [
+     135.8,
+     126.6,
+     125.9
+    ],
+    "order_before": true,
+    "order_after": true
+   }
+  },
+  "elder-m": {
+   "0.08": {
+    "before": [
+     101.8,
+     89.8,
+     82.9
+    ],
+    "after": [
+     99.1,
+     87.7,
+     81.1
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.12": {
+    "before": [
+     118.5,
+     104.6,
+     99.7
+    ],
+    "after": [
+     114.6,
+     102.0,
+     97.3
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.15": {
+    "before": [
+     130.2,
+     114.3,
+     111.5
+    ],
+    "after": [
+     125.5,
+     111.5,
+     108.8
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.18": {
+    "before": [
+     138.3,
+     124.9,
+     122.9
+    ],
+    "after": [
+     133.0,
+     120.3,
+     119.8
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.2": {
+    "before": [
+     143.5,
+     132.3,
+     129.2
+    ],
+    "after": [
+     138.0,
+     127.2,
+     125.6
+    ],
+    "order_before": true,
+    "order_after": true
+   }
+  },
+  "youth-f": {
+   "0.08": {
+    "before": [
+     83.1,
+     73.9,
+     67.9
+    ],
+    "after": [
+     83.1,
+     73.9,
+     67.9
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.12": {
+    "before": [
+     102.3,
+     93.9,
+     88.3
+    ],
+    "after": [
+     102.3,
+     93.9,
+     88.3
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.15": {
+    "before": [
+     116.1,
+     106.4,
+     102.4
+    ],
+    "after": [
+     116.1,
+     106.4,
+     102.4
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.18": {
+    "before": [
+     129.9,
+     118.1,
+     115.6
+    ],
+    "after": [
+     129.9,
+     118.1,
+     115.6
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.2": {
+    "before": [
+     137.3,
+     125.4,
+     123.3
+    ],
+    "after": [
+     137.3,
+     125.4,
+     123.3
+    ],
+    "order_before": true,
+    "order_after": true
+   }
+  },
+  "youth-m": {
+   "0.08": {
+    "before": [
+     100.8,
+     87.7,
+     80.8
+    ],
+    "after": [
+     97.4,
+     85.0,
+     78.4
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.12": {
+    "before": [
+     117.6,
+     103.2,
+     98.1
+    ],
+    "after": [
+     112.6,
+     99.9,
+     95.0
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.15": {
+    "before": [
+     130.1,
+     113.4,
+     110.5
+    ],
+    "after": [
+     124.0,
+     109.7,
+     106.9
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.18": {
+    "before": [
+     138.8,
+     125.4,
+     122.4
+    ],
+    "after": [
+     132.1,
+     119.3,
+     118.4
+    ],
+    "order_before": true,
+    "order_after": true
+   },
+   "0.2": {
+    "before": [
+     144.5,
+     133.5,
+     129.3
+    ],
+    "after": [
+     137.4,
+     126.8,
+     124.5
+    ],
+    "order_before": true,
+    "order_after": true
+   }
+  }
+ }
+}

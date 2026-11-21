@@ -115,8 +115,9 @@ def measure(path, box):
     return finish(im, hair, skin, eye_y, spacing, cx, w)
 
 
-def finish(im, hair, skin, eye_y, spacing, cx, w):
-    """The chin, the cheek row and width, and the hair's two spreads (the module's docstring)."""
+def cheek_at(skin, eye_y, spacing, cx, w):
+    """The chin row, the cheek row, and the run of skin on the cheek row that holds the face's centre column (the
+    module's docstring): (chin, cheek_row, (x0, x1), head_px)."""
     head_px = spacing / EYE_SPACING_H
     h = skin.shape[0]
 
@@ -134,7 +135,13 @@ def finish(im, hair, skin, eye_y, spacing, cx, w):
     width = [(0 if run(r) is None else run(r)[1] - run(r)[0]) for r in rows]
     chin = list(rows)[int(np.argmin(width))]
     cheek_row = int(round(eye_y + CHEEK_DROP_H * head_px))
-    cheek = run(cheek_row)
+    return chin, cheek_row, run(cheek_row), head_px
+
+
+def finish(im, hair, skin, eye_y, spacing, cx, w):
+    """The chin, the cheek row and width, and the hair's two spreads (the module's docstring)."""
+    chin, cheek_row, cheek_px, head_px = cheek_at(skin, eye_y, spacing, cx, w)
+    cheek = cheek_px
     # The face's own outline on that row: the drawing's, where no hair covers the cheeks at that
     # height; a render's from its copy with no hair (part_id.py --none), so no lock can cut it short.
     cw = cheek[1] - cheek[0]
@@ -156,7 +163,7 @@ def finish(im, hair, skin, eye_y, spacing, cx, w):
     d.line((bx.max(), chin, bx.max(), 0), fill=(255, 150, 0))
     return dict(body_over_eyes=round(float((bx.max() - bx.min()) / spacing), 3), whole_over_eyes=round(float((hx[1] - hx[0]) / spacing), 3),
                 body_width_px=int(bx.max() - bx.min()), body=round(float((bx.max() - bx.min()) / cw), 3), opening_px=n, eye_line_px=round(float(eye_y), 1), eye_spacing_px=round(float(spacing), 1), head_px=round(float(head_px), 1), chin_row=chin,
-                cheek_row=cheek_row, cheek_px=cheek, cheek_width_px=cw, hair_px=hx, hair_width_px=hx[1] - hx[0], spread_face=round(float(spread), 3)), pic
+                cheek_row=cheek_row, cheek_px=cheek, cheek_width_px=cw, face_over_eyes=round(float(cw / spacing), 3), hair_px=hx, hair_width_px=hx[1] - hx[0], spread_face=round(float(spread), 3)), pic
 
 
 def render(look, idp, box=(600, 160, 1000, 620), face=None):
@@ -174,6 +181,37 @@ def render(look, idp, box=(600, 160, 1000, 620), face=None):
     # ground's green is far larger and is left out.
     (ya, xa), (yb, xb) = two_eyes((g > r + 8) & (g > b) & (True if face else ~hair))
     return finish(im, hair, skin, (ya + yb) / 2, abs(xa - xb), int(round((xa + xb) / 2)), a.shape[1])
+
+
+EAR_ID = "the ear-ID copy's magenta (ear_id.py): red and blue each over green by 40"
+
+
+def ears_of(a):
+    """The pixels of a frame drawn with the ear-ID copy that are ear (EAR_ID)."""
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    return (r > g + 40) & (b > g + 40)
+
+
+def face_render(frame, box=(600, 160, 1000, 620)):
+    """S6b's acceptance (the GC's): the face's width at the cheek row over the eye spacing, measured as the drawing's
+    is, on a front frame with no hair whose type file is the ear-ID copy (docs/char-port-2/s6b/ear_id.py,
+    face2d.py). The skin is the hairless frame's (render()'s rule) less the ears, so the run on the cheek row stops at
+    the ear's front edge, as the drawing's stops at the line before her ear. Returns (dict, picture)."""
+    im = Image.open(frame).convert("RGB").crop(box)
+    a = np.asarray(im).astype(float)
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    ear = ears_of(a)
+    skin = (r > g + 12) & (r > b + 25) & ~ear
+    (ya, xa), (yb, xb) = two_eyes((g > r + 8) & (g > b))
+    eye_y, spacing, cx = (ya + yb) / 2, abs(xa - xb), int(round((xa + xb) / 2))
+    chin, cheek_row, run, head_px = cheek_at(skin, eye_y, spacing, cx, a.shape[1])
+    cw = run[1] - run[0]
+    pic = im.copy()
+    d = ImageDraw.Draw(pic)
+    d.line((run[0], cheek_row, run[1], cheek_row), fill=(0, 90, 255), width=2)
+    row_ear = np.nonzero(ear[cheek_row])[0]
+    return dict(face_over_eyes=round(float(cw / spacing), 3), cheek_width_px=int(cw), eye_spacing_px=round(float(spacing), 1), cheek_row=cheek_row, cheek_px=[int(run[0]), int(run[1])],
+                eye_line_px=round(float(eye_y), 1), ear_on_cheek_row=bool(len(row_ear)), ear_px=int(ear.sum())), pic
 
 
 def main(out_json, out_png, look=None, idp=None):

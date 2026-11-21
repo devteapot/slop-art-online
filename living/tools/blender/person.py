@@ -1190,6 +1190,85 @@ def raw_object(name, verts, faces, weights, colours, mat, arm, uvs=None, smooth_
 # Head, face, neck.
 
 
+def expression_clearance(face, rounds=40, eye_clear=0.008):
+    """Port `faceprop` (S6b): no expression makes the face's skin cut through itself where it does
+    not at rest. The narrowed face leaves sheets of skin that already touch at rest (the ear's root
+    on the skull's side, the jaw line's seam, the temple beside a blink's reach), and an
+    expression's motion of tenths of a millimetre there crossed them. Where an expression makes two
+    skin triangles cross that do not at rest, the vertices of both take one shared motion (their
+    mean), round after round until none is left. The lids' own meeting is left as it is: pairs
+    within `eye_clear` of an eye opening's rim. The face at rest, and so its jaw lines, is
+    untouched; only the expression's motion at the touching sheets changes (docs/char-port-2/s6b).
+    It is checked as the file will hold it: Blender's own split of each quad, the head in place
+    and in single precision."""
+    from mathutils.bvhtree import BVHTree
+
+    m = face.mesh
+    V = np.array(m.v)
+    me = bpy.data.meshes.new("expression_clearance")
+    me.from_pydata(V.tolist(), [], [f for f, k in zip(m.f, m.fm) if k == "face"])
+    me.calc_loop_triangles()
+    T = np.array([tuple(lt.vertices) for lt in me.loop_triangles], int)
+    bpy.data.meshes.remove(me)
+    # Neighbours by position, not index: along a seam (the atlas's, the midline under the chin) two
+    # vertices share a place, and triangles meeting there touch whatever the motion.
+    _, at = np.unique(np.round(V * 1e6).astype(np.int64), axis=0, return_inverse=True)
+    at = at.ravel()
+    sets = [set(at[t]) for t in T]
+    rims = np.concatenate([V[r["first"]:r["first"] + len(r["ring"])] for r in face.rings.values()])
+    lids = np.array([np.linalg.norm(V[t][:, None] - rims[None], axis=2).min() < eye_clear for t in T])
+    head = np.array(HEAD)[None, :]
+    W0 = (head + V * HEAD_SCALE).astype(np.float32)
+
+    def crossing(D, held):
+        """In the head's frame; or `held`, as the file holds it (in place, single precision)."""
+        if held:
+            P = W0.astype(float) + ((head + (V + D) * HEAD_SCALE).astype(np.float32) - W0).astype(float)
+        else:
+            P = V + D
+        tree = BVHTree.FromPolygons(P.tolist(), T.tolist(), all_triangles=True)
+        return {(a, c) for a, c in tree.overlap(tree) if a < c and not (sets[a] & sets[c]) and not (lids[a] or lids[c])}
+
+    rests = {held: crossing(np.zeros_like(V), held) for held in (False, True)}
+    for name in face.morphs:
+        D = face.morphs[name].copy()
+        trace = []
+        # First in the head's frame; then as the file holds it, where two slivers a few hundredths
+        # of a millimetre apart can cross by rounding alone: a pair that still crosses once its
+        # corners share one motion is held still there, as at rest.
+        for held in (False, True):
+            for _ in range(rounds):
+                new = sorted(crossing(D, held) - rests[held])
+                trace.append(len(new))
+                if not new:
+                    break
+                parent = {}
+
+                def root(x):
+                    while parent.setdefault(x, x) != x:
+                        x = parent[x]
+                    return x
+
+                for a, c in new:
+                    vs = [int(v) for v in (*T[a], *T[c])]
+                    r = root(vs[0])
+                    for v in vs[1:]:
+                        rv = root(v)
+                        if rv != r:
+                            parent[rv] = r
+                groups = {}
+                for v in sorted(parent):
+                    groups.setdefault(root(v), []).append(v)
+                for vs in groups.values():
+                    shared = np.abs(D[vs] - D[vs].mean(axis=0)).max() < 1e-12
+                    D[vs] = 0.0 if held and shared else D[vs].mean(axis=0)
+            else:
+                raise SystemExit(f"expression_clearance: {name} still crosses the skin after {rounds} rounds ({trace})")
+        if len(trace) > 2:
+            print(f"expression_clearance: {name} {trace}")
+        face.morphs[name] = D
+
+
 def make_face(arm, spec, atlas_path):
     """The head's skin with its eye openings and mouth slit, the eyes, lashes, lid lines, brows,
     the mouth's inside and the ears (head_mesh.py), as one object `Face` with the expressions as
@@ -1202,6 +1281,8 @@ def make_face(arm, spec, atlas_path):
     keep = lambda c: WHOLE_HEAD or c[2] < hairline(az_of(c)) + 0.016 or bald_depth(c) > -0.012
     face = cage_head.CageFace(HF, look, keep=keep) if TYPED else head_mesh.Face(HF, look, keep=keep)
     m = face.mesh
+    if TYPED and "faceprop" in cage_head.PORT:
+        expression_clearance(face)
     # Lips and blush are a layer of their own over the skin they lie on, in a material the client
     # does not recolour (`…_FACE`: drawn as the lash lines are, unshaded and in its own colours):
     # painted into the skin, the skin's recolouring washed them out. The layer is the skin's own

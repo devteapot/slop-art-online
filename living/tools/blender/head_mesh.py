@@ -786,10 +786,18 @@ class Face:
                 cols += [c] * seg
             pts.append((side * (x_root + 0.0005), yc + 0.003, zc - 0.002))
             cols.append(mix3(skin, shade, 1.0))
+            # A head form may set where the lobe ends (`ear_bottom`, char-port-2 S6b): the ear is
+            # drawn out downward to it from its top, which stays where it is.
+            zm = zc
+            if getattr(hf, "ear_bottom", None) is not None:
+                top, low = max(p[2] for p in pts), min(p[2] for p in pts)
+                s = (top - hf.ear_bottom) / (top - low)
+                pts = [(p[0], p[1], top - (top - p[2]) * s) for p in pts]
+                zm = top - (top - zc) * s
             # Vertex colours multiply the swatch of plain skin the ears' UVs point at.
             rel = [unlin(tuple(min(a / max(b, 1e-4), 1.0) for a, b in zip(lin(c), lin(skin)))) for c in cols]
             base = m.add(pts, rel, [SWATCH_UV] * len(pts), [], "face")
-            axis = np.array([side * (x_root + 0.004), yc, zc])
+            axis = np.array([side * (x_root + 0.004), yc, zm])
             for r in range(len(rings)):
                 for i in range(seg):
                     a, b = r * seg + i, r * seg + (i + 1) % seg

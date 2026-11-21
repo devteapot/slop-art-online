@@ -1,0 +1,107 @@
+{
+  "file": "lookdev/own-cp6m-girl.glb",
+  "slot": "eyes",
+  "material": null,
+  "ink": {
+    "M00_000_00_LidInk_00_FACE": {
+      "color": [
+        6,
+        2,
+        2
+      ],
+      "width": "uv",
+      "min_px": 1.0,
+      "fade_px": 3.0,
+      "range": 0.00537109375,
+      "map": "lookdev/types/types.eyes.ink.png",
+      "m_uv": 1.024
+    },
+    "M00_000_00_FaceBrowInk_00_FACE": {
+      "color": [
+        57,
+        32,
+        20
+      ],
+      "ref": [
+        102,
+        46,
+        26
+      ],
+      "width": "uv",
+      "min_px": 1.0,
+      "fade_px": 3.0,
+      "range": 0.00537109375,
+      "map": "lookdev/types/types.eyes.ink.png",
+      "m_uv": 1.024
+    }
+  },
+  "also": [
+    "portrait",
+    "0:8:0.18:0.86"
+  ],
+  "passed": true,
+  "sequences": [
+    {
+      "sequence": "near pan",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "near zoom",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "middle pan",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "middle zoom",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "far pan",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "far zoom",
+      "ink_px": 0.0,
+      "result": "faded"
+    },
+    {
+      "sequence": "portrait pan",
+      "f_ink": 0.073,
+      "f_edge": 0.137,
+      "ratio": 0.53,
+      "ink_px": 291.6,
+      "result": "pass"
+    },
+    {
+      "sequence": "portrait zoom",
+      "f_ink": 0.281,
+      "f_edge": 0.556,
+      "ratio": 0.51,
+      "ink_px": 259.1,
+      "result": "pass"
+    },
+    {
+      "sequence": "0_8_0.18_0.86 pan",
+      "f_ink": 0.076,
+      "f_edge": 0.205,
+      "ratio": 0.37,
+      "ink_px": 1312.9,
+      "result": "pass"
+    },
+    {
+      "sequence": "0_8_0.18_0.86 zoom",
+      "f_ink": 0.371,
+      "f_edge": 0.792,
+      "ratio": 0.47,
+      "ink_px": 1509.9,
+      "result": "pass"
+    }
+  ]
+}
