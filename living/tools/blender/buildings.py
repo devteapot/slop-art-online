@@ -78,7 +78,9 @@ import bpy
 from mathutils import Matrix, Vector, noise
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "textures"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # stable.py
 from surfaces import alpha as surface_alpha  # noqa: E402
+import stable  # noqa: E402
 
 PROFILE = None  # --profile: triangles per generator function
 UNTAGGED = None  # --profile: untagged lit triangles (no painted surface) per generator function
@@ -4211,7 +4213,7 @@ def mushroom_cap(k, c, CR, ch, color, spots=(7, 11), droop=0.18):
     rng = k.rng
     c = Vector(c)
     bm = bmesh.new()
-    bmesh.ops.create_uvsphere(bm, u_segments=16, v_segments=8, radius=1.0)
+    stable.uvsphere(bm, u_segments=16, v_segments=8, radius=1.0)  # faces in a fixed order (stable.py)
     bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z < -0.05], context="VERTS")
     for v in bm.verts:
         z = max(0.0, v.co.z)

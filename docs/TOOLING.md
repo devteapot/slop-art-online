@@ -543,6 +543,28 @@ python3 living/tools/render_set.py check ~/slop-assets/branches/<branch>/<id> &&
 
 **Known on main** (2026-11-20, `error-lines.txt` of the build). `gen_anim.sh`'s own `marker_check.py` exits 1: `strafe_run_left_v48` has "no contact window" for a foot on both VRoid bases, and so does `run_diag_br_v48` on Vivi. These are clip-library takes. The bake is written anyway, and the set records 84 clips a base.
 
+## Reproducible generators
+
+Two runs of a generator on the same code and the same Blender give byte-identical files. A difference between two runs is a defect in the generator, fixed there, not noise to allow for: the render set's hash, the flag-off parity of a look change and the GLB size checks all compare bytes.
+
+**What made files differ (2026-11-21, Blender 5.2.2).** `bmesh.ops.create_uvsphere` gives the same vertices in every run, but the order of its faces round the poles changes from one Blender process to the next: two to three orders in five runs, at 8x5 and at 16x8. Two generators used it:
+- the kerchief's knot (`make_kerchief`, `person.py`): the kerchief style and every resident wearing it differed in the `Cloth` mesh's index order between runs (4 runs, 4 different files), the "known triangle-order noise" of S6b's parity;
+- the mushroom caps (`mushroom_cap`, `buildings.py`): small_city's mushroom houses, halls and towers (20 files).
+
+**The fix.** [`living/tools/blender/stable.py`](../living/tools/blender/stable.py)'s `uvsphere` calls the op, then sorts the new faces by their sorted vertex indices (the vertices are stable), keeping each face's winding. Use `stable.uvsphere` wherever a UV sphere goes into a file. Icospheres, cones (with and without caps), cubes and convex hulls of seeded points were the same in every run.
+
+**The selftest:** `python3 living/tools/stable_selftest.py [--runs 3]` builds each of these in separate Blender processes and fails if a stable result differs between them. It also reports how many orders the bare `create_uvsphere` gave (3 in 4 runs on 2026-11-21); that line is a note, not a check.
+
+**The proof for the fix** (dev-box, branch `gen-repro`):
+- **The kerchief style:** 4 runs, one file (`a138c5fe68dd`).
+- **`gen_buildings.sh`:** two full runs, 1,096 of 1,096 files byte-identical, the 20 with mushroom caps among them.
+- **The kerchief's two residents,** `own-nan-fenwick` and `own-vessa-pontil`: two builds each, and their animated GLBs, byte-identical.
+- **Against main** (main's residents, and the pinned set `a7c606d204bb`'s 1,096 building files): 1,076 building files are byte-identical. The 20 with mushroom caps and the residents' `Cloth` mesh have the same vertex data and the same triangles with the same winding; only their index order differs. The fix changes bytes once, in order only, so the render set needs one re-pack after it merges.
+
+**Not run twice here:** `gen_city.sh`, `gen_nature.sh` and the other generators build no UV sphere (city and Cullet use `buildings.py`, but not its mushroom caps); `gen_cullet.sh` was already byte-identical on two runs ([CULLET_KIT.md](CULLET_KIT.md)). Another machine or Blender version has not been compared.
+
+**To check a generator:** run it twice into two scratch out_roots and `cmp` every file. For a GLB that differs, compare its JSON, its vertex accessors and its triangles as a set (winding kept) before its index order: only an order difference points at an op like this one. A scratch `gen_buildings.sh` run rewrites the tracked `living/rules/data/buildings.json` ([above](#building-the-render-asset-set)); `git checkout` it afterwards.
+
 ## Measurements (dev-box, 2026-11-11)
 
 All runs used `CARGO_BUILD_JOBS=12` on the 32-core dev-box while other workers were building. The load average at each run's start (and the range during it) is given because it moved the numbers more than anything else. Before/after arms on the same change are interleaved A B B A. The runs used a scratch clone of the repository and private target folders; reflink snapshots gave each warm arm the same starting state. The raw records are in each run's JSON (`check.py --json`) and the step logs.
