@@ -1476,11 +1476,14 @@ def make_overlay(arm, spec, face, m, world, weights, atlas_path):
     # person wearing both wore the lines twice.
     key = "beard" if OVERLAY.startswith("beard") else OVERLAY
     strong = dict(lines=face_paint.LINE_OVERLAY, freckles=face_paint.FRECKLE_OVERLAY).get(OVERLAY, (1.0, 1.0, 1.0))
-    with_, _ = face_paint.paint_skin(HF, dict(plain, detail_size=strong[2], **{key: look[key]}), rng())
+    with_, painted = face_paint.paint_skin(HF, dict(plain, detail_size=strong[2], **{key: look[key]}), rng())
     without, _ = face_paint.paint_skin(HF, plain, rng())
     hairy = OVERLAY.startswith("beard") or OVERLAY == "stubble"
     diff = np.abs(with_ - without).max(axis=2)
-    alpha = np.clip(diff / (0.10 if OVERLAY.startswith("beard") else 0.16), 0.0, 1.0)
+    if face_paint.BEARD and hairy and painted["whiskers"] is not None:
+        alpha = painted["whiskers"]  # port `beard`: the painted coverage, soft at its edge
+    else:
+        alpha = np.clip(diff / (0.10 if OVERLAY.startswith("beard") else 0.16), 0.0, 1.0)
     tint = np.array(look["beard_colour"] if OVERLAY.startswith("beard") else (look["stubble_colour"] if OVERLAY == "stubble" else look["skin"]))
     grey = np.clip((with_ @ np.array([0.3, 0.59, 0.11])) / max(float(tint @ np.array([0.3, 0.59, 0.11])), 1e-3), 0.0, 1.0)
     fixed = OVERLAY in ("lines", "freckles")
@@ -1587,7 +1590,7 @@ def far_beard(arm, m, look):
     used = sorted({i for f in faces for i in f})
     index = {i: k for k, i in enumerate(used)}
     out = v[used] - np.array(head_mesh.ORIGIN)
-    out = out / np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-9) * 0.004
+    out = out / np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-9) * (0.0015 if face_paint.BEARD else 0.004)
     world = np.array(HEAD)[None, :] + (v[used] + out) * HEAD_SCALE
     return raw_object("Overlay", world, [tuple(index[i] for i in f) for f in faces], [{"J_Bip_C_Head": 1.0}] * len(used), [(0.86, 0.86, 0.86)] * len(used), MAT["far_overlay"], arm)
 

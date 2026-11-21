@@ -982,6 +982,8 @@ def far_jaw_line(m, hf, look):
 # char-port-2 features on in this process (`SLOP_PORT=jaw_shell,…`, face_types.port_features).
 PORT = {f.strip() for f in os.environ.get("SLOP_PORT", "").split(",") if f.strip()}
 JAW_SHELL = "jaw_shell" in PORT
+# `eyes` (S7): the eye's parts placed against the open eye's plane in every state (CageFace._eye).
+EYES_REST = "eyes" in PORT
 # `faceprop` (S6b): where an ear's lobe ends, under the eye line, as a share of eye-to-chin (Cora's
 # drawing: 0.47; docs/char-port-2/s6b).
 EAR_LOW = 0.47
@@ -1245,9 +1247,13 @@ class CageFace(head_mesh.Face):
         d_iris, d_white, d_rim = 0.004 * scale, 0.015 * scale, RIM_FOLD * scale
         mid = ring_pos.mean(axis=0)
         # The opening's own plane (it leans back toward the outer corner, as the front plane does):
-        # depths behind the lid are measured from it.
-        A = np.stack([np.ones(k), ring_pos[:, 0], ring_pos[:, 2]], axis=1)
-        coef = np.linalg.lstsq(A, ring_pos[:, 1], rcond=None)[0]
+        # depths behind the lid are measured from it. With port `eyes` (char-port-2 S7) it is the
+        # open eye's, whatever the state: a closing key folds the ring onto one line (eye-joy's arc),
+        # and a plane fitted to a line is free to tip, which carried the iris forward through the
+        # skin above the arc.
+        plane = self.skin_pos[first : first + k] if EYES_REST else ring_pos
+        A = np.stack([np.ones(k), plane[:, 0], plane[:, 2]], axis=1)
+        coef = np.linalg.lstsq(A, plane[:, 1], rcond=None)[0]
         lid_y = lambda x, z: coef[0] + coef[1] * x + coef[2] * z
         # The lids' rim: the edge again, turned in as far as the white's rim.
         rim = ring_pos.copy()

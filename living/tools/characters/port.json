@@ -133,6 +133,14 @@
      }
     }
    }
+  },
+  "eyes": {
+   "about": "S7, must-fix 1: no eye white or iris above a closed lid. The eye's parts (the white's bowl, the iris and its lights) are placed against the open eye's plane in every face state (cage_head CageFace._eye), not against a plane fitted to the lids' ring as the state leaves it: eye-joy folds the ring onto one arc, and a plane fitted to a line tipped the iris forward through the skin above it (docs/char-port-2/s7).",
+   "classes": {}
+  },
+  "beard": {
+   "about": "S7, must-fix 3: the man's and elder's beards, a solid dark block over the lower face, by the paused char-4-body-joins beard work (8d1659ec5 and 537eb0457's face paint only; the neck lift is a later body pass, PLAN.md §9). Stubble and beards drawn in hairs at a density, their upper edge feathered, cheek hair thinning to the sideburn and the mouth's corners bare (face_paint.paint_skin, head_form.Head.beard_cover); the short beard's core near opaque; the overlay's alpha is the painted coverage (person.make_overlay); the far beard 1.5 mm off the skin (person.far_beard); the far beards share one grey mean (shade_mean FAR_BEARD).",
+   "classes": {}
   }
  }
 }
