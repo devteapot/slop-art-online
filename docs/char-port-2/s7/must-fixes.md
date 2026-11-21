@@ -1,0 +1,91 @@
+# char-port-2 · S7 · The four must-fixes (checkpoint)
+
+Each measure here passed its known-answer test first (PLAN.md §7). All the changes are behind port flags: `jaw` (S1's, extended), and two new ones, `eyes` and `beard`. With no port, `cage_accept` and `face_types check` give the same numbers as main; flag-off parity in full is frame-views' run before the merge.
+
+## 4. `cage_accept.py`: fixed (A) and re-baselined (B)
+
+[cage-accept.md](cage-accept.md) has the diagnosis and S1's quoted intent; [cage/after-fp.json](cage/after-fp.json) the run.
+
+**The known-answer test** ([cage_accept_selftest.py](../../../living/tools/characters/cage_accept_selftest.py)): **21 of 21 checks pass**.
+- the synthetic head's widths, eye height and spacing (18);
+- adult-f-b as built, within its tapered record;
+- **a narrowing beyond the taper fails:** 12% more on the lower face, only when the taper is on. Without the guard it would pass as "taper";
+- **a narrowing in both builds fails** (a plain defect).
+
+**A, the jaw rising sooner behind the chin** (`cage_head` `Plan.jaw_line` `rise`; the port's `jaw`: (0.25, 0.7), the men's classes (0.3, 0.8)):
+- below a quarter of its height the jaw line climbs out of the chin sooner; above, it is as before;
+- **`cage_accept`: 21 of 21 within 0.03 H** with main's whole port (8 of 21 before). The worst against the tapered record is 0.030 (elder-m-a); against the raw record 0.060 (adult-f-a, its taper's own);
+- the c lines' coverage is not changed: they fit with the rest, so `cage_accept` still measures the skin it did;
+- adult-f-c's 0.032 at 0.12 H is 0.026 after A.
+
+**B, S1's taper re-baselined:** `cage_accept` holds a tapered type to its record times the taper it took, at most the cage's declared factor (`cage_head.taper_factor`, the function the cage builds with). It prints and keeps the raw departure beside it.
+
+**What must not move:**
+
+| | Result |
+|---|---|
+| The 2D face measure (S6b's acceptance) | within +0.002 on 20 types; **child-u-a −0.040** (1.764 → 1.724), the child class's mean 1.791 → 1.777 |
+| The 3D slice at the cheek row | unchanged (child-u-a 1.707 → 1.708) |
+| The jaw lines' order | kept at every height in every class |
+| `face_types.py check` | 60,648 of 60,648 value ends; every type ok |
+| Crossings | 0 new in every mouth shape on the four bodies and in `MTH_A` on the 21 types; no type with more blink pairs than unnarrowed |
+| [jaw-rise.png](jaw-rise.png) | the four bodies before and after, side and three-quarter, close on the chin |
+
+- **Why child-u-a moves in 2D and not in 3D:**
+  - the rise moves the face's sample rows up the side of the face in the columns behind the chin;
+  - the surface's width at the cheek row is the same, but on a child's short face the outline the camera sees from slightly above ends 3 px sooner on one side, short of the ear;
+  - repeatable to the pixel over three runs.
+- **One trap found on the way:** rebuilding one type alone re-writes the shared tint page for all of them, and it read as a second 2D move. All measures here are on sets built in one go.
+
+**And one build fix it needed:** `person.expression_clearance` (S6b's mouth clearance) stopped youth-m-a's build after the rise, on a rounding sliver in its head-frame stage. That stage now hands over to the file-frame stage, which already holds such slivers still. Only the file-frame stage may stop a build. Types that converged before are unchanged.
+
+## 1. The eye-joy sliver: fixed (port `eyes`)
+
+**The measure** ([eye_id.py](eye_id.py), [eye_count.py](eye_count.py), [eye_closed.py](eye_closed.py)):
+- the eye white and iris drawn in cyan, each key that closes an eye held at full weight;
+- the close front and three-quarter;
+- the eye pixels that show;
+- its test, [eye_count_selftest.py](eye_count_selftest.py): 8 of 8.
+
+**Before** ([eyes-before.json](eyes-before.json)):
+- blink, left and right: 0 on all 25 heads;
+- **eye-joy: 78–358 px on every woman and child and the men's round line**, a crescent above the arc's inner half.
+
+**The cause:** the eye's parts are placed against a plane fitted to the lids' ring as the state leaves it. Eye-joy folds the ring onto one arc, and a plane fitted to a line is free to tip: it carried the iris forward through the skin above the arc.
+
+**The fix:** that plane is the open eye's in every state (`CageFace._eye`). Open eyes are unchanged by construction.
+
+**After** ([eyes-after.json](eyes-after.json), [eye-joy.png](eye-joy.png)):
+- **0 eye pixels in every closing key** (blink, left, right, eye-joy), front and three-quarter, **on all 25 heads**: the 21 types and the four bodies, with every S7 port on;
+- the open eye, the control, shows 608 px or more on each.
+
+## 3. The beard: ported (port `beard`); one look for the GC
+
+**What it is:** `8d1659ec5` and `537eb0457`'s face paint, onto main's code. Main had not touched those regions since the branch, so nothing conflicted. The neck lift is left out (§9).
+
+**What it does:**
+- the beard drawn in hairs, its upper edge feathered;
+- cheek hair thinning to the sideburn, the mouth's corners bare;
+- the overlay's alpha the painted coverage, a soft edge;
+- the far beard 1.5 mm off;
+- `shade_mean`'s far-beard target.
+
+[beard.png](beard.png): the man and the elder, close front at rest and talking, three-quarter and Middle; before, the port as landed, and an option.
+- **The mouth shows** when talking, and the edges are soft.
+- **As landed, a full beard's core is drawn at about 60% cover** (`0.90 × (0.30 + 0.70 × hairs)`), so the man's dark beard reads pale tan: the skin shows through. The branch restored a near-opaque core for the short beard only (`537eb0457`).
+- **The option** holds the full beard's core like the short's (`0.95 + 0.05 × hairs`; the mask still gives the soft edge and the bare mouth): the man's beard stays dark. It's a one-word change, not in the commit.
+- **At Middle** the hair covers the face from the camera's height, and the three look alike.
+
+**For the GC:** the port as landed, or the option.
+
+## 2. `swept_braid`'s mid strip: still out; the remedy is the GC's
+
+**Re-measured** (`calibrate_bins.py`, six styles, measure only, S7's types and S6's hair set installed; [mid/](mid/)):
+- bob, long, braid, swept and short pass;
+- **swept_braid's dark mid (−6, −5, −12) and brown mid (−6, −4, −7) are out of ±5**, as in S6. S6b and S7 did not move it.
+
+**S6's two remedies** ([s6/step4](../s6/step4/README.md)), for the GC to choose:
+- a wider mid band on the sweep's own surface;
+- less stand-off at the hem.
+
+The band's tolerance is not widened.
