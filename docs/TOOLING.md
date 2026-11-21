@@ -16,7 +16,8 @@ Tool self-tests that fail on `main`, each with its owner, the date and the reaso
 
 | Self-test | Owner | Since | Reason |
 | --- | --- | --- | --- |
-| [`trials_laws_selftest.py`](../living/tools/trials_laws_selftest.py) | Spark | 2026-11-21 | 3 failures and 2 errors in `Publish`: its `FakeDb` does not answer the `genesis_wait` call, so that call reaches the trial server's real port with the test's dummy token, which is refused (401). The fix makes the fake answer `genesis_wait`, so the self-test never touches a running service. |
+
+None since 2026-11-21. Branch `trials-laws-selftest` fixed the first entry, [`trials_laws_selftest.py`](../living/tools/trials_laws_selftest.py) (Spark, from 2026-11-21: 3 failures and 2 errors in `Publish`, because its `FakeDb` did not answer `genesis_wait` and the call reached the trial server's real port with a dummy token). Its fake now answers the `genesis` row. While `Publish` runs, every socket connect is refused and recorded, so a call that escapes the fake fails the test by name and never reaches a running service.
 
 ## The check
 
