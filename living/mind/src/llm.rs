@@ -403,6 +403,9 @@ struct Rate {
     ceiling: f64,
     rpm: f64,
     tpm: Option<u64>,
+    /// The token limit the provider advertises (or the configured `tokens_per_minute`): the
+    /// bound on the worst case, every call in flight using its whole `max_tokens`.
+    tpm_hard: Option<u64>,
     next: Instant,
     last_sent: Instant,
     blocked_until: Instant,
@@ -410,7 +413,10 @@ struct Rate {
     last_decrease: Option<Instant>,
     logged_limits: RateLimits,
     last_limit_log: Option<Instant>,
-    tokens: VecDeque<(u64, Instant, u64)>,
+    /// Calls sent in the last minute: (ticket, sent, reserved, worst). Reserved is what pacing
+    /// counts; worst is the prompt estimate plus the whole `max_tokens`. Both become the actual
+    /// usage when the reply says it.
+    tokens: VecDeque<(u64, Instant, u64, u64)>,
 }
 
 impl Rate {
@@ -421,6 +427,7 @@ impl Rate {
             ceiling,
             rpm: ceiling,
             tpm: p.tokens_per_minute,
+            tpm_hard: p.tokens_per_minute,
             next: now,
             last_sent: now,
             blocked_until: now,
@@ -432,28 +439,42 @@ impl Rate {
         }
     }
 
-    fn ready_at(&mut self, cost: u64, now: Instant) -> Instant {
-        while self.tokens.front().is_some_and(|(_, at, _)| now.duration_since(*at) >= Duration::from_secs(60)) {
+    fn ready_at(&mut self, cost: u64, worst: u64, now: Instant) -> Instant {
+        while self.tokens.front().is_some_and(|(_, at, ..)| now.duration_since(*at) >= Duration::from_secs(60)) {
             self.tokens.pop_front();
         }
         let mut at = self.next.max(self.blocked_until);
         if let Some(limit) = self.tpm {
-            let mut used: u64 = self.tokens.iter().map(|(_, _, n)| n).sum();
-            for (_, sent, n) in &self.tokens {
-                if used.saturating_add(cost) <= limit {
+            let hard = self.tpm_hard.unwrap_or(limit);
+            let mut used: u64 = self.tokens.iter().map(|(_, _, n, _)| n).sum();
+            let mut used_worst: u64 = self.tokens.iter().map(|(.., w)| w).sum();
+            for (_, sent, n, w) in &self.tokens {
+                if used.saturating_add(cost) <= limit && used_worst.saturating_add(worst) <= hard {
                     break;
                 }
                 used = used.saturating_sub(*n);
+                used_worst = used_worst.saturating_sub(*w);
                 at = at.max(*sent + Duration::from_secs(60));
             }
         }
         at
     }
 
-    fn sent(&mut self, id: u64, cost: u64, now: Instant) {
+    /// Whether a call reserving `cost` (at most `worst`) fits the last minute's tokens at `now`
+    /// (read-only `ready_at` without its spacing gates).
+    fn tokens_fit(&self, cost: u64, worst: u64, now: Instant) -> bool {
+        self.tpm.is_none_or(|limit| {
+            let recent = || self.tokens.iter().filter(|(_, at, ..)| now.duration_since(*at) < Duration::from_secs(60));
+            let used: u64 = recent().map(|(_, _, n, _)| n).sum();
+            let used_worst: u64 = recent().map(|(.., w)| w).sum();
+            used.saturating_add(cost) <= limit && used_worst.saturating_add(worst) <= self.tpm_hard.unwrap_or(limit)
+        })
+    }
+
+    fn sent(&mut self, id: u64, cost: u64, worst: u64, now: Instant) {
         self.last_sent = now;
         self.next = now + Duration::from_secs_f64(60.0 / self.rpm);
-        self.tokens.push_back((id, now, cost));
+        self.tokens.push_back((id, now, cost, worst.max(cost)));
     }
 
     fn feedback(&mut self, id: u64, limited: bool, headers: &reqwest::header::HeaderMap, usage: Option<u64>, now: Instant) {
@@ -464,17 +485,20 @@ impl Rate {
             self.rpm = self.rpm.min(self.ceiling);
         }
         if let Some(limit) = number("x-ratelimit-limit-tokens-minute").filter(|n| *n >= 1.0) {
+            let hard = limit.max(1.0) as u64;
             let limit = (limit * RATE_HEADER_HEADROOM).max(1.0) as u64;
             self.tpm = Some(self.tpm.map_or(limit, |old| old.min(limit)));
+            self.tpm_hard = Some(self.tpm_hard.map_or(hard, |old| old.min(hard)));
         }
         if let Some(actual) = usage {
-            if let Some((_, _, cost)) = self.tokens.iter_mut().find(|(ticket, _, _)| *ticket == id) {
+            if let Some((_, _, cost, worst)) = self.tokens.iter_mut().find(|(ticket, ..)| *ticket == id) {
                 *cost = actual;
+                *worst = actual;
             }
         }
         if limited {
             // Responses from the same in-flight burst describe one congestion event.
-            let sent = self.tokens.iter().find(|(ticket, _, _)| *ticket == id).map(|(_, at, _)| *at);
+            let sent = self.tokens.iter().find(|(ticket, ..)| *ticket == id).map(|(_, at, ..)| *at);
             if self.last_decrease.is_none_or(|last| sent.is_some_and(|at| at > last)) {
                 let floor = (self.ceiling * RATE_FLOOR_FRACTION).max(1.0).min(self.ceiling);
                 self.rpm = (self.rpm * RATE_DECREASE).max(floor);
@@ -550,6 +574,7 @@ struct Waiting {
     profile: String,
     lane: Lane,
     cost: u64,
+    worst: u64,
 }
 
 struct Queue {
@@ -570,6 +595,8 @@ struct Queue {
     last_trace_probe: Option<Instant>,
     /// Grant-stall watch (urgent-merge A/B instrumentation, the branch's `Queue::watch`).
     stall: Option<(Instant, usize)>,
+    /// The completion tokens of each profile's last replies for each purpose (`Scheduler::reserve`).
+    completions: HashMap<(String, String), VecDeque<u32>>,
 }
 
 impl Queue {
@@ -582,7 +609,7 @@ impl Queue {
             .filter(|w| w.lane == lane)
             .find(|w| {
                 let gate = gates.get(&hosts[&w.profile]);
-                gate.is_none_or(|g| g.retry_at.is_none_or(|at| g.probing.is_none() && now >= at)) && rates.get_mut(&w.profile).unwrap().ready_at(w.cost, now) <= now
+                gate.is_none_or(|g| g.retry_at.is_none_or(|at| g.probing.is_none() && now >= at)) && rates.get_mut(&w.profile).unwrap().ready_at(w.cost, w.worst, now) <= now
             })
             .map(|w| w.id)
     }
@@ -635,11 +662,7 @@ impl Queue {
         };
         let rate = &self.rates[profile];
         let head = self.waiting.iter().find(|w| w.lane == lane).filter(|w| w.id == id)?;
-        let tokens_fit = rate.tpm.is_none_or(|limit| {
-            let used: u64 = rate.tokens.iter().filter(|(_, at, _)| now.duration_since(*at) < Duration::from_secs(60)).map(|(_, _, n)| n).sum();
-            used.saturating_add(head.cost) <= limit
-        });
-        if !has_slot || now < self.global_next || !tokens_fit || rate.blocked_until > now
+        if !has_slot || now < self.global_next || !rate.tokens_fit(head.cost, head.worst, now) || rate.blocked_until > now
             || self.gates.get(&self.hosts[profile]).is_some_and(|gate| gate.retry_at.is_some())
         {
             return None;
@@ -665,10 +688,7 @@ impl Queue {
                 && self.gates.get(&self.hosts[&w.profile]).is_none_or(|g| {
                     g.retry_at.is_none_or(|at| g.probing.is_none() && at <= now)
                 })
-                && rate.tpm.is_none_or(|limit| {
-                    let used: u64 = rate.tokens.iter().filter(|(_, at, _)| now.duration_since(*at) < Duration::from_secs(60)).map(|(_, _, n)| n).sum();
-                    used.saturating_add(w.cost) <= limit
-                })
+                && rate.tokens_fit(w.cost, w.worst, now)
         }).count()
     }
 
@@ -684,7 +704,7 @@ impl Queue {
             .iter()
             .filter(|w| w.lane != Lane::Fast)
             .filter(|w| if w.lane == Lane::Interactive { free_interactive } else { free_lower })
-            .filter(|w| rates.get_mut(&w.profile).unwrap().ready_at(w.cost, now) <= now)
+            .filter(|w| rates.get_mut(&w.profile).unwrap().ready_at(w.cost, w.worst, now) <= now)
             .count();
         match (&mut self.stall, ready) {
             (None, 0) => {}
@@ -704,7 +724,7 @@ impl Queue {
         let pos = self.waiting.iter().position(|w| w.id == id).unwrap();
         let w = self.waiting.remove(pos).unwrap();
         if w.lane == Lane::Fast {
-            self.rates.get_mut(&w.profile).unwrap().sent(id, w.cost, now);
+            self.rates.get_mut(&w.profile).unwrap().sent(id, w.cost, w.worst, now);
             self.fast_in_flight += 1;
             if self.global_rpm > 0.0 {
                 self.global_next = now + Duration::from_secs_f64(60.0 / self.global_rpm);
@@ -726,7 +746,7 @@ impl Queue {
                 log::warn!("grant stall: {ms} ms with up to {most} ready calls and free slots");
             }
         }
-        self.rates.get_mut(&w.profile).unwrap().sent(id, w.cost, now);
+        self.rates.get_mut(&w.profile).unwrap().sent(id, w.cost, w.worst, now);
         self.in_flight += 1;
         self.lower_in_flight += usize::from(w.lane != Lane::Interactive);
         if self.global_rpm > 0.0 {
@@ -740,6 +760,15 @@ impl Queue {
         (w.lane, probe)
     }
 }
+
+/// Completions remembered per profile and purpose for the in-flight token reservation, how many
+/// replies before the reservation leaves `max_tokens`, and the multiple of their 99th percentile
+/// reserved. In the act-trial battle (13,521 GLM calls) 2 × p99 covered every think and act
+/// repair but 3, and every deliberate and consolidation except the 0.3-0.8% that ran to
+/// `max_tokens`.
+const RESERVE_WINDOW: usize = 512;
+const RESERVE_MIN_SAMPLES: usize = 100;
+const RESERVE_HEADROOM: u64 = 2;
 
 /// The fast lane's reserved slots until the world's `fast_lane_inflight` is read (its shipped value).
 pub const FAST_SLOTS_DEFAULT: usize = 4;
@@ -800,13 +829,16 @@ impl Scheduler {
                 global_next: now,
                 last_trace_probe: None,
                 stall: None,
+                completions: HashMap::new(),
             }),
             changed: tokio::sync::Notify::new(),
             trace_latency: std::env::var("LIVING_INPUT_LATENCY").is_ok_and(|v| v == "1"),
         }
     }
 
-    async fn admit(&self, profile: &str, lane: Lane, cost: u64) -> Result<Admission<'_>> {
+    /// `cost` is what pacing reserves for the call; `worst` (at least `cost`) is what it could use.
+    async fn admit(&self, profile: &str, lane: Lane, cost: u64, worst: u64) -> Result<Admission<'_>> {
+        let worst = worst.max(cost);
         let id = {
             let mut q = self.queue.lock().unwrap();
             q.sequence += 1;
@@ -815,7 +847,7 @@ impl Scheduler {
             if let Some(g) = q.gates.get_mut(&host).filter(|g| g.retry_at.is_some()) {
                 g.held += 1;
             }
-            q.waiting.push_back(Waiting { id, profile: profile.into(), lane, cost });
+            q.waiting.push_back(Waiting { id, profile: profile.into(), lane, cost, worst });
             id
         };
         let mut admission = Admission { scheduler: self, id, lane: None, probe: None };
@@ -828,8 +860,9 @@ impl Scheduler {
             changed.as_mut().enable();
             {
                 let mut q = self.queue.lock().unwrap();
-                if q.rates[profile].tpm.is_some_and(|limit| cost > limit) {
-                    return Err(anyhow!("estimated request tokens {cost} exceed {profile} tokens_per_minute"));
+                let rate = &q.rates[profile];
+                if rate.tpm.is_some_and(|limit| cost > limit) || rate.tpm_hard.is_some_and(|hard| worst > hard) {
+                    return Err(anyhow!("estimated request tokens {cost} (at most {worst}) exceed {profile} tokens_per_minute"));
                 }
                 let now = Instant::now();
                 q.watch(now);
@@ -877,6 +910,31 @@ impl Scheduler {
                 }
             }
         }
+    }
+
+    /// The completion tokens pacing reserves for a call of `purpose` on `profile` while it is in
+    /// flight: twice the 99th percentile of that profile's last `RESERVE_WINDOW` completions for
+    /// the purpose, at most `max_tokens`; the whole `max_tokens` until `RESERVE_MIN_SAMPLES`
+    /// replies have said their usage. A call that uses more is still under the provider's limit:
+    /// the hard bound (`Rate::tpm_hard`) counts every call in flight at its whole `max_tokens`.
+    fn reserve(&self, profile: &str, purpose: &str, max_tokens: u64) -> u64 {
+        let q = self.queue.lock().unwrap();
+        let Some(recent) = q.completions.get(&(profile.to_owned(), purpose.to_owned())).filter(|r| r.len() >= RESERVE_MIN_SAMPLES) else {
+            return max_tokens;
+        };
+        let mut sorted: Vec<u32> = recent.iter().copied().collect();
+        sorted.sort_unstable();
+        let p99 = sorted[(sorted.len() * 99).div_ceil(100) - 1];
+        (u64::from(p99) * RESERVE_HEADROOM).clamp(1, max_tokens.max(1))
+    }
+
+    fn learn_completion(&self, profile: &str, purpose: &str, completion_tokens: u32) {
+        let mut q = self.queue.lock().unwrap();
+        let recent = q.completions.entry((profile.to_owned(), purpose.to_owned())).or_default();
+        if recent.len() == RESERVE_WINDOW {
+            recent.pop_front();
+        }
+        recent.push_back(completion_tokens);
     }
 
     fn set_fast_slots(&self, n: usize) {
@@ -1128,11 +1186,16 @@ impl Llm {
         let p = self.models.profiles.get(profile).ok_or_else(|| anyhow!("no profile {profile}"))?;
         let key = self.keys.get(profile).ok_or_else(|| anyhow!("profile {profile} has no key"))?;
         let body = request_body(p, profile, purpose, pick.effort.as_deref(), messages);
-        let cost = messages.iter().map(|m| (m.content.len() as u64).div_ceil(3) + 8).sum::<u64>() + u64::from(p.max_tokens_for(purpose).unwrap_or(8000));
+        // Prompt tokens at a third of a byte each (the act trial's prompts were 0.27-0.30 a byte),
+        // and the completion: what pacing reserves (`Scheduler::reserve`) and its cap.
+        let prompt = messages.iter().map(|m| (m.content.len() as u64).div_ceil(3) + 8).sum::<u64>();
+        let max_tokens = u64::from(p.max_tokens_for(purpose).unwrap_or(8000));
+        let cost = prompt + self.scheduler.reserve(profile, purpose, max_tokens);
+        let worst = prompt + max_tokens;
         let host = p.base_url.clone();
         let queued = Instant::now();
         let queue_enter_ms = self.scheduler.trace_latency.then(now_ms);
-        let permit = self.scheduler.admit(profile, lane, cost).await?;
+        let permit = self.scheduler.admit(profile, lane, cost, worst).await?;
         let admission_trace = queue_enter_ms.map(|at| (permit.id, at, now_ms()));
         let queue_wait_ms = queued.elapsed().as_millis() as u64;
         let granted = Instant::now();
@@ -1189,6 +1252,9 @@ impl Llm {
             let content = content_text(&v["choices"][0]["message"]["content"]);
             let tokens = v["usage"]["total_tokens"].as_u64().unwrap_or(0) as u32;
             self.scheduler.feedback(profile, permit.id, false, &reqwest::header::HeaderMap::new(), v["usage"]["total_tokens"].as_u64());
+            if let Some(completion) = v["usage"]["completion_tokens"].as_u64() {
+                self.scheduler.learn_completion(profile, purpose, completion.min(u64::from(u32::MAX)) as u32);
+            }
             Ok((content, tokens, v["usage"].clone(), v["choices"][0]["finish_reason"].clone()))
         }
         .await;
@@ -1667,7 +1733,7 @@ mod tests {
 
     fn enqueue(q: &mut Queue, lane: Lane, cost: u64) -> u64 {
         q.sequence += 1;
-        q.waiting.push_back(Waiting { id: q.sequence, profile: "p".into(), lane, cost });
+        q.waiting.push_back(Waiting { id: q.sequence, profile: "p".into(), lane, cost, worst: cost });
         q.sequence
     }
 
@@ -1685,9 +1751,9 @@ mod tests {
         }}))
         .unwrap();
         let scheduler = Scheduler::new(&models, 4, 0.0);
-        let _first = scheduler.admit("p", Lane::Urgent, 10).await.unwrap();
+        let _first = scheduler.admit("p", Lane::Urgent, 10, 10).await.unwrap();
         let t = Instant::now();
-        let _second = scheduler.admit("p", Lane::Urgent, 10).await.unwrap();
+        let _second = scheduler.admit("p", Lane::Urgent, 10, 10).await.unwrap();
         let waited = t.elapsed();
         assert!(waited >= Duration::from_millis(5) && waited < Duration::from_millis(35), "second grant after {waited:?}");
     }
@@ -1826,20 +1892,70 @@ mod tests {
         let mut p = test_profile();
         p.tokens_per_minute = Some(100);
         let mut rate = Rate::new(&p, now);
-        assert_eq!(rate.ready_at(80, now), now);
-        rate.sent(1, 80, now);
-        assert_eq!(rate.ready_at(10, now), now + Duration::from_secs(1));
-        assert_eq!(rate.ready_at(30, now + Duration::from_secs(1)), now + Duration::from_secs(60));
+        assert_eq!(rate.ready_at(80, 80, now), now);
+        rate.sent(1, 80, 80, now);
+        assert_eq!(rate.ready_at(10, 10, now), now + Duration::from_secs(1));
+        assert_eq!(rate.ready_at(30, 30, now + Duration::from_secs(1)), now + Duration::from_secs(60));
         rate.feedback(1, false, &Default::default(), Some(10), now + Duration::from_secs(1));
-        assert!(rate.ready_at(90, now + Duration::from_secs(2)) <= now + Duration::from_secs(2));
-        assert!(rate.ready_at(100, now + Duration::from_secs(60)) <= now + Duration::from_secs(60));
+        assert!(rate.ready_at(90, 90, now + Duration::from_secs(2)) <= now + Duration::from_secs(2));
+        assert!(rate.ready_at(100, 100, now + Duration::from_secs(60)) <= now + Duration::from_secs(60));
+    }
+
+    /// Pacing reserves a call's expected completion, and a hard bound keeps the worst case (every
+    /// call in flight running to `max_tokens`) under the provider's advertised limit, not its 90%.
+    #[test]
+    fn a_reservation_below_max_tokens_never_lets_the_worst_case_pass_the_advertised_limit() {
+        let now = Instant::now();
+        let mut rate = Rate::new(&test_profile(), now);
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("x-ratelimit-limit-tokens-minute", "1000".parse().unwrap());
+        rate.feedback(0, false, &headers, None, now);
+        assert_eq!((rate.tpm, rate.tpm_hard), (Some(900), Some(1000)));
+        // In flight: reserved 300 (prompt 100 + 200 expected), at most 800 (max_tokens 700).
+        rate.sent(1, 300, 800, now);
+        let later = now + Duration::from_secs(1);
+        // 300 + 300 is within the paced 900, but 800 + 300 would pass 1,000 if the first ran long.
+        assert!(!rate.tokens_fit(300, 300, later));
+        assert_eq!(rate.ready_at(300, 300, later), now + Duration::from_secs(60));
+        // 300 + 200 at most 800 + 200 = 1,000: both bounds hold.
+        assert!(rate.tokens_fit(200, 200, later));
+        // It ran long (650 of its 800): the window counts what it used.
+        rate.feedback(1, false, &Default::default(), Some(650), later);
+        assert!(!rate.tokens_fit(300, 300, later), "650 + 300 passes the paced 900");
+        assert!(rate.tokens_fit(250, 350, later), "650 + 250 within 900, 650 + 350 within 1,000");
+        // Without a hard limit (no headers, a configured tokens_per_minute) worst counts against it.
+        let mut p = test_profile();
+        p.tokens_per_minute = Some(1000);
+        let mut configured = Rate::new(&p, now);
+        configured.sent(1, 300, 800, now);
+        assert!(!configured.tokens_fit(300, 300, later), "no looser than reserving max_tokens");
+    }
+
+    #[test]
+    fn the_completion_reservation_learns_twice_the_p99_and_starts_at_max_tokens() {
+        let scheduler = test_scheduler();
+        assert_eq!(scheduler.reserve("p", "think", 1500), 1500);
+        for i in 0..RESERVE_MIN_SAMPLES as u32 - 1 {
+            scheduler.learn_completion("p", "think", 200 + i % 100);
+        }
+        assert_eq!(scheduler.reserve("p", "think", 1500), 1500, "too few replies: the whole max_tokens");
+        scheduler.learn_completion("p", "think", 250);
+        // 100 replies of 200-298 and 250: the 99th percentile (nearest rank) is 297.
+        assert_eq!(scheduler.reserve("p", "think", 1500), 594);
+        assert_eq!(scheduler.reserve("p", "deliberate", 6000), 6000, "per purpose");
+        assert_eq!(scheduler.reserve("p", "think", 400), 400, "never above max_tokens");
+        for _ in 0..RESERVE_WINDOW {
+            scheduler.learn_completion("p", "think", 1500);
+        }
+        assert_eq!(scheduler.reserve("p", "think", 1500), 1500, "runs to the cap raise it back");
+        assert_eq!(scheduler.queue.lock().unwrap().completions[&("p".to_owned(), "think".to_owned())].len(), RESERVE_WINDOW);
     }
 
     #[test]
     fn a_429_reduces_rate_and_obeys_provider_headers() {
         let now = Instant::now();
         let mut rate = Rate::new(&test_profile(), now);
-        rate.sent(1, 20, now);
+        rate.sent(1, 20, 20, now);
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert("retry-after", "120".parse().unwrap());
         headers.insert("x-ratelimit-limit-req-minute", "40".parse().unwrap());
@@ -1848,13 +1964,13 @@ mod tests {
         assert_eq!(rate.ceiling, 36.0);
         assert_eq!(rate.rpm, 18.0);
         assert_eq!(rate.tpm, Some(900));
-        assert_eq!(rate.ready_at(20, now), now + Duration::from_secs(120));
+        assert_eq!(rate.ready_at(20, 20, now), now + Duration::from_secs(120));
         rate.feedback(1, false, &Default::default(), Some(10), now + Duration::from_secs(120));
         assert_eq!(rate.rpm, 19.8);
         headers.clear();
         headers.insert("x-ratelimit-remaining-req-minute", "0".parse().unwrap());
         rate.feedback(1, false, &headers, None, now + Duration::from_secs(120));
-        assert!(rate.ready_at(20, now + Duration::from_secs(120)) >= now + Duration::from_secs(180));
+        assert!(rate.ready_at(20, 20, now + Duration::from_secs(120)) >= now + Duration::from_secs(180));
     }
 
     #[test]
@@ -1885,7 +2001,7 @@ mod tests {
     fn rate_decreases_and_recovery_log_without_provider_headers() {
         let now = Instant::now();
         let mut rate = Rate::new(&test_profile(), now);
-        rate.sent(1, 10, now);
+        rate.sent(1, 10, 10, now);
         rate.feedback(1, true, &Default::default(), None, now);
         assert_eq!(rate.take_limit_update(now), Some(RateLimits { ceiling: 60.0, rpm: 30.0, tpm: None }));
         rate.feedback(1, true, &Default::default(), None, now + Duration::from_secs(1));
@@ -1902,7 +2018,7 @@ mod tests {
         p.requests_per_minute = Some(400.0);
         let mut rate = Rate::new(&p, now);
         for id in 1..=20 {
-            rate.sent(id, 10, now + Duration::from_millis(id));
+            rate.sent(id, 10, 10, now + Duration::from_millis(id));
         }
         for id in 1..=20 {
             rate.feedback(id, true, &Default::default(), None, now + Duration::from_secs(1));
@@ -1910,7 +2026,7 @@ mod tests {
         }
         for id in 21..=30 {
             let sent = now + Duration::from_secs(id);
-            rate.sent(id, 10, sent);
+            rate.sent(id, 10, 10, sent);
             rate.feedback(id, true, &Default::default(), None, sent + Duration::from_millis(1));
         }
         assert_eq!(rate.rpm, 20.0, "five percent of the ceiling is the floor");
@@ -1924,14 +2040,14 @@ mod tests {
         let mut p = test_profile();
         p.requests_per_minute = Some(400.0);
         let mut rate = Rate::new(&p, now);
-        rate.sent(1, 10, now);
+        rate.sent(1, 10, 10, now);
         rate.feedback(1, true, &Default::default(), None, now);
         assert_eq!(rate.rpm, 200.0);
         rate.feedback(1, false, &Default::default(), Some(10), now + Duration::from_secs(9));
         assert_eq!(rate.rpm, 200.0, "recovery waits ten seconds");
         for step in 1..=10 {
             let at = now + RATE_RECOVERY_INTERVAL * step;
-            rate.sent(u64::from(step) + 1, 10, at);
+            rate.sent(u64::from(step) + 1, 10, 10, at);
             rate.feedback(u64::from(step) + 1, false, &Default::default(), Some(10), at);
             assert_eq!(rate.rpm, 200.0 + 20.0 * f64::from(step));
         }
@@ -1946,8 +2062,8 @@ mod tests {
         assert_eq!(p.requests_per_minute, None);
         let mut rate = Rate::new(&p, now);
         assert_eq!(rate.rpm, 600.0);
-        rate.sent(1, 10, now);
-        assert_eq!(rate.ready_at(10, now), now + Duration::from_millis(100));
+        rate.sent(1, 10, 10, now);
+        assert_eq!(rate.ready_at(10, 10, now), now + Duration::from_millis(100));
         rate.feedback(1, false, &Default::default(), Some(10), now + Duration::from_secs(10));
         assert_eq!(rate.rpm, 600.0);
         let mut headers = reqwest::header::HeaderMap::new();
@@ -1958,7 +2074,7 @@ mod tests {
         rate.feedback(1, false, &headers, None, now + Duration::from_secs(10));
         assert_eq!(rate.rpm, 360.0);
         let mut no_headers = Rate::new(&p, now);
-        no_headers.sent(1, 10, now);
+        no_headers.sent(1, 10, 10, now);
         no_headers.feedback(1, true, &Default::default(), None, now);
         assert_eq!(no_headers.rpm, 300.0);
     }
@@ -1978,10 +2094,10 @@ mod tests {
         };
         let scheduler = Scheduler::new(&models, 1, 0.0);
         let mut q = scheduler.queue.lock().unwrap();
-        q.waiting.push_back(Waiting { id: 1, profile: "p".into(), lane: Lane::Background, cost: 10 });
+        q.waiting.push_back(Waiting { id: 1, profile: "p".into(), lane: Lane::Background, cost: 10, worst: 10 });
         q.start(1, now);
-        q.waiting.push_back(Waiting { id: 2, profile: "p".into(), lane: Lane::Background, cost: 10 });
-        q.waiting.push_back(Waiting { id: 3, profile: "p".into(), lane: Lane::Interactive, cost: 10 });
+        q.waiting.push_back(Waiting { id: 2, profile: "p".into(), lane: Lane::Background, cost: 10, worst: 10 });
+        q.waiting.push_back(Waiting { id: 3, profile: "p".into(), lane: Lane::Interactive, cost: 10, worst: 10 });
         assert_eq!(q.candidate(now + Duration::from_secs(1)), None);
         q.in_flight -= 1;
         q.lower_in_flight -= 1;
@@ -2005,11 +2121,11 @@ mod tests {
         };
         let scheduler = Scheduler::new(&models, 2, 30.0);
         let mut q = scheduler.queue.lock().unwrap();
-        q.waiting.push_back(Waiting { id: 1, profile: "p".into(), lane: Lane::Background, cost: 10 });
+        q.waiting.push_back(Waiting { id: 1, profile: "p".into(), lane: Lane::Background, cost: 10, worst: 10 });
         q.start(1, now);
-        q.waiting.push_back(Waiting { id: 2, profile: "p".into(), lane: Lane::Routine, cost: 10 });
+        q.waiting.push_back(Waiting { id: 2, profile: "p".into(), lane: Lane::Routine, cost: 10, worst: 10 });
         assert_eq!(q.candidate(now + Duration::from_secs(2)), None);
-        q.waiting.push_back(Waiting { id: 3, profile: "p".into(), lane: Lane::Interactive, cost: 10 });
+        q.waiting.push_back(Waiting { id: 3, profile: "p".into(), lane: Lane::Interactive, cost: 10, worst: 10 });
         assert_eq!(q.candidate(now + Duration::from_secs(1)), None);
         assert_eq!(q.candidate(now + Duration::from_secs(2)), Some(3));
     }
@@ -2035,15 +2151,15 @@ mod tests {
         let scheduler = Scheduler::new(&one_profile(), 1, 0.0);
         scheduler.set_fast_slots(1);
         let mut q = scheduler.queue.lock().unwrap();
-        q.waiting.push_back(Waiting { id: 1, profile: "p".into(), lane: Lane::Urgent, cost: 10 });
+        q.waiting.push_back(Waiting { id: 1, profile: "p".into(), lane: Lane::Urgent, cost: 10, worst: 10 });
         q.start(1, now);
         assert_eq!(q.in_flight, 1, "the shared pool is full");
-        q.waiting.push_back(Waiting { id: 2, profile: "p".into(), lane: Lane::Routine, cost: 10 });
-        q.waiting.push_back(Waiting { id: 3, profile: "p".into(), lane: Lane::Fast, cost: 10 });
+        q.waiting.push_back(Waiting { id: 2, profile: "p".into(), lane: Lane::Routine, cost: 10, worst: 10 });
+        q.waiting.push_back(Waiting { id: 3, profile: "p".into(), lane: Lane::Fast, cost: 10, worst: 10 });
         assert_eq!(q.candidate(now + Duration::from_secs(1)), Some(3), "a fast call goes in its own slot");
         q.start(3, now + Duration::from_secs(1));
         assert_eq!((q.in_flight, q.fast_in_flight), (1, 1));
-        q.waiting.push_back(Waiting { id: 4, profile: "p".into(), lane: Lane::Fast, cost: 10 });
+        q.waiting.push_back(Waiting { id: 4, profile: "p".into(), lane: Lane::Fast, cost: 10, worst: 10 });
         assert_eq!(q.candidate(now + Duration::from_secs(2)), None, "its slots are full, and the shared pool is not its");
         q.in_flight -= 1;
         q.lower_in_flight -= 1;
@@ -2086,7 +2202,7 @@ mod tests {
         let models: ModelsFile = serde_json::from_value(json!({"default": "p", "profiles": {"p": {"base_url": "x", "model": "m", "key_env": "unused"}}})).unwrap();
         let scheduler = Scheduler::new(&models, 1, 0.0);
         scheduler.queue.lock().unwrap().rates.get_mut("p").unwrap().next = Instant::now() + Duration::from_secs(60);
-        let call = scheduler.admit("p", Lane::Background, 10);
+        let call = scheduler.admit("p", Lane::Background, 10, 10);
         assert!(tokio::time::timeout(Duration::from_millis(10), call).await.is_err());
         let q = scheduler.queue.lock().unwrap();
         assert_eq!(q.in_flight, 0);
@@ -2098,7 +2214,7 @@ mod tests {
         let models: ModelsFile = serde_json::from_value(json!({"default": "p", "profiles": {"p": {"base_url": "x", "model": "m", "key_env": "unused"}}})).unwrap();
         let scheduler = Scheduler::new(&models, 1, 0.0);
         scheduler.queue.lock().unwrap().gates.insert("x".into(), Gate { retry_at: Some(Instant::now()), ..Default::default() });
-        let admission = scheduler.admit("p", Lane::Interactive, 10).await.unwrap();
+        let admission = scheduler.admit("p", Lane::Interactive, 10, 10).await.unwrap();
         assert!(scheduler.queue.lock().unwrap().gates["x"].probing.is_some());
         drop(admission);
         let queue = scheduler.queue.lock().unwrap();
@@ -2392,7 +2508,7 @@ mod tests {
         // Timed on the scheduler's own clock and records, not on wall time around the calls:
         // a stopwatch started outside a call is read some unbounded time before or after the
         // instants the gate uses, and under host load it read 1.97 s against 2 s.
-        let sent = |llm: &Llm, id: u64| llm.scheduler.queue.lock().unwrap().rates["dead"].tokens.iter().find(|(t, ..)| *t == id).map(|(_, at, _)| *at);
+        let sent = |llm: &Llm, id: u64| llm.scheduler.queue.lock().unwrap().rates["dead"].tokens.iter().find(|(t, ..)| *t == id).map(|(_, at, ..)| *at);
         assert!(llm.scheduler.queue.lock().unwrap().gates.is_empty(), "no gate before the first failure");
         assert!(llm.chat("dead", Attention::OnStage, "think", "a", &msg).await.is_err());
         // The first call went out ungated, failed to connect (only that opens the gate) and
