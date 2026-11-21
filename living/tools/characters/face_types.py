@@ -631,7 +631,33 @@ def load(raw=False):
             for tid, t in data["types"].items():
                 for record, values in port["features"][f].get("classes", {}).get(class_of(tid), {}).items():
                     t.setdefault(record, {}).update(values)
+        if "faceprop" in on:
+            for t in data["types"].values():
+                faceprop(t)
     return data
+
+
+# S6b (`faceprop`): where the width factor acts, in H from the chin. Whole from FP_LOW[1] to
+# FP_HIGH[0], none below FP_LOW[0] (the chin, S1's taper's) or above FP_HIGH[1]. The front plane
+# (w15), which the brows lie on, by FP_HIGH_FRONT, none from below the brows: narrowed under them,
+# a brow at the widest face_width sank behind the skin on the round line.
+FP_LOW, FP_HIGH, FP_HIGH_FRONT = (0.04, 0.14), (0.30, 0.46), (0.26, 0.40)
+
+
+def faceprop(t):
+    """A type's sections narrowed by its class's factor (`faceprop.width`, port.json) over the
+    cheeks: w15, w30 and wide at each height times 1 - (1 - k) x the band's weight there."""
+    k = t.get("faceprop", {}).get("width", 1.0)
+    if k == 1.0:
+        return
+    s = t["sections"]
+    for i, z in enumerate(s["z"]):
+        low = smooth((z - FP_LOW[0]) / (FP_LOW[1] - FP_LOW[0]))
+        for key in ("w15", "w30", "wide"):
+            hi = FP_HIGH_FRONT if key == "w15" else FP_HIGH
+            w = low * (1 - smooth((z - hi[0]) / (hi[1] - hi[0])))
+            if s[key][i] is not None:
+                s[key][i] = round(s[key][i] * (1 - (1 - k) * w), 4)
 
 
 # ---------------------------------------------------------------------------------------------

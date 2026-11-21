@@ -1,0 +1,401 @@
+{
+ "rows_h": [
+  0.08,
+  0.15,
+  0.2
+ ],
+ "classes": {
+  "adult-f": [
+   {
+    "z_over_chin": 0.08,
+    "before_mm": [
+     75.8,
+     69.3,
+     63.0
+    ],
+    "after_mm": [
+     71.5,
+     65.4,
+     59.5
+    ],
+    "order_kept": true,
+    "gap_change": [
+     -0.062,
+     -0.063
+    ]
+   },
+   {
+    "z_over_chin": 0.15,
+    "before_mm": [
+     115.8,
+     105.9,
+     96.9
+    ],
+    "after_mm": [
+     98.4,
+     87.5,
+     78.1
+    ],
+    "order_kept": true,
+    "gap_change": [
+     0.101,
+     0.044
+    ]
+   },
+   {
+    "z_over_chin": 0.2,
+    "before_mm": [
+     139.3,
+     130.3,
+     127.4
+    ],
+    "after_mm": [
+     123.5,
+     118.3,
+     118.4
+    ],
+    "order_kept": false,
+    "gap_change": [
+     -0.422,
+     -1.034
+    ]
+   }
+  ],
+  "adult-m": [
+   {
+    "z_over_chin": 0.08,
+    "before_mm": [
+     97.8,
+     88.2,
+     81.3
+    ],
+    "after_mm": [
+     90.4,
+     82.0,
+     75.9
+    ],
+    "order_kept": true,
+    "gap_change": [
+     -0.125,
+     -0.116
+    ]
+   },
+   {
+    "z_over_chin": 0.15,
+    "before_mm": [
+     129.3,
+     113.1,
+     100.3
+    ],
+    "after_mm": [
+     112.3,
+     98.2,
+     87.0
+    ],
+    "order_kept": true,
+    "gap_change": [
+     -0.13,
+     -0.125
+    ]
+   },
+   {
+    "z_over_chin": 0.2,
+    "before_mm": [
+     142.8,
+     133.1,
+     127.1
+    ],
+    "after_mm": [
+     122.9,
+     114.6,
+     115.3
+    ],
+    "order_kept": false,
+    "gap_change": [
+     -0.144,
+     -1.117
+    ]
+   }
+  ],
+  "child-u": [
+   {
+    "z_over_chin": 0.08,
+    "before_mm": [
+     99.7,
+     85.4,
+     74.6
+    ],
+    "after_mm": [
+     94.8,
+     81.0,
+     70.7
+    ],
+    "order_kept": true,
+    "gap_change": [
+     -0.035,
+     -0.046
+    ]
+   },
+   {
+    "z_over_chin": 0.15,
+    "before_mm": [
+     127.4,
+     114.5,
+     106.0
+    ],
+    "after_mm": [
+     119.1,
+     108.0,
+     100.0
+    ],
+    "order_kept": true,
+    "gap_change": [
+     -0.14,
+     -0.059
+    ]
+   },
+   {
+    "z_over_chin": 0.2,
+    "before_mm": [
+     152.5,
+     141.7,
+     131.6
+    ],
+    "after_mm": [
+     142.0,
+     131.9,
+     122.6
+    ],
+    "order_kept": true,
+    "gap_change": [
+     -0.065,
+     -0.079
+    ]
+   }
+  ],
+  "elder-f": [
+   {
+    "z_over_chin": 0.08,
+    "before_mm": [
+     85.9,
+     70.7,
+     65.2
+    ],
+    "after_mm": [
+     72.5,
+     66.1,
+     60.0
+    ],
+    "order_kept": true,
+    "gap_change": [
+     -0.579,
+     0.109
+    ]
+   },
+   {
+    "z_over_chin": 0.15,
+    "before_mm": [
+     119.0,
+     108.5,
+     98.7
+    ],
+    "after_mm": [
+     99.6,
+     87.1,
+     88.2
+    ],
+    "order_kept": false,
+    "gap_change": [
+     0.19,
+     -1.112
+    ]
+   },
+   {
+    "z_over_chin": 0.2,
+    "before_mm": [
+     142.4,
+     134.3,
+     134.5
+    ],
+    "after_mm": [
+     123.3,
+     122.9,
+     123.0
+    ],
+    "order_kept": true,
+    "gap_change": [
+     -0.951,
+     null
+    ]
+   }
+  ],
+  "elder-m": [
+   {
+    "z_over_chin": 0.08,
+    "before_mm": [
+     99.4,
+     89.8,
+     83.0
+    ],
+    "after_mm": [
+     93.3,
+     84.6,
+     78.5
+    ],
+    "order_kept": true,
+    "gap_change": [
+     -0.094,
+     -0.103
+    ]
+   },
+   {
+    "z_over_chin": 0.15,
+    "before_mm": [
+     131.8,
+     115.4,
+     102.4
+    ],
+    "after_mm": [
+     117.6,
+     102.9,
+     91.3
+    ],
+    "order_kept": true,
+    "gap_change": [
+     -0.104,
+     -0.108
+    ]
+   },
+   {
+    "z_over_chin": 0.2,
+    "before_mm": [
+     143.8,
+     134.8,
+     126.6
+    ],
+    "after_mm": [
+     127.3,
+     119.1,
+     116.9
+    ],
+    "order_kept": true,
+    "gap_change": [
+     -0.089,
+     -0.732
+    ]
+   }
+  ],
+  "youth-f": [
+   {
+    "z_over_chin": 0.08,
+    "before_mm": [
+     84.7,
+     70.3,
+     63.8
+    ],
+    "after_mm": [
+     72.5,
+     66.3,
+     60.3
+    ],
+    "order_kept": true,
+    "gap_change": [
+     -0.569,
+     -0.077
+    ]
+   },
+   {
+    "z_over_chin": 0.15,
+    "before_mm": [
+     117.0,
+     107.1,
+     97.9
+    ],
+    "after_mm": [
+     100.0,
+     88.9,
+     79.1
+    ],
+    "order_kept": true,
+    "gap_change": [
+     0.121,
+     0.065
+    ]
+   },
+   {
+    "z_over_chin": 0.2,
+    "before_mm": [
+     140.5,
+     131.5,
+     127.5
+    ],
+    "after_mm": [
+     124.5,
+     118.4,
+     118.5
+    ],
+    "order_kept": false,
+    "gap_change": [
+     -0.322,
+     -1.025
+    ]
+   }
+  ],
+  "youth-m": [
+   {
+    "z_over_chin": 0.08,
+    "before_mm": [
+     98.1,
+     88.3,
+     81.2
+    ],
+    "after_mm": [
+     90.7,
+     82.1,
+     75.8
+    ],
+    "order_kept": true,
+    "gap_change": [
+     -0.122,
+     -0.113
+    ]
+   },
+   {
+    "z_over_chin": 0.15,
+    "before_mm": [
+     132.0,
+     115.7,
+     102.7
+    ],
+    "after_mm": [
+     115.3,
+     101.0,
+     89.6
+    ],
+    "order_kept": true,
+    "gap_change": [
+     -0.123,
+     -0.123
+    ]
+   },
+   {
+    "z_over_chin": 0.2,
+    "before_mm": [
+     146.7,
+     137.6,
+     126.5
+    ],
+    "after_mm": [
+     126.9,
+     119.0,
+     115.0
+    ],
+    "order_kept": true,
+    "gap_change": [
+     -0.132,
+     -0.64
+    ]
+   }
+  ]
+ }
+}
