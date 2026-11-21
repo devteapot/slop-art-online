@@ -69,12 +69,13 @@ AUBURN = [102, 46, 26]
 # At auburn: Cora's accepted hair (docs/char-live-3/ink-batch-2/own-cora-live.glb) as calibrated on a
 # composed person against the drawing's hair patches, with the strands under the bands
 # (docs/char-port-2/s5/calibrate_bins.py; again in S6 step 4, over the held strands).
-PROFILE = dict(palette="tag", ref=AUBURN, shade=[36, 1, 0], mid=[98, 33, 5], light=[114, 43, 4], highlight=[138, 53, 3],
+PROFILE = dict(palette="tag", ref=AUBURN, shade=[41, 1, 0], mid=[101, 34, 5], light=[118, 43, 4], highlight=[138, 53, 3],
                t1=-0.2, t2=0.4, edge=0.02, highlight_feather=0.08, ink_px=1.05, ink_fade_px=2.0)
 # One anchor a colour bin besides auburn (HANDMADE_COMPOSED "Several anchors"): black, brown, blond
 # and grey, calibrated in docs/char-port-2/s5 (calibrate_bins.py) and again, over the strands held at
-# a neutral mean, in S6 step 4 (docs/char-port-2/s6/step4: bob, then checked on six styles).
-ANCHORS = [{"ref": [19, 17, 17], "shade": [0, 0, 0], "mid": [6, 5, 5], "light": [21, 19, 18], "highlight": [51, 46, 46]}, {"ref": [51, 34, 23], "shade": [6, 2, 1], "mid": [42, 27, 15], "light": [55, 36, 25], "highlight": [67, 49, 36]}, {"ref": [158, 125, 71], "shade": [84, 61, 29], "mid": [158, 121, 49], "light": [187, 156, 100], "highlight": [237, 197, 121]}, {"ref": [133, 133, 133], "shade": [65, 65, 65], "mid": [123, 123, 123], "light": [156, 156, 156], "highlight": [193, 193, 193]}]
+# a neutral mean, in S6 step 4: on six styles together (bob, long, braid, swept, swept_braid, short;
+# the joint run's first round, docs/char-port-2/s6/step4/six-styles.json).
+ANCHORS = [{"ref": [19, 17, 17], "shade": [0, 0, 0], "mid": [6, 5, 5], "light": [21, 19, 18], "highlight": [50, 46, 46]}, {"ref": [51, 34, 23], "shade": [7, 2, 1], "mid": [44, 28, 15], "light": [56, 37, 26], "highlight": [66, 48, 36]}, {"ref": [158, 125, 71], "shade": [88, 64, 32], "mid": [161, 123, 51], "light": [190, 159, 102], "highlight": [237, 197, 122]}, {"ref": [133, 133, 133], "shade": [68, 68, 68], "mid": [126, 126, 126], "light": [159, 159, 159], "highlight": [193, 193, 193]}]
 
 
 # The lock lines' colour (the third pass, 2026-11-20): a darker shade of the hair's own mid swatch,

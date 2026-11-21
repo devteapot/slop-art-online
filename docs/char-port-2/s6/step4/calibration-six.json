@@ -1,0 +1,188 @@
+{
+ "rule": "mid, light and highlight: S5 (\u00b15 per channel; near-neutrals \u00b15 luma and a neutral swatch); shade \u00b112 (calibrate_bins.SHADE_TOL)",
+ "palette": {
+  "profile": {
+   "shade": [
+    41,
+    1,
+    0
+   ],
+   "mid": [
+    101,
+    34,
+    5
+   ],
+   "light": [
+    118,
+    43,
+    4
+   ],
+   "highlight": [
+    138,
+    53,
+    3
+   ]
+  },
+  "anchors": [
+   {
+    "ref": [
+     19,
+     17,
+     17
+    ],
+    "shade": [
+     0,
+     0,
+     0
+    ],
+    "mid": [
+     6,
+     5,
+     5
+    ],
+    "light": [
+     21,
+     19,
+     18
+    ],
+    "highlight": [
+     50,
+     46,
+     46
+    ]
+   },
+   {
+    "ref": [
+     51,
+     34,
+     23
+    ],
+    "shade": [
+     7,
+     2,
+     1
+    ],
+    "mid": [
+     44,
+     28,
+     15
+    ],
+    "light": [
+     56,
+     37,
+     26
+    ],
+    "highlight": [
+     66,
+     48,
+     36
+    ]
+   },
+   {
+    "ref": [
+     158,
+     125,
+     71
+    ],
+    "shade": [
+     88,
+     64,
+     32
+    ],
+    "mid": [
+     161,
+     123,
+     51
+    ],
+    "light": [
+     190,
+     159,
+     102
+    ],
+    "highlight": [
+     237,
+     197,
+     122
+    ]
+   },
+   {
+    "ref": [
+     133,
+     133,
+     133
+    ],
+    "shade": [
+     68,
+     68,
+     68
+    ],
+    "mid": [
+     126,
+     126,
+     126
+    ],
+    "light": [
+     159,
+     159,
+     159
+    ],
+    "highlight": [
+     193,
+     193,
+     193
+    ]
+   }
+  ]
+ },
+ "styles": {
+  "bob": {
+   "passed": true,
+   "fails": {},
+   "mid_pixels": 2920
+  },
+  "long": {
+   "passed": true,
+   "fails": {},
+   "mid_pixels": 4599
+  },
+  "braid": {
+   "passed": true,
+   "fails": {},
+   "mid_pixels": 1321
+  },
+  "swept": {
+   "passed": true,
+   "fails": {},
+   "mid_pixels": 1161
+  },
+  "swept_braid": {
+   "passed": false,
+   "fails": {
+    "dark.mid": {
+     "delta": [
+      -6,
+      -5,
+      -12
+     ],
+     "luma": -5.7,
+     "rule": "neutral: luma \u00b15 and a neutral swatch"
+    },
+    "brown.mid": {
+     "delta": [
+      -6,
+      -4,
+      -7
+     ],
+     "luma": -4.6,
+     "rule": "per channel \u00b15"
+    }
+   },
+   "mid_pixels": 1036
+  },
+  "short": {
+   "passed": true,
+   "fails": {},
+   "mid_pixels": 259
+  }
+ }
+}

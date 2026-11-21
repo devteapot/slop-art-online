@@ -85,6 +85,11 @@ ORDER = 5
 #   shows at 11:00) is checked against the floor, which is the auburn shade's noted exception
 #   (the drawing's shade lies under it in green and blue) made a rule.
 TOL, NEUTRAL_C, SWATCH_C = 5, 0.03, 0.02
+# The shade band's tolerance (the GC's, char-port-2 S6 step 4): the shade band is lit by the sky
+# alone, and partly lies in the hair's own cast shadow, which varies about 10 levels with each
+# style's geometry (the six styles' runs). It is held at ±12, on purpose: the palette does not
+# cancel a style's own self-shadowing. Mid, light and highlight keep TOL.
+SHADE_TOL = 12
 # Floors on OKLab lightness (the second pass, 2026-11-20): black and brown hair no lighter than
 # play distance needs them to be told apart (black about main's at Middle, brown a step above it);
 # up close the lock lines and the highlight carry them. S5's first floors (shade 0.35, mid 0.42,
@@ -120,9 +125,10 @@ def check(band, measured, target, swatch):
     t = [max(x, y) for x, y in zip(target, SKY)] if band == 'shade' else list(target)
     d = (np.array(measured) - np.array(t)).tolist()
     dl = round(luma(measured) - luma(t), 1)
+    tol = SHADE_TOL if band == 'shade' else TOL
     if chroma(target) < NEUTRAL_C:
-        return abs(dl) <= TOL and chroma(swatch) < SWATCH_C, 'neutral: luma and a neutral swatch', d, dl
-    return max(abs(x) for x in d) <= TOL, 'per channel', d, dl
+        return abs(dl) <= tol and chroma(swatch) < SWATCH_C, f'neutral: luma ±{tol} and a neutral swatch', d, dl
+    return max(abs(x) for x in d) <= tol, f'per channel ±{tol}', d, dl
 
 
 def Y(c):
