@@ -11,3 +11,12 @@ rustc = "living/tools/rustc-remap"
 # A no-op remap (matches no path) that cargo and sccache can see: wasm crates built before
 # rustc-remap, or before its mapping last changed, are rebuilt. Bump v1 when the mapping changes.
 rustflags = ["--remap-path-prefix=/slop-remap-v1=/slop-remap-v1"]
+
+[env]
+# rhai enables ahash's `compile-time-rng`, so const-random-macro draws fresh random keys into
+# ahash at every compile of it: two target dirs (or two hosts) got different constants and
+# different code. A fixed seed (read by `option_env!` in const-random-macro; cargo tracks it and
+# rebuilds that crate when it changes) makes them the same everywhere. The laws' hashing does
+# not use these keys: living-rules fixes Rhai's own hashing seed (living/rules/src/script.rs,
+# HASHING_SEED). An environment variable of the same name still wins.
+CONST_RANDOM_SEED = "slop-art-online"
