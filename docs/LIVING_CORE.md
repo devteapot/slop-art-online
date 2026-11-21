@@ -639,7 +639,7 @@ Checking, merging and disk cleanup (`just living-check`, `just living-merge`, th
 
 The session ends when the client exits, whether you close the window or it crashes. The launcher then does the following, in order:
 
-- **Pauses the world.** No ticks run, and the offline takeover of your character (`takeover_s`, 30 s) does not fire while the world is paused.
+- **Pauses the world.** No ticks run, and the offline takeover of your character (`takeover_s`, 30 s) does not fire while the world is paused. It then reads the live clock (`clock.tick`, `clock.last_ms`) twice, 2 s apart, and logs both readings: unchanged is `frozen`; a change is logged as `STILL ADVANCING` and recorded as `status: 1` in `teardown.json` (the teardown goes on). `stats` is a periodic snapshot that lags the clock (play-test 11: `stats.ticks` 4127 while `clock.tick` was 4184), so it never decides this. A module without `clock.last_ms` is judged on `clock.tick` alone, and the line says so. `--status` and `--stop` run the same check.
 - **Stops the mind service.** It uses the recorded PID only, after checking that PID's start time and command.
 - **Stops the memory store.** It uses the exact container name; the volume is kept.
 - **Prints the session's cost.** The cost is read from the run's journal at `living/tools/trials.py`'s prices. A model with no price there, such as the fake model server, is counted and named, not priced.
