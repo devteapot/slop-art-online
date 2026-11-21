@@ -1,0 +1,131 @@
+{
+ "idle": {
+  "axis": {
+   "L": 198.0,
+   "R": 198.0
+  },
+  "chin_row": 385,
+  "L": {
+   "left": 98.0,
+   "right": 110.0,
+   "width": 208,
+   "area": 15034
+  },
+  "R": {
+   "left": 85.0,
+   "right": 108.0,
+   "width": 193,
+   "area": 14704
+  },
+  "L_mirrored": {
+   "left": 110.0,
+   "right": 98.0,
+   "width": 208,
+   "area": 15034
+  },
+  "mismatch": 0.6886,
+  "edge_px": 19.0,
+  "best_axis_shift": 5.5,
+  "best_axis_mismatch": 0.6069,
+  "best_axis_edge_px": 13.0,
+  "accepted": false,
+  "spread": {
+   "L": {
+    "hair_width_px": 208,
+    "body_width_px": 199,
+    "body_over_eyes": 2.848
+   },
+   "R": {
+    "hair_width_px": 192,
+    "body_width_px": 185,
+    "body_over_eyes": 2.648
+   }
+  }
+ },
+ "bind": {
+  "axis": {
+   "L": 200.25,
+   "R": 200.25
+  },
+  "chin_row": 387,
+  "L": {
+   "left": 104.2,
+   "right": 96.8,
+   "width": 201,
+   "area": 17665
+  },
+  "R": {
+   "left": 98.2,
+   "right": 102.8,
+   "width": 201,
+   "area": 17722
+  },
+  "L_mirrored": {
+   "left": 96.2,
+   "right": 104.8,
+   "width": 201,
+   "area": 17665
+  },
+  "mismatch": 0.1006,
+  "edge_px": 2.0,
+  "best_axis_shift": -2.0,
+  "best_axis_mismatch": 0.0282,
+  "best_axis_edge_px": 0.0,
+  "accepted": true,
+  "spread": {
+   "L": {
+    "hair_width_px": 201,
+    "body_width_px": 195,
+    "body_over_eyes": 2.661
+   },
+   "R": {
+    "hair_width_px": 201,
+    "body_width_px": 195,
+    "body_over_eyes": 2.661
+   }
+  }
+ },
+ "idle_main_binary": {
+  "axis": {
+   "L": 198.0,
+   "R": 198.0
+  },
+  "chin_row": 385,
+  "L": {
+   "left": 98.0,
+   "right": 110.0,
+   "width": 208,
+   "area": 15034
+  },
+  "R": {
+   "left": 85.0,
+   "right": 108.0,
+   "width": 193,
+   "area": 14704
+  },
+  "L_mirrored": {
+   "left": 110.0,
+   "right": 98.0,
+   "width": 208,
+   "area": 15034
+  },
+  "mismatch": 0.6886,
+  "edge_px": 19.0,
+  "best_axis_shift": 5.5,
+  "best_axis_mismatch": 0.6069,
+  "best_axis_edge_px": 13.0,
+  "accepted": false,
+  "spread": {
+   "L": {
+    "hair_width_px": 208,
+    "body_width_px": 199,
+    "body_over_eyes": 2.848
+   },
+   "R": {
+    "hair_width_px": 192,
+    "body_width_px": 185,
+    "body_over_eyes": 2.648
+   }
+  }
+ }
+}
