@@ -10,6 +10,14 @@ Status: **current** (Tool 7, 2026-11-11, branch `tool-7`; the laptop's follow-up
 
 [`check_timings.py`](../living/tools/check_timings.py) reads a cargo `--timings` report and splits the time between workspace crates, dependencies and build scripts.
 
+### Known red self-tests
+
+Tool self-tests that fail on `main`, each with its owner, the date and the reason. A self-test leaves this list in the change that makes it pass.
+
+| Self-test | Owner | Since | Reason |
+| --- | --- | --- | --- |
+| [`trials_laws_selftest.py`](../living/tools/trials_laws_selftest.py) | Spark | 2026-11-21 | 3 failures and 2 errors in `Publish`: its `FakeDb` does not answer the `genesis_wait` call, so that call reaches the trial server's real port with the test's dummy token, which is refused (401). The fix makes the fake answer `genesis_wait`, so the self-test never touches a running service. |
+
 ## The check
 
 `just living-check` runs the five cargo commands of before and, since `tool-8`, the script fuel gate, since `check-game-tests` the game client's unit tests, and since `check-authority-tests` the authority's native unit tests (they replaced the seed-laws test of `fix-laws` and frame-views' frame tests), in [`check.py`](../living/tools/check.py):
