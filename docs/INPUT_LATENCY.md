@@ -430,7 +430,7 @@ No rise: ticks a second and tick p50 overlap between arms; B's p99 medians are 0
 
 Evidence: `~/slop-evidence/act-replace-gaps-20261121.tar.zst` with its SHA-256 sidecar (`.local/actgaps/`: det outputs and the paused copies' `deliberation` reads, fuel reports, `living-check.txt`, the tick series' `series.jsonl` and outputs; the run directories `.local/living/verify/{core-ag-*,player-ag*,minds-ag*,minds-agtc-*}`).
 
-### Sizing a real-model trial of `mind_act_replaces` (proposed, not run; no paid call made)
+### Sizing a real-model trial of `mind_act_replaces` (the plan; run as the [real-model trial](#real-model-trial-act-trial-2026-11-21) below)
 
 The fake-model runs above cannot show how often a real mind decides while one of its acts runs: the fake mind's cadence is fixed (think 5 s, compile 4 s) and its acts are scripted. A real-model trial would compare `mind_act_replaces` off and on, with `latency_acts` on in both arms and this branch's laws at their defaults (`act_replace_checks`, `act_input_cost`, `act_turned_back` on; `act_same_continues` off), in one battle and one town.
 
@@ -466,3 +466,84 @@ Both together: about 16,000 calls and 140 M tokens, about $24 (about $20 at the 
 - Ticks a second and tick p50 / p99; calls, tokens, dollars and latency per arm from the journals.
 
 **Stop conditions:** an arm's journaled spend past 1.25 × its estimate (battle run $8.7, town run $3.5; e.g. `gate_quality.py watch --stop-usd`); more than 10% of calls failing over any 2 minutes, or the provider refusing or failing for over 60 s; the battle collapsing (`battle_diag`'s two windows under 2 ticks a second) or below 30 ticks a second for two windows; deliberations waiting more than twice the minds for over 2 minutes (the arms would not be comparable); in the on arm, more than one turning-back line per mind-minute, or more than two replacements per mind-minute, sustained for 2 minutes (a runaway: stop and report it as the finding); MemAvailable under 40 GB or under 45 GB of disk. A window with host load over 8 is marked, not redone without a new approval.
+
+## Real-model trial (act-trial, 2026-11-21)
+
+Branch `act-trial` on main `7e4c4d1d` (act-replace-gaps merged). A paid run, authorized by the general coordinator with a hard cap of $30: **$23.79 spent** (town $10.38, battle $13.41), every call priced live from the mind's own journal (tokens × [MODEL_COST.md "Prices"](MODEL_COST.md#prices)). It answers the plan above: how often a real mind decides while one of its own acts runs, what `mind_act_replaces` then does, and how often "the same act again" occurs (the case `act_same_continues` would absorb). Nothing was made default-on.
+
+**Setup.** Private server `slop-acttrial-20261121` (SpacetimeDB 2.14.1, pinned to CPUs 5–9,15–19) and a private Neo4j for the town's minds; rustc 1.99.1; the mind and modules built from main's tree. Models: `living/configs/models.json` as shipped, mix `people` (think GLM 5.3 Flash, effort low; compile DeepSeek V4.1 Flash on stage, GLM off stage; talk DeepSeek; consolidation and the rest GLM). Mind switches unset (defaults): no level of detail, no rethink gate, greet/park defaults, skill timings on, the character frame, lessons and projects off; `LIVING_LLM_PER_MIN` 0. World laws per arm: `mind_act_replaces` false or true; `latency_acts` true; `act_replace_checks`, `act_input_cost`, `act_turned_back` true; `act_same_continues` false (set explicitly, read back in each record); every other law as on main (fast lane off). Seed: island as on main (not aske-coast, so the 07f37b92 pastimes line does not apply).
+
+- **Town** (`trials.py run --batch atN act-town --variants act-replace-off|on`, new trial `act-town`): the island as it ships; the mind service thinks for the first 40 adults of Brackenford by id, the residents `act_town.py`'s fake series drove (`LIVING_ONLY`, nothing repurposed or scripted, `LIVING_CONCURRENCY` 64), 30 minutes an arm. `act_trial.py town-side` sampled their activities every second, read `routine_stat` before and after, ran two 30 s `bench.py` windows (minutes 12 and 24) and captured the replica's act markers.
+- **Battle** (`battle_diag.py --battle 200 --walkers 16 --minutes 8 --keep-plans --act-trace --save-self --real-minds --allow-live --concurrency 192`, new switch `--real-minds`): every fighter's mind, and each refill's, on the real models config; the walkers have no mind. The fight graph is only how a fighter starts: its compiles write its own. Off then on under one `~/slop-mq/battle.lock` hold, each started at a 1-minute load under 4 with the merge lock free; measured from minute 2 to 8.
+- **Guard** (`act_trial.py watch`, beside every arm): spend by model every 30 s, the arm stopped by PID past its share (town: an equal share of what was left of $12.50; battle: the off arm $8.75, the on arm what was left of $17.50; never past $30), at more than 10% failed calls over 2 minutes, at the thinkers' pending deliberations rising for 3 minutes, at more than one replacement per mind-second over 60 s, at a battle under half the off arm's ticks a second, or under 40 GB MemAvailable or 45 GB of disk.
+
+**Arms run.** Town: `at5off`, `at6on`, `at10off`, `at11on` ran their 30 minutes. `at7on` (13.8 min, $1.00) and `at8off` (7.3 min, $0.39) were stopped by the guard on provider failures (DeepSeek "not enough capacity" 429s and GLM 503s, 29 and 12 failed calls inside 45 seconds); `at1`–`at4` ($0.67 together) were stopped at minute 4 by `trials.py`'s own runaway rule (60 calls a minute, meant for one mind; `act-town` now sets `budget.runaway_calls_per_min` 400). Only the four full arms are in the tables. Battle: both arms ran their 8 minutes with no failed call.
+
+### Town: 40 real minds, 30 minutes an arm
+
+| | Off `at5off` / `at10off` | On `at6on` / `at11on` |
+| --- | --- | --- |
+| Spend; calls (failed) | $2.10, 1,766 (0) / $2.08, 1,753 (0) | $2.08, 1,749 (0) / $2.07, 1,739 (0) |
+| GLM calls, $; DeepSeek (talk) calls, $ | 1,519, $1.94; 247, $0.15 / 1,551, $1.96; 202, $0.13 | 1,538, $1.94; 211, $0.13 / 1,542, $1.94; 197, $0.12 |
+| Tokens in (cached) / out, millions | 14.5 (6.3) / 1.20; 14.8 (6.3) / 1.14 | 14.7 (6.4) / 1.17; 14.6 (6.4) / 1.16 |
+| Batches with an act the body could be given | 309 / 315 | 299 / 337 |
+| **Decided while another of the mind's acts ran** | **19 (6.1%) / 33 (10.5%)** | **27 (9.0%) / 26 (7.7%)** |
+| … what became of them | all waited in the queue | replaced the act 21 / 22; refused, the act kept running 6 / 4 |
+| … age of the act under way, p50 / p95 | 5.2 / 10.6 s; 1.9 / 46.7 s | 2.1 / 40.4 s; 4.3 / 180 s |
+| **The same act again** (of those decided while it ran) | **2 / 6** (walks to the same place; two `conceive`) | **6 / 4** (all walks to the same place, each replaced) |
+| Same skill by the markers (a bound) | 14 / 21 | 11 / 15 |
+| Acts started; done ok; failed | 358, 342, 14 / 361, 343, 15 | 362, 326, 12 / 418, 381, 9 |
+| Replaced (approach / performing); age p50 / p95 | 0 | 21 (17 / 4), 4.0 / 61 s / 22 (19 / 3), 8.6 / 201 s |
+| Replaced within 3 s of the act's start; runs of 3 in 20 s | 0; 0 | 10 / 6; 0 / 0 |
+| Replacements per mind-second | 0 | 0.00029 / 0.00031 (about 1 per mind-hour) |
+| Dropped from the queue by a replacement; refused at start; expired | 0; 102 / 85; 1 / 2 | 11 / 12; 97 / 114; 0 |
+| Decided → started, after idle p50; behind an act p50 / p95 | 1.7 ms; 9.6 / 56 s (n 12), 15.7 / 66 s (n 23) | 1.6 ms; 1.6 / 1.9 ms, 1.7 / 3.1 ms |
+| "You keep turning back and forth" lines | 3 / 0 | 1 / 0 |
+| Routine outcomes ok / failed per resident-hour | 457 / 52, 458 / 51 | 469 / 53, 454 / 47 |
+| Gathers done per resident-hour | 15.6 / 16.8 | 16.6 / 15.6 |
+| Tick at minutes 12, 24: p50 / p99 (ms), 60 ticks/s | 1.21 / 2.39, 1.17 / 2.18; 1.19 / 2.52, 1.22 / 2.43 | 1.20 / 2.65, 1.29 / 2.74; 1.21 / 2.66, 1.28 / 2.44 |
+
+- **The overlap is small.** A real mind decides on an act about once every 4 minutes (about 310 acting batches from 40 minds in 30 minutes), and most of its acts are short walks it finishes. 6–11% of its decisions came while another of its acts ran, in both arms; on, those replaced the act at once (mostly walks: `goto` 16 and 19, `conceive` 3 and 3, `keep` and `play` once; 10 and 6 within 3 s of the act's start) or were refused and left it running (`act_replace_checks`). No runs of replacements, about one replacement per mind-hour, one turning-back line in an hour of 40 minds: nothing like the fake fixture's 0.8 replacements per resident-minute.
+- **Errands and work are the same.** Routine successes and gathers per resident-hour differ between arms no more than between runs of one arm, unlike the fake fixture (gathers 3.6–3.9 off against 7.7–8.3 on), whose errands came faster than walks ended. Off, a decision that came during an act waited a median 10–16 s (p95 about a minute) for it; on, it started in under 2 ms. Acts done ok: 95% of starts off, 90–91% on, the difference the 5–6% replaced.
+- **Cost.** $0.105 per thinking resident-hour (plan: $0.12–0.14), 1.46 calls per resident-minute (plan: 1.4); a sixth to a fifth of the batches the minds submitted held no act the body could be given and went to `act_repair` (104–122 repair calls an arm). Tick cost is the same in both arms.
+
+### Battle: 200 real minds, 8 minutes an arm (measured minutes 2–8)
+
+| | Off | On |
+| --- | --- | --- |
+| Spend (8 min); calls (failed) | $6.74; 7,957 (0) | $6.67; 7,911 (0) |
+| GLM calls, $; DeepSeek (talk) calls, $ | 6,749, $6.32; 1,208, $0.42 | 6,772, $6.30; 1,139, $0.38 |
+| Tokens in (cached) / out, millions | 58.5 (30.4) / 2.85 | 58.5 (30.6) / 2.83 |
+| Calls by purpose: think, compile, consolidation, act repair, talk | 2,569, 2,518, 728, 934, 1,208 | 2,593, 2,527, 740, 912, 1,139 |
+| Model latency p50 think / compile; mind queue wait p50 think / consolidation | 3.3 / 3.5 s; 12.4 / 35.0 s | 3.1 / 3.7 s; 12.2 / 35.6 s |
+| Fighters alive mean (min); deaths; refills | 193.2 (191); 199; 209 | 191.3 (189); 198; 205 |
+| Batches with an act; **decided while another act ran** | 1,176; **0** | 1,154; **1** (refused, the act kept running) |
+| **The same act again** | **0** | **0** |
+| Acts started; broken off by a reflex; done ok | 525; 423; 97 | 524; 437; 85 |
+| Refused at start (minutes 2–8); set aside by a reflex; replaced | 1,087; 242; 0 | 1,051; 268; 0 |
+| "You keep turning back and forth" lines (graph walks) | 17 | 26 |
+| Hits / blocked / dodged / missed; combat uses broken off | 6,967 / 7,800 / 5,916 / 2,157; 9,335 | 6,922 / 7,543 / 6,017 / 2,282; 9,061 |
+| Timed defence (mean of windows); contact share | 0.640; 0.668 | 0.632; 0.668 |
+| Engagements per fighter-minute; contact s per engagement; attacks per contact-minute | 7.49; 5.34; 32.5 | 7.67; 5.23; 32.7 |
+| Ticks/s by window; tick p50 / p99, first → last window (ms) | 46 → 60; 10.7 → 5.5 / 32.8 → 8.6 | 47 → 60; 10.5 → 5.4 / 30.6 → 8.7 |
+
+- **Nothing to replace.** Real fighters call the models often (about 5 calls per fighter-minute, against the plan's 2.0–2.9), but their acts never overlap: most acts are refused at the start (over the 8 minutes, 791 and 777 because what they named was not in sight, `unseen`; 504 and 471 by `begin`'s checks, a committed move under way among them, as for a player), and those that start are broken off by the fight's reflexes within seconds (423 of 525, 437 of 524), so when the next decision comes nothing of the mind's is running. The law changed nothing a reading could separate: combat feel, deaths and tick cost are within the run-to-run spread the fake series showed.
+- **The mind service is the limit at 200.** Every fighter had a deliberation pending for most of the run (160–199 of 200); model time was 3–4 s but calls waited a median 12 s for one of the 192 slots (consolidation 35 s). The guard's backlog rule did not trip (the count was high but did not rise). $0.0042 per fighter-minute, as planned, because compile went to GLM (off stage).
+
+### "The same act again" and `act_same_continues`
+
+Measured on the decided acts themselves: each batch matched to the journaled reply that decided it (all 1,260 town batches and 2,330 battle batches), its first act compared with the act under way as the model wrote it (`do`, target, item, amount, words, offer, pace).
+
+- **On** (the only arms where `act_same_continues` could act: it reads only on a replacement): 10 of the 53 decisions made while an act ran were the same act again, all walks to the same place (`goto` "berries", "work", "home", "square" …), each restarting the walk 0.7–131 s in. That is 10 of 43 replacements (23%), 1.6% of all acting decisions, **about one every 4 mind-hours**. With the law on, those 10 walks would have gone on instead of starting over (no route lost, no turn); nothing else in these arms would have changed.
+- **Off**: 8 of the 52 decisions made during an act were the same act again (6 walks, 2 `conceive`); they waited in the queue behind it, to run it a second time. `act_same_continues` does not act here: nothing is replaced.
+- **Battle**: none.
+
+`act_same_continues` would fire rarely, and only on the case it was written for: a mind re-deciding the walk it is on. Whether to turn it on stays the owner's call; this trial finds it harmless where it would act and absent where it would not.
+
+### What this does not show
+
+Two arms a setting in one town and one a setting in one battle; one seed; real model replies differ between runs. The battle's walkers and the island's other residents have no mind, and the battle's minds run without Neo4j memory (the verify harness). The battle measures 200 minds against a mind service that is saturated; a service with more slots (or the level of detail it is designed with) would decide more often and could overlap more. Partial town arms and the first four are left out of the tables (their reports are in the evidence).
+
+**Tools.** `living/tools/act_trial.py` (the guard, the town sidecar and the reports), `battle_diag.py --real-minds` (`--fake-provider` runs the same routing against the local fake, free), the trial `living/trials/act-town.json` with variants `act-replace-off` / `act-replace-on`, and two fixes to `act_trace.py`'s reading of a transaction (an act with nothing to do is done before its `act_started` is logged, and `acts::outcome` then starts the next waiting act first: `act_trace.survivors`). Free tests before the paid runs: a fake-model town arm stopped by the guard on an inflated price, a fake town arm whose compiles decide walks (the act and journal matching), a fake-provider battle of 40 (the routing, journals copied, no key in any evidence), and unit checks of the overlap reading.
+
+Evidence: `~/slop-evidence/act-trial-20261121.tar.zst` with its SHA-256 sidecar (`.local/acttrial/`: the ledger, every arm's spend log, guard log, report and loads, the batch record, the pooled tables, the replicas' module logs; the trial batches `.local/living/trials/at*/` with their journals; the battle runs `.local/living/verify/minds-atb1-*`; no keys).

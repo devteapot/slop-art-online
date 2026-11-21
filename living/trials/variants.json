@@ -318,5 +318,31 @@
    "fast_lane_on": true,
    "fov_on": true
   }
+ },
+ "act-replace-off": {
+  "about": "The real-model trial of mind_act_replaces (docs/INPUT_LATENCY.md, \"Real-model trial\"), its control: the `people` mix as models.json ships it; a mind's acts wait behind the act in progress (main). latency_acts logs each deliberate act; the act-replace-gaps laws at their defaults (checks, input cost and turning back on; the same act continues off), set explicitly so the record names them.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "mind_act_replaces": false,
+   "latency_acts": true,
+   "act_replace_checks": true,
+   "act_input_cost": true,
+   "act_turned_back": true,
+   "act_same_continues": false
+  }
+ },
+ "act-replace-on": {
+  "about": "The real-model trial's treatment: act-replace-off with mind_act_replaces on (a mind's act replaces the act in progress as a player's does).",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "mind_act_replaces": true,
+   "latency_acts": true,
+   "act_replace_checks": true,
+   "act_input_cost": true,
+   "act_turned_back": true,
+   "act_same_continues": false
+  }
  }
 }
