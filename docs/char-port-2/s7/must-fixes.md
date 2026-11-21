@@ -12,7 +12,7 @@ Each measure here passed its known-answer test first (PLAN.md §7). All the chan
 | youth-f | 1.774 | 0.987 |
 | adult-m | 1.822 | 0.961 |
 | youth-m | 1.814 | 0.965 |
-| elder-m | 1.804 | **0.962** (the formula's 0.970 takes elder-m-a's chin to 0.031 H in `cage_accept`, over its 0.030; 0.962 is the widest that holds) |
+| elder-m | 1.804 | **0.962**: bounded by `cage_accept`, not the formula (accepted, 2026-11-21). The formula's 0.970 takes elder-m-a's chin to 0.031 H, over its 0.030. 0.962 is the widest factor that holds 21/21; it is within ±2% and closer to 1.751. |
 | elder-f | 1.871 | 0.936 |
 | child-u | 1.873 | 0.961 (to 1.80) |
 
@@ -157,6 +157,10 @@ The light, highlight and shade bands don't move with t2. brown.highlight's −5 
 **The bind row is for the record.** The palettes were tuned in the calibration frame (idle at 0 s), and dark.shade reads the same −12.2 in bind at t2 0.52, so it is the pose's light on the shade band, not the remedy. Whether hair calibration moves to bind too would mean re-tuning every palette, so that is the GC's call.
 
 **A measuring artefact, caught.** The first t2 trial (0.50–0.53, "passes from 0.51") set t2 in the installed files only. `calibrate_bins` copies its band-mask file (`zzcal-`) before each round's `hair_page --profile-only` rewrite, and that rewrite reset the drawn files to 0.4. So only the masks moved with t2. The sweep above carries t2 in the files and in their `.hairpage.json`, which the rewrite keeps, so masks and drawing agree. `calibrate_bins` now records its pose (`--pose`).
+
+**Accepted** (2026-11-21):
+- t2 0.65, in the generator.
+- Hair calibration stays on the calibration frame (idle at 0 s). Bind's dark.shade −12.2 is a known pose effect (PLAN.md §7).
 
 ### Before: still out; the remedy was the GC's
 
