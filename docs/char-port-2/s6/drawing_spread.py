@@ -31,9 +31,10 @@ ink lines are inside the hair's width either way).
 - **The cheek row:** 0.030 m under the eye line, the generator's (`eye_z - 0.030`), in head
   heights of the generator's standard head (0.030 / 0.2322, Cora's head height in metres).
 - **The cheek width:** the run of skin on that row that holds the face's centre column: the face
-  across the cheekbones, in front of the ears (the generator's, in front of the pinna). Where hair
-  (not the face's ink outline) lies over one end, that half is taken as the other's, about the
-  eyes' middle.
+  across the cheekbones (the generator's, in front of the pinna): the face's outline on that row.
+  On the drawing no hair covers the cheeks there; on a render it is taken from the same frame drawn
+  with no hair (image_spread.py), where nothing covers it (at this head's cheek row the ears join
+  the outline: the generator's head has no line between them and the face).
 - **The spread:** the hair's (and its ink's) widest extent over all rows above the chin, over the
   cheek width.
 """
@@ -96,10 +97,10 @@ def measure(path, box):
     eye_y, spacing = (ya + yb) / 2, abs(xa - xb)
     cx = int(round((xa + xb) / 2))
     hair = (kind == "hair") | (kind == "ink")
-    return finish(im, hair, skin, eye_y, spacing, cx, w, kind == "hair")
+    return finish(im, hair, skin, eye_y, spacing, cx, w)
 
 
-def finish(im, hair, skin, eye_y, spacing, cx, w, covers):
+def finish(im, hair, skin, eye_y, spacing, cx, w):
     """The chin, the cheek row and width, and the hair's two spreads (the module's docstring)."""
     head_px = spacing / EYE_SPACING_H
     h = skin.shape[0]
@@ -119,16 +120,9 @@ def finish(im, hair, skin, eye_y, spacing, cx, w, covers):
     chin = list(rows)[int(np.argmin(width))]
     cheek_row = int(round(eye_y + CHEEK_DROP_H * head_px))
     cheek = run(cheek_row)
-    # Where a lock lies over one cheek (a render's near section) the skin's run stops at the lock,
-    # not at the face's edge: an end with hair (not ink) just beyond it is covered, and that half
-    # is taken as the other's, about the eyes' middle.
-    cov = lambda x: any(covers[cheek_row, x + k] for k in (-2, -1, 1, 2) if 0 <= x + k < w)
-    left, right = cx - cheek[0], cheek[1] - cx
-    if cov(cheek[0] - 1) and not cov(cheek[1] + 1):
-        left = right
-    elif cov(cheek[1] + 1) and not cov(cheek[0] - 1):
-        right = left
-    cw = left + right
+    # The face's own outline on that row: the drawing's, where no hair covers the cheeks at that
+    # height; a render's from its copy with no hair (part_id.py --none), so no lock can cut it short.
+    cw = cheek[1] - cheek[0]
     hair = hair.copy()
     hair[chin:] = False
     big = blobs(hair)[0]  # the hair mass with its outline ink
@@ -158,13 +152,13 @@ def render(look, idp, box=(600, 160, 1000, 620), face=None):
     hair = (i[..., 1] - i[..., 0] > 28) & (i[..., 1] - i[..., 2] > 28) & (i[..., 1] >= 60)
     a = np.asarray(Image.open(face).convert("RGB").crop(box) if face else im).astype(float)
     r, g, b = a[..., 0], a[..., 1], a[..., 2]
-    skin = (r > g + 12) & (r > b + 25) & ~hair if face else (r > g + 25) & (r > b + 40) & (r > 170) & ~hair
+    skin = (r > g + 12) & (r > b + 25) if face else (r > g + 25) & (r > b + 40) & (r > 170) & ~hair  # the hairless frame: nothing over the face
     # The eyes: every piece of iris (a blink leaves only slivers), split into the two eyes about
     # their middle; the ground's green is far larger and is left out.
-    P = np.concatenate([e for e in blobs((g > r + 8) & (g > b) & ~hair) if 3 <= len(e) < 3000][:12])
+    P = np.concatenate([e for e in blobs((g > r + 8) & (g > b) & (True if face else ~hair)) if 3 <= len(e) < 3000][:12])
     mid = np.median(P[:, 1])
     (ya, xa), (yb, xb) = P[P[:, 1] < mid].mean(axis=0), P[P[:, 1] >= mid].mean(axis=0)
-    return finish(im, hair, skin, (ya + yb) / 2, abs(xa - xb), int(round((xa + xb) / 2)), a.shape[1], hair)
+    return finish(im, hair, skin, (ya + yb) / 2, abs(xa - xb), int(round((xa + xb) / 2)), a.shape[1])
 
 
 def main(out_json, out_png, look=None, idp=None):
