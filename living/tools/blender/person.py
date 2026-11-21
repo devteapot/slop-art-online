@@ -1858,7 +1858,7 @@ def make_hair(arm, spec, pos, quads, covered=None, bones=None):
                     partings.append(dict(pts=[list(hw(q)) for q in P], out=[list(hair.unit(q - hair.ORIGIN)) for q in P]))
             with open(os.path.splitext(OUT_PATH)[0] + ".hairpage.json", "w") as fh:
                 json.dump(dict(size=list(size), density_mm=hair.TEXEL_M * 1000, range_px=hair.INK_RANGE_PX, creases=lines, partings=partings,
-                               tris=dict(cap=sum(len(f) - 2 for f in faces), **h.part_tris), measures=h.measures(), **(dict(master=h.master_vary) if hasattr(h, "master_vary") else {}),
+                               tris=dict(cap=sum(len(f) - 2 for f in faces), **h.part_tris), measures=h.measures(), **(dict(master=h.master_vary) if hasattr(h, "master_vary") else {}), **(dict(profile=h.master["profile"]) if getattr(h, "master", None) and h.master.get("profile") else {}),
                                parting=dict(width=hair.PARTING["width"], depth=hair.PARTING["depth"])), fh)
     ob = raw_object("Hair", verts, faces + lock_faces, weights, cols, MAT["hair"], arm, uvs=uvs)
     if page_hl is not None:

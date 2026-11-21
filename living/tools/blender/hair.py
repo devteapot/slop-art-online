@@ -215,6 +215,11 @@ MASTERS = dict(swept_braid=dict(
     # portrait's hair body over the eye spacing (docs/char-port-2/s6/README.md), which this head's
     # wide face takes to 2.006 here, not Cora's 3D 1.87.
     tolerance=dict(spread_face=(1.906, 2.106), crown_lift=(0.061, 0.131), rear_depth=(0.49, 0.57)),
+    # The cut's own hair profile over hair_page.PROFILE (S7 must-fix 2, remedy (a), the GC's): the mid band
+    # widened on the sweep's own surface (t2 0.4 -> 0.52), so the dark and brown bins' mid is in band (t2 0.50 left
+    # brown.mid at -5,-3,-6; 0.52 puts every mid within 2 luma; docs/char-port-2/s7/must-fixes.md). Written to the
+    # cut's .hairpage.json by person.py and applied by hair_page.py to this cut's files only.
+    profile=dict(t2=0.52),
     hair_tris=10700,  # the near mesh's budget, 12,000, less the scalp cap's 1,216 on the style head, with a margin
     # SLOP_MASTER_PLAIT=0 builds the cut without its plait: the visibility control (the plait's
     # pixels are where the two differ).
