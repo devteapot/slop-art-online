@@ -1,0 +1,864 @@
+{
+ "types": {
+  "adult-f-a": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.707,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.342,
+    "ear_on_cheek_row": false
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.451,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.707,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.342,
+    "ear_on_cheek_row": false
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.451,
+    "ear_on_cheek_row": true
+   }
+  },
+  "adult-f-b": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.724,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.343,
+    "ear_on_cheek_row": false
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.5,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.724,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.343,
+    "ear_on_cheek_row": false
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.5,
+    "ear_on_cheek_row": true
+   }
+  },
+  "adult-f-c": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.774,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.43,
+    "ear_on_cheek_row": false
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.644,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.774,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.43,
+    "ear_on_cheek_row": false
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.644,
+    "ear_on_cheek_row": true
+   }
+  },
+  "adult-m-a": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.668,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.471,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.559,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.668,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.471,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.559,
+    "ear_on_cheek_row": true
+   }
+  },
+  "adult-m-b": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.729,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.49,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.641,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.729,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.49,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.641,
+    "ear_on_cheek_row": true
+   }
+  },
+  "adult-m-c": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.806,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.608,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.737,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.806,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.608,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.737,
+    "ear_on_cheek_row": true
+   }
+  },
+  "child-u-a": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.764,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.379,
+    "ear_on_cheek_row": false
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.487,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.724,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.379,
+    "ear_on_cheek_row": false
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.487,
+    "ear_on_cheek_row": true
+   }
+  },
+  "child-u-b": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.78,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.345,
+    "ear_on_cheek_row": false
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.511,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.78,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.345,
+    "ear_on_cheek_row": false
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.511,
+    "ear_on_cheek_row": true
+   }
+  },
+  "child-u-c": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.828,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.391,
+    "ear_on_cheek_row": false
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.617,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.828,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.391,
+    "ear_on_cheek_row": false
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.617,
+    "ear_on_cheek_row": true
+   }
+  },
+  "elder-f-a": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.705,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.408,
+    "ear_on_cheek_row": false
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.547,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.705,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.408,
+    "ear_on_cheek_row": false
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.547,
+    "ear_on_cheek_row": true
+   }
+  },
+  "elder-f-b": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.736,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.372,
+    "ear_on_cheek_row": false
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.568,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.736,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.372,
+    "ear_on_cheek_row": false
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.568,
+    "ear_on_cheek_row": true
+   }
+  },
+  "elder-f-c": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.784,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.492,
+    "ear_on_cheek_row": false
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.758,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.784,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.492,
+    "ear_on_cheek_row": false
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.758,
+    "ear_on_cheek_row": true
+   }
+  },
+  "elder-m-a": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.681,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.517,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.594,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.681,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.517,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.594,
+    "ear_on_cheek_row": true
+   }
+  },
+  "elder-m-b": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.745,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.588,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.678,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.745,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.588,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.678,
+    "ear_on_cheek_row": true
+   }
+  },
+  "elder-m-c": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.814,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.69,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.737,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.816,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.69,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.737,
+    "ear_on_cheek_row": true
+   }
+  },
+  "youth-f-a": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.708,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.355,
+    "ear_on_cheek_row": false
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.453,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.708,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.355,
+    "ear_on_cheek_row": false
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.48,
+    "ear_on_cheek_row": true
+   }
+  },
+  "youth-f-b": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.744,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.334,
+    "ear_on_cheek_row": false
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.516,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.744,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.334,
+    "ear_on_cheek_row": false
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.516,
+    "ear_on_cheek_row": true
+   }
+  },
+  "youth-f-c": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.773,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.412,
+    "ear_on_cheek_row": false
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.644,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.773,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.399,
+    "ear_on_cheek_row": false
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.644,
+    "ear_on_cheek_row": true
+   }
+  },
+  "youth-m-a": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.691,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.487,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.578,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.691,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.487,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.578,
+    "ear_on_cheek_row": true
+   }
+  },
+  "youth-m-b": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.742,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.513,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.661,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.742,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.513,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.661,
+    "ear_on_cheek_row": true
+   }
+  },
+  "youth-m-c": {
+   "s6b_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.829,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.622,
+    "ear_on_cheek_row": true
+   },
+   "s6b_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.73,
+    "ear_on_cheek_row": true
+   },
+   "s7_idle": {
+    "pose": "idle",
+    "pitch": 8,
+    "face_over_eyes": 1.829,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind8": {
+    "pose": "bind",
+    "pitch": 8,
+    "face_over_eyes": 1.622,
+    "ear_on_cheek_row": true
+   },
+   "s7_bind0": {
+    "pose": "bind",
+    "pitch": 0,
+    "face_over_eyes": 1.73,
+    "ear_on_cheek_row": true
+   }
+  }
+ },
+ "class_means": {
+  "adult-f": {
+   "s6b_idle": 1.735,
+   "s6b_bind8": 1.372,
+   "s6b_bind0": 1.532,
+   "s7_idle": 1.735,
+   "s7_bind8": 1.372,
+   "s7_bind0": 1.532
+  },
+  "adult-m": {
+   "s6b_idle": 1.734,
+   "s6b_bind8": 1.523,
+   "s6b_bind0": 1.646,
+   "s7_idle": 1.734,
+   "s7_bind8": 1.523,
+   "s7_bind0": 1.646
+  },
+  "youth-f": {
+   "s6b_idle": 1.742,
+   "s6b_bind8": 1.367,
+   "s6b_bind0": 1.538,
+   "s7_idle": 1.742,
+   "s7_bind8": 1.363,
+   "s7_bind0": 1.547
+  },
+  "youth-m": {
+   "s6b_idle": 1.754,
+   "s6b_bind8": 1.541,
+   "s6b_bind0": 1.656,
+   "s7_idle": 1.754,
+   "s7_bind8": 1.541,
+   "s7_bind0": 1.656
+  },
+  "elder-f": {
+   "s6b_idle": 1.742,
+   "s6b_bind8": 1.424,
+   "s6b_bind0": 1.624,
+   "s7_idle": 1.742,
+   "s7_bind8": 1.424,
+   "s7_bind0": 1.624
+  },
+  "elder-m": {
+   "s6b_idle": 1.747,
+   "s6b_bind8": 1.598,
+   "s6b_bind0": 1.67,
+   "s7_idle": 1.747,
+   "s7_bind8": 1.598,
+   "s7_bind0": 1.67
+  },
+  "child-u": {
+   "s6b_idle": 1.791,
+   "s6b_bind8": 1.372,
+   "s6b_bind0": 1.538,
+   "s7_idle": 1.777,
+   "s7_bind8": 1.372,
+   "s7_bind0": 1.538
+  }
+ },
+ "drawing_face_over_eyes": {
+  "review": 1.751,
+  "stage1": 1.701
+ }
+}
