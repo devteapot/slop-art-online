@@ -202,4 +202,38 @@ mod tests {
         }
         assert!(checked > 60, "{checked} bones checked");
     }
+
+    /// Left and right alike (the hair mirror check, docs/char-port-2/hair-mirror/README.md): for
+    /// any values, a paired bone's change is its partner's mirrored across the midline (the
+    /// file's X): the move's x negated, the same scale, and the turn reflected, (x, y, z, w) to
+    /// (x, -y, -z, w). Every value of the rig is set, one at a time and all together, at both
+    /// ends.
+    #[test]
+    fn paired_bones_change_as_mirrors() {
+        let rig = rig();
+        let ids: Vec<String> = rig.bones.iter().flat_map(|b| b.values.iter().map(|v| v.id.clone())).collect();
+        let mut sets: Vec<BTreeMap<String, f32>> = Vec::new();
+        for x in [-1.0, -0.4, 0.7, 1.0] {
+            sets.push(ids.iter().map(|id| (id.clone(), x)).collect());
+            sets.extend(ids.iter().map(|id| BTreeMap::from([(id.clone(), x)])));
+        }
+        let mut pairs = 0;
+        for values in &sets {
+            let ours: std::collections::HashMap<String, Change> = transforms(rig, values).into_iter().collect();
+            for bone in rig.bones.iter() {
+                let Some(other) = &bone.mirrored else { continue };
+                let (a, b) = (ours[&bone.name], ours[other]);
+                assert!((a.translate * Vec3::new(-1.0, 1.0, 1.0) - b.translate).length() < 1e-7, "{} / {other} move {:?} against {:?} ({values:?})", bone.name, a.translate, b.translate);
+                assert!((a.scale - b.scale).length() < 1e-7, "{} / {other} scale", bone.name);
+                let reflect = |q: Quat| Quat::from_xyzw(q.x, -q.y, -q.z, q.w);
+                match (a.rotation, b.rotation) {
+                    (None, None) => {}
+                    (Some(qa), Some(qb)) => assert!(reflect(qa).dot(qb).abs() > 1.0 - 1e-6, "{} / {other} turn {qa:?} against {qb:?}", bone.name),
+                    (x, y) => panic!("{} / {other}: turn {x:?} against {y:?}", bone.name),
+                }
+                pairs += 1;
+            }
+        }
+        assert!(pairs > 100, "{pairs} pairs checked");
+    }
 }

@@ -28,7 +28,7 @@ S6 ports Cora's hand-made hair into the generator as a **master**: a named set o
 | The audit | 0 / 0 on 92 files and four pages, strand means included | [step4/](step4/README.md) |
 | Flag off | ten styles byte-identical to main | [volume/](volume/README.md) |
 | The bundle (PNG and KTX2) | both pass every check | [step4/](step4/README.md) |
-| The mirror | the generator's output an exact mirror; the client's own fault is the laptop's track | [mirror/](mirror/README.md) |
+| The mirror | the generator's output an exact mirror; the client draws it mirrored on a square head. The idle at 2.0 s turns the head 11–12° (hair-mirror) | [mirror/](mirror/README.md), [../hair-mirror/](../hair-mirror/README.md) |
 
 **Found and corrected on the way:**
 - **S5's strands and calibration:** S5's strand bake and its `bob`-only calibration (step 4).
@@ -50,7 +50,7 @@ S6 ports Cora's hand-made hair into the generator as a **master**: a named set o
 
 **On a cut:** the game's front portrait, from main's client:
 - the setup is a composed woman in auburn at `0:8:0.36:0.88`, 1600×900, 11:00, soft film, springs off;
-- **the moment is 2.0 s into the idle clip**, when the head is square to the camera;
+- **the moment was 2.0 s into the idle clip**, taken to be square to the camera. It is not: the clip turns the head 11–12° there ([hair-mirror](../hair-mirror/README.md)). Since hair-mirror, `image_spread.py` draws the bind pose by default (`--pose bind`, the head square); `--pose idle` gives the numbers below;
 - **the hair** is the all-hair ID copy (`part_id.py --all`);
 - **the eyes** come from the same frame drawn with no hair (`part_id.py --none`);
 - each cut is measured on its own parting side.
