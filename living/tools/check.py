@@ -45,6 +45,7 @@ the compile cache.
 import fcntl
 import glob
 import hashlib
+import io
 import json
 import re
 import urllib.parse
@@ -74,10 +75,12 @@ PINNED_SCCACHE = os.path.join(HOME, ".local/share/slop-tools/bin/sccache")
 # writes. A step may also have `cmd` as a list of cargo commands run in turn; `workspace`, the
 # cargo workspace its relative dep-info paths start from (default living); `target`, a target
 # sub-directory used as its CARGO_TARGET_DIR; `inputs`, files beyond its packages and the
-# shared ones; and `gate`, a script run after its builds, which must pass too.
+# shared ones; `gate`, a script run after its builds, which must pass too; and `scan`, modules
+# (under its target) that must hold no host path (living/tools/host_paths.py).
 STEPS = [
     {"name": "authority", "lane": "release", "packages": ["living-authority"], "dirs": ["wasm32-unknown-unknown/release", "release"],
-     "cmd": ["cargo", "build", "--manifest-path", "living/Cargo.toml", "-p", "living-authority", "--target", "wasm32-unknown-unknown", "--release"]},
+     "cmd": ["cargo", "build", "--manifest-path", "living/Cargo.toml", "-p", "living-authority", "--target", "wasm32-unknown-unknown", "--release"],
+     "inputs": ["living/tools/host_paths.py"], "scan": ["wasm32-unknown-unknown/release/living_authority.wasm"]},
     {"name": "mind+viewer", "lane": "debug", "packages": ["living-mind", "living-viewer"], "dirs": ["debug"],
      "cmd": ["cargo", "build", "--manifest-path", "living/Cargo.toml", "-p", "living-mind", "-p", "living-viewer"]},
     # The game in release only: the build that is run, without a second ~10 GB debug tree.
@@ -493,7 +496,8 @@ def build_env(extra_names):
 def digest(step, inputs, files, tc, env):
     h = hashlib.sha256()
     blob = json.dumps({"v": TOOL_VERSION, "step": step["name"], "cmd": step["cmd"], "inputs": inputs, "files": files,
-                       "toolchain": tc, "env": env, "os": platform.system(), "arch": platform.machine()}, sort_keys=True)
+                       "toolchain": tc, "env": env, "os": platform.system(), "arch": platform.machine(),
+                       **({"scan": step["scan"]} if step.get("scan") else {})}, sort_keys=True)
     h.update(blob.encode())
     return h.hexdigest()
 
@@ -849,12 +853,28 @@ def wrapper_kind(w):
     return "sccache" if os.path.basename(rp).split(".")[0] == "sccache" else "foreign"
 
 
+def same_file_bytes(a, b):
+    """Whether two files (a wrapper named bare is looked up on PATH) hold the same bytes."""
+    a = a if os.sep in a else (shutil.which(a) or a)
+    try:
+        with open(a, "rb") as fa, open(b, "rb") as fb:
+            return fa.read() == fb.read()
+    except OSError:
+        return False
+
+
 def sccache_env(root):
     """(environment to add, the sccache to ask for stats or None, what was decided)."""
     preset = os.environ.get("RUSTC_WRAPPER")
     if os.environ.get("LIVING_SCCACHE", "1") == "0":
         return {}, None, "off (LIVING_SCCACHE=0)" + (f"; RUSTC_WRAPPER={preset} still applies" if preset else "")
     kind = wrapper_kind(preset) if preset else None
+    stale = None
+    if kind == "ours" and not same_file_bytes(preset, OUR_WRAPPER):
+        # A copy of an older (or other) sccache-rustc, such as one a build-slot pre-sets: an older
+        # one loses wasm compiles' path remapping (docs/TOOLING.md, "Byte-identical wasm"), so this
+        # checkout's runs in its place, with the caller's cache settings.
+        stale, preset = preset, OUR_WRAPPER
     if kind == "foreign":
         return {}, None, (f"RUSTC_WRAPPER={preset} is set and is not living/tools/sccache-rustc: cargo uses it as it is, "
                           "without this check's cache settings or stats, and it enters every step's digest")
@@ -884,6 +904,9 @@ def sccache_env(root):
             if preset:
                 return {}, None, f"sccache did not start ({r.stdout.strip()[:200]}); the pre-set RUSTC_WRAPPER={preset} stays, no stats"
             return {}, None, f"sccache did not start ({r.stdout.strip()[:200]}); compiling without it"
+    if stale:
+        return env, exe, (f"living/tools/sccache-rustc in place of the pre-set RUSTC_WRAPPER={stale}, a copy that differs from it "
+                          "(refresh the copy)")
     return env, exe, (f"the pre-set RUSTC_WRAPPER={preset}" if preset else "living/tools/sccache-rustc")
 
 
@@ -1053,6 +1076,16 @@ def main(argv):
                     say(f"{s['name']}: KNOWN RED {name} {what}" if ok else f"{s['name']}: expected failure {name} {what}")
                 if not ok:
                     code = 1
+        if code == 0 and s.get("scan"):
+            import host_paths
+            report = io.StringIO()
+            if not host_paths.check([os.path.join(step_target, m) for m in s["scan"]], out=report):
+                code = 1
+                with lock:
+                    for line in report.getvalue().splitlines():
+                        say(f"{s['name']}: {line}")
+                if log:
+                    log.write(report.getvalue())
         verdict = None
         if code == 0 and s.get("gate"):
             code, verdict = run_gate(s["gate"], root, env, step_target, log)

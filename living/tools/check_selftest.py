@@ -101,6 +101,12 @@ def wrapper_cases(home):
         expect(f"pre-set sccache-rustc ({name}): kept, with the cache settings and stats",
                r.get("env", {}).get("RUSTC_WRAPPER") == w and r["exe"] == pinned and r["env"].get("SLOP_SCCACHE") == pinned
                and "pre-set" in r["how"] and r["digest_wrapper"] is None, r)
+    stale = os.path.join(home, "slop-tools", "sccache-rustc")
+    script(stale, open(OURS).read().replace('exec "$SLOP_SCCACHE" "$@"', '# an older copy\nexec "$SLOP_SCCACHE" "$@"'))
+    r = choose(home, RUSTC_WRAPPER=stale)
+    expect("pre-set sccache-rustc that differs from this checkout's (an older copy): this checkout's runs, with the cache settings",
+           r.get("env", {}).get("RUSTC_WRAPPER") == OURS and r["exe"] == pinned and "in place of the pre-set" in r["how"]
+           and r["digest_wrapper"] is None, r)
     r = choose(home, RUSTC_WRAPPER=link, SCCACHE_DIR=os.path.join(home, "slot-cache"), SCCACHE_SERVER_PORT="4400")
     expect("pre-set sccache-rustc: the caller's SCCACHE_DIR and port are kept", r.get("env", {}).get("SCCACHE_DIR") == os.path.join(home, "slot-cache")
            and r["env"].get("SCCACHE_SERVER_PORT") == "4400", r)
