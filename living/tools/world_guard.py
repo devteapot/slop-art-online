@@ -1,4 +1,12 @@
-"""Detached, run-owned guard for scratch worlds. Admin credentials travel over stdin."""
+"""Detached, run-owned guard for scratch worlds. Admin credentials travel over stdin.
+
+Besides pausing orphans, the guard pauses its world when the host's free space falls under a floor
+(docs/TRIAL_DISK.md, "The disk floor during a run"): every DISK_EVERY_S seconds it reads free space
+(statvfs, no subprocess) on SLOP_GUARD_DISK_PATH (default: the home directory, where rootless
+podman keeps its volumes), and under SLOP_GUARD_FREE_FLOOR_GB (default 15; 0 turns it off) it pauses
+the world at once, verifies the pause by SQL, writes world-guard-disk.json in the run directory and
+keeps guarding: a world unpaused while the disk is still low is paused again. It never unpauses.
+"""
 import fcntl
 import hashlib
 import json
@@ -17,6 +25,21 @@ from pathlib import Path
 from verify_credentials import redact
 
 GRACE_SECONDS = 120
+# A battle of 216 viewers writes up to about 9 MB/s of raw commitlog at 55 ticks/s (docs/BATTLE_DISK.md),
+# about 50 MB in 5 s; the 15 GB floor is about 25 minutes of such a battle, and cleanup's archive room.
+DISK_EVERY_S = 5
+FREE_FLOOR_GB = 15.0
+
+
+def free_gb(path):
+    st = os.statvfs(path)
+    return st.f_bavail * st.f_frsize / 1e9
+
+
+def disk_settings():
+    """The floor and the path, read where the run starts (arm), so the detached guard keeps them."""
+    floor = float(os.environ.get("SLOP_GUARD_FREE_FLOOR_GB", FREE_FLOOR_GB))
+    return {"disk_path": os.environ.get("SLOP_GUARD_DISK_PATH", str(Path.home())), "free_floor_gb": floor}
 
 
 def process_stamp(pid):
@@ -129,7 +152,7 @@ def arm(directory, url, db, token, driver_pid=None, *, command=None, expected=No
     driver = [driver_pid, process_stamp(driver_pid)] if driver_pid is not None else None
     config = dict(path=str(path), result=str(result), generation=generation, url=url, db=db,
                   token=token, driver=driver, grace=grace, idle_seconds=idle_seconds,
-                  command=command, expected=expected, expected_epoch=expected_epoch)
+                  command=command, expected=expected, expected_epoch=expected_epoch, **disk_settings())
     with (directory / "world-guard.log").open("a") as log:
         proc = subprocess.Popen([sys.executable, str(Path(__file__).resolve())], stdin=subprocess.PIPE,
                                 stdout=log, stderr=log, start_new_session=True)
@@ -204,6 +227,10 @@ def watch(config):
     idle_seconds = config["idle_seconds"]
     missing_since = None
     reported = False
+    floor = config.get("free_floor_gb", 0) or 0
+    disk_path = config.get("disk_path")
+    next_disk = 0.0
+    disk_low = False  # in a low episode: paused (or pausing), reported once
 
     def report(message):
         print(f"{time.strftime('%Y-%m-%d %H:%M:%S %z')} ORPHAN GUARD {config['db']}: {message}", flush=True)
@@ -216,11 +243,60 @@ def watch(config):
         state = read_lease(path)
         return state if state and state["generation"] == config["generation"] else None
 
+    def disk_pause(free):
+        """Pause at once while free space is under the floor. Returns False when the guard should end."""
+        nonlocal disk_low
+        with world_lock(config["url"], config["db"]):
+            status, row = world(endpoint, token)
+            if status == 404:
+                report("database gone")
+                return False
+            if row and epoch is not None and row[0] != epoch:
+                report("world incarnation changed; exiting")
+                return False
+            if not row:
+                return True
+            if not disk_low:
+                report(f"PAUSING: free space {free:.1f} GB under the floor of {floor:g} GB on {disk_path}")
+            if not row[1]:
+                request(endpoint + "/call/set_paused", token, b"[true]", json_body=True)
+                _, confirmed = world(endpoint, token)
+                if not (confirmed and confirmed[1]):
+                    report("disk pause not verified; retrying")
+                    return True
+                if disk_low:
+                    report(f"the world was unpaused while free space is {free:.1f} GB: PAUSED AGAIN, verified by SQL")
+                else:
+                    report("PAUSED AND VERIFIED by SQL (disk floor); the guard goes on, and does not unpause")
+            elif not disk_low:
+                report("already paused; the guard goes on")
+            if not disk_low:
+                write_json(path.with_name("world-guard-disk.json"),
+                           {"paused_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "free_gb": round(free, 3),
+                            "floor_gb": floor, "path": disk_path, "db": config["db"]})
+            disk_low = True
+        return True
+
     if idle_seconds is None:
         report(f"armed for driver PID {driver[0]} with {config['grace']} s grace")
     else:
         report(f"armed with {idle_seconds:g} s inactivity lease")
+    if floor > 0:
+        report(f"disk floor {floor:g} GB free on {disk_path}, read every {DISK_EVERY_S} s")
     while (state := current()) is not None:
+        if floor > 0 and time.monotonic() >= next_disk:
+            next_disk = time.monotonic() + DISK_EVERY_S
+            try:
+                free = free_gb(disk_path)
+            except OSError as error:
+                free = None
+                report(f"cannot read free space on {disk_path}: {error}")
+            if free is not None and free < floor:
+                if not disk_pause(free):
+                    return
+            elif free is not None and disk_low:
+                report(f"free space back to {free:.1f} GB (floor {floor:g} GB); the world stays paused")
+                disk_low = False
         mind = state["mind"]
         if state["epoch"] is not None:
             epoch = state["epoch"]
