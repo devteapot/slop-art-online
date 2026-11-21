@@ -1,13 +1,1 @@
-{
-  "look-walk": {
-    "case": "look-walk",
-    "first_main": "b20dea4b7",
-    "first_seen": "2026-11-21T01:42:43+01:00",
-    "last_main": "b20dea4b7",
-    "last_seen": "2026-11-21T01:42:43+01:00",
-    "owner": "laptop",
-    "reason": "92/8 on the dev-box pinned render set 79072c65d37f with main's binary (leg-turn easing, steady leg offsets, strafe/backpedal play plain walk); 100/100 on the laptop's assets. Clip names all present (own-clips 87, VRoid bases 84 incl. walk_back, strafe_*); suspect the dev-box bake's markers: gen_anim marker_check fails on main (strafe_run_left_v48 both bases, run_diag_br_v48 Vivi)",
-    "skill": "verify-ui",
-    "times": 0
-  }
-}
+{}
