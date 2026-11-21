@@ -15,10 +15,17 @@ Two residents are placed beside the player and held still for the talk and items
 (admin `place_at` and `set_behavior`: scene setup, not player acts).
 """
 import argparse, glob, json, math, os, re, subprocess, sys, time
+from contextlib import contextmanager
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "../../../.."))
 V = os.path.join(ROOT, ".agents/skills/verify/scripts/verify.py")
+sys.path.insert(0, os.path.dirname(V))
+import verify
+from drive import next_sync_wait
+sys.path.insert(0, os.path.join(ROOT, "living/tools"))
+from law_values import own_laws
+
 W, H = 1600, 900
 
 
@@ -27,9 +34,11 @@ W, H = 1600, 900
 SCENARIOS = {}
 CULLET = set()
 EXPLICIT = set()
+# FRESH: scenarios that launch their own world under the run's name (no world may exist yet).
+FRESH = set()
 
 
-def scenario(name, cullet=False, explicit=False):
+def scenario(name, cullet=False, explicit=False, fresh=False):
     def register(function):
         assert name not in SCENARIOS, f"scenario {name} registered twice"
         SCENARIOS[name] = function
@@ -37,12 +46,17 @@ def scenario(name, cullet=False, explicit=False):
             CULLET.add(name)
         if explicit:
             EXPLICIT.add(name)
+        if fresh:
+            FRESH.add(name)
+            EXPLICIT.add(name)
         return function
     return register
 
 
-def sql(run, q):
+def sql(run, q, *, check=False):
     r = subprocess.run([sys.executable, V, "sql", "--run", run, q], capture_output=True, text=True)
+    if check and r.returncode:
+        raise RuntimeError(r.stderr.strip())
     t = r.stdout
     i = t.find("[")
     return json.loads(t[i:]) if i >= 0 else []
@@ -56,10 +70,13 @@ def sql_as_player(run, q):
     return json.loads(t[i:]) if i >= 0 else []
 
 
-def call_admin(run, reducer, args):
+def call_admin(run, reducer, args, *, check=False):
     """An admin reducer call (scene setup or restore), its output for evidence."""
     r = subprocess.run([sys.executable, V, "call", "--run", run, reducer, json.dumps(args), "--as-admin"], capture_output=True, text=True)
-    return r.stdout + r.stderr
+    output = r.stdout + r.stderr
+    if check and r.returncode:
+        raise RuntimeError(output.strip())
+    return output
 
 
 def residents(run, n=2):
@@ -70,7 +87,63 @@ def residents(run, n=2):
     return [r["id"] for r in rows[:n]]
 
 
+@contextmanager
+def resident_fixture(run, ids):
+    """Borrow residents for a scene and release their temporary position and graph."""
+    where = " OR ".join(f"id = {actor}" for actor in ids)
+    bodies = {r["id"]: r for r in sql(run, f"SELECT id, x, y FROM body WHERE {where}")}
+    graphs = {r["id"]: r["graph"] for r in sql(run, f"SELECT id, graph FROM brain WHERE {where}")}
+    if any(actor not in bodies or actor not in graphs for actor in ids):
+        raise RuntimeError(f"could not snapshot body and brain for fixture residents {ids}")
+    try:
+        yield
+    finally:
+        errors = []
+        # Return everyone to their tiles before waking the original behavior graphs.
+        calls = [("place_at", [actor, bodies[actor]["x"], bodies[actor]["y"]]) for actor in ids]
+        calls += [("set_behavior", [actor, graphs[actor]]) for actor in ids]
+        for reducer, args in calls:
+            try:
+                call_admin(run, reducer, args, check=True)
+            except RuntimeError as error:
+                errors.append(f"{reducer} for resident #{args[0]}: {error}")
+        if errors:
+            raise RuntimeError("resident fixture restore failed:\n" + "\n".join(errors))
+
+
+@contextmanager
+def sight_fixture(run, defaults):
+    """Restore scene daylight and sight laws, including laws compiled into the seed."""
+    original = own_laws(lambda q: sql(run, q))
+    epoch = sql(run, "SELECT epoch_ms FROM world")[0]["epoch_ms"]
+    try:
+        yield
+    finally:
+        try:
+            for law, default in defaults.items():
+                call_admin(run, "set_world_law", [law, original.get(law, default)], check=True)
+        finally:
+            sql(run, f"UPDATE world SET epoch_ms = {epoch} WHERE id = 0", check=True)
+
+
+# These four laws are enabled in Cullet's authored script before any override exists.
+CULLET_SIGHT = dict.fromkeys(("gaze_on", "fov_on", "cover_sight_on", "cover_brush_on"), "true")
+
+
 THEME = os.environ.get("LIVING_GAME_THEME", "")
+BEARING = float(os.environ.get("VERIFY_UI_BEARING", "0")) % 360
+BEARING_SUFFIX = f"-bearing-{BEARING:g}" if BEARING else ""
+
+
+def bearing_offset(x, y):
+    angle = math.radians(BEARING)
+    return (x * math.cos(angle) - y * math.sin(angle),
+            x * math.sin(angle) + y * math.cos(angle))
+
+
+def at_bearing(d, expected=BEARING):
+    yaw = view(d).get("yaw")
+    return yaw is not None and abs((yaw - expected + 180) % 360 - 180) < 0.05
 
 
 def drive(run, name, plan, places=(), syncs=(), extra=(), free=(), env=None):
@@ -85,6 +158,8 @@ def drive(run, name, plan, places=(), syncs=(), extra=(), free=(), env=None):
         cmd += ["--place-free", p]
     cmd += list(extra)
     r = subprocess.run(cmd, capture_output=True, text=True, env=dict(os.environ, **env) if env else None)
+    # Check the live authority before interpreting any captured perception as a UI result.
+    verify.require_running(verify.load(run), verify.admin_token())
     out = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
     return out, r.returncode, r.stdout + r.stderr
 
@@ -97,6 +172,29 @@ def dump(out, name):
 def log(out):
     p = os.path.join(out, "client.log")
     return re.sub(r"\x1b\[[0-9;]*m", "", open(p, errors="replace").read()) if os.path.exists(p) else ""
+
+
+def partition_sync(text, name, *, last=False):
+    """Split at an exact live-script sync step name."""
+    matches = list(re.finditer(rf"live script: sync:{re.escape(name)}(?= \(me )", text))
+    if not matches:
+        return ("", "", text) if last else (text, "", "")
+    match = matches[-1] if last else matches[0]
+    return text[:match.start()], match[0], text[match.end():]
+
+
+def fresh_log(out):
+    """Remove a drive's earlier client.log (a scenario run again under the same run), so a wait
+    on the log for a sync can only match the new client's lines."""
+    p = os.path.join(out, "client.log")
+    if os.path.exists(p):
+        os.remove(p)
+
+
+def cutaway_fades(text, folder):
+    """Return the fading asset paths from this exact directory."""
+    files = re.findall(r"cutaway: (\S+) fades to ", text)
+    return [file for file in files if os.path.basename(os.path.dirname(file)) == folder]
 
 
 class Checks:
@@ -153,8 +251,8 @@ def apart(d):
 
 @scenario("windows")
 def windows(run, c):
-    s = "windows"
-    plan = ("ready;wait:2;shot:01_explore;dump:01;click:@menu;wait:0.4;shot:02_menu;dump:02;click:@menu:Settings;wait:0.5;shot:03_settings;dump:03;"
+    s = "windows" + BEARING_SUFFIX
+    plan = (f"ready;yaw:{BEARING};wait:2;shot:01_explore;dump:01;click:@menu;wait:0.4;shot:02_menu;dump:02;click:@menu:Settings;wait:0.5;shot:03_settings;dump:03;"
             "key:KeyI:tap;wait:0.4;key:KeyL:tap;wait:0.5;shot:04_log_pack;dump:04;slide:@win:Log:head>0.62,0.45:0.6;wait:0.2;shot:05_dragging;"
             "wait:0.5;shot:06_swapped;dump:06;click:@win:Pack:close;wait:0.4;dump:07;key:KeyI:tap;wait:0.4;dump:08;key:Escape:tap;wait:0.3;dump:09;key:Escape:tap;wait:0.3;dump:10;"
             "key:Escape:tap;wait:0.4;shot:11_esc_menu;dump:11;key:Escape:tap;wait:0.3;dump:12;quit")
@@ -162,6 +260,7 @@ def windows(run, c):
     c.check(s, "client ran and joined", code == 0, text[-300:])
     notes_clear(c, s, out)
     d = {k: dump(out, k) for k in ["01", "02", "03", "04", "06", "07", "08", "09", "10", "11", "12"]}
+    c.check(s, "requested bearing is shown", at_bearing(d["01"]), repr(view(d["01"])))
     c.check(s, "nothing open on arrival", d["01"] and wins(d["01"]) == [] and not d["01"]["menu"], str(wins(d["01"])))
     c.check(s, "Menu button opens the Menu list", d["02"] and d["02"]["menu"])
     c.check(s, "Menu › Settings opens Settings in the centre, and closes the list", d["03"] and wins(d["03"]) == [("Settings", "Centre")] and not d["03"]["menu"], str(wins(d["03"])))
@@ -175,6 +274,116 @@ def windows(run, c):
     c.check(s, "Esc with nothing open opens Menu", d["10"] and d["10"]["menu"])
     c.check(s, "Esc closes the Menu list first", d["11"] and not d["11"]["menu"])
     c.check(s, "Esc again opens Menu (and frees the cursor)", d["12"] and d["12"]["menu"] and "Esc with nothing open: Menu, cursor freed" in log(out))
+
+
+def utc_ms(line):
+    """The client log line's UTC time (ms since the epoch), from its leading ISO stamp."""
+    import datetime
+    m = re.match(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(\.\d+)?Z", line)
+    if not m:
+        return None
+    t = datetime.datetime.strptime(m[1], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=datetime.timezone.utc).timestamp()
+    return int((t + float(m[2] or 0)) * 1000)
+
+
+@scenario("preparing", fresh=True)
+def preparing(run, c):
+    """Staged genesis (docs/STAGED_GENESIS.md §4, living/game/src/genesis.rs): the client joins a
+    world still being made. The scenario launches the run's island world itself (`verify.py
+    launch`, which waits for genesis through genesis_wait.py) and starts the client as soon as the
+    publish is under way, so it connects while the world is made: the cover says "Preparing the
+    world…" with the step, the steps and a bar, nothing is shown as a failure, and the client
+    joins once `genesis.done` turns true. Beside it, a probe `join` as verify.py's player
+    identity records the authority's refusal text while the world is made. Run it on a run name
+    with no world yet (`check.py --run ui-<new> preparing`), then `cleanup`."""
+    sys.path.insert(0, os.path.join(ROOT, "living/tools"))
+    import genesis_wait
+    s = "preparing"
+    st = verify.load(run)
+    if st.get("published") or st.get("publish_attempted"):
+        c.check(s, "a run name with no world yet", False, f"verify-{run} was already launched; use a new run name")
+        return
+    out = os.path.join(ROOT, ".local/living/verify", run, "ui", s)
+    os.makedirs(out, exist_ok=True)
+    seed = os.environ.get("VERIFY_UI_PREPARING_SEED", "island")
+    target = os.environ.get("VERIFY_UI_TARGET_DIR", os.path.join(ROOT, ".local/living/verify", run, "target"))
+    launch_log = open(os.path.join(out, "launch.log"), "w")
+    launch = subprocess.Popen([sys.executable, V, "launch", "--run", run, "--seed", seed, "--target-dir", target], stdout=launch_log, stderr=subprocess.STDOUT, cwd=ROOT)
+    # The client goes as soon as the publish is under way (the module is built): it cannot reach
+    # the world for a moment, tries again every 3 s, and gets in while the world is being made.
+    state = os.path.join(ROOT, ".local/living/verify", run, "state.json")
+    while launch.poll() is None and not (os.path.exists(state) and json.load(open(state)).get("publish_attempted")):
+        time.sleep(0.2)
+    if launch.poll() not in (None, 0):
+        c.check(s, "the world launched", False, open(os.path.join(out, "launch.log")).read()[-600:])
+        return
+    plan = ("preparing:180;wait:0.5;shot:01_preparing;dump:01;wait:3;shot:02_preparing;dump:02;"
+            "ready;wait:1;shot:03_joined;dump:03;quit")
+    cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", s, "--plan", plan, "--timeout", "600", "--preparing"]
+    client = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    # Meanwhile, the authority's side: the `genesis` row as it goes, and one probe `join` while
+    # the world is still being made (verify.py's player identity; refused, so nothing is made).
+    samples, probe, owner = [], None, None
+    while client.poll() is None:
+        st = verify.load(run)
+        if st.get("published"):
+            owner = owner or verify.admin_token()
+            try:
+                row = genesis_wait.genesis_row(verify.URL, st["db"], owner)
+            except genesis_wait.GenesisNotReady:
+                row = None
+            if row is not None and (not samples or (samples[-1]["step"], samples[-1]["done"]) != (row["step"], row["done"])):
+                samples.append({"wall_ms": int(time.time() * 1000), "step": row["step"], "steps": row["steps"], "label": row["label"], "done": row["done"], "updated_ms": row["updated_ms"]})
+            if row is not None and not row["done"] and probe is None:
+                r = subprocess.run([sys.executable, V, "player", "--run", run, "join", "Probe"], capture_output=True, text=True)
+                probe = {"code": r.returncode, "out": (r.stdout + r.stderr).strip()[-400:]}
+        time.sleep(0.25)
+    text_out = client.stdout.read()
+    code = client.wait()
+    launch.wait()
+    launch_log.close()
+    final = None
+    if owner:
+        try:
+            final = genesis_wait.genesis_row(verify.URL, f"verify-{run}", owner)
+        except genesis_wait.GenesisNotReady:
+            pass
+    json.dump({"genesis": samples, "final": final, "probe": probe}, open(os.path.join(out, "genesis.json"), "w"), indent=1)
+    c.check(s, "the world launched and was made", launch.returncode == 0 and final and final.get("done"), open(os.path.join(out, "launch.log")).read()[-400:])
+    c.check(s, "client ran and joined", code == 0, text_out[-300:])
+    c.check(s, "the authority refuses join while the world is made, with world_preparing",
+            probe is not None and re.search(r"world_preparing: the world is still being made \(step \d+ of \d+: [^)]*", probe["out"]), repr(probe))
+    t = log(out)
+    d1, d2, d3 = dump(out, "01"), dump(out, "02"), dump(out, "03")
+    g1, g2, g3 = ((d or {}).get("genesis") or {} for d in (d1, d2, d3))
+    cover = g1.get("cover") or {}
+    progress = g1.get("progress") or {}
+    c.check(s, "the client saw the world being made", g1.get("gate") == "Preparing" and ("genesis: the world is being made" in t or "genesis: preparing step" in t), json.dumps(g1)[:300])
+    c.check(s, "the cover says Preparing the world… with the step, the steps and a bar",
+            cover.get("title") == "Preparing the world…" and progress.get("steps", 0) > 0 and cover.get("bar") is not None
+            and f"step {progress.get('step')} of {progress.get('steps')}" in (cover.get("detail") or ""), json.dumps(cover))
+    p2 = g2.get("progress") or {}
+    c.check(s, "the progress line moves while the world is made", g2.get("gate") != "Preparing" or (p2.get("step", 0), p2.get("label")) != (progress.get("step", 0), progress.get("label")),
+            f"{progress} -> {p2}")
+    c.check(s, "joined after the world was ready", "genesis: the world is ready after" in t and re.search(r"playing character #\d+", t) and g3.get("gate") == "Ready" and not g3.get("cover"), json.dumps(g3)[:300])
+    held = [e for d in (d1, d2, d3) for e in ((d or {}).get("genesis") or {}).get("errors", [])]
+    notes = [n for d in (d1, d2, d3) for n in (d or {}).get("notes", [])]
+    c.check(s, "no error shown: world_preparing never lands in the errors, the notes or a warning",
+            not held and not [n for n in notes if "world_preparing" in n] and not re.search(r"WARN.*(world_preparing|join refused)", t), f"errors {held}; notes {notes}")
+    m = re.search(r"genesis: joined ([\d.]+) s after the world was ready", t)
+    joined_line = next((l for l in t.splitlines() if re.search(r"playing character #\d+", l)), "")
+    # When the authority's world turned ready: the first owner read that saw `done` (polled every
+    # 0.25 s, so up to about 0.3 s late). Not `genesis.updated_ms`: the last step stamps it when
+    # it starts, and populate runs about 4 s on the island after that.
+    done_ms = next((x["wall_ms"] for x in samples if x["done"]), None)
+    joined_ms = utc_ms(joined_line)
+    gap = (joined_ms - done_ms) / 1000 if done_ms and joined_ms else None
+    stamp = (done_ms - final["updated_ms"]) / 1000 if done_ms and final else None
+    detail = (f"client: {m[1] if m else '?'} s from seeing done to playing; authority done (first owner read of done) to the client's 'playing character': "
+              f"{gap if gap is None else round(gap, 2)} s; that read came {stamp if stamp is None else round(stamp, 2)} s after the done row's updated_ms")
+    print(f"      {detail}", flush=True)
+    c.check(s, "joined within 10 s of done", gap is not None and 0 <= gap < 10, detail)
+    json.dump({"client_done_to_join_s": float(m[1]) if m else None, "authority_done_to_join_s": gap, "done_seen_ms": done_ms, "done_updated_ms": final and final.get("updated_ms"), "joined_ms": joined_ms}, open(os.path.join(out, "timing.json"), "w"), indent=1)
 
 
 @scenario("bubble-once")
@@ -306,11 +515,18 @@ def earshot(run, c):
     talk box takes whom Tab goes to, and their order, from `my_earshot`'s `say` list, and shows its
     sentence (in my own labels) in the box's hint line; someone who steps out of a say's reach
     drops from it while a call still reaches them. With it off: no row, the client's own reckoning,
-    as before. At noon on open grass, cleared (the authority lists only people one sees: 11 m by
-    day, 6 by night), residents A and B held 2 m and 6 m off a fresh player; B then 10 m off,
-    beyond a say's 9 m and within a call's reach and sight. The box cannot switch to whisper or call
-    (they have no place in it yet): their lists are only read."""
+    as before. Face both residents at noon on open grass so the Call list proves B stayed
+    visible after leaving Say range."""
     s = "earshot"
+    cards = {r["name"]: r["carry_m"] for r in sql(run, "SELECT name, carry_m FROM speech_card")}
+    carry, call_carry = cards.get("say", 0), cards.get("call", 0)
+    if not 0 < carry < call_carry:
+        c.check(s, "world speech cards give Say and a wider Call", False, str(cards))
+        return
+    print(f"{s}: Say carry {carry:g} m; Call carry {call_carry:g} m", flush=True)
+    # The card already applies carry_for to ordinary world hearing. Leave enough room
+    # for tile snapping while keeping B within the base island's short daytime sight.
+    away = min(1.1 * carry, (carry + call_carry) / 2)
     a, b = residents(run)
     # Anyone within 25 m of the spot (offline player characters of earlier drives among them) is
     # put 40 m east first: they would stand in every list.
@@ -320,16 +536,26 @@ def earshot(run, c):
         call_admin(run, "place_at", [r["id"], ax + 40, ay + 3 * i])
     tok = os.path.join(ROOT, ".local/living/verify", run, "ui", f"earshot-{int(time.time())}.token")
     syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"spot=place_at|{{me}}|{ax}|{ay}",
-             'on=set_world_law|"earshot"|"true"', f"away=place_at|{b}|(mx-10.0)|(my)", 'off=set_world_law|"earshot"|"false"']
-    plan = ("ready;sync:noon;sync:spot;wait:2;sync:on;sync:scene;wait:3;key:Enter:tap;wait:1.2;shot:01_box;dump:e1;tab;wait:0.4;dump:t1;tab;wait:0.4;dump:t2;tab;wait:0.4;dump:t3;"
+             'on=set_world_law|"earshot"|"true"', f"away=place_at|{b}|(mx+{away})|(my+1)",
+             "senses=client_sql|SELECT hearing, sight FROM my_senses",
+             'off=set_world_law|"earshot"|"false"']
+    plan = ("ready;sync:noon;sync:spot;wait:2;sync:on;sync:scene;look:90;wait:3;sync:senses;key:Enter:tap;wait:1.2;shot:01_box;dump:e1;tab;wait:0.4;dump:t1;tab;wait:0.4;dump:t2;tab;wait:0.4;dump:t3;"
             "key:Escape:tap;wait:0.3;sync:away;wait:2;key:Enter:tap;wait:1.2;shot:02_away;dump:e2;tab;wait:0.4;dump:t4;tab;wait:0.4;dump:t5;key:Escape:tap;wait:0.3;"
             "sync:off;wait:2;key:Enter:tap;wait:1.2;shot:03_off;dump:e3;tab;wait:0.4;dump:t6;key:Escape:tap;wait:0.3;quit")
     try:
-        out, code, text = drive(run, s, plan, places=[f"{a}:2:0", f"{b}:-6:0"], syncs=syncs, extra=["--token", tok, "--player", "Hearer"])
+        out, code, text = drive(
+            run, s, plan, places=[f"{a}:{0.6 * carry}:0", f"{b}:{0.8 * carry}:1"],
+            syncs=syncs, extra=["--token", tok, "--player", "Hearer"],
+            env={"LIVING_GAME_CONTROL": "cursor"},
+        )
     finally:
         # Back to the shipped law (on).
         call_admin(run, "set_world_law", ["earshot", "true"])
-    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    scene = dump(out, "scene") or {}
+    snapshots = scene.get("snaps", {}).get("senses", [])
+    senses = snapshots[0]["rows"] if snapshots else []
+    ranges = f"Say carry {carry:g} m; Call carry {call_carry:g} m; my_senses {senses}"
+    c.check(s, "client ran and joined (a fresh player)", code == 0 and bool(senses), f"{ranges}; {text[-300:]}")
     d = {k: dump(out, k) or {} for k in ("e1", "t1", "t2", "t3", "e2", "t4", "t5", "e3", "t6")}
     ty = lambda k: d[k].get("typing") or {}
     told = lambda k: ty(k).get("told") or {}
@@ -360,7 +586,7 @@ def earshot(run, c):
     st = steps(("t1", "t2", "t3"))
     c.check(s, "law on: each Tab goes by the authority's say list, in its order", all(x[0] and x[1] for x in st), str(st))
     say2, call2 = ways("e2").get("say"), ways("e2").get("call")
-    c.check(s, "B steps 10 m off: out of the say list, still in the call's (in sight); the box follows", say2 is not None and b not in say2 and a in say2 and call2 is not None and b in call2 and ty("e2").get("earshot") == say2, f"say {say2}; call {call2}; box {ty('e2').get('earshot')}")
+    c.check(s, "B steps beyond Say range and stays visible in Call range", say2 is not None and b not in say2 and a in say2 and call2 is not None and b in call2 and ty("e2").get("earshot") == say2, f"say {say2}; call {call2}; box {ty('e2').get('earshot')}")
     st2 = steps(("t4", "t5"))
     c.check(s, "Tab then goes by the new say list and never to B", all(x[0] and x[1] for x in st2) and all(b not in (x[4] or []) and x[3] != b for x in st2), str(st2))
     c.check(s, "law off: no row, the client's own reckoning (A within it)", not ty("e3").get("told") and a in (ty("e3").get("earshot") or []), f"told {ty('e3').get('told')}; earshot {ty('e3').get('earshot')}")
@@ -761,14 +987,14 @@ def hair(run, c):
     saved = json.load(open(st)).get("hair_shine") if os.path.exists(st) else None
     c.check(s, "the settings file keeps the last choice", saved == "today", str(saved))
     # The same settings file: the next start reads Today back. Then A, placed beside me and held
-    # still, speaks to me with their window open, the camera comes in close (`view:`, 2.4 m),
-    # and the shines in turn.
+    # still, speaks to me with their window open. Zoom the top-down camera to Near,
+    # then capture the shines in turn.
     a, _ = residents(run)
     thought = json.dumps({"kind": "talk", "summary": "", "detail": "", "latency_ms": 0, "tokens": 0, "model": "verify-ui scene", "reference": ""})
     answer = f'answer=mind_say|{a}|"Good day to you."|{{me}}|""|0|{thought}'
     seq = ["crown", "today", "crown", "soft", "crown"]
     shots = "".join(f"shine:{v};wait:0.7;shot:{i + 1:02d}_{v};" for i, v in enumerate(seq))
-    plan = (f"ready;wait:2;dump:00;shine:crown;sync:scene;wait:1.5;menu:f@id:{a};wait:0.5;click:@acts:0:window;wait:1;sync:answer;wait:0.5;view:8:2.4:30;wait:4;" + shots + "dump:06;quit")
+    plan = (f"ready;wait:2;dump:00;shine:crown;sync:scene;wait:1.5;menu:f@id:{a};wait:0.5;click:@acts:0:window;wait:1;sync:answer;wait:0.5;cursor:0.70,0.55;notches:30;wait:4;" + shots + "dump:06;quit")
     out2, code2, _ = drive(run, s, plan, places=[f"{a}:-1.5:1.5"], syncs=[answer])
     c.check(s, "the next start reads it back", x(out2, "00").get("hair_shine") == "today", str(x(out2, "00").get("hair_shine")))
     c.check(s, "A's window is open in the photographs", any(w.startswith("Person") for w, _ in wins(dump(out2, "06"))), str(wins(dump(out2, "06"))))
@@ -873,18 +1099,18 @@ def offers(run, c):
 
 # Where the support scenario stands the player on Cullet (land metres; the plan's x + 510 and
 # 784 - y, as of layout pass 1: the Ladder Wynd at plan x -52, the Marver's terrace at x 68..80)
-# and what holds it up there: a kit fixture's file (part of its path); whether it is tall enough to
+# and what holds it up there: a kit fixture's file or directory; whether it is tall enough to
 # be an occluder, so the camera's fade (`envs::cutaway`) considers it at all; and whether it is what
 # I walk on there (a flight, a terrace, the quay: never faded), or only beside me (a retaining wall
 # below the edge I stand on, which may fade when it stands between the camera and me).
 SUPPORTS = [
-    ("stairs", 458.0, 755.0, "stairs/stairs_ladder_wynd_strand_to_low", True, True),
-    ("terrace", 584.0, 720.8, "marver_terrace/", False, True),
-    ("quay", 450.0, 782.6, "quay/", False, True),
+    ("stairs", 458.0, 755.0, "envs/cullet/stairs/stairs_ladder_wynd_strand_to_low.glb", True, True),
+    ("terrace", 584.0, 720.8, "envs/cullet/marver_terrace/marver_terrace.glb", False, True),
+    ("quay", 450.0, 782.6, "envs/cullet/quay/", False, True),
     # At the upper level's edge above a retaining wall: the drop's tiles keep you 1-1.5 m from
     # it, so it is beside you, never under you; it may fade when it stands between the camera
     # and you, as anything that hides you does.
-    ("wall", 440.0, 751.6, "retaining_wall/wall_002", False, False),
+    ("wall", 440.0, 751.6, "envs/cullet/retaining_wall/wall_002.glb", False, False),
 ]
 # Where the player stands first, away from every spot: the cutaway names what holds me up once,
 # as I come onto it, and the character keeps its place between drives.
@@ -913,22 +1139,25 @@ def support(run, c):
     c.check(s, "client ran and joined", code == 0, text[-300:])
     L = log(out)
     # The log in stretches, one per spot: from its sync step to the next.
-    parts = re.split(r"live script: sync:(\w+)", L)
+    parts = re.split(r"live script: sync:([^\n]+?)(?= \(me )", L)
     seg = {parts[i]: parts[i + 1] for i in range(1, len(parts) - 1, 2)}
     for name, x, y, part, occluder, walked in SUPPORTS:
         t = seg.get(name, "")
         held = set(re.findall(r"cutaway: (\S+) holds me up", t))
         faded = re.findall(r"cutaway: (\S+) fades to", t)
-        mine = [f for f in held if part in f]
+        def supports(file):
+            return os.path.dirname(file) == part.rstrip("/") if part.endswith("/") else file == part
+
+        mine = [f for f in held if supports(f)]
         if occluder:
             c.check(s, f"{name}: the cutaway finds what holds me up ({part})", bool(mine), f"held {sorted(held)}")
             # Only the plan's own flight is there: no other kit file of its kind drawn on it
             # (stairs-place: a Store Wynd flight stood at the Ladder Wynd's foot).
-            folder = part.split("/")[0] + "/"
-            others = sorted(f for f in held if folder in f and part not in f)
-            c.check(s, f"{name}: no other {folder[:-1]} model stands there", not others, f"also held {others}")
+            folder = os.path.dirname(part)
+            others = sorted(f for f in held if os.path.dirname(f) == folder and f != part)
+            c.check(s, f"{name}: no other {os.path.basename(folder)} model stands there", not others, f"also held {others}")
         # What held me up there, and what I walk on there, never fades there.
-        bad = [f for f in faded if f in held or (walked and part in f)]
+        bad = [f for f in faded if f in held or (walked and supports(f))]
         c.check(s, f"{name}: nothing under or beside my feet fades", t != "" and not bad, f"faded {bad}" if t else "no log for this spot")
     c.check(s, "photographs of each spot", all(os.path.exists(os.path.join(out, f"{n}.png")) for n, *_ in SUPPORTS))
 
@@ -939,21 +1168,23 @@ def pick(run, c):
     behind standing where the cursor's ground point falls) names, hovers and addresses that one.
     The pick is one function for the nameplate, Enter and combat's target (living/game/src/pick.rs);
     before it, Enter took the hovered person nearest the cursor's ground point: the one behind."""
-    s = "pick"
+    s = "pick" + BEARING_SUFFIX
     a, b = residents(run)
     line = f"You in front, {int(time.time()) % 100000}."  # its own line: said rows from earlier drives don't count
-    # The view faces north (yaw 0, sim -y). A stands ahead and to the left; B 1.5 m behind A along
-    # the view, where the ray through A's chest meets the ground.
-    plan = ("ready;frame:0;yaw:0;wait:1.5;sync:scene;wait:2;point:{A}:1.3;wait:0.8;shot:01_pointed;dump:01;"
+    # A stands screen-left; B is farther along the view, where A's chest ray meets the ground.
+    plan = ("ready;frame:0;yaw:{BEARING};wait:1.5;sync:scene;wait:2;point:{A}:1.3;wait:0.8;shot:01_pointed;dump:01;"
             "key:Enter:tap;wait:0.6;shot:02_to_them;dump:02;type:{LINE};enter;wait:1.2;dump:03;key:Escape:tap;wait:0.6;"
             "point:{A}:1.3;wait:0.8;tap;wait:0.8;dump:04;key:Escape:tap;wait:0.4;"
-            "sync:stack;wait:1;point:{A}:1.0;wait:0.5;dump:05a;wait:0.5;dump:05b;wait:0.5;dump:05c;shot:05_stacked;quit").replace("{A}", str(a)).replace("{LINE}", line)
+            "sync:stack;wait:1;point:{A}:1.0;wait:0.5;dump:05a;wait:0.5;dump:05b;wait:0.5;dump:05c;shot:05_stacked;quit").replace("{A}", str(a)).replace("{LINE}", line).replace("{BEARING}", str(BEARING))
     # Last, both on one spot (stacked exactly on screen): one answer every frame, the nearer the camera.
-    stack = f"stack=place_at|{a}|(mx-3.0)|(my-1.0);place_at|{b}|(mx-3.0)|(my-1.0)"
-    out, code, text = drive(run, s, plan, places=[f"{a}:-3.0:-1.0", f"{b}:-3.0:-2.5"], syncs=[stack])
+    ax, ay = bearing_offset(-3.0, -1.0)
+    bx, by = bearing_offset(-3.0, -2.5)
+    stack = f"stack=place_at|{a}|(mx{ax:+.4f})|(my{ay:+.4f});place_at|{b}|(mx{ax:+.4f})|(my{ay:+.4f})"
+    out, code, text = drive(run, s, plan, places=[f"{a}:{ax:.4f}:{ay:.4f}", f"{b}:{bx:.4f}:{by:.4f}"], syncs=[stack])
     c.check(s, "client ran and joined", code == 0, text[-300:])
     d = {k: dump(out, k) for k in ["01", "02", "03", "04"]}
     L = log(out)
+    c.check(s, "requested bearing is shown", at_bearing(d["01"]), repr(view(d["01"])))
     hov = [h.get("id") for h in (d["01"] or {}).get("hovered") or []]
     c.check(s, "the cursor on the one in front: only they are hovered (one nameplate)", hov == [a], f"hovered {hov}, under {(d['01'] or {}).get('under')}, in front #{a}, behind #{b}")
     t2 = (d["02"] or {}).get("typing") or {}
@@ -1039,7 +1270,7 @@ def select_camera_preset(preset):
 @scenario("camera", explicit=True)
 def camera(run, c):
     """Drive real line-wheel messages at the three top-down knots, with the field off and on."""
-    s = "camera"
+    s = "camera" + BEARING_SUFFIX
     ids = residents(run, 3)
     if len(ids) != 3:
         c.check(s, "three residents available", False, repr(ids))
@@ -1047,7 +1278,8 @@ def camera(run, c):
     front, back, behind_wall = ids
     # Land seed 7, Brackenford. The wood line heads north from grass into Forest tiles.
     # The roof point is on walking ground under the north eave of the market stall.
-    street, wood, behind_trees, roof = (420.5, 255.5), (276.5, 395.5), (277.5, 389.5), (412.5, 256.5)
+    street, wood, behind_trees = (420.5, 255.5), (276.5, 395.5), (277.5, 389.5)
+    roof = (411.5, 256.5) if BEARING == 135 else (412.5, 256.5)
     syncs = [
         "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
         'fov_off=set_world_law|"fov_on"|"false"',
@@ -1059,7 +1291,7 @@ def camera(run, c):
              ("middle", 11, 0.55, 12.0, 58.0, 44.0),
              ("near", 30, 1.0, 8.0, 48.0, 42.0))
     for field in ("off", "on"):
-        plan = "ready;" + select_camera_preset("ours") + f"sync:noon;sync:fov_{field};sync:street;wait:3;sync:scene;look:0;wait:2;cursor:0.70,0.55;wait:0.5;dump:initial;pan:300;drag:250;wait:0.5;dump:fixed;"
+        plan = "ready;" + select_camera_preset("ours") + f"yaw:{BEARING};sync:noon;sync:fov_{field};sync:street;wait:3;sync:scene;look:0;wait:2;cursor:0.70,0.55;wait:0.5;dump:initial;pan:300;drag:250;wait:0.5;dump:fixed;"
         for stop, wheel, *_ in knots:
             plan += f"notches:{wheel};wait:1.5;dump:{stop};shot:{stop};"
             plan += f"point:{front}:0;wait:0.6;dump:{stop}_ground;point:{front}:0.8;wait:0.6;dump:{stop}_hover;"
@@ -1080,14 +1312,16 @@ def camera(run, c):
                 f"clear_{stop}=place_at|{{me}}|{street[0]}|{street[1]}",
                 f"roof_{stop}=place_at|{{me}}|{roof[0]}|{roof[1]}",
             ]
-        out, code, text = drive(run, f"{s}-{field}", plan + "quit",
-                                places=[f"{front}:0:-2.5", f"{back}:2.5:4.5", f"{behind_wall}:1.0:-14.0"], syncs=syncs + roof_syncs,
-                                env={"LIVING_GAME_DEV": "1", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
+        # The scene turns `fov_on` and the clock; the fixture puts the world's own law and daylight back.
+        with sight_fixture(run, {"fov_on": "false"}), resident_fixture(run, ids):
+            out, code, text = drive(run, f"{s}-{field}", plan + "quit",
+                                    places=[f"{front}:0:-2.5", f"{back}:2.5:4.5", f"{behind_wall}:1.0:-14.0"], syncs=syncs + roof_syncs,
+                                    env={"LIVING_GAME_DEV": "1", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
         c.check(s, f"field {field}: client joined and finished", code == 0, text[-300:])
         initial = view(dump(out, "initial"))
         c.check(s, f"field {field}: fresh settings start at middle zoom", abs(initial.get("zoom", -1.0) - 0.55) < 0.001, repr(initial))
         fixed = view(dump(out, "fixed"))
-        c.check(s, f"field {field}: drag and pan leave bearing at north", abs(fixed.get("yaw", -100.0)) < 0.01, repr(fixed))
+        c.check(s, f"field {field}: left drag and pan keep the chosen bearing", at_bearing(dump(out, "fixed")), repr(fixed))
         held = dump(out, "held_wheel") or {}
         c.check(s, f"field {field}: the held action wheel consumes line-wheel input",
                 abs(view(held).get("zoom", -1.0)) < 0.001 and bool((held.get("wheel") or {}).get("held")), repr(held.get("wheel")))
@@ -1109,8 +1343,8 @@ def camera(run, c):
             visible.append({a["id"] for a in d.get("seen") or []})
             good = all(abs(v.get(k, -100.0) - expected) < tolerance
                        for k, expected, tolerance in (("zoom", z, 0.001), ("height", height, 0.1),
-                                                       ("pitch", pitch, 0.1), ("fov", fov, 0.1), ("yaw", 0, 0.01)))
-            c.check(s, f"{field} {stop}: north-up camera reaches the curve knot", good and v.get("mode") == "top-down", repr(v))
+                                                       ("pitch", pitch, 0.1), ("fov", fov, 0.1))) and at_bearing(d)
+            c.check(s, f"{field} {stop}: camera reaches the curve knot at the requested bearing", good and v.get("mode") == "top-down", repr(v))
             c.check(s, f"{field} {stop}: authority sight and Shade active",
                     sense.get("on") == (field == "on") and sense.get("source") == "Authority" and data.get("sight_look") == "shade", repr(sense))
             point = ground(dump(out, f"{stop}_ground"))
@@ -1131,9 +1365,9 @@ def camera(run, c):
             wood_dump = dump(out, f"wood_{stop}") or {}
             c.check(s, f"{field} {stop}: resident in generic forest remains in the scoped view",
                     front in (wood_dump.get("perceived") or []), repr(wood_dump.get("perceived")))
-            under_roof = trace.partition(f"live script: sync:roof_{stop}")[2].partition(f"live script: dump:roof_{stop}")[0]
+            under_roof = partition_sync(trace, f"roof_{stop}")[2].partition(f"live script: dump:roof_{stop}")[0]
             c.check(s, f"{field} {stop}: the market stall roof enters cutaway",
-                    re.search(r"cutaway: .*market_stall.* fades to ", under_roof) is not None, under_roof[-350:])
+                    cutaway_fades(under_roof, "market_stall"), under_roof[-350:])
         c.check(s, f"{field}: zoom keeps the authority's sight radius", ranges[0] is not None and len(set(ranges)) == 1, repr(ranges))
         c.check(s, f"{field}: the resident behind the wall stays outside the scoped view",
                 all(behind_wall not in rows for rows in visible + perceived), repr((visible, perceived)))
@@ -1141,6 +1375,63 @@ def camera(run, c):
             c.check(s, "field on: resident behind the player stays out of every pick list", all(back not in rows for rows in visible + perceived), repr((visible, perceived)))
         else:
             c.check(s, "field off: the rear resident is perceived", all(back in rows for rows in perceived), repr(perceived))
+
+
+@scenario("camera-rotate", explicit=True)
+def camera_rotate(run, c):
+    """Turn at Middle, drive real W, aim/pick, cut away an awning and snap north."""
+    s = "camera-rotate"
+    resident = residents(run, 1)[0]
+    open_settings = "click:@menu;wait:0.4;click:@menu:Settings;wait:0.6;"
+    drag = "mouse:middle:down;motion:3,0;wait:0.15;dump:threshold;motion:447,0;mouse:middle:up;"
+    plan = ("ready;click:@tip:ok;wait:0.3;sync:noon;sync:street;wait:3;sync:scene;cursor:0.55,0.42;wait:0.3;"
+            "dump:north;shot:middle-north;" + drag + "wait:0.6;dump:turned;shot:middle-135;"
+            f"point:{resident}:0.9;wait:0.4;dump:resident;point:{resident}:0;wait:0.4;dump:ground;"
+            "cursor:;key:KeyW:down;wait:0.8;key:KeyW:up;wait:0.6;dump:walked;"
+            "sync:roof;wait:3;dump:awning;shot:awning;key:KeyN:tap;wait:0.3;dump:key-snap;"
+            "cursor:0.60,0.40;rotate:135;wait:0.3;dump:gesture;"
+            "mouse:middle:down;motion:2,1;mouse:middle:up;wait:0.3;dump:tap-snap;"
+            + open_settings + "click:@settings:page:rotation;wait:0.4;shot:rotation-settings;click:@settings:camera_rotate_speed:2;wait:0.4;"
+            "click:@settings:camera_rotate_invert;wait:0.4;click:@settings:page:controls;wait:0.4;"
+            "click:@bind:NorthUp:0;wait:0.4;key:KeyY:tap;wait:0.4;"
+            "click:@settings:page:play;wait:0.4;key:Escape:tap;cursor:0.60,0.40;wait:0.6;"
+            "rotate:30;wait:0.3;dump:fast-invert;"
+            + open_settings + "click:@settings:page:camera;wait:0.4;click:@settings:camera_copy;wait:0.4;"
+            "key:Escape:tap;cursor:0.60,0.40;wait:0.4;key:KeyY:tap;wait:0.3;dump:rebound-snap;"
+            + open_settings + "click:@settings:page:rotation;wait:0.4;click:@settings:camera_rotate;wait:0.4;"
+            "key:Escape:tap;cursor:0.60,0.40;wait:0.6;rotate:90;wait:0.3;dump:disabled;quit")
+    out, code, msg = drive(run, s, plan, places=[f"{resident}:2:-2"], syncs=[
+        "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+        'street=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5',
+        "roof=place_at|{me}|411.5|256.5",
+    ], env={"LIVING_GAME_DEV": "1", "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
+    c.check(s, "client joined and finished", code == 0, msg[-300:])
+    for label, yaw in (("north", 0), ("threshold", 0), ("turned", 135), ("awning", 135),
+                       ("key-snap", 0), ("gesture", 135), ("tap-snap", 0), ("fast-invert", 300), ("rebound-snap", 0), ("disabled", 0)):
+        d = dump(out, label)
+        c.check(s, f"{label}: bearing {yaw}° at Middle", at_bearing(d, yaw) and abs(view(d).get("zoom", -1) - 0.55) < 0.001, repr(view(d)))
+    picked = (dump(out, "resident") or {}).get("under")
+    c.check(s, "the rotated camera picks the resident", picked == resident, repr(picked))
+    row = ((dump(out, "scene") or {}).get("placed") or {}).get(str(resident))
+    hit = ground(dump(out, "ground"))
+    c.check(s, "the rotated camera ray reaches the resident's ground point",
+            bool(row and hit and math.hypot(row[0] - hit[0], row[1] - hit[2]) < 0.15), repr((row, hit)))
+    before, after = [(dump(out, name) or {}).get("me_at", {}).get("body") for name in ("turned", "walked")]
+    if before and after:
+        dx, dy = [after[k] - before[k] for k in ("x", "y")]
+        up, right = (dx + dy) / math.sqrt(2), (-dx + dy) / math.sqrt(2)
+        c.check(s, "W moves up-screen at 135°", up > 0.5 and abs(right) < up * 0.25, repr((dx, dy, up, right)))
+    else:
+        c.check(s, "W moves up-screen at 135°", False, repr((before, after)))
+    trace = partition_sync(log(out), "roof")[2].partition("live script: dump:awning")[0]
+    c.check(s, "the market awning cuts away at 135°", cutaway_fades(trace, "market_stall"), trace[-500:])
+    c.check(s, "both Middle stills captured", all(os.path.isfile(os.path.join(out, f"middle-{name}.png")) for name in ("north", "135")))
+    prefs = dump(out, "settings") or {}
+    c.check(s, "the rotation settings are saved", prefs.get("camera_rotate") is False
+            and prefs.get("camera_rotate_speed") == 2 and prefs.get("camera_rotate_invert") is True)
+    c.check(s, "the new north key is saved", (prefs.get("binds") or {}).get("NorthUp") == ["KeyY"])
+    copied = dump(out, "camera-tuning") or {}
+    c.check(s, "Copy values exports the live bearing", abs(copied.get("bearing", -1) - 300) < 0.05, repr(copied))
 
 
 @scenario("camera-tuning", explicit=True)
@@ -1173,12 +1464,14 @@ def camera_tuning(run, c):
         path = os.path.join(out, name)
         return json.load(open(path)) if os.path.exists(path) else {}
     exported = read("camera-tuning.json")
+    bearing = exported.pop("bearing", None)
     late = exported.get("late_tilt") or {}
-    c.check(s, "Copy values writes the persisted live tuning, including tilt start and near pitch",
+    middle, close = [view(dump(out, name)) for name in ("late_middle", "late_near")]
+    c.check(s, "Copy values writes the persisted live tuning and the displayed bearing",
             bool(late) and exported == read("settings.json").get("camera_tuning")
             and abs(exported["fixed_pitch"] - fixed.get("pitch", 0)) < 0.1
-            and abs(late["tilt_start"] - 0.5) < 0.01, repr(exported))
-    middle, close = [view(dump(out, name)) for name in ("late_middle", "late_near")]
+            and abs(late["tilt_start"] - 0.5) < 0.01
+            and bearing is not None and at_bearing(dump(out, "late_middle"), bearing), repr((exported, bearing)))
     c.check(s, "Tilt near eases between the base and near pitches",
             bool(late and middle and close) and late["tilt_start"] < middle["zoom"] < 0.6
             and late["near_pitch"] < middle["pitch"] < exported["fixed_pitch"]
@@ -1225,8 +1518,8 @@ def camera_lol(run, c):
     c.check(s, "the point and tap pick the resident", hover.get("under") == front and selected.get("to") == front,
         repr((hover.get("under"), selected)))
     trace = log(out)
-    roof = trace.partition("live script: sync:roof")[2].partition("live script: dump:under_awning")[0]
-    c.check(s, "the market awning enters cutaway", bool(re.search(r"cutaway: .*market_stall.* fades to ", roof)),
+    roof = partition_sync(trace, "roof")[2].partition("live script: dump:under_awning")[0]
+    c.check(s, "the market awning enters cutaway", cutaway_fades(roof, "market_stall"),
         roof[-300:])
     metrics = clearance_metrics(out, "hold:0", "dump:after_walk")
     c.check(s, "the eye clears the ground and stays continuous while walking out from the awning",
@@ -1286,7 +1579,7 @@ def camera_lod(run, c):
 
 def camera_lod_one(run, c, preset):
     from datetime import datetime
-    s = "camera-lod" if preset == "ours-fixed" else "camera-lod-lol"
+    s = ("camera-lod" if preset == "ours-fixed" else "camera-lod-lol") + BEARING_SUFFIX
     ids = sorted(r["id"] for r in sql(run, "SELECT id, name, alive FROM character WHERE kind = 'person'")
                  if r.get("alive") and r.get("name") != "Verifier")[:17]
     if len(ids) < 12:
@@ -1296,10 +1589,10 @@ def camera_lod_one(run, c, preset):
     if preset == "lol":
         # Pack the same residents into the closer view, without placing anyone on the player.
         offsets = [(x, y) for y in (-2.3, -1.2, -0.1, 1.0) for x in (-1.7, -0.6, 0.6, 1.7)]
-    places = [f"{id}:{x}:{y}" for id, (x, y) in zip(ids, offsets)]
+    places = [f"{id}:{x:.4f}:{y:.4f}" for id, (x, y) in zip(ids, (bearing_offset(*offset) for offset in offsets))]
     syncs = ['setup=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5',
              "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0"]
-    plan = "ready;" + select_camera_preset(preset) + "sync:noon;sync:setup;wait:2;sync:scene;look:180;wait:4;cursor:0.68,0.42;wait:0.5;"
+    plan = "ready;" + select_camera_preset(preset) + f"yaw:{BEARING};sync:noon;sync:setup;wait:2;sync:scene;look:180;wait:4;cursor:0.68,0.42;wait:0.5;"
     knots = (("near", 30),) if preset == "lol" else (("far", -30), ("middle", 11), ("near", 30))
     for stop, notches in knots:
         plan += f"notches:{notches};wait:2;dump:{stop}_start;wait:8;dump:{stop}_end;shot:{stop};"
@@ -1328,7 +1621,7 @@ def camera_lod_one(run, c, preset):
             d = dump(out, f"{stop}_end") or {}
             lod = (d.get("extra") or {}).get("lod") or {}
             measured = len(intervals) >= 100 and lod.get("near", 0) + lod.get("far", 0) >= 8
-            c.check(s, f"{arm} {stop}: crowded street and uncapped samples", measured, repr(lod))
+            c.check(s, f"{arm} {stop}: crowded street and uncapped samples at the requested bearing", measured and at_bearing(d), repr(lod))
             if intervals:
                 metrics[arm][stop] = {"frames": len(intervals), "p50_ms": intervals[len(intervals) // 2],
                                       "p99_ms": intervals[math.ceil(len(intervals) * .99) - 1], **lod}
@@ -1541,6 +1834,1684 @@ def texel(meta, pix, x, y):
     j = int((y - meta["origin"][1]) / meta["texel"])
     n = meta["size"]
     return pix[j * n + i] if 0 <= i < n and 0 <= j < n else None
+
+
+LOG_LINE = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+)Z\s+(\w+)\s+([\w:]+): (.*)$")
+
+
+def timed_lines(out):
+    """The client log's lines with their wall time (s since the epoch)."""
+    import datetime
+    rows = []
+    for line in log(out).splitlines():
+        m = LOG_LINE.match(line)
+        if m:
+            stamp = datetime.datetime.strptime(m[1][:26], "%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=datetime.timezone.utc)
+            rows.append((stamp.timestamp(), m[4]))
+    return rows
+
+
+def first_after(lines, pattern, after, before=None):
+    for t, text in lines:
+        if t >= after and (before is None or t < before) and re.search(pattern, text):
+            return t, text
+    return None
+
+
+# How long law-override waits for `cover_law` to read a cover change in force (the island's
+# switch-on derivation takes about 1.9 s on a world made since cover-stall).
+COVER_WAIT_S = 10.0
+
+
+@scenario("law-override", explicit=True)
+def law_override(run, c):
+    """Value-only law edits reach a connected client in place (docs/LAW_OVERRIDE.md): each of
+    the delivery, gaze and cover laws set through `set_world_law` (which writes `law_override`
+    only) while a client plays, with the script revision unchanged, the client's reaction time,
+    the delivery switch made before broken (no creature missing from the reads, frame by frame:
+    `LIVING_GAME_SEEN_LOG`) and the world's tick gap around the call (the authority's `clock`
+    sampled every ~20 ms); an ordinary law (`turn_rate`) still installs a new revision, compiled
+    here with the overrides kept; a reconnect and a fresh client with overrides present take the
+    set the rows choose first. The laws touched are restored afterwards.
+
+    A cover law is in force only when the public `cover_law` row reads it: switching
+    `cover_sight_on` on derives the cover ground in steps first (cover-genesis, about 1.9 s on the
+    island since cover-stall), so after each cover change the driver waits (at most
+    COVER_WAIT_S) for the row before it judges the client's cover effect, and records the wait
+    (`in_force_s`). The world must be made at or after cover-stall (`c83ee5d1`): an older land
+    has no `cover_source` and stalls the tick while it is generated again."""
+    import threading
+    s = "law-override"
+    st = verify.load(run)
+    db, token = st["db"], verify.admin_token()
+    name = f"{s}-{THEME}" if THEME else s
+    base = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    out = os.path.join(base, name)
+
+    def q(query):
+        code, body = verify.http(f"/v1/database/{db}/sql", query, token, raw=True, timeout=5)
+        if code != 200:
+            return None
+        res = json.loads(body)[-1]
+        names = [col["name"]["some"] for col in res["schema"]["elements"]]
+        return [dict(zip(names, row)) for row in res["rows"]]
+
+    def revision():
+        rows = q("SELECT revision FROM script WHERE name = 'skills'") or [{}]
+        return rows[0].get("revision")
+
+    def set_law(law, value):
+        verify.refresh_lease(st)
+        t0 = time.time()
+        code, body = verify.http(f"/v1/database/{db}/call/set_world_law", [law, value], token, timeout=60)
+        return {"law": law, "value": value, "code": code, "reply": body[:300], "t0": t0, "t1": time.time()}
+
+    # The world clock every ~20 ms, for the tick gap around each call.
+    ticks, stop = [], threading.Event()
+
+    def sample():
+        while not stop.is_set():
+            rows = q("SELECT tick FROM clock WHERE id = 0")
+            if rows:
+                ticks.append((time.time(), int(rows[0]["tick"])))
+            time.sleep(0.02)
+
+    def gap(t0, t1):
+        """The longest wall time (ms) the tick stood still in [t0, t1], by the samples."""
+        w = [(t, k) for t, k in ticks if t0 <= t <= t1]
+        worst, last_t, last_k = 0.0, None, None
+        for t, k in w:
+            if last_k is None or k != last_k:
+                if last_t is not None:
+                    worst = max(worst, t - last_t)
+                last_t, last_k = t, k
+        if w and last_t is not None:
+            worst = max(worst, w[-1][0] - last_t)
+        rate = (w[-1][1] - w[0][1]) / (w[-1][0] - w[0][0]) if len(w) > 1 and w[-1][0] > w[0][0] else 0.0
+        return round(worst * 1000, 1), round(rate, 1), len(w)
+
+    def cover_row():
+        rows = q("SELECT * FROM cover_law WHERE id = 0")
+        return rows[0] if rows else None
+
+    def wait_in_force(want, after):
+        """Poll `cover_law` until each field in `want` reads so (the cover in force), at most
+        COVER_WAIT_S from `after`: (the first wall time it read so or None, the last row)."""
+        end, row = after + COVER_WAIT_S, None
+        while time.time() < end:
+            row = cover_row()
+            if row and all(abs(float(row[k]) - v) < 1e-4 if isinstance(v, float) else row[k] == v for k, v in want.items()):
+                return time.time(), row
+            time.sleep(0.02)
+        return None, row
+
+    original = {r["name"]: r["value"] for r in (q("SELECT name, value FROM law_override") or [])}
+    cover = (q("SELECT * FROM cover_law") or [{}])[0]
+    # A land made before cover-stall (`c83ee5d1`) keeps no ground source: switching cover on
+    # regenerates it, stalling the tick, so this scenario needs a world made since.
+    if not cover.get("cover_sight_on") and not q("SELECT id, chunks FROM cover_source WHERE id = 0"):
+        c.check(s, "the world keeps its cover ground source (made at or after c83ee5d1)", False,
+                "no cover_source row: this world was made before cover-stall; make a fresh island world")
+        return
+    fill = float(cover.get("cover_brush_min_fill", 0.6))
+    new_fill = 0.5 if abs(fill - 0.5) > 1e-3 else 0.7
+    shipped = {"cue_transport_on": "true", "near_tier_on": "true", "gaze_on": "false", "cover_sight_on": "false",
+               "cover_brush_min_fill": f"{fill:g}", "turn_rate": "6"}
+    touched = list(shipped)
+    in_place = r"rules: law overrides laid over in place .*changed \[\"{law}\"\]; delivery {d} cover {c} gaze {g}"
+    # What `cover_law` reads once each cover step is in force.
+    in_force = {("cover_sight_on", "true"): {"cover_sight_on": True},
+                ("cover_brush_min_fill", f"{new_fill:g}"): {"cover_sight_on": True, "cover_brush_min_fill": new_fill},
+                ("cover_sight_on", "false"): {"cover_sight_on": False}}
+    steps = [
+        ("cue_transport_on", "false", "delivery", r"rules: cue_transport_on false near_tier_on true", None),
+        ("near_tier_on", "false", "delivery", r"perception: on the untiered set after", "untiered"),
+        ("near_tier_on", "true", "delivery", r"perception: on the tiered set after", "tiered"),
+        ("cue_transport_on", "true", "delivery", r"rules: cue_transport_on true near_tier_on true", None),
+        ("gaze_on", "true", "gaze", r"sight edge: my senses from the authority \(my_senses_v_2\)", None),
+        ("gaze_on", "false", "gaze", r"sight edge: my senses from the authority \(my_senses\)", None),
+        ("cover_sight_on", "true", "cover", r"sight field: cover policy Some\(", None),
+        ("cover_brush_min_fill", f"{new_fill:g}", "cover", rf"sight field: cover policy Some\(.*brush_min_fill: {new_fill:g}\b", None),
+        ("cover_sight_on", "false", "cover", r"sight field: cover policy None", None),
+    ]
+    plan = "ready;wait:2;sync:armed;wait:1;dump:before;sync:toggled;dump:toggled;reconnect;wait:8;dump:reconnected;sync:done;quit"
+    cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "900"]
+    os.makedirs(base, exist_ok=True)
+    seen_path = os.path.join(base, f"{name}.seen.jsonl")
+    env = dict(os.environ, LIVING_GAME_SEEN_LOG=seen_path)
+    results, installs = [], []
+    sampler = threading.Thread(target=sample, daemon=True)
+    sampler.start()
+    drive_log = open(os.path.join(base, f"{name}.drive.log"), "w")
+    fresh_log(out)
+    p = subprocess.Popen(cmd, stdout=drive_log, stderr=subprocess.STDOUT, env=env)
+
+    def wait_for(pattern, secs):
+        end = time.time() + secs
+        while time.time() < end and p.poll() is None:
+            if re.search(pattern, log(out)):
+                return True
+            time.sleep(0.2)
+        return False
+
+    def go(sync):
+        open(os.path.join(out, f"{sync}.go"), "w").close()
+
+    try:
+        if not wait_for(r"live script: waiting for \S*/armed\.go", 400):
+            c.check(s, "the client reached the toggles", False, f"drive exit {p.poll()}")
+            return
+        go("armed")
+        time.sleep(4)
+        quiet = gap(time.time() - 3.5, time.time())
+        for law, value, cls, effect, _ in steps:
+            rev = revision()
+            r = set_law(law, value)
+            settled = r["t1"]
+            if cls == "cover":
+                # Judge the client's cover effect only once the authority holds it in force; the
+                # next step (a brush edit after the switch-on) starts after this one completed.
+                want = in_force[(law, value)]
+                t_in, row = wait_in_force(want, r["t1"])
+                r["in_force_want"], r["in_force_row"] = want, row
+                r["in_force_at"] = t_in
+                r["in_force_s"] = round(t_in - r["t1"], 3) if t_in else None
+                settled = t_in or time.time()
+            time.sleep(max(0.0, max(r["t1"] + 3.0, settled + 2.0) - time.time()))
+            r.update(cls=cls, rev_before=rev, rev_after=revision())
+            # The tick gap spans the call and, for cover, the whole derivation up to the row.
+            r["gap_ms"], r["ticks_per_s"], r["samples"] = gap(r["t0"] - 0.5, settled + 1.5)
+            results.append(r)
+        for law, value in (("turn_rate", "6.5"), ("turn_rate", shipped["turn_rate"] if "turn_rate" not in original else original["turn_rate"])):
+            rev = revision()
+            r = set_law(law, value)
+            time.sleep(4.0)
+            r.update(rev_before=rev, rev_after=revision())
+            r["gap_ms"], r["ticks_per_s"], r["samples"] = gap(r["t0"] - 0.5, r["t1"] + 2.5)
+            installs.append(r)
+        # The reconnect: the client on the tiered set (both delivery laws on, as it now knows
+        # them) drops its connection, and while it is offline (it retries after 3 s) both laws
+        # go off, so its first result after the reconnect holds rows it has not seen.
+        t_reconnect = time.time()
+        go("toggled")
+        offline = wait_for(r"offline: ", 30)
+        pre = [set_law("cue_transport_on", "false"), set_law("near_tier_on", "false")]
+        wait_for(r"live script: waiting for \S*/done\.go", 60)
+        go("done")
+        p.wait(timeout=120)
+        # A fresh client on the world with those overrides present.
+        fresh_out, fresh_code, _ = drive(run, f"{s}-fresh", "ready;wait:3;dump:fresh;quit")
+    finally:
+        if p.poll() is None:
+            p.terminate()
+        for law in touched:
+            set_law(law, original.get(law, shipped[law]))
+        stop.set()
+        drive_log.close()
+    lines = timed_lines(out)
+    frames = []
+    if os.path.exists(seen_path):
+        for line in open(seen_path):
+            try:
+                frames.append(json.loads(line))
+            except ValueError:
+                pass
+    report = {"quiet_gap_ms": quiet, "steps": results, "installs": installs, "pre_reconnect": pre}
+    c.check(s, "the world's tick ran between calls (quiet gap under 150 ms)", quiet[0] < 150, f"{quiet}")
+    for r, (law, value, cls, effect, switch) in zip(results, steps):
+        tag = f"{law}={value}"
+        c.check(s, f"{tag}: set_world_law accepted", r["code"] == 200, r["reply"])
+        c.check(s, f"{tag}: the script revision did not change", r["rev_before"] == r["rev_after"] and r["rev_before"] is not None, f"{r['rev_before']} -> {r['rev_after']}")
+        pat = in_place.format(law=law, d=str(cls == "delivery").lower(), c=str(cls == "cover").lower(), g=str(cls == "gaze").lower())
+        hit = first_after(lines, pat, r["t0"] - 0.05)
+        eff = first_after(lines, effect, r["t0"] - 0.05)
+        r["laid_over_ms"] = round((hit[0] - r["t1"]) * 1000, 1) if hit else None
+        r["effect_ms"] = round((eff[0] - r["t1"]) * 1000, 1) if eff else None
+        r["effect_line"] = eff[1] if eff else None
+        c.check(s, f"{tag}: laid over in place as {cls}", hit is not None, pat)
+        if cls == "cover":
+            # The cover effect follows the `cover_law` row, not the override: within a second of
+            # the row reading the change in force (polled, so the line may lead it by a poll).
+            t_in = r.get("in_force_at")
+            r["effect_after_in_force_ms"] = round((eff[0] - t_in) * 1000, 1) if eff and t_in else None
+            ok = t_in is not None and eff is not None and eff[0] - t_in < 1.0
+            detail = (f"cover in force after {r['in_force_s']} s; effect {r['effect_after_in_force_ms']} ms after it ({r['effect_ms']} ms after the reply)"
+                      if t_in else f"cover_law did not read {r['in_force_want']} within {COVER_WAIT_S} s of the reply (last row {r['in_force_row']})")
+            c.check(s, f"{tag}: the client reacted within a second of cover_law reading it in force ({effect})", ok, detail)
+        else:
+            c.check(s, f"{tag}: the client reacted within a second ({effect})", eff is not None and eff[0] - r["t1"] < 1.0, f"{r['effect_ms']} ms")
+        c.check(s, f"{tag}: no compile on the client", first_after(lines, r"rules: skill script revision \d+ compiled", r["t0"] - 0.05, r["t0"] + 3.0) is None)
+        c.check(s, f"{tag}: no world freeze (tick gap under 150 ms)", r["gap_ms"] < 150, f"{r['gap_ms']} ms")
+        if switch:
+            sub = first_after(lines, rf"perception: subscribing the {switch} set", r["t0"] - 0.05)
+            r["missing_line"] = eff[1] if eff else None
+            c.check(s, f"{tag}: the {switch} set subscribed beside the old one and applied", sub is not None and eff is not None)
+            c.check(s, f"{tag}: the client's switch line lists nobody missing", bool(eff) and "missing now []" in eff[1], eff[1] if eff else "")
+            # Frame by frame: each creature in the reads just before the call and 1 s after the
+            # switch is in every frame between.
+            if eff:
+                # From the call on: "kept" is what the last frame before the call held, so a creature
+                # coming into sight just before it is not missing from the frames before that.
+                t0_ms, t1_ms = r["t0"] * 1000, (eff[0] + 1.0) * 1000
+                before = [f for f in frames if f.get("wall_ms", 0) < r["t0"] * 1000]
+                after = [f for f in frames if f.get("wall_ms", 0) >= t1_ms]
+                ids = lambda f: {row[0] for row in f.get("rows", [])}
+                keep = (ids(before[-1]) & ids(after[0])) if before and after else set()
+                window = [f for f in frames if t0_ms <= f.get("wall_ms", 0) <= t1_ms]
+                gaps = [f["wall_ms"] for f in window if keep - ids(f)]
+                r["frames"], r["kept"], r["frames_missing"] = len(window), len(keep), len(gaps)
+                sets = {f.get("reads") for f in window}
+                c.check(s, f"{tag}: no frame without a creature kept across the switch", window and keep and not gaps,
+                        f"{len(window)} frames, {len(keep)} kept, {len(gaps)} with one missing; reads {sets}")
+    for r in installs:
+        tag = f"turn_rate={r['value']} (full install)"
+        comp = first_after(lines, rf"rules: skill script revision {r['rev_after']} compiled \(\d+ skills, \d+ law overrides\)", r["t0"] - 0.05)
+        r["compiled_ms"] = round((comp[0] - r["t1"]) * 1000, 1) if comp else None
+        c.check(s, f"{tag}: a new script revision", r["code"] == 200 and r["rev_after"] == (r["rev_before"] or 0) + 1, f"{r['rev_before']} -> {r['rev_after']} {r['reply']}")
+        c.check(s, f"{tag}: compiled here with the overrides", comp is not None, comp[1] if comp else "")
+        c.check(s, f"{tag}: the perception set kept (no subscribe after the compile)", first_after(lines, r"perception: subscribing", r["t0"] - 0.05, r["t0"] + 4.0) is None)
+    after = [(t, x) for t, x in lines if t >= t_reconnect]
+    subscribed = [x for _, x in after if x.startswith("perception: subscribing")]
+    world = [x for _, x in after if x.startswith("world subscribed after")]
+    down = [t for t, x in after if x.startswith("offline: ")]
+    report["reconnect"] = {"subscribed": subscribed, "world": world, "offline": bool(offline), "laws_set_while_offline": pre,
+                           "set_before_reconnect": bool(down) and all(r["t1"] < next((t for t, x in after if x.startswith("world subscribed after")), 0) for r in pre)}
+    c.check(s, "reconnect: the delivery laws went off while the client was offline", report["reconnect"]["set_before_reconnect"] and all(r["code"] == 200 for r in pre), f"{report['reconnect']}")
+    c.check(s, "reconnect: the base set came back with the overrides", any("law overrides)" in x for x in world), f"{world}")
+    c.check(s, "reconnect: the first set chosen is the one the new rows choose (untiered), no tiered set first",
+            bool(subscribed) and "untiered" in subscribed[0] and not any("the tiered set" in x for x in subscribed), f"{subscribed}")
+    flog = log(fresh_out)
+    fsub = re.findall(r"perception: subscribing the (\w+) set", flog)
+    fcomp = re.findall(r"rules: skill script revision \d+ compiled \(\d+ skills, (\d+) law overrides\)", flog)
+    report["fresh"] = {"exit": fresh_code, "subscribed": fsub, "compiled_with": fcomp}
+    c.check(s, "fresh client: compiled with the world's overrides", bool(fcomp) and int(fcomp[0]) >= 2, f"{fcomp}")
+    c.check(s, "fresh client: only the untiered set subscribed", fsub == ["untiered"], f"{fsub}")
+    json.dump(report, open(os.path.join(base, f"{name}.json"), "w"), indent=1)
+
+
+# The world's delivery laws in the order the client's `rules:` line names them (`net::perception_law`).
+DELIVERY_LAWS = ("cue_transport_on", "near_tier_on", "motion_tables_on", "characters_table_on", "fighter_tables_on", "combat_feed_on")
+# The two laws combat-switches adds to the client's switch (docs/BATTLE_VIEWERS.md, addenda 4 and 5).
+COMBAT_LAWS = ("fighter_tables_on", "combat_feed_on")
+
+
+def shipped_law(name):
+    """A law's value in the shipped script's law block (`living/scripts/skills.rhai`), as JSON text."""
+    m = re.search(rf"^\s*{name}:\s*(true|false),", open(os.path.join(ROOT, "living/scripts/skills.rhai")).read(), re.M)
+    return m.group(1) if m else None
+
+
+def owner_rows(run, query):
+    """Owner SQL over HTTP straight to the world (fast enough to poll): rows as dicts, or None."""
+    st = verify.load(run)
+    code, body = verify.http(f"/v1/database/{st['db']}/sql", query, verify.admin_token(), raw=True, timeout=5)
+    if code != 200:
+        return None
+    res = json.loads(body)[-1]
+    names = [col["name"]["some"] for col in res["schema"]["elements"]]
+    return [dict(zip(names, row)) for row in res["rows"]]
+
+
+def feed_of(laws):
+    """The perception set the client chooses (`net::Delivery::feed`): (tier, motion table,
+    characters table, fighter table, combat feed). A law the world never set is read as shipped."""
+    on = lambda k: laws.get(k, shipped_law(k)) == "true"
+    return ("tiered" if on("cue_transport_on") or on("near_tier_on") else "untiered", on("motion_tables_on"), on("characters_table_on"),
+            on("fighter_tables_on"), on("combat_feed_on"))
+
+
+def tables_line(feed):
+    """The `tables: …;` part of the client's perception lines for a set (`net::Feed::tables`)."""
+    tier, m, ch, f, cf = feed
+    b = lambda x: str(x).lower()
+    return rf"tables: motion {b(m)} characters {b(ch)} fighters {b(f)} combat_feed {b(cf)};"
+
+
+def seen_tables(feed):
+    """The seen log's `tables` for a set (the reads)."""
+    tier, m, ch, f, cf = feed
+    return {"motion": m, "characters": ch, "fighters": f, "combat_feed": cf}
+
+
+def set_on_line(feed):
+    return rf"perception: on the {feed[0]} set after \d+ ms \(" + tables_line(feed)
+
+
+def set_sub_line(feed):
+    return rf"perception: subscribing the {feed[0]} set \(\d+ queries; " + tables_line(feed)
+
+
+def identity_of(out):
+    m = re.search(r"connected as ([0-9a-f]{64})", log(out))
+    return m.group(1) if m else None
+
+
+@scenario("battle-views", explicit=True)
+def battle_views(run, c):
+    """battle-views' client switch (docs/BATTLE_VIEWERS.md, "Rollout"): while one client plays, the
+    two table laws (`motion_tables_on`, `characters_table_on`) and the two frame laws are set
+    through `law_override` rows alone, through all four table-law combinations in both frame-tier
+    states (and each tiered state's way: cues only, tiers only, both). For each step: the call
+    accepted with the script revision unchanged, laid over in place as delivery, the client's set
+    switched before broken when the set changes (the new set subscribed beside the old, nobody and
+    no character missing in its line or in any frame: `LIVING_GAME_SEEN_LOG`) and not at all when
+    it does not, the reads on the tables the laws name, and the tick never standing still. A
+    table law going off is the kill switch by row: within a second the authority's public rows are
+    gone (motion: moved back to the private tables, none split; the mirror: deleted), while the
+    client keeps drawing until the views are in. Then a reconnect with both table laws on (the
+    tables set first, no view set before it) and a fresh client. The four laws are restored from
+    the world's own values (`law_values.own_laws`), else the shipped ones."""
+    import threading
+    s = "battle-views"
+    st = verify.load(run)
+    db, token = st["db"], verify.admin_token()
+    name = f"{s}-{THEME}" if THEME else s
+    base = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    out = os.path.join(base, name)
+    q = lambda query: owner_rows(run, query)
+
+    def revision():
+        return ((q("SELECT revision FROM script WHERE name = 'skills'") or [{}])[0]).get("revision")
+
+    def set_law(law, value):
+        verify.refresh_lease(st)
+        t0 = time.time()
+        code, body = verify.http(f"/v1/database/{db}/call/set_world_law", [law, value], token, timeout=60)
+        return {"law": law, "value": value, "code": code, "reply": body[:300], "t0": t0, "t1": time.time()}
+
+    ticks, stop = [], threading.Event()
+
+    def sample():
+        while not stop.is_set():
+            rows = q("SELECT tick FROM clock WHERE id = 0")
+            if rows:
+                ticks.append((time.time(), int(rows[0]["tick"])))
+            time.sleep(0.02)
+
+    def gap(t0, t1):
+        w = [(t, k) for t, k in ticks if t0 <= t <= t1]
+        worst, last_t, last_k = 0.0, None, None
+        for t, k in w:
+            if last_k is None or k != last_k:
+                if last_t is not None:
+                    worst = max(worst, t - last_t)
+                last_t, last_k = t, k
+        if w and last_t is not None:
+            worst = max(worst, w[-1][0] - last_t)
+        rate = (w[-1][1] - w[0][1]) / (w[-1][0] - w[0][0]) if len(w) > 1 and w[-1][0] > w[0][0] else 0.0
+        return round(worst * 1000, 1), round(rate, 1)
+
+    def copies(ident):
+        """My copies where the authority holds them: public motion rows, private motion rows, mirror rows, projections."""
+        x = f"0x{ident}"
+        n = lambda query: len(q(query) or [])
+        return {"public": n(f"SELECT body FROM seen_body_copy WHERE viewer = {x}"),
+                "private": n(f"SELECT id FROM motion_seen WHERE viewer = {x}") + n(f"SELECT id FROM motion_near WHERE viewer = {x}"),
+                "public_all": n("SELECT body FROM seen_body_copy"),
+                "mirror": n(f"SELECT id FROM seen_character_copy WHERE viewer = {x}"),
+                "mirror_all": n("SELECT id FROM seen_character_copy"),
+                "projected": n(f"SELECT id FROM projected WHERE viewer = {x}")}
+
+    original = own_laws(lambda x: sql(run, x))
+    shipped = {k: shipped_law(k) for k in DELIVERY_LAWS}
+    state = {k: original.get(k, shipped[k]) for k in DELIVERY_LAWS}
+    start = dict(state)
+    # Both table laws off first (on by default since bv-defaults-on; a step that changes nothing
+    # is checked as kept), so the sequence reaches all eight combinations from any start.
+    steps = [("motion_tables_on", "false"), ("characters_table_on", "false"),
+             ("motion_tables_on", "true"), ("characters_table_on", "true"),
+             ("motion_tables_on", "false"), ("motion_tables_on", "true"),
+             ("characters_table_on", "false"), ("characters_table_on", "true"),
+             ("cue_transport_on", "false"), ("near_tier_on", "false"),
+             ("motion_tables_on", "false"), ("characters_table_on", "false"),
+             ("motion_tables_on", "true"), ("characters_table_on", "true"),
+             ("cue_transport_on", "true"), ("near_tier_on", "true")]
+    c.check(s, "the world starts with both frame laws on", feed_of(start)[0] == "tiered", json.dumps(start))
+    plan = "ready;wait:2;sync:armed;wait:1;dump:before;sync:toggled;dump:toggled;reconnect;wait:8;dump:reconnected;sync:done;quit"
+    cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "900"]
+    os.makedirs(base, exist_ok=True)
+    seen_path = os.path.join(base, f"{name}.seen.jsonl")
+    env = dict(os.environ, LIVING_GAME_SEEN_LOG=seen_path)
+    results = []
+    sampler = threading.Thread(target=sample, daemon=True)
+    sampler.start()
+    drive_log = open(os.path.join(base, f"{name}.drive.log"), "w")
+    fresh_log(out)
+    p = subprocess.Popen(cmd, stdout=drive_log, stderr=subprocess.STDOUT, env=env)
+
+    def wait_for(pattern, secs):
+        end = time.time() + secs
+        while time.time() < end and p.poll() is None:
+            if re.search(pattern, log(out)):
+                return True
+            time.sleep(0.2)
+        return False
+
+    def go(sync):
+        open(os.path.join(out, f"{sync}.go"), "w").close()
+
+    fresh_out, fresh_code, ident = None, None, None
+    try:
+        if not wait_for(r"live script: waiting for \S*/armed\.go", 400):
+            c.check(s, "the client reached the toggles", False, f"drive exit {p.poll()}")
+            return
+        ident = identity_of(out)
+        go("armed")
+        time.sleep(4)
+        quiet = gap(time.time() - 3.5, time.time())
+        for law, value in steps:
+            before = feed_of(state)
+            state[law] = value
+            after = feed_of(state)
+            rev = revision()
+            r = set_law(law, value)
+            r.update(before=before, after=after, state=dict(state))
+            # The kill switch: how soon the authority's public rows of that table are gone.
+            if value == "false" and law in ("motion_tables_on", "characters_table_on"):
+                table = "seen_body_copy" if law == "motion_tables_on" else "seen_character_copy"
+                gone = None
+                while time.time() - r["t1"] < 3.0:
+                    rows = q(f"SELECT viewer FROM {table}")
+                    if rows == []:
+                        gone = round((time.time() - r["t1"]) * 1000, 1)
+                        break
+                    time.sleep(0.02)
+                r["empty_after_ms"] = gone
+            time.sleep(3.0)
+            r["rev_before"], r["rev_after"] = rev, revision()
+            r["gap_ms"], r["ticks_per_s"] = gap(r["t0"] - 0.5, r["t1"] + 1.5)
+            r["copies"] = copies(ident) if ident else None
+            results.append(r)
+        # The reconnect with both table laws on: the client's first set after it is the tables set.
+        t_reconnect = time.time()
+        go("toggled")
+        offline = wait_for(r"offline: ", 30)
+        wait_for(r"live script: waiting for \S*/done\.go", 60)
+        go("done")
+        p.wait(timeout=120)
+        fresh_out, fresh_code, _ = drive(run, f"{s}-fresh", "ready;wait:4;dump:fresh;quit", env={"LIVING_GAME_SEEN_LOG": os.path.join(base, f"{name}-fresh.seen.jsonl")})
+    finally:
+        if p.poll() is None:
+            p.terminate()
+        for law in DELIVERY_LAWS:
+            set_law(law, original.get(law, shipped[law]))
+        stop.set()
+        drive_log.close()
+    lines = timed_lines(out)
+    frames = []
+    if os.path.exists(seen_path):
+        for line in open(seen_path):
+            try:
+                frames.append(json.loads(line))
+            except ValueError:
+                pass
+    report = {"identity": ident, "start": start, "quiet_gap_ms": quiet, "steps": results}
+    c.check(s, "the world's tick ran between calls (quiet gap under 150 ms)", quiet[0] < 150, f"{quiet}")
+    in_place = r"rules: law overrides laid over in place .*changed \[\"{law}\"\]; delivery true cover false gaze false"
+    ids = lambda f: {row[0] for row in f.get("rows", [])}
+    chars = lambda f: set(f.get("characters", []))
+    for r in results:
+        law, value, before, after = r["law"], r["value"], tuple(r["before"]), tuple(r["after"])
+        tag = f"{law}={value} ({after[0]}, motion table {after[1]}, characters table {after[2]})"
+        c.check(s, f"{tag}: set_world_law accepted", r["code"] == 200, r["reply"])
+        c.check(s, f"{tag}: the script revision did not change", r["rev_before"] == r["rev_after"] and r["rev_before"] is not None, f"{r['rev_before']} -> {r['rev_after']}")
+        hit = first_after(lines, in_place.format(law=law), r["t0"] - 0.05, r["t0"] + 3.0)
+        r["laid_over_ms"] = round((hit[0] - r["t1"]) * 1000, 1) if hit else None
+        c.check(s, f"{tag}: laid over in place as delivery", hit is not None)
+        c.check(s, f"{tag}: no world freeze (tick gap under 150 ms)", r["gap_ms"] < 150, f"{r['gap_ms']} ms")
+        if after == before:
+            eff = first_after(lines, "rules: " + " ".join(f"{k} {r['state'][k]}" for k in DELIVERY_LAWS), r["t0"] - 0.05, r["t0"] + 3.0)
+            r["effect_ms"] = round((eff[0] - r["t1"]) * 1000, 1) if eff else None
+            c.check(s, f"{tag}: the client read the law within a second", eff is not None and eff[0] - r["t1"] < 1.0, f"{r['effect_ms']} ms")
+            c.check(s, f"{tag}: the set kept (no subscribe)", first_after(lines, r"perception: subscribing", r["t0"] - 0.05, r["t0"] + 3.0) is None)
+            continue
+        sub = first_after(lines, set_sub_line(after), r["t0"] - 0.05)
+        eff = first_after(lines, set_on_line(after), r["t0"] - 0.05)
+        r["effect_ms"] = round((eff[0] - r["t1"]) * 1000, 1) if eff else None
+        r["switch_line"] = eff[1] if eff else None
+        c.check(s, f"{tag}: the new set subscribed beside the old and the reads moved to it within 1.5 s", sub is not None and eff is not None and eff[0] - r["t1"] < 1.5, f"{r['effect_ms']} ms")
+        c.check(s, f"{tag}: the switch line lists nobody and no character missing", bool(eff) and eff[1].count("missing now []") == 3, eff[1] if eff else "")
+        if eff:
+            # From the call on: "kept" is what the last frame before the call held, so a creature
+            # coming into sight just before it is not missing from the frames before that.
+            t0_ms, t1_ms = r["t0"] * 1000, (eff[0] + 1.0) * 1000
+            pre = [f for f in frames if f.get("wall_ms", 0) < r["t0"] * 1000]
+            post = [f for f in frames if f.get("wall_ms", 0) >= t1_ms]
+            keep = (ids(pre[-1]) & ids(post[0])) if pre and post else set()
+            keep_c = (chars(pre[-1]) & chars(post[0])) if pre and post else set()
+            window = [f for f in frames if t0_ms <= f.get("wall_ms", 0) <= t1_ms]
+            gaps = [f["wall_ms"] for f in window if keep - ids(f)]
+            gaps_c = [f["wall_ms"] for f in window if keep_c - chars(f)]
+            r["frames"], r["kept"], r["kept_characters"], r["frames_missing"], r["frames_missing_characters"] = len(window), len(keep), len(keep_c), len(gaps), len(gaps_c)
+            c.check(s, f"{tag}: no frame without a creature or a character kept across the switch", window and keep and keep_c and not gaps and not gaps_c,
+                    f"{len(window)} frames, {len(keep)} kept ({len(gaps)} frames missing one), {len(keep_c)} characters kept ({len(gaps_c)} frames missing one)")
+            tables = post[0].get("tables", {}) if post else {}
+            c.check(s, f"{tag}: the reads take the tables the laws name", post and post[0].get("reads") == after[0] and tables == seen_tables(after), json.dumps(tables))
+        cp = r["copies"] or {}
+        if law == "motion_tables_on":
+            if value == "true":
+                c.check(s, f"{tag}: my motion copies all in seen_body_copy, none left private", cp.get("public", 0) > 0 and cp.get("private") == 0, json.dumps(cp))
+            else:
+                c.check(s, f"{tag}: the kill switch: seen_body_copy empty within a second, my copies back in the private tables, none split",
+                        r.get("empty_after_ms") is not None and r["empty_after_ms"] < 1000 and cp.get("public_all") == 0 and cp.get("private", 0) > 0, f"empty after {r.get('empty_after_ms')} ms; {json.dumps(cp)}")
+        if law == "characters_table_on":
+            if value == "true":
+                c.check(s, f"{tag}: my mirror whole (a row per projection)", cp.get("mirror", 0) > 0 and cp.get("mirror") == cp.get("projected"), json.dumps(cp))
+            else:
+                c.check(s, f"{tag}: the kill switch: seen_character_copy empty within a second",
+                        r.get("empty_after_ms") is not None and r["empty_after_ms"] < 1000 and cp.get("mirror_all") == 0, f"empty after {r.get('empty_after_ms')} ms; {json.dumps(cp)}")
+    combos = sorted({tuple(r["after"][:3]) for r in results} | {feed_of(start)[:3]})
+    report["combinations"] = combos
+    c.check(s, "every table-law combination ran in both frame-tier states", len(combos) == 8, json.dumps(combos))
+    final = feed_of({**start, **{r["law"]: r["value"] for r in results}})
+    after_rc = [(t, x) for t, x in lines if t >= t_reconnect]
+    subscribed = [x for _, x in after_rc if x.startswith("perception: subscribing")]
+    report["reconnect"] = {"offline": bool(offline), "subscribed": subscribed}
+    c.check(s, "reconnect with both table laws on: the client went offline and came back", bool(offline) and any(x.startswith("world subscribed after") for _, x in after_rc))
+    c.check(s, "reconnect: the first set chosen reads both tables, no view set before it",
+            bool(subscribed) and re.search(set_sub_line(final), subscribed[0]) is not None and all("tables: motion true characters true" in x for x in subscribed), f"{subscribed}")
+    c.check(s, "reconnect: the reads moved to the tables", first_after(lines, set_on_line(final), t_reconnect) is not None)
+    flog = log(fresh_out) if fresh_out else ""
+    fsub = re.findall(r"perception: subscribing the .*", flog)
+    report["fresh"] = {"exit": fresh_code, "subscribed": fsub}
+    c.check(s, "fresh client with both table laws on: only the tables set subscribed, and read", len(fsub) == 1 and re.search(set_sub_line(final), fsub[0]) is not None and re.search(set_on_line(final), flog) is not None, f"{fsub}")
+    c.check(s, "the four laws restored to the world's own values", {k: own_laws(lambda x: sql(run, x)).get(k, shipped[k]) for k in DELIVERY_LAWS} == {k: original.get(k, shipped[k]) for k in DELIVERY_LAWS})
+    json.dump(report, open(os.path.join(base, f"{name}.json"), "w"), indent=1)
+
+
+@scenario("battle-views-ui", explicit=True)
+def battle_views_ui(run, c):
+    """camera, talk and far with both table laws on (docs/BATTLE_VIEWERS.md, "Rollout" step 5):
+    each scenario's checks, and every client those scenarios started read both tables (its switch
+    line names them, and no view set was read). The table laws are put back after."""
+    s = "battle-views-ui"
+    original = own_laws(lambda x: sql(run, x))
+    shipped = {k: shipped_law(k) for k in DELIVERY_LAWS}
+    t0 = time.time()
+    try:
+        for law in ("motion_tables_on", "characters_table_on"):
+            call_admin(run, "set_world_law", [law, "true"], check=True)
+        laws = own_laws(lambda x: sql(run, x))
+        c.check(s, "both table laws read on in law_override", laws.get("motion_tables_on") == "true" and laws.get("characters_table_on") == "true", json.dumps({k: laws.get(k) for k in DELIVERY_LAWS}))
+        for name in ("camera", "talk", "far"):
+            SCENARIOS[name](run, c)
+        laws = own_laws(lambda x: sql(run, x))
+        c.check(s, "both table laws still on after the scenarios (far's script install kept them)", laws.get("motion_tables_on") == "true" and laws.get("characters_table_on") == "true", json.dumps({k: laws.get(k) for k in DELIVERY_LAWS}))
+    finally:
+        for law in ("motion_tables_on", "characters_table_on"):
+            call_admin(run, "set_world_law", [law, original.get(law, shipped[law])], check=True)
+    logs = [p for p in glob.glob(os.path.join(ROOT, ".local/living/verify", run, "ui", "*", "client.log")) if os.path.getmtime(p) >= t0]
+    on = []
+    for p in sorted(logs):
+        t = log(os.path.dirname(p))
+        if "playing character" not in t:
+            continue
+        reads = re.findall(r"perception: on the \w+ set after \d+ ms \(tables: motion (\w+) characters (\w+) ", t)
+        on.append((os.path.basename(os.path.dirname(p)), reads))
+    bad = [(n, r) for n, r in on if not r or any(x != ("true", "true") for x in r)]
+    c.check(s, f"every client of camera, talk and far read both tables ({len(on)} clients)", on and not bad, json.dumps(bad or [n for n, _ in on]))
+    json.dump({"clients": on}, open(os.path.join(ROOT, ".local/living/verify", run, "ui", "battle-views-ui.json"), "w"), indent=1)
+
+
+class ByteRelay:
+    """A TCP relay in front of the authority for the client alone, counting what the server sends
+    each connection (the client's subscription traffic on the wire), sampled every 0.5 s."""
+
+    def __init__(self, upstream_port):
+        import socket, threading
+        self.socket, self.threading = socket, threading
+        self.up = upstream_port
+        self.ls = socket.socket()
+        self.ls.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.ls.bind(("127.0.0.1", 0))
+        self.ls.listen(8)
+        self.port = self.ls.getsockname()[1]
+        self.down = []
+        self.samples = []
+        self.done = threading.Event()
+        threading.Thread(target=self.accept, daemon=True).start()
+        threading.Thread(target=self.sample, daemon=True).start()
+
+    def accept(self):
+        while not self.done.is_set():
+            try:
+                cl, _ = self.ls.accept()
+            except OSError:
+                return
+            up = self.socket.create_connection(("127.0.0.1", self.up))
+            i = len(self.down)
+            self.down.append(0)
+            self.threading.Thread(target=self.pipe, args=(up, cl, i), daemon=True).start()
+            self.threading.Thread(target=self.pipe, args=(cl, up, None), daemon=True).start()
+
+    def pipe(self, a, b, i):
+        try:
+            while True:
+                d = a.recv(65536)
+                if not d:
+                    break
+                if i is not None:
+                    self.down[i] += len(d)
+                b.sendall(d)
+        except OSError:
+            pass
+        for x in (a, b):
+            try:
+                x.shutdown(self.socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+    def sample(self):
+        while not self.done.is_set():
+            self.samples.append((time.time(), sum(self.down)))
+            time.sleep(0.5)
+
+    def bytes_between(self, t0, t1):
+        s0 = max((b for t, b in self.samples if t <= t0), default=0)
+        s1 = max((b for t, b in self.samples if t <= t1), default=0)
+        return s1 - s0
+
+    def close(self):
+        self.done.set()
+        self.ls.close()
+
+
+# Where `battle-views-cost` stands the player: the island newcomer's arrival on Brackenford's
+# square, among residents (where a play-test starts), and a quiet open spot (look-walk's).
+BV_PLACES = (("square", (412.5, 256.5)), ("open", (300.0, 330.0)))
+
+
+def walker_ages(frames, walker, w0, w1):
+    """Near ages of a walker's fresh segments in a seen log: for each newer `t_ms` of it in the
+    reads, the first frame holding it less its `t_ms` (ms), in [w0, w1] (s). A re-entry into
+    sight (absent the frame before) is not a fresh segment, as gate_load's sampler counts."""
+    ages, last, present = [], None, False
+    for f in frames:
+        t = next((t for i, t in f.get("rows", []) if i == walker), None)
+        inside = w0 <= f.get("wall_ms", 0) / 1000 <= w1
+        if t is not None and present and last is not None and t > last and inside:
+            ages.append(f["wall_ms"] - t)
+        if t is not None:
+            last = t if last is None else max(last, t)
+        present = t is not None
+    return sorted(ages)
+
+
+@scenario("battle-views-cost", explicit=True)
+def battle_views_cost(run, c):
+    """kB/s and near p90 with both table laws on against off (docs/BATTLE_VIEWERS.md, "Rollout"
+    step 7), on the real client, at two places (`BV_PLACES`): Brackenford's square among its
+    residents (as a play-test), and a quiet open spot. At each, four drives, off, on, off, on,
+    each with the client's connection through a byte-counting relay (`LIVING_GAME_CLIENT_SERVER`)
+    and a second player (verify.py's player identity) placed 1.2 m from it walking a small
+    octagon (a new `human_move` every 0.75 s for 40 s), as frame-views' near-age fixture did.
+    kB/s: what the server sent the client in that window, less its first second. Near age: for
+    each fresh segment of the walker, the first frame whose reads hold it (`LIVING_GAME_SEEN_LOG`)
+    less its `t_ms`, so frame-quantized alike in both arms; re-entries into sight are left out
+    (`walker_ages`), and the time the walker was out of sight is reported. The admin moves only
+    the two players (`place_at`), and puts both back after; no resident is moved. The table laws
+    are put back after."""
+    summary = delivery_cost(run, c, "battle-views-cost", ("motion_tables_on", "characters_table_on"), "battle-views-cost")
+    json.dump(summary, open(os.path.join(ROOT, ".local/living/verify", run, "ui", "battle-views-cost.json"), "w"), indent=1)
+
+
+# The seen log's `tables` key for each delivery law with a table (`net::seen_log`).
+SEEN_KEY = {"motion_tables_on": "motion", "characters_table_on": "characters", "fighter_tables_on": "fighters", "combat_feed_on": "combat_feed"}
+
+
+def delivery_cost(run, c, s, laws, prefix, fight=False):
+    """`battle-views-cost`'s measurement for `laws` set together on against off (see its doc).
+    With `fight`, every third move my own player identity (the client's token) asks a strike at
+    no one, which the rules refuse: a refusal is a combat feed row for me alone
+    (`combat::show_to`), no damage to anyone. The walker must have fought before (a `fighter` row
+    lasts until death), so my fighter reads hold it. It does not jump: a jump puts no row in an
+    onlooker's feed, and one jump left a walker rooted for good (an authority gap, the
+    combat-switches record). The arm reports the combat rows the client took and the fighters it
+    read."""
+    st = verify.load(run)
+    db = st["db"]
+    upstream = int(re.search(r":(\d+)", os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300")).group(1))
+    original = own_laws(lambda x: sql(run, x))
+    shipped = {k: shipped_law(k) for k in DELIVERY_LAWS}
+
+    def body():
+        r = subprocess.run([sys.executable, V, "sql", "--run", run, "SELECT id FROM my_body", "--as-player"], capture_output=True, text=True)
+        rows = json.loads(r.stdout[r.stdout.find("["):]) if "[" in r.stdout else []
+        return rows[0]["id"] if rows else None
+    walker = body()
+    if walker is None:
+        subprocess.run([sys.executable, V, "player", "--run", run, "join", "Walker"], capture_output=True, text=True)
+        walker = body()
+    c.check(s, "a second player to walk beside me", walker is not None)
+    if walker is None:
+        return
+    st = verify.load(run)
+    if fight and not owner_rows(run, f"SELECT id FROM fighter WHERE id = {walker}"):
+        # One guard raised (no damage), so the walker has a `fighter` row for my reads.
+        verify.http(f"/v1/database/{db}/call/use_skill", ["block", 0, 0.0, 0.0], st["token"], timeout=5)
+        time.sleep(1.0)
+    dirs = [(math.cos(math.radians(a)), math.sin(math.radians(a))) for a in range(0, 360, 45)]
+    walker_at = (sql(run, f"SELECT x, y FROM body WHERE id = {walker}") or [None])[0]
+
+    def walk(stop_at, sent, jumps):
+        i = 0
+        while time.time() < stop_at:
+            dx, dy = dirs[i % 8]
+            code, _ = verify.http(f"/v1/database/{db}/call/human_move", [dx, dy, False], st["token"], timeout=5)
+            sent.append((time.time(), code))
+            if fight and i % 3 == 1:
+                jc, _ = verify.http(f"/v1/database/{db}/call/use_skill", ["strike", 0, 0.0, 0.0], my_token(), timeout=5)
+                jumps.append(jc)
+            i += 1
+            time.sleep(max(0.0, 0.75 - (time.time() - sent[-1][0])))
+        verify.http(f"/v1/database/{db}/call/human_move", [0, 0, False], st["token"], timeout=5)
+
+    pct = lambda v, p: v[min(len(v) - 1, max(0, math.ceil(p * len(v)) - 1))] if v else None
+    me_before = None
+    # My client's token, written by its first connection (read at the walk, once a drive is on).
+    my_token = lambda: open(os.path.join(ROOT, ".local/living/verify", run, "ui", "player.token")).read().strip()
+    reads_of = lambda f: json.dumps({SEEN_KEY[k]: (f.get("tables") or {}).get(SEEN_KEY[k]) for k in laws}, sort_keys=True)
+    tables = lambda on: json.dumps({SEEN_KEY[k]: on for k in laws}, sort_keys=True)
+    arms = []
+    try:
+        for place, (px, py) in BV_PLACES:
+            for k, on in enumerate((False, True, False, True)):
+                for law in laws:
+                    call_admin(run, "set_world_law", [law, "true" if on else "false"], check=True)
+                name = f"{prefix}-{place}-{k}-{'on' if on else 'off'}"
+                out = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
+                seen = os.path.join(ROOT, ".local/living/verify", run, "ui", f"{name}.seen.jsonl")
+                relay = ByteRelay(upstream)
+                env = dict(os.environ, LIVING_GAME_SEEN_LOG=seen, LIVING_GAME_CLIENT_SERVER=f"http://127.0.0.1:{relay.port}")
+                plan = "ready;wait:2;sync:scene;sync:spot;wait:3;sync:near;wait:3;sync:walk;wait:43;quit"
+                cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "600",
+                       "--sync", f"spot=place_at|{{me}}|{px}|{py}", "--sync", f"near=place_at|{walker}|(mx+1.2)|(my)"]
+                dlog = open(os.path.join(ROOT, ".local/living/verify", run, "ui", f"{name}.drive.log"), "w")
+                fresh_log(out)
+                p = subprocess.Popen(cmd, stdout=dlog, stderr=subprocess.STDOUT, env=env)
+                sent, jumps, arm = [], [], {"arm": name, "place": place, "on": on}
+                w0 = w1 = time.time()
+                try:
+                    end = time.time() + 400
+                    while time.time() < end and p.poll() is None and not re.search(r"live script: waiting for \S*/walk\.go", log(out)):
+                        time.sleep(0.2)
+                    w0 = time.time()
+                    open(os.path.join(out, "walk.go"), "w").close()
+                    walk(w0 + 40, sent, jumps)
+                    w1 = time.time()
+                    p.wait(timeout=120)
+                finally:
+                    if p.poll() is None:
+                        p.terminate()
+                    dlog.close()
+                    relay.close()
+                sc = os.path.join(out, "scene.json")
+                if me_before is None and os.path.exists(sc):
+                    scene = json.load(open(sc))
+                    me_before = (scene.get("me"), scene.get("me_at"))
+                frames = [json.loads(l) for l in open(seen)] if os.path.exists(seen) else []
+                window = [f for f in frames if w0 <= f.get("wall_ms", 0) / 1000 <= w1]
+                ages = walker_ages(frames, walker, w0 + 1, w1)
+                absent = [f for f in window if not any(i == walker for i, _ in f.get("rows", []))]
+                kb = relay.bytes_between(w0 + 1, w1) / 1000 / max(1e-6, w1 - w0 - 1)
+                reads = {reads_of(f) for f in window}
+                others = sorted(len(f.get("rows", [])) for f in window)
+                fighters = sorted(len(f.get("fighters", [])) for f in window)
+                arm.update(kB_per_s=round(kb, 2), total_kB=round(sum(relay.down) / 1000, 1), segments=len(ages), near_p50=pct(ages, 0.5), near_p90=pct(ages, 0.9),
+                           near_max=ages[-1] if ages else None, walker_absent_s=round(len(absent) / max(1, len(window)) * (w1 - w0), 1),
+                           others_median=others[len(others) // 2] if others else None, fps=round(len(window) / max(1e-6, w1 - w0), 1),
+                           moves=len(sent), moves_ok=sum(1 for _, x in sent if x == 200), reads=sorted(reads), connections=len(relay.down), exit=p.returncode,
+                           refusals_asked=sum(1 for x in jumps if x == 200), combat_rows=sum(len(f.get("combat", [])) for f in window),
+                           fighters_median=fighters[len(fighters) // 2] if fighters else None)
+                arms.append(dict(arm, ages=ages))
+                print(f"{s}: {json.dumps(arm)}", flush=True)
+                c.check(s, f"{name}: the client ran, the walker walked{' and fought' if fight else ''}, the reads took the {'tables' if on else 'views'}",
+                        p.returncode == 0 and arm["moves_ok"] >= 40 and arm["segments"] >= 10 and reads == {tables(on)} and (not fight or (arm["refusals_asked"] >= 5 and arm["combat_rows"] > 0 and (arm["fighters_median"] or 0) > 0)), json.dumps(arm))
+    finally:
+        for law in laws:
+            call_admin(run, "set_world_law", [law, original.get(law, shipped[law])], check=True)
+        # The two players back where they stood, so a later scenario finds the scene it expects.
+        if me_before and me_before[0] is not None and me_before[1]:
+            call_admin(run, "place_at", [int(me_before[0]), me_before[1][0], me_before[1][1]])
+        if walker_at:
+            call_admin(run, "place_at", [walker, walker_at["x"], walker_at["y"]])
+
+    def pooled(place, on):
+        mine = [a for a in arms if a["place"] == place and a["on"] == on]
+        kbs = [a["kB_per_s"] for a in mine]
+        ages = sorted(x for a in mine for x in a["ages"])
+        return {"kB_per_s": round(sum(kbs) / len(kbs), 2) if kbs else None, "kB_per_s_arms": kbs, "segments": len(ages),
+                "near_p50": pct(ages, 0.5), "near_p90": pct(ages, 0.9), "near_max": ages[-1] if ages else None,
+                "near_p90_arms": [a["near_p90"] for a in mine], "walker_absent_s": [a["walker_absent_s"] for a in mine]}
+    summary = {place: {"off": pooled(place, False), "on": pooled(place, True)} for place, _ in BV_PLACES}
+    summary["laws"] = list(laws)
+    summary["arms"] = arms
+    print(f"{s}: " + json.dumps({k: v for k, v in summary.items() if k != "arms"}), flush=True)
+    c.check(s, f"{'+'.join(laws)}: kB/s and near ages recorded for both arms at both places",
+            all(summary[p][a]["kB_per_s"] and summary[p][a]["segments"] for p, _ in BV_PLACES for a in ("off", "on")), json.dumps({k: v for k, v in summary.items() if k != "arms"}))
+    return summary
+
+
+def second_player(run, name):
+    """verify.py's player identity as a creature beside mine (joined once per run): its id."""
+    def body():
+        rows = sql_as_player(run, "SELECT id FROM my_body")
+        return rows[0]["id"] if rows else None
+    me = body()
+    if me is None:
+        subprocess.run([sys.executable, V, "player", "--run", run, "join", name], capture_output=True, text=True)
+        me = body()
+    return me
+
+
+def seen_frames(path):
+    frames = []
+    if os.path.exists(path):
+        for line in open(path):
+            try:
+                frames.append(json.loads(line))
+            except ValueError:
+                pass
+    return frames
+
+
+@scenario("combat-switches", explicit=True)
+def combat_switches(run, c):
+    """combat-switches' client switch (docs/BATTLE_VIEWERS.md, addenda 4 and 5, "Rollout"): while
+    one client plays beside a fight, `fighter_tables_on` and `combat_feed_on` are set through
+    `law_override` rows alone, each on, off (the kill switch) and on again, under the tiered and
+    the untiered frame state and with the copy-table laws off and on. A second player (verify.py's
+    player identity) strikes a resident held beside me just before and after each combat-feed
+    call, so events are in flight across every switch. For each call: accepted, the script
+    revision kept, laid over in place as delivery, the tick never standing still; when the set
+    changes, the new set subscribed beside the old and the reads on it within 1.5 s, nobody, no
+    character and no fighter missing in the switch line or in any frame (`LIVING_GAME_SEEN_LOG`),
+    the reads on the tables the laws name; `fighter_tables_on` on: my fighter copies all in
+    `seen_fighter_copy`, none private; off: the table empty within a second and my copies back in
+    `fighter_seen`/`fighter_near`. Across the run: every `combat_seen` row the authority wrote for
+    me (owner SQL polled every ~60 ms) was taken by the client, whichever source was in place.
+    Then a reconnect with both laws on (the first set reads the fighter table and the feed, and
+    `my_combat` is read once) and a fresh client. The six delivery laws are restored from the
+    world's own values (`law_values.own_laws`), else the shipped ones; the resident by
+    `resident_fixture`."""
+    import threading
+    s = "combat-switches"
+    st = verify.load(run)
+    db, token = st["db"], verify.admin_token()
+    name = f"{s}-{THEME}" if THEME else s
+    base = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    out = os.path.join(base, name)
+    q = lambda query: owner_rows(run, query)
+    # The two healthiest residents, held side by side; each strike goes to the healthier, and
+    # none below `STRIKE_FLOOR` (a resident struck run after run would die: two strikes a
+    # combat-feed call, 5 damage each).
+    hp = lambda i: ((q(f"SELECT hp FROM vitals WHERE id = {i}") or [{}])[0]).get("hp") or 0
+    pool = sorted(residents(run, 12), key=hp, reverse=True)[:2]
+    targets = [i for i in pool if hp(i) >= STRIKE_FLOOR]
+    target = targets[0] if targets else None
+    striker = second_player(run, "Striker")
+    c.check(s, "two healthy residents to strike and a second player to strike them", len(targets) == 2 and striker is not None, f"{[(i, hp(i)) for i in pool]} {striker}")
+    if len(targets) < 2 or striker is None:
+        return
+    st = verify.load(run)   # the player identity's token, recorded when it joined
+
+    def revision():
+        return ((q("SELECT revision FROM script WHERE name = 'skills'") or [{}])[0]).get("revision")
+
+    def set_law(law, value):
+        verify.refresh_lease(st)
+        t0 = time.time()
+        code, body = verify.http(f"/v1/database/{db}/call/set_world_law", [law, value], token, timeout=60)
+        return {"law": law, "value": value, "code": code, "reply": body[:300], "t0": t0, "t1": time.time()}
+
+    strikes = []
+
+    def strike():
+        health = {i: hp(i) for i in targets}
+        who = max(targets, key=lambda i: health[i])
+        if health[who] < STRIKE_FLOOR:
+            strikes.append({"t": time.time(), "code": None, "reply": f"skipped: {health}"})
+            return
+        at = (q(f"SELECT x, y FROM body WHERE id = {who}") or [None])[0]
+        if not at:
+            return
+        code, body = verify.http(f"/v1/database/{db}/call/use_skill", ["strike", who, at["x"], at["y"]], st["token"], timeout=10)
+        strikes.append({"t": time.time(), "target": who, "hp": health[who], "code": code, "reply": body[:120]})
+
+    ticks, stop, ident_box, feed_rows = [], threading.Event(), [None], {}
+
+    def sample():
+        n = 0
+        while not stop.is_set():
+            rows = q("SELECT tick FROM clock WHERE id = 0")
+            if rows:
+                ticks.append((time.time(), int(rows[0]["tick"])))
+            n += 1
+            if ident_box[0] and n % 3 == 0:
+                for r in q(f"SELECT id, kind, actor, target FROM combat_seen WHERE viewer = 0x{ident_box[0]}") or []:
+                    feed_rows.setdefault(int(r["id"]), {"first": time.time(), **r})
+            time.sleep(0.02)
+
+    def gap(t0, t1):
+        w = [(t, k) for t, k in ticks if t0 <= t <= t1]
+        worst, last_t, last_k = 0.0, None, None
+        for t, k in w:
+            if last_k is None or k != last_k:
+                if last_t is not None:
+                    worst = max(worst, t - last_t)
+                last_t, last_k = t, k
+        if w and last_t is not None:
+            worst = max(worst, w[-1][0] - last_t)
+        return round(worst * 1000, 1)
+
+    def fighter_copies(ident):
+        x = f"0x{ident}"
+        n = lambda query: len(q(query) or [])
+        return {"public": n(f"SELECT id FROM seen_fighter_copy WHERE viewer = {x}"),
+                "private": n(f"SELECT id FROM fighter_seen WHERE viewer = {x}") + n(f"SELECT id FROM fighter_near WHERE viewer = {x}"),
+                "public_all": n("SELECT id FROM seen_fighter_copy")}
+
+    original = own_laws(lambda x: sql(run, x))
+    shipped = {k: shipped_law(k) for k in DELIVERY_LAWS}
+    state = {k: original.get(k, shipped[k]) for k in DELIVERY_LAWS}
+    start = dict(state)
+    # Both new laws off first (a step that changes nothing is checked as kept), so the sequence is
+    # the same from any start; then each alone and both, on and off, tiered; the frame laws off
+    # (untiered) and the same; the copy-table laws off and on under both; the frame laws back.
+    steps = [("fighter_tables_on", "false"), ("combat_feed_on", "false"),
+             ("fighter_tables_on", "true"), ("combat_feed_on", "true"),
+             ("fighter_tables_on", "false"), ("fighter_tables_on", "true"),
+             ("combat_feed_on", "false"), ("combat_feed_on", "true"),
+             ("motion_tables_on", "false"), ("characters_table_on", "false"),
+             ("cue_transport_on", "false"), ("near_tier_on", "false"),
+             ("fighter_tables_on", "false"), ("combat_feed_on", "false"),
+             ("fighter_tables_on", "true"), ("combat_feed_on", "true"),
+             ("motion_tables_on", "true"), ("characters_table_on", "true"),
+             ("combat_feed_on", "false"), ("fighter_tables_on", "false"),
+             ("combat_feed_on", "true"), ("fighter_tables_on", "true"),
+             ("cue_transport_on", "true"), ("near_tier_on", "true")]
+    c.check(s, "the world starts with both frame laws on", feed_of(start)[0] == "tiered", json.dumps(start))
+    plan = "ready;wait:2;sync:scene;sync:near;wait:2;sync:armed;wait:1;dump:before;sync:toggled;dump:toggled;reconnect;wait:8;dump:reconnected;sync:done;quit"
+    os.makedirs(base, exist_ok=True)
+    seen_path = os.path.join(base, f"{name}.seen.jsonl")
+    cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", "900",
+           "--place", f"{targets[0]}:1.6:0", "--place", f"{targets[1]}:1.6:1.2", "--sync", f"near=place_at|{striker}|(mx+2.4)|(my+0.6)"]
+    env = dict(os.environ, LIVING_GAME_SEEN_LOG=seen_path)
+    results = []
+    sampler = threading.Thread(target=sample, daemon=True)
+    fresh_out, fresh_code, ident, quiet, t_reconnect, offline = None, None, None, 0.0, time.time(), False
+    report_held = {"public": 0, "private": 0}
+    with resident_fixture(run, targets):
+        sampler.start()
+        drive_log = open(os.path.join(base, f"{name}.drive.log"), "w")
+        fresh_log(out)
+        p = subprocess.Popen(cmd, stdout=drive_log, stderr=subprocess.STDOUT, env=env)
+
+        def wait_for(pattern, secs):
+            end = time.time() + secs
+            while time.time() < end and p.poll() is None:
+                if re.search(pattern, log(out)):
+                    return True
+                time.sleep(0.2)
+            return False
+
+        def go(sync):
+            open(os.path.join(out, f"{sync}.go"), "w").close()
+
+        try:
+            if not wait_for(r"live script: waiting for \S*/armed\.go", 400):
+                c.check(s, "the client reached the toggles", False, f"drive exit {p.poll()}")
+                return
+            ident = identity_of(out)
+            ident_box[0] = ident
+            # Strikes until my scene holds fighter copies (a `fighter` row lasts until death), so
+            # the first fighter step has rows to move; a refused strike also answers 200.
+            for _ in range(8):
+                strike()
+                time.sleep(1.5)
+                held = fighter_copies(ident)
+                if held["public"] + held["private"] > 0:
+                    break
+            report_held = fighter_copies(ident)
+            go("armed")
+            time.sleep(4)
+            quiet = gap(time.time() - 3.5, time.time())
+            for law, value in steps:
+                before = feed_of(state)
+                state[law] = value
+                after = feed_of(state)
+                rev = revision()
+                fighting = law == "combat_feed_on" and before != after
+                if fighting:
+                    strike()   # windup about 0.65 s: the blow lands across the call
+                    time.sleep(0.4)
+                r = set_law(law, value)
+                r.update(before=before, after=after, state=dict(state))
+                if fighting:
+                    time.sleep(0.2)
+                    strike()
+                if value == "false" and law == "fighter_tables_on" and before != after:
+                    gone = None
+                    while time.time() - r["t1"] < 3.0:
+                        if q("SELECT id FROM seen_fighter_copy") == []:
+                            gone = round((time.time() - r["t1"]) * 1000, 1)
+                            break
+                        time.sleep(0.02)
+                    r["empty_after_ms"] = gone
+                time.sleep(3.0)
+                r["rev_before"], r["rev_after"] = rev, revision()
+                r["gap_ms"] = gap(r["t0"] - 0.5, r["t1"] + 1.5)
+                r["fighters"] = fighter_copies(ident) if ident else None
+                results.append(r)
+            time.sleep(4.5)   # the last rows written are taken (and polled) before the reconnect
+            t_reconnect = time.time()
+            go("toggled")
+            offline = wait_for(r"offline: ", 30)
+            wait_for(r"live script: waiting for \S*/done\.go", 60)
+            go("done")
+            p.wait(timeout=120)
+            fresh_out, fresh_code, _ = drive(run, f"{s}-fresh", "ready;wait:4;dump:fresh;quit", env={"LIVING_GAME_SEEN_LOG": os.path.join(base, f"{name}-fresh.seen.jsonl")})
+        finally:
+            if p.poll() is None:
+                p.terminate()
+            for law in DELIVERY_LAWS:
+                set_law(law, original.get(law, shipped[law]))
+            stop.set()
+            drive_log.close()
+    lines = timed_lines(out)
+    frames = seen_frames(seen_path)
+    report = {"identity": ident, "start": start, "quiet_gap_ms": quiet, "targets": targets, "striker": striker, "strikes": strikes, "steps": results}
+    c.check(s, "fighters in my scene before the first call", report_held["public"] + report_held["private"] > 0, json.dumps(report_held))
+    c.check(s, "the world's tick ran between calls (quiet gap under 150 ms)", quiet < 150, f"{quiet}")
+    in_place = r"rules: law overrides laid over in place .*changed \[\"{law}\"\]; delivery true cover false gaze false"
+    key = lambda k: (lambda f: {row[0] for row in f.get("rows", [])} if k == "rows" else set(f.get(k, [])))
+    for r in results:
+        law, value, before, after = r["law"], r["value"], tuple(r["before"]), tuple(r["after"])
+        tag = f"{law}={value} ({after[0]}, motion {after[1]}, characters {after[2]}, fighters {after[3]}, combat feed {after[4]})"
+        c.check(s, f"{tag}: set_world_law accepted", r["code"] == 200, r["reply"])
+        c.check(s, f"{tag}: the script revision did not change", r["rev_before"] == r["rev_after"] and r["rev_before"] is not None, f"{r['rev_before']} -> {r['rev_after']}")
+        c.check(s, f"{tag}: no world freeze (tick gap under 150 ms)", r["gap_ms"] < 150, f"{r['gap_ms']} ms")
+        if after == before:
+            eff = first_after(lines, "rules: " + " ".join(f"{k} {r['state'][k]}" for k in DELIVERY_LAWS), r["t0"] - 0.05, r["t0"] + 3.0)
+            r["effect_ms"] = round((eff[0] - r["t1"]) * 1000, 1) if eff else None
+            # A row rewritten with the value it had is no change in force: no line at all.
+            kept = first_after(lines, r"perception: subscribing", r["t0"] - 0.05, r["t0"] + 3.0) is None
+            c.check(s, f"{tag}: the set kept (no subscribe)", kept)
+            continue
+        hit = first_after(lines, in_place.format(law=law), r["t0"] - 0.05, r["t0"] + 3.0)
+        r["laid_over_ms"] = round((hit[0] - r["t1"]) * 1000, 1) if hit else None
+        c.check(s, f"{tag}: laid over in place as delivery", hit is not None)
+        sub = first_after(lines, set_sub_line(after), r["t0"] - 0.05)
+        eff = first_after(lines, set_on_line(after), r["t0"] - 0.05)
+        r["effect_ms"] = round((eff[0] - r["t1"]) * 1000, 1) if eff else None
+        r["switch_line"] = eff[1] if eff else None
+        c.check(s, f"{tag}: the new set subscribed beside the old and the reads moved to it within 1.5 s", sub is not None and eff is not None and eff[0] - r["t1"] < 1.5, f"{r['effect_ms']} ms")
+        c.check(s, f"{tag}: the switch line lists nobody, no character and no fighter missing", bool(eff) and eff[1].count("missing now []") == 3, eff[1] if eff else "")
+        if eff:
+            # From the call on: "kept" is what the last frame before the call held, so a creature
+            # coming into sight just before it is not missing from the frames before that.
+            t0_ms, t1_ms = r["t0"] * 1000, (eff[0] + 1.0) * 1000
+            pre = [f for f in frames if f.get("wall_ms", 0) < r["t0"] * 1000]
+            post = [f for f in frames if f.get("wall_ms", 0) >= t1_ms]
+            window = [f for f in frames if t0_ms <= f.get("wall_ms", 0) <= t1_ms]
+            counts = {}
+            for k in ("rows", "characters", "fighters"):
+                keep = (key(k)(pre[-1]) & key(k)(post[0])) if pre and post else set()
+                counts[k] = (len(keep), len([f for f in window if keep - key(k)(f)]))
+            r["frames"], r["kept"] = len(window), counts
+            c.check(s, f"{tag}: no frame without a creature, a character or a fighter kept across the switch",
+                    window and all(counts[k][0] > 0 and counts[k][1] == 0 for k in counts), f"{len(window)} frames; kept, frames missing one: {json.dumps(counts)}")
+            tables = post[0].get("tables", {}) if post else {}
+            c.check(s, f"{tag}: the reads take the tables the laws name", post and post[0].get("reads") == after[0] and tables == seen_tables(after), json.dumps(tables))
+        cp = r["fighters"] or {}
+        if law == "fighter_tables_on":
+            if value == "true":
+                c.check(s, f"{tag}: my fighter copies all in seen_fighter_copy, none left private", cp.get("public", 0) > 0 and cp.get("private") == 0, json.dumps(cp))
+            else:
+                c.check(s, f"{tag}: the kill switch: seen_fighter_copy empty within a second, my copies back in the private tables",
+                        r.get("empty_after_ms") is not None and r["empty_after_ms"] < 1000 and cp.get("public_all") == 0 and cp.get("private", 0) > 0, f"empty after {r.get('empty_after_ms')} ms; {json.dumps(cp)}")
+    combos = sorted({(r["after"][0], r["after"][3], r["after"][4]) for r in results} | {(feed_of(start)[0], *feed_of(start)[3:])})
+    report["combinations"] = combos
+    c.check(s, "fighter table and combat feed in all four combinations in both frame-tier states", len(combos) == 8, json.dumps(combos))
+    copies = sorted({(r["after"][1], r["after"][2], r["after"][3], r["after"][4]) for r in results})
+    report["with_copy_tables"] = copies
+    c.check(s, "both new laws on with the copy tables off and on", (False, False, True, True) in copies and (True, True, True, True) in copies, json.dumps(copies))
+    # No event missing: every combat_seen row the authority wrote for me while the client ran, in
+    # the frames' wall time, was taken by the client, whichever source was in place.
+    taken = {}
+    for f in frames:
+        for i in f.get("combat", []):
+            taken.setdefault(int(i), f)
+    t_first = (frames[0]["wall_ms"] / 1000) if frames else 0
+    t_last = (frames[-1]["wall_ms"] / 1000 - 1.0) if frames else 0
+    polled = {i: r for i, r in feed_rows.items() if t_first <= r["first"] <= t_last}
+    missing = sorted(set(polled) - set(taken))
+    by_source = {}
+    for i in polled:
+        f = taken.get(i)
+        if f:
+            k = "combat_feed" if f.get("tables", {}).get("combat_feed") else "my_combat"
+            by_source[k] = by_source.get(k, 0) + 1
+    switch_windows = [(r["t0"] - 1.0, r["t1"] + 3.0) for r in results if r["law"] == "combat_feed_on" and tuple(r["before"]) != tuple(r["after"])]
+    across = sorted(i for i, r in polled.items() if any(a <= r["first"] <= b for a, b in switch_windows))
+    report["events"] = {"polled": len(polled), "taken": len(taken), "missing": missing, "by_source": by_source, "across_switches": len(across),
+                        "strikes": len(strikes), "strikes_ok": sum(1 for x in strikes if x["code"] == 200), "skipped": sum(1 for x in strikes if x["code"] is None)}
+    c.check(s, "every combat_seen row the authority wrote for me was taken by the client, whichever source",
+            polled and not missing and by_source.get("combat_feed", 0) > 0 and by_source.get("my_combat", 0) > 0, json.dumps(report["events"]))
+    c.check(s, "events in flight across the combat-feed switches, none missing", len(across) >= len(switch_windows) and not (set(across) & set(missing)), f"{len(across)} rows across {len(switch_windows)} switches")
+    final = feed_of({**start, **{r["law"]: r["value"] for r in results}})
+    after_rc = [(t, x) for t, x in lines if t >= t_reconnect]
+    subscribed = [x for _, x in after_rc if x.startswith("perception: subscribing")]
+    report["reconnect"] = {"offline": bool(offline), "subscribed": subscribed}
+    c.check(s, "reconnect with both new laws on: the client went offline and came back", bool(offline) and any(x.startswith("world subscribed after") for _, x in after_rc))
+    c.check(s, "reconnect: the first set chosen reads the fighter table and the combat feed, no view set before it",
+            bool(subscribed) and re.search(set_sub_line(final), subscribed[0]) is not None and all("fighters true combat_feed true" in x for x in subscribed), f"{subscribed}")
+    c.check(s, "reconnect: my_combat read once, and the reads moved to the set", any(x.startswith("combat feed: my_combat read once") for _, x in after_rc) and first_after(lines, set_on_line(final), t_reconnect) is not None)
+    flog = log(fresh_out) if fresh_out else ""
+    fsub = re.findall(r"perception: subscribing the .*", flog)
+    report["fresh"] = {"exit": fresh_code, "subscribed": fsub}
+    c.check(s, "fresh client with both new laws on: only that set subscribed and read, my_combat read once",
+            len(fsub) == 1 and re.search(set_sub_line(final), fsub[0]) is not None and re.search(set_on_line(final), flog) is not None and "combat feed: my_combat read once" in flog, f"{fsub}")
+    alive = {i: (q(f"SELECT alive FROM character WHERE id = {i}") or [{}])[0].get("alive") for i in targets}
+    c.check(s, "the struck residents are alive (and put back by the fixture)", all(v is True for v in alive.values()), json.dumps({i: [alive[i], hp(i)] for i in targets}))
+    c.check(s, "the six delivery laws restored to the world's own values", {k: own_laws(lambda x: sql(run, x)).get(k, shipped[k]) for k in DELIVERY_LAWS} == {k: original.get(k, shipped[k]) for k in DELIVERY_LAWS})
+    json.dump(report, open(os.path.join(base, f"{name}.json"), "w"), indent=1)
+
+
+# The least health a resident may have to be struck by `combat-switches` (of 100).
+STRIKE_FLOOR = 50.0
+
+
+def death_truth(rows, me):
+    """My death as the authority's rows give it (owner SQL on `combat_seen`, kept two minutes,
+    snapshot by the drive while dead, before anything else can clear it): the killer (the death
+    row's target) and the witnesses' ids (id 0 is no one)."""
+    deaths = [r for r in rows if r["kind"] == 7 and r["actor"] == me]
+    if not deaths:
+        return None
+    d = max(deaths, key=lambda r: r["id"])
+    return {"death_id": d["id"], "killer": d["target"] or None, "witnesses": sorted({r["actor"] for r in rows if r["kind"] == 8 and r["actor"] != 0 and r["id"] > d["id"]})}
+
+
+@scenario("combat-switches-death", explicit=True)
+def combat_switches_death(run, c):
+    """The death screen is the same whichever source the combat feed comes from (dev-box's
+    death-screen equality, docs/BATTLE_VIEWERS.md addendum 4, on the client): two fresh players
+    killed by a stranger (verify.py's player identity, the death scenario's sharper free strike),
+    beside a resident held still as a witness, one with `combat_feed_on` off (the `my_combat`
+    view) and one with it on (the `combat_feed` event table). In each, the death screen (cause,
+    killer, witnesses: the dump's `death`) equals what the authority's `combat_seen` rows say;
+    stays the same when the law flips while dead and back, and across a reconnect while dead (the
+    connection's first set then reads `my_combat` once with the law on); and was taken from the
+    arm's source (the seen log). Across the two arms: the same cause words, the same killer, the
+    same names for the witnesses both had. The laws and the resident are put back."""
+    s = "combat-switches-death"
+    original = own_laws(lambda x: sql(run, x))
+    shipped = {k: shipped_law(k) for k in DELIVERY_LAWS}
+    num = lambda k, d: original.get(k) or (re.search(rf"\b{k}:\s*([0-9.]+)", open(os.path.join(ROOT, "living/scripts/skills.rhai")).read()) or [None, d])[1]
+    dmg0, cost0 = num("dmg_strike", "5"), num("cost_strike", "20")
+    w = (residents(run, 1) or [None])[0]
+    striker = second_player(run, "Striker")
+    c.check(s, "a resident to witness and a stranger to strike", w is not None and striker is not None, f"{w} {striker}")
+    if w is None or striker is None:
+        return
+    d = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    os.makedirs(d, exist_ok=True)
+    arms = {}
+    hits = "".join(f"sync:hit{i};wait:0.9;" for i in range(8))
+    try:
+        with resident_fixture(run, [w]):
+            for arm in ("off", "on"):
+                law = "true" if arm == "on" else "false"
+                flip = "false" if arm == "on" else "true"
+                call_admin(run, "set_world_law", ["combat_feed_on", law], check=True)
+                name = f"{s}-{arm}"
+                seen = os.path.join(d, f"{name}.seen.jsonl")
+                plan = ("ready;wait:3;sync:scene;sync:sharp;sync:near;wait:1.5;dump:00;" + hits +
+                        "wait:2.5;shot:01_died;dump:01;sync:truth;sync:flip;wait:2.5;dump:02;sync:back;wait:2.5;dump:03;reconnect;wait:8;shot:04_reconnected;dump:04;sync:blunt;quit")
+                syncs = ['sharp=set_world_law|"dmg_strike"|"40";set_world_law|"cost_strike"|"0"', f"near=place_at|{striker}|(mx+0.9)|(my)",
+                         *[f'hit{i}=player|use_skill|strike|{{me}}|(mx)|(my)' for i in range(8)],
+                         "truth=sql|SELECT id, kind, actor, target FROM combat_seen WHERE viewer = 0x{ident}",
+                         f'flip=set_world_law|"combat_feed_on"|"{flip}"', f'back=set_world_law|"combat_feed_on"|"{law}"',
+                         f'blunt=set_world_law|"dmg_strike"|"{dmg0}";set_world_law|"cost_strike"|"{cost0}"']
+                tok = os.path.join(d, f"{name}-{int(time.time())}.token")
+                out, code, text = drive(run, name, plan, places=[f"{w}:-1.4:1.0"], syncs=syncs, extra=["--token", tok, "--player", f"Fallen {arm}"], env={"LIVING_GAME_SEEN_LOG": seen})
+                scene = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+                me, ident = scene.get("me"), identity_of(out)
+                snap = ((scene.get("snaps") or {}).get("truth") or [{}])[0].get("rows")
+                truth = death_truth(snap, me) if snap is not None and me else None
+                dumps = {k: (dump(out, k) or {}).get("death") for k in ("01", "02", "03", "04")}
+                frames = seen_frames(seen)
+                death_frame = next((f for f in frames if truth and truth["death_id"] in f.get("combat", [])), None)
+                text_log = log(out)
+                arms[arm] = {"me": me, "identity": ident, "truth": truth, "dumps": dumps, "exit": code,
+                             "death_taken_from": None if not death_frame else ("combat_feed" if death_frame.get("tables", {}).get("combat_feed") else "my_combat"),
+                             "read_once": re.findall(r"combat feed: my_combat read once \((\d+) rows\)", text_log)}
+                a = arms[arm]
+                c.check(s, f"{arm}: the client ran, joined and was killed by the stranger", code == 0 and truth is not None and truth["killer"] == striker, json.dumps(truth))
+                first = dumps["01"]
+                c.check(s, f"{arm}: the death screen shows the authority's killer and witnesses",
+                        bool(first) and first.get("killer_id") == (truth or {}).get("killer") and sorted(first.get("witness_ids") or []) == (truth or {}).get("witnesses")
+                        and (first.get("cause") or "").startswith("Killed by") and w in (first.get("witness_ids") or []), json.dumps({"screen": first, "truth": truth}))
+                c.check(s, f"{arm}: the same screen after the law flipped while dead, back, and across a reconnect while dead",
+                        bool(first) and all(dumps[k] == first for k in ("02", "03", "04")), json.dumps(dumps))
+                c.check(s, f"{arm}: the death was taken from the arm's source ({'combat_feed' if arm == 'on' else 'my_combat'})",
+                        a["death_taken_from"] == ("combat_feed" if arm == "on" else "my_combat"), str(a["death_taken_from"]))
+                if arm == "on":
+                    c.check(s, "on: the reconnect while dead read my_combat once, with the death's rows", bool(a["read_once"]) and int(a["read_once"][-1]) >= 1 + len((truth or {}).get("witnesses", [])), str(a["read_once"]))
+    finally:
+        call_admin(run, "set_world_law", ["dmg_strike", dmg0])
+        call_admin(run, "set_world_law", ["cost_strike", cost0])
+        call_admin(run, "set_world_law", ["combat_feed_on", original.get("combat_feed_on", shipped["combat_feed_on"])])
+    off, on = (arms.get(k, {}).get("dumps", {}).get("01") or {} for k in ("off", "on"))
+    names = lambda x: dict(zip(x.get("witness_ids") or [], x.get("witnesses") or []))
+    common = set(names(off)) & set(names(on))
+    c.check(s, "off against on: the same cause words, killer and witnesses' names",
+            bool(off) and bool(on) and off.get("cause") == on.get("cause") and off.get("killer_id") == on.get("killer_id") and common >= {w, striker} - {None} and all(names(off)[i] == names(on)[i] for i in common),
+            json.dumps({"off": off, "on": on}))
+    c.check(s, "combat_feed_on restored to the world's own value", own_laws(lambda x: sql(run, x)).get("combat_feed_on", shipped["combat_feed_on"]) == original.get("combat_feed_on", shipped["combat_feed_on"]))
+    json.dump(arms, open(os.path.join(d, f"{s}.json"), "w"), indent=1)
+
+
+@scenario("combat-switches-ui", explicit=True)
+def combat_switches_ui(run, c):
+    """camera, talk, far and the combat scenarios (death, bar, own, committed, move-off) with
+    `fighter_tables_on` and `combat_feed_on` both on: each scenario's own checks, and every client
+    those scenarios started read the fighter table and the combat feed (its switch lines name
+    them, and no other set was read). The two laws are put back after."""
+    s = "combat-switches-ui"
+    original = own_laws(lambda x: sql(run, x))
+    shipped = {k: shipped_law(k) for k in DELIVERY_LAWS}
+    t0 = time.time()
+    try:
+        for law in COMBAT_LAWS:
+            call_admin(run, "set_world_law", [law, "true"], check=True)
+        laws = own_laws(lambda x: sql(run, x))
+        c.check(s, "both laws read on in law_override", all(laws.get(k) == "true" for k in COMBAT_LAWS), json.dumps({k: laws.get(k) for k in DELIVERY_LAWS}))
+        for name in ("camera", "talk", "far", "death", "bar", "own", "committed", "move-off"):
+            SCENARIOS[name](run, c)
+        laws = own_laws(lambda x: sql(run, x))
+        c.check(s, "both laws still on after the scenarios (their installs kept them)", all(laws.get(k) == "true" for k in COMBAT_LAWS), json.dumps({k: laws.get(k) for k in DELIVERY_LAWS}))
+    finally:
+        for law in COMBAT_LAWS:
+            call_admin(run, "set_world_law", [law, original.get(law, shipped[law])], check=True)
+    logs = [p for p in glob.glob(os.path.join(ROOT, ".local/living/verify", run, "ui", "*", "client.log")) if os.path.getmtime(p) >= t0]
+    on = []
+    for p in sorted(logs):
+        t = log(os.path.dirname(p))
+        if "playing character" not in t:
+            continue
+        reads = re.findall(r"perception: on the \w+ set after \d+ ms \(tables: motion \w+ characters \w+ fighters (\w+) combat_feed (\w+);", t)
+        on.append((os.path.basename(os.path.dirname(p)), reads))
+    bad = [(n, r) for n, r in on if not r or any(x != ("true", "true") for x in r)]
+    c.check(s, f"every client of the scenarios read the fighter table and the combat feed ({len(on)} clients)", on and not bad, json.dumps(bad or [n for n, _ in on]))
+    json.dump({"clients": on}, open(os.path.join(ROOT, ".local/living/verify", run, "ui", f"{s}.json"), "w"), indent=1)
+
+
+@scenario("combat-switches-cost", explicit=True)
+def combat_switches_cost(run, c):
+    """kB/s and near p90 with each of `fighter_tables_on` and `combat_feed_on` on against off
+    (docs/BATTLE_VIEWERS.md, "Rollout"), as `battle-views-cost` measures them (two places, four
+    drives each, a byte-counting relay, the walker 1.2 m away), the walker also jumping every
+    third move so the fighter copies and the combat feed carry rows. Each law alone; the other
+    stays as the world has it. `combat-switches-cost.json`."""
+    s = "combat-switches-cost"
+    report = {}
+    for law in COMBAT_LAWS:
+        report[law] = delivery_cost(run, c, s, (law,), f"{s}-{law}", fight=True)
+    json.dump(report, open(os.path.join(ROOT, ".local/living/verify", run, "ui", f"{s}.json"), "w"), indent=1)
+
+
+@scenario("gaze", cullet=True, explicit=True)
+def gaze(run, c):
+    """Drive zoom through all gaze bands, coalescing, reconnect and the Cullet hedge."""
+    name = "gaze"
+    state = {"gaze_on": "false", "fov_on": "true", "cover_sight_on": "false", "cover_brush_on": "true"}
+    ids = residents(run, 5)
+    if len(ids) != 5:
+        c.check(name, "five stationary residents available", False, repr(ids))
+        return
+    near, far, flank, rear, middle = ids
+    open_eye = (781.5, 457.5)
+    hedge_eye, hedge_contact = (523.5, 698.5), (527.5, 698.5)
+    open_targets = {near: (783.5, 457.5), far: (837.5, 457.5), flank: (781.5, 469.5), rear: (769.5, 457.5), middle: (821.5, 457.5)}
+    hedge_targets = {near: hedge_contact, flank: (523.5, 697.5)}
+    stops = (("far", 1, -30, 19.0), ("middle", 0, 11, 12.0), ("near", 2, 30, 8.0))
+
+    def setup(eye, points):
+        return ";".join([f"place_at|{{me}}|{eye[0]}|{eye[1]}"] +
+                        [f"place_at|{id}|{x}|{y};set_behavior|{id}|{json.dumps(json.dumps({'wait': 600}))}"
+                         for id, (x, y) in points.items()])
+
+    def snapshot(label):
+        return (f"{label}=client_sql|SELECT * FROM my_senses_v_2;"
+                "client_sql|SELECT * FROM my_senses;"
+                "client_sql|SELECT id FROM seen_characters;"
+                f"sql|SELECT id,x,y FROM body WHERE id = {{me}} OR id = {near} OR id = {far} OR id = {flank} OR id = {rear} OR id = {middle};"
+                "sql|SELECT * FROM cover_law;sql|SELECT * FROM attention WHERE id = {me}")
+
+    directory = os.path.join(ROOT, ".local/living/verify", run, "ui", f"{name}-{THEME}" if THEME else name, "fields")
+    for path in glob.glob(os.path.join(directory, "field-*")):
+        os.remove(path)
+    syncs = [
+        "daylight=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+        f"open={setup(open_eye, open_targets)}",
+        f"hedge={setup(hedge_eye, hedge_targets)}",
+        'enable=set_world_law|"gaze_on"|"true"',
+        'cover_on=set_world_law|"cover_sight_on"|"true"',
+        'disable=set_world_law|"gaze_on"|"false"',
+    ]
+    plan = ["ready", "frame:0", "sightlook:shade", "sync:daylight", "sync:open",
+            "look:270", "wait:0.8", "look:90", "cursor:0.7,0.55", "wait:2"]
+    labels = ["off_before"]
+    plan += ["sync:off_before", "shot:off_before", "sync:enable"]
+    for fixture in ("open", "hedge"):
+        if fixture == "hedge":
+            plan += ["sync:cover_on", "sync:hedge", "wait:2"]
+        for stop, _, notches, _ in stops:
+            label = f"{fixture}_{stop}"
+            labels.append(label)
+            plan += [f"notches:{notches}", "wait:1.6"]
+            if fixture == "hedge":
+                plan += [f"pointat:{hedge_contact[0]},{hedge_contact[1]}:1", "wait:0.3"]
+            plan += [f"sync:{label}", f"dump:{label}", f"shot:{label}", "cursor:0.7,0.55"]
+        if fixture == "open":
+            labels += ["spin_start", "spin_end", "after_reconnect"]
+            plan += ["notches:-30", "wait:1.6", "sync:spin_start",
+                     "notches:30", "wait:0.1", "notches:-30", "wait:0.1", "notches:30",
+                     "wait:0.1", "notches:-30", "wait:0.1", "notches:30", "wait:0.1",
+                     "notches:-30", "wait:1.5", "sync:spin_end",
+                     "reconnect", "wait:0.35", "notches:30", "wait:6", "sync:after_reconnect"]
+    labels.append("off_after")
+    plan += ["sync:disable", "notches:-30", "wait:0.5", "notches:11", "wait:3.5", "sync:off_after", "shot:off_after", "quit"]
+    with sight_fixture(run, CULLET_SIGHT), resident_fixture(run, ids):
+        for law, value in state.items():
+            call_admin(run, "set_world_law", [law, value], check=True)
+        out, code, drive_log = drive(run, name, ";".join(plan), syncs=syncs + [snapshot(k) for k in labels],
+                                     env={"LIVING_GAME_CONTROL": "cursor", "LIVING_SIGHT_FIELD_DUMP": directory,
+                                          "RUST_LOG": "info,wgpu=warn,naga=warn,living_game::net=debug,living_game::sightedge=trace"})
+
+    scene = dump(out, "scene") or {}
+    me, snaps = scene.get("me"), scene.get("snaps", {})
+    trace = log(out)
+    fields = field_dumps(directory) if os.path.isdir(directory) else []
+    proof = {}
+    sense_keys = ("id", "sight", "hearing", "field", "focal_deg", "side_deg", "side_share", "near_m", "margin_deg", "at_ms")
+    sent = lambda text: [int(b) for b in re.findall(r"gaze sent band=(\d+)", text)]
+
+    def sample(label, eye, band, points):
+        rows = snaps.get(label, [])
+        if len(rows) != 6:
+            return {"ok": False, "missing": label}
+        projected, legacy, perceived, positions, cover, intent = [r["rows"] for r in rows]
+        view_row = projected[0] if len(projected) == 1 else {}
+        senses = view_row.get("senses", {})
+        if isinstance(senses, list):
+            senses = dict(zip(sense_keys, senses))
+        candidates = [(meta, pixels) for meta, pixels in fields
+                      if meta["band"] == band and meta["wall_ms"] <= rows[0]["wall_ms"]
+                      and math.dist(meta["eye"], eye) < 0.2]
+        meta, pixels = candidates[-1] if candidates else ({}, b"")
+        visible = {r["id"] for r in perceived}
+        position_by_id = {r["id"]: (r["x"], r["y"]) for r in positions}
+        probes = {}
+        for id, point in points.items():
+            shade = texel(meta, pixels, *point) if meta else None
+            probes[id] = {"point": point, "exact": position_by_id.get(id) == point, "texel": shade,
+                          "authority": id in visible,
+                          "shade": shade is not None and shade >= 128 and math.dist(eye, point) <= meta["radius"]}
+        d = dump(out, label) or {}
+        matching = bool(meta.get("facing") and senses) and all(
+            abs(meta["facing"][k] - senses[k]) < 0.004 for k in ("sight", *sense_keys[4:-1]))
+        matching = matching and abs(meta["radius"] - senses["sight"]) < 0.004
+        ok = (view_row.get("id") == me and view_row.get("band") == band
+              and bool(intent) and intent[0]["band"] == band and matching and position_by_id.get(me) == eye
+              and all(p["exact"] and p["texel"] is not None and p["shade"] == p["authority"] for p in probes.values())
+              and any(p["authority"] for p in probes.values()) and not all(p["authority"] for p in probes.values())
+              and (d.get("extra") or {}).get("sight_look") == "shade"
+              and os.path.isfile(os.path.join(out, f"{label}.png")))
+        return dict(ok=ok, view=view_row, senses=senses, legacy=legacy, field=meta, probes=probes, cover=cover,
+                    drawn=near in {row["id"] for row in d.get("looks") or []},
+                    seen=near in {row["id"] for row in d.get("seen") or []},
+                    hovered=near in {row["id"] for row in d.get("hovered") or []},
+                    picked=d.get("under") == near, height=view(d).get("height", -1), pitch=view(d).get("pitch", -1))
+
+    def stops_at(fixture, eye, points):
+        result = {stop: sample(f"{fixture}_{stop}", eye, band, points) for stop, band, _, _ in stops}
+        good = all(result[stop]["ok"] and abs(result[stop]["height"] - height) < 0.1
+                   and abs(result[stop]["pitch"] - 58) < 0.1 for stop, _, _, height in stops)
+        return result, good
+
+    opened, opened_ok = stops_at("open", open_eye, open_targets)
+    senses_at_stops = [opened[stop].get("senses", {}) for stop, *_ in stops]
+    ranges = [r.get("sight", 0) for r in senses_at_stops]
+    angles = [(r.get("focal_deg"), r.get("side_deg")) for r in senses_at_stops]
+    probe_ids = (near, middle, far, flank, rear)
+    sampled_fields = [[row.get("probes", {}).get(id, {}).get("authority") for id in probe_ids]
+                      for row in opened.values()]
+    distinct = sampled_fields == [[True, True, True, False, False],
+                                  [True, True, False, True, False],
+                                  [True, False, False, True, False]]
+    legacy = ((snaps.get("off_before") or [{}, {}])[1].get("rows") or [{}])[0]
+    same_middle = bool(legacy and senses_at_stops[1]) and all(legacy[k] == senses_at_stops[1][k] for k in sense_keys[1:-1])
+    frame_pattern = r"gaze shade confirmed=(-?\d+) drawn=(-?\d+) radius=([-\d.]+) revision=(\d+) mode=(\d+)"
+    off_before, _, enabled = partition_sync(trace, "enable")
+    off_after = partition_sync(trace, "disable", last=True)[2]
+
+    def legacy_shade(label, output, eye):
+        rows = snaps.get(label, [])
+        frames = re.findall(frame_pattern, output)
+        if len(rows) != 6 or rows[0]["rows"] or len(rows[1]["rows"]) != 1 or not frames:
+            return False
+        row = rows[1]["rows"][0]
+        confirmed, drawn, radius, revision, mode = frames[-1]
+        return (not sent(output) and "gaze refused" not in output and confirmed == drawn == "-1"
+                and int(revision) > 0 and mode == "1" and abs(float(radius) - row["sight"]) < 0.004
+                and any(meta["band"] is None and meta["facing"]
+                        and math.dist(meta["eye"], eye) < 0.2 and abs(meta["sight"] - row["sight"]) < 0.004
+                        for meta, _ in fields))
+
+    off_ok = legacy_shade("off_before", off_before, open_eye) and legacy_shade("off_after", off_after, hedge_eye)
+    approach = partition_sync(enabled.partition("live script: notches:-30")[2], "spin_start")[0]
+    proof["stops"] = dict(samples=opened, reach=ranges, angles=angles, middle_matches_legacy=same_middle,
+                          off_legacy=off_ok, sampled_fields=sampled_fields, sends=sent(approach))
+    c.check(name, "1. Three fixed camera stops have different authority-matched Shade fields",
+            code == 0 and opened_ok and distinct and ranges[0] > ranges[1] > ranges[2] and same_middle and off_ok
+            and angles == [(35, 65), (70, 110), (110, 155)] and sent(approach)[:3] == [1, 0, 2],
+            repr((ranges, angles, sampled_fields, opened_ok, same_middle, off_ok, drive_log[-300:])))
+
+    spin = partition_sync(partition_sync(trace, "spin_start")[2], "spin_end")[0]
+    replies = [(int(b), int(t)) for b, t in re.findall(r"gaze accepted band=(\d+) at_us=(\d+)", spin)]
+    interval_ok = len(replies) >= 2 and all(b[1] - a[1] >= 250_000 for a, b in zip(replies, replies[1:]))
+    frames = [(int(cb), int(db), float(r), int(rev), int(mode)) for cb, db, r, rev, mode in re.findall(frame_pattern, spin)]
+    rendered = [b for i, (_, b, _, _, _) in enumerate(frames) if i == 0 or b != frames[i - 1][1]]
+    confirmed = [b for i, (b, _, _, _, _) in enumerate(frames) if i == 0 or b != frames[i - 1][0]]
+    same_frame = all(
+        (a[3] == b[3] if a[1] == b[1] else b[0] == b[1] and a[3] != b[3])
+        for a, b in zip(frames, frames[1:])
+    )
+    radius_by_band = {band: r for (_, band, _, _), r in zip(stops, ranges)}
+    no_flicker = bool(frames) and rendered == confirmed and same_frame and all(
+        mode == 1 and abs(radius - radius_by_band.get(b, -1)) < 0.004 for _, b, radius, _, mode in frames)
+    zoom_times = re.findall(r"(\d\d:\d\d:\d\d(?:\.\d+)?)Z.*live script: notches:", spin)
+    seconds = lambda t: sum(float(x) * (60 ** i) for i, x in enumerate(reversed(t.split(":"))))
+    duration = seconds(zoom_times[-1]) - seconds(zoom_times[0]) if len(zoom_times) == 6 else None
+    final = (snaps.get("spin_end") or [{}])[0].get("rows") or [{}]
+    max_per_second = max((sum(0 <= b[1] - a[1] < 1_000_000 for b in replies) for a in replies), default=0)
+    proof["spin"] = dict(duration_s=duration, accepted=replies, max_per_second=max_per_second,
+                         frames=frames, rendered=rendered,
+                         confirmed=confirmed, no_flicker=no_flicker)
+    c.check(name, "2. Rapid wheel spin respects the limiter, keeps the last band, and does not flicker",
+            duration is not None and 0 < duration < 1 and interval_ok and max_per_second <= 4 and no_flicker
+            and replies[-1][0] == final[0].get("band") == 1,
+            repr((duration, replies, len(frames), rendered, confirmed, no_flicker)))
+
+    reconnect = partition_sync(trace.partition("live script: reconnect")[2], "after_reconnect")[0]
+    events = re.findall(r"(?m)(offline:.*|connected as .*|world subscribed .*|gaze owner applied band=\d+[^\n]*|gaze sent band=\d+)", reconnect)
+    recovered = (snaps.get("after_reconnect") or [{}])[0].get("rows") or [{}]
+    order = [re.sub(r"^(gaze (?:owner applied|sent) band=\d+).*", r"\1", line) for line in events if line.startswith("gaze ")]
+    proof["reconnect"] = dict(events=events, after=recovered)
+    zoom_at = reconnect.find("live script: notches:30")
+    subscribed_at = reconnect.find("world subscribed")
+    c.check(name, "3. Reconnect restores Far before sending the queued Near band",
+            "offline:" in reconnect and 0 <= zoom_at < subscribed_at
+            and order == ["gaze owner applied band=1", "gaze sent band=2", "gaze owner applied band=2"]
+            and recovered[0].get("band") == 2, repr(events))
+
+    hedge, hedge_ok = stops_at("hedge", hedge_eye, hedge_targets)
+    hidden = all(row.get("cover") and row["cover"][0]["cover_sight_on"] and row["cover"][0]["cover_brush_on"]
+                 and row["probes"][near]["texel"] == 0 and not row["probes"][near]["authority"]
+                 and not any(row[k] for k in ("seen", "drawn", "hovered", "picked")) for row in hedge.values())
+    proof["hedge"] = hedge
+    c.check(name, "4. Gaze and cover hide the Cullet hedge contact at every stop", hedge_ok and hidden,
+            repr({stop: (row["ok"], row.get("probes")) for stop, row in hedge.items()}))
+    with open(os.path.join(out, "gaze-proof.json"), "w") as f:
+        json.dump(proof, f, indent=1)
+
+
+@scenario("cover", cullet=True)
+def cover(run, c):
+    """The same Cullet sight rays with cover on and off, through the real client."""
+    ids = residents(run, 1)
+    if not ids:
+        c.check("cover", "adult resident available", False)
+        return
+    with sight_fixture(run, CULLET_SIGHT), resident_fixture(run, ids):
+        for law, value in (("gaze_on", "false"), ("fov_on", "false"), ("cover_brush_on", "true")):
+            call_admin(run, "set_world_law", [law, value], check=True)
+        for fixture, eye, contact, blocks in (
+            ("trunk", (781.5, 457.5), (785.5, 457.5), True),
+            ("edge", (781.5, 457.5), (785.5, 459.5), False),
+            # The closer point still crosses the brush and stays in the near camera's frame.
+            ("brush", (608.5, 479.5), (608.5, 474.5), True),
+            # Cullet's mid_row_plot_toft_3_hedge, 1.8 m high, plan origin (510, 784).
+            ("hedge", (523.5, 698.5), (527.5, 698.5), True),
+        ):
+            cover_pair(run, c, ids[0], fixture, eye, contact, blocks)
+        cover_canopy(run, c)
+
+
+def cover_pair(run, c, target, fixture, eye, contact, blocks):
+    stops = (("far", -30, 19.0), ("middle", 11, 12.0), ("near", 30, 8.0))
+    name = f"cover-{fixture}"
+    directory = os.path.join(ROOT, ".local/living/verify", run, "ui",
+                             f"{name}-{THEME}" if THEME else name, "fields")
+    if os.path.isdir(directory):
+        for filename in os.listdir(directory):
+            if re.fullmatch(r"field-\d+\.(json|pgm)", filename):
+                os.remove(os.path.join(directory, filename))
+    x, y = contact
+    syncs = [
+        "daylight=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+        'enable=set_world_law|"cover_sight_on"|"true"',
+        'disable=set_world_law|"cover_sight_on"|"false"',
+        f"positions=place_at|{{me}}|{eye[0]}|{eye[1]};place_at|{target}|{x}|{y};"
+        f"set_behavior|{target}|{json.dumps(json.dumps({'wait': 600}))}",
+    ]
+    plan = ["ready", "weapon:sheathe", "frame:0", "yaw:0", "sightlook:shade", "sync:daylight", "sync:positions"]
+    for state in ("on", "off"):
+        plan += [f"sync:{'enable' if state == 'on' else 'disable'}", "wait:7"]
+        for stop, notches, _ in stops:
+            key = f"{state}_{stop}"
+            syncs.append(f"{key}=sql|SELECT body FROM perceived WHERE viewer = 0x{{ident}};"
+                         "sql|SELECT * FROM cover_law;"
+                         f"sql|SELECT id,x,y FROM body WHERE id = {{me}} OR id = {target}")
+            plan += ["cursor:0.7,0.55", f"notches:{notches}", "wait:1.5",
+                     f"pointat:{x},{y}:1.0", "wait:0.5", f"sync:{key}", f"dump:{key}", f"shot:{key}"]
+            if blocks and state == "on":
+                plan += ["weapon:sheathe", "wait:0.5", "tap", "wait:0.6", f"dump:{key}_talk",
+                         "weapon:draw", "wait:0.5", "tap", "wait:0.6", f"dump:{key}_attack",
+                         "weapon:sheathe"]
+    out, code, output = drive(run, name, ";".join(plan + ["quit"]), syncs=syncs,
+                              env={"LIVING_SIGHT_FIELD_DUMP": directory})
+    c.check(name, "client joined and finished", code == 0, output[-500:])
+    scene = dump(out, "scene") or {}
+    me = scene.get("me")
+    fields = field_dumps(directory) if os.path.isdir(directory) else []
+    trace = log(out)
+    for state in ("on", "off"):
+        hidden = state == "on" and blocks
+        for stop, _, height in stops:
+            key = f"{state}_{stop}"
+            d = dump(out, key) or {}
+            talk = dump(out, f"{key}_talk") or {}
+            extra = d.get("extra") or {}
+            snapshots = scene.get("snaps", {}).get(key, [])
+            if len(snapshots) != 3:
+                c.check(name, f"{key}: authority snapshots present", False)
+                continue
+            perception, law, positions = [snap["rows"] for snap in snapshots]
+            actual = {row["id"]: (row["x"], row["y"]) for row in positions}
+            law_ok = bool(law) and law[0]["cover_brush_on"] and law[0]["cover_sight_on"] == (state == "on")
+            c.check(name, f"{key}: policy and exact positions", law_ok and actual == {me: eye, target: contact}, repr(actual))
+            v = view(d)
+            c.check(name, f"{key}: camera stop and still", v.get("mode") == "top-down"
+                    and abs(v.get("height", -1) - height) < 0.1
+                    and os.path.isfile(os.path.join(out, f"{key}.png")), repr(v))
+            authority = target in {row["body"] for row in perception}
+            perceived = target in (d.get("perceived") or [])
+            seen = target in {row["id"] for row in d.get("seen") or []}
+            drawn = target in {row["id"] for row in d.get("looks") or []}
+            c.check(name, f"{key}: authority and client agree on visibility",
+                    (authority, perceived, seen, drawn) == (not hidden,) * 4,
+                    repr((authority, perceived, seen, drawn)))
+            candidates = [(meta, pixels) for meta, pixels in fields
+                          if meta["wall_ms"] <= snapshots[0]["wall_ms"]
+                          and math.dist(meta["eye"], eye) < 0.2]
+            shade = texel(*candidates[-1], *contact) if candidates else None
+            c.check(name, f"{key}: Shade agrees with authority at the target",
+                    shade == (255 if authority else 0) and extra.get("sight_look") == "shade", repr(shade))
+            pointer = extra.get("cursor") or {}
+            on_screen = all(0 < pointer.get(axis, -1) < 1 for axis in ("fx", "fy"))
+            hovered = target in {row["id"] for row in d.get("hovered") or []}
+            addressed = (talk.get("typing") or {}).get("to")
+            if hidden:
+                segment = partition_sync(trace, key)[2].partition(f"live script: dump:{key}_attack")[0]
+                strikes = re.findall(r"tap: strike \(at (.*?), weapon drawn\)", segment)
+                naming = [word for kind, word in d.get("naming") or [] if kind in ("hover", "target")]
+                quiet = (d.get("under") is None and not hovered and not naming
+                         and d.get("targeted") is None and addressed != target
+                         and bool(strikes) and all(who != f"Some({target})" for who in strikes))
+                c.check(name, f"{key}: no hover, label, plate, talk or strike target",
+                        on_screen and quiet, repr((pointer, d.get("under"), naming, addressed, strikes)))
+            else:
+                c.check(name, f"{key}: cursor can pick the visible resident",
+                        on_screen and d.get("under") == target and hovered,
+                        repr((pointer, d.get("under"), hovered)))
+
+
+def cover_canopy(run, c):
+    # Cullet's streamed land client uses the authored Hanger tree at (783.2, 457.4).
+    canopy = (783.5, 457.5)
+    plan = ["ready", "weapon:sheathe", "frame:0", "sync:daylight"]
+    syncs = ["daylight=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+             'enable=set_world_law|"cover_sight_on"|"true"',
+             'disable=set_world_law|"cover_sight_on"|"false"']
+    for state in ("on", "off"):
+        plan += [f"sync:{'enable' if state == 'on' else 'disable'}", "wait:3"]
+        for stop, notches in (("middle", -9 if state == "off" else 0), ("near", 30)):
+            key = f"{state}_{stop}"
+            syncs += [f"clear_{key}=place_at|{{me}}|775.5|457.5",
+                      f"tree_{key}=place_at|{{me}}|{canopy[0]}|{canopy[1]}"]
+            plan += [f"sync:clear_{key}", "wait:3", "cursor:0.7,0.55", f"notches:{notches}",
+                     f"sync:tree_{key}", "wait:3", f"dump:{key}", f"shot:{key}"]
+    name = "cover-canopy"
+    out, code, output = drive(run, name, ";".join(plan + ["quit"]), syncs=syncs,
+                              env={"RUST_LOG": "info,wgpu=warn,naga=warn,living_game::envs=debug"})
+    c.check(name, "client joined and finished", code == 0, output[-500:])
+    trace = log(out)
+    for state in ("on", "off"):
+        for stop, height in (("middle", 12.0), ("near", 8.0)):
+            key = f"{state}_{stop}"
+            d = dump(out, key) or {}
+            body = (d.get("me_at") or {}).get("body") or {}
+            segment = partition_sync(trace, f"tree_{key}")[2].partition(f"live script: dump:{key}")[0]
+            faded = cutaway_fades(segment, "hanger_tree")
+            c.check(name, f"{key}: Hanger tree cuts away above the player",
+                    (body.get("x"), body.get("y")) == canopy and bool(faded)
+                    and abs(view(d).get("height", -1) - height) < 0.1
+                    and os.path.isfile(os.path.join(out, f"{key}.png")),
+                    repr((body, view(d), faded)))
 
 
 # The looks the scenario faces (live script `look:DEG`: 0 north, clockwise) and where the
@@ -2894,8 +4865,13 @@ def looks(run, c):
     a, b = residents(run, 2)
     ev = os.path.join(ROOT, ".local/living/verify", run, "ui")
     test_book = book_copy(ev, book, "looks-without-b", drop=[rows.get(b, "")])
-    plan = "ready;sync:scene;cursor:0.5,0.5;wait:5;dump:00;shot:00_drawn;sync:hold;wait:0.6;point:{A};wait:0.5;dump:01;quit".replace("{A}", str(a))
-    out, code, text = drive(run, s, plan, free=[f"{a}:-2.5:1.0", f"{b}:2.0:-1.0"], syncs=["hold=refree"], env={"LIVING_GAME_LOOK_BOOK": test_book})
+    # Start on open ground even if the previous scenario left the player beside Cullet's hedge.
+    plan = (f"ready;sync:open_ground;look:0;sync:scene;cursor:0.5,0.5;wait:5;"
+            f"dump:00;shot:00_drawn;sync:hold;wait:0.6;point:{a};wait:0.5;dump:01;quit")
+    with resident_fixture(run, (a, b)):
+        out, code, text = drive(run, s, plan, free=[f"{a}:-2.0:-1.5", f"{b}:2.0:-1.5"],
+                                syncs=["open_ground=place_at|{me}|781.5|469.5", "hold=refree"],
+                                env={"LIVING_GAME_LOOK_BOOK": test_book})
     c.check(s, "client ran and joined", code == 0, text[-300:])
     L = log(out)
     d0 = dump(out, "00") or {}
@@ -2990,7 +4966,8 @@ def looks_band(run, c):
     before = look_rows(run)
     burst = "".join(f"dump:b{i:03d};wait:0.2;" + (f"shot:b{i:03d};" if i % 10 == 0 else "") for i in range(350))
     plan = f"ready;sync:scene;cursor:0.5,0.5;wait:1;{burst}quit"
-    out, code, text = drive(run, s, plan, free=[f"{ids[0]}:-2.5:1.0", f"{ids[1]}:2.0:-1.0", f"{ids[2]}:0.5:2.2"])
+    with resident_fixture(run, ids):
+        out, code, text = drive(run, s, plan, free=[f"{ids[0]}:-2.5:1.0", f"{ids[1]}:2.0:-1.0", f"{ids[2]}:0.5:2.2"])
     c.check(s, "client ran and joined", code == 0, text[-300:])
     after = look_rows(run)
     L = log(out)
@@ -3061,6 +5038,434 @@ def skirt_scale(run, c):
     c.check(s, "Vivi scaled keeps her hem's width", abs(h["small"][1] - h["vivi"][1]) < 0.01, f"small {h['small'][1]:.4f}, vivi {h['vivi'][1]:.4f}")
 
 
+def seated_outfits(run):
+    """Residents beside whom the scene can sit, by their line's outer garment: skirted (a smock
+    or an apron, `Skirt` spring chains) and coated (a coat; `Coat` chains once the generator
+    builds them, docs/seat-contact/)."""
+    book = json.load(open(LOOK_BOOK)) if os.path.exists(LOOK_BOOK) else {"lines": {}}
+    rows = look_rows(run)
+    out = {"skirt": [], "coat": []}
+    for cid in residents(run, 400):
+        outfit = (book["lines"].get(rows.get(cid, ""), {}).get("person") or {}).get("styles", {}).get("outfit", [])
+        if any(p.startswith(("smock_", "apron_")) and not p.startswith("smock_bands") for p in outfit):
+            out["skirt"].append(cid)
+        elif any(p.startswith("coat-") for p in outfit):
+            out["coat"].append(cid)
+    return out
+
+
+CLIP_VARIANTS = os.path.join(ROOT, "living/game/assets/characters/clip_variants.json")
+
+
+def seat_clips(run, ids):
+    """{resident: the animation its seated loop should play}: anim.rs `variants` over its look
+    line's type and pieces (clip_variants.json; sit-f-select, the female ground sit)."""
+    book = json.load(open(LOOK_BOOK)) if os.path.exists(LOOK_BOOK) else {"lines": {}}
+    rows = look_rows(run)
+    families = json.load(open(CLIP_VARIANTS))["families"]
+    out = {}
+    for cid in ids:
+        person = book["lines"].get(rows.get(cid, ""), {}).get("person") or {}
+        kind, worn = person.get("type", ""), person.get("styles", {}).get("outfit", [])
+        out[cid] = next((f["clips"]["sit_ground"] for f in families if any(kind.startswith(t) for t in f["types"]) and all(w in worn for w in f["wears"])), "sit_ground")
+    return out
+
+
+def seat_segments(path, cid):
+    """A sitter's ground one-shots from the feet log, each from its start to the next one: the
+    peak speed of its hips and feet from its root (m/s) over the crossfade in (0.12 s) and after
+    it, frames where the root moves (a placement) left out, and its hips' mean height over the
+    ground in the seated loop. A pop between the variant clips would show as a peak above the
+    originals' (`LIVING_GAME_CLIP_VARIANTS=0`) in the same segment."""
+    if not os.path.exists(path):
+        return None
+    rows = feet_rows(path, cid)
+    rel = lambda r, k: [a - b for a, b in zip(r[k][:3], r["root"])]
+    out, cur, seated = [], None, []
+    for a, b in zip(rows, rows[1:]):
+        act = tuple(b["action"]) if b.get("action") else None
+        if cur is None or act != cur["act"]:
+            cur = {"act": act, "t0": b["t"], "fade_mps": 0.0, "after_mps": 0.0, "frames": 0}
+            out.append(cur)
+        dt = b["t"] - a["t"]
+        if dt <= 0 or math.dist(a["root"], b["root"]) > 0.01:
+            continue
+        v = max(math.dist(rel(a, k), rel(b, k)) / dt for k in ("hips_at", "l", "r"))
+        key = "fade_mps" if b["t"] - cur["t0"] < 0.12 else "after_mps"
+        cur[key] = round(max(cur[key], v), 3)
+        cur["frames"] += 1
+        if b.get("clip") == "sit_ground":
+            seated.append(b["hips_at"][1] - b["l"][3])
+    segs = [dict(s, clip=s["act"][0], t0=round(s["t0"], 3), act=None) for s in out if s["act"] and s["act"][0] in ("sit_ground_down", "stand_up_ground")]
+    return {"segments": [{k: v for k, v in x.items() if k != "act"} for x in segs], "seated_hips_over_ground_m": round(sum(seated) / len(seated), 4) if seated else None}
+
+
+def script_t(text, step):
+    """The client's clock (s) at the first live-script line for STEP (`live script: STEP (me …,
+    t X s)`), the clock the feet log's `t` uses."""
+    m = re.search(rf"live script: {re.escape(step)} \(me .*?, t ([\d.]+) s\)", text)
+    return float(m.group(1)) if m else None
+
+
+def feet_rows(path, cid):
+    """A feet log's frames of one body (a line cut short when the client stopped is skipped)."""
+    out = []
+    for line in open(path):
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if r.get("id") == cid and r.get("hips_at"):
+            out.append(r)
+    return out
+
+
+def seated_frames(path, cid, t0, t1):
+    """The watched sitter's feet-log frames between t0 and t1 (client s) that show it off the
+    seated loop: any one-shot over it (getting up, settling down again, a turn take) or its hips
+    more than SEATED_HIPS_M over the ground (the seated loop keeps them about 0.11 m up, standing
+    about 0.9). Returns (frames in the window, [(t, clip, action, hips over ground m)])."""
+    if not os.path.exists(path) or t0 is None or t1 is None:
+        return 0, []
+    rows = [r for r in feet_rows(path, cid) if t0 <= r["t"] <= t1]
+    off = [(round(r["t"], 3), r.get("clip"), (r.get("action") or [None])[0], round(r["hips_at"][1] - r["l"][3], 3))
+           for r in rows if r.get("action") or r["hips_at"][1] - r["l"][3] > SEATED_HIPS_M]
+    return len(rows), off
+
+
+SEATED_HIPS_M = 0.35
+
+
+@scenario("seat")
+def seat(run, c):
+    """Seated cloth on the ground (seat-2a, docs/seat-contact/): skirted and coated residents
+    beside me in the crowded street (eight near: me and seven), told to rest at noon in dry
+    weather (`set_behavior` `{"do": "rest"}`, scene setup), so town.rs sits them on the ground
+    (`sit_ground_down`, then `sit_ground`; about three in ten stand at ease instead), then told to
+    go home at `sync:up`, so they get up where they sat (`stand_up_ground`) and walk off.
+    Stills going down, seated, getting up and up. They sit about 18 s, across two of the
+    authority's 8 s rest renewals (a new `doing` row each, snapshotted at `held0` and `held1`),
+    and meanwhile the camera goes Far, Near, Far and Near, so their springs rest and wake (the
+    re-entry reseed, `LIVING_GAME_PERF=springwake`). Nobody seated may rise before `up`: the
+    watched sitter's feet log stays in the seated loop (no one-shot, hips low) from the seated
+    dump to `up`, every sitter's one `gets up` line comes after `up`, and every seated wake starts
+    where its chains were drawn (under 5° at waking) and does not swing (under 10° a frame). Two arms: the contact on, and off
+    (`LIVING_GAME_SEAT_CONTACT=0`); `LIVING_GAME_PERF=seat` logs each seated character's lowest
+    cloth tail above its ground, and frames.csv and the springs line give the cost. Each sitter's
+    `seat:` line names the animation its seated loop plays: the female ground sit's variant for an
+    adult line in `trousers-f` and `boots-f`, else the original (sit-f-select)."""
+    s = "seat"
+    who = seated_outfits(run)
+    want = seat_clips(run, who["skirt"] + who["coat"])
+    skirts = who["skirt"][:4]
+    # At least one sitter of each kind, so the selector is seen both ways.
+    for kind in (lambda i: want[i] != "sit_ground", lambda i: want[i] == "sit_ground"):
+        if skirts and not any(kind(i) for i in skirts + who["coat"][:3]):
+            extra = next((i for i in who["skirt"][4:] if kind(i)), None)
+            if extra is not None:
+                skirts = skirts[:3] + [extra] if len(skirts) == 4 else skirts + [extra]
+    ids = skirts + who["coat"][:3]
+    c.check(s, "skirted and coated residents to seat", len(who["skirt"]) >= 1 and len(who["coat"]) >= 1 and len(ids) == 7, f"skirt {who['skirt'][:4]}, coat {who['coat'][:3]}")
+    if len(ids) < 2:
+        return
+    ring = [(2.2, 0.0), (-2.2, 0.0), (0.0, 2.2), (0.0, -2.2), (1.6, 1.6), (-1.6, -1.6), (1.6, -1.6)]
+    free = [f"{i}:{x}:{y}" for i, (x, y) in zip(ids, ring)]
+    rest = json.dumps(json.dumps({"do": "rest"}))
+    home = json.dumps(json.dumps({"do": "goto", "target": "home"}))
+    doing = "sql|SELECT id, since_ms, until_ms FROM doing WHERE " + " OR ".join(f"id = {i}" for i in ids)
+    syncs = ['setup=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5;set_weather|false|900',
+             "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+             "sit=" + ";".join(f"set_behavior|{i}|{rest}" for i in ids),
+             "held0=" + doing, "held1=" + doing,
+             "up=" + ";".join(f"set_behavior|{i}|{home}" for i in ids)]
+    # Seated from about 4 s after `sit` to `up` about 18 s after it: across the rest renewals at
+    # about 8 and 16 s (the first while the camera is Near between two Far stops), and a
+    # Far → Near → Far → Near zoom.
+    plan = ("ready;sync:noon;sync:setup;wait:2;sync:scene;look:180;cursor:0.5,0.55;wait:3;notches:30;wait:2;dump:standing;shot:00_standing;"
+            "sync:sit;wait:1.6;shot:01_down;wait:2.4;dump:seated;shot:02_seated;sync:held0;"
+            "notches:-30;wait:2;notches:30;wait:2.5;shot:03_idle;notches:-30;wait:2;notches:30;wait:3;dump:rewoken;shot:04_rewoken;"
+            "wait:5;dump:renewed;shot:04b_renewed;sync:held1;"
+            "sync:up;wait:0.9;shot:05_rising;wait:1.2;shot:06_rising_late;wait:2;dump:up;shot:07_up;wait:1;quit")
+    arms = {}
+    # One variant sitter's hips and feet, frame by frame (the feet log): its seat's height, and
+    # each ground one-shot's peak speed, to compare with the originals' (seat_segments).
+    watch = next((i for i in ids if want.get(i) != "sit_ground"), None)
+    for arm, env in (("on", {}), ("off", {"LIVING_GAME_SEAT_CONTACT": "0"})):
+        name = f"{s}-{arm}"
+        ev = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
+        os.makedirs(ev, exist_ok=True)
+        frames = os.path.join(ev, "frames.csv")
+        feet = os.path.join(ev, "feet.jsonl")
+        if arm == "on" and watch is not None:
+            env = dict(env, LIVING_GAME_FEET=feet, LIVING_GAME_FEET_ID=str(watch))
+        out, code, text = drive(run, name, plan, free=free, syncs=syncs, env=dict(env, LIVING_GAME_PERF="seat,springwake", LIVING_GAME_FRAMES=frames, LIVING_GAME_FPS_CAP="0"))
+        c.check(s, f"{arm}: client ran and joined", code == 0, text[-300:])
+        L = log(out)
+        up, after_up = next_sync_wait(L, 0, {os.path.join(out, "up.go"): "up"})
+        sat = sorted({int(m) for m in re.findall(r"seat: #(\d+) sits on the ground", L[:after_up])} & set(ids))
+        plays = {int(i): clip for i, clip in re.findall(r"seat: #(\d+) sits on the ground .*?, plays (\S+)", L)}
+        rose = sorted({int(m) for m in re.findall(r"seat: #(\d+) is off the ground", L[after_up:])} & set(ids))
+        # A sitter whose body left sight while it got up (the authority walks it off at once and
+        # stops sending it past sight, ~11 m, before its drawn rise ends): its seat went with its
+        # fading body (live.rs `leaves sight`). Accounted for, and named apart.
+        left = {int(i): float(d) for i, d in re.findall(r"seat: #(\d+) leaves sight getting up, (-?[\d.]+|NaN) m from me", L[after_up:]) if int(i) in ids and d != "NaN"}
+        seated_left = sorted({int(i) for i in re.findall(r"seat: #(\d+) leaves sight seated", L[:after_up])} & set(ids))
+        lows = [(n, int(k), float(v)) for n, k, v in re.findall(r"seat: (.+?) \S+: (\d+) cloth joints, lowest tail (-?[\d.]+|inf) mm", L) if v != "inf"]
+        # The seated characters' springs waking as the camera comes back near (their entities, from
+        # their seat reports), after they sat.
+        seated_e = {e for _, e, k, _ in re.findall(r"seat: (.+?) (\S+): (\d+) cloth joints, lowest tail (-?[\d.]+|inf) mm", L) if int(k) > 0}
+        # Seated: from the seated dump to the `up` request.
+        seated_log = L.split("live script: dump:seated", 1)[-1].split("live script: sync:up (", 1)[0]
+        wakes = [(e, float(a), float(b)) for e, a, b in re.findall(r"springwake: \S+ (\S+) \(\d+ joints, settle \d+\): largest turn ([\d.]+)° at waking, ([\d.]+)° a frame after", seated_log) if e in seated_e]
+        # The authority's rest rows while they sat: a renewal extends the row in place (doing-renew:
+        # the same `since_ms`, a later `until_ms`), or, on older modules, writes a new `since_ms`.
+        sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+        held = [{r["id"]: (r["since_ms"], r["until_ms"]) for r in ((sc.get("snaps") or {}).get(k) or [{}])[0].get("rows", [])} for k in ("held0", "held1")]
+        renewed = sorted(i for i in sat if i in held[0] and i in held[1] and (held[0][i][0] != held[1][i][0] or held[1][i][1] > held[0][i][1]))
+        # Getting up after `sit` (residents resting already when the scene places them get up then).
+        sit_at = L.find("live script: sync:sit (")
+        gets_up = [(int(i), m.start()) for m in re.finditer(r"seat: #(\d+) gets up", L) for i in [m.group(1)] if int(i) in ids and m.start() > sit_at >= 0]
+        early_up = sorted({i for i, at in gets_up if at < after_up})
+        t_seated, t_far1, t_up = script_t(L, "dump:seated"), script_t(L, "notches:-30"), script_t(L, "sync:up")
+        t_far2 = next((float(x) for x in re.findall(r"live script: notches:-30 \(me .*?, t ([\d.]+) s\)", L)[1:2]), None)
+        springs = [float(x) for x in re.findall(r"springs: .*?([\d.]+) µs CPU a character-step", L)]
+        rows = []
+        if os.path.exists(frames):
+            rows = [tuple(map(int, line.split(","))) for line in open(frames) if line.strip()]
+        ms = sorted(r[1] / 1000 for r in rows[len(rows) // 4:])
+        arms[arm] = {"sat": sat, "rose": rose, "left_sight_getting_up": left, "left_sight_seated": seated_left, "cloth_lows_mm": lows, "wakes_deg": wakes, "spring_us_per_char_step": springs,
+                     "frames": len(ms), "p50_ms": ms[len(ms) // 2] if ms else None, "p99_ms": ms[math.ceil(len(ms) * .99) - 1] if ms else None,
+                     "skirt": [i for i in sat if i in who["skirt"]], "coat": [i for i in sat if i in who["coat"]],
+                     "plays": {i: plays.get(i) for i in sat}, "selected": {i: want.get(i) for i in sat}}
+        if arm == "on" and watch is not None:
+            arms[arm]["segments"] = seat_segments(feet, watch)
+            c.check(s, f"on: #{watch}'s sitting down, seated loop and getting up are in its feet log (seat.json `segments`)",
+                    bool(arms[arm]["segments"] and arms[arm]["segments"]["segments"] and arms[arm]["segments"]["seated_hips_over_ground_m"]), json.dumps(arms[arm]["segments"])[:600])
+        d = dump(out, "seated") or {}
+        seen = {x["id"] for x in d.get("seen") or []}
+        c.check(s, f"{arm}: a skirted and a coated resident sit on the ground in view", arms[arm]["skirt"] and arms[arm]["coat"] and set(sat) <= seen, f"sat {sat} (skirt {arms[arm]['skirt']}, coat {arms[arm]['coat']}); in view {sorted(seen)}")
+        c.check(s, f"{arm}: everyone who sat got up and was let go of the ground after up (or left sight getting up, its seat with it)", up == "up" and sat and sorted(set(rose) | set(left)) == sat and not seated_left and len(rose) >= 1,
+                f"sat {sat}, off the ground {rose}, left sight getting up {left} (m from me), left sight seated {seated_left}")
+        variant = [i for i in sat if want.get(i) != "sit_ground"]
+        c.check(s, f"{arm}: each sitter plays the seated loop its line selects (a variant for {len(variant)}, the original for {len(sat) - len(variant)})",
+                sat and variant and len(variant) < len(sat) and all(plays.get(i) == want.get(i) for i in sat), f"plays {arms[arm]['plays']}, selected {arms[arm]['selected']}")
+        if arm == "on":
+            cloth = [x for x in lows if x[1] > 0]
+            c.check(s, "on: seated cloth tails stay on the ground's side (at most 5 mm under it)", cloth and min(v for _, _, v in cloth) >= -5.0, f"{len(cloth)} reports; lowest {min((v for _, _, v in cloth), default=None)} mm")
+        c.check(s, f"{arm}: the authority renewed the sitters' rest while they sat (its doing row extended or new between held0 and held1)", renewed, f"held0 {held[0]}, held1 {held[1]}")
+        if watch is not None and arm == "on":
+            n, off = seated_frames(feet, watch, t_seated, t_up)
+            arms[arm]["seated_off_loop"] = off[:40]
+            c.check(s, f"on: #{watch} stays seated across the rest renewal (no one-shot, hips under {SEATED_HIPS_M} m, seated dump to up)",
+                    n > 100 and watch in renewed and not off, f"{n} frames; renewed {renewed}; off the loop {off[:6]}")
+            n2, off2 = seated_frames(feet, watch, t_far1, (t_far2 or 0) + 2.0)
+            c.check(s, f"on: #{watch} stays seated across Far → Near → Far", n2 > 50 and t_far2 and not off2, f"{n2} frames, t {t_far1}–{t_far2}; off the loop {off2[:6]}")
+        arms[arm]["gets_up"] = [i for i, _ in gets_up]
+        c.check(s, f"{arm}: every sitter gets up once, after up (`seat: #ID gets up`), none while seated", sat and early_up == [] and sorted(i for i, _ in gets_up) == sat,
+                f"gets up {[i for i, _ in gets_up]} (before up {early_up}), sat {sat}")
+        c.check(s, f"{arm}: seated springs wake (Far → Near) where they were drawn (under 5° at waking) and settle without a swing (under 10° a frame)",
+                wakes and max(a for _, a, _ in wakes) < 5.0 and max(b for _, _, b in wakes) < 10.0, f"{wakes}")
+    evidence = os.path.join(ROOT, ".local/living/verify", run, "ui", "seat.json")
+    json.dump(arms, open(evidence, "w"), indent=1)
+    on, off = arms.get("on", {}), arms.get("off", {})
+    c.check(s, "frame cost with the contact on and off (eight near, crowded street)", on.get("p50_ms") and off.get("p50_ms"), json.dumps({k: {x: arms[k].get(x) for x in ("frames", "p50_ms", "p99_ms")} for k in arms}))
+
+FAKE_LLM = os.path.join(ROOT, ".agents/skills/verify-llm/scripts/fake_llm.py")
+
+
+def saying_ms(text):
+    """`living_rules::saying::saying_ms`: 330 ms a word, 1.5 s at least, 8 s at most."""
+    return min(max(len(text.split()) * 330, 1500), 8000)
+
+
+def free_port():
+    import socket
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+@scenario("reply-pace")
+def reply_pace(run, c):
+    """A resident's reply bubble at speaking pace (reply-pace, docs/COMMUNICATION.md §21). Since
+    reply-timing a mind says a reply as soon as it is ready, so its `at_ms` can fall inside the
+    time the answered line takes to say. The client shows the reply's bubble once that line is
+    done being said (its `at_ms` plus `saying_ms`, 330 ms a word, at least 1.5 s), and the
+    answered line's bubble ends then: one bubble an exchange.
+
+    A real mind service (`living-mind`, LIVING_ONLY the one resident) answers through a local fake
+    model (verify-llm's fake_llm.py; no paid call). At noon on open grass (UNHEARD_SPOT, anyone
+    within 25 m put away), resident A is held 2 m west of a fresh player.
+    1. Near: the player says a twelve-word line to A; the fake answers at once. The reply's row
+       comes well within the line's saying time; the client log's `bubble:` line gives when its
+       bubble first showed. Dumps every 0.2 s: never my bubble and A's at once.
+    2. Out of range: the player says a second line and walks east for 4 s; the fake answers after
+       5 s, when the player is beyond a said line's reach (9 m) and within a call's. A's reply
+       gets the authority's `silence` ("… could not have heard you."), A's mind takes its one
+       follow-up turn with those words ("# What came of your last words"), and the fake calls
+       out 4 s later. The player meanwhile walks back west for 2 s, into sight (11 m by day) and
+       within the call's reach: the call shows as said (its bubble not held by A's paced
+       reply before it) and in the Log."""
+    s = "reply-pace"
+    a = residents(run, 1)[0]
+    names = {r["id"]: r["name"] for r in sql(run, f"SELECT id, name FROM character WHERE id = {a}")}
+    cards = {r["name"]: r["carry_m"] for r in sql(run, "SELECT name, carry_m FROM speech_card")}
+    ui = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    ev = os.path.join(ui, s)
+    os.makedirs(ev, exist_ok=True)
+    near_line = "Good morning to you, how is the bread at the bakery today? (rp-near)"
+    far_line = "And what about the honey cakes, are there any left? (rp-far)"
+    follow_head = "# What came of your last words"
+    follow_say = "Did you hear me? The cakes are gone."
+    script = {"replies": {"think": {"thought": "I listen.", "intend": ["wait"], "say": None},
+                          "deliberate": {"graph": {"wait": 300}, "weight": 1.5, "plan": "verify-ui wait"},
+                          "talk": {"thought": "Nothing more.", "say": "", "to": 0, "acts": [], "end": True, "settled": None}},
+              "rules": [
+                  # The follow-up turn first: its prompt carries both lines of the exchange too.
+                  {"purpose": "talk", "contains": follow_head, "times": -1,
+                   "delay_s": 4, "reply": {"thought": "They did not hear me.", "say": follow_say, "way": "call", "to": 0, "acts": [], "end": True, "settled": None}},
+                  {"purpose": "talk", "contains": "rp-far", "times": -1, "delay_s": 5,
+                   "reply": {"thought": "Cakes.", "say": "None left, sorry.", "to": 0, "acts": [], "end": False, "settled": None}},
+                  {"purpose": "talk", "contains": "rp-near", "times": -1,
+                   "reply": {"thought": "A greeting.", "say": "Fresh as ever, come and see.", "to": 0, "acts": [], "end": False, "settled": None}},
+              ]}
+    script_path = os.path.join(ev, "fake-script.json")
+    json.dump(script, open(script_path, "w"), indent=1)
+    requests = os.path.join(ev, "fake-requests.jsonl")
+    port = free_port()
+    target = os.environ.get("CARGO_TARGET_DIR") or os.path.join(ROOT, ".local/target")
+    mind_bin = os.path.join(target, "release/living-mind")
+    if not os.path.exists(mind_bin):
+        c.check(s, "the mind binary is built in CARGO_TARGET_DIR", False, mind_bin)
+        return
+    models = {"default": "local", "profiles": {"local": {"base_url": f"http://127.0.0.1:{port}/v1", "model": "fake-ui", "key_env": "LIVING_VERIFY_FAKE_KEY",
+                                                          "max_tokens": 256, "requests_per_minute": 6000, "reasoning_effort": {p: p for p in ("think", "deliberate", "consolidate", "talk")}}}}
+    models_path = os.path.join(ev, "models.json")
+    json.dump(models, open(models_path, "w"), indent=1)
+    st = verify.load(run)
+    procs = []
+    fake_log = open(os.path.join(ev, "fake-server.log"), "a")
+    mind_log = open(os.path.join(ev, "mind.log"), "a")
+    try:
+        fake = subprocess.Popen([sys.executable, FAKE_LLM, "--port", str(port), "--log", requests, "--script", script_path], cwd=ROOT, stdout=fake_log, stderr=subprocess.STDOUT)
+        procs.append(fake)
+        deadline = time.time() + 10
+        while time.time() < deadline and "READY " not in open(os.path.join(ev, "fake-server.log")).read():
+            time.sleep(0.2)
+        # The fake answers before the mind starts (a first connection once timed out).
+        import urllib.request
+        for attempt in range(20):
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2) as r:
+                    if r.status == 200:
+                        break
+            except OSError:
+                time.sleep(0.5)
+        else:
+            c.check(s, "the fake model answers its health check", False, f"port {port}")
+            return
+        env = dict(os.environ, LIVING_ROOT=ROOT, LIVING_SERVER=os.environ.get("LIVING_STDB_URL", "http://127.0.0.1:3300"), LIVING_DB=st["db"], LIVING_RUN=st["db"],
+                   LIVING_SEED="island", LIVING_MODELS=models_path, LIVING_NEO4J="off", LIVING_NEO4J_PASSWORD="", LIVING_ONLY=str(a),
+                   LIVING_LLM_PER_MIN="0", LIVING_CONCURRENCY="4", LIVING_TOKEN=verify.admin_token(), LIVING_VERIFY_FAKE_KEY="dummy-local-only",
+                   LIVING_LOD="0", NO_PROXY="127.0.0.1,localhost", RUST_LOG="info,neo4rs=warn,spacetimedb_sdk=warn")
+        mind = subprocess.Popen([mind_bin], cwd=ROOT, env=env, stdout=mind_log, stderr=subprocess.STDOUT)
+        procs.append(mind)
+        json.dump({"fake_pid": fake.pid, "mind_pid": mind.pid, "only": [a], "port": port}, open(os.path.join(ev, "processes.json"), "w"))
+        deadline = time.time() + 60
+        while time.time() < deadline and "world subscribed:" not in open(os.path.join(ev, "mind.log"), errors="replace").read():
+            if mind.poll() is not None:
+                break
+            time.sleep(0.5)
+        c.check(s, "the mind service minds the resident through the fake model", mind.poll() is None and "world subscribed:" in open(os.path.join(ev, "mind.log"), errors="replace").read(), "see mind.log")
+        people = {r["id"] for r in sql(run, "SELECT id, kind FROM character WHERE kind = 'person'")}
+        ax, ay = UNHEARD_SPOT
+        near0 = [r for r in sql(run, "SELECT id, x, y FROM body") if r["id"] in people and r["id"] != a and ((r["x"] - ax) ** 2 + (r["y"] - ay) ** 2) ** 0.5 < 25]
+        clear = ";".join(f"place_at|{r['id']}|{ax + 40}|{ay + 3 * i}" for i, r in enumerate(near0)) or "sql|SELECT id FROM world"
+        dumps = lambda p, n: "".join(f"wait:0.2;dump:{p}{k:02d};" for k in range(n))
+        plan = ("ready;sync:noon;sync:clear;sync:spot;wait:2;sync:scene;wait:3;"
+                "point:{A};wait:0.5;key:Enter:tap;wait:0.6;dump:n0;type:" + near_line + ";enter;" + dumps("n", 30) + "shot:01_near;wait:3;"
+                "point:{A};wait:0.5;key:Enter:tap;wait:0.6;type:" + far_line + ";enter;wait:0.3;cursor:;walk:90:4;sync:walked;wait:1.5;walk:270:2;sync:back;" + dumps("f", 40) + "shot:02_follow;wait:2;"
+                "key:KeyL:tap;wait:0.6;dump:log;shot:03_log;quit").replace("{A}", str(a))
+        syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0", f"clear={clear}", f"spot=place_at|{{me}}|{ax}|{ay}",
+                 f"walked=sql|SELECT id, x, y FROM body WHERE id = {{me}} OR id = {a}", f"back=sql|SELECT id, x, y FROM body WHERE id = {{me}} OR id = {a}"]
+        tok = os.path.join(ui, f"reply-pace-{int(time.time())}.token")
+        out, code, text = drive(run, s, plan, places=[f"{a}:-2:0"], syncs=syncs, extra=["--token", tok, "--player", "Asker"])
+        time.sleep(2)
+    finally:
+        stops = []
+        for p in reversed(procs):
+            if p.poll() is None:
+                p.terminate()
+                try:
+                    p.wait(timeout=8)
+                    stops.append((p.pid, "SIGTERM"))
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    p.wait(timeout=5)
+                    stops.append((p.pid, "SIGKILL"))
+            else:
+                stops.append((p.pid, f"exited {p.returncode}"))
+        json.dump(stops, open(os.path.join(ev, "stops.json"), "w"))
+        fake_log.close()
+        mind_log.close()
+        # The resident back to the admin's default (no mind): a still graph, as --place left it.
+        call_admin(run, "set_behavior", [a, json.dumps({"wait": 600})])
+    c.check(s, "client ran and joined (a fresh player)", code == 0, text[-300:])
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    L = log(out)
+    rows = sql(run, f"SELECT id, observer, kind, subject, object, at_ms, text FROM experience WHERE (observer = {me} OR observer = {a}) AND (kind = 'said' OR kind = 'speech' OR kind = 'silence')") if me else []
+    rows.sort(key=lambda r: r["at_ms"])
+    said = lambda words: next((r for r in rows if r["observer"] == me and r["kind"] == "said" and words in r["text"]), None)
+    heard = lambda words: next((r for r in rows if r["observer"] == me and r["kind"] == "speech" and r["subject"] == a and words in r["text"]), None)
+    shown = {}
+    for m in re.finditer(r'bubble: #(\d+) to #(\d+) shown at (\d+) ms, said at (\d+) ms(?:, paced to (\d+) ms after #(\d+)\'s line said at (\d+) ms and shown at (\d+) ms \((\d+) ms to say\))?: "(.*)"', L):
+        shown[m[10]] = {"speaker": int(m[1]), "to": int(m[2]), "shown": int(m[3]), "at": int(m[4]), "paced": int(m[5]) if m[5] else None, "after": int(m[7]) if m[7] else None}
+    ended = [(int(t), int(e)) for t, e in re.findall(r"bubble: my line \(sent at (\d+) ms\) ended at (\d+) ms", L)]
+    # 1. Near.
+    mine1, reply1 = said(near_line), heard("Fresh as ever")
+    need = saying_ms(near_line)
+    b1 = shown.get("Fresh as ever, come and see.")
+    result = {"me": me, "a": a, "cards": cards, "near_line_ms_to_say": need}
+    if mine1 and reply1:
+        result["near"] = {"said_at": mine1["at_ms"], "reply_at": reply1["at_ms"], "reply_after_ms": reply1["at_ms"] - mine1["at_ms"],
+                          "bubble_shown": b1 and b1["shown"], "bubble_after_ms": b1 and b1["shown"] - mine1["at_ms"]}
+    c.check(s, "near: the reply was said within the line's saying time (said when ready)", mine1 and reply1 and 0 < reply1["at_ms"] - mine1["at_ms"] < need, json.dumps(result.get("near")))
+    c.check(s, "near: the reply's bubble first shows at least the line's saying time after it was said", b1 and mine1 and b1["shown"] - mine1["at_ms"] >= need and b1["paced"] == mine1["at_ms"] + need, f"{b1}; said {mine1 and mine1['at_ms']}; to say {need} ms")
+    c.check(s, "near: and not much later (within 0.5 s of its paced time)", b1 and b1["paced"] and b1["shown"] - b1["paced"] < 500, str(b1))
+    seq = []
+    for k in ["n0"] + [f"n{i:02d}" for i in range(30)]:
+        bs = {x.get("speaker") for x in (dump(out, k) or {}).get("bubbles") or []}
+        seq.append(("me" if me in bs else "") + ("A" if a in bs else ""))
+    c.check(s, "near: my bubble, then A's in its place, never both at once (dumps every 0.2 s)", "meA" not in seq and "me" in seq and "A" in seq and seq.index("A") > seq.index("me") and "me" not in seq[seq.index("A"):], " ".join(x or "-" for x in seq))
+    c.check(s, "near: my bubble ended in the frame the reply's showed", b1 and any(e <= b1["shown"] and e >= b1["paced"] for _, e in ended), f"ended {ended}; reply {b1}")
+    # 2. Out of range.
+    mine2 = said(far_line)
+    silences = [r for r in rows if r["observer"] == a and r["kind"] == "silence" and r["subject"] == me and mine2 and r["at_ms"] > mine2["at_ms"]]
+    reqs = [json.loads(l) for l in open(requests)] if os.path.exists(requests) else []
+    text_of = lambda e: "\n".join(str(x.get("content", "")) for x in (e.get("body") or {}).get("messages", []))
+    follow = [text_of(e) for e in reqs if e.get("purpose") == "talk" and follow_head in text_of(e)]
+    walked = {r["id"]: (r["x"], r["y"]) for r in (((sc.get("snaps") or {}).get("walked") or [{}])[0].get("rows") or [])}
+    gap = math.dist(walked[me], walked[a]) if me in walked and a in walked else None
+    result["far"] = {"apart_m": gap, "silences": [r["text"] for r in silences], "follow_prompts": len(follow)}
+    c.check(s, "far: the player walked beyond a said line's reach, within a call's", gap is not None and cards.get("say", 9) < gap < cards.get("call", 0), f"{gap} m; cards {cards}")
+    c.check(s, "far: A's reply met the authority's silence (… could not have heard you)", silences and "could not have heard you" in silences[0]["text"], str(silences))
+    c.check(s, "far: A's one follow-up turn weighs those words", len(follow) == 1 and silences and follow[0].rstrip().endswith(f"{follow_head}\n{silences[0]['text']}"), f"{len(follow)} follow-up prompts")
+    f1, b2 = heard(follow_say), shown.get(follow_say)
+    fs = [{x.get("speaker") for x in (dump(out, f"f{i:02d}") or {}).get("bubbles") or []} for i in range(40)]
+    back = {r["id"]: (r["x"], r["y"]) for r in (((sc.get("snaps") or {}).get("back") or [{}])[0].get("rows") or [])}
+    back_m = math.dist(back[me], back[a]) if me in back and a in back else None
+    result["far"]["back_m"] = back_m
+    c.check(s, "far: the follow-up call reaches the player, back in sight, unpaced, and its bubble shows", f1 and b2 and b2["speaker"] == a and b2["shown"] - f1["at_ms"] < 500 and any(a in x for x in fs), f"row {f1 and f1['text']}; bubble {b2}; back {back_m} m; dumps with A {sum(a in x for x in fs)}")
+    logl = [x.get("text") or "" for x in (((dump(out, "log") or {}).get("extra") or {}).get("lines") or [])]
+    c.check(s, "far: the Log has the follow-up too", any(follow_say in t for t in logl), str(logl[-6:]))
+    at = lambda w: next((i for i, t in enumerate(logl) if w in t), None)
+    c.check(s, "the Log keeps every line unpaced, in the order said (my line, then the reply)", None not in (at(near_line), at("Fresh as ever")) and at(near_line) < at("Fresh as ever") < at(far_line), str(logl))
+    result["follow"] = {"row": f1, "bubble": b2}
+    json.dump(result, open(os.path.join(ev, "reply-pace.json"), "w"), indent=1)
+    print(f"{s}: {json.dumps(result)}", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run")
@@ -3068,19 +5473,24 @@ def main():
     ap.add_argument("scenarios", nargs="*")
     a = ap.parse_args()
     if a.list:
-        print("\n".join(n + (" *" if n in CULLET else "") for n in SCENARIOS))
+        print("\n".join(n + (" *" if n in CULLET else "") + (" (launches its own world)" if n in FRESH else "") for n in SCENARIOS))
         return
     if not a.run:
         ap.error("--run is required")
-    if not f"verify-{a.run}".startswith("verify-ui-"):
-        sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*)")
+    # gate-*: the scene gate's render group (living/tools/scene_gate.py), on its own verify-gate-* worlds.
+    if not f"verify-{a.run}".startswith(("verify-ui-", "verify-gate-")):
+        sys.exit("verify-ui runs use run names ui-* (worlds verify-ui-*), or the scene gate's gate-*")
     c = Checks()
+    owner = None
     # Special seed fixtures require a scenario name on the command line.
     for name in a.scenarios or [k for k in SCENARIOS if k not in CULLET and k not in EXPLICIT]:
         if name not in SCENARIOS:
             sys.exit(f"unknown scenario {name}; known: {', '.join(SCENARIOS)}")
+        owner = owner or verify.admin_token()
+        if name not in FRESH:
+            verify.require_running(verify.load(a.run), owner)
         SCENARIOS[name](a.run, c)
-    p = os.path.join(ROOT, ".local/living/verify", a.run, "ui", "checks.json")
+    p = os.path.join(ROOT, ".local/living/verify", a.run, "ui", f"checks{BEARING_SUFFIX}.json")
     os.makedirs(os.path.dirname(p), exist_ok=True)
     json.dump(c.rows, open(p, "w"), indent=1)
     failed = [r for r in c.rows if not r["ok"]]

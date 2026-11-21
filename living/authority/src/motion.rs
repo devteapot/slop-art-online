@@ -89,10 +89,6 @@ fn leg(map: &Map, p: (f32, f32), to: (f32, f32), laws: &living_rules::script::La
 /// The next leg of body `id`'s walk to a place, along the route it keeps in `walk_route`
 /// (searched afresh when it has none: a new walk).
 fn walk_leg(ctx: &ReducerContext, id: u32, map: &Map, p: (f32, f32), to: (f32, f32), laws: &living_rules::script::Laws) -> Result<Vec<Waypoint>, NoLeg> {
-    // Over what the walker has seen (docs/MOVEMENT_MIND.md, step 3), whoever controls it.
-    if laws.nav_belief {
-        return crate::known::leg(ctx, id, map, p, to).map_err(|_| NoLeg::NoPath);
-    }
     let row = ctx.db.walk_route().id().find(id);
     let mut walk = row.as_ref().map(|r| Walk::from_vec(&r.route)).unwrap_or_default();
     let leg = map.route_leg_along(p, to, &route_spec(laws), &mut walk);
@@ -116,6 +112,7 @@ fn walk_leg(ctx: &ReducerContext, id: u32, map: &Map, p: (f32, f32), to: (f32, f
 /// A walk is over, or another goal starts: its route is not kept.
 fn walk_over(ctx: &ReducerContext, id: u32) {
     ctx.db.walk_route().id().delete(id);
+    crate::known::end_search(id);
 }
 
 /// What a walker is told when its walk gets no nearer for `NO_HEADWAY_LEGS` legs.
@@ -273,7 +270,9 @@ fn put(ctx: &ReducerContext, b: Body, chunk_before: u32) {
     }
     crate::frame::moved(b.id);
     common::body_written(b.id);
+    let (id, t_ms, vx, vy, turn) = (b.id, b.t_ms, b.vx, b.vy, b.turn);
     ctx.db.body().id().update(b);
+    crate::latency::nav(ctx, id, "body_written", t_ms, format_args!("{vx} {vy} {turn}"));
 }
 
 /// Longest a finished segment is continued from where it ended, not from `now`.
@@ -699,18 +698,59 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
                 dirty = true;
                 stand = Some(IDLE);
             } else {
-                if b.path.is_empty() {
-                    b.path.push(Waypoint { x: goal.0, y: goal.1 });
-                }
-                advance_corners(&map, p, &mut b.path, laws.corner_radius);
-                // A long walk goes leg by leg: near the end of one that stops short of the
-                // goal, plan the next from here.
-                let leg_end = b.path.last().map(|l| (l.x, l.y)).unwrap_or(goal);
-                if leg_end != goal && dist(p, leg_end) < REPLAN_AHEAD_M {
-                    match walk_leg(ctx, b.id, &map, p, goal, &laws) {
-                        Ok(path) => b.path = path,
-                        Err(NoLeg::NoHeadway) => ev = Some(Event::Lost(NO_HEADWAY.into())),
-                        Err(NoLeg::NoPath) => ev = Some(Event::Lost("the way is blocked".into())),
+                if laws.nav_belief {
+                    advance_corners(&map, p, &mut b.path, laws.corner_radius);
+                    let needs_leg = b.path.last().map_or(true, |w| {
+                        b.path.len() == 1 && (w.x, w.y) != goal && dist(p, (w.x, w.y)) <= laws.corner_radius.max(0.5)
+                    });
+                    if needs_leg {
+                        match crate::known::leg(ctx, b.id, &map, p, goal) {
+                            Ok(Some(path)) => {
+                                b.path = path;
+                                if st.plan_ms == 0 {
+                                    st.plan_ms = now;
+                                    dirty = true;
+                                }
+                            }
+                            Ok(None) => {
+                                // Hold the starting pose while the next scheduled update resumes.
+                                b.path.clear();
+                                halt(b);
+                                b.next_ms = now.saturating_add(MIN_STEP_MS);
+                                b.chunk = chunk_of(p.0, p.1);
+                                return (None, dirty);
+                            }
+                            Err(reason) => {
+                                let reason = match reason {
+                                    living_rules::known::NoLeg::NoWay => "belief_no_way",
+                                    living_rules::known::NoLeg::GoalBlocked => "belief_goal_blocked",
+                                    living_rules::known::NoLeg::StartBlocked => "belief_start_blocked",
+                                    living_rules::known::NoLeg::CorridorDisconnected => "belief_corridor_disconnected",
+                                    living_rules::known::NoLeg::WorkLimit => "belief_work_limit",
+                                };
+                                route_exit(b.id, now, reason);
+                                let text = if st.plan_ms == 0 { "no path there" } else { "the way is blocked" };
+                                ev = Some(Event::Lost(text.into()));
+                            }
+                        }
+                    }
+                } else {
+                    if b.path.is_empty() {
+                        b.path.push(Waypoint { x: goal.0, y: goal.1 });
+                    }
+                    advance_corners(&map, p, &mut b.path, laws.corner_radius);
+                    // A long walk goes leg by leg: near the end of one that stops short of the
+                    // goal, plan the next from here.
+                    let leg_end = b.path.last().map(|l| (l.x, l.y)).unwrap_or(goal);
+                    if leg_end != goal && dist(p, leg_end) < REPLAN_AHEAD_M {
+                        match walk_leg(ctx, b.id, &map, p, goal, &laws) {
+                            Ok(path) => b.path = path,
+                            Err(NoLeg::NoHeadway) => ev = Some(Event::Lost(NO_HEADWAY.into())),
+                            Err(NoLeg::NoPath) => {
+                                route_exit(b.id, now, "true_map_no_leg");
+                                ev = Some(Event::Lost("the way is blocked".into()));
+                            }
+                        }
                     }
                 }
             }
@@ -725,6 +765,10 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
                     let h = angle(p, goal);
                     let (dur, blocked) = geo::sweep(&map, p, &straight(h, v, dg / v), 0.0);
                     if blocked && dur < 0.05 {
+                        if laws.nav_belief {
+                            let (event, changed) = belief_collision(ctx, b, st, now);
+                            return (event, changed || dirty);
+                        }
                         // Cannot quite reach the spot: this is as close as it gets.
                         b.path.clear();
                         if !st.reported {
@@ -963,6 +1007,11 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
         let mut seg = geo::plan(&map, p, b.heading, v_cur, w, &tune);
         let mut replanned = false;
         if seg.blocked && seg.speed == 0.0 {
+            crate::latency::nav(ctx, b.id, "steer_blocked", st.plan_ms, format_args!("{}", st.goal));
+            if st.goal == GOAL_POINT && laws.nav_belief {
+                let (event, changed) = belief_collision(ctx, b, st, now);
+                return (event, changed || dirty);
+            }
             // Stuck against something the coarse path did not know (a gate shut, a wall
             // built, or pushed off the path): find a new way, or give up.
             let dest = match st.goal {
@@ -978,6 +1027,7 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
                 ev = Some(Event::Lost("the way round is blocked".into()));
             } else if st.flags & FLAG_STUCK != 0 {
                 // A fresh plan did not get it moving either.
+                route_exit(b.id, now, "collision_after_replan");
                 ev = Some(Event::Lost("the way is blocked".into()));
             } else if let Some(dest) = dest {
                 if now.saturating_sub(st.plan_ms) >= REPLAN_MS {
@@ -993,7 +1043,10 @@ fn steer_update(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64, la
                             let dir = angle(p, (b.path[0].x, b.path[0].y));
                             seg = geo::plan(&map, p, b.heading, v_cur, Want { dir, ..w }, &tune);
                         }
-                        _ => ev = Some(Event::Lost("the way is blocked".into())),
+                        _ => {
+                            route_exit(b.id, now, "collision_no_leg");
+                            ev = Some(Event::Lost("the way is blocked".into()));
+                        }
                     }
                 }
             }
@@ -1082,10 +1135,6 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
             if dist(p, at) <= 0.06 {
                 return Ok(None);
             }
-            let Ok(path) = walk_leg(ctx, id, &map, p, at, &common::laws(ctx)) else {
-                return Err("no path there".into());
-            };
-            b.path = path;
         }
         GOAL_POINT => {
             if !map.free(at.0, at.1) {
@@ -1140,6 +1189,9 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
         b.speed = goal.pace;
     }
     let (ev, _) = update(ctx, &mut b, &mut st, now);
+    if matches!(&ev, Some(Event::Lost(why)) if why == "no path there") {
+        return Err("no path there".into());
+    }
     save_steer(ctx, st, exists);
     put(ctx, b, before);
     Ok(Some(ev))
@@ -1147,6 +1199,7 @@ pub fn start(ctx: &ReducerContext, id: u32, goal: Goal, now: u64) -> Result<Opti
 
 /// Stop where the body stands, at once (work, a windup, a guard).
 pub fn stop(ctx: &ReducerContext, id: u32, now: u64) {
+    crate::known::end_search(id);
     let Some(mut b) = ctx.db.body().id().find(id) else { return };
     let (mut st, exists) = load_steer(ctx, id);
     let look = st.look_on.then_some(st.look);
@@ -1197,6 +1250,7 @@ pub fn face(ctx: &ReducerContext, id: u32, toward: (f32, f32), now: u64) {
 /// Drop the goal and coast to a stand (an activity replaced or abandoned). A goal set in
 /// the same transaction takes over with the body's momentum.
 pub fn brake(ctx: &ReducerContext, id: u32, now: u64) {
+    crate::known::end_search(id);
     let (mut st, exists) = load_steer(ctx, id);
     let look = st.look_on.then_some(st.look);
     if exists && (st.goal != GOAL_NONE || st.flags & FLAG_DRAIN != 0) {
@@ -1358,16 +1412,41 @@ pub fn resteer_near(ctx: &ReducerContext, at: (f32, f32), r: f32, now: u64) {
                 b.next_ms = now;
                 crate::frame::moved(b.id);
                 common::body_written(b.id);
+                let id = b.id;
                 ctx.db.body().id().update(b);
+                crate::latency::nav(ctx, id, "terrain_resteer", 0, format_args!(""));
             }
         }
     }
 }
 
+pub(crate) fn route_exit(id: u32, now: u64, reason: &str) {
+    log::info!("route_exit actor={id} at_ms={now} reason={reason}");
+}
+
+/// Give the ordinary observation pass time to discover a blockage before trying again.
+/// Collision constrains movement, but never alters what the actor knows about the map.
+fn belief_collision(ctx: &ReducerContext, b: &mut Body, st: &mut Steer, now: u64) -> (Option<Event>, bool) {
+    halt(b);
+    b.chunk = chunk_of(b.x, b.y);
+    if st.flags & FLAG_STUCK == 0 {
+        st.flags |= FLAG_STUCK;
+        b.path.clear();
+        b.next_ms = now.saturating_add(REPLAN_MS);
+        return (None, true);
+    }
+    route_exit(b.id, now, "belief_collision_after_replan");
+    st.goal = GOAL_NONE;
+    walk_over(ctx, b.id);
+    b.path.clear();
+    b.next_ms = IDLE;
+    (Some(Event::Lost("the way is blocked".into())), true)
+}
+
 /// A walk to a place planned over belief (`nav_belief`) whose path now crosses ground the walker
 /// has just seen blocked: its leg is planned again from where it is, and steering looks at once.
 pub fn replan_if_blocked(ctx: &ReducerContext, id: u32, now: u64) {
-    let Some(st) = ctx.db.steer().id().find(id) else { return };
+    let Some(mut st) = ctx.db.steer().id().find(id) else { return };
     let Some(mut b) = ctx.db.body().id().find(id) else { return };
     if st.goal != GOAL_POINT || b.next_ms == IDLE || b.path.is_empty() {
         return;
@@ -1378,20 +1457,24 @@ pub fn replan_if_blocked(ctx: &ReducerContext, id: u32, now: u64) {
         return;
     }
     common::diag(|| "known:replan", 1);
-    let laws = common::laws(ctx);
-    if let Ok(path) = walk_leg(ctx, id, &map, p, (st.gx, st.gy), &laws) {
-        let t0 = resume_at(&b, now);
-        anchor(&mut b, t0);
-        resumed(b.id, t0, now);
-        b.path = path;
-        b.next_ms = now;
-        crate::frame::moved(b.id);
-        ctx.db.body().id().update(b);
+    if st.flags & FLAG_STUCK != 0 {
+        st.flags &= !FLAG_STUCK;
+        save_steer(ctx, st, true);
     }
+    let t0 = resume_at(&b, now);
+    anchor(&mut b, t0);
+    resumed(b.id, t0, now);
+    halt(&mut b);
+    b.path.clear();
+    b.next_ms = now;
+    crate::frame::moved(b.id);
+    common::body_written(b.id);
+    ctx.db.body().id().update(b);
 }
 
 /// Put a body somewhere at rest (test support).
 pub fn place(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> Result<(), String> {
+    crate::known::end_search(id);
     let mut b = ctx.db.body().id().find(id).ok_or("no such body")?;
     let (mut st, exists) = load_steer(ctx, id);
     if exists {
@@ -1413,6 +1496,9 @@ pub fn place(ctx: &ReducerContext, id: u32, at: (f32, f32), now: u64) -> Result<
     common::body_written(b.id);
     ctx.db.body().id().update(b);
     common::invalidate_bodies();
+    // A movement under way ends here: its steering stopped above and could not end it after
+    // (`act::relocated`; a player's movement held meanwhile resumes from here).
+    crate::act::relocated(ctx, id, now);
     Ok(())
 }
 

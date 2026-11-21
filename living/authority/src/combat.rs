@@ -115,6 +115,10 @@ pub fn feed_row(ctx: &ReducerContext, viewer: Identity, now: u64, ev: &Seen, amo
         ms: ev.ms,
         note: ev.note.clone(),
     });
+    // Views step 2: the same row as an event for its viewer alone, while the law is on.
+    if common::laws(ctx).combat_feed_on {
+        ctx.db.combat_feed().insert(CombatFeed::of(&row));
+    }
     row.id
 }
 
@@ -325,6 +329,10 @@ pub fn resume_move(ctx: &ReducerContext, id: u32, now: u64) {
 /// move runs its course (the same rule a graph's change of mind meets, `committed`).
 pub fn rooted_now(ctx: &ReducerContext, id: u32) -> bool {
     let Some(a) = ctx.db.activity().id().find(id) else { return false };
+    // A dash that can no longer end holds nothing: it is broken off (`act::unstick`).
+    if act::unstick(ctx, &a, common::now_ms(ctx)) {
+        return false;
+    }
     let sc = common::scripts(ctx);
     committed(&sc, &a) || (a.node == act::PLAYER && sc.combat(&a.skill).is_some_and(|s| (a.phase == 1 && s.rooted) || s.aim == Aim::Dash))
 }
@@ -703,6 +711,7 @@ fn my_character(ctx: &ReducerContext) -> Result<Character, String> {
 /// told back through `my_combat` (`REFUSED`), so the reducer itself succeeds.
 #[spacetimedb::reducer]
 pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f32) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     let sc = common::scripts(ctx);
     let Some(shape) = sc.combat(&skill).filter(|_| sc.shapes().on_bar(&skill)) else {
@@ -775,6 +784,7 @@ pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f3
 /// Let go of a held skill (the guard).
 #[spacetimedb::reducer]
 pub fn release_skill(ctx: &ReducerContext, skill: String) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     let now = common::now_ms(ctx);
     if let Some(a) = ctx.db.activity().id().find(me.id).filter(|a| a.skill == skill && a.node == act::PLAYER) {

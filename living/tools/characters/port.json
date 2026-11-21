@@ -1,0 +1,110 @@
+{
+ "about": "char-port-2 features (docs/char-port-2/PLAN.md), each off unless named in SLOP_PORT (comma-separated). face_types.load() merges a feature's per-class values into each type's records; a class is the type id without its line letter. With SLOP_PORT unset every type and file is built exactly as before.",
+ "features": {
+  "jaw": {
+   "about": "S1: the lower face's taper toward the drawing (chin over jaw 0.507, jaw 0.952 of the pupil-to-chin span; docs/char-port-2/s1). cage_head's jaw_taper and chin_taper: fractional offsets of the local half-width, the chin's below 0.095 H, the jaw's from 0.15 to 0.27 H. Per-person spread stays with the identity bones J_Id_Jaw (jaw_width) and J_Id_Chin (chin_width).",
+   "classes": {
+    "adult-f": {
+     "jaw": {
+      "jaw_taper": -0.05,
+      "chin_taper": -0.18
+     }
+    },
+    "youth-f": {
+     "jaw": {
+      "jaw_taper": -0.04,
+      "chin_taper": -0.145
+     }
+    },
+    "elder-f": {
+     "jaw": {
+      "jaw_taper": -0.02,
+      "chin_taper": -0.16
+     }
+    },
+    "adult-m": {
+     "jaw": {
+      "jaw_taper": 0.0,
+      "chin_taper": -0.06
+     }
+    },
+    "youth-m": {
+     "jaw": {
+      "jaw_taper": 0.0,
+      "chin_taper": -0.05
+     }
+    },
+    "elder-m": {
+     "jaw": {
+      "jaw_taper": 0.0,
+      "chin_taper": -0.05
+     }
+    },
+    "child-u": {
+     "jaw": {
+      "jaw_taper": 0.0,
+      "chin_taper": -0.1
+     }
+    }
+   }
+  },
+  "jaw_shell": {
+   "about": "S1: the inside-out jaw line over the whole underside, from the jaw line to the neck's ring (cage_head.CageFace._underside_shell), in place of the first ring under the jaw, whose copy faces away at portrait height and draws nothing in front (docs/char-port-2/s0)."
+  },
+  "paint": {
+   "about": "S2: Cora's face paint as parameters of the generator's landmarks (face_paint.PAINT): a broad warm blush with a band over the nose's bridge, a darker mouth crease, a diffuse lower lip and a shade under it, the nose's underside shade, a glint at its tip and two soft filled nostrils (docs/char-port-2/s2)."
+  },
+  "neck": {
+   "about": "S2: the neck shade as Cora's (cage_head.NECK_SHADE): a multiply of the skin, whole under the jaw, full to 8 mm below the chin and clear by 45 mm, its edge rising toward the sides and fading round the back (docs/char-port-2/s2)."
+  },
+  "ink": {
+   "about": "S4: the lid, its wing, flicks and fringe, the outer lower lid and the brow as ink on carriers (living/tools/blender/ink_carriers.py), on the types' shared ink page (lookdev/types/types.eyes.ink.png, docs/HANDMADE_COMPOSED.md), in place of the lid band, lash cards, lower line and brow strip; an opaque lid core keeps the lid at play distance (docs/char-port-2/s4)."
+  },
+  "hair": {
+   "about": "S5: hair styles laid out for the handmade-hair profile on the shared hair-mask pages (lookdev/styles/hair/hair-masks.png and -1, -2: 4096 at 1 mm a texel, docs/HANDMADE_COMPOSED.md): each piece its own UV island by its own lengths (hair.page_layout), a highlight on the upper hair and a pale parting (_HIGHLIGHT and the mask's R), lock lines grouped into locks from the notches between a sheet's points (G), main's strands under the bands at low contrast (B), and one tag-relative profile with anchors for black, brown, blond and grey (living/tools/characters/hair_page.py; docs/char-port-2/s5)."
+  },
+  "masters": {
+   "about": "S6: hair masters, a cut as a named set of parameters in the generator (hair.MASTERS): swept_braid, Cora's cut, its rear layers as stations, wide locks and companions joining a three-strand plait at staggered heights, the plait lifted at its start for the game camera and its crossings lit (docs/char-port-2/s6). Written as styles (`swept_braid`, its cuts and `.collar`) only with the flag."
+  },
+  "faceprop": {
+   "about": "S6b: the face's width against its eyes toward Cora's drawing (the face's outline at the cheek row, 0.030 m under the eyes, over the eye spacing, iris to iris, the ears left out: 1.75; docs/char-port-2/s6b). One width factor a class on the type's sections (w15, w30, wide), whole over the cheeks and fading to none by the chin and above the eyes (face_types.faceprop); the eyes, nose and mouth as they are, the ears carried in with the skull's side. A class's three lines take the same factor, so their differences stay.",
+   "classes": {
+    "adult-f": {
+     "faceprop": {
+      "width": 1.0
+     }
+    },
+    "adult-m": {
+     "faceprop": {
+      "width": 0.935
+     }
+    },
+    "child-u": {
+     "faceprop": {
+      "width": 0.973
+     }
+    },
+    "elder-f": {
+     "faceprop": {
+      "width": 0.957
+     }
+    },
+    "elder-m": {
+     "faceprop": {
+      "width": 0.961
+     }
+    },
+    "youth-f": {
+     "faceprop": {
+      "width": 1.0
+     }
+    },
+    "youth-m": {
+     "faceprop": {
+      "width": 0.95
+     }
+    }
+   }
+  }
+ }
+}

@@ -44,6 +44,7 @@ pub enum Page {
     Play,
     Controls,
     Camera,
+    CameraTuning,
 }
 
 #[derive(Component)]
@@ -88,6 +89,7 @@ fn act_label(a: Act, names: &SkillNames) -> String {
         Act::Character => "Character".into(),
         Act::Skills => "Skills and know-how".into(),
         Act::Log => "Log and people".into(),
+        Act::NorthUp => "Snap camera north".into(),
         Act::Glance => "Glance with the camera (hold)".into(),
     }
 }
@@ -111,7 +113,7 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
         commands.entity(e).with_children(|body| {
             // Pages.
             body.spawn((Node { width: Val::Px(150.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(6.0), flex_shrink: 0.0, ..default() }, Pickable::IGNORE)).with_children(|tabs| {
-                for (label, page) in [("Play", "play"), ("Controls", "controls"), ("Camera tuning", "camera")].into_iter().filter(|&(_, page)| page != "camera" || camera_dev()) {
+                for (label, page) in [("Play", "play"), ("Controls", "controls"), ("Camera", "rotation"), ("Camera tuning", "camera")].into_iter().filter(|&(_, page)| page != "camera" || camera_dev()) {
                     tabs.spawn((super::hit::Hot, Tag(format!("settings:page:{page}")), kit::Paint::Choice, Lit(false), Node { padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)), border: wood::b(2.0), border_radius: wood::r(8.0), ..default() }, bevy::ui::BackgroundGradient::default(), BorderColor::all(wood::edge())))
                         .with_child((Text::new(label), wood::ink(f, 14.0, 800), Pickable::IGNORE));
                 }
@@ -137,8 +139,13 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                     kit::button(c, f, "Show tips again", "settings:tips_again", true);
                 });
             });
+            body.spawn((PageBody(Page::Camera), Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, display: Display::None, ..default() }, Pickable::IGNORE)).with_children(|pg| {
+                row(pg, f, "Top-down rotation", "Middle drag or twist two fingers. Middle tap snaps north.", |c| kit::toggle(c, "settings:camera_rotate"));
+                row(pg, f, "Rotation speed", "", |c| kit::seg(c, f, "settings:camera_rotate_speed", &[("Slow", "0.5"), ("Normal", "1"), ("Fast", "2")]));
+                row(pg, f, "Invert rotation", "", |c| kit::toggle(c, "settings:camera_rotate_invert"));
+            });
             if camera_dev() {
-                body.spawn((PageBody(Page::Camera), Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, display: Display::None, ..default() }, Pickable::IGNORE))
+                body.spawn((PageBody(Page::CameraTuning), Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, display: Display::None, ..default() }, Pickable::IGNORE))
                     .with_children(|pg| camera_panel(pg, f));
             }
             // Controls.
@@ -146,7 +153,7 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                 row(pg, f, "Skill keys", "Mouse buttons stay the basic attacks", |c| kit::seg(c, f, "settings:preset", &[("Q E R, plus 1–9", "letters"), ("1–9 only", "numbers"), ("My own", "own")]));
                 pg.spawn((Node { display: Display::Grid, grid_template_columns: RepeatedGridTrack::fr(2, 1.0), column_gap: Val::Px(26.0), ..default() }, Pickable::IGNORE)).with_children(|grid| {
                     let groups: [(&str, Vec<Act>); 3] = [
-                        ("Moving", vec![Act::Forward, Act::Back, Act::Left, Act::Right, Act::Run, Act::Jump, Act::Dodge, Act::Glance]),
+                        ("Moving", vec![Act::Forward, Act::Back, Act::Left, Act::Right, Act::Run, Act::Jump, Act::Dodge, Act::Glance, Act::NorthUp]),
                         ("Fighting", { let mut v = vec![Act::Weapon, Act::Primary, Act::Secondary, Act::Skill1, Act::Skill2, Act::Skill3]; v.extend((0..crate::keys::EXTRA).map(Act::Extra)); v }),
                         ("People and things", vec![Act::Interact, Act::Talk, Act::Address, Act::Way, Act::Wave, Act::Nod, Act::LookOver, Act::Pack, Act::Character, Act::Skills, Act::Log]),
                     ];
@@ -239,7 +246,8 @@ pub fn update(
         match what {
             "settings:page" => *page = match value {
                 "controls" => Page::Controls,
-                "camera" if camera_dev() => Page::Camera,
+                "rotation" => Page::Camera,
+                "camera" if camera_dev() => Page::CameraTuning,
                 _ => Page::Play,
             },
             "settings:facing" => {
@@ -282,6 +290,12 @@ pub fn update(
             "settings:camera" => {
                 prefs.camera = if value == "orbit" { crate::camera::Mode::Orbit } else { crate::camera::Mode::TopDown };
                 changed = true;
+            }
+            "settings:camera_rotate_speed" => {
+                if let Ok(speed) = value.parse::<f32>() {
+                    prefs.camera_rotate_speed = speed.clamp(0.5, 2.0);
+                    changed = true;
+                }
             }
             "settings:control" => {
                 input.control = if value == "cursor" { crate::controls::Control::Cursor } else { crate::controls::Control::Travel };
@@ -329,6 +343,14 @@ pub fn update(
                 changed = true;
             }
             _ => match t {
+                "settings:camera_rotate" => {
+                    prefs.camera_rotate = !prefs.camera_rotate;
+                    changed = true;
+                }
+                "settings:camera_rotate_invert" => {
+                    prefs.camera_rotate_invert = !prefs.camera_rotate_invert;
+                    changed = true;
+                }
                 "settings:auto_draw" => {
                     prefs.auto_draw = !prefs.auto_draw;
                     changed = true;
@@ -371,13 +393,14 @@ pub fn update(
     kit::light(&mut lit, |t| {
         let (what, value) = t.rsplit_once(':').unwrap_or((t, ""));
         match what {
-            "settings:page" => Some(value == match pg { Page::Play => "play", Page::Controls => "controls", Page::Camera => "camera" }),
+            "settings:page" => Some(value == match pg { Page::Play => "play", Page::Controls => "controls", Page::Camera => "rotation", Page::CameraTuning => "camera" }),
             "settings:facing" => Some(value == prefs.facing().name()),
             "settings:camera_pitch" => Some(value == match (prefs.camera_tuning.fixed_pitch, prefs.camera_tuning.late_tilt) {
                 (None, _) => "curve",
                 (_, Some(_)) => "late",
                 _ => "fixed",
             }),
+            "settings:camera_rotate_speed" => Some(value.parse::<f32>() == Ok(prefs.camera_rotate_speed)),
             "settings:camera" => Some(value == prefs.camera.name()),
             "settings:control" => Some(value == control),
             "settings:sight" => Some(Some(value) == sight),
@@ -388,6 +411,8 @@ pub fn update(
             "settings:film" => Some(value == film_now),
             "settings:hair" => Some(value == shine_now),
             _ => match t {
+                "settings:camera_rotate" => Some(prefs.camera_rotate),
+                "settings:camera_rotate_invert" => Some(prefs.camera_rotate_invert),
                 "settings:auto_draw" => Some(prefs.auto_draw),
                 "settings:tips" => Some(prefs.tips),
                 _ => None,
@@ -527,6 +552,7 @@ pub(super) fn camera_controls(
     ui: Res<UiPointer>,
     tags: Query<&Tag>,
     mut prefs: ResMut<Prefs>,
+    cam: Res<crate::camera::Cam>,
     mut clipboard: ResMut<bevy::clipboard::Clipboard>,
     mut sliders: Query<(Entity, &CameraSlider, &ComputedNode, &bevy::ui::UiGlobalTransform, &Children, &mut Node), Without<CameraSliderFill>>,
     mut fills: Query<&mut Node, (With<CameraSliderFill>, Without<LateTiltRow>)>,
@@ -572,7 +598,9 @@ pub(super) fn camera_controls(
         prefs.dirty = true;
     }
     if kit::clicked(&ui, &tags) == Some("settings:camera_copy") {
-        let json = serde_json::to_string_pretty(&serde_json::json!(tuning)).expect("camera tuning is serializable");
+        let mut values = serde_json::json!(tuning);
+        values["bearing"] = serde_json::json!(cam.shown_yaw.rem_euclid(360.0));
+        let json = serde_json::to_string_pretty(&values).expect("camera tuning is serializable");
         if !crate::capture::headless() {
             if let Err(e) = clipboard.set_text(json.as_str()) {
                 warn!("settings: could not copy camera values: {e}");

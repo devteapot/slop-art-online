@@ -135,6 +135,9 @@ def main():
     a = ap.parse_args()
     db = a.db
     stdb("publish", "-s", "local", "-b", f"/wasm/{a.wasm}", db, "--delete-data", "-y")
+    # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+    import genesis_wait
+    genesis_wait.wait_ready_cli(lambda *x: stdb(*x).stdout, db)
     time.sleep(3)
     call(db, "spawn_crowd", 2, True)
     time.sleep(1.5)

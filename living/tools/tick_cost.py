@@ -50,7 +50,7 @@ import subprocess
 import sys
 import time
 import urllib.request
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -78,7 +78,7 @@ def scrape(ident):
 
 
 def server_pid():
-    return int(subprocess.run(["podman", "inspect", look_cost.CONTAINER, "--format", "{{.State.Pid}}"], capture_output=True, text=True, check=True).stdout.strip())
+    return int(subprocess.run(["docker", "inspect", look_cost.CONTAINER, "--format", "{{.State.Pid}}"], capture_output=True, text=True, check=True).stdout.strip())
 
 
 def thread_cpu(pid):
@@ -137,11 +137,18 @@ def ticks(log, t0, t1):
 def frame_cadence(log, t0, t1):
     """Count scene rows scheduled for delivery, including rows that needed no write."""
     pattern = re.compile(r'frame cadence: (\d+) (\d+) (\[.*\])$')
+    pair_pattern = re.compile(r"frame pair cadence: (\d+) (\[.*\])$")
     ticks = []
     by_viewer = defaultdict(list)
+    all_pairs, relevant_pairs = Counter(), Counter()
     for line in log.splitlines():
         match = pattern.search(line)
         if not match:
+            pair_match = pair_pattern.search(line)
+            if pair_match and t0 * 1e6 <= int(pair_match[1]) < t1 * 1e6:
+                for ms, all_count, relevant_count in json.loads(pair_match[2].replace("(", "[").replace(")", "]")):
+                    all_pairs[ms] += all_count
+                    relevant_pairs[ms] += relevant_count
             continue
         start_us, budget = map(int, match.groups()[:2])
         if not t0 * 1e6 <= start_us < t1 * 1e6:
@@ -155,7 +162,20 @@ def frame_cadence(log, t0, t1):
     def percentiles(samples):
         samples = sorted(samples)
         return {f"p{p}": samples[min(len(samples) - 1, len(samples) * p // 100)]
-                for p in (10, 50, 90)} if samples else {}
+                for p in (10, 50, 90, 95)} if samples else {}
+
+    def pair_percentiles(counts):
+        n = sum(counts.values())
+        values = sorted(counts.items())
+        result = {"samples": n, "counts_ms": dict(values)}
+        for p in (50, 90, 95):
+            index = n * p // 100
+            for ms, count in values:
+                if index < count:
+                    result[f"p{p}"] = ms
+                    break
+                index -= count
+        return result
 
     def intervals(frames):
         return [(b[0] - a[0]) / 1000 for a, b in zip(frames, frames[1:])]
@@ -163,6 +183,8 @@ def frame_cadence(log, t0, t1):
     return {
         "columns": ["start_us", "budget", "frame_scene_rows"],
         "ticks": ticks,
+        "pair_interval_ms": {"all_in_sight": pair_percentiles(all_pairs),
+                             "engaged_or_near": pair_percentiles(relevant_pairs)},
         "rows_per_tick": percentiles(t[2] for t in ticks),
         "ticks_at_budget_min": sum(t[1] == 250 for t in ticks),
         "frame_interval_ms": percentiles(v for frames in by_viewer.values() for v in intervals(frames)),

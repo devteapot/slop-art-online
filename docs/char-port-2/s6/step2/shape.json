@@ -1,0 +1,85 @@
+{
+ "style": "swept_braid",
+ "flags": "SLOP_PORT=hair,masters",
+ "silhouette": {
+  "measured": {
+   "spread_face": 1.918,
+   "spread": 2.24,
+   "crown_lift": 0.087,
+   "rear_depth": 0.567,
+   "by": {
+    "left": "front",
+    "right": "front",
+    "top": "front",
+    "back": "plait"
+   }
+  },
+  "cora": {
+   "spread": [
+    1.87,
+    0.1
+   ],
+   "crown_lift": [
+    0.096,
+    0.035
+   ],
+   "rear_depth": [
+    0.53,
+    0.04
+   ]
+  },
+  "note": "spread_face is the spread against this face's cheek width, the one compared; spread is in Cora's units (0.5076 head heights)"
+ },
+ "tips": {
+  "front": 9,
+  "three_quarter": [
+   7,
+   8
+  ],
+  "target": {
+   "front": [
+    10,
+    2
+   ],
+   "three_quarter": [
+    9,
+    2
+   ]
+  },
+  "method": "char-live-2: independent tapered endpoints visible at the outer silhouette or against the face; the braid, crown lobes and interior colour changes excluded; counted by eye on front-close.png"
+ },
+ "plait": {
+  "Near, back": {
+   "first_row": 436,
+   "width_px": 7.24,
+   "drawn_px": 7.4,
+   "width_off_px": -0.16,
+   "luma_crest": 65.0,
+   "luma_nocrest": 64.0,
+   "drawn_luma": 69.1
+  },
+  "Middle, back": {
+   "first_row": 441,
+   "width_px": 4.7,
+   "drawn_px": 4.6,
+   "width_off_px": 0.1,
+   "luma_crest": 71.6,
+   "luma_nocrest": 68.9,
+   "drawn_luma": 69.1
+  }
+ },
+ "triangles": {
+  "near": 11600,
+  "near_parts": {
+   "cap": 1216,
+   "jaw strands": 492,
+   "mass": 1948,
+   "front": 3308,
+   "rear layers": 1936,
+   "side groups": 608,
+   "plait": 2092
+  },
+  "far": 4312,
+  "budget_near": 12000
+ }
+}

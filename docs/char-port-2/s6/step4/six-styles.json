@@ -1,0 +1,808 @@
+{
+ "bob_palette": {
+  "bob": {
+   "passed": true,
+   "fails": {}
+  },
+  "long": {
+   "passed": false,
+   "fails": {
+    "auburn.shade": [
+     -6,
+     -9,
+     -9
+    ],
+    "dark.shade": [
+     -10,
+     -9,
+     -8
+    ],
+    "brown.shade": [
+     -6,
+     -8,
+     -7
+    ],
+    "light.shade": [
+     1,
+     -6,
+     -6
+    ]
+   }
+  },
+  "braid": {
+   "passed": false,
+   "fails": {
+    "auburn.shade": [
+     -8,
+     -4,
+     -5
+    ],
+    "light.shade": [
+     -4,
+     -8,
+     -6
+    ],
+    "grey.shade": [
+     -2,
+     -7,
+     -19
+    ]
+   }
+  },
+  "swept": {
+   "passed": true,
+   "fails": {}
+  },
+  "swept_braid": {
+   "passed": false,
+   "fails": {
+    "auburn.shade": [
+     -9,
+     -10,
+     -9
+    ],
+    "auburn.mid": [
+     -8,
+     -5,
+     -3
+    ],
+    "dark.shade": [
+     -11,
+     -10,
+     -8
+    ],
+    "dark.mid": [
+     -6,
+     -5,
+     -12
+    ],
+    "brown.shade": [
+     -8,
+     -9,
+     -7
+    ],
+    "brown.mid": [
+     -8,
+     -5,
+     -7
+    ],
+    "light.shade": [
+     -4,
+     -9,
+     -7
+    ],
+    "light.mid": [
+     -6,
+     -6,
+     -6
+    ],
+    "grey.shade": [
+     -3,
+     -8,
+     -19
+    ],
+    "grey.mid": [
+     -1,
+     -7,
+     -19
+    ]
+   }
+  },
+  "short": {
+   "passed": false,
+   "fails": {
+    "auburn.shade": [
+     -6,
+     -4,
+     -5
+    ],
+    "auburn.mid": [
+     -6,
+     -3,
+     0
+    ],
+    "brown.mid": [
+     -7,
+     -2,
+     -4
+    ],
+    "light.shade": [
+     -1,
+     -6,
+     -3
+    ],
+    "light.mid": [
+     -6,
+     -5,
+     -4
+    ],
+    "grey.mid": [
+     0,
+     -6,
+     -18
+    ]
+   }
+  }
+ },
+ "luma": {
+  "port-bob": {
+   "pixels": 237,
+   "black": 69.0,
+   "brown": 83.2,
+   "auburn": 103.2,
+   "chestnut": 96.7,
+   "blond": 179.0,
+   "grey": 180.7,
+   "white": 210.8
+  },
+  "main-bob": {
+   "pixels": 234,
+   "black": 66.9,
+   "brown": 80.0,
+   "auburn": 100.2,
+   "chestnut": 91.0,
+   "blond": 157.0,
+   "grey": 162.5,
+   "white": 196.6
+  },
+  "port-long": {
+   "pixels": 248,
+   "black": 68.6,
+   "brown": 81.7,
+   "auburn": 100.5,
+   "chestnut": 94.3,
+   "blond": 174.3,
+   "grey": 175.8,
+   "white": 205.7
+  },
+  "main-long": {
+   "pixels": 246,
+   "black": 66.2,
+   "brown": 78.7,
+   "auburn": 97.9,
+   "chestnut": 89.1,
+   "blond": 154.0,
+   "grey": 159.4,
+   "white": 193.1
+  },
+  "port-braid": {
+   "pixels": 190,
+   "black": 69.9,
+   "brown": 83.7,
+   "auburn": 103.5,
+   "chestnut": 97.0,
+   "blond": 178.0,
+   "grey": 179.7,
+   "white": 209.8
+  },
+  "main-braid": {
+   "pixels": 188,
+   "black": 68.7,
+   "brown": 80.1,
+   "auburn": 98.4,
+   "chestnut": 90.0,
+   "blond": 154.2,
+   "grey": 159.6,
+   "white": 193.1
+  },
+  "port-swept": {
+   "pixels": 156,
+   "black": 70.4,
+   "brown": 84.7,
+   "auburn": 103.7,
+   "chestnut": 96.9,
+   "blond": 176.7,
+   "grey": 178.5,
+   "white": 209.0
+  },
+  "main-swept": {
+   "pixels": 154,
+   "black": 71.0,
+   "brown": 83.2,
+   "auburn": 102.4,
+   "chestnut": 93.6,
+   "blond": 157.7,
+   "grey": 163.3,
+   "white": 195.7
+  },
+  "port-swept_braid": {
+   "pixels": 321,
+   "black": 69.6,
+   "brown": 84.0,
+   "auburn": 103.8,
+   "chestnut": 97.1,
+   "blond": 178.3,
+   "grey": 180.0,
+   "white": 210.2
+  },
+  "main-swept_braid": {
+   "pixels": 188,
+   "black": 68.7,
+   "brown": 80.1,
+   "auburn": 98.4,
+   "chestnut": 90.0,
+   "blond": 154.2,
+   "grey": 159.6,
+   "white": 193.1
+  },
+  "port-short": {
+   "pixels": 210,
+   "black": 69.2,
+   "brown": 82.9,
+   "auburn": 103.3,
+   "chestnut": 96.9,
+   "blond": 178.9,
+   "grey": 180.5,
+   "white": 211.6
+  },
+  "main-short": {
+   "pixels": 208,
+   "black": 65.6,
+   "brown": 78.3,
+   "auburn": 98.0,
+   "chestnut": 89.0,
+   "blond": 155.0,
+   "grey": 160.5,
+   "white": 194.7
+  }
+ },
+ "joint_rounds": [
+  {
+   "bob": {
+    "passed": true,
+    "fails": {}
+   },
+   "long": {
+    "passed": false,
+    "fails": {
+     "auburn.shade": [
+      -6,
+      -9,
+      -9
+     ],
+     "dark.shade": [
+      -10,
+      -9,
+      -8
+     ],
+     "brown.shade": [
+      -6,
+      -8,
+      -7
+     ],
+     "light.shade": [
+      1,
+      -6,
+      -6
+     ]
+    }
+   },
+   "braid": {
+    "passed": false,
+    "fails": {
+     "auburn.shade": [
+      -8,
+      -4,
+      -5
+     ],
+     "light.shade": [
+      -4,
+      -8,
+      -6
+     ],
+     "grey.shade": [
+      -2,
+      -7,
+      -19
+     ]
+    }
+   },
+   "swept": {
+    "passed": true,
+    "fails": {}
+   },
+   "swept_braid": {
+    "passed": false,
+    "fails": {
+     "auburn.shade": [
+      -9,
+      -10,
+      -9
+     ],
+     "auburn.mid": [
+      -8,
+      -5,
+      -3
+     ],
+     "dark.shade": [
+      -11,
+      -10,
+      -8
+     ],
+     "dark.mid": [
+      -6,
+      -5,
+      -12
+     ],
+     "brown.shade": [
+      -8,
+      -9,
+      -7
+     ],
+     "brown.mid": [
+      -8,
+      -5,
+      -7
+     ],
+     "light.shade": [
+      -4,
+      -9,
+      -7
+     ],
+     "light.mid": [
+      -6,
+      -6,
+      -6
+     ],
+     "grey.shade": [
+      -3,
+      -8,
+      -19
+     ],
+     "grey.mid": [
+      -1,
+      -7,
+      -19
+     ]
+    }
+   },
+   "short": {
+    "passed": false,
+    "fails": {
+     "auburn.shade": [
+      -6,
+      -4,
+      -5
+     ],
+     "auburn.mid": [
+      -6,
+      -3,
+      0
+     ],
+     "brown.mid": [
+      -7,
+      -2,
+      -4
+     ],
+     "light.shade": [
+      -1,
+      -6,
+      -3
+     ],
+     "light.mid": [
+      -6,
+      -5,
+      -4
+     ],
+     "grey.mid": [
+      0,
+      -6,
+      -18
+     ]
+    }
+   },
+   "profile": {
+    "shade": [
+     41,
+     1,
+     0
+    ],
+    "mid": [
+     101,
+     34,
+     5
+    ],
+    "light": [
+     118,
+     43,
+     4
+    ],
+    "highlight": [
+     138,
+     53,
+     3
+    ]
+   }
+  },
+  {
+   "bob": {
+    "passed": false,
+    "fails": {
+     "light.shade": [
+      6,
+      0,
+      2
+     ]
+    }
+   },
+   "long": {
+    "passed": false,
+    "fails": {
+     "auburn.shade": [
+      -3,
+      -9,
+      -9
+     ],
+     "dark.shade": [
+      -10,
+      -9,
+      -8
+     ],
+     "brown.shade": [
+      -5,
+      -8,
+      -7
+     ],
+     "light.shade": [
+      6,
+      -2,
+      -2
+     ]
+    }
+   },
+   "braid": {
+    "passed": true,
+    "fails": {}
+   },
+   "swept": {
+    "passed": false,
+    "fails": {
+     "light.shade": [
+      7,
+      0,
+      3
+     ]
+    }
+   },
+   "swept_braid": {
+    "passed": false,
+    "fails": {
+     "auburn.shade": [
+      -6,
+      -10,
+      -9
+     ],
+     "dark.shade": [
+      -11,
+      -10,
+      -8
+     ],
+     "dark.mid": [
+      -6,
+      -5,
+      -12
+     ],
+     "brown.shade": [
+      -8,
+      -9,
+      -7
+     ],
+     "brown.mid": [
+      -6,
+      -4,
+      -7
+     ],
+     "light.shade": [
+      0,
+      -6,
+      -4
+     ]
+    }
+   },
+   "short": {
+    "passed": true,
+    "fails": {}
+   },
+   "profile": {
+    "shade": [
+     41,
+     1,
+     0
+    ],
+    "mid": [
+     101,
+     34,
+     5
+    ],
+    "light": [
+     118,
+     43,
+     4
+    ],
+    "highlight": [
+     138,
+     53,
+     3
+    ]
+   }
+  },
+  {
+   "bob": {
+    "passed": false,
+    "fails": {
+     "brown.shade": [
+      4,
+      2,
+      0
+     ],
+     "light.shade": [
+      6,
+      1,
+      4
+     ]
+    }
+   },
+   "long": {
+    "passed": false,
+    "fails": {
+     "auburn.shade": [
+      -2,
+      -9,
+      -9
+     ],
+     "dark.shade": [
+      -10,
+      -9,
+      -8
+     ],
+     "brown.shade": [
+      -5,
+      -8,
+      -7
+     ],
+     "light.shade": [
+      6,
+      -1,
+      0
+     ]
+    }
+   },
+   "braid": {
+    "passed": false,
+    "fails": {
+     "brown.shade": [
+      -3,
+      -3,
+      -4
+     ]
+    }
+   },
+   "swept": {
+    "passed": false,
+    "fails": {
+     "brown.shade": [
+      4,
+      2,
+      0
+     ],
+     "light.shade": [
+      7,
+      1,
+      5
+     ]
+    }
+   },
+   "swept_braid": {
+    "passed": false,
+    "fails": {
+     "auburn.shade": [
+      -5,
+      -10,
+      -9
+     ],
+     "dark.shade": [
+      -11,
+      -10,
+      -8
+     ],
+     "dark.mid": [
+      -6,
+      -5,
+      -12
+     ],
+     "brown.shade": [
+      -7,
+      -9,
+      -7
+     ],
+     "brown.mid": [
+      -5,
+      -3,
+      -7
+     ]
+    }
+   },
+   "short": {
+    "passed": false,
+    "fails": {
+     "brown.shade": [
+      0,
+      -3,
+      -4
+     ]
+    }
+   },
+   "profile": {
+    "shade": [
+     41,
+     1,
+     0
+    ],
+    "mid": [
+     101,
+     34,
+     5
+    ],
+    "light": [
+     118,
+     43,
+     4
+    ],
+    "highlight": [
+     138,
+     53,
+     3
+    ]
+   }
+  },
+  {
+   "bob": {
+    "passed": false,
+    "fails": {
+     "brown.shade": [
+      5,
+      2,
+      0
+     ],
+     "light.shade": [
+      6,
+      1,
+      5
+     ]
+    }
+   },
+   "long": {
+    "passed": false,
+    "fails": {
+     "auburn.shade": [
+      -1,
+      -10,
+      -9
+     ],
+     "dark.shade": [
+      -10,
+      -9,
+      -8
+     ],
+     "brown.shade": [
+      -4,
+      -8,
+      -7
+     ],
+     "light.shade": [
+      6,
+      -1,
+      0
+     ]
+    }
+   },
+   "braid": {
+    "passed": false,
+    "fails": {
+     "brown.shade": [
+      -2,
+      -3,
+      -4
+     ]
+    }
+   },
+   "swept": {
+    "passed": false,
+    "fails": {
+     "brown.shade": [
+      4,
+      2,
+      0
+     ],
+     "light.shade": [
+      7,
+      1,
+      5
+     ]
+    }
+   },
+   "swept_braid": {
+    "passed": false,
+    "fails": {
+     "auburn.shade": [
+      -4,
+      -10,
+      -9
+     ],
+     "dark.shade": [
+      -11,
+      -10,
+      -8
+     ],
+     "dark.mid": [
+      -6,
+      -5,
+      -12
+     ],
+     "brown.shade": [
+      -7,
+      -9,
+      -7
+     ],
+     "brown.mid": [
+      -6,
+      -3,
+      -6
+     ]
+    }
+   },
+   "short": {
+    "passed": false,
+    "fails": {
+     "brown.shade": [
+      0,
+      -3,
+      -4
+     ]
+    }
+   },
+   "profile": {
+    "shade": [
+     41,
+     1,
+     0
+    ],
+    "mid": [
+     101,
+     34,
+     5
+    ],
+    "light": [
+     118,
+     43,
+     4
+    ],
+    "highlight": [
+     138,
+     53,
+     3
+    ]
+   }
+  }
+ ]
+}

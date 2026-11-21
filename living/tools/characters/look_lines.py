@@ -82,7 +82,9 @@ POOL, DECOR = 128, 96
 # A cloth's name (person_params.CLOTH) as the one colour word a glance gives it: ten cloths, nine words.
 CLOTH_WORDS = dict(oilskin="yellow", tarred="black", olive="green", canvas="tan", blue="blue", red="red", green="green", cream="cream", navy="navy", heather="purple")
 # The fields of a line the client draws: what a line's key is the hash of, and all the book keeps.
-DRAWN = ("type", "height", "proportions", "identity", "colors", "styles", "belly", "grey")
+# `hero_file` (contract v1.3, docs/HANDMADE_COMPOSED.md "Heroes") is drawn only when present, so no
+# existing line's key changes.
+DRAWN = ("type", "height", "proportions", "identity", "colors", "styles", "belly", "grey", "hero_file")
 # Of the decor's people, how many are drawn at each band: the island's background, as a town's ages run.
 DECOR_BANDS = (1, 2, 3, 3, 3, 3, 3, 4)
 
@@ -114,7 +116,7 @@ def band_of(stage, age):
 
 def given_for(person, band, age):
     """A person's parameters as given to the generator for a band: who they are, at that age."""
-    g = {k: person[k] for k in ("seed", "sex", "family", "skin") if k in person}
+    g = {k: person[k] for k in ("seed", "sex", "family", "household", "skin") if k in person}
     g["age"] = age
     if band == 0:
         g["hair"] = dict(style="crop")
@@ -260,7 +262,11 @@ def book(a):
                 if own["type"] != line["type"] or own["identity"] != line["identity"]:
                     raise SystemExit(f"look_lines: {made_path} is not this person as drawn now; build the town again")
                 built.append((own, line))
-                line = own
+                # A cached measurement can predate the fitted cut and its hair collar.
+                # Retain measured dyes for the pieces the resident still wears.
+                measured = own["colors"]["outfit"]
+                outfit = {piece: measured.get(piece, tone) for piece, tone in line["colors"]["outfit"].items()}
+                line = dict(own, styles=line["styles"], colors=dict(own["colors"], outfit=outfit))
             entries.append((("resident", p["full_name"]), b, params, line, made))
     if not built:
         raise SystemExit(f"look_lines: no built residents under {a.built}; run town.py first (the outfit colours are measured from them)")
@@ -282,6 +288,10 @@ def book(a):
     for who, b, params, line, made in entries:
         if not made:
             painted(line, rule)
+        if params["outfit"]["coat"] == "coat":
+            # Toon recolouring targets the line colour directly. Its contrast must
+            # survive both the measured resident path and the pool's paint estimate.
+            person_params.set_coat_line_dyes(line, person_params.resolve(params))
         line = {k: line[k] for k in DRAWN if k in line}
         k = key_of(line)
         lines[k] = dict(person=line, words=words_of(params, line, b))

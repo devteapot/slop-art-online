@@ -207,9 +207,7 @@ pub fn setup(mut commands: Commands, mut waters: ResMut<Assets<crate::water::Wat
     commands.spawn((
         DirectionalLight { color: Color::srgb(1.0, 0.96, 0.88), illuminance: 9_000.0, shadow_maps_enabled: true, ..default() },
         Transform::from_xyz(-30.0, 60.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
-        // Shadows were the largest single cost (12–18 ms of 19–29 ms on the island): three
-        // cascades to 90 m, where the fog has mostly taken over, instead of four to 160 m.
-        bevy::light::CascadeShadowConfigBuilder { num_cascades: crate::perf::value("cascades").map_or(3, |n| n as usize), first_cascade_far_bound: 18.0, maximum_distance: crate::perf::value("shadowfar").unwrap_or(90.0), ..default() }.build(),
+        SHADOWS.cascades(),
     ));
 }
 
@@ -259,11 +257,7 @@ pub fn terrain(mut commands: Commands, net: NonSend<Net>, mut scene: NonSendMut<
 
 /// Cheap deterministic hash for per-object variation.
 pub fn hash(x: u32, y: u32) -> f32 {
-    let mut h = x.wrapping_mul(0x9E37_79B1) ^ y.wrapping_mul(0x85EB_CA77);
-    h ^= h >> 15;
-    h = h.wrapping_mul(0x2C1B_3C6D);
-    h ^= h >> 12;
-    (h & 0xFFFF) as f32 / 65535.0
+    living_rules::cover::placement_sample(x, y)
 }
 
 /// Vertex-coloured, flat-shaded mesh building.
@@ -500,7 +494,7 @@ fn build_chunk(commands: &mut Commands, meshes: &mut Assets<Mesh>, palette: &Pal
                 Terrain::Water => water = true,
                 // A real forest: a tree on about one forest tile in ten (3–4 m apart, crowns
                 // 4–7 m wide), bushes and undergrowth between.
-                Terrain::Forest if v < 0.1 => {
+                Terrain::Forest if living_rules::cover::forest_tree(tx, ty) => {
                     let p = Vec3::new(px, g(px, py) - 0.1, py);
                     let size = 4.0 + 2.5 * hash(tx + 7, ty + 3);
                     let broad = hash(tx + 1, ty + 9) < 0.3;
@@ -884,5 +878,40 @@ mod tests {
             assert!(shape == "storage" || thing_mesh(k).is_some(), "{k} is drawn as {shape}");
         }
         assert_eq!(drawn_as("house_store", Some(Some(&cullet))).as_deref(), Some("storage"));
+    }
+}
+
+/// The sun's shadows. `LIVING_GAME_PERF` overrides each for measurement: `cascades=`,
+/// `firstcascade=`, `shadowfar=`, `sunstep=` (and `shadowmap=`, the map's size, in
+/// `perf::diagnostics`).
+pub struct Shadows {
+    /// Shadows were the largest single cost (12–18 ms of 19–29 ms on the island): three
+    /// cascades to 90 m, where the fog has mostly taken over, instead of four to 160 m. The
+    /// top-down stops see ground from about 9 m (Near) to 31 m (Far) along the view, so the first
+    /// cascade covers Near and most of Middle, the second Far; the last reaches the far views
+    /// of context framing (a fight, a greeting), which look toward the horizon.
+    pub cascades: usize,
+    /// The first cascade's far edge and the last's, along the view (m).
+    pub first_far: f32,
+    pub far: f32,
+    /// The key light turns only when the sun has moved this far (degrees; `daylight::apply`):
+    /// once every 0.75 s with a 12-minute day, every 3 s with Cullet's 48. A step re-draws the
+    /// shadow map once, no more visibly than one frame of a turning sun (flicker-2), instead
+    /// of every frame.
+    pub sun_step_deg: f32,
+}
+
+pub const SHADOWS: Shadows = Shadows { cascades: 3, first_far: 18.0, far: 90.0, sun_step_deg: 0.25 };
+
+impl Shadows {
+    pub fn cascades(&self) -> bevy::light::CascadeShadowConfig {
+        let v = |name: &str, d: f32| crate::perf::value(name).unwrap_or(d);
+        bevy::light::CascadeShadowConfigBuilder {
+            num_cascades: crate::perf::value("cascades").map_or(self.cascades, |n| n as usize),
+            first_cascade_far_bound: v("firstcascade", self.first_far),
+            maximum_distance: v("shadowfar", self.far),
+            ..default()
+        }
+        .build()
     }
 }

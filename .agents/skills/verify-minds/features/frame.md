@@ -30,3 +30,5 @@ Trials: variant `player-frame` sets `LIVING_FRAME=player`; each summary's `promp
 
 - Whether the frame changes what minds do (initiative, exploration, long-range aims) or how often they break character: that needs real-model trial batches, which are paid.
 - The word list's precision: it over-counts and misses paraphrase; read its examples.
+
+The narrow `act_repair` exchange receives the refused acts and authority feedback. It uses the same repair format under either character framing.

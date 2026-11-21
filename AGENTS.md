@@ -39,14 +39,14 @@ Spatial subscriptions are not permission boundaries by themselves: enforce perce
 
 Use focused correctness checks and representative actual-authority workloads. A passing synthetic transport fixture does not establish full model-workload access; small-world correctness does not establish scale. Declare population, duration, action rate, local density, subscriptions and observer/export load when making performance claims.
 
-Measure reducer execution/queue time, subscription volume, table growth, WASM memory and service allocator/pool memory where relevant. Distinguish service-wide RSS across retained databases from a single world's footprint, and retained WAL size from cumulative writes. Keep historical evidence while planning bounded active-data retention. Do not hide growth with restarts or label a forced service stop graceful.
+Measure reducer execution/queue time, subscription volume, table growth, WASM memory and service allocator/pool memory where relevant. Distinguish service-wide RSS across retained databases from a single world's footprint, and retained WAL size from cumulative writes. Keep historical evidence while planning bounded active-data retention. Do not hide growth with restarts or label a forced service stop graceful. Remove a worktree only with `living/tools/wt_remove.py` (`~/.local/share/slop-tools/wt-remove`), which archives its untracked and ignored evidence first; never run `git worktree remove --force` directly ([tooling](docs/TOOLING.md#removing-a-worktree)).
 
 ## Build and run
 
 Use the [Justfile](Justfile) and the [living core](docs/LIVING_CORE.md). The legacy runbooks ([M1 runbook](docs/M1_RUNBOOK.md), [Bevy browser client](docs/BEVY_BROWSER_CLIENT.md), [participant agents](docs/PARTICIPANT_AGENTS.md)) and [stack reference](STACK_REFERENCE.md) are retained as historical evidence for the removed line. Verify the selected server, database, CLI and output paths before publishing or launching a run.
 
 ```bash
-just living-check     # authority wasm + mind + both observers + game client and its tests + rules tests + script fuel gate; run before every commit
+just living-check     # authority wasm + mind + both observers + game client and its tests + rules tests + authority unit tests + script fuel gate; run before every commit
 just living-merge <branch> -m "Merge <branch>: …" --scenes  # coordinators: --no-ff merge, check, scene gate, push, retry when main moved (docs/TOOLING.md)
 just living-game-assets # regenerate the game client's git-ignored assets (needs Blender; Kimodo cache for clips)
 just living-test      # rules tests
@@ -67,12 +67,14 @@ For documentation-only work, check links, terminology, current/target labels and
 
 ## Models and coordination
 
-Coordinators run on Claude; subagents run on Codex models (owner's choice, 2026-11-18).
+Work is routed by kind (owner's choice, 2026-11-19; it replaces the 2026-11-18 routing).
 
 - **Coordinators:** each machine has one coordinator thread on Claude Opus 5.5 (`claude-opus-5-5`) at high reasoning effort.
-- **Subagents:** GPT-6.2 Sol (`gpt-6.2-sol`, Codex provider) at low reasoning effort by default. Start them with T3's `delegate_task` (provider `codex`), each in its own worktree from `origin/main`; Claude's native `Agent` tool would start a Claude model.
-- **Asset generation:** GPT-6.2 Astra (`gpt-6.2-astra`, Codex provider) at low reasoning effort for 3D models, textures and other generated assets.
-- **Escalation:** a task a Sol subagent has attempted and could not solve goes to Claude Opus 5.5 at high effort. Say in the report when a task was moved and why.
+- **Implementation of game logic and systems:** Claude Opus 5.5 at high effort. This covers the authority, rules and laws, the mind service, the game client's systems, schemas, subscriptions and merges of code that changes behaviour. Start these workers with Claude's native `Agent` tool or T3's `delegate_task` (provider `claudeAgent`, effort `high`), each in its own worktree from `origin/main`.
+- **Exploration and execution:** GPT-6.2 Sol (`gpt-6.2-sol`, Codex provider, via `delegate_task`) at low reasoning effort. This covers research and design surveys, diagnoses, measurement series and trial runs, reviews, documentation, tooling chores and verification runs. When a Sol task turns into implementing game logic, hand the implementation to Opus.
+- **Asset generation:** GPT-6.2 Astra (`gpt-6.2-astra`, Codex provider) at low reasoning effort for 3D models, skeletons, textures and the asset generators.
+- **Escalation:** a task a Sol or Astra worker has attempted and could not solve goes to Claude Opus 5.5 at high effort. Say in the report when a task was moved and why.
+- **When Astra is unavailable** (usage limit reached, provider down), asset work continues on Claude Opus 5.5 at high effort. Do not use Fable (owner, 2026-11-20). Say in the report which tasks ran on Opus for this reason.
 - **Ultracode:** off for coordinators and subagents. Turn it on only when the owner asks for it for a named piece of work, and only for that work.
 - A model or provider the owner asks for by name overrides these defaults for that task.
 - A model named inside a skill does not override this section. This section does not switch the model of a thread the owner started.

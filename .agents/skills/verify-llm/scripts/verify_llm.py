@@ -20,6 +20,8 @@ import trials  # noqa: E402  (consolidation_table: the trial report's per-charac
 import world_guard  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(ROOT / 'living/tools'))
+from verify_credentials import redact
 # The mind binary the suite builds: in CARGO_TARGET_DIR when set (a private build directory),
 # else living/target. Running another path would test whatever binary another checkout left.
 MIND_BIN = Path(os.environ.get('CARGO_TARGET_DIR') or ROOT / 'living/target') / 'release/living-mind'
@@ -91,7 +93,8 @@ class Run:
     def command(self, args, filename='driver.log', check=True, timeout=240):
         result = subprocess.run([str(x) for x in args], cwd=ROOT, capture_output=True, text=True, timeout=timeout)
         with (self.directory / filename).open('a') as stream:
-            stream.write('$ ' + ' '.join(str(x) for x in args) + '\n' + result.stdout + result.stderr + f'\nexit={result.returncode}\n')
+            message = '$ ' + ' '.join(map(str, args)) + '\n' + result.stdout + result.stderr
+            stream.write(redact(message, (self.token,)) + f'\nexit={result.returncode}\n')
         if check and result.returncode:
             raise RuntimeError(f'{args[0]} failed; see {self.directory / filename}')
         return result
@@ -180,7 +183,8 @@ class Run:
                                                                     for p in source_paths}, indent=2))
         (self.directory / 'processes.json').write_text(json.dumps({'mind_pid': self.mind.pid,
                'owned_pids': [p.pid for p in self.processes], 'only': ids, 'neo4j': 'off'}, indent=2))
-        if models['profiles'][models['default']]['key_env'] == 'LIVING_VERIFY_MISSING_KEY':
+        # The default may name a mix (battle_diag.py --real-minds), not a profile.
+        if models['profiles'].get(models['default'], {}).get('key_env') == 'LIVING_VERIFY_MISSING_KEY':
             self.mind.wait(timeout=8)
             assert self.mind.returncode != 0
             assert 'has no API key' in (self.directory / 'mind.log').read_text()

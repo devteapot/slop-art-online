@@ -61,9 +61,9 @@ if [ "$clips_baked" = 1 ]; then
   echo "gen_person: the clip library is $kimodo" >&2
   # The takes the bake reads and the library does not hold, by name. A warning: a machine may
   # hold a part of the library. The bake reads one take an entry, the picked one (`pick`, a
-  # seed), and the neutral pose's; an entry's other seeds are the candidates it was picked
+  # seed), and any shared neutral or ground seat pose; an entry's other seeds are the candidates it was picked
   # from, kept for review, and a library may hold only the picks. They are counted, not named.
-  python3 - "$kimodo" "$only" >&2 <<'PY'
+  present=$(python3 - "$kimodo" "$only" <<'PY'
 import json, os, sys
 d, only = sys.argv[1], sys.argv[2]
 have = set(os.listdir(d)) if os.path.isdir(d) else set()
@@ -73,27 +73,34 @@ wanted = None if only in ("", "present") else set(only.split(","))
 if lib.get("neutral"):
     name, seed = lib["neutral"].split("@")[0].split("#")
     if f"{name}_s{int(seed)}.npz" not in have:
-        print(f"gen_person: warning: the neutral pose's take {name}_s{int(seed)}.npz is missing from {d}: no clip can be baked")
+        print(f"gen_person: warning: the neutral pose's take {name}_s{int(seed)}.npz is missing from {d}: no clip can be baked", file=sys.stderr)
 lost, spare = [], 0
+present = []
 for c in clips:
-    if (wanted is not None and c["name"] not in wanted) or "keyed" in c or "overlay" in c:
+    if wanted is not None and c["name"] not in wanted:
         continue
-    if f"{c['name']}_s{c['pick']}.npz" not in have:
+    if "keyed" in c or "overlay" in c:
+        present.append(c["name"])
+        continue
+    required = [f"{c['name']}_s{c['pick']}.npz"]
+    if "ground_seat" in c:
+        name, seed = c["ground_seat"].split("@")[0].split("#")
+        required.append(f"{name}_s{seed}.npz")
+    missing = [path for path in required if path not in have]
+    if missing:
         lost.append(c["name"])
-        print(f"gen_person: warning: {c['name']}: its take {c['name']}_s{c['pick']}.npz is missing from {d}" + ("; the entry is not baked (ONLY=present)" if only == "present" else ""))
+        print(f"gen_person: warning: {c['name']}: missing {', '.join(missing)} from {d}" + ("; the entry is not baked (ONLY=present)" if only == "present" else ""), file=sys.stderr)
+    else:
+        present.append(c["name"])
     spare += sum(f"{c['name']}_s{s}.npz" not in have for s in c.get("seeds", []) if s != c["pick"])
 n = len(clips) if wanted is None else sum(c["name"] in wanted for c in clips)
-print(f"gen_person: {len(lost)} of {n} entries have their take missing from {d}" + (": " + ", ".join(lost) if lost else "") + f"; {spare} candidate takes that were not picked are not there either (the bake does not read them)")
-PY
-fi
-if [ "$only" = present ]; then
-  only=$(python3 - "$kimodo" <<'PY'
-import json, os, sys
-have = set(os.listdir(sys.argv[1]))
-clips = json.load(open("living/tools/blender/clips.json"))["clips"]
-print(",".join(c["name"] for c in clips if c.get("kind") != "pose" and ("keyed" in c or "overlay" in c or f"{c['name']}_s{c['pick']}.npz" in have)))
+print(f"gen_person: {len(lost)} of {n} entries have their take missing from {d}" + (": " + ", ".join(lost) if lost else "") + f"; {spare} candidate takes that were not picked are not there either (the bake does not read them)", file=sys.stderr)
+print(",".join(present))
 PY
 )
+fi
+if [ "$clips_baked" = 1 ] && [ "$only" = present ]; then
+  only=$present
   echo "gen_person: baking the $(echo "$only" | tr ',' '\n' | wc -l) library entries whose take is in $kimodo" >&2
 fi
 people=("$@")
@@ -113,8 +120,12 @@ for p in "${people[@]}"; do
   for lod in "${lods[@]}"; do
     case "$lod" in near) dir=$src ;; far) dir=$src/far ;; both) dir=$src/lod ;; *) echo "gen_person: LOD: $lod is not near, far or both" >&2; exit 1 ;; esac
     mkdir -p "$dir/anim"
+    # The shared motion reference uses the coat's body weights. Renderable coats
+    # get their spring weights when built as people or wardrobe pieces.
+    clip_args=()
+    if [[ "$name" = own-clips && "$clips_baked" = 1 ]]; then clip_args=(--clip-source); fi
     # shellcheck disable=SC2086
-    if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- "${arg[@]}" ${PERSON_ARGS:-} --lod "$lod" --morphs "${MORPHS:-all}" $([ "${IDENTITY:-bones}" = bake ] && echo --bake) --out "$dir/$name.glb" > "$log" 2>&1; then
+    if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- "${arg[@]}" ${PERSON_ARGS:-} "${clip_args[@]}" --lod "$lod" --morphs "${MORPHS:-all}" $([ "${IDENTITY:-bones}" = bake ] && echo --bake) --out "$dir/$name.glb" > "$log" 2>&1; then
       grep -v OpenColorIO "$log" | tail -30; rm -f "$log"; exit 1
     fi
     grep -E '^PERSON' "$log" || true
@@ -122,10 +133,21 @@ for p in "${people[@]}"; do
       cp "$dir/$name.glb" "$dir/anim/$name.glb"
       rm -f "$dir/anim/$name.clips.json"
     else
+      family_args=()
+      if [[ "$name" = own-clips && ( -z "$only" || ",$only," =~ ,(sit_ground|sit_ground_down|stand_up_ground), ) ]]; then
+        seat_dir=$(mktemp -d)
+        trap 'rm -rf -- "$seat_dir"' EXIT
+        if ! "$blender" -b --python-exit-code 1 -P living/tools/blender/person.py -- --variant piece:trousers-f \
+          --parts keep --keep Trousers,Boots --lod near --out "$seat_dir/contact.glb" > "$log" 2>&1; then
+          tail -30 "$log"; exit 1
+        fi
+        family_args=(--female-seat-mesh "$seat_dir/contact.glb")
+      fi
       if ! "$blender" -b --python-exit-code 1 -P "$animate" -- --in "$dir/$name.glb" --out "$dir/anim/$name.glb" \
-        --library living/tools/blender/clips.json --summary "$dir/anim/$name.clips.json" --kimodo-dir "$kimodo" ${only:+--only "$only"} > "$log" 2>&1; then
+        --library living/tools/blender/clips.json --summary "$dir/anim/$name.clips.json" --kimodo-dir "$kimodo" "${family_args[@]}" ${only:+--only "$only"} > "$log" 2>&1; then
         grep -v "OpenColorIO\|^ANIM" "$log" | tail -30; rm -f "$log"; exit 1
       fi
+      if (( ${#family_args[@]} )); then rm -rf -- "$seat_dir"; trap - EXIT; fi
       grep -E '^(SKELETON|GRAFT|SUMMARY)' "$log" | cut -c1-220 || true
     fi
     # The copy the game draws, and then the builder's own copy beside it, are finished the same
@@ -149,6 +171,10 @@ for p in "${people[@]}"; do
       # composes one (compose.py). Last, so the designed normals are the type's own.
       if [ "${IDENTITY:-bones}" != bake ] && grep -q '"identity"' "$dir/$name.params.json"; then
         python3 living/tools/characters/compose.py "$f" "$f" --params "$dir/$name.params.json"
+      fi
+      # Ink carriers (SLOP_PORT=ink): the file opts in and its carriers name the types' ink page.
+      if [[ ",${SLOP_PORT:-}," == *",ink,"* ]]; then
+        python3 living/tools/characters/type_ink.py "$f" > /dev/null
       fi
     done
     # The shared clip file (`clips=<preset>`) is read for its clips alone: its skeleton, its

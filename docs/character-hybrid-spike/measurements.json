@@ -1,0 +1,932 @@
+{
+  "committed_base": "f592a072e",
+  "near_ceiling": 50000,
+  "geometry": {
+    "control": {
+      "near": {
+        "vertices": 19119,
+        "triangles": 32024,
+        "primitives": 14,
+        "materials": [
+          "M00_000_00_Body_00_SKIN",
+          "M00_000_00_EyeIris_00_EYE",
+          "M00_000_00_Eye_00_EYE",
+          "M00_000_00_FaceBrow_00_FACE",
+          "M00_000_00_FaceEyeline_00_FACE",
+          "M00_000_00_FaceTint_00_FACE",
+          "M00_000_00_Face_00_SKIN",
+          "M00_000_Hair_00_HAIR",
+          "M00_001_01_Cloth_01_CLOTH"
+        ],
+        "zero_weight": 0,
+        "max_weight_error": 1.341104507446289e-07,
+        "max_influences": 4
+      },
+      "far": {
+        "vertices": 4303,
+        "triangles": 7212,
+        "primitives": 7,
+        "materials": [
+          "M00_000_00_Body_01_SKIN",
+          "M00_000_Hair_00_HAIR",
+          "M00_001_01_Cloth_01_CLOTH"
+        ],
+        "zero_weight": 0,
+        "max_weight_error": 1.1175870895385742e-07,
+        "max_influences": 4
+      },
+      "parts": [
+        {
+          "file": "types/adult-f-a.glb",
+          "mesh": "Face",
+          "vertices": 4370,
+          "triangles": 7184,
+          "primitives": 7
+        },
+        {
+          "file": "types/adult-f-a.glb",
+          "mesh": "Skin",
+          "vertices": 3027,
+          "triangles": 4616,
+          "primitives": 1
+        },
+        {
+          "file": "styles/hair/long.glb",
+          "mesh": "Hair",
+          "vertices": 4870,
+          "triangles": 9528,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/smock_58-f.glb",
+          "mesh": "Cloth",
+          "vertices": 2363,
+          "triangles": 4384,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/jersey_smock-f.glb",
+          "mesh": "Cloth",
+          "vertices": 1067,
+          "triangles": 1280,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/smock_bands-f.glb",
+          "mesh": "Cloth",
+          "vertices": 170,
+          "triangles": 256,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/trousers-f.glb",
+          "mesh": "Cloth",
+          "vertices": 1702,
+          "triangles": 2096,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/boots-f.glb",
+          "mesh": "Cloth",
+          "vertices": 1550,
+          "triangles": 2680,
+          "primitives": 1
+        }
+      ]
+    },
+    "atelier": {
+      "near": {
+        "vertices": 24153,
+        "triangles": 38442,
+        "primitives": 14,
+        "materials": [
+          "M00_000_00_Body_00_SKIN",
+          "M00_000_00_EyeIris_00_EYE",
+          "M00_000_00_Eye_00_EYE",
+          "M00_000_00_FaceBrow_00_FACE",
+          "M00_000_00_FaceEyeline_00_FACE",
+          "M00_000_00_FaceTint_00_FACE",
+          "M00_000_00_Face_00_SKIN",
+          "M00_000_Hair_00_HAIR",
+          "M00_001_01_Cloth_01_CLOTH"
+        ],
+        "zero_weight": 0,
+        "max_weight_error": 1.2852251529693604e-07,
+        "max_influences": 4
+      },
+      "far": {
+        "vertices": 4303,
+        "triangles": 7212,
+        "primitives": 7,
+        "materials": [
+          "M00_000_00_Body_01_SKIN",
+          "M00_000_Hair_00_HAIR",
+          "M00_001_01_Cloth_01_CLOTH"
+        ],
+        "zero_weight": 0,
+        "max_weight_error": 1.1175870895385742e-07,
+        "max_influences": 4
+      },
+      "parts": [
+        {
+          "file": "types/atelier-adult-f-a.glb",
+          "mesh": "Face",
+          "vertices": 4388,
+          "triangles": 7190,
+          "primitives": 7
+        },
+        {
+          "file": "types/atelier-adult-f-a.glb",
+          "mesh": "Skin",
+          "vertices": 3027,
+          "triangles": 4616,
+          "primitives": 1
+        },
+        {
+          "file": "styles/hair/atelier.glb",
+          "mesh": "Hair",
+          "vertices": 7699,
+          "triangles": 12216,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/atelier-f.glb",
+          "mesh": "Cloth",
+          "vertices": 4550,
+          "triangles": 8108,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/atelier-jersey_smock-f.glb",
+          "mesh": "Cloth",
+          "vertices": 1067,
+          "triangles": 1280,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/atelier-smock_bands-f.glb",
+          "mesh": "Cloth",
+          "vertices": 170,
+          "triangles": 256,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/atelier-trousers-f.glb",
+          "mesh": "Cloth",
+          "vertices": 1702,
+          "triangles": 2096,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/atelier-boots-f.glb",
+          "mesh": "Cloth",
+          "vertices": 1550,
+          "triangles": 2680,
+          "primitives": 1
+        }
+      ]
+    },
+    "atelier-youth": {
+      "near": {
+        "vertices": 24153,
+        "triangles": 38442,
+        "primitives": 14,
+        "materials": [
+          "M00_000_00_Body_00_SKIN",
+          "M00_000_00_EyeIris_00_EYE",
+          "M00_000_00_Eye_00_EYE",
+          "M00_000_00_FaceBrow_00_FACE",
+          "M00_000_00_FaceEyeline_00_FACE",
+          "M00_000_00_FaceTint_00_FACE",
+          "M00_000_00_Face_00_SKIN",
+          "M00_000_Hair_00_HAIR",
+          "M00_001_01_Cloth_01_CLOTH"
+        ],
+        "zero_weight": 0,
+        "max_weight_error": 1.2852251529693604e-07,
+        "max_influences": 4
+      },
+      "far": {
+        "vertices": 4303,
+        "triangles": 7212,
+        "primitives": 7,
+        "materials": [
+          "M00_000_00_Body_01_SKIN",
+          "M00_000_Hair_00_HAIR",
+          "M00_001_01_Cloth_01_CLOTH"
+        ],
+        "zero_weight": 0,
+        "max_weight_error": 1.1175870895385742e-07,
+        "max_influences": 4
+      },
+      "parts": [
+        {
+          "file": "types/atelier-youth-f-a.glb",
+          "mesh": "Face",
+          "vertices": 4388,
+          "triangles": 7190,
+          "primitives": 7
+        },
+        {
+          "file": "types/atelier-youth-f-a.glb",
+          "mesh": "Skin",
+          "vertices": 3027,
+          "triangles": 4616,
+          "primitives": 1
+        },
+        {
+          "file": "styles/hair/atelier.glb",
+          "mesh": "Hair",
+          "vertices": 7699,
+          "triangles": 12216,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/atelier-f.glb",
+          "mesh": "Cloth",
+          "vertices": 4550,
+          "triangles": 8108,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/atelier-jersey_smock-f.glb",
+          "mesh": "Cloth",
+          "vertices": 1067,
+          "triangles": 1280,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/atelier-smock_bands-f.glb",
+          "mesh": "Cloth",
+          "vertices": 170,
+          "triangles": 256,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/atelier-trousers-f.glb",
+          "mesh": "Cloth",
+          "vertices": 1702,
+          "triangles": 2096,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/atelier-boots-f.glb",
+          "mesh": "Cloth",
+          "vertices": 1550,
+          "triangles": 2680,
+          "primitives": 1
+        }
+      ]
+    },
+    "atelier-broad": {
+      "near": {
+        "vertices": 24153,
+        "triangles": 38442,
+        "primitives": 14,
+        "materials": [
+          "M00_000_00_Body_00_SKIN",
+          "M00_000_00_EyeIris_00_EYE",
+          "M00_000_00_Eye_00_EYE",
+          "M00_000_00_FaceBrow_00_FACE",
+          "M00_000_00_FaceEyeline_00_FACE",
+          "M00_000_00_FaceTint_00_FACE",
+          "M00_000_00_Face_00_SKIN",
+          "M00_000_Hair_00_HAIR",
+          "M00_001_01_Cloth_01_CLOTH"
+        ],
+        "zero_weight": 0,
+        "max_weight_error": 1.2852251529693604e-07,
+        "max_influences": 4
+      },
+      "far": {
+        "vertices": 4303,
+        "triangles": 7212,
+        "primitives": 7,
+        "materials": [
+          "M00_000_00_Body_01_SKIN",
+          "M00_000_Hair_00_HAIR",
+          "M00_001_01_Cloth_01_CLOTH"
+        ],
+        "zero_weight": 0,
+        "max_weight_error": 1.1175870895385742e-07,
+        "max_influences": 4
+      },
+      "parts": [
+        {
+          "file": "types/atelier-adult-f-a.glb",
+          "mesh": "Face",
+          "vertices": 4388,
+          "triangles": 7190,
+          "primitives": 7
+        },
+        {
+          "file": "types/atelier-adult-f-a.glb",
+          "mesh": "Skin",
+          "vertices": 3027,
+          "triangles": 4616,
+          "primitives": 1
+        },
+        {
+          "file": "styles/hair/atelier.glb",
+          "mesh": "Hair",
+          "vertices": 7699,
+          "triangles": 12216,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/atelier-f.glb",
+          "mesh": "Cloth",
+          "vertices": 4550,
+          "triangles": 8108,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/atelier-jersey_smock-f.glb",
+          "mesh": "Cloth",
+          "vertices": 1067,
+          "triangles": 1280,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/atelier-smock_bands-f.glb",
+          "mesh": "Cloth",
+          "vertices": 170,
+          "triangles": 256,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/atelier-trousers-f.glb",
+          "mesh": "Cloth",
+          "vertices": 1702,
+          "triangles": 2096,
+          "primitives": 1
+        },
+        {
+          "file": "styles/outfit/atelier-boots-f.glb",
+          "mesh": "Cloth",
+          "vertices": 1550,
+          "triangles": 2680,
+          "primitives": 1
+        }
+      ]
+    }
+  },
+  "atlas": {
+    "bytes": 15913,
+    "file": "living/game/assets/lookdev/pages/atelier-atlas.ktx2",
+    "format": "BC7_SRGB_BLOCK",
+    "full_chain": 11,
+    "gpu_bytes": 1398128,
+    "height": 1024,
+    "level_bytes": [
+      1048576,
+      262144,
+      65536,
+      16384,
+      4096,
+      1024,
+      256,
+      64,
+      16,
+      16,
+      16
+    ],
+    "levels": 11,
+    "ok": true,
+    "supercompression": "zstd",
+    "transfer": "srgb",
+    "vk_format": 146,
+    "width": 1024,
+    "writer": "bc7ktx 0.1.0 (intel_tex_2 0.5.0 BC7 slow, ISPC avx2)"
+  },
+  "frame_runs": [
+    {
+      "run": "0-control",
+      "characters": 64,
+      "far_shown": 56,
+      "with_far": 64,
+      "interval_ms_p50": 9.46,
+      "interval_ms_p95": 25.53,
+      "interval_ms_p99": 42.2,
+      "gpu_ms": 4.62,
+      "people_meshes": 504,
+      "people_materials": 9,
+      "people_pairs": 21,
+      "gpu_textures": 23,
+      "gpu_texture_mib": 29.6,
+      "people_ktris": 660,
+      "batches_opaque": {
+        "sets": 12,
+        "bins": 0,
+        "lone": 0
+      },
+      "batches_prepass": {
+        "sets": 12,
+        "bins": 0,
+        "lone": 0
+      },
+      "batches_shadow": {
+        "sets": 6,
+        "bins": 0,
+        "lone": 0
+      },
+      "ready_s": 0.71,
+      "frames": 1204
+    },
+    {
+      "run": "1-atelier",
+      "characters": 64,
+      "far_shown": 56,
+      "with_far": 64,
+      "interval_ms_p50": 7.72,
+      "interval_ms_p95": 9.96,
+      "interval_ms_p99": 18.97,
+      "gpu_ms": 4.13,
+      "people_meshes": 504,
+      "people_materials": 9,
+      "people_pairs": 21,
+      "gpu_textures": 24,
+      "gpu_texture_mib": 31.0,
+      "people_ktris": 711,
+      "batches_opaque": {
+        "sets": 12,
+        "bins": 0,
+        "lone": 0
+      },
+      "batches_prepass": {
+        "sets": 12,
+        "bins": 0,
+        "lone": 0
+      },
+      "batches_shadow": {
+        "sets": 6,
+        "bins": 0,
+        "lone": 0
+      },
+      "ready_s": 1.18,
+      "frames": 1376
+    },
+    {
+      "run": "2-atelier",
+      "characters": 64,
+      "far_shown": 56,
+      "with_far": 64,
+      "interval_ms_p50": 8.05,
+      "interval_ms_p95": 9.83,
+      "interval_ms_p99": 10.99,
+      "gpu_ms": 2.52,
+      "people_meshes": 504,
+      "people_materials": 9,
+      "people_pairs": 21,
+      "gpu_textures": 24,
+      "gpu_texture_mib": 31.0,
+      "people_ktris": 711,
+      "batches_opaque": {
+        "sets": 12,
+        "bins": 0,
+        "lone": 0
+      },
+      "batches_prepass": {
+        "sets": 12,
+        "bins": 0,
+        "lone": 0
+      },
+      "batches_shadow": {
+        "sets": 6,
+        "bins": 0,
+        "lone": 0
+      },
+      "ready_s": 1.68,
+      "frames": 1314
+    },
+    {
+      "run": "3-control",
+      "characters": 64,
+      "far_shown": 56,
+      "with_far": 64,
+      "interval_ms_p50": 11.76,
+      "interval_ms_p95": 19.55,
+      "interval_ms_p99": 26.47,
+      "gpu_ms": 3.91,
+      "people_meshes": 504,
+      "people_materials": 9,
+      "people_pairs": 21,
+      "gpu_textures": 23,
+      "gpu_texture_mib": 29.6,
+      "people_ktris": 660,
+      "batches_opaque": {
+        "sets": 12,
+        "bins": 0,
+        "lone": 0
+      },
+      "batches_prepass": {
+        "sets": 12,
+        "bins": 0,
+        "lone": 0
+      },
+      "batches_shadow": {
+        "sets": 6,
+        "bins": 0,
+        "lone": 0
+      },
+      "ready_s": 0.76,
+      "frames": 1072
+    }
+  ],
+  "clip_samples": {
+    "atelier": {
+      "idle": {
+        "times_s": [
+          0.18,
+          0.58
+        ],
+        "shared_body_joints": 52,
+        "max_delta_joint": "J_Bip_L_Little3",
+        "max_delta_mm": 16.4
+      },
+      "walk": {
+        "times_s": [
+          0.18,
+          0.58
+        ],
+        "shared_body_joints": 52,
+        "max_delta_joint": "J_Bip_L_ToeBase",
+        "max_delta_mm": 705.8
+      },
+      "run": {
+        "times_s": [
+          0.18,
+          0.58
+        ],
+        "shared_body_joints": 52,
+        "max_delta_joint": "J_Bip_L_ToeBase",
+        "max_delta_mm": 713.5
+      },
+      "talk": {
+        "times_s": [
+          0.18,
+          0.58
+        ],
+        "shared_body_joints": 52,
+        "max_delta_joint": "J_Bip_L_Thumb3",
+        "max_delta_mm": 108.3
+      },
+      "sit_idle": {
+        "times_s": [
+          0.18,
+          0.58
+        ],
+        "shared_body_joints": 52,
+        "max_delta_joint": "J_Bip_R_ToeBase",
+        "max_delta_mm": 18.3
+      }
+    },
+    "atelier-youth": {
+      "idle": {
+        "times_s": [
+          0.18,
+          0.58
+        ],
+        "shared_body_joints": 52,
+        "max_delta_joint": "J_Bip_L_Little3",
+        "max_delta_mm": 15.3
+      },
+      "walk": {
+        "times_s": [
+          0.18,
+          0.58
+        ],
+        "shared_body_joints": 52,
+        "max_delta_joint": "J_Bip_L_ToeBase",
+        "max_delta_mm": 651.0
+      },
+      "run": {
+        "times_s": [
+          0.18,
+          0.58
+        ],
+        "shared_body_joints": 52,
+        "max_delta_joint": "J_Bip_L_ToeBase",
+        "max_delta_mm": 658.0
+      },
+      "talk": {
+        "times_s": [
+          0.18,
+          0.58
+        ],
+        "shared_body_joints": 52,
+        "max_delta_joint": "J_Bip_L_Thumb3",
+        "max_delta_mm": 100.9
+      },
+      "sit_idle": {
+        "times_s": [
+          0.18,
+          0.58
+        ],
+        "shared_body_joints": 52,
+        "max_delta_joint": "J_Bip_R_ToeBase",
+        "max_delta_mm": 17.1
+      }
+    },
+    "atelier-broad": {
+      "idle": {
+        "times_s": [
+          0.18,
+          0.58
+        ],
+        "shared_body_joints": 52,
+        "max_delta_joint": "J_Bip_L_Little3",
+        "max_delta_mm": 16.8
+      },
+      "walk": {
+        "times_s": [
+          0.18,
+          0.58
+        ],
+        "shared_body_joints": 52,
+        "max_delta_joint": "J_Bip_L_ToeBase",
+        "max_delta_mm": 727.4
+      },
+      "run": {
+        "times_s": [
+          0.18,
+          0.58
+        ],
+        "shared_body_joints": 52,
+        "max_delta_joint": "J_Bip_L_ToeBase",
+        "max_delta_mm": 735.1
+      },
+      "talk": {
+        "times_s": [
+          0.18,
+          0.58
+        ],
+        "shared_body_joints": 52,
+        "max_delta_joint": "J_Bip_L_Thumb3",
+        "max_delta_mm": 111.8
+      },
+      "sit_idle": {
+        "times_s": [
+          0.18,
+          0.58
+        ],
+        "shared_body_joints": 52,
+        "max_delta_joint": "J_Bip_R_ToeBase",
+        "max_delta_mm": 18.8
+      }
+    }
+  },
+  "detail": {
+    "shino": {
+      "portrait_front": {
+        "roi_px": [
+          640,
+          315,
+          960,
+          765
+        ],
+        "valid_adjacent_pairs": 121605,
+        "contrast_pairs": 7084,
+        "percent": 5.83
+      },
+      "near_front": {
+        "roi_px": [
+          771,
+          397,
+          830,
+          455
+        ],
+        "valid_adjacent_pairs": 2044,
+        "contrast_pairs": 495,
+        "percent": 24.22
+      },
+      "middle_front": {
+        "roi_px": [
+          782,
+          415,
+          821,
+          452
+        ],
+        "valid_adjacent_pairs": 814,
+        "contrast_pairs": 269,
+        "percent": 33.05
+      }
+    },
+    "control": {
+      "portrait_front": {
+        "roi_px": [
+          640,
+          315,
+          960,
+          765
+        ],
+        "valid_adjacent_pairs": 103157,
+        "contrast_pairs": 3697,
+        "percent": 3.58
+      },
+      "near_front": {
+        "roi_px": [
+          771,
+          397,
+          830,
+          455
+        ],
+        "valid_adjacent_pairs": 1885,
+        "contrast_pairs": 243,
+        "percent": 12.89
+      },
+      "middle_front": {
+        "roi_px": [
+          782,
+          415,
+          821,
+          452
+        ],
+        "valid_adjacent_pairs": 655,
+        "contrast_pairs": 124,
+        "percent": 18.93
+      }
+    },
+    "atelier": {
+      "portrait_front": {
+        "roi_px": [
+          640,
+          315,
+          960,
+          765
+        ],
+        "valid_adjacent_pairs": 108674,
+        "contrast_pairs": 7300,
+        "percent": 6.72
+      },
+      "near_front": {
+        "roi_px": [
+          771,
+          397,
+          830,
+          455
+        ],
+        "valid_adjacent_pairs": 1541,
+        "contrast_pairs": 575,
+        "percent": 37.31
+      },
+      "middle_front": {
+        "roi_px": [
+          782,
+          415,
+          821,
+          452
+        ],
+        "valid_adjacent_pairs": 490,
+        "contrast_pairs": 224,
+        "percent": 45.71
+      }
+    }
+  },
+  "variation_grid": [
+    {
+      "file": "recipe:atelier-youth-standard-71",
+      "size_m": [
+        1.5851483345031738,
+        1.649999976158142,
+        0.37914028763771057
+      ]
+    },
+    {
+      "file": "recipe:atelier-youth-standard-163",
+      "size_m": [
+        1.5813924074172974,
+        1.649999976158142,
+        0.38232821226119995
+      ]
+    },
+    {
+      "file": "recipe:atelier-youth-standard-294",
+      "size_m": [
+        1.5851168632507324,
+        1.649999976158142,
+        0.37990015745162964
+      ]
+    },
+    {
+      "file": "recipe:atelier-youth-narrow-71",
+      "size_m": [
+        1.462095856666565,
+        1.5299999713897705,
+        0.35684511065483093
+      ]
+    },
+    {
+      "file": "recipe:atelier-youth-narrow-163",
+      "size_m": [
+        1.4582569599151611,
+        1.5299999713897705,
+        0.35975316166877747
+      ]
+    },
+    {
+      "file": "recipe:atelier-youth-narrow-294",
+      "size_m": [
+        1.4620635509490967,
+        1.5299999713897705,
+        0.35755953192710876
+      ]
+    },
+    {
+      "file": "recipe:atelier-youth-broad-71",
+      "size_m": [
+        1.6318836212158203,
+        1.7400000095367432,
+        0.39031854271888733
+      ]
+    },
+    {
+      "file": "recipe:atelier-youth-broad-163",
+      "size_m": [
+        1.6281086206436157,
+        1.7400000095367432,
+        0.39362263679504395
+      ]
+    },
+    {
+      "file": "recipe:atelier-youth-broad-294",
+      "size_m": [
+        1.6318517923355103,
+        1.7400000095367432,
+        0.39110100269317627
+      ]
+    },
+    {
+      "file": "recipe:atelier-adult-standard-71",
+      "size_m": [
+        1.5851483345031738,
+        1.649999976158142,
+        0.37914028763771057
+      ]
+    },
+    {
+      "file": "recipe:atelier-adult-standard-163",
+      "size_m": [
+        1.5813924074172974,
+        1.649999976158142,
+        0.38232821226119995
+      ]
+    },
+    {
+      "file": "recipe:atelier-adult-standard-294",
+      "size_m": [
+        1.5851168632507324,
+        1.649999976158142,
+        0.37990015745162964
+      ]
+    },
+    {
+      "file": "recipe:atelier-adult-narrow-71",
+      "size_m": [
+        1.462095856666565,
+        1.5299999713897705,
+        0.35684511065483093
+      ]
+    },
+    {
+      "file": "recipe:atelier-adult-narrow-163",
+      "size_m": [
+        1.4582569599151611,
+        1.5299999713897705,
+        0.35975316166877747
+      ]
+    },
+    {
+      "file": "recipe:atelier-adult-narrow-294",
+      "size_m": [
+        1.4620635509490967,
+        1.5299999713897705,
+        0.35755953192710876
+      ]
+    },
+    {
+      "file": "recipe:atelier-adult-broad-71",
+      "size_m": [
+        1.6318836212158203,
+        1.7400000095367432,
+        0.39031854271888733
+      ]
+    },
+    {
+      "file": "recipe:atelier-adult-broad-163",
+      "size_m": [
+        1.6281086206436157,
+        1.7400000095367432,
+        0.39362263679504395
+      ]
+    },
+    {
+      "file": "recipe:atelier-adult-broad-294",
+      "size_m": [
+        1.6318517923355103,
+        1.7400000095367432,
+        0.39110100269317627
+      ]
+    }
+  ]
+}

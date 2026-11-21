@@ -14,7 +14,7 @@ import bevy_pbr::{
     },
 };
 import bevy_render::globals::Globals;
-import living_game::toon_light::sway;
+import living_game::toon_light::{sway, seat_clamp};
 
 // In the prepass's view bind group the globals sit at binding 1 (bevy_pbr prepass/mod.rs).
 @group(0) @binding(1) var<uniform> prepass_globals: Globals;
@@ -62,7 +62,7 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 
     out.world_position = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(vertex.position, 1.0));
     let tag = mesh_functions::get_tag(vertex_no_morph.instance_index);
-    out.world_position = vec4<f32>(sway(out.world_position.xyz, mesh_world_from_local[3].xyz, tag, prepass_globals.time), 1.0);
+    out.world_position = vec4<f32>(seat_clamp(sway(out.world_position.xyz, mesh_world_from_local[3].xyz, tag, prepass_globals.time)), 1.0);
     out.position = position_world_to_clip(out.world_position.xyz);
 @if(UNCLIPPED_DEPTH_ORTHO_EMULATION) {
     out.unclipped_depth = out.position.z;

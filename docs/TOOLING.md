@@ -12,7 +12,7 @@ Status: **current** (Tool 7, 2026-11-11, branch `tool-7`; the laptop's follow-up
 
 ## The check
 
-`just living-check` runs the five cargo commands of before and, since `tool-8`, the script fuel gate, since `fix-laws` the seed-laws test, and since `check-game-tests` the game client's unit tests, in [`check.py`](../living/tools/check.py):
+`just living-check` runs the five cargo commands of before and, since `tool-8`, the script fuel gate, since `check-game-tests` the game client's unit tests, and since `check-authority-tests` the authority's native unit tests (they replaced the seed-laws test of `fix-laws` and frame-views' frame tests), in [`check.py`](../living/tools/check.py):
 
 | Step | Command | Lane |
 | --- | --- | --- |
@@ -20,13 +20,14 @@ Status: **current** (Tool 7, 2026-11-11, branch `tool-7`; the laptop's follow-up
 | `mind+viewer` | `cargo build -p living-mind -p living-viewer` | debug |
 | `game` | `cargo build --release -p living-game` | release |
 | `game-tests` | `cargo test --release -p living-game`: the client's unit tests on the game step's release tree, headless (no display, GPU or generated assets); names in `GAME_TEST_SKIPS` are skipped here by name (`--exact --skip`) and run by hand: none needs a display, and none is skipped now (fix-make-offer fixed the one known red test). The client reads the rules (`offered()`, the checks), and a rules change turned `verbs::tests::make_is_offered_at_a_furnace_only_while_it_burns_with_fuel` red on main (f0061a07) while the check only built the game (its fixture held no crucible, which goods-3's glass needs). Its stamp covers the game's closure, the rules included. Spark, 2026-11-12: 15 s on top of a built game tree, 0 s stamped | release |
+| `authority-tests` | `cargo test --release -p living-authority --lib`: the authority's whole native lib suite ([below](#the-authoritys-tests)), on the release tree after the game; the names in `AUTHORITY_TEST_XFAIL` are known red, skipped in the suite and run alone, where each must still fail | release |
 | `viewer-wasm` | `cargo build --manifest-path living/viewer/Cargo.toml --target wasm32-unknown-unknown --profile wasm-dev --bin living-viewer` | wasm-dev |
 | `rules-tests` | `cargo test -p living-rules` | debug |
-| `seed-laws` | `cargo test -p living-authority --lib seed::tests::a_seeds_laws_are_in_force_after_init`: every seed with its own laws has them in force after `init` | debug |
 | `script-gate` | `cargo build --manifest-path living/tools/script_bench/Cargo.toml -p sb-module --target wasm32-unknown-unknown --release --features rhai`, then `-p sb-host --bin sb-host --release --no-default-features`, then [`gate.py`](../living/tools/script_bench/gate.py) ([below](#the-script-fuel-gate)) | script-bench |
 
 Three things are new:
 
+- **Disk space before building.** When any step needs to run, the check looks at free space on the filesystem holding Cargo's target directory (`CARGO_TARGET_DIR` or Cargo's configured target, normally `living/target`). Required free space is `SLOP_DISK_FLOOR_GB` (default 45) plus the greater of 2 GiB and the remaining cost (`SLOP_CHECK_COST_GB`, default 18, minus the space already occupied by the target tree). A fresh tree needs 63 GiB by default. `SLOP_CHECK_START_GB` overrides the total and `0` disables the guard. All three settings are whole GiB. Below the threshold, the check reports free space and how it calculated the threshold, lists up to six of the largest build trees under `~/.t3/worktrees/*/*/living/target` and `~/.t3/worktrees/*/*/.local/*/target`, then polls free space every 60 seconds. Waiting never deletes files. Plans and runs fully served by stamps skip the disk check.
 - **Lanes at once.** Cargo locks each build directory (`target/debug`, `target/release` and the wasm ones), so steps that use different directories can run together. The four lanes run in parallel, each lane's steps in the order above. The script bench is a cargo workspace of its own, built into `<target>/script-bench`, so its lane locks nothing the others use. One make-style jobserver (a fifo that every cargo joins) caps the lanes together at `CARGO_BUILD_JOBS` jobs (default: all cores). Each step's output goes to `<target>/living-check/<step>.log`, and a failing step's log is printed. After a failure no new step starts. `LIVING_CHECK_SERIAL=1` (or `--serial`) runs the steps one by one, with cargo's output on the terminal.
 - **Step stamps.** A step's inputs are:
   - the files of the packages it builds and their path dependencies (from `cargo metadata`); a path package that is no workspace member, such as a `[patch]` path, leaves the step unstampable until it is mapped;
@@ -53,7 +54,7 @@ Three things are new:
 
 A failure of the check itself (a full disk while writing a log, say) fails the step. Every planned step must end skipped, passed or failed, so a crash is never reported as a pass. With `CARGO_BUILD_JOBS` at or under the number of lanes, the steps run one by one. The jobserver caps compile jobs, not the threads of the rules tests while they run (libtest uses all cores).
 
-`just living-check-full` (or `LIVING_CHECK_FULL=1`) runs every step and ignores stamps; it still writes them. `python3 living/tools/check.py --plan` prints what would run or be skipped, and why. `--steps a,b` runs some steps. Every run is appended to `~/.cache/slop-check/runs.jsonl` with each step's time, the load average, the wrapper used and the cache stats. `python3 living/tools/check_selftest.py` checks the wrapper choice, the watchdog and the gate step's keying and judging (22 checks, about 2 s), building nothing. `--gate` adds four checks that build and run the gate step in a clone (below). `--plan --json PATH` writes each step's digest, inputs and whether its stamp applies.
+`just living-check-full` (or `LIVING_CHECK_FULL=1`) runs every step and ignores stamps; it still writes them. `python3 living/tools/check.py --plan` prints what would run or be skipped, and why. `--steps a,b` runs some steps. Every run is appended to `~/.cache/slop-check/runs.jsonl` with each step's time, the load average, the wrapper used and the cache stats. `python3 living/tools/check_selftest.py` checks the disk guard, wrapper choice, watchdog, the gate step's keying and judging, and the authority tests' step and its expected failures without building. `--gate` adds four checks that build and run the gate step in a clone (below). `--plan --json PATH` writes each step's digest, inputs and whether its stamp applies.
 
 ### The script fuel gate
 
@@ -65,6 +66,16 @@ The `script-gate` step fails the check when a hot Rhai law takes more fuel (WASM
 - **Cost** (dev-box, `CARGO_BUILD_JOBS=12`, 2026-11-11, the step alone, `--json` records in the run): cold, a new target folder with the shared compile cache warm from other worktrees, **204 s** at load average 59–64 from other workers (89 cache hits, 177 misses, 111 not cacheable). The gate run itself is about 2 s: eight instances, 4 batches of 64 calls per law. Warm, nothing to rebuild and no stamp, **3 s**. Stamped, **0.18 s** (skipped). Its target folder takes 0.9 GB. In a whole check it runs in its own lane, beside the other three.
 - **Self-test:** `check_selftest.py` checks it in a clone of the worktree, with its uncommitted files. An empty stamp store runs the step; a stamp at its digest skips it. An edited script, `budgets.json` or `host/src/main.rs` runs it again; an edited README does not. Over a stand-in bench, `gate.py` passes laws within budget, and fails a law over budget (naming the law, its fuel and its budget) or a budgeted law not measured. `check_selftest.py --gate` also runs the real step there (`CHECK_SELFTEST_TARGET` sets its target folder). It passes and is stamped, is skipped on a second run, fails the check with that message under a budget of 1,000 for `rates-law`, and runs and passes again after an edit to the script: 57 s with a warm target folder.
 
+### The authority's tests
+
+The `authority-tests` step runs every unit test of `living-authority` natively (`--lib`: the crate is a WASM `cdylib` with no other targets), 44 on 2026-11-20. Before `check-authority-tests` the check ran two of them, as `seed-laws` (`seed::tests::a_seeds_laws_are_in_force_after_init`, fix-laws) and `frame-tests` (`frame::tests`, frame-views), and `look::tests::the_island_wears_the_pool` went red on main (07f37b927) without the check seeing it. Both old steps are folded into this one; their tests are in the suite.
+
+- **Release, on the release lane.** On the Spark (2026-11-20, no compile cache, load 5) the suite builds in 27 s and runs in 72 s in debug, where `seed::tests::a_plan_naming_kinds_the_world_lacks_is_refused` composes Cullet's world six times; in release it builds in 32 s and runs in 10.5 s. The debug lane (`mind+viewer`, `rules-tests`) is the check's longest, so the step runs in release after `game` and `game-tests`, on their tree. Like `game-tests`, release runs without debug assertions or overflow checks; the authority has no `debug_assert` and no `should_panic` test. No test needs a server or is slow enough to leave out.
+- **Inputs.** The authority's closure (the rules crate included) and the shared inputs. The tests read their fixtures with `include_str!`, which the audit sees, and one reads `living/seeds` at run time (`a_seeds_laws_are_in_force_after_init`), a shared input. The build script picks the compiled-in seed from `LIVING_SEED` (default `world`); the check leaves it as the caller set it, and it is in the digest.
+- **Known red tests.** `AUTHORITY_TEST_XFAIL` in [`check.py`](../living/tools/check.py) lists tests known red on main whose fix is owned elsewhere, each with its owner, the date and the reason, so a data issue another machine owns does not block every merge. Each is skipped in the suite (`--exact --skip NAME`, so the list is in the step's digest) and then run alone (`--exact NAME`). The step passes only when it still fails. One that passes fails the step with `now PASSES: take it out of AUTHORITY_TEST_XFAIL` (the fix takes the entry out in the same change), and a name that matches no test fails it too. Every check prints each entry (`authority-tests: KNOWN RED, expected to fail: …`, with owner, date and reason) whether the step runs or is skipped, and its last line ends with `KNOWN RED (expected failure, owner …)`. The entry is also on the scene gate's red-on-main list. On 2026-11-20 the list holds `look::tests::the_island_wears_the_pool`: the island's look data is generation `c4-e61b01c0` (`living/seeds/island.json`, `worlds/island/looks.json`) while Cullet's `looks.json` is `c4-cbcc40bf`. The owner is the dev-box (char-4 track, parked until 2026-11-25). The fix regenerates the island's looks (`look_lines.py`) and recompiles it (`author_world.py island --compile-only`).
+- **Cost** (Spark, 2026-11-20, `CARGO_BUILD_JOBS=10` as the merge queue runs it, no compile cache on the Spark, through `~/slop-mq/build-slot`; the whole check with an empty target folder and stamp store, `--json` records). Cold, back to back at load 11–13: 587 s before (main 0c72eb39), 601 s with this step (+14 s). The step takes 43 s there, after the game; the release lane becomes the longest (authority 103 s, game 430 s, game-tests 21 s, authority-tests 43 s: 597 s), and the debug lane, without `seed-laws` (75 s), falls to 515 s. An earlier pair at uneven load read 588 s and 734 s (load 3–24 against 15–45; the game alone took 416 s and 544 s). Warm, one comment appended to `living/authority/src/geometry.rs`: 48 s before (`authority` 14 s beside `seed-laws` 47 s), 43 s with it (`authority` 16 s, then `authority-tests` 26 s, on the same lane). Stamped, 0 s. It adds 0.23 GB to the release tree and no longer builds the authority's debug test binary (74 units for `seed-laws`, 0.19 GB of test binaries).
+- **Self-test:** `check_selftest.py` checks the step's shape: the whole suite in release on the release lane after the game, no test filter, every expected failure with an owner, a date and a reason, skipped exactly in the suite and run alone. It checks how a lone run is judged: still failing passes, passing, matching no test or never reaching the test fails. In a clone, the plan names every expected failure whether the step runs or is skipped, an edited authority source or seed runs the step again, and an edited doc does not.
+
 ### What a passing check still guarantees
 
 A merge checked this way guarantees what it did before: every step of `living-check` has passed **on this machine**, with this toolchain and build environment, on inputs byte-identical to the merged tree's inputs for that step. A skipped step's result is the one it had when it ran; nothing is assumed from another machine.
@@ -74,7 +85,7 @@ Two things keep the input map honest:
 - **The audit.** After each passing step, the compiler's dep-info and the build scripts' `rerun-if-changed` lines are checked. Every file a workspace crate read must lie inside that package's declared inputs and must not be git-ignored. A step that fails the audit passed, but writes no stamp, so an out-of-date map costs time, never a false skip. On its first run the audit found the game's `#[path]` modules.
 - **Environment learning.** Environment names that build scripts declare (`rerun-if-env-changed`) and that crates read (`env!`) are kept per step in `~/.cache/slop-check/envdeps.json` and enter that step's digest.
 
-What it does not add: a skipped test step is not re-run, so a flaky test that once passed stays passed until its inputs change. Outputs are not compared, only inputs, so the guarantee is cargo's own freshness rule applied across worktrees. A test that reads files outside its inputs at run time would not be seen; the rules tests read none (all their fixtures are `include_str!`, which the audit sees).
+What it does not add: a skipped test step is not re-run, so a flaky test that once passed stays passed until its inputs change. Outputs are not compared, only inputs, so the guarantee is cargo's own freshness rule applied across worktrees. A test that reads files outside its inputs at run time would not be seen; the rules tests read none (all their fixtures are `include_str!`, which the audit sees), and the authority's tests read only `living/seeds`, a shared input.
 
 ## Merging
 
@@ -86,9 +97,10 @@ set -o pipefail; just living-merge plan-3 -m "Merge plan-3: what it brings"
 
 [`merge.py`](../living/tools/merge.py):
 
-1. Refuses a dirty worktree (untracked files included), an unfinished merge or rebase, `main` checked out here, the owner's checkout, and commits that `origin/main` lacks.
+1. Refuses a dirty worktree (untracked files included), an unfinished merge or rebase, `main` checked out here, the owner's checkout, and commits that `origin/main` lacks. Before fetching, it checks free space on the worktree and Cargo target filesystems ([disk policy](#disk)). It checks again before retrying a merge. A disk refusal names the path, free space, required space, and how much allocated target space it subtracted (exit 12).
 2. Fetches `main` and the branch, and pins the branch to the commit it has now. It prefers `origin/<branch>` and otherwise takes a local branch, saying so.
 3. Moves HEAD to `origin/main` (`git reset --keep`) and runs `git merge --no-ff`. On a conflict it aborts the merge, restores HEAD and stops (exit 4).
+3a. **Checks that the compiled seeds are fresh** ([seed freshness](#seed-freshness)) on every merge, with or without `--scenes`: `scene_gate.py seeds`, files only, a fraction of a second. A stale seed that the red-on-main list does not hold restores HEAD and stops before the check (exit 13), naming the seed, the block and the command that recompiles it. `LIVING_MERGE_SEEDS=off` skips it, saying so.
 4. Runs the check (`check.py`). If the check fails, HEAD is restored and nothing is pushed (exit 5). If the check changes the worktree (a rewritten `Cargo.lock`, say), it stops (exit 6).
 4a. **Checks that the bindings were regenerated.** This runs when the merge touches the module's shape: `living/authority`, `living/rules`, `living/bindings`, or the workspace's `Cargo.toml` or `Cargo.lock`.
     - **What it does:** runs `just living-generate` on the checked tree and fails the merge when `git status --porcelain living/bindings` then shows a change. The check already built the module, so cargo rebuilds nothing when it is current.
@@ -100,18 +112,139 @@ set -o pipefail; just living-merge plan-3 -m "Merge plan-3: what it brings"
 5. Pushes the checked merge commit as a compare-and-swap: `git push --force-with-lease=refs/heads/main:<base> origin <merge>:refs/heads/main`. It lands only while `main` is still exactly the commit that was merged onto and checked, so it never lands on a `main` that moved or was rewound meanwhile. When the push is refused and the remote `main` is no longer the base, the tool re-fetches, merges the same branch commit onto the new `main` and checks again; stamps skip the steps whose inputs the new `main` did not change. It tries up to `--retries` times (5; exit 7 after). If the branch was merged by someone else meanwhile, it stops with nothing to push (exit 0). Any other push failure stops (exit 8) with the checked merge left in HEAD, and any other git failure stops with the summary (exit 9).
 6. Prints every git command it ran and a summary. The check's output is also kept in `~/.local/state/slop-merge/<time>-<branch>.log`.
 
-`--no-push` stops after a passing check. `python3 living/tools/merge_selftest.py` drives all of this against a throwaway remote (24 checks):
+`--no-push` stops after a passing check. `python3 living/tools/merge_selftest.py` drives these cases against a throwaway remote.
+
+- fake `df` and `du` for cold and warm targets, the 2 GB minimum, a retry at 48.8 GB free, separate target and trial filesystems, and the overrides;
 - the dirty-worktree, local-commit, conflict, failing-check and dirtying-check refusals;
-- a failing and a passing scene gate (a stand-in command);
+- a failing and a passing scene gate (a stand-in command), and a failed gate's genesis fuel per seed in the summary;
+- a stale seed stopping the merge before the check (a stand-in command);
 - a `main` that moves during the check, and one rewound during the check;
 - a branch merged by someone else meanwhile, an unknown branch, and a clean merge;
 - the bindings check with a stand-in generator: bindings that change fail and are named, a failing generator fails, unchanged bindings pass, and a docs-only merge skips it.
 
 ### The scene gate
 
-`just living-merge <branch> --scenes` (or `LIVING_MERGE_SCENES=1`) runs the scene gate, [`scene_gate.py`](../living/tools/scene_gate.py), after a passing check and before the push. `just living-check` builds and runs cargo tests only; no scene runs against a live authority, so `fix-place-free` (e3f0527f) merged green while verify-minds `dealings` and verify-player's combat staging went red on main. When the merge's diff against `main` touches behaviour (`living/authority`, `rules`, `scripts`, `mind`, `seeds`, `configs`, `bindings`, the workspace manifest or lock, or the drivers the gate runs), the gate runs real scenes with the fake model on scratch `verify-gate-*` databases: verify-core `tick`, `sight`, `senses`, `refusal` (one default-seed world) and `skirmish` (island), verify-minds `roundtrip`, `acts`, `dealings`, `conversation` (each its own world, the real `living-mind`), verify-player `combat` (`--scene all`, island), and `mind-unit`, living-mind's cargo tests (the check builds the mind but tests only `living-rules`). The four worlds and the tests run at once. Client, viewer, docs, other tools and verify-ui changes skip it in under a second. A failing case runs again once, alone, on a fresh world; the gate fails only on a case that fails twice and passes on `main` (the merge's first parent, run in its own checkout, `~/.local/state/slop-merge/scene-gate/main`, built in `main-target` beside it). A case that also fails on `main` is reported as red on main too, does not block, and stays on the red-on-main list until it passes on main. The list is in git, so every machine's gate shares it: the branch `red-on-main` (one file, `red-on-main.json`; never merged into main) is fetched before every gate command and written by commits pushed without force, fetched and retried when another writer got there first; the local file (`LIVING_GATE_REDS`, `~/slop-mq/red-on-main.json` on the Spark) is a cache, read only when the fetch fails, which the gate says ([`scene_gate_selftest.py`](../living/tools/scene_gate_selftest.py): an add on one clone seen on another and back, eight racing writers on two clones, the fallback); every gate run prints the list and `just living-scene-gate reds` prints it alone (the daily digest). `reds --add CASE --skill S --who OWNER --reason WHY` lists a known red by hand, `reds --drop CASE` removes one, and `recheck` runs every listed case it can (the gate's own and any verify-minds case) on `origin/main`, dropping the green ones. A listed part of a case, a mind test `living-mind::<test>` or a combat scene `combat:<scene>`, is reported when it fails but does not fail its case; such parts are dropped by hand. A failed gate restores HEAD and pushes nothing (exit 10). When `main` moved and the merge is redone, the gate runs again only if the new `main` commits touch behaviour. It uses the Spark's trial server by default (`slop-trials-stdb`, `http://127.0.0.1:3320`; `LIVING_GATE_STDB_CONTAINER`, `LIVING_GATE_STDB_URL`), never Neo4j, and deletes its databases in every case. See the verify skill's "Scene gate" for the case list, flakes and evidence.
+`just living-merge <branch> --scenes` (or `LIVING_MERGE_SCENES=1`) runs the scene gate, [`scene_gate.py`](../living/tools/scene_gate.py), after a passing check and before the push. `just living-check` builds and runs cargo tests only; no scene runs against a live authority, so `fix-place-free` (e3f0527f) merged green while verify-minds `dealings` and verify-player's combat staging went red on main. When the merge's diff against `main` touches behaviour (`living/authority`, `rules`, `scripts`, `mind`, `seeds`, `configs`, `bindings`, the workspace manifest or lock, or the drivers the gate runs), the gate runs real scenes with the fake model on scratch `verify-gate-*` databases: verify-core `tick`, `sight`, `senses`, `refusal` (one default-seed world) and `skirmish` (island), verify-minds `roundtrip`, `acts`, `dealings`, `conversation` (each its own world, the real `living-mind`), verify-player `combat` (`--scene all`, island), verify-client `cues` (since frame-views: `cues.py`, row-level security keeps each player's cues to that player and the `cue_transport_on` law off writes none, and `near_tier.py`, the near tier engaged first) and `motion_tables` (since battle-views: `motion_tables.py`, the public copy tables reach only their viewer and each delivery law off empties its table at once), one default-seed world and the SDK probe, which the gate builds, `combat_feed` (since views step 2: `combat_feed.py`, a player's combat feed as event rows reaches only its viewer and equals `my_combat`), `copy_privacy` (since copy-privacy, only when the merge touches `frame.rs`, `perception.rs`, `tables.rs`, `combat.rs` or its drivers: `battle_viewers.py --privacy`, 16 viewers round a 60-fighter battle, every copy row each viewer receives its own), and `mind-unit`, living-mind's cargo tests (the check builds the mind but tests only `living-rules`). The world groups and the tests run at once. A change to how the client draws (shaders, character drawing, the camera and sight drawing, the verify-ui drivers) runs the [render group](#the-render-group): verify-ui's `looks`, `hair`, `seat`, `camera-faces`, `camera-lod` and `far`, after the other groups, on the host with a pinned [render asset set](#render-asset-set) (dev-box), and elsewhere `render-smoke` and a refusal until dev-box records a pass. Other client paths, the viewer, docs, other tools and the rest of verify-ui skip it in under a second. A failing case runs again once, alone, on a fresh world; the gate fails only on a case that fails twice and passes on `main` (the merge's first parent, run in its own checkout, `~/.local/state/slop-merge/scene-gate/main`, built in `main-target` beside it). A case that also fails on `main` is reported as red on main too, does not block, and stays on the red-on-main list until it passes on main. The list is in git, so every machine's gate shares it: the branch `red-on-main` (one file, `red-on-main.json`; never merged into main) is fetched before every gate command and written by commits pushed without force, fetched and retried when another writer got there first; the local file (`LIVING_GATE_REDS`, `~/slop-mq/red-on-main.json` on the Spark) is a cache, read only when the fetch fails, which the gate says ([`scene_gate_selftest.py`](../living/tools/scene_gate_selftest.py): an add on one clone seen on another and back, eight racing writers on two clones, the fallback); every gate run prints the list and `just living-scene-gate reds` prints it alone (the daily digest). `reds --add CASE --skill S --who OWNER --reason WHY` lists a known red by hand, `reds --drop CASE` removes one, and `recheck` runs every listed case it can (the gate's own and any verify-minds case) on `origin/main`, dropping the green ones. A listed part of a case, a mind test `living-mind::<test>` or a combat scene `combat:<scene>`, is reported when it fails but does not fail its case; such parts are dropped by hand. A failed gate restores HEAD and pushes nothing (exit 10). When `main` moved and the merge is redone, the gate runs again only if the new `main` commits touch behaviour. It uses the Spark's trial server by default (`slop-trials-stdb`, `http://127.0.0.1:3320`; `LIVING_GATE_STDB_CONTAINER`, `LIVING_GATE_STDB_URL`), never Neo4j, and deletes its databases in every case. See the verify skill's "Scene gate" for the case list, flakes and evidence.
 
 Measured on the Spark on 2026-11-12, load average 75–105 on 20 cores, private `CARGO_TARGET_DIR`: the scenes' first pass takes 199–284 s, with the four worlds at once. A case failing once adds its retry (45–85 s). A case failing twice also adds main's run of it: 21–302 s, the most when main's checkout builds cold. Whole gates: 265 s when `sight` was broken, and 753 s on a main where `dealings` was red (a cold main build). A real `living-merge --scenes --no-push` of a behavioural branch took 1263 s: the check 993 s, the scenes 265 s, git about 5 s. A push adds seconds. A docs-only merge skips the gate in 0.1 s.
+
+#### Genesis fuel
+
+**Why.** SpacetimeDB 2.14.1 gives every reducer call, `init` included, [120 × 10⁹ Wasmtime fuel](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/client-api-messages/src/energy.rs#L126-L142) (`FunctionBudget::DEFAULT_BUDGET`, one fuel unit per wasm instruction). A call that runs out fails, and a failed `init` refuses the publish. The island's `init` was a few tenths of a percent short of it when status-parts' extra ~1 × 10⁹ stopped island worlds from publishing on dev-box (2026-11-19), and nothing caught it before the merge. The gate now measures every seed's genesis on every gated merge, pass or fail.
+
+**What it publishes.** Before the scenes, the gate publishes a fresh scratch world `verify-gate-<stamp>-fuel-<seed>` for each seed in `GENESIS_SEEDS`: `island` (the skirmish, minds and player combat worlds), `cullet`, `cullet-laws` and `plan-test` (verify-player's fixtures), then `world` (the core, mechanics and client scenes reuse its build). Each world is deleted through `verify.py cleanup`, which pauses it, confirms the pause and deletes it with the shared `world_delete.py` rule. Keep `GENESIS_SEEDS` in step when a scene or player fixture adopts a new seed. `just living-scene-gate run --genesis-only` runs the same publishes without the scenes or the red-on-main list.
+
+**How it reads fuel.** The gate reads the server's [`/v1/metrics`](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/client-api/src/routes/mod.rs#L74) and takes, for the fresh database's identity (`db`) and `reducer="init"`, the counter [`reducer_wasmtime_fuel_used`](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/datastore/src/db_metrics/mod.rs#L109-L112) and the call count `spacetime_reducer_plus_query_duration_sec_count` (the histogram [`spacetime_reducer_plus_query_duration_sec`](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/core/src/worker_metrics/mod.rs#L711-L714)). Both are recorded for every reducer call, failed calls included ([`call_reducer_with_tx`](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/core/src/host/wasm_common/module_host_actor.rs#L1223-L1231), [`VmMetrics::report`](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/core/src/host/wasm_common/module_host_actor.rs#L2070-L2077)). `init_fuel` is the counter divided by the count. A fresh publish runs `init` twice: standalone first [checks the module on an in-memory database](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/standalone/src/lib.rs#L317-L321) ([`check_module_validity_with_environment`](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/core/src/host/host_controller.rs#L561-L597), opened under the same database identity, [`try_init_in_memory_to_check`](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/core/src/host/host_controller.rs#L1542-L1557)), then initializes the real replica. The gate requires exactly two runs after a successful publish. The name is [registered before the check](https://github.com/clockworklabs/SpacetimeDB/blob/v2.14.1/crates/client-api/src/routes/database.rs#L1541-L1564), so a refused publish still reports its fuel. A missing or duplicate series fails the seed, never passes it. The counters live as long as the server process, and each publish has a new identity, so parallel publishers and earlier worlds do not mix. The check adds no reducers, tables or subscriptions.
+
+**Rules.** Per seed, on `init_fuel`:
+
+- **The headroom rule:** fail when fuel is over 90% of the budget (108 × 10⁹), that is under 10% headroom (`SLOP_GATE_GENESIS_HEADROOM`, default 10). Warn above 50%.
+- **The interim rule, "must not rise":** a seed that is already over 90% passes only when it has a baseline in [`genesis_fuel_baselines.json`](../living/tools/genesis_fuel_baselines.json) for the gate's rustc and its fuel is at most 0.1% above that baseline. An over-90% seed with no baseline for this rustc fails and says so.
+- **Graduating:** a seed with a baseline uses the headroom rule as soon as its measured headroom reaches the required headroom, automatically, measurement by measurement. To make that permanent, or to put a seed back on the headroom rule at once, delete its entry from `genesis_fuel_baselines.json` (one line per toolchain).
+- `SLOP_GATE_GENESIS_CHECK=0` skips the check with a warning in the output and `genesis_disabled: true` in the record.
+
+Genesis failures stop the gate before the scenes (exit 1). They are not retried and the red-on-main list does not excuse them: the same module counts the same fuel. Three rounds on the same module gave identical `init_fuel` for four seeds, and `cullet-laws` varied by 38 fuel units.
+
+**Baselines are per toolchain.** Fuel counts the instructions of the module that rustc produced, so another rustc gives other numbers for the same source: the island with status-parts measured 119.79 × 10⁹ on dev-box (rustc 1.97.1, x86_64) and 118.735 × 10⁹ on the Spark (rustc 1.99.1, aarch64). The repository pins no toolchain. The file is keyed by seed and then by `rustc --version`, as the gate prints it. Each machine that runs the gate records its own baseline. A record that has one only for another rustc fails and names the toolchains it has. Record from a gate's evidence:
+
+```bash
+just living-scene-gate run --genesis-only          # on main, after the change the baseline is for
+just living-scene-gate genesis-baseline .local/living/verify/gate-<stamp>/genesis.json island
+```
+
+`genesis-baseline` takes a clean two-run measurement only and records `init_fuel`, `commit` and the date for that record's rustc. Commit the file with the reason in the message.
+
+**Output.** Each seed prints one line, forwarded by the Spark queue (it forwards `scene-gate:` lines), for example:
+
+```text
+scene-gate: genesis island: init 118.735e9 fuel per run (2 init runs), 98.95% of the 120e9 budget, 1.05% headroom; rule 10% minimum headroom, limit 108.000e9; init 118.735e9 is over its limit 108.000e9: under 10% headroom and no recorded baseline in genesis_fuel_baselines.json — FAIL
+```
+
+`living-merge` adds `genesis init fuel per run: island 118.735e9, 98.95% FAIL; …` to its summary on a pass and on a failure. The evidence folder's `genesis.json`, and `gate.json` (and `--json`) under `genesis`, hold one record per seed with dev-box's staged-genesis (`docs/STAGED_GENESIS.md` on the `staged-genesis` branch) field names: `seed`, `commit`, `init_fuel` (per run), `init_runs`, `steps` (`phase`, `label`, `fuel`, `reducer`), `largest_step_share` and `budget`. The gate adds `toolchain`, `headroom_pct`, `policy`, `limit_fuel`, `baseline_fuel`, `warnings`, `failures`, `passed`, the database and its identity, and the paths of the launch log and the two metric series (`genesis-<seed>.prom`).
+
+**Staged genesis.** When `living/tools/genesis_fuel.py` exists in the tree under test, the gate runs `genesis_fuel.py --seed SEED` with the gate's server environment and reads one JSON object in that format from its stdout (stderr goes to the log). `--genesis-fuel-report FILE`, once per seed, reads reports already made for the commit under test. The gate checks the report's seed, commit, budget, two init runs and `largest_step_share`, then applies the rules to `init` and to **every step**, each against its own full budget (each scheduled step is its own reducer call). The interim baseline applies to `init` only.
+
+Measured on the Spark (rustc 1.99.1, aarch64) on 2026-11-20, private `clockworklabs/spacetime:v2.14.1` server. Main `3ed22a74` (its module is battle-views' `a407be01`, with status-parts): three `--genesis-only` rounds of 193–210 s, five publishes in a row. Main `bfbbc079` (overlay-validate-once on top: a seed's laws overlay is validated once, about 24.8 × 10⁹ less on both Cullet seeds): one gate run with the generation cases, 182 s.
+
+| Seed | `init_fuel` per run, `3ed22a74` | `bfbbc079` | Share of budget (`bfbbc079`) | Result under the default rules |
+| --- | --- | --- | --- | --- |
+| island | 118,734,992,179 | 118,734,992,179 | 98.95% (1.05% headroom) | fails: over 90%, no baseline |
+| cullet | 91,829,020,112 | 66,994,189,556 | 55.83% | passes, warns |
+| cullet-laws | 62,997,679,071–147 | 38,169,278,708 | 31.81% | passes |
+| plan-test | 26,997,746,345 | 26,997,746,345 | 22.50% | passes |
+| world | 17,614,179,252 | 17,614,179,252 | 14.68% | passes |
+
+TODO (Spark): record the island's baseline for rustc 1.99.1 from a `--genesis-only` run on main once the status-parts revert is on main. Until then, every gated merge on the Spark fails on the island. Dev-box records its own for its rustc.
+
+#### Generation smoke
+
+The cases `generation-default` (`world`), `generation-island` (`island`) and `generation-cullet` (`cullet` and `cullet-laws`) run verify-generation's per-world checks (`generation.py --run RUN --smoke`): the world's day, **the seed's laws composed over the shipped script** (or the shipped script alone), dimensions and terrain chunks, settlements, residents and their sheets, bands, animals and resources, rhythms, land and plans, looks and body sex, and no sheet secret in a public table. The smoke pauses the world and reads its tables. It runs no native digest comparison, repeatability, floors or build: those stay in the full skill. In the first pass the smoke reads the genesis fuel worlds before they are deleted, so it publishes nothing of its own and adds seconds. A retry, or main's run of it, launches its own world. A passing world keeps `checks.json` and `smoke.json` (an island's table snapshots are about 60 MB). A failing one also keeps the snapshots.
+
+A failing check is a part, `<case>:<seed>:<check>`, that the red-on-main list can hold like `combat:<scene>`. The case passes when every failing check is listed, and says which. `recheck` cannot run a part, so drop it by hand (`just living-scene-gate reds --drop '<key>'`) once it is green. Listed on 2026-11-20 against main `bfbbc079`: `generation-cullet:cullet-laws:the seed's laws are composed over the shipped script` (red on both cullet-laws seeds; fixed separately after status-parts-genesis), and Cullet's two look checks `generation-cullet:cullet:the cases are of the world's generation` and `generation-cullet:cullet:each band case's resident wears its entry, in its band, with its line, at its stage (11 cases)` (the stale compiled seed below; dev-box's `cullet-looks-seed`).
+
+#### The render group
+
+**Why.** The gate classed every client path as non-behavioural, so a shader or character-drawing change (char-port-2 S5's `toon.wesl` and `handmade.rs`) merged with no verify-ui case run. The render group runs verify-ui's drawing cases ([`check.py`](../.agents/skills/verify-ui/scripts/check.py)) when a merge changes how the client draws, and only then.
+
+**What selects it** (`RENDER_CHARACTER`, `RENDER_CAMERA`, `RENDER_BOTH` in [`scene_gate.py`](../living/tools/scene_gate.py); `*` stays within a folder, `**` crosses folders):
+
+| Class | Paths (under `living/game/src/` unless named) | Cases |
+| --- | --- | --- |
+| both (matched first) | every `*.wesl` (the shaders), `living/game/Cargo.toml`, `.agents/skills/verify-ui/scripts/**` | all six |
+| character | `characters/**` (`compose.rs` among them), `characters.rs`, `handmade.rs`, `compose.rs`, `lookdev.rs`, `looks.rs`, `style.rs`, `bodies.rs`, `anim.rs`, `gait.rs`, `ik.rs`, `twist.rs`, `mouth.rs`, `facing.rs`, `post.rs`, hair files (`**hair*.rs`) | `looks`, `hair`, `seat` (about 6 minutes on dev-box) |
+| camera | `camera.rs`, `perf.rs`, `fade.rs`, `envs.rs`, `sightfield.rs`, `sightedge.rs` (the camera, LOD and sight) | `camera-faces`, `camera-lod`, `far` (about 5 minutes) |
+
+The split is automatic (render-autosplit, 2026-11-21; the whole group took about 11 minutes on dev-box's first pass, `looks` about 196 s of it): a merge runs the half its drawing paths select, and both halves when it touches a path of each or a path of the first row. Every other client path keeps its classing: it selects nothing. A merge that touches drawing paths and no behavioural path runs the render group alone: no genesis fuel, no authority scenes. `--render-split` and `LIVING_GATE_RENDER_SPLIT` are retired (the flag is accepted and ignored, with a note); `--render-only --force` runs all six whatever the diff selects, for a manual full pass.
+
+**How it runs.** After every other group has finished, never beside one (dev-box's `mechanics` already takes about 480 s under load), one case at a time: `looks` on a Cullet world, then `hair`, `seat`, `camera-faces`, `camera-lod` and `far` on one island world (`gate-<stamp>-<tag>-cul`, `-isl`). The gate checks the set (`render_set.py check`), links it (`render_set.py link`), builds the release client into its `CARGO_TARGET_DIR` and runs `check.py --run <run> <case>` under `uv run --no-project --with pillow --with numpy` (the pixel checks), with `WGPU_VALIDATION`, a window, a theme, a forced shine or look book and `RUST_LOG` taken out of the environment: Vulkan validation layers log benign ERRORs. `check.py` and `drive.py` accept the gate's `gate-*` runs (`verify-gate-*` worlds). A failing case runs again once on a fresh world and is judged on main, as every case is; the red-on-main list holds render cases too.
+
+**Verdicts.** A case passes when `check.py` exits 0 and the client logs of its drives (every `ui/<drive>/client.log` it wrote) hold none of:
+
+- **shader/pipeline** (the code): ERROR lines from `wgpu`, `wgpu_core`, `wgpu_hal`, `naga`, `bevy_render`, `bevy_pbr` or `bevy_core_pipeline`, and any ERROR line with `Shader`, `pipeline` or `Validation Error`;
+- **asset** (a load failure: the code or the set): ERROR lines from `bevy_asset` (an unapproved path, a load failure, a missing file);
+- **panic**: a `panicked at` line.
+
+WARN lines never fail (ShadowLodOrigin, bevy_egui's bindless, winit's Destroyed, the websocket's close and `offline` at teardown, `view`'s "no clip or view", `live`'s "no UI node"). The case's note names each verdict with its first line. A third verdict is the set's, not the case's: **asset set stale** when a drive logged that the book lacks a key or the world's generation (`is not in the look book`, `which the look book (…) does not hold`, `no look book at`), outside the drives that leave one out on purpose (`looks`, `looks-generation`, `camera-faces`). It ends the gate with exit 2 and no retry.
+
+**Where it runs.** On the host with a pinned set ([below](#render-asset-set)): dev-box. Elsewhere (the Spark), the gate prints `render: not run here; needs a pinned asset set (dev-box)` and refuses the merge (exit 1, each render case `needs-render-host`) unless dev-box recorded a render pass for the same content covering every half the merge needs. That host runs `render-smoke` instead, which needs no set: the VRoid bases (fetched once into `~/.cache/slop-render-smoke`, pinned to the mirror's commit and their sha256), the look-dev island tour and one live drive (`ready`, Middle, Near and Far photographs) on an island world; it fails on a client that does not finish and on shader, pipeline and panic lines (missing kits, textures and the book are expected there). It never stands in for the render cases.
+
+**Recorded render passes.** A render host that passes its render cases (`pass`, `flaky-pass` or `red-on-main`) records them on the branch `render-passes` (one file, `render-passes.json`; never merged; written like the red-on-main list, without force), keyed by the content: a hash of the trees of `living/`, `.agents/skills/verify/` and `.agents/skills/verify-ui/`. The same merge made on two machines (two merge commits) has one key, and a docs commit on main keeps it. A pass covers a (content, half) pair: a half counts only when every one of its cases passed for that content, so a character-half pass does not let a camera change through, and a merge that needs both halves needs both covered. Passes for one content merge into its entry (its `cases`, and `halves`, the halves they now cover), so a character pass and a later camera pass together cover both. An entry recorded before the split (`2ed2d93d65c7`, all six cases, no `halves`) covers both halves by its cases. A case recorded `red-on-main` covers its place in the half only while the shared red-on-main list still holds it (once dropped, main is green for it and dev-box must run it again: the refusal names it in `--cases`); it does not block, as no red-on-main case does, but the Spark's gate never reports it as passed: its status is `recorded-red-on-main`, a `WARNING render: <case> did not pass in dev-box's recorded pass` line names its owner and evidence, and the result reads `passed (red on main too: <case> (in dev-box's recorded pass, not passed))`. To let a refused merge through, dev-box makes the same tree (the gate prints how: merge the branch's head into the same main, and the content key to expect) and runs `just living-scene-gate run --render-only --base <main>` there; when the other half is already recorded the refusal adds `--cases` with only the missing half's cases. The next gate on the Spark reads the pass and reports each case `recorded-pass`, naming the halves it covered. `--render-only` runs only the cases of the halves the diff selects (all six with `--force`); `--cases` names cases exactly. `recheck` runs listed render cases only where a set checks ok against main.
+
+**Host load.** The render cases are timing-sensitive (dev-box's `seat` failed 4 of 4 at a 1-minute load of 15 to 29, 2026-11-20, from a Blender batch that bypassed the gate pause and a mechanics container). The gate reads the host's 1-minute load average at the start and end of every render group and render-smoke run (after the client build, around the drives) and keeps them in `gate.json` (`load`); the results list them, and a value over 8 (`LIVING_GATE_LOAD_WARN`) prints `WARNING <group> (<tag>): <host>'s 1-minute load was over 8 …; a failure here may be load-made`. A recorded pass keeps its render group's load, and the Spark's gate prints it (and the warning) when it reads the pass.
+
+**Cost.** On the Spark (GB10, Vulkan, no display; no set; 2026-11-20, CPUs 0-4 and 10-14, a private server), a rendering-only change (one line in `toon.wesl`), the whole `scene_gate.py run`: cold (an empty target folder) 360 s, of which the client's release build 311 s; warm (the client rebuilt for the change) 121 s, of which the build 71 s. In a merge the check has already built the release client into the same target folder, so the gate adds about 50 s there: the look-dev tour (about 40 s), an island world and one live drive, then refuses the merge until dev-box records a pass. A shader that does not compile (an unknown name in `toon.wesl`) failed `render-smoke` twice, 24 `bevy_render::render_resource::pipeline_cache: failed to process shader` lines, in 114 s and 43 s. dev-box's full group (the six cases, set 79072c65d37f, 2026-11-20): about 11 minutes, `looks` on Cullet about 196 s; hence the automatic split (a character change about 6 minutes, a camera change about 5).
+
+#### Render asset set
+
+The render group needs the game client's git-ignored assets. The gate does not generate them: it reads one pinned, read-only **asset set**, built on dev-box by [`render_set.py`](../living/tools/render_set.py) (its docstring is the format), and links it into its checkout. Sets are built on dev-box because the composed bundle's KTX2 pictures are byte-identical only on dev-box's kernel ([CHARACTERS.md § Pictures as KTX2](CHARACTERS.md#pictures-as-ktx2)).
+
+- **Build:** `render_set.py build --bundle <KTX2 bundle> [--pin]` from a clean checkout of a main commit with its generated assets built, and the composed bundle of the same commit (`living/tools/characters/bundle.py --with-clips`). It writes `~/slop-assets/<id>/` (`<id>` the first 12 hex digits of the bundle's sha256), read-only: `assets/` laid out as `living/game/assets` (the VRoid and KayKit bases, the animated bases, the composed characters and `own-clips.glb`, `view/`, `textures/`, `envs/<name>/`, `characters/looks.json`), `bundle/` (the bundle as built, its `MANIFEST.txt`, the world look data), `SET-MANIFEST.txt` (every file under `assets/` with its sha256) and `set.json` (schema 2: `id`, `bundle` {file, sha256, commit, port, pictures}, `main_commit`, `generator_trees`, `generator_tree` (the generator hash, which leaves out the listed non-generating tools: [Building the render asset set](#building-the-render-asset-set)), `generator_exclude`, `looks` {book, generations, worlds}, `clips`, `files`, `bytes`, `built`, `build_seconds`). `--pin` (or `pin SET`) moves `~/slop-assets/current` to it atomically.
+- **Where the gate looks:** `LIVING_GATE_RENDER_ASSETS`, default `~/slop-assets/current`. A host without it does not run the render group; a dangling `current` counts as a set, and a broken one.
+- **Check** (`render_set.py check [SET] --repo <checkout>`, one JSON verdict), mapped by the gate, each a setup failure (exit 2) that does not blame the merge:
+  - `corrupt` (exit 1, or a check that cannot run): a file's sha256 is not `SET-MANIFEST.txt`'s, or a file is missing or extra. The gate says `asset set corrupt`.
+  - `stale` (exit 2): the checkout's generator tree (`git rev-parse HEAD:living/tools/{blender,characters,textures}`, hashed together) is not the set's, or a world's look generation (`living/seeds/worlds/<w>/looks.json`) is not in the set's book. The gate says `asset set stale`. A branch that changes a generator passes only with a set built from its own head, given with `LIVING_GATE_RENDER_ASSETS`; its worker builds that set, and after the merge dev-box pins it.
+- **Link** (`render_set.py link SET --repo <checkout>`): `lookdev`, `view`, `textures`, `characters/looks.json` and each `envs/<name>` as symlinks into `living/game/assets`, refusing to replace anything that is not a link. The ignore patterns match the links as they matched folders, so a gate's checkout stays clean; the links stay until the next link replaces them.
+- **What a set does not cover yet:** main's defaults only (no `SLOP_PORT` hair or ink pages until char-port-2's S8), so the KTX2 path is exercised through the bundle's other pictures, not a hair-mask page.
+
+### Seed freshness
+
+[`seed_fresh.py`](../living/tools/seed_fresh.py) compares every compiled seed with the sources it is compiled from, files only (no publish, no build, no model; about 0.5 s). Each `living/seeds/worlds/<world>/` compiles into `living/seeds/<into>.json` through `author_world.py <world> --compile-only` (`into` from `cast.json` or `world.json`, else the world's name). Cullet's land, plan, ways and town life come from `cullet_plan.py`. The compilers stamp nothing but the look data's own `generation`, so the check compares each block as its compiler copies it:
+
+- `looks`: the seed's `looks.generation` against `looks.json`'s, then the whole block, then each resident's `look`;
+- `ways`: `ways.json`'s `top`, `common` and `occupations` entries in the seed's `ways`, its `town_life`, and its `work` within the seed's `town_life.work`;
+- `residents`: the residents against the drafted sheets in `sheets/*.json` by name, and each sheet's narrative;
+- `plan`: Cullet's `cullet_plan.py --check`, which rebuilds the plan, the land seed and the game's ground map in memory and compares them byte for byte.
+- `compile`: the whole seed. `author_world.py <world> --compile-only --seed-out TMP` compiles the world over the tracked seed into a scratch file (about 0.1 s a world), and the two must be equal as JSON. It catches a field the compiler learned after the seed was last compiled, which the targeted blocks above do not name (aske-coast's `sheet.pastimes` from `efcd489a8`, found 2026-11-20).
+- `derived`: a tracked seed whose `run` names an authored world without being its seed (aske-coast's `-crypercept`, `-dynamic` and `-yieldnorm`, which differ only in their own `rules`) must carry the compiled world's residents exactly. Nothing recompiles a derived seed: rebuild it by copying the recompiled world's residents into it, keeping its own blocks.
+
+`just living-scene-gate seeds` runs it with the red-on-main list, and `living-merge` runs that before the check. A stale block prints, for example:
+
+```text
+scene-gate: seeds: stale cullet looks: look generation c4-e61b01c0 in the seed, c4-cbcc40bf in living/seeds/worlds/cullet/looks.json; recompile: python3 living/tools/cullet_plan.py && python3 living/tools/author_world.py cullet --compile-only
+```
+
+A block listed red on main as `seeds:<seed>:<block>` is reported and does not fail. On 2026-11-20 `aske-coast` and `island` are fresh. `cullet` is stale: look generation `c4-e61b01c0` against `c4-cbcc40bf`, and 55 residents' looks. It is listed as `seeds:cullet:looks` until dev-box's `cullet-looks-seed` lands. Seeds that are hand-written, such as `plan-test` with its look fixture, or that read a source at build time, such as the `laws_file` of `cullet-laws`, have nothing to go stale.
+
 
 ## Disk
 
@@ -130,10 +263,18 @@ Measured on the Spark on 2026-11-12, load average 75–105 on 20 cores, private 
 | Machine | Floor | Target (floor + 30 GB, about one cold check build) |
 | --- | --- | --- |
 | dev-box | 40 GB | 70 GB |
-| Spark | 60 GB proposed (`--floor-gb 60`): its paid trial servers write to the same disk, and several agents build cold at once | 90 GB |
+| Spark | 60 GB (`--floor-gb 60`): its paid trial servers write to the same disk, and several agents build cold at once | 90 GB |
 | laptop | 40 GB (the default; set `--floor-gb` when installing) | 70 GB |
 
 When the folders that may go are gone and free space is still under the floor, the report says so (exit 3), and the list shows what holds the rest.
+
+**Merge pre-check.** `living-merge` requires the floor plus the remaining check allowance on each filesystem holding its worktree or Cargo target. On each attempt, including automatic retries, it subtracts the space already allocated in the resolved Cargo target from the 18 GB cold allowance and reserves at least 2 GB. This uses the same calculation as the check’s start guard. The merge tool reads the cleaner's installed `--floor-gb` from the systemd user service or launchd agent and uses 45 GB when there is no installed floor. A cold target requires 63 GB with the fallback floor or 78 GB with the Spark's installed 60 GB floor. Units match the cleaner (1 GB = 1,024³ bytes).
+
+On the Spark on 2026-11-19, `just living-check` passed in 949 s from a fresh worktree at `49adf9a3`, with an empty private `CARGO_TARGET_DIR`, eight Cargo jobs, the Spark sysroot and stamps forced off. The worktree and target grew by a sampled peak of 17.62 GB (18,915,008,512 allocated bytes), measured with `du -sk` during the check.
+
+The `--scenes` allowance for scratch databases is 1 GB on a filesystem also used by the trial server, as on the Spark (79 GB total for a cold target). This is an estimate. The [trial disk inventory](trial-disk/removal-list-20261112.tsv) records 0.093 GB for one player scene replica. The separately alarmed [trial volume](TRIAL_DISK.md) only adds to the threshold when its filesystem matches the worktree or Cargo target filesystem.
+
+Set `SLOP_MERGE_FLOOR_GB` to override the floor, or `SLOP_MERGE_CHECK_GB` to override the cold check allowance. A host with the 40 GB cleanup floor can set `SLOP_MERGE_FLOOR_GB=45` to retain the dev-box wrapper's 63 GB threshold for a cold check. `SLOP_MERGE_DISK_CHECK=0` disables the pre-check and always prints a warning.
 
 **Never touched:**
 
@@ -229,6 +370,105 @@ living/tools/disk_clean_install.sh --uninstall
 On Linux the timer runs without a login when lingering is on (`loginctl enable-linger`). The Linux timer runs on a calendar schedule (`OnCalendar=*:0/30` for the default 30 minutes) and the installer warns when the timer has no next trigger. The earlier `OnUnitActiveSec` form counted from the service's last run, so a timer stopped and restarted after that moment had passed showed `elapsed` and never fired again (seen on the Spark, 2026-11-12). An interval that does not divide an hour keeps that form, with `OnActiveSec=1min` so a restart always schedules a first run. On macOS the same command writes and loads the launchd agent `~/Library/LaunchAgents/dev.slop.disk-clean.plist` (every 30 minutes, log in `~/.local/state/slop-disk/launchd.log`). Full Disk Access is optional; see the known limit above.
 
 [`disk_report.sh`](../living/tools/disk_report.sh) still reports free space and big folders across the machines; it deletes nothing.
+
+### Removing a worktree
+
+`git worktree remove --force` deletes a worktree's untracked and git-ignored files with it, and in this project those are evidence: `.local/` verification runs, stills, measurement series, uncommitted edits. Evidence was lost this way more than once (the dev-box's eight `mechanics-flake` proof runs on 2026-11-20 among them). Remove worktrees with `living/tools/wt_remove.py PATH` (installed on each machine as `~/.local/share/slop-tools/wt-remove`), never with `git worktree remove --force` directly. It:
+
+- archives every untracked and ignored file (`git ls-files --others`), plus `tracked.patch` (`git diff HEAD --binary`), `status.txt` and a `manifest.json` (branch, HEAD, whether HEAD is on `origin/main` or any remote branch, host, time, counts), to `~/archive/worktree-evidence-<YYYYMMDD>/<name>-<HHMMSS>.tar.gz` with a `.sha256` beside it;
+- leaves out build caches, the folders holding a `CACHEDIR.TAG` (Cargo targets, sccache), listing them with their sizes (`--keep-caches` archives them too);
+- reads the archive back (every member present at its size, the digest recomputed) and only then runs `git worktree remove --force` from another worktree of the repository. The branch is kept.
+
+It refuses, before writing anything, the repository's main worktree, anything under `~/dev/slop-art-online`, a path that is not a worktree root, the worktree it runs in, and a worktree a process is working in (cwd inside it; `/proc` on Linux, `lsof` on macOS). `--dry-run` prints what it would archive. Standard library only, so the same file runs on the dev-box, the Spark and the laptop. Install: `install -m 755 living/tools/wt_remove.py ~/.local/share/slop-tools/wt-remove`.
+
+### Starting a container from a script or an agent
+
+Two rules for any script, queue or agent shell that starts or restarts a SpacetimeDB (or other) container with `podman start` or `podman run`:
+
+- **Its own systemd scope:** `systemd-run --user --scope --quiet podman start NAME`. Rootless podman's `conmon` and `fuse-overlayfs` otherwise join the caller's cgroup: started from an agent's shell, the overlay helper is lost within minutes (`podman exec` then fails with "transport endpoint is not connected"), and started from a systemd unit (the dev-box merge queue), stopping that unit kills the container's processes with it, a forced stop (dev-box, 2026-11-20). `~/.local/state/devbox-queue/run.sh` starts `coord-stdb` this way.
+- **No lock fd:** close the gate lock's descriptor in the command that starts the container, e.g. `systemd-run --user --scope --quiet podman start NAME 9>&-` for a lock held on fd 9 (`exec 9>~/.local/state/slop-build/gate.lock; flock -x 9`). A container started while a shell holds the lock inherits the descriptor in `conmon` and `fuse-overlayfs` and keeps the lock after the script exits: on 2026-11-20 a scratch server recycled inside a locked measurement held `gate.lock` for 70 minutes, stalling a merge gate for two hours and Blender's `flock -s` pause. Python's `subprocess` does not pass descriptors on by default (`close_fds=True`). To see who holds the lock: `fuser ~/.local/state/slop-build/gate.lock`, then `ps` on each pid; a container's `conmon` among them is this case, and stopping the (idle) container with `podman kill -s INT` releases it.
+
+## Building the render asset set
+
+The scene gate's verify-ui `render` group draws with the game client's generated assets, which are git-ignored and made on the dev-box only (Blender, the clip library, the KTX2 encoder's AVX2 kernel). The gate therefore reads a fixed, read-only set: `~/slop-assets/<id>/`, with `~/slop-assets/current` linking to the pinned one. [`living/tools/render_set.py`](../living/tools/render_set.py) builds, checks, links and pins sets. How the gate uses one is under the scene gate, [Render asset set](#render-asset-set). In short, it runs `check` and then `link`: exit 1 means corrupt, exit 2 stale. Its fields change only by a name the gate asks for, not by a fork of the format.
+
+**What a set holds.**
+- `assets/`, laid out as `living/game/assets`. From the checkout:
+  - the VRoid and KayKit bases;
+  - the animated bases with their clips, the wolf and the deer;
+  - `textures/`, `envs/<name>/`, and `view/` when present.
+
+  From the composed bundle:
+  - the types, pages, styles, strands and `own-clips.glb`;
+  - the look book.
+- `bundle/`: the bundle as built, its `MANIFEST.txt` and the world look data it was checked against.
+- `SET-MANIFEST.txt`: every file's sha256.
+- `set.json`:
+  - `bundle`: file, sha256, commit, port and pictures;
+  - `main_commit`, for provenance only;
+  - `generator_trees` (provenance), `generator_tree` (the generator hash) and `generator_exclude` (the list's file, sha256 and count);
+  - `looks`: the book's generations and each world's;
+  - `clips`;
+  - `book_drift`.
+
+`<id>` is the first 12 hex digits of the bundle file's sha256.
+
+**Stale or corrupt.** `check` compares a set with a checkout:
+- **corrupt** (exit 1): a file's sha256 differs, or a file is missing or extra;
+- **stale** (exit 2): the checkout's generator hash differs from the set's, or a world's look generation (`living/seeds/worlds/<w>/looks.json`) is not in the set's book.
+
+**The generator hash** (schema 2, since `render-set-exclude`) is a sha256 over every file of `living/tools/{blender,characters,textures}` (`git ls-tree -r`: mode, blob and path), less the non-generating tools listed in [`living/tools/render_set_exclude.txt`](../living/tools/render_set_exclude.txt), together with that list's own sha256. `build`, `check` and the bundle match all compute it with one function, `gen_hash`.
+- **What it ignores.** A main commit outside those folders, or an edit to a listed check or measuring tool (`cloth_check.py`, `book_drift.py`, the reference's measuring tools, …), leaves a set `ok`.
+- **What makes a set stale.** Any other edit inside them does, even one that changes no output: rebuild, or re-pack (below), and pin again after it lands. Changing the list itself does too, so it cannot be widened quietly.
+- **How the list is kept.**
+  - It holds explicit paths, no globs, each read before it was listed. A new tool stays a generator input until it is listed.
+  - A file a generator imports is never listed: `build` refuses a list whose files a non-listed file imports (`exclusion_imported`), and a listed path that is not in the trees.
+  - A file that both generates and checks (`pictures.py`, `shade_mean.py`) stays an input. Its check moves to a file of its own first, if it should be left out.
+- **The selftest:** `python3 living/tools/render_set_selftest.py`.
+
+**Re-pack, no Blender** (when only listed tools changed, or the hash's definition did). `bundle.py` and `render_set.py build` again, from a worktree at the new main with the last set's generated files in place. First restore the checkout-sourced files from the pinned set if anything rewrote them: `gen_buildings.sh` is not byte-reproducible. About 3 minutes. The assets come out identical (compare the two `SET-MANIFEST.txt`), with a new id and generator hash.
+
+**Rebuild and pin** (dev-box, about 41 minutes beside other Blender work at `JOBS=2`; 2026-11-20: 2,768 files, 407 MB). Work in a worktree at main, with no tracked changes. Use the full clip library, `~/archive/clip-library`. `animate.py` and `gen_person.sh` read it from `.local/kimodo/library` first. The coordinator's `.local/kimodo/outputs/library` is partial.
+
+```bash
+mkdir -p .local/kimodo && ln -sfn ~/archive/clip-library .local/kimodo/library   # the full clip library, where the bakes look first
+just living-game-assets                                 # 1-2: bases, textures, scenery, the bases' clip bake (under assets_guard.py)
+living/tools/blender/gen_types.sh                       # 3: the 21 types and their pages
+living/tools/blender/gen_styles.sh                      # 3: hair, outfit and overlay styles, strands.png
+python3 living/tools/characters/town.py .local/town --town living/seeds/cullet.json --models-only --no-pages --lod near --jobs 2   # 4: the 64 residents the checks need
+ONLY=present LOD=near living/tools/blender/gen_person.sh clips=man     # 5: the shared clip bake, own-clips.glb
+python3 living/tools/characters/bundle.py OUT --name render-set --with-clips --book SHIPPED_LOOKS.json \
+    [--allow-book-drift living/tools/characters/book-drift-<generation>.json]   # 6: the checks, PNG and KTX2 bundles
+python3 living/tools/render_set.py build --bundle OUT/render-set-<sha8>-ktx2.tar.gz   # 7: ~/slop-assets/<id>/, read-only
+python3 living/tools/render_set.py check ~/slop-assets/<id>    # must print "ok"
+python3 living/tools/render_set.py pin ~/slop-assets/<id>      # then, and only then
+```
+
+- **`--no-pages` (step 4).** Without it `town.py` writes town pages into `lookdev/pages/`. `pictures.py` then refuses them as pictures of no known class.
+- **The book.** It is the one the last bundle shipped (`--book`), never one rebuilt in place.
+  - `book_drift.py` rebuilds it into a scratch file. Outfit colours may differ by one level of 255.
+  - Known larger differences pass only through a reviewed, tracked list: `book_drift.py --json` writes it, and `--allow-book-drift` reads it. Its path and sha256 go into the manifest and `set.json`.
+  - `book-drift-c4-cbcc40bf.json` holds the 6 differences of 2026-11-20 (Wick Marl's smock jersey by 49 levels; the shipped book's colours were measured on an earlier build). The next generation, which rebuilds the book whole, deletes it.
+- **A set is never rebuilt in place.** A new bundle has a new id. `pin` replaces `current` atomically.
+
+**A generator branch builds its own** for its own render pass, without touching the pinned set. Its worktree, at its branch with no tracked changes, runs the same steps with `--root` set to a scratch root, and does not pin:
+
+```bash
+python3 living/tools/render_set.py build --bundle OUT/…-ktx2.tar.gz --root ~/slop-assets/branches/<branch>
+python3 living/tools/render_set.py check ~/slop-assets/branches/<branch>/<id> && python3 living/tools/render_set.py link ~/slop-assets/branches/<branch>/<id> --repo .
+```
+
+`link` symlinks `lookdev`, `view`, `textures`, each `envs/<name>` and `characters/looks.json` into the checkout's `living/game/assets`. The client reads its assets from its own checkout (`lookdev::asset_root`, a compiled-in path), so each worktree that draws needs the links or its own build. `.gitignore` matches the links as it matches the folders. With port output (`SLOP_PORT=hair,ink`), pass `--port hair,ink` to `bundle.py`: it refuses a build whose port files do not match.
+
+**Generated assets never change tracked files.** `just living-game-assets` runs under [`assets_guard.py`](../living/tools/assets_guard.py), which fails the run, naming them, if it changed any tracked file. The rules' footprint table (`living/rules/data/buildings.json`) is tracked because the authority and the client compile it in. It changes on purpose:
+- `just living-rules-table` gathers it from the generated models' sidecars under `envs/`, Cullet's lots included, and prints the diff to review;
+- the change merges as a rules change, through the gate with scenes.
+
+**Follow-up: the table writers' opt-in.**
+- **Today.** `gen_buildings.sh`, `gen_city.sh` and `gen_cullet.sh` still write the table on every full run. Their output equals the committed table, so the guard passes: on 2026-11-20 a full recipe run left every tracked file as it was.
+- **The opt-in.** Making the write opt-in (`RULES_TABLE=1`) touches the hashed `blender` tree. It therefore goes in with the next change to the generator trees that rebuilds its own set (char-port-2's S6 or S8). The patch is `~/.t3/worktrees/slop-art-online/t3-b749c655-2e53274b9e364084/.local/rs/blender-optin.patch` on the dev-box.
+
+**Known on main** (2026-11-20, `error-lines.txt` of the build). `gen_anim.sh`'s own `marker_check.py` exits 1: `strafe_run_left_v48` has "no contact window" for a foot on both VRoid bases, and so does `run_diag_br_v48` on Vivi. These are clip-library takes. The bake is written anyway, and the set records 84 clips a base.
 
 ## Measurements (dev-box, 2026-11-11)
 

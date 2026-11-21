@@ -34,6 +34,24 @@ pub(crate) struct Terrace {
     g: Vec<V2>,
 }
 
+impl crate::bin::Bin for Terrace {
+    fn put(&self, w: &mut Vec<u8>) {
+        (self.site, self.c, self.r_in, self.r_out).put(w);
+        (self.base, self.step, self.drop_m, self.x0).put(w);
+        (self.y0, self.cell, self.n).put(w);
+        self.s.put(w);
+        self.g.put(w);
+    }
+    fn get(r: &mut crate::bin::Reader) -> Result<Self, String> {
+        let (site, c, r_in, r_out) = crate::bin::Bin::get(r)?;
+        let (base, step, drop_m, x0) = crate::bin::Bin::get(r)?;
+        let (y0, cell, n) = crate::bin::Bin::get(r)?;
+        let s = crate::bin::Bin::get(r)?;
+        let g = crate::bin::Bin::get(r)?;
+        Ok(Self { site, c, r_in, r_out, base, step, drop_m, x0, y0, cell, n, s, g })
+    }
+}
+
 impl Terrace {
     /// Sample the ground around a site on a 4 m grid and smooth it.
     pub(crate) fn new(land: &Land, site: u16, c: V2, r_in: f32, r_out: f32, step: f32, drop_m: f32) -> Self {

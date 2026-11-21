@@ -51,6 +51,10 @@ pub struct Last {
     /// Speech I heard, by experience id: `my_experience` holds only my newest lines (the
     /// authority's window, `frame::LINES_SHOWN`), so the log keeps what it has received.
     heard: BTreeMap<u64, Experience>,
+    /// Heard lines whose bubble has shown (logged once each, `bubble:` in the client log), and
+    /// my last line whose bubble a reply ended (reply-pace).
+    bubbled: std::collections::HashSet<u64>,
+    cut: Option<u64>,
     /// The connection has been live: a later loss is shown.
     was_live: bool,
 }
@@ -80,10 +84,13 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     if net.status == crate::net::Status::Live {
         last.was_live = true;
     }
-    let link = (last.was_live && net.status != crate::net::Status::Live).then(|| match net.status {
+    // A world still being made (a reconnect into one: staged genesis, `genesis.rs`) says how far
+    // it is, never a failure.
+    let preparing = net.genesis.text(now).map(|(title, line)| if line.is_empty() { title } else { format!("{title} {}", line.lines().next().unwrap_or("")) });
+    let link = preparing.filter(|_| last.was_live).or_else(|| (last.was_live && net.status != crate::net::Status::Live).then(|| match net.status {
         crate::net::Status::Offline => "Connection lost · reconnecting…".to_string(),
         _ => "Reconnecting…".to_string(),
-    });
+    }));
     let Some(conn) = net.conn.as_ref() else {
         *model = HudModel { shown: true, now, link, ..default() };
         return;
@@ -91,7 +98,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     model.link = link;
     // Who I perceive, as I perceive them (name or label, health as I can tell it), and my own
     // characters (the dead one stays for the death screen).
-    let chars: HashMap<u32, SeenCharacter> = conn.db.seen_characters().iter().map(|c| (c.id, c)).collect();
+    let chars: HashMap<u32, SeenCharacter> = crate::net::characters(conn).into_iter().map(|c| (c.id, c)).collect();
     let mine: HashMap<u32, Character> = conn.db.my_characters().iter().map(|c| (c.id, c)).collect();
     if last.labels.len() > 4096 {
         last.labels.clear();
@@ -253,25 +260,50 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         Some(TargetInfo { name, doing, hp: band(id), stance: a.stance, distance: a.distance })
     });
 
-    // Bubbles: each speaker's newest line within its lifetime, and my own last line. An older
-    // line never comes back when a newer one's bubble ends (play-test 6: a long reply re-showed
-    // after a short line said 2 s later had gone).
+    // Bubbles: each speaker's newest line shown by now, within its lifetime, and my own last
+    // line. An older line never comes back when a newer one's bubble ends (play-test 6: a long
+    // reply re-showed after a short line said 2 s later had gone). A reply shows at speaking
+    // pace and ends the bubble of the line it answers (reply-pace, `heard::paced`): my own
+    // `said` rows are paced with what I heard, so a reply to me waits for my line too.
     let mut bubbles = Vec::new();
-    let picks = bubble_picks(&heard.iter().map(|e| (e.subject, e.at_ms as f64, bubble_life(quoted(&e.text)))).collect::<Vec<_>>(), now_ms);
-    for e in picks.into_iter().map(|i| &heard[i]) {
-        let text = quoted(&e.text).to_string();
-        let age = ((now_ms - e.at_ms as f64) / 1000.0) as f32;
-        let life = bubble_life(&text);
+    let said_rows: Vec<Experience> = me.map_or_else(Vec::new, |id| conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "said").collect());
+    let lines = crate::heard::pace_rows(heard.iter().chain(said_rows.iter()));
+    let end_of = |s: &crate::heard::Spoken, p: &crate::heard::Paced| {
+        let end = p.shown_ms + bubble_life(s.words) as f64 * 1000.0;
+        p.cut_ms.map_or(end, |c| c.min(end))
+    };
+    let shown: Vec<usize> = (0..lines.len()).filter(|&i| lines[i].0.kind == "speech").collect();
+    let picks = bubble_picks(&shown.iter().map(|&i| (lines[i].1.speaker, lines[i].2.shown_ms, end_of(&lines[i].1, &lines[i].2))).collect::<Vec<_>>(), now_ms);
+    for (e, s, p) in picks.into_iter().map(|k| &lines[shown[k]]) {
+        let text = s.words.to_string();
+        let age = ((now_ms - p.shown_ms) / 1000.0) as f32;
+        let life = ((end_of(s, p) - p.shown_ms) / 1000.0) as f32;
+        if last.bubbled.insert(e.id) {
+            let pace = p.answers.map(|j| &lines[j]).map_or(String::new(), |(_, a, ap)| {
+                format!(", paced to {:.0} ms after #{}'s line said at {:.0} ms and shown at {:.0} ms ({} ms to say)", p.shown_ms, a.speaker, a.at_ms, ap.shown_ms, living_rules::saying::saying_ms(a.words))
+            });
+            info!("bubble: #{} to #{} shown at {now_ms:.0} ms, said at {} ms{pace}: {:?}", s.speaker, s.to, e.at_ms, s.words);
+        }
         let Some((p, _)) = scene.shown.get(&e.subject) else { continue };
         let kind = chars.get(&e.subject).map_or("person", |c| c.kind.as_str());
         // Over their head, as their plate names them (someone too far: by the colours drawn).
         let name = looks.plate(e.subject).map(String::from).unwrap_or_else(|| name_of(e.subject));
         bubbles.push(Bubble { speaker: e.subject as u64, name, text, head: head(e.subject, *p, kind), age, life, mine: false });
     }
+    let Last { bubbled, heard: kept, .. } = &mut *last;
+    bubbled.retain(|id| kept.contains_key(id));
     if let (Some(id), Some((t, text))) = (me, input.said.last()) {
         let age = ((now_ms - *t as f64) / 1000.0) as f32;
-        if let Some((p, _)) = scene.shown.get(&id).filter(|_| age < bubble_life(text)) {
-            bubbles.push(Bubble { speaker: id as u64, name: my_name.clone(), text: text.clone(), head: head(id, *p, "person"), age, life: bubble_life(text), mine: true });
+        // My line's `said` row (the same words, said about when I sent them): a reply to it
+        // that shows ends my bubble.
+        let cut = lines.iter().rev().find(|(e, s, _)| e.kind == "said" && s.words == text.as_str() && (e.at_ms as f64 - *t as f64).abs() < 5_000.0).and_then(|(_, _, p)| p.cut_ms);
+        let life = cut.map_or(bubble_life(text), |c| bubble_life(text).min(((c - *t as f64) / 1000.0) as f32));
+        if let Some(c) = cut.filter(|c| *c <= now_ms && last.cut != Some(*t)) {
+            last.cut = Some(*t);
+            info!("bubble: my line (sent at {t} ms) ended at {now_ms:.0} ms as its reply showed ({c:.0} ms)");
+        }
+        if let Some((p, _)) = scene.shown.get(&id).filter(|_| age < life) {
+            bubbles.push(Bubble { speaker: id as u64, name: my_name.clone(), text: text.clone(), head: head(id, *p, "person"), age, life, mine: true });
         }
     }
     model.bubbles = bubbles;
@@ -444,17 +476,19 @@ fn death_words(code: Option<&str>, killer: Option<&str>) -> String {
     }
 }
 
-/// Which heard lines get a bubble now, as indices into `lines` ((speaker, said at ms, life s),
-/// oldest first): each speaker's newest line only, and only within its life. Once a speaker has
-/// said something newer, their older lines are done, whatever life they had left.
-fn bubble_picks(lines: &[(u32, f64, f32)], now_ms: f64) -> Vec<usize> {
+/// Which heard lines get a bubble now, as indices into `lines` ((speaker, shown at ms, ends at
+/// ms), in the order said): each speaker's newest line shown by now, and only until it ends.
+/// Once a speaker's newer line has shown, their older lines are done, whatever life they had
+/// left; a line not shown yet (a reply waiting for its pace, `heard::paced`) leaves the one
+/// before it up.
+fn bubble_picks(lines: &[(u32, f64, f64)], now_ms: f64) -> Vec<usize> {
     let mut spoke = std::collections::HashSet::new();
     let mut out = Vec::new();
-    for (i, (speaker, at, life)) in lines.iter().enumerate().rev() {
-        if !spoke.insert(*speaker) {
+    for (i, (speaker, shown, end)) in lines.iter().enumerate().rev() {
+        if *shown > now_ms || !spoke.insert(*speaker) {
             continue;
         }
-        if ((now_ms - at) / 1000.0) as f32 <= *life {
+        if now_ms <= *end {
             out.push(i);
         }
     }
@@ -493,7 +527,7 @@ mod tests {
     fn an_older_line_never_comes_back_when_a_newer_one_ends() {
         // Play-test 6: a long reply (life 10 s) at 0, then a short line from the same speaker
         // (life 5.6 s) 2.1 s later, and another speaker's line at 1 s.
-        let lines = [(12, 0.0, 10.0), (7, 1_000.0, 6.0), (12, 2_100.0, 5.6)];
+        let lines = [(12, 0.0, 10_000.0), (7, 1_000.0, 7_000.0), (12, 2_100.0, 7_700.0)];
         // Before the short line (only the first two have been said): the reply shows.
         assert_eq!(bubble_picks(&lines[..2], 1_500.0), vec![1, 0]);
         // The short line shows; the reply does not.
@@ -501,6 +535,15 @@ mod tests {
         // At 8 s the short line's life (to 7.7 s) is over and the reply's (to 10 s) is not: the
         // reply does not show again (it did before: the play-test's repeat).
         assert_eq!(bubble_picks(&lines, 8_000.0), Vec::<usize>::new());
+    }
+
+    #[test]
+    fn a_reply_waiting_for_its_pace_leaves_the_line_before_it_up() {
+        // Speaker 12's line at 0 (up to 6 s); their reply to someone said at 1 s and shown at
+        // 3 s (`heard::paced`); the line it answers (speaker 7's) cut at 3 s.
+        let lines = [(12, 0.0, 6_000.0), (7, 500.0, 3_000.0), (12, 3_000.0, 9_000.0)];
+        assert_eq!(bubble_picks(&lines, 2_000.0), vec![1, 0], "the reply is not up yet; the earlier line and the answered one are");
+        assert_eq!(bubble_picks(&lines, 3_100.0), vec![2], "the reply is up, the line it answers is over");
     }
     use living_rules::outcome::death;
 

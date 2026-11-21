@@ -31,6 +31,14 @@ For a focused rerun:
 .agents/skills/verify-generation/scripts/generation.py --run generation-guards-$(date +%Y%m%d-%H%M%S) --feature guards
 ```
 
+The scene gate runs a light smoke of this skill on every behavioural merge (`living/tools/scene_gate.py`, cases `generation-default`, `generation-island` and `generation-cullet`; docs/TOOLING.md, "Generation smoke"). It runs `check_seed` and the secrets check on a world already launched through the shared harness, without native digests, repeatability, floors or a build, and leaves cleanup to the caller:
+
+```bash
+.agents/skills/verify-generation/scripts/generation.py --run <launched-run> --smoke
+```
+
+It writes `checks.json` and `smoke.json` (`seed`, `pass`, `checks`, `failed`) in the run's folder, keeps the table snapshots only when a check fails, prints `FAIL <seed>: <check>` per failure and exits 1 on any. The gate's first pass reads its genesis fuel worlds (world, island, cullet, cullet-laws). The compiled seeds' freshness against `living/seeds/worlds/` is a files-only check, `living/tools/seed_fresh.py` (docs/TOOLING.md, "Seed freshness").
+
 `--seeds a,b` limits the worlds to those seeds, for example `--feature worlds --seeds island,plan-test,cullet,floor-megacity-2k,floor-megacity-4k` after a land, city or plan change, or after the model table (`living/rules/data/buildings.json`, written by `gen_buildings.sh` and `gen_city.sh`, and for Cullet's lots by `gen_cullet.sh`, which replaces only the `cullet` style's entries) is regenerated: its footprints and eye-height cells decide the hosted tiles. Run `cargo test -p living-rules pinned_digests_hold` then too. It may also name any other tracked seed in `living/seeds/` (a trial world such as `hamlet`), which gets the same generic checks: dimensions, chunks, settlements and their authored residents, sheets, parents, promised resources, animal counts.
 
 Since `sex-1` every world's checks include body sex (`check_sex`: a row per person, the seed's sex for its residents, the world's pick recomputed for the rest) and looks by sex (pool picks among the entries of the person's sex, every look showing its wearer's sex); see [features/sex.md](features/sex.md).
@@ -49,7 +57,7 @@ The driver calls shared cleanup for every database in `finally`. Shared cleanup 
 
 Use the interrupted child run's name for `<child-run>`. Do not clean unrelated `verify-*` databases. Do not stop the shared container.
 
-`checks.json` failures are failures. RNG differences in `repeatability.json` are findings. A cached compilation difference is a finding to inspect in `compile-differences.json`; compilation failure or attempted network access fails the driver. The malformed-seed check asserts rejection only, so rejection is a plain pass. It does not assert a readable error. The old unreadable error (a panic that did not name the field) is struck through as fixed in `docs/LIVING_HANDOFF.md` under "Still open". The shared harness truncates publication stderr; this run cannot certify the complete user-facing diagnostic. The driver exits 0 if every required check passes. `server-init.log` keeps the launch matching the scratch name's resolved database identity and seed panic frames from the publication window. `guards.json` records the panic and whether a missing-field diagnostic surfaced.
+`checks.json` failures are failures. RNG differences in `repeatability.json` are findings. A cached compilation difference is a finding to inspect in `compile-differences.json`; compilation failure or attempted network access fails the driver. The malformed-seed check asserts rejection only, so rejection is a plain pass. It does not assert a readable error. The old unreadable error (a panic that did not name the field) is struck through as fixed in `docs/LIVING_HANDOFF.md` under "Still open". Since verify-guard (2026-11-19) the publish runs in the world guard, whose output (the server's error) is the run's `world-guard.log`; the driver reads it with the launch and module logs, and `guards.json` records whether the missing field is named (`missing_field_diagnostic_visible`: true on 2026-11-20, `law-compose`). Before `law-compose` a refused publish left no `state.json`, so the rejection read as not attempted (FAIL) and the driver stopped in cleanup. The driver exits 0 if every required check passes. `server-init.log` keeps the launch matching the scratch name's resolved database identity and seed panic frames from the publication window. `guards.json` records the panic and whether a missing-field diagnostic surfaced.
 
 ## Opt-in model drafting
 

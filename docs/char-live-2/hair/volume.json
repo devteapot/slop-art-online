@@ -1,0 +1,28 @@
+{
+  "cheek_m": 0.11788663171690694,
+  "head_height_m": 0.23221158981323242,
+  "spread": 1.8700002431869507,
+  "crown_lift": 0.12436522543430328,
+  "rear_depth": 0.5299997925758362,
+  "max_x": 0.10250832885503769,
+  "min_x": -0.11793970316648483,
+  "visible_tips": {
+    "front_estimate": [
+      6,
+      7
+    ],
+    "three_quarter_estimate": [
+      4,
+      5
+    ],
+    "front_target": [
+      8,
+      12
+    ],
+    "three_quarter_target": [
+      7,
+      11
+    ],
+    "count_method": "Count independent tapered endpoints visible at the outer silhouette or against the face. Exclude crown part lobes, the braid and interior colour changes."
+  }
+}

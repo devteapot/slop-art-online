@@ -1083,7 +1083,7 @@ Approved 2026-11-12 from play-test 6's item 4a. Sissly gave the owner directions
 > - 3 berry bush around [28, 11], here: seen day 1 08:01
 
 - **One source for every prompt.** `Minds::places(actor, near, say_way)` makes the lines from the character's `place` rows and its remembered resources (b), the resources nearest `near` first, and with `say_way` the way from `near` in `living_rules::bearing` words: "here" within 4 m, else the distance in the scene's words (`bearing::rough_dist`: whole metres up to 30, then to the nearest ten) and the scene's compass word ("50 m south"; `bearing::direction` is the scene's `dir`). A talk turn says the way. The think and deliberate prompts' "# Places you remember" are the same lines, nearest the scene's own place (`you.at`), without the way: the scene's `places` give each place's way already (known-ground), so it is said once. Player memory's internalize prompt has them with no way (no place to stand).
-- **Where one stands.** The mind service does not follow bodies. A talk turn asks the authority: the reducer `mind_where(actor)` (the character's controller only) writes the private one-row-per-character table `standing` (x, y, when), which the service reads back when the call returns (at most `STANDING_WAIT_MS`, 2 s; past it, the places are listed without the way, under "# Places you know"). The talk prompt's "at"/"near" place in "# Now" reads it too (before, where the heard line was said). This follows the docs' advice to prefer a reducer over a procedure: procedures are `unstable` in 2.14.1 ([procedures](https://spacetimedb.com/docs/functions/procedures/)). One write per talk turn.
+- **Where one stands.** The mind service does not follow bodies. A talk turn asks the authority: the reducer `mind_where(actor)` (the character's controller only) writes the private one-row-per-character table `standing` (x, y, when), which the service reads back when the call returns (at most `STANDING_WAIT_MS`, 2 s; past it, the places are listed without the way, under "# Places you know"). The talk prompt's "at"/"near" place in "# Now" reads it too (before, where the heard line was said). This follows the docs' advice to prefer a reducer over a procedure: procedures are `unstable` in 2.14.1 ([procedures](https://spacetimedb.com/docs/functions/procedures/)). One write per talk turn. Since reply-timing (§21) the turn asks the procedure `mind_reach` instead, which also says how one perceives the other and where one is going; nothing writes `standing` now.
 - **Size.** All of one's places (24 at most), and the nearest 8 remembered resources (`STOCK_SHOWN`).
 
 **(b) A remembered resource carries when it was seen, and is gone only once the character sees it gone.** The private table `seen_stock`: one row per kind of resource a character saw at a spot (the middle of the ones seen), with how many had something to gather (`count`), the nodes seen (nearest first, at most 12), when last seen bearing (`seen_ms`), and when last seen bare (`gone_ms`, 0 while not).
@@ -1102,3 +1102,60 @@ Approved 2026-11-12 from play-test 6's item 4a. Sissly gave the owner directions
 - **Remembered things.** `known-ground`'s `remembered` table holds what a character last saw of one thing (a gate, open or shut). `seen_stock` is a patch: a kind, a count and the nodes. They can stay apart, or become one table with a kind for each.
 
 Checks: verify-knowledge `remembered.py` (a player's character: remembered, unchanged while stripped out of sight, gone once seen bare and told once, a new bush its own row); verify-knowledge `player_memory.py` (the internalize prompt lists the player's remembered resources); verify-minds `talk-places` (the talk prompt's places from where H stands, `standing`, the think prompt's places without the way and its scene's `places` with it, gone once seen bare); verify-client (`mind_where` refused for another's character and for anonymous; `seen_stock` and `standing` private); rules test `a_place_is_here_or_metres_and_a_compass_word` (with `rough_dist`).
+
+## 21. A reply is said when it is ready (branch `reply-timing`)
+
+Approved 2026-11-19 by the general coordinator from play-test 10, as a default-on mechanics fix. Fern greeted Agnes within a said line's reach (12 m in that overlay). Agnes's model replied in 572 ms. The mind then held the reply 1.98 s (`talk.rs` `reply_turn`: the greeting's six words "being said", `saying_ms`, 330 ms a word with a 1.5 s floor, counted from when it was heard). Agnes walked on with her routine meanwhile and was out of reach when the line was finally said. The authority judges reception by distance when a line is said (`speech::speak`). Agnes got a `silence`, and the mind ended the conversation on it ("out of earshot, conversation over"). The mind's own pacing cancelled a reply the person had already chosen to give.
+
+### What changed
+
+- **Said when ready.** A reply turn submits its line (`mind_say`) as soon as the model's reply is parsed. Reception is then judged when the speaker starts speaking. The agreement a closing turn writes to memory now goes after the line, so that write no longer holds it back.
+- **The rhythm is kept for turn-taking.** The old said time is kept as the line's place in the exchange's rhythm: once the line answered is done being said, and at least `SPEECH_GAP_MS` (2.1 s) after one's own previous line (`Pace::of`, `paced_ms`). The speaker's next line keeps its gap from that time (`spoke`), not from when the line was actually said. So a speaker's lines are never closer together than before. With the same lines at the same times, the rhythm is the old one exactly (`the_next_line_is_not_sooner_than_before`). When two of this service's characters talk, each line's place comes from the other's (`voice`: when the other's line is done being said at its own place), so their exchange keeps the old rhythm (`two_minds_keep_the_old_rhythm`). Only the gap after one's own previous line still holds a reply back. That gap is also the authority's 2 s speaking limit.
+- **What the rows mean is unchanged.** `said`, the `speech` experiences of those who heard (`heard`), `line_heard` and `audience` keep `at_ms` = the moment the line was said, when its reception was judged. A reply's `at_ms` is now nearer the line it answers (by up to that line's `saying_ms`). The game client shows a heard line whole at its `at_ms` and keeps it up for `bubble_life` (`ui/live.rs`, one bubble per speaker). So a reply's bubble could appear while the first speaker's bubble was still up. Since `reply-pace` the game client delays a reply's bubble by the answered line's `saying_ms` from that line's `at_ms` (from when it showed, for a reply to a reply), and ends the answered line's bubble then: one bubble an exchange at a time. The rows carry no reply-to link, so the client takes the answered line to be the most recent line to the replier from the one the reply is addressed to. The Log shows both lines at their `at_ms`; the rule is shared as `living_rules::saying::saying_ms` (verify-ui `talking.md`, `reply-pace`).
+
+### The reply frame: where the other is, and where one is going
+
+The talk turn asks the authority where it stands with the procedure `mind_reach(actor, other)` (the character's controller only), in place of `mind_where`. Its answer `Reach` goes to the caller alone. A procedure's return value is not broadcast, and it writes nothing. It gives where one stands (for the places, §20) and how one perceives the other, by the scene's own sensing (`perception::Sensing::sensed_id`):
+
+- **Seen:** their distance and compass way.
+- **Heard and not seen** (while sight has a field, `fov_on`): where the sound is and how far, in the world's words.
+- **Seen only as a figure too far away to make out** (far-label): nothing, because one cannot tell it is them.
+- **Neither seen nor heard:** nothing.
+
+It also gives one's own motion: speed, the point one's movement is going to (`steer` `GOAL_POINT`), one's activity's words, and whether one's way takes one toward, away from or past them (the travel heading within 60° of them, beyond 120°, or between).
+
+"# Now" in the talk prompt gains one line, in these words:
+
+> Fern is 7 m west of you. You are walking to "the bakery", away from Fern.
+>
+> You cannot see Fern now; you hear them behind you, to the south; close. You are walking.
+>
+> You neither see nor hear a stranger now. You are standing still.
+
+The goal is named when it is within 6 m of one of one's own places, and is otherwise "a spot 30 m south". These are facts with no advice. Whether to stop, turn, call out, or walk on with the reply is the mind's choice, through the reply's speech and acts (the speech-plus-act frame, docs/BYSTANDERS_2.md). No rule makes anyone stop when spoken to.
+
+### A missed line is weighed, once
+
+A reply turn's line can still go unheard (the replier was already out of reach when its reply was ready). The speaker's `silence` (§15, the authority's words unchanged) no longer ends the exchange inside the mind. When it comes within 10 s of the speaker's own reply-turn line to that person (`MISSED_MS`), and the exchange was still going, the speaker gets one more turn. The prompt shows the whole exchange up to its own unheard words. In place of "# What you are answering" it shows "# What came of your last words" and the silence's own text:
+
+> \# What came of your last words
+> Fern is too far away: they could not have heard you.
+
+That turn's reply is recorded like any other turn's (a `talk` thought, with `detail.missed`). It may call out, go to them, say nothing, or end the exchange. **Bounded:** one follow-up per missed line. Another silence before the other is heard again ends the exchange, as before. A silence for any other line (a deliberation's, a plan's) ends it as before; the next deliberation sees the silence among its experiences.
+
+### Data paths and SpacetimeDB
+
+- **Per talk turn:** before, one `mind_where` reducer call wrote the private `standing` row and the mind read it back through its subscription. Now one `mind_reach` procedure call reads the speaker's body, activity and steering rows by primary key, plus the scene's sensing of one target (the candidates near the speaker and one sight test). It writes nothing. Nobody subscribes to the answer, and no table grows. The mind no longer subscribes to `standing`. The table and `mind_where` stay (removing a table is a migration of its own) and nothing writes them now.
+- **Why a procedure here** when §20 chose a reducer: SpacetimeDB's procedures documentation ([procedures](https://spacetimedb.com/docs/functions/procedures/), read 2026-11-19) says to prefer reducers unless a procedure's special operations are needed. A reducer cannot return a value to its caller, though; §20 got its answer back by writing a row and reading the subscription. The answer here would add six fields to that row (a column append rewrites the table and disconnects every client in 2.14.1) or need a new table read once per turn. A procedure's answer "will be sent to the caller, but will not be broadcast to any other clients". The pinned 2.14.1 module already enables `unstable` for `mind_act_checked` (docs/BYSTANDERS_2.md). The transaction `try_with_tx` opens may run its body twice, so the body only reads.
+- The `silence` follow-up adds at most one talk-model call per missed reply-turn line.
+
+### Checks
+
+- **Mind unit tests:**
+  - `a_reply_is_said_when_ready_and_keeps_its_old_place_in_the_rhythm` (play-test 10's numbers: said at 572 ms, place 1 980 ms);
+  - `the_next_line_is_not_sooner_than_before` and `two_minds_keep_the_old_rhythm` (turn-taking);
+  - `the_frame_says_how_far_they_are_and_where_one_is_walking` (the frame's words, with no advice);
+  - `prompts::a_missed_line_is_told_in_the_authoritys_words`.
+- **verify-minds `reply-timing`:** a walking resident's reply delivered and the exchange going on; a resident genuinely out of reach told the truthful silence, its one follow-up turn, and the end; the frame from its own perception. With `VERIFY_REPLY_TIMING=main` it checks main's behaviour on a build of main: the reply lost and the exchange over.
+- **verify-minds `talk-places`:** "# Now" from `mind_reach`.
+- **verify-client:** `mind_reach` refused for another's character and for anonymous, answered for one's own.

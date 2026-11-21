@@ -1,0 +1,65 @@
+{
+  "source": "turnaround.png",
+  "view": "front",
+  "origin": "image top left, x right, y down",
+  "crown_y": 22,
+  "sole_y": 785,
+  "height_px": 763,
+  "vertical": {
+    "eye_line": {
+      "y_px": 83,
+      "height_share_above_sole": 0.9201
+    },
+    "chin": {
+      "y_px": 126,
+      "height_share_above_sole": 0.8637
+    },
+    "shoulder_seam": {
+      "y_px": 163,
+      "height_share_above_sole": 0.8152
+    },
+    "chest": {
+      "y_px": 207,
+      "height_share_above_sole": 0.7575
+    },
+    "waist_apron_tie": {
+      "y_px": 294,
+      "height_share_above_sole": 0.6435
+    },
+    "coat_hem": {
+      "y_px": 554,
+      "height_share_above_sole": 0.3028
+    },
+    "apron_hem": {
+      "y_px": 530,
+      "height_share_above_sole": 0.3342
+    },
+    "coat_cuff_lower": {
+      "y_px": 358,
+      "height_share_above_sole": 0.5596
+    },
+    "knee": {
+      "y_px": 564,
+      "height_share_above_sole": 0.2896
+    }
+  },
+  "hair_width": {
+    "temple": {
+      "y_px": 83,
+      "x_edges": [
+        122,
+        228
+      ],
+      "width_share_of_height": 0.1389
+    },
+    "upper_crown": {
+      "y_px": 43,
+      "x_edges": [
+        137,
+        211
+      ],
+      "width_share_of_height": 0.097
+    }
+  },
+  "method": "Visual picks on the front drawing, including the hair silhouette and boot sole. Chest and knee are anatomical estimates under cloth."
+}

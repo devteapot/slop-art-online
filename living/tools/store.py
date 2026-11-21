@@ -35,6 +35,7 @@ import hashlib
 import io
 import importlib.util
 import json
+import lzma
 import os
 import platform
 import re
@@ -44,6 +45,11 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import zipfile
+import zlib
+from pathlib import Path
+
+from store_credentials import Scanner, safe_label
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(TOOLS))
@@ -2343,6 +2349,27 @@ def pack_motion(src, out_dir, scrubber, machine=None):
 # Backends
 # --------------------------------------------------------------------------------------------
 
+def check_credentials(*payloads):
+    """Scan the actual upload payload before any backend writes."""
+    scanner = Scanner()
+    for prefix, source in payloads:
+        source = Path(source)
+        files = sorted(source.rglob("*")) if source.is_dir() and not source.is_symlink() else [source]
+        for path in files:
+            if path.is_dir() and not path.is_symlink():
+                continue
+            label = prefix
+            if path != source:
+                label += "/" + path.relative_to(source).as_posix()
+            try:
+                scanner.scan(path, label)
+            except (OSError, ValueError, EOFError, RuntimeError, tarfile.TarError,
+                    zipfile.BadZipFile, lzma.LZMAError, zlib.error) as e:
+                raise Refused(f"{safe_label(label)}: credential scan failed ({type(e).__name__})") from None
+    if scanner.findings:
+        raise Refused("upload refused: credential values found\n" + "\n".join(map(str, scanner.findings)))
+
+
 class Backend:
     """Where units are published and fetched. `repo` is a logical name (runs, assets)."""
     name = "abstract"
@@ -2374,6 +2401,7 @@ class LocalBackend(Backend):
         return os.path.join(self.root, repo)
 
     def publish(self, repo, local_dir, path_in_repo, message):
+        check_credentials((path_in_repo, local_dir))
         dest = _safe_join(self._repo(repo), path_in_repo)
         if os.path.exists(dest):
             shutil.rmtree(dest)
@@ -2518,6 +2546,7 @@ class HFBackend(Backend):
 
     def publish(self, repo, local_dir, path_in_repo, message):
         self.gate()
+        check_credentials((path_in_repo, local_dir))
         api = self.api()
         rid = self.repo_id(repo)
         self._call(api.create_repo, rid, repo_type=self.repo_type, private=self.private, exist_ok=True)
@@ -2544,6 +2573,7 @@ class HFBackend(Backend):
     def publish_units(self, repo, units, message):
         """Several (path_in_repo, local_dir) units in one commit."""
         self.gate()
+        check_credentials(*units)
         api = self.api()
         rid = self.repo_id(repo)
         self._call(api.create_repo, rid, repo_type=self.repo_type, private=self.private, exist_ok=True)
@@ -2562,6 +2592,7 @@ class HFBackend(Backend):
 
     def put_file(self, repo, local_file, path_in_repo, message):
         self.gate()
+        check_credentials((path_in_repo, local_file))
         api = self.api()
         rid = self.repo_id(repo)
         self._call(api.create_repo, rid, repo_type=self.repo_type, private=self.private, exist_ok=True)
@@ -3106,6 +3137,7 @@ def cmd_publish_batches(a, cfg, machine):
             held.append((name, str(e)))
             shutil.rmtree(out, ignore_errors=True)
             print(f"held {name}: {e}", flush=True)
+    check_credentials(*((unit_path("batch", name, machine), out) for name, out, _ in ready))
     groups = [ready[i:i + a.per_commit] for i in range(0, len(ready), a.per_commit)]
     for k, group in enumerate(groups, 1):
         msg = f"{len(group)} batches from {machine} ({k}/{len(groups)}): {', '.join(n for n, _, _ in group)}"

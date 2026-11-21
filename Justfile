@@ -101,8 +101,9 @@ living-test:
 living-goods:
     cargo test --manifest-path living/Cargo.toml -p living-rules --lib goods_audit::tests::write_goods_audit -- --ignored --exact
 
-# Everything that must keep compiling after any change: authority (wasm), mind, the native
-# and browser observer, the game client and its unit tests, and the rules tests. Run before every
+# Everything that must keep compiling after any change: authority (wasm) and its native unit
+# tests, mind, the native and browser observer, the game client and its unit tests, and the
+# rules tests. Run before every
 # commit. living/tools/check.py runs these steps (docs/TOOLING.md): the cargo steps and the
 # script fuel gate (living/tools/script_bench: fails when a hot law is over budgets.json). Its
 # four cargo build directories at once under one jobserver; a step skipped when it already passed on this
@@ -161,8 +162,13 @@ living-script-gate:
 # The game client's generated assets (git-ignored; the scripts are the source), on any machine
 # with Blender: CC0 look-dev models, nature, buildings, then the animated characters. The
 # animation step needs the Kimodo cache in .local/kimodo/outputs/library/: make it with
-# living/tools/kimodo/spark.sh, or copy it from a machine that has it.
+# living/tools/kimodo/spark.sh, or copy it from a machine that has it. Run under assets_guard.py:
+# it fails, naming them, if the run changed any tracked file (rules data such as the footprint
+# table is changed on purpose: `just living-rules-table`).
 living-game-assets:
+    python3 living/tools/assets_guard.py -- just _living-game-assets-steps
+
+_living-game-assets-steps:
     living/tools/lookdev_assets.sh
     just living-game-textures --set all
     living/tools/blender/gen_nature.sh
@@ -170,6 +176,22 @@ living-game-assets:
     living/tools/blender/gen_city.sh
     living/tools/blender/gen_cullet.sh
     living/tools/blender/gen_anim.sh
+
+# The rules' footprint table (living/rules/data/buildings.json, tracked: the authority and the
+# client compile it in) from the generated models' footprint sidecars under envs/ (every set,
+# Cullet's lots included), after `just living-game-assets`. A rules change: review the diff.
+living-rules-table:
+    blender -b --python-exit-code 1 -P living/tools/blender/buildings.py -- --table living/rules/data/buildings.json --envs living/game/assets/envs 2>&1 | grep -E '^TABLE|Error|Traceback' || true
+    git diff --stat -- living/rules/data/buildings.json
+
+# The calibration frame for a hand-made character (docs/HANDMADE_HAIR.md): the contract's audit,
+# three fixed daylight shots through the asset view, and each patch's colour against its target in
+# <stem>.calibration.json. `just living-game-calibrate view/own-cora-live.glb [--also middle@0]`.
+# Honours CARGO_TARGET_DIR. Free: no model calls, no world.
+[positional-arguments]
+living-game-calibrate file *args:
+    cargo build --release -q -p living-game --manifest-path living/Cargo.toml
+    python3 living/tools/characters/calibrate.py "$@"
 
 # The asset board (docs/ASSET_BOARD.md): every generated family photographed in the game's own
 # renderer beside the version the owner accepted, with decisions and history in

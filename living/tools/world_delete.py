@@ -7,11 +7,12 @@ back as paused, given 2 s for its queue to drain, and only then deleted. A world
 read back as paused is not deleted, and the caller is told why. A database that answers 404 at any
 step is already gone, which counts as deleted.
 
-The verify harness's cleanup (`verify.py cleanup`, which every surface's cleanup and the tools
-built on its runs go through) and the trial runner (`trials.py` `delete_db`) apply the same rule in
-their own code. This module serves the tools that delete scratch databases outside both:
-verify-core's `verify_mechanics.py` and `verify_steering.py`, `gate.py`, `latency.py` and `play.py`.
-Each passes its own ways of reaching the server:
+This is the one copy of that rule. Its callers: the verify harness's cleanup (`verify.py cleanup`,
+through `trial_archive.finish`, which archives between the confirmed pause and the delete, so it uses
+`pause_confirmed`), verify-core's `verify_mechanics.py`, `verify_steering.py` and `updates.py`,
+`gate.py`, `latency.py`, `play.py`, and the measurement tools `look_cost.py` (and `tick_cost.py` on
+it) and `battle_viewers.py`. Still with their own copy of the same rule, to adopt it: the trial
+runner (`trials.py` `delete_db`). Each passes its own ways of reaching the server:
 
     deleted, why = pause_and_delete(
         pause=lambda: <call set_paused(true) as the world's admin; returns the HTTP status, or 0>,
@@ -25,24 +26,31 @@ TRIES = 10       # read-backs of `paused`, one a second
 SETTLE_S = 2.0   # after the world reads back paused, before the delete
 
 
-def pause_and_delete(pause, read, delete, gone, tries=TRIES, settle_s=SETTLE_S, sleep=time.sleep):
-    """Pause, confirm, wait, delete. Returns `(deleted, why)`."""
+def pause_confirmed(pause, read, tries=TRIES, sleep=time.sleep):
+    """Pause the world and read it back as paused. Returns `(state, why)`: state "paused", "gone"
+    (404 at any step) or "unpaused" (never read back as paused within `tries` s: do not delete)."""
     code = pause()
     if code == 404:
-        return True, "already gone (404)"
-    paused = False
+        return "gone", "already gone (404)"
     last = ""
     for _ in range(tries):
         c, body = read()
         if c == 404:
-            return True, "gone (404)"
+            return "gone", "gone (404)"
         if c == 200 and "true" in body.lower():
-            paused = True
-            break
+            return "paused", "paused"
         last = f"{c} {body.strip()[:160]}"
         sleep(1)
-    if not paused:
-        return False, f"not deleted: its world could not be read back as paused within {tries} s (set_paused {code}; last read {last})"
+    return "unpaused", f"its world could not be read back as paused within {tries} s (set_paused {code}; last read {last})"
+
+
+def pause_and_delete(pause, read, delete, gone, tries=TRIES, settle_s=SETTLE_S, sleep=time.sleep):
+    """Pause, confirm, wait, delete. Returns `(deleted, why)`."""
+    state, why = pause_confirmed(pause, read, tries, sleep)
+    if state == "gone":
+        return True, why
+    if state != "paused":
+        return False, f"not deleted: {why}"
     sleep(settle_s)
     delete()
     if gone():
@@ -69,3 +77,29 @@ def cli_pause_and_delete(cli, db):
         read=read,
         delete=lambda: cli("delete", "-s", "local", db, "-y"),
         gone=lambda: status(cli("sql", "-s", "local", db, "SELECT 1 FROM world")) == 404)
+
+
+def http_pause_and_delete(url, db, token, delete, tries=TRIES, settle_s=SETTLE_S, sleep=time.sleep):
+    """`pause_and_delete` over the server's HTTP API as the world's admin (`token`): `set_paused`
+    by `/call`, the read-back and the 404 check by `/sql`; `delete()` deletes (the CLI)."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    def post(path, body):
+        req = urllib.request.Request(f"{url}/v1/database/{db}/{path}", data=body.encode(), method="POST",
+                                     headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json" if path.startswith("call/") else "text/plain"})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return r.status, r.read().decode()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read().decode(errors="replace")
+        except OSError as e:
+            return 0, str(e)
+
+    return pause_and_delete(
+        pause=lambda: post("call/set_paused", json.dumps([True]))[0],
+        read=lambda: post("sql", "SELECT paused FROM world"),
+        delete=delete,
+        gone=lambda: post("sql", "SELECT 1 FROM world")[0] == 404,
+        tries=tries, settle_s=settle_s, sleep=sleep)

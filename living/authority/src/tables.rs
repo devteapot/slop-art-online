@@ -228,15 +228,66 @@ pub struct Clock {
     pub missed: u64,
 }
 
-/// A world's own value of a law (a seed's `rules`: `minds`, `fire_warmth`, …), over the
-/// script's `laws()`. Written when the world is created; read with the laws, once per script
-/// revision (docs/WORLD_RULES.md, "A world's own laws").
+/// A world's own value of a law before `law_override` (2026-11-19): kept as it was and no
+/// longer written or read; a world's rows are copied into `law_override` once, by the first
+/// transaction that reads the laws on a module with that table (`common::law_rev`).
 #[spacetimedb::table(accessor = world_law)]
 pub struct WorldLaw {
     #[primary_key]
     pub name: String,
     /// The value as JSON: a number, or true or false.
     pub value: String,
+}
+
+/// A world's own value of a law (a seed's `rules`, `set_world_law`), over the script's
+/// `laws()`: every one, public and read-only (admin `set_world_law` writes it). The law in force
+/// is this value when a row names it, else the script's (`living_rules::script::Scripts::
+/// with_overrides`, `apply_overrides`): the authority and every client that compiles the
+/// `script` row lay these rows over it in the same place, so they compute alike
+/// (docs/LAW_OVERRIDE.md). A value-only law (`living_rules::script::VALUE_ONLY`) changes here
+/// alone; any other change also installs the script again with the values written at its end.
+/// A new table, so adding it rewrites no existing one (docs/LAW_OVERRIDE.md, "Storage").
+#[spacetimedb::table(accessor = law_override, public)]
+pub struct LawOverride {
+    #[primary_key]
+    pub name: String,
+    /// The value as JSON: a number, or true or false (as `set_world_law` takes it).
+    pub value: String,
+    /// The law revision (`law_revision`) that wrote it.
+    pub revision: u32,
+}
+
+/// The world's law revision: one more at each write of `law_override` (private, one row,
+/// `id` 0). The authority's laws in force are kept in module memory by it and the script
+/// revision (`common::laws`, `common::scripts`). No row: the world's `world_law` rows are not
+/// yet copied into `law_override` (`common::law_rev`).
+#[spacetimedb::table(accessor = law_revision)]
+pub struct LawRevision {
+    #[primary_key]
+    pub id: u32,
+    pub revision: u32,
+}
+
+/// Effective, world-wide cover policy used by Shade.
+#[derive(Clone, Copy, PartialEq)]
+#[spacetimedb::table(accessor = cover_law, public)]
+pub struct CoverLaw {
+    #[primary_key]
+    pub id: u8,
+    pub cover_sight_on: bool,
+    pub cover_eye_height_m: f32,
+    pub cover_brush_on: bool,
+    pub cover_brush_min_fill: f32,
+    pub cover_cliff_step_m: f32,
+}
+
+/// Quantized generation output, private and read only when cover is enabled.
+#[spacetimedb::table(accessor = cover_ground)]
+pub struct CoverGround {
+    #[primary_key]
+    pub id: u32,
+    pub heights: Vec<i16>,
+    pub candidates: Vec<u32>,
 }
 
 #[spacetimedb::table(accessor = script, public)]
@@ -1043,6 +1094,19 @@ pub struct LastLook {
     pub at_ms: u64,
 }
 
+/// Inclusive structure-id ranges for one observer and one 128 m block.
+#[spacetimedb::table(accessor = seen_structures,
+    index(accessor = by_actor_block, btree(columns = [actor, block])))]
+pub struct SeenStructures {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub block: u32,
+    pub ranges: Vec<u64>,
+}
+
 pub const FAM_REGION: u64 = 1 << 40;
 pub const FAM_CREATURE: u64 = 2 << 40;
 pub const FAM_STRUCTURE: u64 = 3 << 40;
@@ -1315,6 +1379,36 @@ pub struct Standing {
     pub x: f32,
     pub y: f32,
     pub at_ms: u64,
+}
+
+/// Where a character stands and moves, and how it perceives someone it is answering, for its
+/// talk turn's frame (reply-timing, docs/COMMUNICATION.md): `mind_reach`'s answer to its
+/// controller alone (not a table, not broadcast). Only what the character itself perceives of
+/// the other: nothing of them when it neither sees nor hears them.
+#[derive(SpacetimeType, Clone, Debug, PartialEq, Default)]
+pub struct Reach {
+    /// Where it stands now.
+    pub x: f32,
+    pub y: f32,
+    /// How it perceives the other now: `seen`, `heard` (heard and not seen, while sight has a
+    /// field), or `""` (neither, or seen only as a figure too far away to make out).
+    pub other: String,
+    /// Seen: how far they are (m, whole metres). Heard: 0 (a sound's distance is in words).
+    pub other_m: f32,
+    /// Seen: which way they are ("to the north-east"). Heard: where the sound is and how far,
+    /// in the world's words ("behind you, to the south; close").
+    pub other_where: String,
+    /// How fast its body travels now (m/s; 0 standing).
+    pub speed: f32,
+    /// While it travels and sees the other: 1 its way takes it toward them, -1 away from them,
+    /// 0 past them (or it does not travel or see them).
+    pub toward: i8,
+    /// What its body is doing (its activity's words), `""` when nothing.
+    pub doing: String,
+    /// The point it is walking to, when its movement has one (`goal`).
+    pub goal: bool,
+    pub gx: f32,
+    pub gy: f32,
 }
 
 #[cfg_attr(open_tables, spacetimedb::table(accessor = place, public))]
@@ -1659,6 +1753,39 @@ pub struct CombatSeen {
     pub note: String,
 }
 
+/// A `combat_seen` row as an event for its viewer alone (views step 2, the `combat_feed_on` law;
+/// docs/BATTLE_VIEWERS.md, addendum 4): public, filtered per client by row-level security
+/// (`frame::COMBAT_FEED_FILTER`), delivered at commit and never kept. `id` is the `combat_seen`
+/// row's, so a client that also read `my_combat` (once, at connect) merges the two by it. The
+/// columns are `CombatSeen`'s, in its order.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = combat_feed, public, event)]
+pub struct CombatFeed {
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub expires_ms: u64,
+    pub at_ms: u64,
+    pub kind: u8,
+    pub actor: u32,
+    pub target: u32,
+    pub skill: u8,
+    pub x: f32,
+    pub y: f32,
+    pub dx: f32,
+    pub dy: f32,
+    pub amount: f32,
+    pub ms: u32,
+    pub note: String,
+}
+
+impl CombatFeed {
+    pub fn of(r: &CombatSeen) -> Self {
+        CombatFeed { id: r.id, viewer: r.viewer, expires_ms: r.expires_ms, at_ms: r.at_ms, kind: r.kind, actor: r.actor, target: r.target, skill: r.skill,
+                     x: r.x, y: r.y, dx: r.dx, dy: r.dy, amount: r.amount, ms: r.ms, note: r.note.clone() }
+    }
+}
+
 /// One blow of a fight as its onlookers saw it (private; docs/BATTLE_SCALE.md, fix 4): who
 /// struck whom, how it ended, and everyone who could see it under the sight rule at that instant
 /// (`perceive::witnessed`'s test), the two in it excepted. Each onlooker is told what it saw as
@@ -1908,8 +2035,11 @@ pub struct ActCard {
 }
 
 /// What a character is visibly doing right now, for a skill with an `act_card`: written when
-/// it starts being performed, deleted when it ends. Clients receive it through their body
-/// window (a join on `body.id`), like `fighter`. It holds what anyone looking would see.
+/// it starts being performed, deleted when it ends. A continuous activity that ends well is
+/// held, left as it was, until the body's next evaluation (`town::hold`; a row with no activity
+/// behind it): renewed in place, keeping its `since_ms`, when the same activity begins again,
+/// else replaced or deleted then. Clients receive it through their body window (a join on
+/// `body.id`), like `fighter`. It holds what anyone looking would see.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(open_tables, spacetimedb::table(accessor = doing, public))]
 #[cfg_attr(not(open_tables), spacetimedb::table(accessor = doing))]
@@ -2011,7 +2141,8 @@ pub struct LawChange {
     pub new: String,
     pub at_ms: u64,
     pub by: Identity,
-    /// The script revision the change installed (`script.revision`).
+    /// The script revision in force after the change (`script.revision`): a new one when it
+    /// installed the script, the one before for a value-only law (`law_override`, docs/LAW_OVERRIDE.md).
     pub revision: u32,
 }
 
@@ -2144,6 +2275,176 @@ pub struct DoingSeen {
     #[index(btree)]
     pub viewer: Identity,
     pub doing: Doing,
+}
+
+// ---- the near tier (frame-views; docs/PERCEPTION.md, "Cues and tiers") ------------------
+//
+// A viewer's copies of the creatures within `frame::NEAR_M` of it at its last sweep live here,
+// the others' in `motion_seen`, `fighter_seen` and `doing_seen` (the far tier): each tier view
+// (`seen_*_near`, `seen_*_far`) reads one table's `viewer` key, so a write to a far copy re-runs
+// only the far view. A creature that changes tier moves between the tables as it is now. New
+// tables rather than a column on the old ones: in 2.14.1 appending a column rewrites a table and
+// disconnects every client (`auto_migrate.rs`, `AddColumns`); adding a table does not.
+
+/// A near creature's motion copy (private): `copy` is the row the far tier would hold.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = motion_near)]
+pub struct MotionNear {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub copy: MotionSeen,
+}
+
+/// A near creature's fighter copy (private).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = fighter_near)]
+pub struct FighterNear {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub copy: FighterSeen,
+}
+
+/// A near creature's doing copy (private).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = doing_near)]
+pub struct DoingNear {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub copy: DoingSeen,
+}
+
+// ---- battle-views: a player's motion copies as rows only it can read -------------------
+//
+// With the `motion_tables_on` law on (docs/BATTLE_VIEWERS.md, "Addendum"), a player's motion
+// copies live here instead of `motion_seen`/`motion_near`: one public table, filtered per client
+// by row-level security (`frame.rs`, `SEEN_BODY_COPY_FILTER`, `viewer = :sender`), so a client
+// subscribes it as a table and a written copy is matched to its one viewer without re-running a
+// view. A viewer's copies are all here or all in the private tables, never split (they move in
+// one transaction); the motion views read whichever holds them. `moving` is exactly the row
+// `seen_bodies` returns, so nothing a view hides is in it.
+
+/// A perceived creature's motion, as the viewer's frames last wrote it (public, row-level
+/// security): `body` the creature, `near` the tier, `seg` its `Moving` without the id (the row
+/// `seen_bodies` returns is `seg.moving(body)`). 98 B (the viewer's identity 32, `body` 4, `near`
+/// 1, `seg` 61). No primary key and no copy key: a viewer's row of a creature is found by
+/// `(viewer, body)`, so a client keys it by `body` (each client holds only its own rows) and sees
+/// a change as a delete and an insert, as an update's old and new rows are sent anyway.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_body_copy, public,
+    index(accessor = viewer_near, btree(columns = [viewer, near])),
+    index(accessor = viewer_body, btree(columns = [viewer, body])))]
+pub struct SeenBodyCopy {
+    #[index(btree)]
+    pub viewer: Identity,
+    pub body: u32,
+    pub near: bool,
+    pub seg: crate::perception::Segment,
+}
+
+/// Where a viewer's battle-views copies stand (private): its motion copies in `seen_body_copy`
+/// (`public`) and its mirror of projections whole (`mirrored`). Written in the same transaction as
+/// the moves (`frame::to_public`, `all_private`, `perception::fill_mirror`, `drop_mirrors`), so
+/// a step that rolls back takes it back with them: module memory could not say so to a reducer
+/// that runs before the next tick. No row: neither.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = copy_state)]
+pub struct CopyState {
+    #[primary_key]
+    pub viewer: Identity,
+    pub public: bool,
+    pub mirrored: bool,
+    /// Its fighter copies are in `seen_fighter_copy` (views step 3, the `fighter_tables_on` law).
+    #[default(false)]
+    pub fighters: bool,
+}
+
+impl Default for CopyState {
+    fn default() -> Self {
+        CopyState { viewer: Identity::ZERO, public: false, mirrored: false, fighters: false }
+    }
+}
+
+/// A perceived creature's `fighter` row as the viewer's frames last wrote it (public, row-level
+/// security `viewer = :sender`; views step 3, the `fighter_tables_on` law): `id` the private
+/// copy's key (`frame::key`: the viewer's character and the creature), `body` the creature,
+/// `near` the tier, `fighter` the row `seen_fighters` returns for it (its band as this viewer
+/// perceives it). A primary key, unlike `seen_body_copy`: fighter copies change often (a move, a
+/// band), and a change is then one in-place update, not a delete and an insert on every index
+/// (measured: the keyless table cost 24-43 ms/s more tick WASM at 16-216 viewers).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_fighter_copy, public,
+    index(accessor = viewer_near, btree(columns = [viewer, near])))]
+pub struct SeenFighterCopy {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub body: u32,
+    pub near: bool,
+    pub fighter: Fighter,
+}
+
+/// A mirror of a viewer's `projected` row (public, row-level security `viewer = :sender`;
+/// battle-views addendum 2, the `characters_table_on` law): `id` the projected row's, `row`
+/// exactly what `seen_characters` returns for it. Written by `perception::proj_*`, the only
+/// writers of `projected`, for a viewer whose mirror is whole (`perception::mirrored`).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_character_copy, public)]
+pub struct SeenCharacterCopy {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub row: crate::perception::SeenCharacter,
+}
+
+// ---- cues: what a player is shown at once of those near it or engaged with it ----------
+//
+// Event tables (docs/PERCEPTION.md, "Cues"; `frame.rs`): a row exists only in the transaction
+// that inserts it, is sent to the subscribers whose query it matches and is never stored, so a
+// cue rebuilds no view. Each is public, and row-level security (`frame.rs`, the
+// `client_visibility_filter`s) lets a client receive only rows whose `viewer` is its own
+// identity. A cue is a copy of what the viewer's `*_seen` row of that creature would hold now;
+// the copies and the `seen_*` views stay the durable state (a join, a reconnect, a cue missed).
+
+/// A perceived creature's motion (`seen_bodies`' row), sent when it changed.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_body_cue, public, event)]
+pub struct SeenBodyCue {
+    #[index(btree)]
+    pub viewer: Identity,
+    /// When the authority sent it (ms).
+    pub at_ms: u64,
+    pub motion: crate::perception::Moving,
+}
+
+/// A perceived creature's `fighter` row as `seen_fighters` would show it (band as this viewer
+/// perceives it), or `None` when it has none.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_fighter_cue, public, event)]
+pub struct SeenFighterCue {
+    #[index(btree)]
+    pub viewer: Identity,
+    pub at_ms: u64,
+    pub body: u32,
+    pub fighter: Option<Fighter>,
+}
+
+/// What a perceived creature is visibly doing (`seen_doing`'s row), or `None` for nothing.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_doing_cue, public, event)]
+pub struct SeenDoingCue {
+    #[index(btree)]
+    pub viewer: Identity,
+    pub at_ms: u64,
+    pub body: u32,
+    pub doing: Option<Doing>,
 }
 
 /// What a skill use revealed to an observer about a target, until `until_ms` (private): the

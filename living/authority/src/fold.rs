@@ -129,6 +129,7 @@ pub fn flush(ctx: &ReducerContext, prev: u64, now: u64) {
         // figure by its sighting's handle), "a stranger (#412)", as other lines naming several
         // people do: a line can hold many strangers' fights, and the line's own subject and object
         // anchor only one pair. A player's line reads as the screen shows it.
+        common::diag(|| "fold:line_labels", who.len() as u64);
         let named = common::detail_span("fold.labels");
         let player = crate::combat::human(ctx, c.id).is_some();
         let labels: HashMap<u32, String> = who

@@ -350,6 +350,11 @@ fn dump(
         // Every text that names a person or a place on screen (perceived-names-1), by where it
         // shows, and what the authority has given me to name (`known_names`, `given_places`).
         "naming": naming(&model, &verbs, talk.as_deref(), &ws, &extra),
+        // The death screen as drawn (its words, place, life and witnesses) and what it was made
+        // from: the killer's and the witnesses' ids `combat::ingest` took from my combat feed,
+        // either source (combat-switches: the same whichever is in use).
+        "death": model.death.as_ref().map(|d| serde_json::json!({"cause": d.cause, "place": d.place, "lived": d.lived, "witnesses": d.witnesses,
+            "killer_id": extra.combat.as_ref().and_then(|c| c.killer), "witness_ids": extra.combat.as_ref().map(|c| c.witnesses.clone())})),
         "known_names": crate::looks::known_names(&extra.net),
         "given_places": crate::looks::given_places(&extra.net),
         "perceived": crate::looks::perceived_ids(&extra.net),
@@ -380,6 +385,19 @@ fn dump(
             "cells": g.cells.iter().map(|c| serde_json::json!({"product": c.product, "item": c.item, "label": c.label, "allowed": c.allowed, "reason": c.reason, "detail": c.detail, "rows": c.rows})).collect::<Vec<_>>()})),
         "tags": ui.tags.iter().map(|(k, v)| (k.clone(), serde_json::json!([v.x, v.y]))).collect::<serde_json::Map<_, _>>(),
         "looks": extra.looks_json(),
+        // Staged genesis (`genesis.rs`): whether the world is made, how far, and what the first
+        // load's cover says (its title, detail and bar share; the bar shows while preparing).
+        "genesis": {
+            "gate": format!("{:?}", extra.net.genesis.gate),
+            "progress": extra.net.genesis.progress.as_ref().map(|p| serde_json::json!({"step": p.step, "steps": p.steps, "label": p.label, "line": p.line(), "share": p.share()})),
+            "since": extra.net.genesis.since,
+            "status": format!("{:?}", extra.net.status),
+            "cover": extra.loading.as_ref().filter(|l| !l.done).map(|l| serde_json::json!({"title": l.cover.0, "detail": l.cover.1, "bar": l.cover.2})),
+            "link": model.link,
+            // The refusals and failures this connection holds (the F1 panel's last line): a
+            // `world_preparing` never lands here.
+            "errors": extra.net.errors.lock().unwrap().iter().rev().take(12).rev().cloned().collect::<Vec<_>>(),
+        },
     });
     match std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap_or_default()) {
         Ok(()) => info!("ui: state written to {}", path.display()),
@@ -466,6 +484,8 @@ pub struct DumpExtra<'w, 's> {
     live: Option<Res<'w, crate::live::Live>>,
     shine: Res<'w, crate::style::HairShine>,
     town: Option<Res<'w, crate::town::Town>>,
+    loading: Option<Res<'w, crate::loading::Loading>>,
+    combat: Option<Res<'w, crate::combat::Combat>>,
 }
 
 impl DumpExtra<'_, '_> {

@@ -1,0 +1,233 @@
+{
+ "adult-f-a": {
+  "spacing_mm": 100.8,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.813,
+  "ears_excluded": 1.783,
+  "outline_depth_behind_irises_mm": -83.1,
+  "ear_height_mm": 47.6,
+  "ear_top_over_eyes_mm": 15.6,
+  "ear_bottom_under_eyes_mm": 32.0,
+  "ear_reach_over_face_mm": 4.6
+ },
+ "adult-f-b": {
+  "spacing_mm": 97.8,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.864,
+  "ears_excluded": 1.755,
+  "outline_depth_behind_irises_mm": -74.3,
+  "ear_height_mm": 49.7,
+  "ear_top_over_eyes_mm": 14.3,
+  "ear_bottom_under_eyes_mm": 35.5,
+  "ear_reach_over_face_mm": 10.0
+ },
+ "adult-f-c": {
+  "spacing_mm": 96.1,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.959,
+  "ears_excluded": 1.802,
+  "outline_depth_behind_irises_mm": -73.2,
+  "ear_height_mm": 49.3,
+  "ear_top_over_eyes_mm": 11.8,
+  "ear_bottom_under_eyes_mm": 37.4,
+  "ear_reach_over_face_mm": 10.1
+ },
+ "adult-m-a": {
+  "spacing_mm": 95.5,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.893,
+  "ears_excluded": 1.781,
+  "outline_depth_behind_irises_mm": -69.2,
+  "ear_height_mm": 52.5,
+  "ear_top_over_eyes_mm": 15.0,
+  "ear_bottom_under_eyes_mm": 37.5,
+  "ear_reach_over_face_mm": 8.5
+ },
+ "adult-m-b": {
+  "spacing_mm": 92.5,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.978,
+  "ears_excluded": 1.837,
+  "outline_depth_behind_irises_mm": -70.5,
+  "ear_height_mm": 51.8,
+  "ear_top_over_eyes_mm": 14.2,
+  "ear_bottom_under_eyes_mm": 37.6,
+  "ear_reach_over_face_mm": 8.5
+ },
+ "adult-m-c": {
+  "spacing_mm": 90.7,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 2.052,
+  "ears_excluded": 1.885,
+  "outline_depth_behind_irises_mm": -69.4,
+  "ear_height_mm": 49.2,
+  "ear_top_over_eyes_mm": 13.6,
+  "ear_bottom_under_eyes_mm": 35.5,
+  "ear_reach_over_face_mm": 9.2
+ },
+ "child-u-a": {
+  "spacing_mm": 101.3,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.915,
+  "ears_excluded": 1.874,
+  "outline_depth_behind_irises_mm": -77.4,
+  "ear_height_mm": 42.9,
+  "ear_top_over_eyes_mm": 14.3,
+  "ear_bottom_under_eyes_mm": 28.5,
+  "ear_reach_over_face_mm": 6.1
+ },
+ "child-u-b": {
+  "spacing_mm": 98.3,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.993,
+  "ears_excluded": 1.906,
+  "outline_depth_behind_irises_mm": -76.5,
+  "ear_height_mm": 47.1,
+  "ear_top_over_eyes_mm": 15.2,
+  "ear_bottom_under_eyes_mm": 31.9,
+  "ear_reach_over_face_mm": 7.4
+ },
+ "child-u-c": {
+  "spacing_mm": 96.3,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 2.045,
+  "ears_excluded": 1.934,
+  "outline_depth_behind_irises_mm": -76.5,
+  "ear_height_mm": 48.0,
+  "ear_top_over_eyes_mm": 12.5,
+  "ear_bottom_under_eyes_mm": 35.5,
+  "ear_reach_over_face_mm": 8.5
+ },
+ "elder-f-a": {
+  "spacing_mm": 99.9,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.874,
+  "ears_excluded": 1.729,
+  "outline_depth_behind_irises_mm": -71.4,
+  "ear_height_mm": 51.7,
+  "ear_top_over_eyes_mm": 14.6,
+  "ear_bottom_under_eyes_mm": 37.1,
+  "ear_reach_over_face_mm": 9.4
+ },
+ "elder-f-b": {
+  "spacing_mm": 96.9,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.934,
+  "ears_excluded": 1.765,
+  "outline_depth_behind_irises_mm": -71.0,
+  "ear_height_mm": 47.2,
+  "ear_top_over_eyes_mm": 11.1,
+  "ear_bottom_under_eyes_mm": 36.0,
+  "ear_reach_over_face_mm": 10.2
+ },
+ "elder-f-c": {
+  "spacing_mm": 95.1,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.99,
+  "ears_excluded": 1.82,
+  "outline_depth_behind_irises_mm": -81.4,
+  "ear_height_mm": 53.1,
+  "ear_top_over_eyes_mm": 14.1,
+  "ear_bottom_under_eyes_mm": 39.0,
+  "ear_reach_over_face_mm": 10.1
+ },
+ "elder-m-a": {
+  "spacing_mm": 95.0,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.936,
+  "ears_excluded": 1.741,
+  "outline_depth_behind_irises_mm": -77.3,
+  "ear_height_mm": 53.5,
+  "ear_top_over_eyes_mm": 14.8,
+  "ear_bottom_under_eyes_mm": 38.6,
+  "ear_reach_over_face_mm": 11.4
+ },
+ "elder-m-b": {
+  "spacing_mm": 92.0,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 2.001,
+  "ears_excluded": 1.823,
+  "outline_depth_behind_irises_mm": -67.6,
+  "ear_height_mm": 52.3,
+  "ear_top_over_eyes_mm": 13.4,
+  "ear_bottom_under_eyes_mm": 39.0,
+  "ear_reach_over_face_mm": 10.2
+ },
+ "elder-m-c": {
+  "spacing_mm": 90.2,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 2.054,
+  "ears_excluded": 1.872,
+  "outline_depth_behind_irises_mm": -68.9,
+  "ear_height_mm": 47.4,
+  "ear_top_over_eyes_mm": 13.0,
+  "ear_bottom_under_eyes_mm": 34.4,
+  "ear_reach_over_face_mm": 10.2
+ },
+ "youth-f-a": {
+  "spacing_mm": 100.8,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.812,
+  "ears_excluded": 1.781,
+  "outline_depth_behind_irises_mm": -82.7,
+  "ear_height_mm": 47.6,
+  "ear_top_over_eyes_mm": 15.6,
+  "ear_bottom_under_eyes_mm": 32.0,
+  "ear_reach_over_face_mm": 4.6
+ },
+ "youth-f-b": {
+  "spacing_mm": 97.8,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.863,
+  "ears_excluded": 1.753,
+  "outline_depth_behind_irises_mm": -73.9,
+  "ear_height_mm": 49.7,
+  "ear_top_over_eyes_mm": 14.3,
+  "ear_bottom_under_eyes_mm": 35.4,
+  "ear_reach_over_face_mm": 10.0
+ },
+ "youth-f-c": {
+  "spacing_mm": 96.1,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.958,
+  "ears_excluded": 1.8,
+  "outline_depth_behind_irises_mm": -72.8,
+  "ear_height_mm": 49.0,
+  "ear_top_over_eyes_mm": 11.9,
+  "ear_bottom_under_eyes_mm": 37.0,
+  "ear_reach_over_face_mm": 10.2
+ },
+ "youth-m-a": {
+  "spacing_mm": 96.2,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.879,
+  "ears_excluded": 1.768,
+  "outline_depth_behind_irises_mm": -69.8,
+  "ear_height_mm": 51.6,
+  "ear_top_over_eyes_mm": 14.0,
+  "ear_bottom_under_eyes_mm": 37.5,
+  "ear_reach_over_face_mm": 8.5
+ },
+ "youth-m-b": {
+  "spacing_mm": 93.2,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 1.966,
+  "ears_excluded": 1.826,
+  "outline_depth_behind_irises_mm": -71.1,
+  "ear_height_mm": 53.4,
+  "ear_top_over_eyes_mm": 15.0,
+  "ear_bottom_under_eyes_mm": 38.4,
+  "ear_reach_over_face_mm": 8.5
+ },
+ "youth-m-c": {
+  "spacing_mm": 91.4,
+  "cheek_row_mm_under_eyes": 30,
+  "with_ears": 2.042,
+  "ears_excluded": 1.876,
+  "outline_depth_behind_irises_mm": -69.9,
+  "ear_height_mm": 49.3,
+  "ear_top_over_eyes_mm": 14.1,
+  "ear_bottom_under_eyes_mm": 35.2,
+  "ear_reach_over_face_mm": 9.2
+ }
+}

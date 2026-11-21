@@ -35,7 +35,7 @@
 //! look-dev's 1.4 and 3.6 m/s with their clips' own lengths.
 //!
 //! `LIVING_GAME_FEET=<file>` writes, every frame, where your character's toes and ankles (an
-//! animal's paw tips: `LIVING_GAME_PLAYER=beast:wolf` in look-dev) are and the ground under them, the clip that shows most and, through `anim.rs`, the shared phase and
+//! animal's paw tips: `LIVING_GAME_PLAYER=beast:wolf` in look-dev) are and the ground under them, the hips' place (`hips_at`), the clip that shows most and, through `anim.rs`, the shared phase and
 //! each foot's marker contact (JSON lines), for measuring foot slide
 //! (`living/tools/foot_slide.py`) and checking markers.
 
@@ -824,6 +824,8 @@ fn record(
             "eyes": motions.get(e).ok().map(|m| m.eyes.to_degrees()),
             "travel_rel": motions.get(e).ok().map(|m| m.travel.to_degrees()),
             "hips_yaw": bone_yaw(at[0]),
+            // The hips' place as drawn (world m): a seat's height, and any jump between frames.
+            "hips_at": at[0].and_then(|b| bones.get(b).ok()).map(|(_, g)| g.translation().to_array()),
             "chest_yaw": bone_yaw(at[1]),
             "head_yaw": bone_yaw(at[2]),
             "id": id,

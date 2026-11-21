@@ -31,6 +31,7 @@ names() {
 import sys; sys.path.insert(0, 'living/tools/blender'); sys.path.insert(0, 'living/tools/characters'); import person_params as p
 hair = ['hair/' + s + ('' if c == 1 else '.' + str(c)) for s in p.STYLES for c in range(1, (1 if s == 'kerchief' else p.CUTS) + 1)] + ['hair/' + s + ('' if c == 1 else '.' + str(c)) + '.collar' for s in p.COLLARED for c in range(1, p.CUTS + 1)] + ['hair/' + s + '.cap' for s in p.CAPPED]
 hair += ['hair/' + n[5:] + '.m' for n in hair if n[5:].split('.')[0] in p.MAN_BACKED and not n.endswith('.cap')]
+hair += [n[:-2] + '.full' for n in hair if n.startswith('hair/braid.') and n.endswith('.m')]
 outfit = ['outfit/' + n + f for n in p.PIECES for f in ('-m', '-f')] + ['outfit/' + n for n in p.HEAD_PIECES]
 import face_types
 types = face_types.load()['types']
@@ -66,6 +67,8 @@ one() {
     grep -v OpenColorIO "$log" | tail -30; rm -rf "$log" "$tmp"; return 1
   fi
   python3 living/tools/merge_primitives.py "$tmp/x.glb" "$root/$item.glb" > /dev/null
+  # With the hair-mask page (SLOP_PORT=hair), the file's rectangle and lock lines (hair_page.py).
+  if [ -f "$tmp/x.hairpage.json" ]; then cp "$tmp/x.hairpage.json" "$root/$item.hairpage.json"; fi
   # One shading mean a class, so the client can share one material between a class's files.
   python3 living/tools/characters/shade_mean.py "$kind" "$root/$item.glb" > /dev/null
   if [ "$kind" = hair ]; then

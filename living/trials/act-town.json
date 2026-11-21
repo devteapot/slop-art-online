@@ -1,0 +1,40 @@
+{
+ "kind": "life",
+ "title": "A town of real minds acting: mind_act_replaces off and on",
+ "about": "docs/INPUT_LATENCY.md, \"Real-model trial\". The island as it ships; the mind service thinks for the first 40 adults of the first town by id (Brackenford: the residents act_town.py's fake series drove), all 40 the trial's subject (LIVING_ONLY), with the models file's `people` mix. Nobody is repurposed: they keep their items, routines and given places, and nothing is scripted. The arms differ only in the world law `mind_act_replaces` (variants act-replace-off, act-replace-on); `latency_acts` logs every deliberate act in both. act_trial.py town-side samples the thinkers' activities, routine outcomes and act markers beside the run. trials.py's runaway call rate is set for 40 minds (`budget.runaway_calls_per_min` 400; its one-mind default of 60 stopped the first four arms at minute 4); act_trial.py watch guards spend, failures and backlog.",
+ "gradient": "Whether real minds decide while one of their own acts runs, how often a replacement breaks off work under way, and whether errands and routine work get done more or less.",
+ "world": {
+  "seed": "island"
+ },
+ "minutes": 30,
+ "keep_db": true,
+ "subject": {
+  "pick": {
+   "kind": "person",
+   "stage": 2,
+   "group": 0,
+   "count": 40
+  },
+  "clear_items": false,
+  "clear_routines": false
+ },
+ "cast": {},
+ "timeline": [],
+ "minds": {
+  "concurrency": 64
+ },
+ "life": {
+  "snapshot_min": 60,
+  "stop_on_death": false
+ },
+ "variants": [
+  "act-replace-off",
+  "act-replace-on"
+ ],
+ "probes": [
+  "survived"
+ ],
+ "budget": {
+  "runaway_calls_per_min": 400
+ }
+}

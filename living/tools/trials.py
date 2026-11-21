@@ -207,6 +207,7 @@ def journal_file(name):
 # A seed's laws (`laws`/`laws_file`) composed over the shipped script as the authority composes
 # them at creation (`living_rules::floors::compose`): one Python copy, in install_script.py.
 from install_script import OVERLAY_MARK, compose_laws, same_script, seed_laws, without_world_laws  # noqa: E402
+from law_values import own_laws  # noqa: E402
 
 DEFAULT_DAY_MS = 12 * 60 * 1000  # living_rules::DEFAULT_DAY_MS: a seed without `day_minutes`
 
@@ -1130,6 +1131,9 @@ class Instance:
         owner = world_guard.arm(self.dir, URL, self.db, self.shared["token"], os.getpid(), command=command)
         self.database_identity, self.world_epoch = owner["identity"], owner["epoch"]
         self.published = True
+        # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+        import genesis_wait
+        genesis_wait.wait_ready(URL, self.db, self.shared["token"])
         # The replica remains on disk after logical deletion in SpacetimeDB 2.14.1.
         try:
             self.replica = replica_of(self.db, self.shared["token"], newer_than=started)
@@ -1178,18 +1182,19 @@ class Instance:
         ran = source if source is not None else readback
         (self.dir / "skills.sha256").write_text(hashlib.sha256(ran.encode()).hexdigest() + "\n")
         # A variant's world laws (`world_laws`, name -> value), set as an admin sets them on a live
-        # world (`set_world_law`), after the laws guard; read back from `world_law`.
+        # world (`set_world_law`), after the laws guard; read back as the world's own values
+        # (`law_override` over `world_law`: an older module has only the latter; law_values.py).
         wl = variant.get("world_laws") or {}
         for name, value in wl.items():
             code, body = http(f"/v1/database/{self.db}/call/set_world_law", [name, json.dumps(value)], self.shared["token"])
             if code != 200:
                 raise RuntimeError(f"set_world_law {name} {value}: {code} {body[:300]}")
         if wl:
-            got = {r["name"]: json.loads(r["value"]) for r in self.rows("SELECT * FROM world_law")}
+            got = {k: json.loads(v) for k, v in own_laws(self.rows).items()}
             if any(got.get(k) != v for k, v in wl.items()):
-                raise RuntimeError(f"world laws not in force: wanted {wl}, world_law has {got}")
+                raise RuntimeError(f"world laws not in force: wanted {wl}, the world's own values are {got}")
             (self.dir / "world_laws.json").write_text(json.dumps(got, indent=1))
-            self.log(f"world laws set (set_world_law): {wl}; world_law now {got}")
+            self.log(f"world laws set (set_world_law): {wl}; the world's own values now {got}")
         self.log(f"laws guard passed: the `script` row read back is the {'source sent' if source is not None else 'creation-time script, kept'}"
                  f"{'; the seed laws are composed as the world composed them' + (' (overlay found; module from ' + tag + ')' if built is None else '') + f'; day_ms {day_ms}' if overlay else ''}")
         how = "kept the world's own laws (keep_laws, no install)" if source is None else f"skills installed from {skills.relative_to(ROOT)}"
@@ -1630,7 +1635,11 @@ class Instance:
             env["LIVING_RETHINK_URL"] = f"http://127.0.0.1:{self.shared['fake_port']}/v1/systemone"
             env["TYPESAFE_API_KEY"] = "fake-only"
         self.concurrency = int(env["LIVING_CONCURRENCY"])
-        (self.dir / "mind-env.json").write_text(json.dumps({k: env[k] for k in sorted(env) if k.startswith("LIVING_") and k not in ("LIVING_TOKEN", "LIVING_NEO4J_PASSWORD")}, indent=1))
+        logged_env = {k: env[k] for k in sorted(env) if k.startswith("LIVING_")}
+        for key in logged_env:
+            if re.search(r"(?:^|_)(?:TOKEN|PASSWORD|SECRET|KEY|AUTH|AUTHORIZATION)$", key):
+                logged_env[key] = "<redacted>"
+        (self.dir / "mind-env.json").write_text(json.dumps(logged_env, indent=1))
         log = open(self.dir / "mind.log", "a")
         # A variant may run a mind built from another branch (an iteration's mind change): `mind_bin`,
         # a path under the repository or absolute; the default is this tree's build.

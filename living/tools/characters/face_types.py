@@ -604,8 +604,69 @@ def faults(t):
     return out
 
 
-def load():
-    return json.load(open(DATA))
+PORT = os.path.join(HERE, "port.json")
+
+
+def port_features():
+    """The char-port-2 features switched on for this process: `SLOP_PORT=jaw,jaw_shell,…`
+    (docs/char-port-2/PLAN.md). Empty by default, so every type and file is built as before."""
+    return {f.strip() for f in os.environ.get("SLOP_PORT", "").split(",") if f.strip()}
+
+
+def class_of(tid):
+    """A type's class, its id without the line letter: `adult-f-b` -> `adult-f`."""
+    return tid.rsplit("-", 1)[0]
+
+
+def load(raw=False):
+    """types.json, with the switched-on port features' values (port.json) merged into each
+    type's records. `raw` reads the file alone, as the commands that write it back must."""
+    data = json.load(open(DATA))
+    on = set() if raw else port_features()
+    if on:
+        port = json.load(open(PORT))
+        for f in sorted(on):
+            if f not in port["features"]:
+                raise ValueError(f"SLOP_PORT names {f!r}; port.json has {sorted(port['features'])}")
+            for tid, t in data["types"].items():
+                for record, values in port["features"][f].get("classes", {}).get(class_of(tid), {}).items():
+                    t.setdefault(record, {}).update(values)
+        if "faceprop" in on:
+            for t in data["types"].values():
+                faceprop(t)
+    return data
+
+
+# S6b (`faceprop`): where the width factor acts, in H from the chin. Whole from FP_LOW[1] to
+# FP_HIGH[0], none below FP_LOW[0] (the chin, S1's taper's) or above FP_HIGH[1]. The front plane
+# (w15), which the brows lie on, by FP_HIGH_FRONT, none from below the brows: narrowed under them,
+# a brow at the widest face_width sank behind the skin on the round line.
+FP_LOW, FP_HIGH, FP_HIGH_FRONT = (0.04, 0.14), (0.30, 0.46), (0.26, 0.40)
+
+
+def faceprop(t):
+    """A type's sections narrowed by its class's factor (`faceprop.width`, port.json) over the
+    cheeks: w30 and wide at each height times 1 - (1 - k) x the band's weight there. The front
+    plane (w15) loses as much width as the head within 0.30 H (w30) does at its own weight, not the
+    same share: narrowed by a share, its margin under w30 shrank with it, and a value's fixed
+    widening of the front (`front_breadth`) then put it past w30 at 0.20 H on the men's narrow
+    lines (face_types.py check)."""
+    k = t.get("faceprop", {}).get("width", 1.0)
+    if k == 1.0:
+        return
+    s = t["sections"]
+    for i, z in enumerate(s["z"]):
+        low = smooth((z - FP_LOW[0]) / (FP_LOW[1] - FP_LOW[0]))
+        w30 = s["w30"][i]
+        for key in ("w15", "w30", "wide"):
+            hi = FP_HIGH_FRONT if key == "w15" else FP_HIGH
+            w = low * (1 - smooth((z - hi[0]) / (hi[1] - hi[0])))
+            if s[key][i] is None:
+                continue
+            if key == "w15" and w30 is not None:
+                s[key][i] = round(s[key][i] - (1 - k) * w * w30, 4)
+            else:
+                s[key][i] = round(s[key][i] * (1 - (1 - k) * w), 4)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -924,12 +985,12 @@ def main():
     sub_.add_parser("rig")
     a = ap.parse_args()
     if a.cmd == "measure":
-        data = load() if os.path.exists(DATA) else {}
+        data = load(raw=True) if os.path.exists(DATA) else {}
         data["measured"] = measure(a.ref)
         json.dump(data, open(DATA, "w"), indent=1)
         print(f"measured {len(data['measured'])} anchors into {DATA}")
     elif a.cmd == "build":
-        data = load()
+        data = load(raw=True)
         data = dict(about="Face types, the identity rig and the anchors they were set from (living/tools/characters/face_types.py; docs/CHARACTERS.md). Lengths are in units of the head's height H, chin to crown, unless a name says otherwise.",
                     version=1, file=dict(head_height_m=HEAD_IN_FILE, chin_m=1.535, about="a character file's own size: every head is this high in the file, the chin at this height; the recipe's height and head multiplier size the person"), bands=[dict(band=b, ages=[lo, min(hi, 99)]) for b, lo, hi in BANDS], lines=LINES, rig=rig_json(), measured=data["measured"], types=compose(data["measured"]))
         json.dump(data, open(DATA, "w"), indent=1)

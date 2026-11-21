@@ -1,0 +1,373 @@
+{
+ "note": "each style file's strands (page B, 128 neutral): the mean of its written texels as baked (before, S5's bake) and as held (after, S6 step 4; hair_page.STRANDS_MEAN_TOL 2.0, the audit's check)",
+ "files": {
+  "balding.2.glb": {
+   "before": 160.0,
+   "after": 127.7
+  },
+  "balding.3.glb": {
+   "before": 160.0,
+   "after": 127.7
+  },
+  "balding.cap.glb": {
+   "before": 125.8,
+   "after": 127.5
+  },
+  "balding.glb": {
+   "before": 159.7,
+   "after": 127.7
+  },
+  "bob.2.glb": {
+   "before": 155.0,
+   "after": 127.7
+  },
+  "bob.3.glb": {
+   "before": 153.7,
+   "after": 127.7
+  },
+  "bob.glb": {
+   "before": 152.3,
+   "after": 127.7
+  },
+  "bob_parted.2.glb": {
+   "before": 147.9,
+   "after": 127.7
+  },
+  "bob_parted.3.glb": {
+   "before": 148.5,
+   "after": 127.7
+  },
+  "bob_parted.glb": {
+   "before": 147.6,
+   "after": 127.7
+  },
+  "braid.2.collar.full.glb": {
+   "before": 132.3,
+   "after": 127.5
+  },
+  "braid.2.collar.glb": {
+   "before": 132.6,
+   "after": 127.6
+  },
+  "braid.2.collar.m.glb": {
+   "before": 132.3,
+   "after": 127.6
+  },
+  "braid.2.full.glb": {
+   "before": 132.3,
+   "after": 127.5
+  },
+  "braid.2.glb": {
+   "before": 132.6,
+   "after": 127.6
+  },
+  "braid.2.m.glb": {
+   "before": 132.4,
+   "after": 127.6
+  },
+  "braid.3.collar.full.glb": {
+   "before": 132.7,
+   "after": 127.6
+  },
+  "braid.3.collar.glb": {
+   "before": 133.0,
+   "after": 127.6
+  },
+  "braid.3.collar.m.glb": {
+   "before": 132.7,
+   "after": 127.6
+  },
+  "braid.3.full.glb": {
+   "before": 132.7,
+   "after": 127.6
+  },
+  "braid.3.glb": {
+   "before": 132.9,
+   "after": 127.6
+  },
+  "braid.3.m.glb": {
+   "before": 132.8,
+   "after": 127.6
+  },
+  "braid.collar.full.glb": {
+   "before": 132.7,
+   "after": 127.6
+  },
+  "braid.collar.glb": {
+   "before": 133.0,
+   "after": 127.6
+  },
+  "braid.collar.m.glb": {
+   "before": 132.7,
+   "after": 127.6
+  },
+  "braid.full.glb": {
+   "before": 132.7,
+   "after": 127.6
+  },
+  "braid.glb": {
+   "before": 133.0,
+   "after": 127.6
+  },
+  "braid.m.glb": {
+   "before": 132.8,
+   "after": 127.6
+  },
+  "braids.2.glb": {
+   "before": 136.0,
+   "after": 127.6
+  },
+  "braids.2.m.glb": {
+   "before": 136.0,
+   "after": 127.6
+  },
+  "braids.3.glb": {
+   "before": 136.3,
+   "after": 127.6
+  },
+  "braids.3.m.glb": {
+   "before": 136.3,
+   "after": 127.6
+  },
+  "braids.glb": {
+   "before": 134.4,
+   "after": 127.6
+  },
+  "braids.m.glb": {
+   "before": 134.4,
+   "after": 127.6
+  },
+  "bun.2.glb": {
+   "before": 131.5,
+   "after": 127.6
+  },
+  "bun.3.glb": {
+   "before": 132.0,
+   "after": 127.5
+  },
+  "bun.glb": {
+   "before": 134.6,
+   "after": 127.6
+  },
+  "crop.2.glb": {
+   "before": 160.9,
+   "after": 127.5
+  },
+  "crop.3.glb": {
+   "before": 161.2,
+   "after": 127.5
+  },
+  "crop.cap.glb": {
+   "before": 161.7,
+   "after": 127.5
+  },
+  "crop.glb": {
+   "before": 161.7,
+   "after": 127.5
+  },
+  "kerchief.glb": {
+   "before": 125.5,
+   "after": 127.5
+  },
+  "long.2.collar.glb": {
+   "before": 138.0,
+   "after": 127.6
+  },
+  "long.2.collar.m.glb": {
+   "before": 138.0,
+   "after": 127.6
+  },
+  "long.2.glb": {
+   "before": 138.1,
+   "after": 127.6
+  },
+  "long.2.m.glb": {
+   "before": 138.0,
+   "after": 127.6
+  },
+  "long.3.collar.glb": {
+   "before": 137.4,
+   "after": 127.7
+  },
+  "long.3.collar.m.glb": {
+   "before": 137.2,
+   "after": 127.6
+  },
+  "long.3.glb": {
+   "before": 137.4,
+   "after": 127.7
+  },
+  "long.3.m.glb": {
+   "before": 137.2,
+   "after": 127.6
+  },
+  "long.collar.glb": {
+   "before": 138.5,
+   "after": 127.7
+  },
+  "long.collar.m.glb": {
+   "before": 138.5,
+   "after": 127.7
+  },
+  "long.glb": {
+   "before": 138.5,
+   "after": 127.7
+  },
+  "long.m.glb": {
+   "before": 138.5,
+   "after": 127.7
+  },
+  "shag.2.glb": {
+   "before": 147.0,
+   "after": 127.7
+  },
+  "shag.3.glb": {
+   "before": 144.7,
+   "after": 127.7
+  },
+  "shag.cap.glb": {
+   "before": 162.2,
+   "after": 127.5
+  },
+  "shag.glb": {
+   "before": 146.7,
+   "after": 127.7
+  },
+  "short.2.glb": {
+   "before": 159.9,
+   "after": 127.5
+  },
+  "short.3.glb": {
+   "before": 159.2,
+   "after": 127.5
+  },
+  "short.cap.glb": {
+   "before": 161.7,
+   "after": 127.5
+  },
+  "short.glb": {
+   "before": 157.8,
+   "after": 127.6
+  },
+  "sides.2.glb": {
+   "before": 162.2,
+   "after": 127.5
+  },
+  "sides.3.glb": {
+   "before": 162.6,
+   "after": 127.5
+  },
+  "sides.cap.glb": {
+   "before": 162.3,
+   "after": 127.5
+  },
+  "sides.glb": {
+   "before": 162.8,
+   "after": 127.5
+  },
+  "swept.2.glb": {
+   "before": 160.9,
+   "after": 127.6
+  },
+  "swept.3.glb": {
+   "before": 161.2,
+   "after": 127.5
+  },
+  "swept.cap.glb": {
+   "before": 163.6,
+   "after": 127.5
+  },
+  "swept.glb": {
+   "before": 160.7,
+   "after": 127.5
+  },
+  "swept_braid.2.collar.glb": {
+   "before": 129.8,
+   "after": 127.5
+  },
+  "swept_braid.2.glb": {
+   "before": 129.8,
+   "after": 127.5
+  },
+  "swept_braid.3.collar.glb": {
+   "before": 129.9,
+   "after": 127.5
+  },
+  "swept_braid.3.glb": {
+   "before": 129.9,
+   "after": 127.5
+  },
+  "swept_braid.collar.glb": {
+   "before": 129.7,
+   "after": 127.5
+  },
+  "swept_braid.glb": {
+   "before": 129.7,
+   "after": 127.5
+  },
+  "tail.2.collar.glb": {
+   "before": 142.8,
+   "after": 127.6
+  },
+  "tail.2.collar.m.glb": {
+   "before": 142.8,
+   "after": 127.6
+  },
+  "tail.2.glb": {
+   "before": 142.8,
+   "after": 127.6
+  },
+  "tail.2.m.glb": {
+   "before": 142.8,
+   "after": 127.6
+  },
+  "tail.3.collar.glb": {
+   "before": 141.4,
+   "after": 127.6
+  },
+  "tail.3.collar.m.glb": {
+   "before": 141.4,
+   "after": 127.6
+  },
+  "tail.3.glb": {
+   "before": 141.4,
+   "after": 127.6
+  },
+  "tail.3.m.glb": {
+   "before": 141.4,
+   "after": 127.6
+  },
+  "tail.collar.glb": {
+   "before": 142.0,
+   "after": 127.6
+  },
+  "tail.collar.m.glb": {
+   "before": 142.0,
+   "after": 127.6
+  },
+  "tail.glb": {
+   "before": 142.0,
+   "after": 127.6
+  },
+  "tail.m.glb": {
+   "before": 142.0,
+   "after": 127.6
+  },
+  "tousled.2.glb": {
+   "before": 158.6,
+   "after": 127.6
+  },
+  "tousled.3.glb": {
+   "before": 156.8,
+   "after": 127.6
+  },
+  "tousled.cap.glb": {
+   "before": 161.8,
+   "after": 127.5
+  },
+  "tousled.glb": {
+   "before": 156.4,
+   "after": 127.6
+  }
+ }
+}

@@ -1,0 +1,80 @@
+{
+  "glb_sha256": "3081b2568dc03bc7795943b3a80d036655d8a97d06f1cddfeea69fd493a79f06",
+  "glb_byte_identical": false,
+  "differing_pixels": {
+    "profile-fit-back.png": 0,
+    "profile-fit-portrait.png": 0,
+    "profile-fit-profile.png": 0,
+    "profile-fit-three-quarter.png": 0,
+    "stage2-back.png": 0,
+    "stage2-expression-Fcl_BRW_Angry.png": 0,
+    "stage2-expression-Fcl_BRW_Fun.png": 0,
+    "stage2-expression-Fcl_BRW_Sorrow.png": 0,
+    "stage2-expression-Fcl_BRW_Surprised.png": 0,
+    "stage2-expression-Fcl_EYE_Close.png": 0,
+    "stage2-expression-Fcl_EYE_Close_L.png": 0,
+    "stage2-expression-Fcl_EYE_Close_R.png": 0,
+    "stage2-expression-Fcl_EYE_Joy.png": 0,
+    "stage2-expression-Fcl_MTH_A.png": 0,
+    "stage2-expression-Fcl_MTH_E.png": 0,
+    "stage2-expression-Fcl_MTH_Fun.png": 0,
+    "stage2-expression-Fcl_MTH_I.png": 0,
+    "stage2-expression-Fcl_MTH_O.png": 0,
+    "stage2-expression-Fcl_MTH_Sorrow.png": 0,
+    "stage2-expression-Fcl_MTH_U.png": 0,
+    "stage2-expression-neutral.png": 0,
+    "stage2-expression-returned.png": 0,
+    "stage2-front.png": 0,
+    "stage2-middle.png": 0,
+    "stage2-near.png": 0,
+    "stage2-profile.png": 0,
+    "stage2-three-quarter.png": 0
+  },
+  "export": {
+    "triangles": 35720,
+    "vertices": 23321,
+    "primitives": 10,
+    "materials": 9,
+    "clips": [
+      "idle",
+      "walk",
+      "run",
+      "talk",
+      "sit_idle",
+      "sit_ground"
+    ],
+    "face_keys": [
+      "Fcl_EYE_Close",
+      "Fcl_EYE_Close_L",
+      "Fcl_EYE_Close_R",
+      "Fcl_EYE_Joy",
+      "Fcl_MTH_A",
+      "Fcl_MTH_I",
+      "Fcl_MTH_U",
+      "Fcl_MTH_E",
+      "Fcl_MTH_O",
+      "Fcl_MTH_Fun",
+      "Fcl_MTH_Sorrow",
+      "Fcl_BRW_Angry",
+      "Fcl_BRW_Sorrow",
+      "Fcl_BRW_Surprised",
+      "Fcl_BRW_Fun"
+    ]
+  },
+  "material_audit": {
+    "stage": "stage2-expressions",
+    "materials": 26,
+    "images": [
+      "cora.atlas.png",
+      "cora.iris.png",
+      "cora.tint.png"
+    ],
+    "failures": []
+  },
+  "replay_sha256": "9aae291c8f123c5a3193e9da8395b7eca9c37ef886d44e95b780dc67c4d771fa",
+  "different_buffer_views": [
+    13
+  ],
+  "ordered_vertices_morphs_joints_images_and_animations_identical": true,
+  "all_oriented_triangles_identical": true
+}

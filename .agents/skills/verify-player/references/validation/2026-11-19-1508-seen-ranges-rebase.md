@@ -1,0 +1,3 @@
+# Seen ranges merged onto main, 2026-11-19
+
+`player-seenrb-155857` passed 3/3 on the merged tree at `1b49fefd` (main `974ef3d8`), on the private server on port 3395. The player identity read all 20 bodies within reach. It had no `You notice` lines and was refused SQL on `seen_structures` (HTTP 400). `seen_remains.py` now reads 5 s after placing the player, so several looks pass before the check, where it used to read at once. The run on the first merge (`player-seenrb-154910`) read at once and also passed. See the [core record](../../../verify-core/references/validation/2026-11-19-1508-seen-ranges-rebase.md).

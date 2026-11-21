@@ -1,0 +1,71 @@
+{
+  "near_180": {
+    "old": {
+      "first_visible_y": 432,
+      "marked_pixels_in_window": 157,
+      "window": [
+        775,
+        389,
+        831,
+        482
+      ]
+    },
+    "current": {
+      "first_visible_y": 430,
+      "marked_pixels_in_window": 143,
+      "window": [
+        775,
+        389,
+        831,
+        482
+      ]
+    },
+    "upward_change_px": 2
+  },
+  "middle_180": {
+    "old": {
+      "first_visible_y": 439,
+      "marked_pixels_in_window": 62,
+      "window": [
+        783,
+        405,
+        821,
+        471
+      ]
+    },
+    "current": {
+      "first_visible_y": 438,
+      "marked_pixels_in_window": 55,
+      "window": [
+        783,
+        405,
+        821,
+        471
+      ]
+    },
+    "upward_change_px": 1
+  },
+  "180:8:0.36:0.88": {
+    "old": {
+      "first_visible_y": 504,
+      "marked_pixels_in_window": 11499,
+      "window": [
+        610,
+        170,
+        973,
+        675
+      ]
+    },
+    "current": {
+      "first_visible_y": 428,
+      "marked_pixels_in_window": 15646,
+      "window": [
+        610,
+        170,
+        973,
+        675
+      ]
+    },
+    "upward_change_px": 76
+  }
+}

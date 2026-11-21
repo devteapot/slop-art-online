@@ -1,0 +1,136 @@
+{
+  "shots": [
+    "0:8:0.16:0.91",
+    "0:8:0.16:0.87"
+  ],
+  "rows": [
+    {
+      "material": "Cora_LidInk_EYE",
+      "shot": "0:8:0.16:0.91",
+      "patch": [
+        690,
+        410
+      ],
+      "depth_px": 13,
+      "reference": [
+        690,
+        391
+      ],
+      "measured": [
+        64,
+        43,
+        32
+      ],
+      "floor": [
+        61,
+        42,
+        31
+      ],
+      "reference_measured": [
+        238,
+        180,
+        145
+      ],
+      "drawing_ink": [
+        46,
+        18,
+        9
+      ],
+      "drawing_ref": [
+        237,
+        175,
+        139
+      ],
+      "target": [
+        76,
+        48,
+        35
+      ],
+      "delta": [
+        -12,
+        -5,
+        -3
+      ],
+      "color": [
+        6,
+        2,
+        2
+      ],
+      "suggested": [
+        8,
+        2,
+        2
+      ]
+    },
+    {
+      "material": "Cora_BrowInk_EYE",
+      "shot": "0:8:0.16:0.91",
+      "patch": [
+        766,
+        372
+      ],
+      "depth_px": 15,
+      "reference": [
+        766,
+        352
+      ],
+      "measured": [
+        109,
+        67,
+        43
+      ],
+      "floor": [
+        69,
+        45,
+        30
+      ],
+      "reference_measured": [
+        237,
+        182,
+        146
+      ],
+      "drawing_ink": [
+        80,
+        46,
+        26
+      ],
+      "drawing_ref": [
+        241,
+        181,
+        145
+      ],
+      "target": [
+        101,
+        65,
+        42
+      ],
+      "delta": [
+        8,
+        2,
+        1
+      ],
+      "color": [
+        57,
+        32,
+        20
+      ],
+      "suggested": [
+        52,
+        31,
+        19
+      ]
+    }
+  ],
+  "suggested": {
+    "Cora_LidInk_EYE": [
+      8,
+      2,
+      2
+    ],
+    "Cora_BrowInk_EYE": [
+      52,
+      31,
+      19
+    ]
+  }
+}

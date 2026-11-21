@@ -24,11 +24,25 @@ use std::rc::Rc;
 pub mod calls {
     use std::cell::Cell;
     pub const SKILL: usize = 0;
+    /// `status_of` asked (either way).
     pub const STATUS_ASKED: usize = 1;
+    /// Asked whole: answered from the whole law's memo, or run.
     pub const STATUS_MEMO: usize = 2;
     pub const STATUS_RUN: usize = 3;
+    /// Asked by its parts (`status_parts`): asks, and the joined answer found kept.
+    pub const PARTS_ASKED: usize = 4;
+    pub const PARTS_JOINED: usize = 5;
+    /// Parts answered from their memo, and run.
+    pub const PART_MEMO: usize = 6;
+    pub const PART_RUN: usize = 7;
+    /// `status_parts_check`: asks also asked of the whole law, and those that differed.
+    pub const STATUS_CHECKED: usize = 8;
+    pub const STATUS_DIFFERED: usize = 9;
+    /// Runs of each part by its place in `status_parts()` (the last slot counts the rest).
+    pub const PART_RUN_BY: usize = 10;
+    pub const COUNTS: usize = PART_RUN_BY + super::body::MAX_PARTS;
     thread_local! {
-        static CALLS: Cell<[u64; 4]> = const { Cell::new([0; 4]) };
+        static CALLS: Cell<[u64; COUNTS]> = const { Cell::new([0; COUNTS]) };
     }
     pub fn note(i: usize) {
         CALLS.with(|c| {
@@ -38,8 +52,8 @@ pub mod calls {
         });
     }
     /// The counts since the last take, cleared.
-    pub fn take() -> [u64; 4] {
-        CALLS.with(|c| c.replace([0; 4]))
+    pub fn take() -> [u64; COUNTS] {
+        CALLS.with(|c| c.replace([0; COUNTS]))
     }
 }
 
@@ -55,7 +69,7 @@ pub mod speech;
 mod ui;
 pub use ui::UiWork;
 pub use check::Report;
-pub use body::{Alarm, BodyFacts, Meter, MeterMax, Status, Think};
+pub use body::{Alarm, BodyFacts, Meter, MeterMax, Status, StatusWay, Think};
 
 #[derive(Clone, Debug, Default)]
 pub struct ActorFacts {
@@ -168,6 +182,7 @@ pub struct TargetFacts {
 
 #[derive(Clone, Debug, Default)]
 pub struct SkillCtx {
+    pub gaze_band: crate::sight::GazeBand,
     pub actor: ActorFacts,
     pub target: TargetFacts,
     pub item: String,
@@ -530,6 +545,12 @@ pub struct Laws {
     /// Sight depends on facing (the `field` of `senses(a)`; the geometry is the `fov_*` laws,
     /// read by the script).
     pub fov_on: bool,
+    pub cover_cliff_step_m: f32,
+    pub cover_brush_min_fill: f32,
+    pub cover_brush_on: bool,
+    pub cover_eye_height_m: f32,
+    pub gaze_on: bool,
+    pub cover_sight_on: bool,
     /// How far a character sees ground by day (metres): the cells of `known_ground` it marks
     /// (docs/MOVEMENT_MIND.md, step 3). At night, its own sight.
     pub ground_sight_m: f32,
@@ -549,6 +570,12 @@ pub struct Laws {
     /// A body cannot fall asleep while the one who last struck it, in a fight still on, is within
     /// `wake_reach` (the fact `hurt_by_near`).
     pub alert_while_attacker_near: bool,
+    /// A continuous activity (rest, sleep, work, eating, play) that ends well stays seen until
+    /// the body's next evaluation: its `doing` row is held, then renewed in place if the same
+    /// activity begins again, replaced or removed if not (doing-renew). Nothing begins sooner.
+    /// Off: the row is deleted at the end and the body is seen doing nothing until the next
+    /// begins, as before 2026-11-19.
+    pub renew_in_place: bool,
     /// What a graph's `relation: "stranger"` filter means (docs/STRANGERS.md): off, no
     /// relation row (or one labelled "stranger"); on, someone whose name one does not know
     /// (`perception::knows_name`, the rule scenes and percepts name people by).
@@ -585,11 +612,39 @@ pub struct Laws {
     /// once per this many ms (docs/BATTLE_SCALE.md, fix 3); the percept is written at once and in
     /// full. 0: woken by each, as before.
     pub witness_wake_ms: f32,
+    /// Battle laws (docs/BATTLE_LAWS.md, prototypes, 0 = off in play). (a) At most this many
+    /// creatures a player sees at once: the nearest, and whoever is engaged with it first.
+    pub far_cap: f32,
+    /// (b) Above this many creatures in sight, a player's sweep comes less often, in proportion
+    /// (at most three times the period).
+    pub crowd_sweep_n: f32,
+    /// (b) The longest interval between a player's frames in a crowd (ms; 0: `frame::FRAME_MAX_MS`).
+    pub crowd_frame_max_ms: f32,
+    /// (e) A far creature's motion copy is rewritten only when the client's extrapolation of the old
+    /// one would be this many metres off within half a second (0: on every change).
+    pub far_motion_tol_m: f32,
+    /// Whether a creature in a fight (on the combat cadence, `mind_state.fast_until`) is woken as a
+    /// bystander (`witness_wake_ms`), as before (on). Off (docs/BATTLE_LAWS.md (c), COMBAT_PHASE.md
+    /// "Part B"): what it sees of others' acts waits for its own next cadence evaluation, at most
+    /// `60 / combat_eval_hz` ticks later. The percept is written at once either way, and a party to
+    /// an act is still woken at once.
+    pub fighter_bystander_wakes: bool,
+    /// How often a creature in a fight is evaluated (docs/COMBAT_PHASE.md, "Part B"): every
+    /// `round(60 / combat_eval_hz)` ticks, staggered by id. 15 (every 4th tick) as before.
+    pub combat_eval_hz: f32,
     /// A diagnostic, 0 in play (docs/PERCEPTION.md, "Module memory and rollback"): a step the
     /// world fails on purpose, to prove that nothing kept in module memory outlives a
     /// transaction that rolled back (1 the tick after its sweep, 2 the tick by a panic, 3
     /// `place_at`, 4 `kill`, 5 `join`; 6 drops the marks kept in memory, as if made elsewhere).
     pub memory_test: f32,
+    /// A diagnostic, off in play (docs/COMBAT_PHASE.md, "Step 3 results"): the world's clock, its
+    /// random draws and its 1 Hz housekeeping follow the tick count alone (the clock moves 1/60 s a
+    /// tick from where it stood, the draws are seeded from the tick, housekeeping runs in every
+    /// 60th tick), and each tick logs a hash of every table, so two builds started from one copy
+    /// of a world can be compared tick by tick. `det_stop` (a tick number, 0: none) pauses the world
+    /// at that tick.
+    pub det_clock: bool,
+    pub det_stop: f32,
     /// What an onlooker sees of fights it is not party to is told as one line per this many ms
     /// (docs/BATTLE_SCALE.md, fix 4): every blow it could see, with counts and outcomes. A blow
     /// at it or by it is told at once. 0: each fight's first blow told at once, as before.
@@ -601,10 +656,45 @@ pub struct Laws {
     /// Diagnostic: every shared answer is also computed afresh and compared; differences are
     /// logged and counted (`perception::report_answers`). Costs both.
     pub regard_cache_check: bool,
+    /// A diagnostic, off in play (docs/COMBAT_PHASE.md, "Next: tick body and module memory"):
+    /// each player's sweep keeps its `heard` rows, and the creatures' health readings, in module
+    /// memory across ticks instead of reading them each sweep. Inexact: a vitals write that
+    /// `health_moved` does not mark stands until the reading is renewed (1 s). `sweep_keep_check`
+    /// compares each kept value with the table and counts differences (`sweep keep: …`).
+    pub sweep_keep_memory: bool,
+    pub sweep_keep_check: bool,
     /// A diagnostic: while profiling (`set_profile`), also time the parts of a behaviour graph's
     /// evaluation (its conditions, targets, act starts, alerts), docs/BATTLE_SCALE.md. Off by
     /// default: those spans are many and would weigh on what an ordinary profile measures.
     pub profile_detail: bool,
+    pub latency_nav_from: u32,
+    pub latency_fast: bool,
+    /// A diagnostic (docs/INPUT_LATENCY.md, "Mind acts replace"): each deliberate act's course
+    /// (decided, queued, started, replaced, ended and how) is logged as an `input_latency` marker,
+    /// for every character. Off in play.
+    pub latency_acts: bool,
+    /// Whether a mind's deliberate acts (`mind_act`, `mind_act_checked`) replace the act in
+    /// progress as a player's command does (`human_act`): what was waiting is dropped and the act
+    /// under way is broken off, unless it is a committed move (docs/INPUT_LATENCY.md, "Mind acts
+    /// replace"). Only a batch with at least one act for the body replaces (a gaze change alone
+    /// does not). Off: a mind's acts wait for the act in progress to end, as before.
+    pub mind_act_replaces: bool,
+    /// A replacing act (a player's `human_act`; a mind's under `mind_act_replaces`) is checked
+    /// before the act in progress is broken off: `act::begin` meets the act under way as it meets
+    /// a graph's, so a refused replacement leaves it running and the refusal is told
+    /// (docs/INPUT_LATENCY.md, "Act replacement gaps"). Off: the act under way is broken off first.
+    pub act_replace_checks: bool,
+    /// Each `human_act`, `mind_act` and `mind_act_checked` call spends one token of the actor's
+    /// input bucket (`input_hz`/`input_burst`, shared with movement and skill use); an empty
+    /// bucket refuses it ("too many inputs"). Off: acts cost no input.
+    pub act_input_cost: bool,
+    /// A walk given up within 3 s for another, when one deliberate act replaces another, is
+    /// noticed as a graph's is (`act::turned_back`; the sixth in 20 s is told and asks for a
+    /// thought). Needs `act_replace_checks`. Off: a replacing act's walks are not counted.
+    pub act_turned_back: bool,
+    /// The same act again (skill, target, item, amount, words) while it runs continues it instead
+    /// of starting it over (a held movement's time is renewed). Needs `act_replace_checks`.
+    pub act_same_continues: bool,
     /// A move's check before it starts is given a context of the fields the check reads alone
     /// (its plan; docs/BATTLE_SCALE.md, battle-cheap path 1): the same answer, without gathering
     /// what it never reads (kin near, practice, community and home, warmth). Off: the whole context.
@@ -615,9 +705,54 @@ pub struct Laws {
     /// The body's alarms (`status_of`) are answered from the last answer while no field it reads
     /// has crossed one of its levels (battle-cheap path 2). Off: asked at every evaluation.
     pub alarm_cells: bool,
+    /// How what is near a player, or fighting it, reaches its client (docs/PERCEPTION.md, "Cues
+    /// and tiers"): on, as cues at once (the `seen_*_cue` event tables, filtered per client by
+    /// row-level security) behind near copies that follow every 500 ms; off, no cue is written
+    /// and the near copies follow at every frame. A switch for the delivery, not for what is
+    /// perceived: the rows a client ends on are the same.
+    pub cue_transport_on: bool,
+    /// Whether a player's copies are split into a near tier and a far tier (docs/PERCEPTION.md,
+    /// "Cues and tiers"). Off, every copy is in the far tier (the untiered views' tables), so a
+    /// frame re-runs one view as before frame-views; with `cue_transport_on` off too, a player's
+    /// delivery is main's.
+    pub near_tier_on: bool,
+    /// Whether a player's motion copies reach its client as rows of the public `seen_body_copy`
+    /// table, filtered per client by row-level security (battle-views, docs/BATTLE_VIEWERS.md), in
+    /// place of the private copy tables behind the motion views. The views read whichever holds
+    /// a player's copies, so they show the same either way. Off (the kill switch), every public
+    /// copy goes back to the private tables in one tick. A switch for the delivery, not for what is
+    /// perceived.
+    pub motion_tables_on: bool,
+    /// Whether a player's `seen_characters` rows also reach its client as rows of the public
+    /// `seen_character_copy` table, filtered per client by row-level security (battle-views,
+    /// docs/BATTLE_VIEWERS.md, addendum 2): a mirror of its `projected` rows, kept whole per
+    /// viewer. Off (the kill switch), every mirror row goes in one tick. Delivery only: the view
+    /// shows the same either way.
+    pub characters_table_on: bool,
+    /// Whether a player's copies of the fighters it perceives (`seen_fighters` and its tiers) live
+    /// in the public `seen_fighter_copy` table, filtered per client by row-level security (views
+    /// step 3, docs/BATTLE_VIEWERS.md, addendum 5), instead of the private `fighter_seen` and
+    /// `fighter_near`. Moved at each viewer's frame; off (the kill switch, and the default until the
+    /// client reads it), every public copy goes back to the private tables in one tick. Delivery
+    /// only: the views show the same either way.
+    pub fighter_tables_on: bool,
+    /// Whether what a player's character perceived of fights (its `combat_seen` feed rows) also
+    /// reaches its client as rows of the public `combat_feed` event table, filtered per client by
+    /// row-level security (views step 2, docs/BATTLE_VIEWERS.md, addendum 4): one event row per
+    /// feed row, delivered at commit and never kept. Off (the kill switch, and the default until
+    /// the client reads it), none is written. Delivery only: the `my_combat` view shows the same
+    /// either way.
+    pub combat_feed_on: bool,
     /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
     /// and counted (`alarm:differed`).
     pub alarm_cells_check: bool,
+    /// The body's statuses are asked by the parts the script declares (`status_parts()`; docs/
+    /// STATUS_PARTS.md), each kept on what it reads, so a change of breath alone asks only the
+    /// part that reads breath. Off: `status_of` asked whole (the rollback).
+    pub status_parts: bool,
+    /// Diagnostic: every ask by the parts is also asked of the whole `status_of` with the whole
+    /// body, and a difference logged and counted (`status_parts:differed`).
+    pub status_parts_check: bool,
     /// Diagnostic: warmth (battle-cheap path 3: only what warms or shelters, visited in place)
     /// is also worked out from a full copy, and a difference logged and counted
     /// (`warmth:differed`).
@@ -652,6 +787,8 @@ pub struct Laws {
     /// Diagnostic: every structure a look skips is checked to have its `familiar` row (it would
     /// not have been new), and one without is logged and counted (`notice_delta:differed`).
     pub notice_delta_check: bool,
+    pub seen_ranges: bool,
+    pub seen_ranges_check: bool,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -685,6 +822,14 @@ pub fn longing_wait_ms(after_min: f32, nurture: f32) -> f32 {
     60_000.0 * after_min.max(0.0) * (1.0 - nurture.clamp(0.0, 100.0) / 120.0)
 }
 
+
+impl Laws {
+    /// Every how many ticks a creature in a fight is evaluated: `round(60 / combat_eval_hz)`, at
+    /// least 1 (15 Hz: every 4th tick).
+    pub fn combat_every_ticks(&self) -> u64 {
+        (60.0 / self.combat_eval_hz.max(1.0)).round().max(1.0) as u64
+    }
+}
 
 impl Default for Laws {
     fn default() -> Self {
@@ -732,6 +877,12 @@ impl Default for Laws {
             longing_after_min: 20.0,
             longing_food: 0.0,
             fov_on: false,
+            cover_cliff_step_m: 2.0,
+            cover_brush_min_fill: 0.6,
+            cover_brush_on: true,
+            cover_eye_height_m: 1.6,
+            gaze_on: false,
+            cover_sight_on: false,
             ground_sight_m: 24.0,
             known_cells_pass: 0.0,
             nav_belief: false,
@@ -739,6 +890,7 @@ impl Default for Laws {
             pack_reflex: true,
             alert_after_hit_s: 15.0,
             alert_while_attacker_near: true,
+            renew_in_place: true,
             stranger_by_name: false,
             cues_on: false,
             cue_cooldown_s: 600.0,
@@ -750,15 +902,41 @@ impl Default for Laws {
             think_framing: false,
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
+            far_cap: 0.0,
+            crowd_sweep_n: 0.0,
+            crowd_frame_max_ms: 0.0,
+            fighter_bystander_wakes: true,
+            far_motion_tol_m: 0.0,
+            combat_eval_hz: 15.0,
             memory_test: 0.0,
+            det_clock: false,
+            det_stop: 0.0,
             witness_fold_ms: 2000.0,
             regard_cache: true,
             regard_cache_check: false,
+            sweep_keep_memory: false,
+            sweep_keep_check: false,
             profile_detail: false,
+            latency_nav_from: 0,
+            latency_fast: false,
+            latency_acts: false,
+            mind_act_replaces: false,
+            act_replace_checks: true,
+            act_input_cost: true,
+            act_turned_back: true,
+            act_same_continues: false,
             check_ctx_plan: true,
             check_ctx_check: false,
             alarm_cells: true,
+            cue_transport_on: true,
+            near_tier_on: true,
+            motion_tables_on: true,
+            characters_table_on: true,
+            fighter_tables_on: true,
+            combat_feed_on: true,
             alarm_cells_check: false,
+            status_parts: true,
+            status_parts_check: false,
             warmth_check: false,
             scene_lazy: true,
             scene_lazy_check: false,
@@ -768,6 +946,8 @@ impl Default for Laws {
             notice_inplace_check: false,
             notice_delta: true,
             notice_delta_check: false,
+            seen_ranges: true,
+            seen_ranges_check: false,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -797,6 +977,8 @@ pub struct Reach {
     pub night: f32,
     pub hearing: f32,
     pub glow: f32,
+    /// Optional narrower glow bound in full daylight (falls back to the all-light bound).
+    pub glow_day: f32,
 }
 
 impl Reach {
@@ -810,6 +992,10 @@ impl Reach {
         } else {
             self.day.max(self.night)
         }
+    }
+
+    pub fn glow_at(&self, dark: f32) -> f32 {
+        if dark <= 0.0 { self.glow_day } else { self.glow }
     }
 
     /// The farthest anything is seen at darkness `dark`: by an eye, or by a light on it.
@@ -1119,6 +1305,15 @@ pub struct Scripts {
     laws: std::collections::BTreeMap<String, LawSpec>,
     /// The farthest senses reach (from `senses_law()`).
     reach: Reach,
+    /// The gaze bands' ceilings while the `gaze_on` law holds (`gaze_ceiling(band)`), else none.
+    /// A value-only change of `gaze_on` reads them again ([`Scripts::apply_overrides`]).
+    gaze_ceilings: std::cell::Cell<Option<[f32; 3]>>,
+    /// The world's own law values over the script's ([`Scripts::apply_overrides`]: the
+    /// authority's `law_override` rows), by name. [`Scripts::laws_map`] lays them over.
+    overrides: RefCell<Vec<(String, serde_json::Value)>>,
+    /// The value-only laws ([`VALUE_ONLY`]) that this script names only where the constants are
+    /// declared and described (`value_only_in`): their values can change without an install.
+    value_only: Vec<&'static str>,
     /// Required laws the script lacks, taken from the shipped script (an install refuses them).
     borrowed: Vec<String>,
     /// The script's source (for the order of its declarations).
@@ -1127,7 +1322,9 @@ pub struct Scripts {
     law_errors: RefCell<Vec<String>>,
     /// `law_about(laws(), name)` for each constant, read once when the script compiles, under [`COMPILE_OPERATIONS`]
     /// like the laws' other descriptions: what each world constant is, or why it could not be read.
-    about: Result<Vec<(String, String)>, String>,
+    /// None after a value-only edit ([`Scripts::apply_overrides`]): read again, with the
+    /// compile's limits, when next asked (only an install's checks and tests ask).
+    about: RefCell<Option<Result<Vec<(String, String)>, String>>>,
     /// What each kind of structure does for those near it (its traits in `structures()`).
     structures: HashMap<String, StructureTraits>,
     /// Resource kinds' shares of their regrowth by season (`regrow_by_season`), when not the
@@ -1444,6 +1641,13 @@ impl Scripts {
     /// hour (`rates` with `per: "hour"`) are turned into real time by it, and a law may read it:
     /// `hour_ms()` (real milliseconds in a game hour) and `day_minutes()` (real minutes in a day).
     pub fn with_day(source: &str, day_ms: u64) -> Result<Self, String> {
+        Self::with_overrides(source, day_ms, &[])
+    }
+
+    /// The script for a world whose day lasts `day_ms`, with the world's own law values `over`
+    /// laid over its laws (the authority's `law_override` rows; see [`Scripts::apply_overrides`]):
+    /// everything the script derives from its laws is read under them, as an install reads it.
+    pub fn with_overrides(source: &str, day_ms: u64, over: &[(String, serde_json::Value)]) -> Result<Self, String> {
         if source.len() > MAX_SOURCE {
             return Err(format!("script source exceeds {} KiB", MAX_SOURCE / 1024));
         }
@@ -1456,6 +1660,10 @@ impl Scripts {
         // A script from before a required law existed runs on the shipped script's functions,
         // with its own on top, until it is installed again.
         let borrowed: Vec<String> = REQUIRED_LAWS.iter().filter(|f| !ast.iter_functions().any(|d| d.name == **f)).map(|f| f.to_string()).collect();
+        // The script's own `status_of` without its own `status_parts`: asked whole, so the shipped
+        // parts merged under it below never stand in for it.
+        let defines = |name: &str| ast.iter_functions().any(|d| d.name == name);
+        let status_whole_only = !borrowed.is_empty() && defines("status_of") && !defines("status_parts");
         // What each function reads, from its own source: the field analysis places statements by
         // line and column, which two sources share, so a merged script is analysed source by
         // source, the script's own functions over the shipped ones.
@@ -1474,8 +1682,8 @@ impl Scripts {
         let unary = ast.iter_functions().filter(|f| own(f.name) && f.params.len() == 1).map(|f| f.name.to_string()).collect();
         let nullary = ast.iter_functions().filter(|f| own(f.name) && f.params.is_empty()).map(|f| f.name.to_string()).collect();
         let fields = fields.unwrap_or_else(|| fields::Fields::analyze(&ast));
-        let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0 };
-        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), kin: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), about: Ok(Vec::new()), ui: Default::default(), body: Default::default(), makings: Default::default() };
+        let reach = Reach { day: 0.0, night: 0.0, hearing: 0.0, glow: 0.0, glow_day: 0.0 };
+        let mut s = Self { engine, ast, fns, unary, nullary, shapes: Default::default(), shows: Default::default(), skills: Default::default(), ways: Vec::new(), kin: Default::default(), fields, plans: Default::default(), names: Default::default(), lists: Default::default(), needs: Default::default(), senses: Default::default(), moves: Default::default(), pools: Default::default(), glows: Default::default(), lives: Default::default(), hour_ms, daylight: Default::default(), laws: Default::default(), reach, gaze_ceilings: Default::default(), overrides: RefCell::new(sorted_overrides(over)), value_only: value_only_in(source), borrowed, structures: Default::default(), seasons: Default::default(), tables, source: source.to_string(), law_errors: Default::default(), about: RefCell::new(Some(Ok(Vec::new()))), ui: Default::default(), body: Default::default(), makings: Default::default() };
         // Skills in the order the source declares them (the last declaration of a name counts).
         let declared = |name: &str| source.rfind(&format!("fn {name}_spec(")).unwrap_or(usize::MAX);
         // Required entry points.
@@ -1506,6 +1714,7 @@ impl Scripts {
         s.seasons = s.read_seasons()?;
         s.laws = s.read_laws()?;
         s.reach = s.read_reach()?;
+        s.read_gaze(&s.engine)?;
         for (f, names) in name_laws(&s) {
             for n in names {
                 s.num_of(&f, &n, 0.0);
@@ -1515,10 +1724,10 @@ impl Scripts {
         // compile (`ui_errors`).
         s.ui = s.read_ui();
         // The body's meters: never fail the compile either (`meter_errors`, refused at install).
-        s.body = s.read_body();
+        s.body = s.read_body(status_whole_only);
         // The world constants' words: read once, with what is read once (they list every
         // constant, and grow with a world's laws).
-        s.about = s.read_laws_about();
+        *s.about.borrow_mut() = Some(s.read_laws_about(&s.engine));
         s.engine.set_max_operations(LIMITS.operations);
         Ok(s)
     }
@@ -2119,14 +2328,28 @@ impl Scripts {
         self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, ()).map_err(|e| format!("{f}: {e}"))?.try_cast::<Map>().ok_or_else(|| format!("{f} must return a map"))
     }
 
-    /// The farthest senses reach, from `senses_law()`.
+    /// The largest enabled gaze ceiling, for gathering possible onlookers.
+    pub fn gaze_reach(&self) -> f32 {
+        self.gaze_ceilings.get().map_or(0.0, |ceilings| ceilings.into_iter().fold(0.0, f32::max))
+    }
+
+    pub fn gaze_enabled(&self) -> bool {
+        self.gaze_ceilings.get().is_some()
+    }
+
+    /// Select once per law lookup, so the disabled world uses the original script path.
+    pub fn senses_function(&self) -> &'static str {
+        if self.gaze_enabled() { "gaze_view" } else { "senses" }
+    }
+
     fn read_reach(&self) -> Result<Reach, String> {
         let m = self.law_map("senses_law")?;
         let r = m.get("reach").and_then(|r| r.clone().try_cast::<Map>()).ok_or("senses_law: `reach` is a map of day, night and hearing (metres)")?;
         let g = |k: &str| r.get(k).and_then(number).map(|v| (v as f32).clamp(0.0, 256.0)).ok_or_else(|| format!("senses_law: `reach.{k}` must be a number of metres"));
         // `glow` bounds the `glow` law, and is needed only with one.
         let glow = if self.has("glow") { g("glow").map_err(|e| format!("{e} (the script has a `glow` law)"))? } else { 0.0 };
-        Ok(Reach { day: g("day")?, night: g("night")?, hearing: g("hearing")?, glow })
+        let glow_day = if r.contains_key("glow_day") { g("glow_day")?.min(glow) } else { glow };
+        Ok(Reach { day: g("day")?, night: g("night")?, hearing: g("hearing")?, glow, glow_day })
     }
 
     /// Every law the script declares, by name.
@@ -2137,12 +2360,23 @@ impl Scripts {
     /// What each world constant is (`law_about(laws(), name)`), by name: the script's words for the
     /// values in force. Empty when the script does not say.
     pub fn laws_about(&self) -> Vec<(String, String)> {
-        self.about.clone().unwrap_or_default()
+        self.about_now().unwrap_or_default()
     }
 
     /// Why `laws_about` could not be read when the script compiled, if it could not.
-    pub fn laws_about_error(&self) -> Option<&str> {
-        self.about.as_ref().err().map(|e| e.as_str())
+    pub fn laws_about_error(&self) -> Option<String> {
+        self.about_now().err()
+    }
+
+    /// The constants' words: as the compile read them, or read again for the values in force
+    /// after a value-only edit.
+    fn about_now(&self) -> Result<Vec<(String, String)>, String> {
+        if let Some(a) = self.about.borrow().as_ref() {
+            return a.clone();
+        }
+        let a = self.read_laws_about(&self.compile_engine());
+        *self.about.borrow_mut() = Some(a.clone());
+        a
     }
 
     /// The world constants' words as the compile reads them: `law_about(laws(), name)` for each
@@ -2151,14 +2385,14 @@ impl Scripts {
     /// number of laws (Rhai counts every string inside one value against its string limit). A
     /// script that has only the old `laws_about(l)`, one map of them all (a world's script
     /// installed before 2026-11-13), is read that way.
-    fn read_laws_about(&self) -> Result<Vec<(String, String)>, String> {
+    fn read_laws_about(&self, engine: &Engine) -> Result<Vec<(String, String)>, String> {
         let m = self.laws_map();
         if self.has("law_about") {
             let mut keys: Vec<String> = m.keys().map(|k| k.to_string()).collect();
             keys.sort();
             let mut out = Vec::with_capacity(keys.len());
             for k in keys {
-                let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "law_about", (m.clone(), ImmutableString::from(k.as_str()))).map_err(|e| format!("law_about({k}): {e}"))?;
+                let d = engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "law_about", (m.clone(), ImmutableString::from(k.as_str()))).map_err(|e| format!("law_about({k}): {e}"))?;
                 if d.is_unit() {
                     continue;
                 }
@@ -2170,7 +2404,7 @@ impl Scripts {
         if !self.has("laws_about") {
             return Ok(Vec::new());
         }
-        let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws_about", (m,)).map_err(|e| format!("laws_about: {e}"))?;
+        let d = engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "laws_about", (m,)).map_err(|e| format!("laws_about: {e}"))?;
         Ok(d.try_cast::<Map>().unwrap_or_default().into_iter().map(|(k, v)| (k.to_string(), v.into_string().unwrap_or_default())).collect())
     }
 
@@ -2238,6 +2472,12 @@ impl Scripts {
         let plan = self.plan(law);
         let mut key = Vec::with_capacity(16);
         context::key(ctx, "", &plan, &mut key);
+        if law == "gaze_view" {
+            // The decoded result also carries the chosen band and the light-dependent
+            // glow bound, even when an authored gaze_view does not read these inputs.
+            key.push(ctx.gaze_band as u8);
+            key.extend_from_slice(&ctx.dark.to_bits().to_le_bytes());
+        }
         if let Some(v) = memo.borrow().get(&key) {
             return Ok(*v);
         }
@@ -2252,7 +2492,7 @@ impl Scripts {
 
     /// A creature's senses (`senses(a)`), kept per state and held to the reach.
     pub fn senses(&self, ctx: &SkillCtx) -> Result<Senses, String> {
-        self.per_state("senses", &self.senses, ctx, || self.senses_unshared(ctx))
+        self.per_state(self.senses_function(), &self.senses, ctx, || self.senses_unshared(ctx))
     }
 
     /// How a creature moves (`motion(a)`), kept per state.
@@ -2288,9 +2528,47 @@ impl Scripts {
     /// The same, asking the law every time (benchmarks and install checks).
     #[doc(hidden)]
     pub fn senses_unshared(&self, ctx: &SkillCtx) -> Result<Senses, String> {
-        let m = context::map(ctx, "", &self.plan("senses"));
-        let d = self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "senses", (m,)).map_err(|e| format!("senses: {e}"))?;
-        decode_senses(d, &self.reach, ctx.dark)
+        self.senses_with(&self.engine, ctx)
+    }
+
+    /// `senses_unshared` on `engine` (the script's own, or one with the compile's limits).
+    fn senses_with(&self, engine: &Engine, ctx: &SkillCtx) -> Result<Senses, String> {
+        let f = self.senses_function();
+        let m = context::map(ctx, "", &self.plan(f));
+        let d = engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (m,)).map_err(|e| format!("senses: {e}"))?;
+        let gaze = self.gaze_ceilings.get().map(|ceilings| (ctx.gaze_band, ceilings[ctx.gaze_band as usize]));
+        decode_senses(d, &self.reach, ctx.dark, gaze)
+    }
+
+    /// The gaze bands' ceilings while the `gaze_on` law holds, and every band's senses on the
+    /// install's samples (each light, with and without a torch), as the compile reads them on
+    /// `engine`; none without the law. On an error the ceilings are left as they were.
+    fn read_gaze(&self, engine: &Engine) -> Result<(), String> {
+        if self.law_value("gaze_on") != Some(serde_json::Value::Bool(true)) {
+            self.gaze_ceilings.set(None);
+            return Ok(());
+        }
+        let mut ceilings = [0.0f32; 3];
+        for band in crate::sight::GazeBand::ALL {
+            let d = engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "gaze_ceiling", (i64::from(band as u8),))
+                .map_err(|e| format!("gaze_ceiling: {e}"))?;
+            ceilings[band as usize] = number(&d).filter(|n| (0.0..=256.0).contains(n))
+                .ok_or("gaze_ceiling must be a number of metres (0..=256)")? as f32;
+        }
+        let before = self.gaze_ceilings.replace(Some(ceilings));
+        for gaze_band in crate::sight::GazeBand::ALL {
+            for (night, dark) in [(false, 0.0), (false, 0.25), (true, 0.75), (true, 1.0)] {
+                for torch in [false, true] {
+                    let mut ctx = SkillCtx { gaze_band, night, dark, ..Default::default() };
+                    if torch { ctx.actor.inv.push(("torch".into(), 1)); }
+                    if let Err(e) = self.senses_with(engine, &ctx) {
+                        self.gaze_ceilings.set(before);
+                        return Err(e);
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// How far a creature is seen from by a light on it (`glow(a)`, kept per state like
@@ -2786,6 +3064,13 @@ impl Scripts {
                 }
             }
         }
+        // The world's own values (`law_override`) over both: the one place a law's value in force
+        // is decided. A name that is not a law here, or a value of another kind, is left out.
+        for (k, v) in self.overrides.borrow().iter() {
+            if let Some(d) = m.get(k.as_str()).and_then(|cur| override_value(cur, v)) {
+                m.insert(k.as_str().into(), d);
+            }
+        }
         m
     }
 
@@ -2803,6 +3088,83 @@ impl Scripts {
             }
         }
         if matches!(kind, "person" | "deer" | "wolf") { kind.to_string() } else { "creature".to_string() }
+    }
+
+    /// The world's own law values laid over the script's (as given to [`Scripts::with_overrides`]
+    /// or [`Scripts::apply_overrides`]), by name.
+    pub fn overrides(&self) -> Vec<(String, serde_json::Value)> {
+        self.overrides.borrow().clone()
+    }
+
+    /// Whether `name` is a value-only law in this script, and what its value reaches: one of
+    /// [`VALUE_ONLY`] that the script names only where the constants are declared and described
+    /// (`laws`, `law_about`). A script that reads it anywhere else (an overlay's `law("gaze_on")`
+    /// in a function of its own) makes it an ordinary law, changed by an install.
+    pub fn value_only(&self, name: &str) -> Option<ValueOnly> {
+        VALUE_ONLY.iter().find(|(n, _)| *n == name && self.value_only.contains(n)).map(|(_, c)| *c)
+    }
+
+    /// Lay the world's own law values `over` over the script's laws in place, with the compiled
+    /// script kept: the laws in force (`laws()`, `law_value`, Rhai's `law(name)`) take them, and
+    /// what the script derived from a changed law is read again: the gaze ceilings and their
+    /// samples for `gaze_on` (with the senses kept per state), and the constants' words (when next
+    /// asked). Every
+    /// law whose value in force changes must be value-only here ([`Scripts::value_only`]); a
+    /// change to any other is refused, with nothing changed, and needs the script compiled with
+    /// the values ([`Scripts::with_overrides`]) and, at the authority, installed. A refusal of a
+    /// derived check (a gaze ceiling out of bounds) also leaves everything as it was.
+    pub fn apply_overrides(&self, over: &[(String, serde_json::Value)]) -> Result<Applied, String> {
+        let old_over = self.overrides.replace(sorted_overrides(over));
+        let new = self.laws_map();
+        let old = self.tables.borrow().laws.clone();
+        let mut changed: Vec<String> = new.iter().filter(|(k, v)| old.get(k.as_str()).map_or(true, |o| !same_law_value(o, v))).map(|(k, _)| k.to_string()).collect();
+        changed.extend(old.keys().filter(|k| !new.contains_key(k.as_str())).map(|k| k.to_string()));
+        changed.sort();
+        let mut a = Applied { changed, ..Default::default() };
+        for k in &a.changed {
+            match self.value_only(k) {
+                Some(ValueOnly::Delivery) => a.delivery = true,
+                Some(ValueOnly::Cover) => a.cover = true,
+                Some(ValueOnly::Gaze) => a.gaze = true,
+                None => {
+                    self.overrides.replace(old_over);
+                    return Err(format!("the law `{k}` is not value-only in this script: its change needs an install"));
+                }
+            }
+        }
+        if a.changed.is_empty() {
+            return Ok(a);
+        }
+        self.tables.borrow_mut().laws = new;
+        if a.gaze {
+            // What the compile reads once, read again with its limits.
+            let engine = self.compile_engine();
+            if let Err(e) = self.read_gaze(&engine) {
+                self.tables.borrow_mut().laws = old;
+                self.overrides.replace(old_over);
+                return Err(e);
+            }
+            // Kept per state under the other function (`senses` or `gaze_view`) and ceilings.
+            self.senses.borrow_mut().clear();
+        }
+        // The constants' words follow the values, read when next asked.
+        *self.about.borrow_mut() = None;
+        Ok(a)
+    }
+
+    /// A function of one text argument called on this script's engine, its answer in words
+    /// (tests: `law(name)` as the laws read it).
+    #[cfg(test)]
+    pub(crate) fn call_test(&self, f: &str, arg: &str) -> String {
+        self.engine.call_fn::<Dynamic>(&mut Scope::new(), &self.ast, f, (ImmutableString::from(arg),)).map_or_else(|e| format!("error: {e}"), |d| d.to_string())
+    }
+
+    /// An engine on this script's tables and day with the compile's operations
+    /// ([`COMPILE_OPERATIONS`]), for what is read once after the compile.
+    fn compile_engine(&self) -> Engine {
+        let mut e = engine_with(Limits { operations: COMPILE_OPERATIONS, ..LIMITS }, &self.tables);
+        register_day(&mut e, self.hour_ms);
+        e
     }
 
     /// The world constants in force, as the script's laws read them (`law(name)`).
@@ -2882,6 +3244,12 @@ impl Scripts {
             longing_after_min: g("longing_after_min", l.longing_after_min).clamp(0.0, 100_000.0),
             longing_food: g("longing_food", l.longing_food).clamp(0.0, 1_000.0),
             fov_on: flag("fov_on", l.fov_on),
+            cover_cliff_step_m: g("cover_cliff_step_m", l.cover_cliff_step_m),
+            cover_brush_min_fill: g("cover_brush_min_fill", l.cover_brush_min_fill),
+            cover_brush_on: flag("cover_brush_on", l.cover_brush_on),
+            cover_eye_height_m: g("cover_eye_height_m", l.cover_eye_height_m),
+            gaze_on: flag("gaze_on", l.gaze_on),
+            cover_sight_on: flag("cover_sight_on", l.cover_sight_on),
             ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
             known_cells_pass: g("known_cells_pass", l.known_cells_pass).clamp(0.0, 100_000.0),
             nav_belief: flag("nav_belief", l.nav_belief),
@@ -2889,6 +3257,7 @@ impl Scripts {
             pack_reflex: flag("pack_reflex", l.pack_reflex),
             alert_after_hit_s: g("alert_after_hit_s", l.alert_after_hit_s).clamp(0.0, 3_600.0),
             alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
+            renew_in_place: flag("renew_in_place", l.renew_in_place),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
             cues_on: flag("cues_on", l.cues_on),
             cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),
@@ -2900,15 +3269,41 @@ impl Scripts {
             think_framing: flag("think_framing", l.think_framing),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
+            far_cap: g("far_cap", l.far_cap).clamp(0.0, 10_000.0),
+            crowd_sweep_n: g("crowd_sweep_n", l.crowd_sweep_n).clamp(0.0, 10_000.0),
+            crowd_frame_max_ms: g("crowd_frame_max_ms", l.crowd_frame_max_ms).clamp(0.0, 2_000.0),
+            fighter_bystander_wakes: flag("fighter_bystander_wakes", l.fighter_bystander_wakes),
+            far_motion_tol_m: g("far_motion_tol_m", l.far_motion_tol_m).clamp(0.0, 50.0),
+            combat_eval_hz: g("combat_eval_hz", l.combat_eval_hz).clamp(1.0, 60.0),
             memory_test: g("memory_test", l.memory_test).round().clamp(0.0, 9.0),
+            det_clock: flag("det_clock", l.det_clock),
+            det_stop: g("det_stop", l.det_stop).round().clamp(0.0, 16_000_000.0),
             witness_fold_ms: g("witness_fold_ms", l.witness_fold_ms).clamp(0.0, 10_000.0),
             regard_cache: flag("regard_cache", l.regard_cache),
             regard_cache_check: flag("regard_cache_check", l.regard_cache_check),
+            sweep_keep_memory: flag("sweep_keep_memory", l.sweep_keep_memory),
+            sweep_keep_check: flag("sweep_keep_check", l.sweep_keep_check),
             profile_detail: flag("profile_detail", l.profile_detail),
+            latency_nav_from: g("latency_nav_from", l.latency_nav_from as f32) as u32,
+            latency_fast: flag("latency_fast", l.latency_fast),
+            latency_acts: flag("latency_acts", l.latency_acts),
+            mind_act_replaces: flag("mind_act_replaces", l.mind_act_replaces),
+            act_replace_checks: flag("act_replace_checks", l.act_replace_checks),
+            act_input_cost: flag("act_input_cost", l.act_input_cost),
+            act_turned_back: flag("act_turned_back", l.act_turned_back),
+            act_same_continues: flag("act_same_continues", l.act_same_continues),
             check_ctx_plan: flag("check_ctx_plan", l.check_ctx_plan),
             check_ctx_check: flag("check_ctx_check", l.check_ctx_check),
             alarm_cells: flag("alarm_cells", l.alarm_cells),
+            cue_transport_on: flag("cue_transport_on", l.cue_transport_on),
+            near_tier_on: flag("near_tier_on", l.near_tier_on),
+            motion_tables_on: flag("motion_tables_on", l.motion_tables_on),
+            characters_table_on: flag("characters_table_on", l.characters_table_on),
+            fighter_tables_on: flag("fighter_tables_on", l.fighter_tables_on),
+            combat_feed_on: flag("combat_feed_on", l.combat_feed_on),
             alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
+            status_parts: flag("status_parts", l.status_parts),
+            status_parts_check: flag("status_parts_check", l.status_parts_check),
             warmth_check: flag("warmth_check", l.warmth_check),
             scene_lazy: flag("scene_lazy", l.scene_lazy),
             scene_lazy_check: flag("scene_lazy_check", l.scene_lazy_check),
@@ -2918,6 +3313,8 @@ impl Scripts {
             notice_inplace_check: flag("notice_inplace_check", l.notice_inplace_check),
             notice_delta: flag("notice_delta", l.notice_delta),
             notice_delta_check: flag("notice_delta_check", l.notice_delta_check),
+            seen_ranges: flag("seen_ranges", l.seen_ranges),
+            seen_ranges_check: flag("seen_ranges_check", l.seen_ranges_check),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -3107,7 +3504,7 @@ fn decode_pools(d: Dynamic) -> Result<crate::pools::Pools, String> {
     })
 }
 
-fn decode_senses(d: Dynamic, reach: &Reach, dark: f32) -> Result<Senses, String> {
+fn decode_senses(d: Dynamic, reach: &Reach, dark: f32, band: Option<(crate::sight::GazeBand, f32)>) -> Result<Senses, String> {
     let m = d.try_cast::<Map>().ok_or("senses must return a map of sight and hearing")?;
     let g = |k: &str| m.get(k).and_then(number).map(|v| v as f32).ok_or_else(|| format!("senses: `{k}` must be a number of metres"));
     let field = match m.get("field") {
@@ -3120,7 +3517,167 @@ fn decode_senses(d: Dynamic, reach: &Reach, dark: f32) -> Result<Senses, String>
             Some(Field { focal_deg, side_deg: n("side_deg", 0.0, 180.0)?.max(focal_deg), side_share: n("side_share", 0.0, 1.0)?, near_m: n("near_m", 0.0, 256.0)?, margin_deg: n("margin_deg", 0.0, 90.0)? })
         }
     };
-    Ok(Senses { sight: g("sight")?.clamp(0.0, reach.sight(dark)), hearing: g("hearing")?.clamp(0.0, reach.hearing), field })
+    let mut sight = g("sight")?;
+    let gaze = if let Some((band, ceiling)) = band {
+        let ground = g("ground")?;
+        let f = field.ok_or("senses: enabled gaze requires a field")?;
+        if !(0.0..=256.0).contains(&ceiling) || !(0.0..=ceiling).contains(&sight)
+            || !(0.0..=256.0).contains(&ground) || !(0.0..=sight).contains(&f.near_m) {
+            return Err("senses: invalid gaze bounds".into());
+        }
+        Some(crate::sight::Gaze { band, ceiling, ground, glow: reach.glow_at(dark) })
+    } else {
+        sight = sight.clamp(0.0, reach.sight(dark));
+        None
+    };
+    Ok(Senses { sight, hearing: g("hearing")?.clamp(0.0, reach.hearing), field, gaze })
+}
+
+/// What a value-only law's value reaches beyond the laws in force (see [`VALUE_ONLY`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValueOnly {
+    /// Read live by the authority each tick (its frames, sweeps and wakes): nothing derived, the
+    /// next tick reads it. The delivery laws, and the battle laws' prototypes (docs/BATTLE_LAWS.md).
+    Delivery,
+    /// The cover policy: the authority's `cover_law` row and its cover mask (`living_rules::cover`).
+    Cover,
+    /// The gaze bands: the ceilings and senses ([`Scripts::apply_overrides`]), and the
+    /// authority's owner projection (`applied_gaze`).
+    Gaze,
+}
+
+/// The laws whose value can change on a running world without an install (`set_world_law`'s
+/// value-only path, docs/LAW_OVERRIDE.md), with what each reaches. A law belongs here only
+/// when no script function but the constants' own (`laws`, `law_about`) reads it, so a new
+/// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
+/// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
+/// for that world ([`Scripts::value_only`]).
+pub const VALUE_ONLY: [(&str, ValueOnly); 26] = [
+    ("cue_transport_on", ValueOnly::Delivery),
+    ("near_tier_on", ValueOnly::Delivery),
+    // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
+    ("motion_tables_on", ValueOnly::Delivery),
+    // battle-views: the mirror of a player's projections (`perception.rs`, `seen_character_copy`).
+    ("characters_table_on", ValueOnly::Delivery),
+    // views step 3: where a player's fighter copies live (`frame.rs`, `seen_fighter_copy`).
+    ("fighter_tables_on", ValueOnly::Delivery),
+    // views step 2: a player's combat feed as event rows (`combat.rs`, `combat_feed`).
+    ("combat_feed_on", ValueOnly::Delivery),
+    // The battle laws' prototypes (docs/BATTLE_LAWS.md), live-tunable: the sweeps read `far_cap`
+    // and `crowd_sweep_n`, the frames `crowd_frame_max_ms` and `far_motion_tol_m`, the wakes
+    // `fighter_bystander_wakes`, each at its next tick.
+    ("far_cap", ValueOnly::Delivery),
+    ("crowd_sweep_n", ValueOnly::Delivery),
+    ("crowd_frame_max_ms", ValueOnly::Delivery),
+    ("fighter_bystander_wakes", ValueOnly::Delivery),
+    ("far_motion_tol_m", ValueOnly::Delivery),
+    // battle-laws (docs/COMBAT_PHASE.md, docs/BATTLE_LAWS.md §4), read live by the tick: the wakes
+    // `fighter_bystander_wakes`, the combat cadence `combat_eval_hz`, the sweeps' memory
+    // `sweep_keep_memory` and its check, each at its next tick.
+    ("combat_eval_hz", ValueOnly::Delivery),
+    ("sweep_keep_memory", ValueOnly::Delivery),
+    ("sweep_keep_check", ValueOnly::Delivery),
+    // mind-act-replace (docs/INPUT_LATENCY.md, "Mind acts replace"), read by `mind_act` and the
+    // act markers at their next call.
+    ("mind_act_replaces", ValueOnly::Delivery),
+    ("latency_acts", ValueOnly::Delivery),
+    // act-replace-gaps (docs/INPUT_LATENCY.md, "Act replacement gaps"), read at the next act.
+    ("act_replace_checks", ValueOnly::Delivery),
+    ("act_input_cost", ValueOnly::Delivery),
+    ("act_turned_back", ValueOnly::Delivery),
+    ("act_same_continues", ValueOnly::Delivery),
+    ("cover_sight_on", ValueOnly::Cover),
+    ("cover_eye_height_m", ValueOnly::Cover),
+    ("cover_brush_on", ValueOnly::Cover),
+    ("cover_brush_min_fill", ValueOnly::Cover),
+    ("cover_cliff_step_m", ValueOnly::Cover),
+    ("gaze_on", ValueOnly::Gaze),
+];
+
+/// The functions a value-only law may be named in: the constants (`laws`, an overlay's
+/// `base_laws`), their words and a world's own values.
+const VALUE_ONLY_READERS: [&str; 5] = ["laws", "base_laws", "law_about", "laws_about", WORLD_LAW_VALUES];
+
+/// What [`Scripts::apply_overrides`] changed: the laws whose value in force changed, and the
+/// classes they belong to (what the caller refreshes of its own).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Applied {
+    pub changed: Vec<String>,
+    pub delivery: bool,
+    pub cover: bool,
+    pub gaze: bool,
+}
+
+/// The value-only laws `source` names only in [`VALUE_ONLY_READERS`]: each place the name
+/// appears as a word (a key, a field, a `law("…")` string, a comment) counts for the function
+/// declared last before it, and anywhere outside those functions (or before any function) the
+/// law is not value-only in this script.
+fn value_only_in(source: &str) -> Vec<&'static str> {
+    // Every function's start, by the line that declares it (`fn name(`, `private fn name(`).
+    let mut starts: Vec<(usize, &str)> = Vec::new();
+    let mut at = 0;
+    for line in source.split_inclusive('\n') {
+        let t = line.trim_start();
+        let t = t.strip_prefix("private ").map(str::trim_start).unwrap_or(t);
+        if let Some(rest) = t.strip_prefix("fn ") {
+            let name = rest.trim_start().split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).next().unwrap_or("");
+            if !name.is_empty() {
+                starts.push((at, name));
+            }
+        }
+        at += line.len();
+    }
+    let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+    let bytes = source.as_bytes();
+    VALUE_ONLY.iter().map(|(n, _)| *n).filter(|n| {
+        source.match_indices(n).filter(|(i, _)| {
+            let before = *i == 0 || !word(bytes[i - 1]);
+            let after = i + n.len() >= bytes.len() || !word(bytes[i + n.len()]);
+            before && after
+        }).all(|(i, _)| {
+            let f = starts.iter().take_while(|(s, _)| *s <= i).last().map(|(_, f)| *f);
+            f.is_some_and(|f| VALUE_ONLY_READERS.contains(&f))
+        })
+    }).collect()
+}
+
+/// The world's own law values from `law_override` rows (name, value as JSON), as the authority
+/// and every client decode them for [`Scripts::with_overrides`] and [`Scripts::apply_overrides`]:
+/// by name; a value that is not JSON is left out.
+pub fn overrides_of<'a>(rows: impl IntoIterator<Item = (&'a str, &'a str)>) -> Vec<(String, serde_json::Value)> {
+    let v: Vec<(String, serde_json::Value)> = rows.into_iter().filter_map(|(k, v)| serde_json::from_str(v.trim()).ok().map(|v| (k.to_string(), v))).collect();
+    sorted_overrides(&v)
+}
+
+/// Overrides by name, the last of a name kept.
+fn sorted_overrides(over: &[(String, serde_json::Value)]) -> Vec<(String, serde_json::Value)> {
+    let mut m: BTreeMap<String, serde_json::Value> = BTreeMap::new();
+    for (k, v) in over {
+        m.insert(k.clone(), v.clone());
+    }
+    m.into_iter().collect()
+}
+
+/// A world's own value of a law whose script value is `cur`, as the laws read it: true or false
+/// for a flag, a number (as a float) for a number; none for a value of another kind.
+fn override_value(cur: &Dynamic, v: &serde_json::Value) -> Option<Dynamic> {
+    match v {
+        serde_json::Value::Bool(b) if cur.is_bool() => Some(Dynamic::from(*b)),
+        serde_json::Value::Number(n) if !cur.is_bool() && number(cur).is_some() => Some(Dynamic::from(n.as_f64()?)),
+        _ => None,
+    }
+}
+
+/// Two values of a law alike: the same flag, or the same number.
+fn same_law_value(a: &Dynamic, b: &Dynamic) -> bool {
+    match (a.as_bool(), b.as_bool()) {
+        (Ok(x), Ok(y)) => x == y,
+        (Err(_), Err(_)) => match (number(a), number(b)) {
+            (Some(x), Some(y)) => x == y,
+            _ => a.type_name() == b.type_name(),
+        },
+        _ => false,
+    }
 }
 
 /// The function a world's own law values are written as at the end of its script.
@@ -3853,6 +4410,11 @@ mod tests {
         assert_eq!((l.cue_cooldown_s, l.cue_gap_s, l.cue_check_s), (600.0, 60.0, 1.0));
         assert!(l.regard_cache && !l.regard_cache_check, "answers are shared by default, unchecked");
         assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
+        assert!(!l.sweep_keep_memory && !l.sweep_keep_check, "sweeps read heard rows and health afresh by default");
+        assert!(l.fighter_bystander_wakes, "a fighter is woken as any bystander by default (docs/COMBAT_PHASE.md)");
+        assert!(!l.mind_act_replaces && !l.latency_acts, "a mind's acts wait for the act in progress, unlogged, by default (docs/INPUT_LATENCY.md)");
+        assert!(l.act_replace_checks && l.act_input_cost && l.act_turned_back && !l.act_same_continues, "a replacing act is checked first, costs an input and is counted for turning back; the same act again restarts (docs/INPUT_LATENCY.md)");
+        assert_eq!((l.combat_eval_hz, l.combat_every_ticks()), (15.0, 4), "fighters evaluated every 4th tick by default");
         assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
         assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");
         assert!(l.chronicle_recent && !l.chronicle_recent_check, "the chronicle's repeat check reads the newest rows; its check off");
@@ -3872,6 +4434,12 @@ mod tests {
         assert!(about["memory_test"].starts_with("A test switch"), "{about:?}");
         let t = Scripts::new(&with_world_laws(src, &[("memory_test".into(), serde_json::json!(3.4))])).unwrap();
         assert_eq!(t.laws().memory_test, 3.0);
+        assert!(about["combat_eval_hz"].contains("15 times a second"), "{about:?}");
+        for (hz, every) in [(10.0, 6), (7.5, 8), (60.0, 1), (0.0, 60), (100.0, 1)] {
+            let t = Scripts::new(&with_world_laws(src, &[("combat_eval_hz".into(), serde_json::json!(hz)), ("fighter_bystander_wakes".into(), serde_json::json!(false))])).unwrap();
+            assert_eq!(t.laws().combat_every_ticks(), every, "{hz} Hz");
+            assert!(!t.laws().fighter_bystander_wakes);
+        }
     }
 
     /// First sights that ask for a thought (docs/FIRST_SIGHT.md): off by default, with the gap a
@@ -3919,6 +4487,39 @@ mod tests {
         assert!(!off.laws().earshot);
         let about: std::collections::HashMap<String, String> = off.laws_about().into_iter().collect();
         assert!(about["earshot"].contains("judges for oneself"), "{about:?}");
+    }
+
+    #[test]
+    fn cue_transport_on_is_on_since_acceptance_and_separate_from_attention_cues() {
+        // frame-views: the cue event tables' kill switch (docs/TICK_RATE.md, "Row-level security,
+        // the kill switch and SpacetimeDB upgrades"), on by default since the acceptance series;
+        // `cues_on` is the minds' attention cues.
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(shipped.laws().cue_transport_on);
+        assert!(!shipped.laws().cues_on);
+        let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
+        assert!(about["cue_transport_on"].contains("at once"), "{about:?}");
+        let on = Scripts::new(&with_world_laws(src, &[("cue_transport_on".into(), serde_json::json!(true))])).unwrap();
+        on.validate().unwrap();
+        assert!(on.laws().cue_transport_on && !on.laws().cues_on);
+        assert!(shipped.laws().near_tier_on, "the near tier is on by default");
+        assert!(shipped.laws().motion_tables_on, "the motion tables are on by default since bv-defaults-on");
+        assert!(shipped.laws().characters_table_on, "the characters table is on by default since bv-defaults-on");
+        assert!(about["characters_table_on"].contains("meant for that player alone"), "{about:?}");
+        assert!(about["motion_tables_on"].contains("meant for that player alone"), "{about:?}");
+        assert_eq!(Laws::default().motion_tables_on, shipped.laws().motion_tables_on, "Laws::default and the shipped script agree");
+        assert_eq!(Laws::default().characters_table_on, shipped.laws().characters_table_on, "Laws::default and the shipped script agree");
+        // The kill switch: a world's laws can still turn either off.
+        let tables = Scripts::new(&with_world_laws(src, &[("motion_tables_on".into(), serde_json::json!(false)), ("characters_table_on".into(), serde_json::json!(false))])).unwrap();
+        assert!(!tables.laws().motion_tables_on && !tables.laws().characters_table_on && tables.laws().near_tier_on && tables.laws().cue_transport_on);
+        let about_off: std::collections::HashMap<String, String> = tables.laws_about().into_iter().collect();
+        assert!(about_off["motion_tables_on"].contains("what it may look at") && about_off["characters_table_on"].contains("what it may look at"), "{about_off:?}");
+        let off = Scripts::new(&with_world_laws(src, &[("near_tier_on".into(), serde_json::json!(false)), ("cue_transport_on".into(), serde_json::json!(false))])).unwrap();
+        off.validate().unwrap();
+        assert!(!off.laws().near_tier_on && !off.laws().cue_transport_on);
+        let about: std::collections::HashMap<String, String> = off.laws_about().into_iter().collect();
+        assert!(about["cue_transport_on"].contains("with the rest of what it sees"), "{about:?}");
     }
 
     #[test]
@@ -4001,6 +4602,50 @@ mod tests {
     }
 
     #[test]
+    fn gaze_bands_change_light_reach_field_and_ground_in_both_worlds() {
+        use crate::sight::GazeBand::{Far, Middle, Near};
+        const BASE: &str = include_str!("../../scripts/skills.rhai");
+        const CULLET: &str = include_str!("../../seeds/worlds/cullet/laws.rhai");
+        for (source, day, night) in [(BASE.to_owned(), 11.0, 6.0), (crate::floors::compose(BASE, CULLET).unwrap(), 48.0, 14.0)] {
+            // Gaze off explicitly: Cullet ships it on (2026-11-19).
+            let off = Scripts::new(&with_world_laws(&source, &[("fov_on".into(), true.into()), ("gaze_on".into(), false.into())])).unwrap();
+            let on = Scripts::new(&with_world_laws(&source, &[("gaze_on".into(), true.into())])).unwrap();
+            on.validate().unwrap();
+            let ctx = |gaze_band| SkillCtx { gaze_band, ..Default::default() };
+            let middle = on.senses(&ctx(Middle)).unwrap();
+            assert_eq!(Senses { gaze: None, ..middle }, off.senses(&ctx(Middle)).unwrap());
+            let far = on.senses(&ctx(Far)).unwrap();
+            let near = on.senses(&ctx(Near)).unwrap();
+            for (s, band, share, focal, side) in [(middle, Middle, 1.0, 70.0, 110.0), (far, Far, 1.3, 35.0, 65.0), (near, Near, 0.6, 110.0, 155.0)] {
+                let field = s.field.unwrap();
+                assert_eq!((field.focal_deg, field.side_deg), (focal, side));
+                assert_eq!(field.side_share, middle.field.unwrap().side_share);
+                assert_eq!(field.near_m, middle.field.unwrap().near_m);
+                assert!((s.sight - day * share).abs() < 0.001);
+                assert_eq!(s.gaze.unwrap().band, band);
+                let dark = on.senses(&SkillCtx { night: true, dark: 1.0, ..ctx(band) }).unwrap();
+                assert!((dark.sight - night * share).abs() < 0.001);
+                assert!((dark.gaze.unwrap().ground - night * share).abs() < 0.001);
+            }
+            // Far's own sight can exceed a twilight glow, while the glow can still
+            // reach beyond the observer's shorter peripheral sight.
+            let twilight = on.senses(&SkillCtx { dark: 0.05, ..ctx(Far) }).unwrap();
+            assert_eq!(far.gaze.unwrap().glow, 0.0);
+            assert!(twilight.gaze.unwrap().glow < twilight.sight);
+            if day == 48.0 {
+                let glow = twilight.gaze.unwrap().glow;
+                assert_eq!(glow, 48.0);
+                assert!(crate::sight::reach(&twilight, 50.0f32.to_radians(), glow, None) > twilight.sight / 2.0);
+            }
+            assert_eq!(middle.gaze.unwrap().ground, 24.0);
+            assert!((near.gaze.unwrap().ground - 14.4).abs() < 0.001);
+            assert!(near.gaze.unwrap().ceiling < middle.gaze.unwrap().ceiling);
+            assert!(far.gaze.unwrap().ceiling > middle.gaze.unwrap().ceiling);
+            assert_eq!(off.senses(&ctx(Far)).unwrap(), off.senses(&ctx(Near)).unwrap());
+        }
+    }
+
+    #[test]
     fn senses_are_a_law_per_creature() {
         let s = scripts();
         let got: Vec<(f32, f32)> = [(false, false), (true, false), (true, true), (false, true)].iter().map(|(n, t)| {
@@ -4008,7 +4653,7 @@ mod tests {
             (v.sight, v.hearing)
         }).collect();
         assert_eq!(got, vec![(11.0, 9.0), (6.0, 9.0), (9.0, 9.0), (11.0, 9.0)]);
-        assert_eq!(s.reach(), Reach { day: 11.0, night: 9.0, hearing: 9.0, glow: 0.0 });
+        assert_eq!(s.reach(), Reach { day: 11.0, night: 9.0, hearing: 9.0, glow: 0.0, glow_day: 0.0 });
         assert_eq!(s.law_plan("senses").describe(), vec!["actor.inv[torch]".to_string(), "night".to_string()], "the key is what the law reads");
         let spec = &s.law_specs()["senses"];
         assert_eq!((spec.cadence, spec.topic.as_str()), (Cadence::Hot, "senses"));

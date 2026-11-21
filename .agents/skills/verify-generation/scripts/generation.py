@@ -366,6 +366,25 @@ def database_identity(database):
         return error.code, error.read().decode()
 
 
+def world_law_block(script):
+    """The law values written at the end of an installed script (`living_rules::script::
+    with_world_laws`: `fn world_law_values() { #{ name: value, ... } }` after its mark), as
+    {name: bool or float}; {} when the script has none. A value of another kind reads as None."""
+    sys.path.insert(0, str(ROOT / "living/tools"))
+    import install_script
+    i = script.find(install_script.WORLD_LAW_MARK)
+    if i < 0:
+        return {}
+    body = re.search(r"fn world_law_values\(\)\s*\{\s*#\{(.*?)\}\s*\}", script[i:], re.S)
+    values = {}
+    for item in (body.group(1).split(",") if body else []):
+        if ":" not in item:
+            continue
+        name, value = (s.strip() for s in item.split(":", 1))
+        values[name] = value == "true" if value in ("true", "false") else float(value) if re.fullmatch(r"-?[0-9.]+(e[-+]?[0-9]+)?", value) else None
+    return values
+
+
 def check_seed(seed, rows):
     checks = []
 
@@ -377,14 +396,25 @@ def check_seed(seed, rows):
 
     w = rows["world"][0]
     # The seed's day and its own laws (docs/CULLET_RULES.md): the world's day, and the installed
-    # script is the shipped one with the overlay composed over it.
+    # script is the shipped one with the overlay composed over it (install_script.py's
+    # `seed_script`, the one Python copy of `floors::compose`). Every install then writes the
+    # world's own law values (a seed's `rules`) after it as `world_law_values()`
+    # (docs/PERCEPTION.md, "Changing a law on a running world"; docs/LAW_OVERRIDE.md), so the
+    # composition is compared without that block and the block with the seed's rules.
     equal("world day length", w["day_ms"], round(seed.get("day_minutes", 12) * 60000))
     script = (rows.get("script") or [{}])[0].get("source", "")
-    if str(seed.get("laws") or "").strip():
-        parts = script.split("// ---- floor overlay ----", 1)
-        present("the seed's laws are composed over the shipped script", len(parts) == 2 and parts[1].strip() == seed["laws"].strip() and "fn base_rates(a)" in parts[0], {"chars": len(script)})
+    sys.path.insert(0, str(ROOT / "living/tools"))
+    import install_script
+    made = install_script.without_world_laws(script).rstrip("\n")
+    expected, overlay = install_script.seed_script(seed)
+    detail = {"chars": len(script), "composed_chars": len(made), "expected_chars": len(expected.rstrip("\n"))}
+    if overlay.strip():
+        present("the seed's laws are composed over the shipped script", made == expected.rstrip("\n") and "fn base_rates(a)" in made, detail)
     else:
-        present("the installed script is the shipped one", "// ---- floor overlay ----" not in script and script.strip() == (ROOT / "living/scripts/skills.rhai").read_text().strip())
+        present("the installed script is the shipped one", install_script.OVERLAY_MARK.strip() not in made and made == expected.rstrip("\n"), detail)
+    written = world_law_block(script)
+    rules = seed.get("rules") or {}
+    present("the installed script carries the seed's rules as its law values", written == {k: float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else v for k, v in rules.items()}, {"written": written, "rules": rules})
     m = seed.get("map", {})
     if m.get("kind") == "land":
         size = [m.get("size") or max(m.get("w", 0), m.get("h", 0))] * 2
@@ -732,7 +762,9 @@ def check_land(seed, rows, side, tiles):
     if plans:
         checks.extend(check_plans(seed, rows, plans, tile))
     # A seed's `rules` are the world's own law values, kept when it is made (docs/WORLD_RULES.md).
-    kept = {r["name"]: json.loads(r["value"]) for r in rows.get("world_law", [])}
+    # Kept in `law_override` since law-override (docs/LAW_OVERRIDE.md), laid over `world_law`
+    # (which a module from before it writes): living/tools/law_values.py's rule.
+    kept = {r["name"]: json.loads(r["value"]) for r in rows.get("world_law", []) + rows.get("law_override", [])}
     present("the seed's rules are kept as the world's laws", kept == seed.get("rules", {}), {"kept": kept, "seed": seed.get("rules", {})})
     if seed.get("rules", {}).get("minds") is False:
         world = rows["world"][0]
@@ -1233,7 +1265,7 @@ def suite(args):
             write(d / "seed.json", seed_text(seed_path) if seed_name != "malformed" else json.loads(seed_path.read_text()))
             database = "verify-" + active_run
             seed_arg = "none" if seed_name in FLOORS else str(seed_path.with_suffix("")) if seed_name == "malformed" or seed_name in DERIVED else seed_name
-            # A seed's `rules` are world laws kept at creation (`world_law`), not compiled in.
+            # A seed's `rules` are world laws kept at creation (`law_override`), not compiled in.
             launch_env = None
             container = subprocess.run(["docker", "ps", "--filter", f"name=^{CONTAINER}$", "--format", "{{.Status}}"], capture_output=True, text=True, check=True, timeout=30)
             if not container.stdout.strip().startswith("Up"):
@@ -1246,7 +1278,7 @@ def suite(args):
                     identity_status, identity = database_identity(database)
                     built = target / "seeded/wasm32-unknown-unknown/release/living_authority.wasm"
                     state = json.loads((d / "state.json").read_text()) if (d / "state.json").exists() else {}
-                    publication = {"started": started, "ended": ended, "identity_status": identity_status, "database_identity": identity, "wasm_sha256": hashlib.sha256(built.read_bytes()).hexdigest() if built.exists() else None, "publication_attempted": state.get("published", False)}
+                    publication = {"started": started, "ended": ended, "identity_status": identity_status, "database_identity": identity, "wasm_sha256": hashlib.sha256(built.read_bytes()).hexdigest() if built.exists() else None, "publication_attempted": state.get("published", False) or state.get("publish_attempted", False)}
                     write(d / "publication.json", publication)
                     server = subprocess.run(["docker", "logs", "--since", started, "--until", ended, CONTAINER], capture_output=True, text=True, timeout=30)
                     records = re.split(r"(?=\d{4}-\d{2}-\d{2}T)", server.stdout + server.stderr)
@@ -1257,12 +1289,14 @@ def suite(args):
                     query_code = harness("sql", active_run, d / "init-state.log", "SELECT * FROM world")
                     query = (d / "init-state.log").read_text()
                     write(d / "init-state.json", {"exit_code": query_code, "output": query})
-                    text = (d / "launch.log").read_text() + (d / "module.log").read_text()
+                    # Since verify-guard the publish runs in the world guard, which logs its output
+                    # (the refused publish's error) to world-guard.log.
+                    text = "".join((d / f).read_text() for f in ("launch.log", "module.log", "world-guard.log") if (d / f).exists())
                     trace = (d / "server-init.log").read_text()
                     readable = "animals" in text and "missing field" in text
                     rejected = launch_code != 0 and publication["publication_attempted"] and query_code != 0 and "sql: 404" in query
                     report = {"pass": rejected, "rejection": "PASS" if rejected else "FAIL",
-                              "known_issue": {"label": "KNOWN ISSUE", "reference": "docs/LIVING_HANDOFF.md, Still open", "source": "living/authority/src/lib.rs (init)", "description": "init returns `seed: missing field ...` instead of panicking; the shared harness truncates publication stderr, so whether the field is named is recorded (missing_field_diagnostic_visible), not asserted", "readable_error_asserted": False},
+                              "known_issue": {"label": "KNOWN ISSUE", "reference": "docs/LIVING_HANDOFF.md, Still open", "source": "living/authority/src/lib.rs (init)", "description": "init returns `seed: missing field ...` instead of panicking; whether the field is named in the launch, module or world-guard log is recorded (missing_field_diagnostic_visible), not asserted", "readable_error_asserted": False},
                               "launch_exit_code": launch_code, "panic_reported": "::seed::seed" in trace and "rust_panic" in trace,
                               "missing_field_diagnostic_visible": readable, "database_launch_correlated": launch_key in trace}
                     write(d / "guards.json", report)
@@ -1296,7 +1330,8 @@ def suite(args):
                     snapshots[seed_name] = rows
             finally:
                 code = harness("cleanup", active_run, d / "cleanup.log")
-                state = json.loads((d / "state.json").read_text())
+                # No state.json: launch refused before any publish (a run name too long).
+                state = json.loads((d / "state.json").read_text()) if (d / "state.json").exists() else {}
                 module = ROOT / "living/target/wasm32-unknown-unknown/release" / state.get("wasm", "unused")
                 cleaned = code == 0 and not state.get("published", False) and not module.exists()
                 evidence_exists = all((d / name).exists() for name in ("seed.json", "launch.log", "actions.log"))
@@ -1312,13 +1347,51 @@ def suite(args):
     return 0 if all(r["pass"] for r in results.values()) else 1
 
 
+def smoke(run):
+    """The scene gate's light generation case (living/tools/scene_gate.py, `generation-*`): the
+    per-world checks of `worlds` (check_seed: the day and the seed's laws composed over the shipped
+    script, dimensions, chunks, settlements, residents, sheets, animals, resources, rhythms, land and
+    plans, looks, sex; and no sheet secrets in public tables) on a world someone else launched (the
+    gate's fresh genesis-fuel world). It pauses the world and reads its tables; no native digests,
+    no repeatability, no floors, no build. The caller cleans the world up. Writes checks.json and
+    smoke.json in the run's folder (the table snapshots only when a check fails); exit 0 when every
+    check passes."""
+    d = BASE / run
+    state = json.loads((d / "state.json").read_text())
+    if not state.get("published"):
+        raise SystemExit(f"{run} is not published")
+    seed = seed_text(ROOT / f"living/seeds/{state['seed']}.json")
+    write(d / "seed.json", seed)
+    if harness("call", run, d / "pause.log", "set_paused", "[true]", "--as-admin"):
+        raise SystemExit(f"pause failed; read {d}/pause.log")
+    rows = snapshot(run, TABLES)
+    public_tables = re.findall(r"#\[spacetimedb::table\(accessor = (\w+), public\)\]", (ROOT / "living/authority/src/tables.rs").read_text())
+    rows.update(snapshot(run, [t for t in public_tables if t not in rows]))
+    checks = check_seed(seed, rows)
+    checks.append({"check": "public tables exclude sheet secrets", **no_secrets(seed, rows)})
+    write(d / "checks.json", checks)
+    failed = [c["check"] for c in checks if not c["pass"]]
+    write(d / "smoke.json", {"seed": state["seed"], "pass": not failed, "checks": len(checks), "failed": failed})
+    if not failed:
+        # Every merge runs this: a passing world keeps its checks, not its table snapshots (an
+        # island's are about 60 MB). A failing one keeps them for the diagnosis.
+        for table in rows:
+            (d / f"{table}.json").unlink(missing_ok=True)
+            (d / f"sql-{table}.log").unlink(missing_ok=True)
+    for name in failed:
+        print(f"FAIL {state['seed']}: {name}", flush=True)
+    print(f"generation smoke {state['seed']}: {len(checks) - len(failed)} of {len(checks)} checks passed", flush=True)
+    return 1 if failed else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", required=True)
+    parser.add_argument("--smoke", action="store_true", help="the gate's light case: check the already launched world RUN (see smoke())")
     parser.add_argument("--feature", choices=("all", "worlds", "authored", "guards"), default="all")
     parser.add_argument("--seeds", help="comma-separated subset of the worlds' seeds (e.g. floor-megacity-2k,floor-megacity-4k)")
     args = parser.parse_args()
-    return suite(args)
+    return smoke(args.run) if args.smoke else suite(args)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ with admin test reducers (`place_at`, `set_behavior`, `grant_items`; named in th
 checks the outcome in the authority's rows: `my_skill_uses`, `my_combat` and `my_readiness`
 (the player's views), and `vitals`, `fighter`, `character` (public).
 
-    combat.py --run RUN [--scene all|refusals|strike|kill|bow|shot|bolt|block|dodge|jump|committed|breath|heal|early_dodge|fast_lane|wolves|death]
+    combat.py --run RUN [--scene all|refusals|strike|kill|bow|shot|bolt|block|dodge|jump|teleport|committed|breath|heal|early_dodge|fast_lane|wolves|death]
 
 Needs `verify.py launch --run RUN --seed island` and `verify.py player --run RUN join NAME`
 first (the death scene rejoins with the same identity). Writes `RUN/combat.json`.
@@ -21,6 +21,8 @@ import math
 import sys
 import time
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "living/tools"))
+from law_values import own_laws  # noqa: E402  (the world's own law values, docs/LAW_OVERRIDE.md)
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("verify", HERE.parent.parent / "verify/scripts/verify.py")
@@ -426,6 +428,9 @@ def scene_bow(st):
     before = {r["id"]: r["hp"] for r in sql(st, "SELECT id, hp FROM vitals")}
     t0 = int(time.time() * 1000)
     ready(st, "bowshot")
+    # After the strike and kill scenes in `--scene all` the shooter can be out of breath: wait
+    # for it to come back, as the later scenes do (a bowshot costs breath).
+    full_breath(st, 30.0)
     arrows0 = sum(r["qty"] for r in sql(st, f"SELECT qty FROM inventory WHERE owner = {cid} AND item = 'arrow'"))
     call(st, "use_skill", ["bowshot", 0, at[0], at[1]])
     u = wait_outcome(st, "bowshot", 3)
@@ -763,6 +768,71 @@ def scene_jump(st):
     call(st, "set_behavior", [a, '{"wait":60}'], "admin")
 
 
+def activity(st, cid):
+    r = sql(st, f"SELECT * FROM activity WHERE id = {cid}")
+    return r[0] if r else None
+
+
+def scene_teleport(st):
+    """A movement under way ends when its body is put somewhere else (2026-11-20, cover-stall):
+    the laptop's stuck jump (a jump, then an admin `place_at` mid-flight, left the activity at
+    phase 0 with no end, node 65533 = a player's own input, and every later move was deferred)
+    and dev-box's flaky threat check (a resident's walk, then `place_near`). The player jumps and
+    is put 6 m off at once: the jump is gone, the jump's use has an outcome, and a move then
+    moves the body. A resident walking to a point 30 m off is put elsewhere: its walk ends
+    (broken off, told to its graph) instead of standing there "walking" for good."""
+    cid = me(st)
+    p = open_ground(st, cid, east=8.0, south=8.0)
+    ready(st, "jump")
+    t0 = time.time()
+    code, body_ = call(st, "use_skill", ["jump", 0, p[0] + 2.0, p[1]])
+    call(st, "place_at", [cid, p[0], p[1] + 6.0], "admin")
+    gap = round((time.time() - t0) * 1000)
+    time.sleep(1.0)
+    a = activity(st, cid)
+    u = last_use(st, "jump")
+    check(st, "teleport: a jump's body put elsewhere mid-flight ends the jump (no jump left, the use told)",
+          code == 200 and (a is None or a["skill"] != "jump") and u and u["outcome"] not in (None, "", "in flight"),
+          f"use_skill {code} {body_.strip()[:80]}; place_at {gap} ms after; activity {a and {k: a[k] for k in ('skill', 'phase', 'node', 'ends_ms')}}; outcome {u and u['outcome']}")
+    q = body(st, cid)
+    call(st, "human_move", [1.0, 0.0, False])
+    time.sleep(1.2)
+    q2 = body(st, cid)
+    call(st, "human_move", [0.0, 0.0, False])
+    moved = q and q2 and math.dist(q, q2)
+    check(st, "teleport: then a move moves the body (not deferred behind the jump)", moved and moved > 0.8,
+          f"from {q and (round(q[0], 2), round(q[1], 2))} to {q2 and (round(q2[0], 2), round(q2[1], 2))}: {moved and round(moved, 2)} m")
+    # A mind's body alike: a resident's walk under way, put elsewhere.
+    time.sleep(0.5)
+    p = body(st, cid)
+    r = dummy(st, p, 3.0, 0.0, room=0.0)
+    rb = body(st, r)
+    g = json.dumps({"seq": [{"do": {"skill": "goto", "target": {"at": [rb[0] + 30.0, rb[1] + 0.5]}}}, {"wait": 60}]})
+    call(st, "set_behavior", [r, g], "admin")
+    walking = None
+    for _ in range(40):
+        walking = activity(st, r)
+        if walking and walking["skill"] == "goto" and walking["phase"] == 0:
+            break
+        time.sleep(0.1)
+    t_put = int(time.time() * 1000)
+    call(st, "place_at", [r, p[0], p[1] + 4.0], "admin")
+    time.sleep(1.5)
+    left = activity(st, r)
+    # Stuck is a movement that can no longer end: at phase 0 with no timer while its steering has
+    # no goal and the body no motion due (main's state after the teleport). A walk begun again
+    # from the new spot has a goal, though it may stand still while its route is searched.
+    steer = sql(st, f"SELECT goal FROM steer WHERE id = {r}")
+    due = sql(st, f"SELECT next_ms FROM body WHERE id = {r}")
+    idle = 18446744073709551615
+    stuck = (left is not None and left["phase"] == 0 and left["ends_ms"] == idle and left["started_ms"] <= t_put
+             and (not steer or steer[0]["goal"] == 0) and (not due or due[0]["next_ms"] == idle))
+    check(st, "teleport: a resident's walk put elsewhere ends (broken off, not walking nowhere for good)",
+          walking and walking["skill"] == "goto" and not stuck,
+          f"walking {walking and walking['skill']}; after: {left and {k: left[k] for k in ('skill', 'phase', 'node', 'ends_ms', 'started_ms')}}; put at {t_put}; steer goal {steer and steer[0]['goal']}; next_ms {due and due[0]['next_ms']}")
+    call(st, "set_behavior", [r, '{"wait":60}'], "admin")
+
+
 def full_breath(st, secs=12.0):
     """Wait until the player's breath is full (earlier scenes on a reused world spend it)."""
     end = time.time() + secs
@@ -918,7 +988,7 @@ def scene_breath(st):
     run = sql(st, f"SELECT speed FROM body WHERE id = {cid}")[0]["speed"]
     v1 = my_vitals(st)
     src = sql(st, "SELECT source FROM script WHERE name = 'skills'")[0]["source"]
-    own = [r for r in sql(st, "SELECT * FROM world_law") if r["name"] == "run_share"]
+    own = [{"name": k, "value": v} for k, v in own_laws(lambda q: sql(st, q)).items() if k == "run_share"]
     share = float(own[0]["value"]) if own else float(__import__("re").search(r"\brun_share: ([0-9.]+)", src).group(1))
     check(st, "a player's run is the run_share law times its walk and drains 4 breath a second from the row's anchor", walk and abs(run / walk - share) < 0.02 and abs(v1["stamina_rate"] + 4.0) < 1e-3 and v1["stamina_from_ms"] == v1["at_ms"], {"walk": walk, "run": run, "row": v1})
     time.sleep(1.5)
@@ -1099,7 +1169,7 @@ def scene_onlooker(st):
         spots = free_spots(st, p, dx, 0.0, skip={who}) or [(p[0] + dx, p[1])]
         call(st, "place_at", [who, spots[0][0], spots[0][1]], "admin")
         call(st, "set_behavior", [who, '{"wait":60}'], "admin")
-    fold = next((float(r["value"]) for r in sql(st, "SELECT * FROM world_law") if r["name"] == "witness_fold_ms"), 2000.0)
+    fold = float(own_laws(lambda q: sql(st, q)).get("witness_fold_ms", 2000.0))
     t0 = int(time.time() * 1000)
     call(st, "set_behavior", [a, json.dumps({"first": [{"do": {"skill": "strike", "target": {"id": b}}}, {"wait": 60}]})], "admin")
     # The feed's rows expire a few seconds after each blow: gathered while the fight goes on.
@@ -1143,7 +1213,7 @@ def scene_onlooker(st):
     return a
 
 
-SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "shot": scene_shot, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "committed": scene_committed, "breath": scene_breath, "heal": scene_heal, "early_dodge": scene_early_dodge, "fast_lane": scene_fast_lane, "wolves": scene_wolves, "onlooker": scene_onlooker, "death": scene_death}
+SCENES = {"refusals": scene_refusals, "strike": scene_strike, "kill": scene_kill, "bow": scene_bow, "shot": scene_shot, "bolt": scene_bolt, "block": scene_block, "dodge": scene_dodge, "jump": scene_jump, "teleport": scene_teleport, "committed": scene_committed, "breath": scene_breath, "heal": scene_heal, "early_dodge": scene_early_dodge, "fast_lane": scene_fast_lane, "wolves": scene_wolves, "onlooker": scene_onlooker, "death": scene_death}
 
 
 def main():

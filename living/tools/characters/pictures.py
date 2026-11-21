@@ -52,9 +52,14 @@ MANIFEST = "MANIFEST.txt"
 
 # The classes, where they are and what they become. `colour` is how the client samples them:
 # sRGB colour, or linear data (the shadow maps, loaded with `is_srgb = false`).
-CLASSES = ["atlas", "face", "overlay", "far", "tint", "iris", "strands"]
-URI_CLASSES = {"pages/types-far.png": "far", "pages/types-tint.png": "tint", "pages/types-iris.png": "iris", "strands.png": "strands"}
-LINEAR = {"face"}
+CLASSES = ["atlas", "face", "overlay", "far", "tint", "iris", "strands", "ink", "hairmask"]
+URI_CLASSES = {"pages/atelier-atlas.png": "atlas", "pages/types-far.png": "far", "pages/types-tint.png": "tint", "pages/types-iris.png": "iris", "strands.png": "strands"}
+LINEAR = {"face", "ink", "hairmask"}
+# Contract v1.3's sidecar pictures (docs/HANDMADE_COMPOSED.md, "The shared pages", "Bundles"): the
+# ink page, the hair-mask page and a hero file's sidecars, by where they are under lookdev/. All
+# are linear data (the client loads them with sRGB off) and keep their colour channels.
+SIDECARS = [("types/types.*.ink.png", "ink"), ("styles/hair/hair-masks*.png", "hairmask"),
+            ("heroes/*.face.png", "face"), ("heroes/*.hair.png", "hairmask"), ("heroes/*.*.ink.png", "ink")]
 
 
 def die(msg):
@@ -215,6 +220,11 @@ def survey(root):
                 f["users"].append((glb, i))
     for face in sorted((lookdev / "types").glob("*.face.png")):
         found[face.relative_to(lookdev).as_posix()] = {"class": "face", "source": face, "out": face.with_suffix(".ktx2"), "users": []}
+    for pattern, cls in SIDECARS:
+        # A pattern such as `hair-masks*.png` also matches a converted picture's own summary
+        # (`hair-masks.thumb.png`): that is not a picture to convert.
+        for pic in sorted(p for p in lookdev.glob(pattern) if not p.name.endswith(".thumb.png")):
+            found[pic.relative_to(lookdev).as_posix()] = {"class": cls, "source": pic, "out": pic.with_suffix(".ktx2"), "users": []}
     known = {Path(v["source"]).resolve() for v in found.values() if not isinstance(v["source"], tuple)}
     for png in sorted(lookdev.rglob("*.png")):
         if png.resolve() not in known and not png.name.endswith(".thumb.png"):
@@ -445,6 +455,14 @@ def check(root, exe=None):
             ktx2s[face.resolve()] = "face"
         if "face" in ktx2_classes and t.with_name(t.stem + ".face.png").exists():
             fails.append(f"{t.stem}.face.png left beside {face.name}")
+    # v1.3's sidecars and pages, and what names them.
+    for pattern, cls in SIDECARS:
+        for pic in sorted(p for p in set(lookdev.glob(pattern)) | set(lookdev.glob(pattern[: -len(".png")] + ".ktx2")) if not p.name.endswith(".thumb.png")):
+            if pic.suffix == ".ktx2":
+                ktx2s[pic.resolve()] = cls
+            elif cls in ktx2_classes:
+                fails.append(f"{pic.relative_to(lookdev)} left as PNG; {MANIFEST} calls {cls} KTX2")
+    fails += composed_checks(root, lookdev)
     for k in sorted(lookdev.rglob("*.ktx2")):
         if k.resolve() not in ktx2s:
             fails.append(f"{k.relative_to(lookdev)}: a KTX2 nothing names")
@@ -487,6 +505,76 @@ def check(root, exe=None):
             if page.get("file") and not (lookdev / "pages" / page["file"]).exists():
                 fails.append(f"pages/types.json: page {name} names {page['file']}, not in the bundle")
     return mode, sorted(ktx2s), fails
+
+
+def composed_checks(root, lookdev):
+    """Contract v1.3 (docs/HANDMADE_COMPOSED.md, "Bundles"): every opted-in composed file's inked
+    material and profile hair find their map and mask in the bundle; the pages' manifests name
+    files that are there and opt in; every book line's hero file is there and declares a
+    hand-made character."""
+    fails = []
+    assets = lookdev.parent
+
+    def present(path):
+        p = assets / path
+        return p.exists() or p.with_suffix(".ktx2").exists()
+
+    def opted(j):
+        sl = j.get("scenes", [{}])[j.get("scene", 0)].get("extras", {}).get("slop")
+        return isinstance(sl, dict) and "contract" in sl and "character" not in sl
+
+    for glb in sorted(list((lookdev / "types").glob("*.glb")) + list((lookdev / "styles").rglob("*.glb"))):
+        j, _ = read_glb(glb)
+        if not opted(j):
+            continue
+        rel = glb.relative_to(lookdev)
+        stem = glb.relative_to(assets).as_posix()[: -len(".glb")]
+        for m in j.get("materials", []):
+            ms = (m.get("extras") or {}).get("slop") or {}
+            ink = ms.get("ink")
+            if isinstance(ink, dict):
+                cands = ([ink["map"]] if isinstance(ink.get("map"), str) else []) + ([f"{stem}.{ms['slot']}.ink.png"] if ms.get("slot") else [])
+                if not any(present(c) for c in cands):
+                    fails.append(f"{rel}: material {m.get('name')!r}: no ink map in the bundle (tried {', '.join(cands)}): its carriers would draw nothing")
+            hair = ms.get("hair")
+            if isinstance(hair, dict) and isinstance(hair.get("highlight_map"), str) and not present(hair["highlight_map"]):
+                fails.append(f"{rel}: material {m.get('name')!r}: its hair mask {hair['highlight_map']} is not in the bundle")
+    hm = lookdev / "styles/hair/hair-masks.json"
+    if hm.exists():
+        man = json.loads(hm.read_text())
+        # Every page (`pages`; a manifest from before the second page has only `page` and `files`,
+        # which repeat the first).
+        for pg in man.get("pages") or [dict(page=man.get("page", ""), files=man.get("files", {}))]:
+            if not present(pg.get("page", "")):
+                fails.append(f"styles/hair/hair-masks.json: page {pg.get('page')} is not in the bundle")
+            for f in sorted(pg.get("files", {})):
+                g = lookdev / "styles/hair" / f
+                if not g.exists():
+                    fails.append(f"styles/hair/hair-masks.json: {f} ({pg.get('page')}) is not in the bundle")
+                elif not opted(read_glb(g)[0]):
+                    fails.append(f"styles/hair/hair-masks.json: {f} ({pg.get('page')}) does not opt in (no scene slop)")
+    im = lookdev / "types/types.ink.json"
+    if im.exists():
+        man = json.loads(im.read_text())
+        for slot, page in man.get("pages", {}).items():
+            if not present(page):
+                fails.append(f"types/types.ink.json: the {slot} page {page} is not in the bundle (no lids for anyone)")
+    book = assets / "characters/looks.json"
+    if book.exists():
+        for k, line in json.loads(book.read_text()).get("lines", {}).items():
+            hf = (line.get("person") or {}).get("hero_file")
+            if not hf:
+                continue
+            g = assets / hf
+            if not re.fullmatch(r"lookdev/heroes/[^/]+\.glb", hf):
+                fails.append(f"characters/looks.json: {k}'s hero_file {hf} is not lookdev/heroes/<id>.glb")
+            elif not g.exists():
+                fails.append(f"characters/looks.json: {k}'s hero_file {hf} is not in the bundle")
+            else:
+                sl = read_glb(g)[0].get("scenes", [{}])[0].get("extras", {}).get("slop") or {}
+                if sl.get("character") != "handmade":
+                    fails.append(f"characters/looks.json: {k}'s hero_file {hf} does not declare a hand-made character")
+    return fails
 
 
 def check_cmd(target):

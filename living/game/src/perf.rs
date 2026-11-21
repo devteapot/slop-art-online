@@ -12,8 +12,9 @@
 //! - `nofar`: no coarse ground and sea past the island's 170 m, and no landmarks past 190 m
 //!   (`island::stream`, `live::lots`): the long view's cost;
 //! - `nohair`, `charopaque`: characters without hair, or with alpha-masked materials drawn opaque;
-//! - `shadowmap=N`, `cascades=N`, `shadowfar=M`: the sun's shadow map size, cascade count and
-//!   reach;
+//! - `shadowmap=N`, `cascades=N`, `firstcascade=M`, `shadowfar=M`: the sun's shadow map size,
+//!   cascade count, first cascade's far edge and reach; `sunstep=D`: how far (degrees) the sun
+//!   moves before its shadow light turns (`world::SHADOWS`; 0 turns it every frame);
 //! - `people=K`: K times the island's people per settlement;
 //! - `nodetail`: no painted detail on scenery models (style.rs); `detailonly=bark+leaves` keeps
 //!   it on only the surfaces named;
@@ -42,6 +43,13 @@
 //! - `filestyles`: composed people's style files take a toon material a file and material
 //!   name, as before compose-1 shared them by what they draw (`characters/compose.rs`), to
 //!   compare the two.
+//! - `springfar`: spring chains are simulated for characters drawn with the far model too, as
+//!   before spring-near (`characters::springs`), to compare; `springwake`: log each woken
+//!   character's joint turns for its first frames (`springwake:` lines), to see the hand-off.
+//! - `seat`: every 3 s, each seated character's lowest cloth tail above its ground
+//!   (`characters::SeatAnchor`; `seat:` lines), with the contact on or off
+//!   (`LIVING_GAME_SEAT_CONTACT=0`) and the hem against the ground on or off
+//!   (`LIVING_GAME_SEAT_HEM=0`: chain roots lifted, skirted pieces clamped, hem-ground).
 //!
 //! The frame is often limited by neither the GPU nor one system but by the render world's
 //! per-batch work: every distinct material and mesh slab is a batch set per view and pass, and

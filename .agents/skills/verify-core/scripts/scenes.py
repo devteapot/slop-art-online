@@ -12,8 +12,13 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+import sys
 
 ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(ROOT / "living/tools"))
+from law_values import own_laws  # noqa: E402
+from verify_credentials import redact  # noqa: E402
+
 STDB = ROOT / "living/tools/stdb"
 BASE = ROOT / ".local/living/verify"
 
@@ -35,10 +40,10 @@ class Scene:
     def command(self, *args, check=True):
         r = subprocess.run([str(STDB), *args], capture_output=True, text=True, timeout=180)
         with self.log.open("a") as f:
-            f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": args,
-                                "exit": r.returncode, "stdout": r.stdout, "stderr": r.stderr}) + "\n")
+            f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": [redact(arg) for arg in args],
+                                "exit": r.returncode, "stdout": redact(r.stdout), "stderr": redact(r.stderr)}) + "\n")
         if check and r.returncode:
-            raise RuntimeError(f"stdb {args[0]} failed: {r.stderr[-500:]}")
+            raise RuntimeError(f"stdb {args[0]} failed: {redact(r.stderr)[-500:]}")
         return r
 
     def call(self, reducer, *args, check=True):
@@ -62,10 +67,11 @@ class Scene:
                 code, body = r.status, r.read().decode()
         except urllib.error.HTTPError as e:
             code, body = e.code, e.read().decode()
+        safe_body = redact(body, (self.token,))
         with self.log.open("a") as f:
-            f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": ["call (http)", self.db, reducer, f"{len(json.dumps(args))} bytes"], "exit": 0 if code == 200 else 1, "stdout": body, "stderr": ""}) + "\n")
+            f.write(json.dumps({"at_ms": time.time_ns() // 1_000_000, "args": ["call (http)", self.db, reducer, f"{len(json.dumps(args))} bytes"], "exit": 0 if code == 200 else 1, "stdout": safe_body, "stderr": ""}) + "\n")
         if check and code != 200:
-            raise RuntimeError(f"{reducer} over HTTP failed: {code} {body[-500:]}")
+            raise RuntimeError(f"{reducer} over HTTP failed: {code} {safe_body[-500:]}")
         return subprocess.CompletedProcess([reducer], 0 if code == 200 else 1, body, "")
 
     def http_rows(self, query):
@@ -89,7 +95,7 @@ class Scene:
         names = [e["name"]["some"] for e in table["schema"]["elements"]]
         rows = [dict(zip(names, row)) for row in table["rows"]]
         if label:
-            (self.out / f"{self.name}-{label}.json").write_text(json.dumps(rows, indent=2) + "\n")
+            (self.out / f"{self.name}-{label}.json").write_text(redact(json.dumps(rows, indent=2)) + "\n")
         return rows
 
     def expect(self, name, passed, detail=None, fatal=True, known=False):
@@ -186,7 +192,7 @@ def tick(s):
     finally:
         s.call("set_profile", False)
     r = s.command("logs", "-s", "local", s.db)
-    (s.out / "tick-profile.txt").write_text(r.stdout)
+    (s.out / "tick-profile.txt").write_text(redact(r.stdout))
     s.expect("profile emits actual tick spans", 'tick' in r.stdout and ('µs' in r.stdout or 'us' in r.stdout), s.db)
 
 
@@ -1011,6 +1017,22 @@ def open_line(s, length=16, avoid=()):
     raise RuntimeError("no open line on this map")
 
 
+def walkable(s):
+    """Whether a tile is walkable on this world's map (`open_line`'s test)."""
+    w = s.rows("SELECT width, height FROM world")[0]
+    W, H = w["width"], w["height"]
+    tiles = bytearray(W * H)
+    for row in s.rows("SELECT * FROM terrain_chunk"):
+        data = row["tiles"]
+        data = bytes.fromhex(data.removeprefix("0x")) if isinstance(data, str) else bytes(data)
+        cx, cy = row["id"] & 0xFFFF, row["id"] >> 16
+        for k, t in enumerate(data):
+            x, y = cx * 16 + k % 16, cy * 16 + k // 16
+            if x < W and y < H:
+                tiles[y * W + x] = t
+    return lambda x, y: 0 <= x < W and 0 <= y < H and tiles[y * W + x] not in (2, 4, 7, 8, 9)
+
+
 def world_hour(s):
     w = s.rows("SELECT epoch_ms, day_ms FROM world")[0]
     now = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
@@ -1373,14 +1395,14 @@ def moves(s):
 
 
 def law_value(s, name):
-    """A world law in force: the world's own value (`world_law`, set with `set_world_law`), else
-    the installed script's `laws()` number."""
+    """A world law in force: the world's own value (`law_override`, or `world_law` on an older
+    module: `living/tools/law_values.py`), else the installed script's `laws()` number."""
     def val(v):
         v = str(v).strip().strip('"')
         return {"true": True, "false": False}[v] if v in ("true", "false") else float(v)
-    own = [r for r in s.rows("SELECT * FROM world_law") if r["name"] == name]
-    if own:
-        return val(own[0]["value"])
+    own = own_laws(s.rows)
+    if name in own:
+        return val(own[name])
     src = s.rows("SELECT source FROM script WHERE name = 'skills'")[0]["source"]
     # A world's own values block (`world_law_values`, a seed's `laws`) comes before laws().
     m = re.search(r"\b" + name + r": (true|false|[0-9.]+)", src)
@@ -2098,6 +2120,25 @@ def known_cells(s, actor):
     return out
 
 
+# `known::FLUSH_MS`: an actor's dirty blocks are persisted one per 5.5 s, oldest first, at its looks
+# (about every 0.9 s), so a newly seen block can wait behind older ones (nav-planner).
+KNOWN_SETTLE_S = 7.0
+
+
+def known_settled(s, actor, want=lambda m: True, limit=75.0):
+    """`actor`'s persisted known ground once `want(cells)` holds and two reads a write interval
+    apart agree (its queue is drained); the last read if that never happens within `limit` s."""
+    t0, last = time.monotonic(), None
+    while True:
+        marked = known_cells(s, actor)
+        if want(marked) and marked == last:
+            return marked
+        if time.monotonic() - t0 > limit:
+            return marked
+        last = marked if want(marked) else None
+        time.sleep(KNOWN_SETTLE_S)
+
+
 def cell(p):
     """The 4 m cell of a point."""
     return (int(p[0]) // 4, int(p[1]) // 4)
@@ -2106,20 +2147,25 @@ def cell(p):
 def known_ground(s):
     """Known ground (docs/MOVEMENT_MIND.md, step 3): every character marks the 4 m cells it sees,
     out to `ground_sight_m` (24 by day) with the one sight rule, at its noticing cadence, written
-    every few seconds: open ground within about 20 m is marked and nothing past about 30 m; a cell
-    behind a wall is not, the wall's side toward it is; a player's character marks too; with
-    `known_cells_pass` set, a look marks at most that many and later looks take the rest (none
-    dropped); the rows go at death. Default seed."""
+    one block per 5.5 s per actor, oldest first: open ground within about 20 m is marked and nothing
+    past about 30 m; a cell behind a wall is not, the wall's side toward it is; a player's character
+    marks too; with `known_cells_pass` set, a look marks at most that many and later looks take the
+    rest (none dropped); the rows go at death. Residents stand still for it (a wait graph) and their
+    earlier ground is persisted before they are placed, so the rows read are this look's. Default
+    seed."""
     s.expect("ground is seen 24 m off by day (shipped)", law_value(s, "ground_sight_m") == 24, law_value(s, "ground_sight_m"))
     p, q, r = s.people(3)
+    for who in (p, q, r):
+        s.graph(who, {"wait": 600})
+    before = known_settled(s, p)
     spot = open_patch(s, size=60)
     s.call("place_at", p, *spot)
-    time.sleep(7.0)
+    time.sleep(1.0)
     here = body_at(s, p)
-    marked = known_cells(s, p)
     near = {(x, y) for x in range(cell(here)[0] - 6, cell(here)[0] + 7) for y in range(cell(here)[1] - 6, cell(here)[1] + 7) if math.dist((x * 4 + 2, y * 4 + 2), here) <= 20}
-    # Only around where it stands now: it also marked where it was spawned, before it was placed.
-    far = {c for c in marked if 30 < math.dist((c[0] * 4 + 2, c[1] * 4 + 2), here) <= 40}
+    marked = known_settled(s, p, lambda m: near <= m)
+    # Only what it marked here: its earlier ground (where it was spawned and walked) was persisted before.
+    far = {c for c in marked - before if 30 < math.dist((c[0] * 4 + 2, c[1] * 4 + 2), here) <= 40}
     s.expect("open ground within 20 m is marked", near <= marked, {"missing": sorted(near - marked)[:8], "marked": len(marked)})
     s.expect("nothing 30-40 m off in the open is marked (ground is seen 24 m off)", not far, sorted(far)[:8])
     # Behind a wall.
@@ -2127,8 +2173,7 @@ def known_ground(s):
     s.expect("the map has a wall to look past", bool(setups), setups)
     a, b, c = setups[0]
     s.call("place_at", q, *a)
-    time.sleep(7.0)
-    seen_q = known_cells(s, q)
+    seen_q = known_settled(s, q, lambda m: cell(b) in m)
     W, H, walk = tile_grid(s)
     s.expect("the cell in sight is marked, the one behind the wall is not", cell(b) in seen_q and cell(c) not in seen_q, {"a": a, "b": b, "c": c, "b_marked": cell(b) in seen_q, "c_marked": cell(c) in seen_q})
     # A player's character, by the same rule.
@@ -2139,10 +2184,13 @@ def known_ground(s):
     me = s.wait(lambda: next(iter(s.rows(f"SELECT id FROM character WHERE controller = 0x{st['identity']}")), None))["id"]
     spot2 = open_patch(s, size=40, avoid=[spot])
     s.call("place_at", me, *spot2)
-    time.sleep(7.0)
-    mine = known_cells(s, me)
+    time.sleep(1.0)
+    mine = known_settled(s, me, lambda m: cell(body_at(s, me)) in m and len(m) >= 40)
     s.expect("a player's character marks the ground it sees too", cell(body_at(s, me)) in mine and len(mine) >= 40, {"cells": len(mine)})
-    # The cap: at most N a look, the rest later, none dropped.
+    # The cap: at most N a look, the rest later, none dropped. Its earlier ground persisted first,
+    # so the spot's block is the only one queued; the rate counts only cells new since then (it
+    # may have seen ground round the new spot before).
+    before_r = known_settled(s, r)
     set_law(s, "known_cells_pass", 5)
     spot3 = open_patch(s, size=60, avoid=[spot, spot2])
     s.call("place_at", r, *spot3)
@@ -2150,14 +2198,15 @@ def known_ground(s):
     counts = []
     # Only the cells round the new spot: it also marked where it was spawned.
     round_here = lambda: len({c for c in known_cells(s, r) if math.dist((c[0] * 4 + 2, c[1] * 4 + 2), spot3) <= 30})
-    while time.monotonic() - t0 < 16:
+    new_here = lambda: len({c for c in known_cells(s, r) - before_r if math.dist((c[0] * 4 + 2, c[1] * 4 + 2), spot3) <= 30})
+    while time.monotonic() - t0 < 22:
         time.sleep(2.0)
-        counts.append((round(time.monotonic() - t0, 1), round_here()))
-    capped = counts[-1][1]
+        counts.append((round(time.monotonic() - t0, 1), new_here()))
+    capped = round_here()
     set_law(s, "known_cells_pass", 0)
-    time.sleep(7.0)
+    known_settled(s, r, lambda m: len({c for c in m if math.dist((c[0] * 4 + 2, c[1] * 4 + 2), spot3) <= 30}) >= 100)
     full = round_here()
-    (s.out / f"{s.name}-cap.json").write_text(json.dumps({"counts": counts, "full": full}) + "\n")
+    (s.out / f"{s.name}-cap.json").write_text(json.dumps({"counts": counts, "known_before": len(before_r), "capped": capped, "full": full}) + "\n")
     s.expect("capped at 5 a look: the count grows look by look, no faster", counts[-1][1] > 0 and all(n <= 5 * (t / 0.9 + 1) for t, n in counts) and counts[-1][1] > counts[0][1], counts)
     s.expect("uncapped again, the rest are marked (none dropped)", full > capped and full >= 100, {"capped": capped, "full": full})
     # Death.
@@ -2661,7 +2710,10 @@ SHORT_HOURS = {
 
 
 def compose(base, overlay):
-    for name in overlay:
+    # As `floors::compose`: an overlay that replaces `status_of` alone is asked it whole, the base's
+    # parts kept as `base_status_parts` (docs/STATUS_PARTS.md).
+    names = list(overlay) + (["status_parts"] if "status_of" in overlay and "status_parts" not in overlay else [])
+    for name in names:
         base = base.replace(f"fn {name}(", f"fn base_{name}(")
     return base + "\n" + "\n".join(overlay.values()) + "\n"
 
@@ -3480,7 +3532,7 @@ def sleeper_cue(s):
     try:
         set_law(s, "cues_on", True)
         set_cues(s, o, [cue("stance:verify_watch", who="unknown", at="verify bed", within=20.0)], [bed])
-        s.wait(lambda: any(w["name"] == "cues_on" and w["value"] == "true" for w in s.rows("SELECT * FROM world_law")), 10)
+        s.wait(lambda: own_laws(s.rows).get("cues_on") == "true", 10)
         s.graph(o, {"seq": [{"do": "sleep"}]})
         s.wait(lambda: slumber(), seconds=20)
         s.call("place_at", n, line[2][0], line[2][1] + 1.0)
@@ -3846,7 +3898,7 @@ def stranger_filter(s):
         off = waved_at()
         s.expect("law off: the nearest stranger is A, of O's community with no relation row", off == a, {"waved_at": off, "A": a, "N": n})
         set_law(s, "stranger_by_name", True)
-        s.wait(lambda: any(r["name"] == "stranger_by_name" and r["value"] == "true" for r in s.rows("SELECT * FROM world_law")), 10)
+        s.wait(lambda: own_laws(s.rows).get("stranger_by_name") == "true", 10)
         on = waved_at()
         s.expect("law on: the nearest stranger is N, whose name O does not know (its relation row does not count)", on == n, {"waved_at": on, "A": a, "N": n})
         # Too far away to make out: who someone is only within 4 m (as Cullet's law within 24 m).
@@ -3961,7 +4013,7 @@ def cues(s):
         time.sleep(2)
         set_law(s, "cues_on", True)
         set_law(s, "cue_gap_s", 15)
-        s.wait(lambda: any(w["name"] == "cues_on" and w["value"] == "true" for w in s.rows("SELECT * FROM world_law")), 10)
+        s.wait(lambda: own_laws(s.rows).get("cues_on") == "true", 10)
         t1 = now()
         s.call("place_at", n, line[2][0], line[2][1] + 1.0)
         got = s.wait(lambda: noticed(t1), 10)
@@ -4195,9 +4247,11 @@ def doing_seen(s):
         got = s.wait(lambda: [x for x in uses(t0, "far") if x["actor"] == w and x["skill"] == "dodge"] or None, seconds=15)
         s.expect("far: F's guard 5 m off (seen) triggers W's routine", got, got[:1])
         seen = s.wait(lambda: scene_since(t0, "far"), seconds=10)
-        fe = seen.get(f, {})
+        # The mind's scene uses W's sighting handle for F while F is too far to make out.
+        handles = s.rows(f"SELECT id FROM far_handle WHERE observer = {w} AND target = {f}", "far-handles")
+        fe = next((seen[1_000_000_000 + h["id"]] for h in handles if 1_000_000_000 + h["id"] in seen), {})
         s.expect("far: W's scene shows F as someone too far away to make out, visibly holding a block",
-                 fe.get("who") == FAR and "name" not in fe and {k: v for k, v in (fe.get("visibly") or {}).items() if k != "at"} == {"is": "block", "phase": "holding"}
+                 f not in seen and fe.get("who") == FAR and "name" not in fe and {k: v for k, v in (fe.get("visibly") or {}).items() if k != "at"} == {"is": "block", "phase": "holding"}
                  and (fe.get("visibly") or {}).get("at", "you") == "you", fe)
         s.graph(f, {"wait": 60 + next(rounds)})
         time.sleep(1.5)
@@ -5594,6 +5648,134 @@ def body_sex(s):
     finally:
         s.call("install_script", shipped)
 
+REST_MS = 8000  # rest_duration in living/scripts/skills.rhai
+
+
+def doing_watch(s, who, seconds, every=0.02):
+    """Samples of `who`'s `doing` row over HTTP for `seconds` (about every 20 ms): (local ms, row
+    or None, the authority's clock when sampled)."""
+    out = []
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        rows = s.http_rows(f"SELECT * FROM doing WHERE id = {who}")
+        out.append((time.time_ns() // 1_000_000, rows[0] if rows else None))
+        time.sleep(every)
+    return out
+
+
+def doing_renewals(samples):
+    """What a run of samples shows: each renewal (the row's end moved on to a new rest's, the row
+    held, past its end, between them), with the authority's gap between the old
+    rest's end and the next one's start (its end less the rest's 8 s): the pacing, which the
+    hold must leave as it was; whether the start (`since_ms`) was kept; how many samples saw the
+    row held; and the longest stretch the row was absent (local ms, from the last sample with a
+    row to the next)."""
+    renewals, last, held = [], None, 0
+    for at, row in samples:
+        if row is None:
+            continue
+        if row["until_ms"] < at:
+            # Past its end and still there: held until the next evaluation (local and authority
+            # clocks are the host's).
+            held += 1
+        if last is not None and row["until_ms"] != last["until_ms"]:
+            renewals.append({"old_until": last["until_ms"], "new_since": row["since_ms"], "new_until": row["until_ms"],
+                             "gap_ms": (row["until_ms"] - REST_MS) - last["until_ms"], "since_kept": row["since_ms"] == last["since_ms"]})
+        last = row
+    misses = [i for i, (_, r) in enumerate(samples) if r is None]
+    longest, i = 0, 0
+    while i < len(samples):
+        if samples[i][1] is None:
+            j = i
+            while j < len(samples) and samples[j][1] is None:
+                j += 1
+            if i > 0 and j < len(samples):
+                longest = max(longest, samples[j][0] - samples[i - 1][0])
+            i = j
+        else:
+            i += 1
+    steps = [samples[k + 1][0] - samples[k][0] for k in range(len(samples) - 1)]
+    step = sorted(steps)[len(steps) // 2] if steps else None
+    return {"renewals": renewals, "samples": len(samples), "missing_samples": len(misses), "held_samples": held, "longest_absent_ms": longest, "median_sample_ms": step}
+
+
+def doing_renew(s):
+    """A rest renewed in place (doing-renew): a resident whose only desire is to rest rests 8 s at a
+    time, and each rest that finishes is followed by the next at the body's next evaluation, as
+    before (about a second later here: the pacing is unchanged). Its `doing` row stays: held as it
+    was (past its end) between two rests, then renewed in place. Polled about every 20 ms
+    for 34 s (three renewals or more): no sample lacks it, the gap between a rest's end and the
+    next one's start is the old one (median 500 ms or more, none past 1.1 s), and the row keeps
+    its `since_ms` (one rest going on). A rest under a `first` root renews the same way.
+    A real change still shows at once: a graph that walks the resident off ends the rest, and the
+    row is gone while it walks (walking is not shown), within a second of the install. With the
+    `renew_in_place` law off the old way comes back: the row is absent after each rest.
+    `--baseline` (a build before doing-renew) records the same without asserting the renewal:
+    there the row is absent for a while after each rest (about 1 s) and a new rest starts anew."""
+    line = open_line(s, avoid=[(b["x"], b["y"]) for b in s.rows("SELECT x, y FROM body")])
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    rester, other = s.people(2)
+    s.call("place_at", rester, *line[2])
+    s.call("place_at", other, *line[12])
+    results = {}
+    for root, graph in (("desires", {"desires": [{"want": "rest", "weight": {"base": 1.0}, "do": {"do": "rest"}}]}),
+                        ("first", {"first": [{"do": "rest"}]})):
+        s.graph(rester, graph)
+        s.wait(lambda: s.http_rows(f"SELECT * FROM doing WHERE id = {rester}"), 10, 0.1)
+        samples = doing_watch(s, rester, 34 if root == "desires" else 18)
+        (s.out / f"{s.name}-samples-{root}.json").write_text(json.dumps(samples) + "\n")
+        got = doing_renewals(samples)
+        results[root] = got
+        (s.out / f"{s.name}-renewals-{root}.json").write_text(json.dumps(got, indent=1) + "\n")
+        print(json.dumps({root: {k: v for k, v in got.items() if k != "renewals"}, "gaps_ms": [r["gap_ms"] for r in got["renewals"]], "since_kept": [r["since_kept"] for r in got["renewals"]]}), flush=True)
+        want = 3 if root == "desires" else 1
+        enough = len(got["renewals"]) >= want
+        if s.baseline:
+            s.expect(f"baseline ({root}): renewals seen", enough, got["renewals"], fatal=False)
+            continue
+        s.expect(f"{root}: the rest was renewed {want} times or more", enough, len(got["renewals"]))
+        s.expect(f"{root}: no sample lacks the doing row (none absent 100 ms or more)", got["missing_samples"] == 0 and got["longest_absent_ms"] < 100, {k: got[k] for k in ("missing_samples", "longest_absent_ms", "median_sample_ms")})
+        gaps = sorted(r["gap_ms"] for r in got["renewals"])
+        s.expect(f"{root}: the pacing is the old one: each next rest begins at the body's next evaluation (median 500 ms or more, none past 1.1 s), the row held between", gaps and gaps[len(gaps) // 2] >= 500 and gaps[-1] <= 1100 and got["held_samples"] > 0, {"gaps_ms": gaps, "held_samples": got["held_samples"]})
+        s.expect(f"{root}: a renewed rest keeps its since_ms (one rest going on)", all(r["since_kept"] for r in got["renewals"]), got["renewals"])
+    # A real change: walked off, the rest ends and the row goes at once.
+    row = s.http_rows(f"SELECT * FROM doing WHERE id = {rester}")
+    sent = time.time_ns() // 1_000_000
+    s.call("set_behavior", rester, json.dumps({"seq": [{"do": {"skill": "goto", "target": {"at": list(line[14])}}}, {"wait": 300}]}))
+    after = doing_watch(s, rester, 2.0)
+    (s.out / f"{s.name}-samples-walk.json").write_text(json.dumps(after) + "\n")
+    gone = next((at for at, r in after if r is None), None)
+    act = s.rows(f"SELECT id, skill, phase, started_ms FROM activity WHERE id = {rester}", "walk-activity")
+    back = [at for at, r in after if r is not None and gone is not None and at > gone]
+    detail = {"row_before": row, "gone_after_ms": None if gone is None else gone - sent, "activity": act, "row_again": len(back)}
+    print(json.dumps({"walk": detail}), flush=True)
+    s.expect("rest → walk: the doing row is gone within a second of the new graph", gone is not None and gone - sent < 1000, detail)
+    s.expect("rest → walk: it walks (goto) and nothing is shown while it does", bool(act) and act[0]["skill"] == "goto" and not back, detail)
+    off = None
+    if not s.baseline:
+        # The switch: with the `renew_in_place` law off, each rest starts afresh at the next
+        # evaluation, as before doing-renew (the row is absent meanwhile).
+        set_law(s, "renew_in_place", False)
+        try:
+            s.graph(rester, {"desires": [{"want": "rest", "weight": {"base": 1.0}, "do": {"do": "rest"}}]})
+            s.wait(lambda: s.http_rows(f"SELECT * FROM doing WHERE id = {rester}"), 10, 0.1)
+            samples = doing_watch(s, rester, 18)
+            (s.out / f"{s.name}-samples-law-off.json").write_text(json.dumps(samples) + "\n")
+            off = doing_renewals(samples)
+            print(json.dumps({"law_off": {k: v for k, v in off.items() if k != "renewals"}, "gaps_ms": [r["gap_ms"] for r in off["renewals"]]}), flush=True)
+            s.expect("renew_in_place off: the row is absent after each rest, and the next starts afresh", off["renewals"] and off["missing_samples"] > 0 and not any(r["since_kept"] for r in off["renewals"]), off)
+        finally:
+            set_law(s, "renew_in_place", True)
+    (s.out / f"{s.name}-summary.json").write_text(json.dumps({"results": {k: {kk: vv for kk, vv in v.items()} for k, v in results.items()}, "walk": detail, "law_off": off}, indent=1) + "\n")
+    # Off the shared open line, standing: later scenes (doing) place their own people on it.
+    for k, who in enumerate((rester, other)):
+        s.graph(who, {"wait": 120})
+        s.call("place_at", who, line[0][0] + 60 + 2 * k, line[0][1] + 40, check=False)
+
+
+SCENES["doing_renew"] = doing_renew
+
+
 def main():
     import sys
     if sys.argv[1:2] == ["sex-seed"]:
@@ -5859,7 +6041,7 @@ def first_sight(s):
         # On: refused within think_min_s, owed, asked again while in sight.
         set_law(s, "first_sight_thinks", True)
         set_law(s, "first_sight_gap_s", 40)
-        s.wait(lambda: any(r["name"] == "first_sight_thinks" and r["value"] == "true" for r in s.rows("SELECT * FROM world_law")), 10)
+        s.wait(lambda: own_laws(s.rows).get("first_sight_thinks") == "true", 10)
         t1 = think_now()
         near(u2, 2)
         seen = s.wait(lambda: about(u2, t1), 10)
@@ -6293,7 +6475,7 @@ def heard_first(s):
         s.expect("law off: O's line after L's is said", any("verify hf O1" in c["text"] for c in said_by(o, t0)), said_by(o, t0))
         # On: mind_say (a deliberation carrying on).
         set_law(s, "heard_first_rethinks", True)
-        s.wait(lambda: any(w["name"] == "heard_first_rethinks" and w["value"] == "true" for w in s.rows("SELECT * FROM world_law")), 10)
+        s.wait(lambda: own_laws(s.rows).get("heard_first_rethinks") == "true", 10)
         clear()
         t1 = now()
         l_says("Good day, friend. verify hf L2", u)
@@ -6501,6 +6683,111 @@ def battle_cheap(s):
 SCENES["cheap_check_ctx"] = battle_cheap
 SCENES["cheap_alarms"] = battle_cheap
 SCENES["cheap_warmth"] = battle_cheap
+
+
+def status_parts(s):
+    """The body's statuses asked by their parts (`status_parts`, docs/STATUS_PARTS.md) are the whole
+    `status_of`'s, for every status the shipped law has, and the `status_parts` law off asks the law
+    whole again (the rollback). Eight minded fighters on an open line (strikes, dodges, blocks, heals:
+    hurt, in combat, out of breath, recovering) and eight bodies beside them set by admin fixtures
+    (`admin_set_vitals` for health; owner SQL for hunger and energy, as the verify-ui noon fixtures
+    set the clock): starving, very hungry and exhausted, hungry and spent, peckish and tired, fed and
+    hurt, well rested and badly hurt, barely alive; the world's clock moved to its night (owner SQL
+    through `verify.py sql`, which records the epoch) and rain set (`set_weather`), so those out in it
+    lose health: freezing, wasting. With `status_parts_check` on for 75 s every ask by the parts is
+    also asked of the whole law with the whole body (`status_parts:checked`, `:differed`), and each
+    status the compared asks gave is counted (`status_parts:has:<name>`). Then 25 s with
+    `status_parts` off: no ask goes by the parts (`eval:status_parts_asked`) and the whole law
+    answers (`eval:status_run`, `eval:status_memo`). Every law is put back."""
+    import subprocess as sp
+    line = clear_line(s)
+    ppl = s.people(16)
+    fighters, bodies = ppl[:8], ppl[8:]
+    for k, who in enumerate(fighters):
+        s.call("place_at", who, line[2 + k % 4][0], line[2 + k % 4][1] + (k // 4) * 1.4)
+        s.call("grant_know_how", who, "wound_tending")
+        s.graph(who, {"first": [
+            {"if": {"cond": {"health": {"below": 50}}, "then": {"do": {"skill": "heal", "target": "self"}}}},
+            {"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if who % 2 == 0 else "block"}}}},
+            {"do": {"skill": "strike", "target": {"nearest": "person"}}}]})
+    for k, who in enumerate(bodies):
+        s.call("place_at", who, line[8 + k % 6][0], line[8 + k % 6][1] + 3.0 + (k // 6) * 1.4)
+        s.graph(who, {"wait": 300})
+    # (hunger, energy, health) of each body: every band of the three meters among them.
+    fixtures = [(99, 60, None), (85, 5, None), (60, 0, None), (45, 20, None), (10, 40, 50), (30, 90, 25), (20, 70, 10), (70, 15, 70)]
+    clock = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    for who, (hunger, energy, hp) in zip(bodies, fixtures):
+        if hp is not None:
+            s.call("admin_set_vitals", who, float(hp))
+        s.command("sql", "-s", "local", s.db, f"UPDATE vitals SET hunger = {float(hunger)}, energy = {float(energy)}, at_ms = {clock()}, rate_key = 0 WHERE id = {who}")
+    s.rows("SELECT * FROM vitals", "fixtures")
+    # The world's night, now: its clock moved by owner SQL through the harness (which records the
+    # epoch for cleanup), and rain.
+    w = s.rows("SELECT epoch_ms, day_ms FROM world", "world-before")[0]
+    now = clock()
+    epoch = now - w["day_ms"] * 16 // 24
+    verify = str(ROOT / ".agents/skills/verify/scripts/verify.py")
+    r = sp.run(["python3", verify, "sql", "--run", s.out.name, f"UPDATE world SET epoch_ms = {epoch} WHERE id = 0"], capture_output=True, text=True)
+    s.expect("the world's clock moved to its night", r.returncode == 0, r.stderr[-300:])
+    s.call("set_weather", True, 600)
+    for law in ("status_parts_check",):
+        set_law(s, law, True)
+    s.call("set_profile", True)
+    windows = {}
+    t0 = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    try:
+        time.sleep(75)
+        t1 = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        set_law(s, "status_parts_check", False)
+        set_law(s, "status_parts", False)
+        time.sleep(3)
+        t2 = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        time.sleep(25)
+        t3 = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    finally:
+        s.call("set_profile", False)
+        set_law(s, "status_parts_check", False)
+        set_law(s, "status_parts", True)
+        s.call("set_weather", False, 0)
+    s.rows("SELECT * FROM vitals", "after")
+    logs = s.command("logs", "-s", "local", s.db, "-n", "400000").stdout.splitlines()
+    def window(a, b):
+        text = "\n".join(l for l in logs if a <= l[:19] < b and "diag:" in l)
+        keys = set(re.findall(r'"([^"]+)":\d+', text))
+        return {k: sum(int(x) for x in re.findall(rf'"{re.escape(k)}":(\d+)', text)) for k in keys}
+    check, whole = window(t0, t1), window(t2, t3)
+    errors = [l for l in logs if t0 <= l[:19] and "status_parts of" in l][:10]
+    has = {k.split(":", 2)[2]: n for k, n in check.items() if k.startswith("status_parts:has:")}
+    g = lambda m, k: m.get(k, 0)
+    m = {"check": {k: v for k, v in sorted(check.items()) if k.startswith(("status_parts", "eval:status", "alarm:"))},
+         "whole": {k: v for k, v in sorted(whole.items()) if k.startswith(("status_parts", "eval:status", "alarm:"))},
+         "has": has, "errors": errors, "windows": [t0, t1, t2, t3]}
+    (s.out / f"{s.name}-status-parts.json").write_text(json.dumps(m, indent=1) + "\n")
+    print("MEASURE", json.dumps({"check": m["check"], "whole": m["whole"], "has": has}), flush=True)
+    families = {
+        "hunger": ("starving", "very_hungry", "hungry", "peckish", "fed", "not_hungry"),
+        "energy": ("spent", "exhausted", "tired", "a_little_tired", "rested", "well_rested"),
+        "health": ("barely_alive", "badly_hurt", "hurt", "a_little_hurt", "unhurt"),
+        "cold": ("freezing",), "combat": ("in_combat",), "breath": ("out_of_breath",), "slowed": ("slowed",),
+        "mending": ("wasting", "recovering")}
+    try:
+        s.expect("many asks by the parts were also asked of the whole law, and none differed",
+                 g(check, "status_parts:checked") >= 500 and g(check, "status_parts:differed") == 0 and not errors,
+                 {"checked": g(check, "status_parts:checked"), "differed": g(check, "status_parts:differed"), "errors": errors})
+        s.expect("the compared asks gave a status of every part", all(any(has.get(n, 0) > 0 for n in names) for names in families.values()),
+                 {f: [n for n in names if has.get(n, 0)] for f, names in families.items()})
+        s.expect("every band of hunger, energy and health was compared, and both wasting and recovering",
+                 all(has.get(n, 0) > 0 for names in families.values() for n in names), sorted(n for names in families.values() for n in names if not has.get(n, 0)))
+        s.expect("kept parts answered most part asks", g(check, "eval:status_part_memo") > g(check, "eval:status_part_run") > 0, m["check"])
+        s.expect("status_parts off: the law asked whole, nothing by the parts",
+                 g(whole, "eval:status_calls") > 0 and g(whole, "eval:status_parts_asked") == 0 and g(whole, "eval:status_run") + g(whole, "eval:status_memo") == g(whole, "eval:status_calls"), m["whole"])
+    finally:
+        for who in ppl:
+            s.graph(who, {"wait": 300})
+        off_the_line(s, line, ppl, dy=80)
+
+
+SCENES["status_parts"] = status_parts
 
 
 def _sweep_player(s, name):
@@ -6746,7 +7033,7 @@ def scene_lazy(s):
             {"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if who % 2 == 0 else "block"}}}},
             {"do": {"skill": "strike", "target": {"nearest": "person"}}}]})
     # The world's own fov_on, else the shipped script's (off).
-    fov0 = any(r["name"] == "fov_on" and str(r["value"]).lower() == "true" for r in s.rows("SELECT * FROM world_law"))
+    fov0 = str(own_laws(s.rows).get("fov_on", "")).lower() == "true"
 
     def window(secs):
         # Counts gathered while profiling stopped are reported when it starts again, in the
@@ -7167,6 +7454,372 @@ def notice_delta(s):
 
 SCENES["notice_delta"] = notice_delta
 
+
+def stage_seen_remains(s, observers, dead, line):
+    """Introduce the first two people, then leave the bodies together before observers arrive."""
+    at = line[5]
+    away = (at[0], at[1] + 45)
+    names = {row["id"]: row["name"] for row in s.rows("SELECT id, name FROM character")}
+    for i, who in enumerate(observers):
+        s.call("place_at", who, at[0] - 1 + i, at[1])
+    for i, who in enumerate(dead[:2]):
+        s.call("place_at", who, at[0] + 2 + i, at[1])
+        s.call("mind_say", who, f"I am {names[who]}.", 0, "", 0, FS_TALK)
+        for observer in observers:
+            s.wait(lambda: s.rows(f"SELECT id FROM acquaintance WHERE observer = {observer} AND known = {who}"), 8)
+    for who in observers:
+        s.call("place_at", who, *away)
+    for i, who in enumerate(dead):
+        x = at[0] + (1 + i % 5)
+        y = at[1] + (i // 5 % 3 - 1)
+        s.call("place_at", who, x, y)
+        s.call("kill", who, "seen remains fixture")
+    return at, away, [names[who] for who in dead[:2]]
+
+
+def seen_remains(s):
+    if (s.out / "seen-remains-field.json").exists():
+        raise RuntimeError("use a fresh world for the seen remains fixture")
+    line = clear_line(s)
+    observer, legacy, builder, extra, *dead = s.people(24)
+    for who in (observer, legacy, builder, extra, *dead):
+        s.graph(who, {"wait": 300})
+    for who in (builder, extra):
+        s.call("place_at", who, line[-1][0], line[-1][1] + 45)
+    at, away, names = stage_seen_remains(s, (observer, legacy), dead, line)
+    bodies = [r for r in s.rows("SELECT * FROM structure WHERE kind = 'remains'", "field")
+              if r["owner"] in dead]
+    (s.out / "seen-remains-field.json").write_text(json.dumps(bodies, indent=2))
+    s.expect("field has 20 individual bodies", len(bodies) == 20, bodies)
+
+    def lines(actor, label):
+        return [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {actor} AND kind = 'saw'", label)
+                if r["text"].startswith("You notice")]
+
+    def remains(actor, label):
+        return [r for r in lines(actor, label) if "remains" in r["text"]]
+
+    def first(actor, label):
+        s.call("place_at", actor, *at)
+        got = s.wait(lambda: (rows if len(rows := remains(actor, label)) >= 3 else None), 15)
+        folded = [r for r in got if r["text"].startswith("You notice the remains of 18 strangers around you, the nearest ")]
+        s.expect(label + " has two named lines and one exact counted line",
+                 len(got) == 3 and len(folded) == 1 and
+                 all(any(name in r["text"] and r["subject"] for r in got) for name in names), got)
+        s.expect(label + " counted experience has no person id and lies on a body",
+                 folded[0]["subject"] == folded[0]["object"] == 0 and abs(folded[0]["salience"] - 0.8) < 0.001
+                 and any((r["x"], r["y"]) == (folded[0]["x"], folded[0]["y"]) for r in bodies), folded)
+        return got
+
+    def legacy_rows(actor):
+        return [r for r in s.rows(f"SELECT thing FROM familiar WHERE actor = {actor}", "legacy-familiar")
+                if r["thing"] in {3 << 40 | body["id"] for body in bodies}]
+
+    def blocks(actor):
+        return s.rows(f"SELECT * FROM seen_structures WHERE actor = {actor}", "seen-blocks")
+
+    set_law(s, "seen_ranges_check", True)
+    set_law(s, "notice_delta_check", True)
+    s.call("set_profile", True)
+    stamp = time.time()
+    try:
+        got = first(observer, "ranges-on")
+        s.expect("diagnostic keeps the corresponding legacy rows", len(legacy_rows(observer)) == 20)
+        s.expect("ranges are stored in at most two block rows here", 1 <= len(blocks(observer)) <= 2)
+        s.call("place_at", observer, *away)
+        time.sleep(3)
+        s.call("place_at", observer, *at)
+        time.sleep(3)
+        s.expect("return to the field does not repeat any remains line", remains(observer, "returned") == got)
+        diagnostics = diag_totals(s, stamp)
+        s.expect("ranges and C2 comparisons ran with no differences",
+                 diagnostics.get("seen_ranges:checked", 0) >= 20 and
+                 diagnostics.get("notice_delta:checked", 0) >= 20 and
+                 diagnostics.get("seen_ranges:differed", 0) == diagnostics.get("notice_delta:differed", 0) == 0,
+                 diagnostics)
+    finally:
+        s.call("set_profile", False)
+        set_law(s, "notice_delta_check", False)
+        set_law(s, "seen_ranges_check", False)
+
+    s.call("place_at", observer, *away)
+    set_law(s, "seen_ranges", False)
+    first(legacy, "ranges-off")
+    s.expect("law off records each field body in familiarity", len(legacy_rows(legacy)) == 20)
+    set_law(s, "seen_ranges", True)
+    s.wait(lambda: not legacy_rows(legacy), 15)
+    s.expect("migration drained the rows and did not repeat the lines",
+             1 <= len(blocks(legacy)) <= 2 and len(remains(legacy, "migrated-remains")) == 3)
+    s.call("place_at", legacy, *away)
+
+    s.call("place_at", observer, *at)
+    s.call("place_at", extra, at[0] + 2, at[1] - 1)
+    s.call("kill", extra, "one new body")
+    fresh = s.wait(lambda: [r for r in remains(observer, "one-new") if r["subject"] == extra], 12)
+    s.expect("one new body gets its own line", len(fresh) == 1 and fresh[0]["text"].startswith("You notice a remains"), fresh)
+    s.call("place_at", builder, at[0] + 3, at[1] + 1)
+    s.call("place_structure", builder, "shelter")
+    fresh = s.wait(lambda: [r for r in lines(observer, "shelter") if r["text"].startswith("You notice a shelter")], 12)
+    s.expect("the new shelter is noticed once", len(fresh) == 1, fresh)
+    s.call("kill", observer, "seen ranges death cleanup")
+    s.expect("death deletes the observer's block rows", not blocks(observer))
+
+
+SCENES["seen_remains"] = seen_remains
+
+
+def seen_remains_gaze(s):
+    """Seen ranges and the counted remains line under Cullet's shipped cover and gaze laws
+    (`--seed cullet`, by day). Structures are taken within the observer's sight radius, which the
+    gaze band scales (Near 0.6, Middle 1.0 of 48 m by day); cover traces only people. An observer
+    in Near is told one counted line for the strangers' bodies within Near. Middle brings the
+    outer bodies within reach: one more counted line, counting only those. Going back to Near and
+    to Middle again, and then to Far, repeats nothing."""
+    law = s.rows("SELECT * FROM cover_law")
+    s.expect("Cullet's cover law is on", bool(law) and law[0]["cover_sight_on"], law)
+    hour, day = world_hour(s)
+    if not 7.5 <= hour < 18.5:
+        wait_s = ((7.5 - hour) % 24) / 24 * day / 1000
+        print(f"waiting {wait_s:.0f} s for daylight (hour {hour:.1f})", flush=True)
+        time.sleep(wait_s + 5)
+    observer, *dead = s.people(12)
+    for who in (observer, *dead):
+        s.graph(who, {"wait": 600})
+    centre = clear_line(s)[0]
+    walk = walkable(s)
+    # Somewhere walkable well beyond Far (62 m by day) while the bodies are staged.
+    away = next(spot for step in range(72) for reach in (110, 90, 75)
+                if walk(int((spot := (centre[0] + reach * math.cos(step * math.pi / 36),
+                                      centre[1] + reach * math.sin(step * math.pi / 36)))[0]), int(spot[1])))
+    s.call("place_at", observer, *away)
+    s.act(observer, {"do": "gaze", "band": "near"})
+    s.wait(lambda: s.rows(f"SELECT * FROM attention WHERE id = {observer} AND band = 2"), 10)
+    picked = []
+    for i, who in enumerate(dead):
+        reach = 14 if i % 2 == 0 else 38
+        # Around the ring from this body's own angle, the first walkable tile clear of the others
+        # (Cullet's streets leave gaps between houses).
+        for step in range(72):
+            angle = i * 2 * math.pi / len(dead) + step * math.pi / 36
+            spot = (centre[0] + reach * math.cos(angle), centre[1] + reach * math.sin(angle))
+            if walk(int(spot[0]), int(spot[1])) and all(math.dist(spot, q) > 2 for q in picked):
+                break
+        else:
+            raise RuntimeError(f"no walkable tile {reach} m from {centre}")
+        picked.append(spot)
+        s.call("place_at", who, *spot)
+        s.call("kill", who, "seen remains gaze fixture")
+    s.call("place_at", observer, *centre)
+    at = s.rows(f"SELECT x, y FROM body WHERE id = {observer}")[0]
+    at = (at["x"], at["y"])
+    bodies = [r for r in s.rows("SELECT * FROM structure WHERE kind = 'remains'", "field") if r["owner"] in dead]
+    dist = {r["id"]: math.dist(at, (r["x"], r["y"])) for r in bodies}
+    near_r, middle_r = 48 * 0.6, 48.0
+    inner = [i for i, d in dist.items() if d <= near_r]
+    outer = [i for i, d in dist.items() if near_r < d <= middle_r]
+    s.expect("field of 11 bodies, none within 2 m of a band edge, split between Near and Middle",
+             len(bodies) == 11 and inner and outer and len(inner) + len(outer) == 11 and
+             all(abs(d - near_r) > 2 and abs(d - middle_r) > 2 for d in dist.values()),
+             {"at": at, "dist": dist})
+
+    def remains(label):
+        return [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {observer} AND kind = 'saw'", label)
+                if r["text"].startswith("You notice") and "remains" in r["text"]]
+
+    def counted(n):
+        return f"You notice the remains of {n} strangers around you, the nearest "
+
+    got = s.wait(lambda: remains("near"), 15)
+    time.sleep(3)
+    got = remains("near")
+    s.expect(f"Near: one counted line for the {len(inner)} bodies within {near_r:.1f} m",
+             len(got) == 1 and got[0]["text"].startswith(counted(len(inner))), got)
+    s.act(observer, {"do": "gaze", "band": "middle"})
+    s.wait(lambda: s.rows(f"SELECT * FROM attention WHERE id = {observer} AND band = 0"), 10)
+    s.wait(lambda: len(remains("middle")) >= 2, 15)
+    time.sleep(3)
+    got = remains("middle")
+    s.expect(f"Middle: one more counted line, for only the {len(outer)} bodies it brought within reach",
+             len(got) == 2 and got[1]["text"].startswith(counted(len(outer))), got)
+    for band, code in (("near", 2), ("middle", 0), ("far", 1)):
+        time.sleep(1)
+        s.act(observer, {"do": "gaze", "band": band})
+        s.wait(lambda: s.rows(f"SELECT * FROM attention WHERE id = {observer} AND band = {code}"), 10)
+        time.sleep(3)
+    s.expect("Near, Middle and Far again repeat no remains line", remains("again") == got, remains("again"))
+    ranges = [r["ranges"] for r in s.rows(f"SELECT * FROM seen_structures WHERE actor = {observer}", "seen-blocks")]
+    pairs = [(rs[k], rs[k + 1]) for rs in ranges for k in range(0, len(rs), 2)]
+    s.expect("the observer's ranges hold every field body",
+             all(any(a <= id <= b for a, b in pairs) for id in dist), {"ranges": ranges, "bodies": sorted(dist)})
+    s.call("place_at", observer, *away)
+
+
+SCENES["seen_remains_gaze"] = seen_remains_gaze
+
+
+def act_replace(s):
+    """A mind's act under way and the next one it decides (docs/INPUT_LATENCY.md, "Mind acts
+    replace"; features/acts.md). With `mind_act_replaces` off (as shipped) the next waits in
+    `act_queue` for the walk under way to end. On, it replaces the walk as a player's command does
+    (`acts::submit_player`): the walk is broken off with no outcome told, what waited is dropped,
+    and the new act starts in the same transaction. A gaze change alone, or an act that cannot be
+    read, replaces nothing. The law is set back off at the end."""
+    a, = s.people(1)
+    line = open_line(s, 30)
+    start, far, back = line[0], line[-1], line[14]
+    goto = lambda p: {"do": "goto", "target": {"at": [p[0], p[1]]}}
+    doing = lambda: (s.http_rows(f"SELECT skill, node, started_ms, label FROM activity WHERE id = {a}") or [None])[0]
+    queued = lambda: s.http_rows(f"SELECT id, node FROM act_queue WHERE actor = {a}")
+    told = lambda: [r["text"] for r in s.rows(f"SELECT kind, text FROM experience WHERE observer = {a}") if r["kind"] == "act"]
+
+    def walking_far():
+        s.call("place_at", a, *start)
+        time.sleep(0.5)
+        s.act(a, goto(far))
+        return s.wait(lambda: (d := doing()) and d["skill"] == "goto" and d["node"] == 65534 and d, 10)
+
+    set_law(s, "mind_act_replaces", False)
+    first = walking_far()
+    time.sleep(1.0)
+    s.act(a, goto(back))
+    now = doing()
+    s.expect("off: the next act waits while the walk is under way", now and now["started_ms"] == first["started_ms"] and len(queued()) == 1,
+             {"first": first, "now": now, "queue": queued()})
+    s.wait(lambda: (d := doing()) and d["started_ms"] != first["started_ms"] and d, 40)
+    s.expect("off: it starts once the walk has ended, with the walk's outcome told", any("decided: goto" in t for t in told()), told())
+
+    set_law(s, "mind_act_replaces", True)
+    # Counted from here: `place_at` breaks off a walk still under way, told (act.rs `relocated`).
+    first = walking_far()
+    before = len(told())
+    time.sleep(1.0)
+    s.call("mind_act", a, [json.dumps(goto(back)), json.dumps(goto(far))], "verify-core")
+    time.sleep(0.2)
+    s.call("mind_act", a, [json.dumps(goto(start))], "verify-core")
+    now = doing()
+    s.expect("on: the next act replaces the walk at once and drops what waited", now and now["started_ms"] != first["started_ms"] and now["skill"] == "goto" and not queued(),
+             {"first": first, "now": now, "queue": queued()})
+    s.expect("on: the broken-off walks are told nothing (as a player's command is)", not any("did not work out: goto" in t for t in told()[before:]), told()[before:])
+    under_way = doing()
+    s.act(a, {"do": "gaze", "band": "middle"})
+    s.act(a, {"do": "no_such_skill"})
+    now = doing()
+    s.expect("on: a gaze change or an unreadable act replaces nothing", now and now["started_ms"] == under_way["started_ms"], {"under_way": under_way, "now": now})
+    set_law(s, "mind_act_replaces", False)
+    s.graph(a, {"wait": 120})
+
+
+SCENES["act_replace"] = act_replace
+
+def act_gaps(s):
+    """The three gaps a replacing act had for a player and, under `mind_act_replaces`, for a mind
+    (docs/INPUT_LATENCY.md, "Act replacement gaps"), driven here through a mind's `mind_act`
+    (verify-player `act_gaps.py` drives the same through `human_act`), each beside its law off:
+
+    1. `act_replace_checks`: a replacement refused as it would start (eating cooked meat one does
+       not carry) leaves the walk under way running and is told; off, the walk is broken off first
+       and the body stands idle.
+    2. `act_input_cost`: a burst of 40 acts sent at once is cut at the input bucket (`input_burst`
+       15 plus what `input_hz` 30/s refills during the burst), the rest refused "too many inputs"
+       with nothing written; a second later acts go through again; off, all 40 go through.
+    3. `act_turned_back`: seven walks each given up within 3 s for another the other way are
+       noticed; the sixth in 20 s is told, "You keep turning back and forth"; off, nothing is told.
+    4. `act_same_continues` (off as shipped): the same walk again while it runs goes on (its start
+       unchanged); off, it starts over.
+
+    `mind_act_replaces` is on for the scene; every law is set back at the end."""
+    a, = s.people(1)
+    line = open_line(s, 30)
+    start, far, back = line[0], line[-1], line[14]
+    goto = lambda p: {"do": "goto", "target": {"at": [p[0], p[1]]}}
+    eat = {"do": {"skill": "eat", "item": "cooked_meat"}}
+    doing = lambda: (s.http_rows(f"SELECT skill, node, started_ms, label FROM activity WHERE id = {a}") or [None])[0]
+    told = lambda: [r for r in s.http_rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}")]
+
+    def walking_far():
+        s.call("place_at", a, *start)
+        time.sleep(0.5)
+        s.act(a, goto(far))
+        return s.wait(lambda: (d := doing()) and d["skill"] == "goto" and d["node"] == 65534 and d, 10)
+
+    set_law(s, "mind_act_replaces", True)
+    try:
+        # 1. A refused replacement.
+        for checks in (True, False):
+            set_law(s, "act_replace_checks", checks)
+            first = walking_far()
+            n = len(told())
+            time.sleep(0.5)
+            s.act(a, eat)
+            now = doing()
+            refusal = [r["text"] for r in told()[n:] if r["kind"] == "act" and "cooked_meat" in r["text"]]
+            if checks:
+                s.expect("checks on: a refused replacement leaves the walk under way running", now and now["started_ms"] == first["started_ms"] and now["skill"] == "goto", {"first": first, "now": now})
+            else:
+                s.expect("checks off (control): the walk is broken off before the refusal, the body idle", not now or now["started_ms"] != first["started_ms"], {"first": first, "now": now})
+            s.expect(f"checks {'on' if checks else 'off'}: the refusal is told", any("did not work out" in t for t in refusal), refusal)
+        set_law(s, "act_replace_checks", True)
+
+        # 2. The input bucket.
+        import concurrent.futures
+        def burst(n):
+            body = [json.dumps(goto(far))]
+            t0 = time.monotonic()
+            with concurrent.futures.ThreadPoolExecutor(n) as pool:
+                res = list(pool.map(lambda _: s.http_call("mind_act", [a, body, "verify-core"], check=False), range(n)))
+            return [(r.returncode, r.stdout.strip()) for r in res], time.monotonic() - t0
+        for cost in (True, False):
+            set_law(s, "act_input_cost", cost)
+            s.call("place_at", a, *start)
+            time.sleep(1.5)  # the bucket full again
+            res, secs = burst(40)
+            ok = sum(1 for c, _ in res if c == 0)
+            refused = [b for c, b in res if c != 0]
+            detail = {"accepted": ok, "refused": len(refused), "burst_s": round(secs, 3), "refusals": sorted(set(refused))[:3]}
+            if cost:
+                s.expect("input cost on: a burst of 40 acts is cut at the bucket (15 plus 30/s refill), the rest refused 'too many inputs'",
+                         15 <= ok <= 15 + 30 * secs + 1 and refused and all("too many inputs" in b for b in refused), detail)
+                time.sleep(1.0)
+                again = s.http_call("mind_act", [a, [json.dumps(goto(back))], "verify-core"], check=False)
+                s.expect("input cost on: a second later an act goes through again", again.returncode == 0, again.stdout.strip())
+            else:
+                s.expect("input cost off (control): all 40 go through", ok == 40 and not refused, detail)
+        set_law(s, "act_input_cost", True)
+
+        # 3. Turning back and forth (off first: nothing is counted, so the window starts clean).
+        for counted in (False, True):
+            set_law(s, "act_turned_back", counted)
+            s.call("place_at", a, *line[14])
+            time.sleep(0.5)
+            n = len(told())
+            for i in range(7):
+                s.act(a, goto(far if i % 2 == 0 else start))
+                time.sleep(0.4)
+            time.sleep(0.5)
+            dither = [r["text"] for r in told()[n:] if r["kind"] == "self" and "turning back and forth" in r["text"]]
+            if counted:
+                s.expect("turned back on: seven walks given up for one the other way are noticed and told once", len(dither) == 1, dither)
+            else:
+                s.expect("turned back off (control): nothing is told", not dither, dither)
+
+        # 4. The same act again.
+        for same in (True, False):
+            set_law(s, "act_same_continues", same)
+            first = walking_far()
+            time.sleep(1.0)
+            s.act(a, goto(far))
+            now = doing()
+            if same:
+                s.expect("same continues on: the same walk again goes on (its start unchanged)", now and now["started_ms"] == first["started_ms"], {"first": first, "now": now})
+            else:
+                s.expect("same continues off (as shipped): the same walk again starts over", now and now["started_ms"] != first["started_ms"] and now["skill"] == "goto", {"first": first, "now": now})
+    finally:
+        for law, value in (("mind_act_replaces", False), ("act_replace_checks", True), ("act_input_cost", True), ("act_turned_back", True), ("act_same_continues", False)):
+            set_law(s, law, value, check=False)
+        s.graph(a, {"wait": 120})
+
+
+SCENES["act_gaps"] = act_gaps
 
 if __name__ == "__main__":
     raise SystemExit(main())

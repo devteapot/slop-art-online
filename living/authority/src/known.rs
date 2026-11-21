@@ -18,21 +18,23 @@ use crate::tables::*;
 use living_rules::known::{self as kn, Belief, Edit, Known};
 use spacetimedb::{ReducerContext, Table};
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
-/// The longest a character's changed blocks wait before they are written.
-const FLUSH_MS: u64 = 5_000;
+/// Minimum interval between an actor's known-ground row writes.
+const FLUSH_MS: u64 = 5_500;
 /// Most remembered things a character keeps (oldest seen go first).
 const REMEMBER_LIMIT: usize = 512;
 
 struct Pending {
     blocks: HashMap<u32, Known>,
-    dirty: Vec<u32>,
+    dirty: VecDeque<u32>,
     flushed_ms: u64,
 }
 
 thread_local! {
+    static SEARCH: RefCell<HashMap<u32, (SearchKey, kn::Search)>> = RefCell::new(HashMap::new());
+    static REVISION: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
     static PENDING: RefCell<HashMap<u32, Pending>> = RefCell::new(HashMap::new());
     static RINGS: RefCell<HashMap<u32, Rc<Vec<(i32, i32)>>>> = RefCell::new(HashMap::new());
     /// The map's edit count (the newest `ground_edit` id), once read.
@@ -74,7 +76,11 @@ fn block(ctx: &ReducerContext, id: u32, block: u32) -> Option<Known> {
 /// its own sight.
 pub fn ground_radius(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 {
     let laws = common::laws(ctx);
-    let sight = common::sight_for(ctx, id, w, now);
+    let senses = common::senses_of(ctx, id, w, now);
+    if let Some(gaze) = senses.gaze {
+        return gaze.ground.min(laws.ground_sight_m);
+    }
+    let sight = senses.sight;
     let day = common::scripts(ctx).reach().day;
     if sight + 0.01 < day {
         sight.min(laws.ground_sight_m)
@@ -84,14 +90,14 @@ pub fn ground_radius(ctx: &ReducerContext, id: u32, w: &World, now: u64) -> f32 
 }
 
 /// One look: mark the ground `id` sees from `at` facing `heading`, remember the gates in view, and
-/// write what changed when it is due. Returns how many cells were marked.
-pub fn mark(ctx: &ReducerContext, id: u32, at: (f32, f32), heading: f32, now: u64) -> usize {
+/// write what changed when it is due. Returns whether the belief changed.
+pub fn mark(ctx: &ReducerContext, id: u32, at: (f32, f32), heading: f32, now: u64) -> bool {
     let _span = common::span("known.mark");
     let laws = common::laws(ctx);
     let w = common::world(ctx);
     let radius = ground_radius(ctx, id, &w, now);
     if radius <= 0.0 {
-        return 0;
+        return false;
     }
     let map = common::map(ctx);
     let mut senses = common::senses_of(ctx, id, &w, now);
@@ -116,35 +122,40 @@ pub fn mark(ctx: &ReducerContext, id: u32, at: (f32, f32), heading: f32, now: u6
         common::diag(|| "known:cells", found.len() as u64);
         PENDING.with(|p| {
             let mut p = p.borrow_mut();
-            let pend = p.entry(id).or_insert_with(|| Pending { blocks: HashMap::new(), dirty: Vec::new(), flushed_ms: now });
+            let pend = p.entry(id).or_insert_with(|| Pending { blocks: HashMap::new(), dirty: VecDeque::new(), flushed_ms: now });
             for (chunk, bit) in &found {
                 let (b, slot) = kn::block_of(*chunk);
                 let k = pend.blocks.entry(b).or_insert_with(|| blocks.get(&b).cloned().flatten().unwrap_or_default());
                 k.mark(slot, *bit, ep);
                 if !pend.dirty.contains(&b) {
-                    pend.dirty.push(b);
+                    pend.dirty.push_back(b);
                 }
             }
         });
     }
-    remember_gates(ctx, id, at, heading, &senses, &map, now);
-    flush(ctx, id, now, false);
-    found.len()
+    crate::latency::nav(ctx, id, "ground_look", 0, format_args!(""));
+    let changed = remember_gates(ctx, id, at, heading, &senses, &map, now) || !found.is_empty();
+    if changed {
+        REVISION.with(|r| *r.borrow_mut().entry(id).or_default() += 1);
+    }
+    flush(ctx, id, now);
+    changed
 }
 
-/// Write `id`'s changed blocks if they are due (or `force`).
-pub fn flush(ctx: &ReducerContext, id: u32, now: u64, force: bool) {
+/// Write one dirty block per interval, oldest first, while the planner reads pending observations.
+fn flush(ctx: &ReducerContext, id: u32, now: u64) {
     let todo = PENDING.with(|p| {
         let mut p = p.borrow_mut();
-        let Some(pend) = p.get_mut(&id) else { return Vec::new() };
-        if pend.dirty.is_empty() || (!force && now.saturating_sub(pend.flushed_ms) < FLUSH_MS) {
-            return Vec::new();
+        let pend = p.get_mut(&id)?;
+        if now.saturating_sub(pend.flushed_ms) < FLUSH_MS {
+            return None;
         }
+        let b = pend.dirty.pop_front()?;
         pend.flushed_ms = now;
-        let dirty = std::mem::take(&mut pend.dirty);
-        dirty.into_iter().filter_map(|b| pend.blocks.get(&b).map(|k| (b, k.clone()))).collect::<Vec<_>>()
+        let k = pend.blocks.remove(&b).expect("dirty block in buffer");
+        Some((b, k))
     });
-    for (b, k) in todo {
+    if let Some((b, k)) = todo {
         common::diag(|| "known:writes", 1);
         match ctx.db.known_ground().by_actor_block().filter((id, b)).next() {
             Some(mut row) => {
@@ -161,7 +172,8 @@ pub fn flush(ctx: &ReducerContext, id: u32, now: u64, force: bool) {
 }
 
 /// Gates in view are remembered open or shut, written when that changes.
-fn remember_gates(ctx: &ReducerContext, id: u32, at: (f32, f32), heading: f32, senses: &living_rules::script::Senses, map: &living_rules::map::Map, now: u64) {
+fn remember_gates(ctx: &ReducerContext, id: u32, at: (f32, f32), heading: f32, senses: &living_rules::script::Senses, map: &living_rules::map::Map, now: u64) -> bool {
+    let mut changed = false;
     for (s, d) in common::structures_near(ctx, at, senses.sight) {
         if &*s.kind != "gate" {
             continue;
@@ -175,12 +187,16 @@ fn remember_gates(ctx: &ReducerContext, id: u32, at: (f32, f32), heading: f32, s
         match ctx.db.remembered().by_observer_target().filter((id, s.id)).next() {
             Some(r) if r.state == state => {}
             Some(mut r) => {
+                changed = true;
                 r.state = state;
                 r.seen_ms = now;
                 ctx.db.remembered().id().update(r);
+                crate::latency::nav(ctx, id, "gate_remembered", u64::from(s.id), format_args!("{state} {}", g.changed_ms));
             }
             None => {
+                changed = true;
                 ctx.db.remembered().insert(Remembered { id: 0, observer: id, target: s.id, kind: REMEMBER_GATE, x: s.x, y: s.y, state, seen_ms: now });
+                crate::latency::nav(ctx, id, "gate_remembered", u64::from(s.id), format_args!("{state} {}", g.changed_ms));
                 let rows: Vec<(u64, u64)> = ctx.db.remembered().observer().filter(id).map(|r| (r.seen_ms, r.id)).collect();
                 if rows.len() > REMEMBER_LIMIT {
                     let mut rows = rows;
@@ -192,12 +208,11 @@ fn remember_gates(ctx: &ReducerContext, id: u32, at: (f32, f32), heading: f32, s
             }
         }
     }
+    changed
 }
 
 /// `id`'s belief over the map: its own seen cells and remembered gates.
 pub fn belief<'a>(ctx: &'a ReducerContext, id: u32, map: &'a living_rules::map::Map) -> Belief<'a> {
-    // Pending blocks are newer than the rows: write them first, so the belief reads one place.
-    flush(ctx, id, ctx.timestamp.to_micros_since_unix_epoch() as u64 / 1000, true);
     let gates: HashMap<u32, bool> = ctx
         .db
         .remembered()
@@ -211,19 +226,48 @@ pub fn belief<'a>(ctx: &'a ReducerContext, id: u32, map: &'a living_rules::map::
         .collect();
     Belief::new(
         map,
-        move |b| ctx.db.known_ground().by_actor_block().filter((id, b)).next().map(|r| Known::from_bytes(&r.cells, &r.seen_at)),
+        move |b| block(ctx, id, b),
         move |chunk| ctx.db.ground_edit().chunk().filter(chunk).map(|e| Edit { epoch: e.id as u32, tile: e.tile, before: e.before }).collect(),
         gates,
     )
 }
 
-/// The next leg of `id`'s walk from `from` to `to`, planned over what it has seen.
-pub fn leg(ctx: &ReducerContext, id: u32, map: &living_rules::map::Map, from: (f32, f32), to: (f32, f32)) -> Result<Vec<Waypoint>, kn::NoLeg> {
+#[derive(PartialEq)]
+struct SearchKey {
+    revision: u64,
+    from: (f32, f32),
+    to: (f32, f32),
+    unknown_cost: f32,
+    road_speed: f32,
+}
+
+/// Advance one slice of the actor's search. A missing cache after a reload starts a new search
+/// from the persisted steering goal and pose.
+pub fn leg(ctx: &ReducerContext, id: u32, map: &living_rules::map::Map, from: (f32, f32), to: (f32, f32)) -> Result<Option<Vec<Waypoint>>, kn::NoLeg> {
     let _span = common::span("known.leg");
     let laws = common::laws(ctx);
+    let revision = REVISION.with(|r| r.borrow().get(&id).copied().unwrap_or_default());
+    let key = SearchKey { revision, from, to, unknown_cost: laws.unknown_cost, road_speed: laws.road_speed };
     let b = belief(ctx, id, map);
     let shape = kn::Shape { unknown_cost: laws.unknown_cost, road_speed: laws.road_speed, ..Default::default() };
-    kn::leg(&b, from, to, &shape).map(|p| p.into_iter().map(|(x, y)| Waypoint { x, y }).collect())
+    SEARCH.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let mut search = match cache.remove(&id) {
+            Some((previous, search)) if previous == key => search,
+            _ => kn::Search::new(&b, from, to, shape)?,
+        };
+        match search.advance(&b, kn::STEERING_POPS) {
+            Some(result) => result.map(|points| Some(points.into_iter().map(|(x, y)| Waypoint { x, y }).collect())),
+            None => {
+                cache.insert(id, (key, search));
+                Ok(None)
+            }
+        }
+    })
+}
+
+pub fn end_search(id: u32) {
+    SEARCH.with(|s| s.borrow_mut().remove(&id));
 }
 
 /// Whether a walk's path, from `at`, crosses ground `id` now believes blocked (a wall it has just
@@ -242,6 +286,8 @@ pub fn path_blocked(ctx: &ReducerContext, id: u32, map: &living_rules::map::Map,
 
 /// Death: the character's known ground and remembered things go.
 pub fn forget(ctx: &ReducerContext, id: u32) {
+    end_search(id);
+    REVISION.with(|r| r.borrow_mut().remove(&id));
     PENDING.with(|p| p.borrow_mut().remove(&id));
     let rows: Vec<u64> = ctx.db.known_ground().actor().filter(id).map(|r| r.id).collect();
     for r in rows {

@@ -1,0 +1,74 @@
+{
+ "drawing": {
+  "area": [
+   16,
+   15
+  ],
+  "box": [
+   [
+    8,
+    5
+   ],
+   [
+    8,
+    5
+   ]
+  ],
+  "across": [
+   8.3,
+   7.3
+  ]
+ },
+ "stills": [
+  {
+   "file": ".local/char-port-2/s0/shots/cp2-woman/own-cp2-woman/03-clip-idle@0-0_8_0.18_0.86.png",
+   "scale": 1.302,
+   "nostrils": [
+    null,
+    null
+   ]
+  },
+  {
+   "file": ".local/char-port-2/s0/shots/cp2q-woman/own-cp2q-woman/03-clip-idle@0-0_8_0.18_0.86.png",
+   "scale": 1.278,
+   "nostrils": [
+    {
+     "area": 20,
+     "box": [
+      8,
+      4
+     ],
+     "across": 11.7,
+     "below_pupils": 100.4,
+     "core_D": 0.58
+    },
+    {
+     "area": 20,
+     "box": [
+      8,
+      4
+     ],
+     "across": 6.4,
+     "below_pupils": 100.4,
+     "core_D": 0.57
+    }
+   ]
+  },
+  {
+   "file": ".local/char-port-2/s0/shots/cp2-girl/own-cp2-girl/03-clip-idle@0-0_8_0.18_0.86.png",
+   "scale": 1.458,
+   "nostrils": [
+    null,
+    null
+   ]
+  },
+  {
+   "file": ".local/char-port-2/s0/shots/cp2q-girl/own-cp2q-girl/03-clip-idle@0-0_8_0.18_0.86.png",
+   "scale": 1.428,
+   "nostrils": [
+    null,
+    null
+   ]
+  }
+ ]
+}

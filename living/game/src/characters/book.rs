@@ -241,7 +241,8 @@ fn missing_file(key: &str, p: &Person) -> Option<String> {
         return m.clone();
     }
     let root = std::path::PathBuf::from(crate::lookdev::asset_root());
-    let m = p.files().into_iter().find(|f| !root.join(f).exists());
+    // A hero drawn from their whole file needs nothing else (contract v1.3).
+    let m = if compose::enabled() && compose::hero_file(p).is_some() { None } else { p.files().into_iter().find(|f| !root.join(f).exists()) };
     cache.lock().unwrap().insert(key.to_string(), m.clone());
     m
 }

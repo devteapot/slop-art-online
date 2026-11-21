@@ -1,0 +1,30 @@
+{
+ "style": "swept_braid",
+ "body_over_eyes": 3.071,
+ "whole_over_eyes": 3.113,
+ "spread_face": 1.817,
+ "body": 1.792,
+ "hair_width_px": 218,
+ "body_width_px": 215,
+ "cheek_width_px": 120,
+ "cheek_px": [
+  138,
+  258
+ ],
+ "eye_spacing_px": 70.0,
+ "chin_row": 363,
+ "cheek_row": 296,
+ "target": {
+  "body_over_eyes": 3.146,
+  "band": [
+   2.973,
+   3.319
+  ]
+ },
+ "within": true,
+ "report_only": {
+  "body_over_cheek": 1.792,
+  "cheek_over_eyes": 1.714,
+  "drawing_body_over_cheek": 1.823
+ }
+}

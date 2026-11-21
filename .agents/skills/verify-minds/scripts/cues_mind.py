@@ -29,6 +29,8 @@ import sys
 import time
 import traceback
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "living/tools"))
+from law_values import own_laws  # noqa: E402  (the world's own law values, docs/LAW_OVERRIDE.md)
 
 sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
@@ -50,7 +52,7 @@ def scene(run, args):
     run.harness('launch')
     run.harness('doctor')
     run.admin('set_world_law', 'cues_on', 'true')
-    laws = {r['name']: r['value'] for r in run.private('SELECT * FROM world_law', 'world-law')}
+    laws = own_laws(lambda q: run.private(q, 'world-law'))
     assert laws.get('cues_on') == 'true', laws
     people = sorted(run.sql("SELECT * FROM character WHERE kind = 'person'", 'people'), key=lambda p: p['id'])
     w = next(p for p in people if p['ai'] and p['alive'] and p['stage'] == 2)['id']

@@ -1,0 +1,50 @@
+{
+  "final_material_audit": {
+    "stage": "stage2-expressions",
+    "materials": 26,
+    "images": [
+      "cora.atlas.png",
+      "cora.iris.png",
+      "cora.tint.png"
+    ],
+    "failures": []
+  },
+  "images_sha256": {
+    "cora.atlas": "1ad7c79d204fc86769199292af4e62e32a7d0e3a6288c64c2630566b33e1b7f2",
+    "cora.iris": "307a6c5805d361b75f0f3bb03a5fd3cfb77e7ed67fe2af1db2e3801376924808",
+    "cora.tint": "64e760d428cdd862105c35053be7a4a2ed9be3d1e76c28f2c1c5b60664456c05"
+  },
+  "all_primitives_have_COLOR_0": true,
+  "maximum_weight_sum_error": 1.1920928955078125e-07,
+  "export": {
+    "triangles": 35720,
+    "vertices": 23321,
+    "primitives": 10,
+    "materials": 9,
+    "clips": [
+      "idle",
+      "walk",
+      "run",
+      "talk",
+      "sit_idle",
+      "sit_ground"
+    ],
+    "face_keys": [
+      "Fcl_EYE_Close",
+      "Fcl_EYE_Close_L",
+      "Fcl_EYE_Close_R",
+      "Fcl_EYE_Joy",
+      "Fcl_MTH_A",
+      "Fcl_MTH_I",
+      "Fcl_MTH_U",
+      "Fcl_MTH_E",
+      "Fcl_MTH_O",
+      "Fcl_MTH_Fun",
+      "Fcl_MTH_Sorrow",
+      "Fcl_BRW_Angry",
+      "Fcl_BRW_Sorrow",
+      "Fcl_BRW_Surprised",
+      "Fcl_BRW_Fun"
+    ]
+  }
+}

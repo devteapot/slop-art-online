@@ -1,0 +1,150 @@
+{
+  "walk_2": {
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "codec_name": "vp9",
+          "width": 1600,
+          "height": 900,
+          "pix_fmt": "gbrp",
+          "r_frame_rate": "30/1",
+          "nb_read_frames": "150"
+        }
+      ],
+      "format": {
+        "duration": "5.000000"
+      }
+    },
+    "decoded_max_abs_rgb_error_vs_source": {
+      "0": 0,
+      "74": 0,
+      "149": 0
+    },
+    "sha256": "f1072c0013c71735c28940c63a170a4fb5125ec37e327888ee78a46bd8a0dc2e"
+  },
+  "walk_3": {
+    "probe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "codec_name": "vp9",
+          "width": 1600,
+          "height": 900,
+          "pix_fmt": "gbrp",
+          "r_frame_rate": "30/1",
+          "nb_read_frames": "150"
+        }
+      ],
+      "format": {
+        "duration": "5.000000"
+      }
+    },
+    "decoded_max_abs_rgb_error_vs_source": {
+      "0": 0,
+      "74": 0,
+      "149": 0
+    },
+    "sha256": "f1072c0013c71735c28940c63a170a4fb5125ec37e327888ee78a46bd8a0dc2e"
+  },
+  "walk_2_vs_3": {
+    "frames": 150,
+    "frames_with_rgb_difference": 0,
+    "peak_differing_pixels": 0,
+    "peak_abs_channel_error": 0
+  },
+  "idle_2_vs_plain": {
+    "Near pan": {
+      "frames": 16,
+      "frames_with_rgb_difference": 0,
+      "peak_differing_pixels": 0,
+      "peak_abs_channel_error": 0
+    },
+    "Near zoom": {
+      "frames": 16,
+      "frames_with_rgb_difference": 0,
+      "peak_differing_pixels": 0,
+      "peak_abs_channel_error": 0
+    },
+    "Middle pan": {
+      "frames": 16,
+      "frames_with_rgb_difference": 0,
+      "peak_differing_pixels": 0,
+      "peak_abs_channel_error": 0
+    },
+    "Middle zoom": {
+      "frames": 16,
+      "frames_with_rgb_difference": 0,
+      "peak_differing_pixels": 0,
+      "peak_abs_channel_error": 0
+    },
+    "Far pan": {
+      "frames": 16,
+      "frames_with_rgb_difference": 0,
+      "peak_differing_pixels": 0,
+      "peak_abs_channel_error": 0
+    },
+    "Far zoom": {
+      "frames": 16,
+      "frames_with_rgb_difference": 0,
+      "peak_differing_pixels": 0,
+      "peak_abs_channel_error": 0
+    }
+  },
+  "idle_3_vs_plain": {
+    "Near pan": {
+      "frames": 16,
+      "frames_with_rgb_difference": 0,
+      "peak_differing_pixels": 0,
+      "peak_abs_channel_error": 0
+    },
+    "Near zoom": {
+      "frames": 16,
+      "frames_with_rgb_difference": 0,
+      "peak_differing_pixels": 0,
+      "peak_abs_channel_error": 0
+    },
+    "Middle pan": {
+      "frames": 16,
+      "frames_with_rgb_difference": 0,
+      "peak_differing_pixels": 0,
+      "peak_abs_channel_error": 0
+    },
+    "Middle zoom": {
+      "frames": 16,
+      "frames_with_rgb_difference": 0,
+      "peak_differing_pixels": 0,
+      "peak_abs_channel_error": 0
+    },
+    "Far pan": {
+      "frames": 16,
+      "frames_with_rgb_difference": 0,
+      "peak_differing_pixels": 0,
+      "peak_abs_channel_error": 0
+    },
+    "Far zoom": {
+      "frames": 16,
+      "frames_with_rgb_difference": 0,
+      "peak_differing_pixels": 0,
+      "peak_abs_channel_error": 0
+    }
+  },
+  "camera": {
+    "width": 1600,
+    "height": 900,
+    "game_pitch_degrees": 58,
+    "height_metres": 12,
+    "FOV_degrees": 44,
+    "hour": 11,
+    "yaw_start_degrees": 20,
+    "yaw_step_degrees": 0.1,
+    "yaw_last_degrees": 34.9,
+    "walk_phase": "(frame % 30)/30 seconds",
+    "frames_per_second": 30,
+    "frames": 150,
+    "springs": false,
+    "film": "soft"
+  }
+}

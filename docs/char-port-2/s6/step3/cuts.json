@@ -1,0 +1,291 @@
+{
+ "cuts": {
+  "swept_braid.2.collar": {
+   "variation": {
+    "scale": 1.0,
+    "moved": {
+     "drop": -0.0457,
+     "flare": 0.0009,
+     "hook_az": 2.7705,
+     "hook_h": -0.0098,
+     "jaw_end": 0.0077,
+     "lean": 0.0932,
+     "length_h": 0.0712,
+     "near_end": 0.0241,
+     "part": -0.009
+    }
+   },
+   "measures": {
+    "spread": 2.079,
+    "spread_face": 1.78,
+    "crown_lift": 0.094,
+    "rear_depth": 0.567,
+    "by": {
+     "left": "near section",
+     "right": "front",
+     "top": "front",
+     "back": "plait"
+    }
+   },
+   "triangles_near": 11052,
+   "parts": {
+    "cap": 1216,
+    "jaw strands": 456,
+    "mass": 1884,
+    "front": 1504,
+    "near section": 1016,
+    "rear layers": 1936,
+    "hooks": 304,
+    "side groups": 608,
+    "plait": 2128
+   }
+  },
+  "swept_braid.2": {
+   "variation": {
+    "scale": 1.0,
+    "moved": {
+     "drop": -0.0457,
+     "flare": 0.0009,
+     "hook_az": 2.7705,
+     "hook_h": -0.0098,
+     "jaw_end": 0.0077,
+     "lean": 0.0932,
+     "length_h": 0.0712,
+     "near_end": 0.0241,
+     "part": -0.009
+    }
+   },
+   "measures": {
+    "spread": 2.079,
+    "spread_face": 1.78,
+    "crown_lift": 0.094,
+    "rear_depth": 0.567,
+    "by": {
+     "left": "near section",
+     "right": "front",
+     "top": "front",
+     "back": "plait"
+    }
+   },
+   "triangles_near": 11052,
+   "parts": {
+    "cap": 1216,
+    "jaw strands": 456,
+    "mass": 1884,
+    "front": 1504,
+    "near section": 1016,
+    "rear layers": 1936,
+    "hooks": 304,
+    "side groups": 608,
+    "plait": 2128
+   }
+  },
+  "swept_braid.3.collar": {
+   "variation": {
+    "scale": 0.5,
+    "moved": {
+     "drop": -0.0277,
+     "flare": -0.0003,
+     "hook_az": -0.7753,
+     "hook_h": 0.0027,
+     "jaw_end": -0.0186,
+     "lean": 0.0254,
+     "length_h": -0.0952,
+     "near_end": -0.0165,
+     "part": -0.0151
+    }
+   },
+   "measures": {
+    "spread": 2.067,
+    "spread_face": 1.77,
+    "crown_lift": 0.089,
+    "rear_depth": 0.567,
+    "by": {
+     "left": "near section",
+     "right": "front",
+     "top": "front",
+     "back": "plait"
+    }
+   },
+   "triangles_near": 10412,
+   "parts": {
+    "cap": 1216,
+    "jaw strands": 420,
+    "mass": 1724,
+    "front": 1272,
+    "near section": 948,
+    "rear layers": 1936,
+    "hooks": 304,
+    "side groups": 608,
+    "plait": 1984
+   }
+  },
+  "swept_braid.3": {
+   "variation": {
+    "scale": 0.5,
+    "moved": {
+     "drop": -0.0277,
+     "flare": -0.0003,
+     "hook_az": -0.7753,
+     "hook_h": 0.0027,
+     "jaw_end": -0.0186,
+     "lean": 0.0254,
+     "length_h": -0.0952,
+     "near_end": -0.0165,
+     "part": -0.0151
+    }
+   },
+   "measures": {
+    "spread": 2.067,
+    "spread_face": 1.77,
+    "crown_lift": 0.089,
+    "rear_depth": 0.567,
+    "by": {
+     "left": "near section",
+     "right": "front",
+     "top": "front",
+     "back": "plait"
+    }
+   },
+   "triangles_near": 10412,
+   "parts": {
+    "cap": 1216,
+    "jaw strands": 420,
+    "mass": 1724,
+    "front": 1272,
+    "near section": 948,
+    "rear layers": 1936,
+    "hooks": 304,
+    "side groups": 608,
+    "plait": 1984
+   }
+  },
+  "swept_braid.collar": {
+   "variation": {
+    "scale": 0.0,
+    "moved": {
+     "drop": 0.0,
+     "flare": -0.0,
+     "hook_az": 0.0,
+     "hook_h": 0.0,
+     "jaw_end": -0.0,
+     "lean": -0.0,
+     "length_h": 0.0,
+     "near_end": 0.0,
+     "part": 0.0
+    }
+   },
+   "measures": {
+    "spread": 2.162,
+    "spread_face": 1.852,
+    "crown_lift": 0.089,
+    "rear_depth": 0.567,
+    "by": {
+     "left": "front",
+     "right": "near section",
+     "top": "near section",
+     "back": "plait"
+    }
+   },
+   "triangles_near": 11184,
+   "parts": {
+    "cap": 1216,
+    "jaw strands": 492,
+    "mass": 1948,
+    "front": 1504,
+    "near section": 1084,
+    "rear layers": 1936,
+    "hooks": 304,
+    "side groups": 608,
+    "plait": 2092
+   }
+  },
+  "swept_braid": {
+   "variation": {
+    "scale": 0.0,
+    "moved": {
+     "drop": 0.0,
+     "flare": -0.0,
+     "hook_az": 0.0,
+     "hook_h": 0.0,
+     "jaw_end": -0.0,
+     "lean": -0.0,
+     "length_h": 0.0,
+     "near_end": 0.0,
+     "part": 0.0
+    }
+   },
+   "measures": {
+    "spread": 2.162,
+    "spread_face": 1.852,
+    "crown_lift": 0.089,
+    "rear_depth": 0.567,
+    "by": {
+     "left": "front",
+     "right": "near section",
+     "top": "near section",
+     "back": "plait"
+    }
+   },
+   "triangles_near": 11184,
+   "parts": {
+    "cap": 1216,
+    "jaw strands": 492,
+    "mass": 1948,
+    "front": 1504,
+    "near section": 1084,
+    "rear layers": 1936,
+    "hooks": 304,
+    "side groups": 608,
+    "plait": 2092
+   }
+  }
+ },
+ "tolerance": {
+  "spread_face": [
+   1.77,
+   1.97
+  ],
+  "crown_lift": [
+   0.061,
+   0.131
+  ],
+  "rear_depth": [
+   0.49,
+   0.57
+  ],
+  "near_triangles": 12000
+ },
+ "pages": {
+  "files": 92,
+  "pages": [
+   {
+    "page": "lookdev/styles/hair/hair-masks.png",
+    "files": 33,
+    "swept_braid": []
+   },
+   {
+    "page": "lookdev/styles/hair/hair-masks-1.png",
+    "files": 21,
+    "swept_braid": []
+   },
+   {
+    "page": "lookdev/styles/hair/hair-masks-2.png",
+    "files": 27,
+    "swept_braid": [
+     "swept_braid.2.collar.glb",
+     "swept_braid.2.glb",
+     "swept_braid.3.collar.glb",
+     "swept_braid.3.glb",
+     "swept_braid.collar.glb",
+     "swept_braid.glb"
+    ]
+   },
+   {
+    "page": "lookdev/styles/hair/hair-masks-3.png",
+    "files": 11,
+    "swept_braid": []
+   }
+  ]
+ }
+}

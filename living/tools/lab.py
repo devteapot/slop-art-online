@@ -50,6 +50,9 @@ def main():
         subprocess.run([str(LIVING / "tools/reclaim_disk.sh")], check=False)
     stdb = str(LIVING / "tools/stdb")
     subprocess.run([stdb, "publish", "-s", "local", "-b", f"/wasm/{wasm}", a.db, "--delete-data", "-y"], check=True)
+    # Staged genesis: the world is made by scheduled steps after the publish (genesis_wait.py).
+    import genesis_wait
+    genesis_wait.wait_ready_cli(lambda *x: subprocess.run([stdb, *x], capture_output=True, text=True).stdout, a.db)
     run = f"{a.scenario}-{int(time.time())}"
     mind_env = dict(os.environ, LIVING_DB=a.db, LIVING_RUN=run, LIVING_SEED=a.scenario, RUST_LOG="info")
     log = open(ROOT / f".local/living/{run}.log", "a")

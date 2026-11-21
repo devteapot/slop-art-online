@@ -1,6 +1,8 @@
 # The fast lane
 
-docs/FAST_LANE.md; `living/mind/src/mind/fast.rs` (serving an issued `fast_ask` row), `prompts.rs` `fast_system` and `fast_user`, `main.rs` (the `fast_ask` subscription and events), `rethink.json` `fast` (route, timeout, experiences). The world law `fast_lane_on` turns it on (off by default).
+docs/FAST_LANE.md; `living/mind/src/mind/fast.rs` (serving an issued `fast_ask` row), `prompts.rs` `fast_system` and `fast_user`, `main.rs` (the `fast_ask` subscription and its channel), `rethink.json` `fast` (route, timeout, experiences). The world law `fast_lane_on` turns it on (off by default).
+
+Dispatch (fast-dispatch, 2026-11-20; docs/INPUT_LATENCY.md, "Mind dispatch profile"): the `fast_ask` insert and update callbacks send to the fast lane's own channel, read on its own runtime (`LIVING_FAST_WORKERS`, default 2), where the request is prepared and sent through the fast lane's own HTTP client. It never waits behind the shared event loop. With `LIVING_INPUT_LATENCY=1`, `outcomes/input_latency_fast.jsonl` stamps each ask (callback, dispatch, pickup, model start, queue entry, grant, reply, patch send).
 
 ## Cases (fake model; `LIVING_RETHINK_CONFIG` routes `fast` to the fake's profile)
 

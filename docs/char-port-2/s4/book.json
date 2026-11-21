@@ -1,0 +1,91 @@
+{
+ "generation": "c4-s4ink001",
+ "generations": [],
+ "lines": {
+  "lk_a87c2856256afd56": {
+   "person": {
+    "type": "adult-f-b",
+    "height": 1.64,
+    "colors": {
+     "hair": "#662e1a",
+     "skin": "#e8bca3",
+     "eyes": "#4f7a4f"
+    },
+    "styles": {
+     "hair": "bob",
+     "outfit": [
+      "jersey-f",
+      "trousers-f",
+      "boots-f"
+     ],
+     "overlays": []
+    }
+   },
+   "words": {}
+  },
+  "lk_b2521f5bd74f5afd": {
+   "person": {
+    "type": "adult-m-b",
+    "height": 1.78,
+    "colors": {
+     "hair": "#332217",
+     "skin": "#d9a98a",
+     "eyes": "#4a6a8a"
+    },
+    "styles": {
+     "hair": "tousled",
+     "outfit": [
+      "jersey-m",
+      "trousers-m",
+      "boots-m"
+     ],
+     "overlays": []
+    }
+   },
+   "words": {}
+  },
+  "lk_be925cd361b3bac9": {
+   "person": {
+    "type": "elder-m-b",
+    "height": 1.72,
+    "colors": {
+     "hair": "#858585",
+     "skin": "#d9a98a",
+     "eyes": "#5a6a7a"
+    },
+    "styles": {
+     "hair": "balding",
+     "outfit": [
+      "coat-m",
+      "trousers-m",
+      "boots-m"
+     ],
+     "overlays": []
+    }
+   },
+   "words": {}
+  },
+  "lk_3a2de0b155c84d4b": {
+   "person": {
+    "type": "child-u-a",
+    "height": 1.22,
+    "colors": {
+     "hair": "#4a2b1a",
+     "skin": "#ecc4a8",
+     "eyes": "#4a6a8a"
+    },
+    "styles": {
+     "hair": "bob.2",
+     "outfit": [
+      "jersey-f",
+      "trousers-f",
+      "boots-f"
+     ],
+     "overlays": []
+    }
+   },
+   "words": {}
+  }
+ },
+ "decor": []
+}

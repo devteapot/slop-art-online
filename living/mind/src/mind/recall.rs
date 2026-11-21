@@ -91,20 +91,39 @@ pub(super) fn within_tokens(mind: Vec<String>, memories: Vec<String>, tokens: Op
     (mind, memories)
 }
 
+/// The people's names (lowercase, with their ids) and whom one mind knows by name, read once
+/// for many texts (`Minds::named_people_among`).
+#[derive(Default)]
+pub(super) struct People {
+    names: Option<Vec<(String, u32)>>,
+    knows: Option<std::collections::HashSet<u32>>,
+}
+
 impl Minds {
     /// People named in a text (by their names as words) whose names `actor` knows, for cues. A
     /// name heard but not known (someone calling "Cal" across the square) does not tell whose
     /// it is, so it cues no one: the person it belongs to stays "a stranger #<id>" in memory.
     pub(super) fn named_people(&self, actor: u32, text: &str) -> Vec<u32> {
+        self.named_people_among(actor, text, &mut People::default())
+    }
+
+    /// `named_people`, reading the people's names and whom `actor` knows once for many texts
+    /// (`people`): a consolidation batch names people in each of its experiences, and reading
+    /// (cloning) every character for each one was most of a battle's mind CPU
+    /// (docs/INPUT_LATENCY.md, "Mind dispatch profile").
+    pub(super) fn named_people_among(&self, actor: u32, text: &str, people: &mut People) -> Vec<u32> {
         let words: Vec<String> = text.to_lowercase().split(|c: char| !c.is_alphabetic()).filter(|w| w.len() >= 3).map(String::from).collect();
         if words.is_empty() {
             return Vec::new();
         }
-        let named: Vec<u32> = self.conn.db.character().iter().filter(|c| c.kind == "person" && words.iter().any(|w| *w == c.name.to_lowercase())).map(|c| c.id).collect();
+        let names = people.names.get_or_insert_with(|| {
+            self.conn.db.character().iter().filter(|c| c.kind == "person").map(|c| (c.name.to_lowercase(), c.id)).collect()
+        });
+        let named: Vec<u32> = names.iter().filter(|(name, _)| words.iter().any(|w| w == name)).map(|(_, id)| *id).collect();
         if named.is_empty() {
             return named;
         }
-        let knows = self.known_names(actor);
+        let knows = people.knows.get_or_insert_with(|| self.known_names(actor));
         named.into_iter().filter(|id| knows.contains(id)).collect()
     }
 
@@ -116,8 +135,9 @@ impl Minds {
     /// its latest experiences and its current plan.
     pub(super) fn scene_cues(&self, actor: u32, scene: &Value, reason: &str) -> Cues {
         let mut cues = Cues::default();
+        let people = std::cell::RefCell::new(People::default());
         let named = |c: &mut Cues, text: &str, w: f64| {
-            for id in self.named_people(actor, text) {
+            for id in self.named_people_among(actor, text, &mut people.borrow_mut()) {
                 if id != actor {
                     c.key(format!("person:{id}"), w);
                 }
@@ -195,12 +215,13 @@ impl Minds {
     /// what they say.
     pub(super) fn experience_cues(&self, actor: u32, exps: &[&Experience]) -> Cues {
         let mut cues = Cues::default();
+        let mut people = People::default();
         for e in exps {
             for k in self.anchors(e) {
                 cues.key(k, 1.0);
             }
             cues.text(&e.text, 0.7);
-            for id in self.named_people(actor, &e.text) {
+            for id in self.named_people_among(actor, &e.text, &mut people) {
                 if id != actor {
                     cues.key(format!("person:{id}"), 0.8);
                 }

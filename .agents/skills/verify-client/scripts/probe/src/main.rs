@@ -1,7 +1,7 @@
 use living_bindings::*;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use spacetimedb_sdk::{DbContext, Table, TableWithPrimaryKey};
+use spacetimedb_sdk::{DbContext, EventTable, Table, TableWithPrimaryKey};
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -18,6 +18,14 @@ struct Request {
     until_actor: Option<u32>,
     #[serde(default)]
     stream: bool,
+    /// Stream callbacks from the connection on, the initial subscription's own included (the
+    /// default streams only changes after it applied); for proving no row arrives at all.
+    #[serde(default)]
+    from_start: bool,
+    /// Subscribe with the SDK's own `subscribe_to_all_tables` (one query per table the generated
+    /// bindings name, private ones included) in place of `queries` (copy-privacy).
+    #[serde(default)]
+    all_tables: bool,
 }
 
 #[derive(Default)]
@@ -38,9 +46,9 @@ macro_rules! primary_tables {
             belief, judgment, place, thought, chronicle, stats, bond_offer, expecting,
             mind_cursor, know_how, artifact, trade_offer, background, gate, experience,
             routine, routine_stat, cue, script, community, membership, join_request, genome,
-            practice, land, settlement, lot, fighter, skill_card, act_card, speech_card, doing, weather,
-            seen_bodies, seen_characters, seen_fighters, seen_doing, my_body, my_fighter, my_doing, my_characters, my_vitals,
-            my_experience, my_places, my_inventory, my_know_how, my_offers, my_heard, my_senses, my_earshot, my_act_outcomes, my_known_names, my_sex);
+            practice, land, settlement, lot, fighter, skill_card, act_card, speech_card, doing, weather, law_override,
+            seen_bodies, seen_characters, seen_fighters, seen_doing, seen_bodies_near, seen_bodies_far, seen_fighters_near, seen_fighters_far, seen_doing_near, seen_doing_far, seen_character_copy, seen_fighter_copy, my_body, my_fighter, my_doing, my_characters, my_vitals,
+            my_experience, my_places, my_inventory, my_know_how, my_offers, my_heard, my_senses, my_senses_v_2, my_earshot, my_act_outcomes, my_known_names, my_sex);
     };
 }
 
@@ -56,8 +64,11 @@ fn emit(value: &Value) {
     io::stdout().flush().expect("probe stdout");
 }
 
-fn stream_change(signals: &Mutex<Signals>, value: Value) {
+/// A streamed change, stamped with when the probe received it (`ms`, unix ms).
+fn stream_change(signals: &Mutex<Signals>, mut value: Value) {
     if signals.lock().unwrap().stream_live {
+        let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+        value["ms"] = json!(ms);
         emit(&value);
     }
 }
@@ -83,7 +94,18 @@ fn stream_callbacks(c: &DbConnection, signals: Arc<Mutex<Signals>>) {
     }
     primary_tables!(insert_delete, c, signals);
     primary_tables!(updates, c, signals);
-    insert_delete!(c, signals; my_deliberations, my_combat, my_readiness, my_skill_uses);
+    // `seen_body_copy` (battle-views) has no primary key: a change is a delete and an insert.
+    insert_delete!(c, signals; my_deliberations, my_combat, my_readiness, my_skill_uses, seen_body_copy);
+    // The cue event tables (docs/PERCEPTION.md, "Cues"): inserts only, never cached.
+    macro_rules! events {
+        ($c:expr, $signals:expr; $($table:ident),*) => { $(
+            let inserted = $signals.clone();
+            EventTable::on_insert(&$c.db.$table(), move |_, row| stream_change(&inserted,
+                json!({"event":"insert","table":stringify!($table),"row":row_json(row)})));
+        )* };
+    }
+    // A player's combat feed as event rows (views step 2, `combat_feed`).
+    events!(c, signals; seen_body_cue, seen_fighter_cue, seen_doing_cue, combat_feed);
 }
 
 fn stream_initial(c: &DbConnection, r: &Request, identity: &str) {
@@ -97,7 +119,7 @@ fn stream_initial(c: &DbConnection, r: &Request, identity: &str) {
         )* };
     }
     primary_tables!(rows, c, tables);
-    rows!(c, tables; my_deliberations, my_combat, my_readiness, my_skill_uses);
+    rows!(c, tables; my_deliberations, my_combat, my_readiness, my_skill_uses, seen_body_copy);
     emit(&json!({"event":"initial","identity":identity,"db":r.db,
         "queries":r.queries,"seconds":r.seconds,"tables":tables}));
 }
@@ -155,6 +177,7 @@ fn snapshot(c: &DbConnection) -> Value {
         speech_card,
         doing,
         weather,
+        law_override,
         my_combat,
         my_readiness,
         my_skill_uses,
@@ -175,6 +198,7 @@ fn snapshot(c: &DbConnection) -> Value {
         heard_sounds,
         my_heard,
         my_senses,
+        my_senses_v_2,
         my_earshot,
         my_act_outcomes,
         my_known_names,
@@ -203,6 +227,7 @@ fn snapshot(c: &DbConnection) -> Value {
         "my_know_how": ids(c.db.my_know_how().iter().map(|r| r.actor).collect()),
         "my_offers": c.db.my_offers().iter().map(|r| json!({"id":r.id,"incoming":r.incoming,"from":r.from,"to":r.to,"give_item":r.give_item,"want_item":r.want_item,"until_ms":r.until_ms})).collect::<Vec<_>>(),
         // What my character senses (the `senses` law with all its facts), written on change.
+        "my_senses_v_2": c.db.my_senses_v_2().iter().map(|r| row_json(&r)).collect::<Vec<_>>(),
         "my_senses": c.db.my_senses().iter().map(|r| json!({"id":r.id,"sight":r.sight,"hearing":r.hearing,"field":r.field,"near_m":r.near_m,"at_ms":r.at_ms})).collect::<Vec<_>>(),
         // Whom a line I said now would reach, per way, and in words (written on change).
         "my_earshot": c.db.my_earshot().iter().map(|r| json!({"id":r.id,"ways":r.ways.iter().map(|w| json!({"way":w.way,"hearers":w.hearers})).collect::<Vec<_>>(),"text":r.text,"at_ms":r.at_ms})).collect::<Vec<_>>(),
@@ -301,6 +326,7 @@ fn connect(r: &Request, signals: Arc<Mutex<Signals>>) -> Result<DbConnection, St
     let queries = r.queries.clone();
     let credential_fd = r.credential_fd;
     let stream = r.stream;
+    let all_tables = r.all_tables;
     DbConnection::builder()
         .with_uri(&r.uri)
         .with_database_name(&r.db)
@@ -322,10 +348,14 @@ fn connect(r: &Request, signals: Arc<Mutex<Signals>>) -> Result<DbConnection, St
                 .on_update(move |_, _, _| updates.lock().unwrap().stats_updates += 1);
             let applied = ready.clone();
             let error = ready.clone();
-            c.subscription_builder()
+            let builder = c.subscription_builder()
                 .on_applied(move |_| applied.lock().unwrap().applied = true)
-                .on_error(move |_, e| error.lock().unwrap().error = Some(e.to_string()))
-                .subscribe(queries);
+                .on_error(move |_, e| error.lock().unwrap().error = Some(e.to_string()));
+            if all_tables {
+                builder.subscribe_to_all_tables();
+            } else {
+                builder.subscribe(queries);
+            }
         })
         .on_disconnect(move |_, e| {
             gone.lock().unwrap().disconnected = Some(
@@ -339,7 +369,7 @@ fn connect(r: &Request, signals: Arc<Mutex<Signals>>) -> Result<DbConnection, St
 }
 
 fn drive(r: &Request, drop_connection: bool) -> Result<Value, String> {
-    let signals = Arc::new(Mutex::new(Signals::default()));
+    let signals = Arc::new(Mutex::new(Signals { stream_live: r.stream && r.from_start, ..Signals::default() }));
     let c = connect(r, signals.clone())?;
     let start = Instant::now();
     loop {
@@ -424,8 +454,12 @@ fn main() {
             .read_to_string(&mut input)
             .map_err(|e| e.to_string())?;
         let r: Request = serde_json::from_str(&input).map_err(|e| e.to_string())?;
-        if !r.db.starts_with("verify-client-") {
-            return Err("database must start with verify-client-".into());
+        // Scratch worlds only: a verify-client run, the merge's scene gate (living/tools/
+        // scene_gate.py, case `cues`), verify-player's (gaze scenes; a player's `seen_doing`
+        // stream, rest_seen.py), verify-core's (`doing` deltas, doing_deltas.py) and the battle
+        // measurements' (`verify-lookcost-*`: battle_viewers.py --privacy, copy-privacy).
+        if !["verify-client-", "verify-gate-", "verify-player-", "verify-core-", "verify-lookcost-"].iter().any(|p| r.db.starts_with(p)) {
+            return Err("database must start with verify-client-, verify-gate-, verify-player-, verify-core- or verify-lookcost-".into());
         }
         let first = drive(&r, r.drop_file.is_some())?;
         if r.drop_file.is_some() {

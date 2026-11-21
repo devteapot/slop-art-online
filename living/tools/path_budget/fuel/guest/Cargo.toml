@@ -9,3 +9,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 living-rules = { path = "../../../../rules", default-features = false }
+serde_json = "1"

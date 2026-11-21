@@ -36,6 +36,10 @@ one() {
   # Designed shadows: the planar proxy's normals and the drawn threshold map, one map a type.
   python3 living/tools/characters/face_shadow.py "$out/$t.glb" --png "$out/$t.face.png" > /dev/null
   python3 living/tools/characters/outline_normals.py "$out/$t.glb" > /dev/null
+  # Ink carriers (SLOP_PORT=ink): the type opts in and its carriers name the ink page (below).
+  if [[ ",${SLOP_PORT:-}," == *",ink,"* ]]; then
+    python3 living/tools/characters/type_ink.py "$out/$t.glb" > /dev/null
+  fi
   rm -f "$out/$t.atlas.png" "$out/$t.far.png" "$out/$t.tint.png" "$out/$t.iris.png" "$log"
   python3 living/tools/characters/share.py list "$out/$t.glb" | head -1
 }
@@ -47,6 +51,11 @@ rm -f "$out/strands.png"
 files=()
 for t in "${types[@]}"; do files+=("$out/$t.glb"); done
 python3 living/tools/characters/share.py types --dir "$(dirname "$out")/pages" "${files[@]}"
+# With ink (SLOP_PORT=ink), every class's strokes on the one ink page and its manifest beside the
+# types (type_ink.py --page; docs/HANDMADE_COMPOSED.md, "The ink page").
+if [[ ",${SLOP_PORT:-}," == *",ink,"* ]]; then
+  python3 living/tools/characters/type_ink.py --page "$out" | tail -1
+fi
 # Every type's iris is the one shared picture, with the source colour that the lines' eye
 # colours are worked out from (person_params.eye_line_colour).
 python3 living/tools/characters/eye_colours.py "$out" --check | tail -1

@@ -299,6 +299,7 @@ pub fn rework(ctx: &ReducerContext, actor: u32, name: &str, graph: &str, now: u6
 /// A mind edits its character's routines (one or a few at a time).
 #[spacetimedb::reducer]
 pub fn mind_routines(ctx: &ReducerContext, actor: u32, routines: Vec<RoutineIn>) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     authorize(ctx, actor)?;
     let now = common::now_ms(ctx);
     let notes = set_routines(ctx, actor, &routines, "mind", now)?;
@@ -352,6 +353,7 @@ pub fn set_graph(ctx: &ReducerContext, actor: u32, graph: &str, plan: &str, sour
         ctx.db.activity().id().update(a);
     }
     common::wake(ctx, actor);
+    crate::latency::nav(ctx, actor, "graph_installed", u64::from(revision), format_args!("{source}"));
     Ok(revision)
 }
 
@@ -413,7 +415,9 @@ fn keep_fast_branch(ctx: &ReducerContext, actor: u32, graph: String, seen_ms: u6
 /// (`think_min_s`), and a committed move under way runs its course.
 #[spacetimedb::reducer]
 pub fn mind_patch(ctx: &ReducerContext, actor: u32, target: String, graph: String, asked_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let c = authorize(ctx, actor)?;
+    crate::latency::fast(ctx, actor, "patch_enter", asked_ms, format_args!(""));
     if !c.alive {
         return Err("character is dead".into());
     }
@@ -422,6 +426,7 @@ pub fn mind_patch(ctx: &ReducerContext, actor: u32, target: String, graph: Strin
         return Err("no fast re-plan was asked of this character".into());
     };
     let refuse = |why: String| {
+        crate::latency::fast(ctx, actor, "patch_refused", asked_ms, format_args!(""));
         common::diag(|| "fast:refused", 1);
         add_thought(ctx, actor, ThoughtIn { kind: "fast".into(), summary: format!("refused: {why}"), ..thought.clone() }, now);
         crate::fast::answered(ctx, actor, asked_ms, now);
@@ -471,6 +476,7 @@ pub fn mind_patch(ctx: &ReducerContext, actor: u32, target: String, graph: Strin
         st.marks.push(crate::tables::Mark { node: FAST_MARK, at_ms: now });
         ctx.db.mind_state().id().update(st);
     }
+    crate::latency::fast(ctx, actor, "patch_installed", asked_ms, format_args!(""));
     common::diag(|| "fast:installed", 1);
     add_thought(ctx, actor, ThoughtIn { kind: "fast".into(), ..thought }, now);
     crate::fast::answered(ctx, actor, asked_ms, now);
@@ -482,11 +488,13 @@ pub fn mind_patch(ctx: &ReducerContext, actor: u32, target: String, graph: Strin
 /// kind is kept. Only for an open request: a body its person controls never has one.
 #[spacetimedb::reducer]
 pub fn mind_fast_done(ctx: &ReducerContext, actor: u32, asked_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     authorize(ctx, actor)?;
     if !ctx.db.fast_ask().actor().find(actor).is_some_and(|r| r.issued_ms == asked_ms && asked_ms != 0) {
         return Err("no fast re-plan was asked of this character".into());
     }
     let now = common::now_ms(ctx);
+    crate::latency::fast(ctx, actor, "fast_done", asked_ms, format_args!(""));
     common::diag(|| "fast:kept", 1);
     if !thought.kind.is_empty() {
         add_thought(ctx, actor, thought, now);
@@ -498,6 +506,7 @@ pub fn mind_fast_done(ctx: &ReducerContext, actor: u32, asked_ms: u64, thought: 
 /// Deliver a deliberation result: a new behavior graph, optional speech and a thought log entry.
 #[spacetimedb::reducer]
 pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: String, say: String, say_to: u32, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     // To retire (mind-say-way, 2026-11-12): the mind service installs through
     // `mind_install_way`. Kept, signature unchanged, for a module update that leaves an older
     // mind service connected, and for the admin harness. Its line is always said, and a refused
@@ -514,6 +523,7 @@ pub fn mind_install(ctx: &ReducerContext, actor: u32, graph: String, plan: Strin
 #[allow(clippy::too_many_arguments)]
 #[spacetimedb::reducer]
 pub fn mind_install_way(ctx: &ReducerContext, actor: u32, graph: String, plan: String, say: String, say_to: u32, way: String, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     install(ctx, actor, graph, plan, say, say_to, &way, seen_ms, thought, true)
 }
 
@@ -572,6 +582,7 @@ fn heard_first(ctx: &ReducerContext, actor: u32, to: u32, since: u64) -> Option<
 /// postpones thinking about what to do.
 #[spacetimedb::reducer]
 pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, way: String, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let c = authorize(ctx, actor)?;
     if !c.alive {
         return Err("character is dead".into());
@@ -606,16 +617,37 @@ pub fn mind_say(ctx: &ReducerContext, actor: u32, say: String, say_to: u32, way:
 /// Deliberate acts decided by a mind (in a deliberation or a conversation turn): each a
 /// `do` node (`{"do": "conceive", "target": {"id": 6}}`), carried out once, in order, by the
 /// same skill rules as graph leaves, outside the behavior graph. The outcome of each comes
-/// back as an experience. `source` says where it was decided (e.g. "deliberate", "talk").
+/// back as an experience. `source` says where it was decided (e.g. "deliberate", "talk"). They
+/// wait for the act in progress to end, or, under the `mind_act_replaces` law, replace it as a
+/// player's command does (`acts::submit_mind`).
 #[spacetimedb::reducer]
 pub fn mind_act(ctx: &ReducerContext, actor: u32, acts: Vec<String>, source: String) -> Result<(), String> {
-    let c = authorize(ctx, actor)?;
-    if !c.alive {
+    crate::floor::ready(ctx)?;
+    require_live_controller(ctx, actor)?;
+    crate::latency::nav(ctx, actor, "mind_act", 0, format_args!(""));
+    let now = common::now_ms(ctx);
+    crate::acts::spend_input(ctx, actor, now)?;
+    crate::acts::submit_mind(ctx, actor, &acts, &source, now);
+    Ok(())
+}
+
+/// Commit the same acts and experience feedback as the reducer, and return synchronous
+/// refusals to the controlling caller. A refused act is a committed outcome.
+#[spacetimedb::procedure]
+pub fn mind_act_checked(ctx: &mut spacetimedb::ProcedureContext, actor: u32, acts: Vec<String>, source: String) -> Result<Vec<Option<String>>, String> {
+    ctx.try_with_tx(|tx| {
+        crate::floor::ready(tx)?;
+        require_live_controller(tx, actor)?;
+        let now = common::now_ms(tx);
+        crate::acts::spend_input(tx, actor, now)?;
+        Ok(crate::acts::submit_checked(tx, actor, &acts, &source, now))
+    })
+}
+
+fn require_live_controller(ctx: &ReducerContext, actor: u32) -> Result<(), String> {
+    if !authorize(ctx, actor)?.alive {
         return Err("character is dead".into());
     }
-    let now = common::now_ms(ctx);
-    let notes = crate::acts::submit(ctx, actor, &acts, &source, false, now);
-    log::debug!("{} decides: {}", c.name, notes.join("; "));
     Ok(())
 }
 
@@ -624,6 +656,7 @@ pub fn mind_act(ctx: &ReducerContext, actor: u32, acts: Vec<String>, source: Str
 /// controller may ask.
 #[spacetimedb::reducer]
 pub fn mind_where(ctx: &ReducerContext, actor: u32) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     authorize(ctx, actor)?;
     let now = common::now_ms(ctx);
     let b = ctx.db.body().id().find(actor).ok_or("no body")?;
@@ -637,9 +670,75 @@ pub fn mind_where(ctx: &ReducerContext, actor: u32) -> Result<(), String> {
     Ok(())
 }
 
+/// Where the character stands and moves, and how it perceives `other` (someone it is answering),
+/// for its talk turn's frame (reply-timing, docs/COMMUNICATION.md): returned to the controller
+/// alone (a procedure's answer is not broadcast) and written nowhere. What it perceives of the
+/// other is its own sensing (`perception::Sensing`, the scene's): their distance and way when
+/// it sees them and can make them out, where the sound is when it only hears them, nothing when
+/// neither. Only the character's controller may ask.
+#[spacetimedb::procedure]
+pub fn mind_reach(ctx: &mut spacetimedb::ProcedureContext, actor: u32, other: u32) -> Result<Reach, String> {
+    ctx.try_with_tx(|tx| {
+        crate::floor::ready(tx)?;
+        authorize(tx, actor)?;
+        Ok(reach(tx, actor, other, common::now_ms(tx)))
+    })
+}
+
+/// [`mind_reach`]'s answer.
+fn reach(ctx: &ReducerContext, actor: u32, other: u32, now: u64) -> Reach {
+    let (Some(me), Some(b)) = (ctx.db.character().id().find(actor), ctx.db.body().id().find(actor)) else { return Reach::default() };
+    let at = common::pos(&b, now);
+    let mut r = Reach { x: at.0, y: at.1, ..Default::default() };
+    let moving = (b.vx != 0.0 || b.vy != 0.0) && now < b.next_ms;
+    if moving {
+        r.speed = (b.vx * b.vx + b.vy * b.vy).sqrt();
+    }
+    if let Some(a) = ctx.db.activity().id().find(actor) {
+        r.doing = a.label;
+    }
+    if let Some(s) = ctx.db.steer().id().find(actor).filter(|s| s.goal == crate::motion::GOAL_POINT) {
+        (r.goal, r.gx, r.gy) = (true, s.gx, s.gy);
+    }
+    let other = crate::far::resolve(ctx, actor, other);
+    let Some(them) = ctx.db.character().id().find(other).filter(|c| c.alive && c.id != actor) else { return r };
+    match crate::perception::Sensing::new(ctx, actor, at, now).sensed_id(ctx, now, other) {
+        Some((c, true)) => {
+            // A figure too far away to make out is not known to be them (far-label).
+            let seen = crate::perception::project(ctx, &me, &them, now);
+            if them.kind == "person" && seen.name.is_empty() && seen.label == living_rules::script::FAR_PERSON {
+                return r;
+            }
+            r.other = "seen".into();
+            r.other_m = c.dist.round();
+            r.other_where = common::direction(at, c.pos).to_string();
+            if r.speed > 0.0 && c.dist > 0.5 {
+                let off = living_rules::steer::wrap((c.pos.1 - at.1).atan2(c.pos.0 - at.0) - common::heading_at(&b, now)).abs();
+                r.toward = if off < std::f32::consts::FRAC_PI_3 {
+                    1
+                } else if off > 2.0 * std::f32::consts::FRAC_PI_3 {
+                    -1
+                } else {
+                    0
+                };
+            }
+        }
+        Some((c, false)) => {
+            let laws = common::laws(ctx);
+            let band = living_rules::sight::heard_band(c.dist, laws.heard_near_m, laws.heard_close_m);
+            let (_, wh, far) = living_rules::sight::heard_words("person", at, common::facing_at(&b, now), c.pos, band);
+            r.other = "heard".into();
+            r.other_where = format!("{wh}; {far}");
+        }
+        None => {}
+    }
+    r
+}
+
 /// Give up on a pending deliberation (e.g. model failure), logging why.
 #[spacetimedb::reducer]
 pub fn mind_skip(ctx: &ReducerContext, actor: u32, seen_ms: u64, thought: ThoughtIn) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     authorize(ctx, actor)?;
     let now = common::now_ms(ctx);
     clear_deliberation(ctx, actor, seen_ms, false);
@@ -655,6 +754,7 @@ pub fn mind_skip(ctx: &ReducerContext, actor: u32, seen_ms: u64, thought: Though
 /// holds at most `JUDGED_PER_ACTOR`. Only the character's controller may write them.
 #[spacetimedb::reducer]
 pub fn mind_judged(ctx: &ReducerContext, actor: u32, items: Vec<JudgedIn>) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     authorize(ctx, actor)?;
     let now = common::now_ms(ctx);
     for j in items.into_iter().take(JUDGED_PER_ACTOR) {
@@ -687,6 +787,7 @@ pub fn mind_judged(ctx: &ReducerContext, actor: u32, items: Vec<JudgedIn>) -> Re
 /// integrated experiences are removed (the inbox is transactional).
 #[spacetimedb::reducer]
 pub fn mind_consolidated(ctx: &ReducerContext, actor: u32, upto: u64) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     authorize(ctx, actor)?;
     let now = common::now_ms(ctx);
     // A character a person plays keeps its rows: the person sees what it lived while they
@@ -717,6 +818,7 @@ pub fn mind_consolidated(ctx: &ReducerContext, actor: u32, upto: u64) -> Result<
 /// Project consolidated mind state: persona, relations, beliefs, judgments, places.
 #[spacetimedb::reducer]
 pub fn mind_update(ctx: &ReducerContext, actor: u32, update: MindUpdate) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
     let who = authorize_projection(ctx, actor)?;
     let now = common::now_ms(ctx);
     if update.replace {

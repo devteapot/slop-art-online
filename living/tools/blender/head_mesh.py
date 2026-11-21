@@ -22,6 +22,7 @@ head's middle with more texels given to the front.
 
 import math
 import random
+import sys
 
 import numpy as np
 
@@ -496,7 +497,14 @@ class Face:
             k = len(ring)
             self._eye(m, skin, side, state)
             self._lines(m, side, state, dark)
-            self._brow(m, side, state)
+            if self._ink():
+                import cage_head
+                import ink_carriers
+                import face_types
+                core = mix3(dark, (0.01, 0.008, 0.012), 0.88)
+                ink_carriers.add(m, self, side, state, cage_head, face_types, sys.modules[__name__], dict(core=core))
+            else:
+                self._brow(m, side, state)
         self._mouth_inside(m, state)
         self._ears(m)
         return m
@@ -573,10 +581,19 @@ class Face:
         tops = [off] * n if off_top is None else (list(off_top) if isinstance(off_top, (list, tuple)) else [off_top] * n)  # one distance, or one a point
         self._shell(m, list(top) + list(bottom), faces, [col_top] * n + [col_bottom] * n, mat, tops + [off] * n)
 
+    def _ink(self):
+        """Whether this face draws its lids and brows as ink on carriers (`SLOP_PORT=ink`,
+        ink_carriers.py): a face type's head, of a class the ink page has a cell for."""
+        import ink_carriers
+
+        t = getattr(self.hf, "t", None)
+        return ink_carriers.ON and isinstance(t, dict) and ink_carriers.class_of(t.get("id", "")) in ink_carriers.CLASS_CELLS
+
     def _lines(self, m, side, state, dark):
         """The upper lash as the reference draws it: a broad dark band over the whole lid with an
         ink line along the lid's edge, flicks along its top and a fan of them at the outer
-        corner. Then the lower lid's line and lashes, and the lid's fold."""
+        corner. Then the lower lid's line and lashes, and the lid's fold. With ink on (`_ink`)
+        only the fold: the rest is the carriers' (ink_carriers.add)."""
         hf, look = self.hf, self.look
         ex, ew = hf.eye_x, hf.eye_w
         b = max(state.get("blink_l" if side < 0 else "blink_r", 0.0), state.get("joy", 0.0))
@@ -601,63 +618,65 @@ class Face:
         # Thickest past the middle, thinner toward both corners.
         th = [full * (0.58 + 0.42 * smooth((s + 1.1) / 1.3)) * (0.55 + 0.45 * smooth((s + 1.0) / 0.25)) * (0.62 + 0.38 * smooth((1.0 - s) / 0.30)) for s in ss]
         th_at = lambda s: float(np.interp(s, ss, th))
-        out = self.LASH_OUT
-        # A deep red-brown band and a near-black edge. Both are darker than they are to look: the
-        # client draws a face's parts unshaded, which comes out lighter.
-        band = mix3(dark, (0.26, 0.05, 0.06), 0.45)
-        ink = mix3(dark, (0.01, 0.008, 0.012), 0.88)
-        top = [at(s, up(s) + t) for s, t in zip(ss, th)]
-        bot = [at(s, up(s) - 0.0005) for s in ss]
-        # The band runs on past the outer corner to a point: outward and a little up, not down the
-        # side of the eye along the lid's slope, which bracketed the eye and made it droop.
-        slope = (up(1.0) - up(0.90)) / 0.10 / ew
-        wl = ew * look["lash_wing"]
-        lift = look.get("wing_lift", 0.25)
-        for i in range(1, 5):
-            t = i / 4
-            x = ex + ew + wl * t
-            z = up(1.0) + wl * t * (0.12 * slope + 0.35 + lift * (1 - 0.3 * t))
-            w = th[-1] * (1 - t) ** 1.3
-            top.append((side * x, hf.eye_z + z + w))
-            bot.append((side * x, hf.eye_z + z - 0.0004 * (1 - t)))
-        self._strip(m, top, bot, mix3(band, look["lash_tip"], 0.30), band, "line", 0.0012, off_top=0.0012 + out)
-        # The ink line along the lid's edge, on the band: it is what holds the eye's shape from far off.
-        we = [opening * (0.057 + 0.022 * k) * (0.6 + 0.4 * smooth((s + 1.0) / 1.2)) for s in ss]
-        self._strip(m, [at(s, up(s) + w) for s, w in zip(ss, we)], [at(s, up(s) - 0.0006) for s in ss], ink, ink, "line", 0.0016, off_top=[0.0016 + out * w / max(t, 1e-6) for w, t in zip(we, th)])
-        rng = random.Random(f"lash/{look.get('seed', 0)}/{side}")
-        nl = look["lashes"]
-        shut = 1 - 0.6 * b
-        # Flicks along the band's top: broad at the root, leaning toward the outer corner.
-        for i in range(nl):
-            f = (i + 0.5) / max(nl, 1)
-            s = lerp(-0.55, 0.92, f) + rng.uniform(-0.03, 0.03)
-            ln = opening * (0.07 + 0.07 * f) * (0.75 + 0.25 * k / 1.9) * rng.uniform(0.85, 1.15) * shut
-            a = math.radians(lerp(96, 38, f ** 0.8) + rng.uniform(-6, 6))
-            self._strand(m, side, (ex + ew * s, hf.eye_z + up(s) + 0.62 * th_at(s)), a, ln, opening * 0.042, bend=-0.25, cols=(band, look["lash_tip"]), mat="line", off=0.0013, rise=0.80)
-        # A fan at the outer corner, from the band's end: the longest points out and a little down.
-        fan = min(nl, 4) if nl else 0
-        for i in range(fan):
-            f = i / max(fan - 1, 1)
-            root = (ex + ew * (0.97 + 0.04 * f), hf.eye_z + up(0.97) + th[-1] * lerp(0.85, 0.10, f))
-            ln = opening * lerp(0.14, 0.20, math.sin(math.pi * f)) * (0.8 + 0.2 * k / 1.9) * shut
-            a = math.radians(lerp(30, -24, f) + rng.uniform(-4, 4))
-            self._strand(m, side, root, a, ln, opening * 0.034, bend=-0.20, cols=(band, look["lash_tip"]), mat="line", off=0.0013, rise=lerp(0.85, 0.10, f))
-        # Two short ones at the inner corner.
-        for i in range(2 if nl >= 6 else 0):
-            s = -0.90 + 0.16 * i
-            self._strand(m, side, (ex + ew * s, hf.eye_z + up(s) + 0.7 * th_at(s)), math.radians(140 - 22 * i), opening * 0.055 * shut, opening * 0.022, bend=0.2, cols=(band, look["lash_tip"]), mat="line", off=0.0013, rise=0.7)
-        # A few under the outer corner.
-        for i in range(look.get("lashes_low", 0)):
-            f = (i + 0.5) / look["lashes_low"]
-            s = lerp(0.50, 0.94, f)
-            ln = opening * (0.045 + 0.035 * f) * shut
-            self._strand(m, side, (ex + ew * s, hf.eye_z + lo(s) - 0.0002), math.radians(-70 + 34 * f), ln, opening * 0.016, bend=-0.3, cols=(band, look["lash_tip"]), mat="line", off=0.0011, rise=0.0)
-        # Lower line: the outer part only, as the reference has it.
-        lk = look["lower"]
-        s3 = [0.22 + 0.78 * i / 8 for i in range(9)]
-        w3 = [(0.00022 + 0.00060 * lk * smooth((s - 0.22) / 0.5)) * (1.0 if s < 0.85 else 0.6) for s in s3]
-        low_c = mix3(look["skin_line"], band, 0.30 + 0.55 * min(lk, 1.0))
-        self._strip(m, [at(s, lo(s) + 0.0003) for s in s3], [at(s, lo(s) - w) for s, w in zip(s3, w3)], low_c, low_c, "line", 0.0010)
+        inked = self._ink()
+        if not inked:
+            out = self.LASH_OUT
+            # A deep red-brown band and a near-black edge. Both are darker than they are to look: the
+            # client draws a face's parts unshaded, which comes out lighter.
+            band = mix3(dark, (0.26, 0.05, 0.06), 0.45)
+            ink = mix3(dark, (0.01, 0.008, 0.012), 0.88)
+            top = [at(s, up(s) + t) for s, t in zip(ss, th)]
+            bot = [at(s, up(s) - 0.0005) for s in ss]
+            # The band runs on past the outer corner to a point: outward and a little up, not down the
+            # side of the eye along the lid's slope, which bracketed the eye and made it droop.
+            slope = (up(1.0) - up(0.90)) / 0.10 / ew
+            wl = ew * look["lash_wing"]
+            lift = look.get("wing_lift", 0.25)
+            for i in range(1, 5):
+                t = i / 4
+                x = ex + ew + wl * t
+                z = up(1.0) + wl * t * (0.12 * slope + 0.35 + lift * (1 - 0.3 * t))
+                w = th[-1] * (1 - t) ** 1.3
+                top.append((side * x, hf.eye_z + z + w))
+                bot.append((side * x, hf.eye_z + z - 0.0004 * (1 - t)))
+            self._strip(m, top, bot, mix3(band, look["lash_tip"], 0.30), band, "line", 0.0012, off_top=0.0012 + out)
+            # The ink line along the lid's edge, on the band: it is what holds the eye's shape from far off.
+            we = [opening * (0.057 + 0.022 * k) * (0.6 + 0.4 * smooth((s + 1.0) / 1.2)) for s in ss]
+            self._strip(m, [at(s, up(s) + w) for s, w in zip(ss, we)], [at(s, up(s) - 0.0006) for s in ss], ink, ink, "line", 0.0016, off_top=[0.0016 + out * w / max(t, 1e-6) for w, t in zip(we, th)])
+            rng = random.Random(f"lash/{look.get('seed', 0)}/{side}")
+            nl = look["lashes"]
+            shut = 1 - 0.6 * b
+            # Flicks along the band's top: broad at the root, leaning toward the outer corner.
+            for i in range(nl):
+                f = (i + 0.5) / max(nl, 1)
+                s = lerp(-0.55, 0.92, f) + rng.uniform(-0.03, 0.03)
+                ln = opening * (0.07 + 0.07 * f) * (0.75 + 0.25 * k / 1.9) * rng.uniform(0.85, 1.15) * shut
+                a = math.radians(lerp(96, 38, f ** 0.8) + rng.uniform(-6, 6))
+                self._strand(m, side, (ex + ew * s, hf.eye_z + up(s) + 0.62 * th_at(s)), a, ln, opening * 0.042, bend=-0.25, cols=(band, look["lash_tip"]), mat="line", off=0.0013, rise=0.80)
+            # A fan at the outer corner, from the band's end: the longest points out and a little down.
+            fan = min(nl, 4) if nl else 0
+            for i in range(fan):
+                f = i / max(fan - 1, 1)
+                root = (ex + ew * (0.97 + 0.04 * f), hf.eye_z + up(0.97) + th[-1] * lerp(0.85, 0.10, f))
+                ln = opening * lerp(0.14, 0.20, math.sin(math.pi * f)) * (0.8 + 0.2 * k / 1.9) * shut
+                a = math.radians(lerp(30, -24, f) + rng.uniform(-4, 4))
+                self._strand(m, side, root, a, ln, opening * 0.034, bend=-0.20, cols=(band, look["lash_tip"]), mat="line", off=0.0013, rise=lerp(0.85, 0.10, f))
+            # Two short ones at the inner corner.
+            for i in range(2 if nl >= 6 else 0):
+                s = -0.90 + 0.16 * i
+                self._strand(m, side, (ex + ew * s, hf.eye_z + up(s) + 0.7 * th_at(s)), math.radians(140 - 22 * i), opening * 0.055 * shut, opening * 0.022, bend=0.2, cols=(band, look["lash_tip"]), mat="line", off=0.0013, rise=0.7)
+            # A few under the outer corner.
+            for i in range(look.get("lashes_low", 0)):
+                f = (i + 0.5) / look["lashes_low"]
+                s = lerp(0.50, 0.94, f)
+                ln = opening * (0.045 + 0.035 * f) * shut
+                self._strand(m, side, (ex + ew * s, hf.eye_z + lo(s) - 0.0002), math.radians(-70 + 34 * f), ln, opening * 0.016, bend=-0.3, cols=(band, look["lash_tip"]), mat="line", off=0.0011, rise=0.0)
+            # Lower line: the outer part only, as the reference has it.
+            lk = look["lower"]
+            s3 = [0.22 + 0.78 * i / 8 for i in range(9)]
+            w3 = [(0.00022 + 0.00060 * lk * smooth((s - 0.22) / 0.5)) * (1.0 if s < 0.85 else 0.6) for s in s3]
+            low_c = mix3(look["skin_line"], band, 0.30 + 0.55 * min(lk, 1.0))
+            self._strip(m, [at(s, lo(s) + 0.0003) for s in s3], [at(s, lo(s) - w) for s, w in zip(s3, w3)], low_c, low_c, "line", 0.0010)
         # The fold above the lid: it stands clear of the band, and closes onto the lid with a blink.
         fold = look["fold"]
         gap = (0.0016 + 0.0014 * fold) * (1 - 0.75 * b)
@@ -767,10 +786,18 @@ class Face:
                 cols += [c] * seg
             pts.append((side * (x_root + 0.0005), yc + 0.003, zc - 0.002))
             cols.append(mix3(skin, shade, 1.0))
+            # A head form may set where the lobe ends (`ear_bottom`, char-port-2 S6b): the ear is
+            # drawn out downward to it from its top, which stays where it is.
+            zm = zc
+            if getattr(hf, "ear_bottom", None) is not None:
+                top, low = max(p[2] for p in pts), min(p[2] for p in pts)
+                s = (top - hf.ear_bottom) / (top - low)
+                pts = [(p[0], p[1], top - (top - p[2]) * s) for p in pts]
+                zm = top - (top - zc) * s
             # Vertex colours multiply the swatch of plain skin the ears' UVs point at.
             rel = [unlin(tuple(min(a / max(b, 1e-4), 1.0) for a, b in zip(lin(c), lin(skin)))) for c in cols]
             base = m.add(pts, rel, [SWATCH_UV] * len(pts), [], "face")
-            axis = np.array([side * (x_root + 0.004), yc, zc])
+            axis = np.array([side * (x_root + 0.004), yc, zm])
             for r in range(len(rings)):
                 for i in range(seg):
                     a, b = r * seg + i, r * seg + (i + 1) % seg

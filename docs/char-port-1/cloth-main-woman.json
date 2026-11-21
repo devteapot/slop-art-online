@@ -1,0 +1,176 @@
+{
+ "smock_58-f|apron_58-f|rest": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 1
+ },
+ "jersey_smock-f|smock_58-f|rest": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 1
+ },
+ "trousers-f|smock_58-f|rest": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 1
+ },
+ "trousers-f|apron_58-f|rest": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 1
+ },
+ "smock_58-f|apron_58-f|idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "jersey_smock-f|smock_58-f|idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-f|smock_58-f|idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-f|apron_58-f|idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "smock_58-f|apron_58-f|walk": {
+  "most": -0.868157550678217,
+  "frames": 0,
+  "of": 12,
+  "at": 0.58,
+  "bone": "J_Sec_L_SkirtFront",
+  "out": 0
+ },
+ "jersey_smock-f|smock_58-f|walk": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-f|smock_58-f|walk": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-f|apron_58-f|walk": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "smock_58-f|apron_58-f|run": {
+  "most": -0.5441571455224932,
+  "frames": 0,
+  "of": 12,
+  "at": 0.2,
+  "bone": "J_Sec_L_SkirtFront",
+  "out": 0
+ },
+ "jersey_smock-f|smock_58-f|run": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-f|smock_58-f|run": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-f|apron_58-f|run": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "smock_58-f|apron_58-f|sit_idle": {
+  "most": 0.020674146203474172,
+  "frames": 0,
+  "of": 12,
+  "at": 2.98,
+  "bone": "J_Bip_C_Hips",
+  "out": 0
+ },
+ "jersey_smock-f|smock_58-f|sit_idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-f|smock_58-f|sit_idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-f|apron_58-f|sit_idle": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "smock_58-f|apron_58-f|sit_ground": {
+  "most": 24.006548486661195,
+  "frames": 12,
+  "of": 12,
+  "at": 5.32,
+  "bone": "J_Bip_L_UpperLeg",
+  "out": 2
+ },
+ "jersey_smock-f|smock_58-f|sit_ground": {
+  "most": -1.0,
+  "frames": 0,
+  "of": 12
+ },
+ "trousers-f|smock_58-f|sit_ground": {
+  "most": 31.259756430484398,
+  "frames": 12,
+  "of": 12,
+  "at": 1.33,
+  "bone": "J_Bip_C_Hips",
+  "out": 27
+ },
+ "trousers-f|apron_58-f|sit_ground": {
+  "most": 22.477552174268908,
+  "frames": 12,
+  "of": 12,
+  "at": 5.97,
+  "bone": "J_Bip_R_UpperLeg",
+  "out": 13
+ },
+ "smock_58-f|chair|sit_idle": {
+  "most": 112.54003417197855,
+  "below": 112.54003417197855,
+  "behind": 111.0947696815251,
+  "vertices": 376
+ },
+ "apron_58-f|chair|sit_idle": {
+  "most": 24.5949513243926,
+  "below": 0.0,
+  "behind": 24.5949513243926,
+  "vertices": 14
+ },
+ "smock_58-f|terrain|sit_ground": {
+  "most": 0.0,
+  "below": 0.0,
+  "behind": 0.0,
+  "vertices": 0
+ },
+ "apron_58-f|terrain|sit_ground": {
+  "most": 0.0,
+  "below": 0.0,
+  "behind": 0.0,
+  "vertices": 0
+ },
+ "smock_58-f|ground|sit_ground": {
+  "most": 0.8556389981328217,
+  "below": 0.8556389981328217,
+  "behind": 0.0,
+  "vertices": 0
+ },
+ "apron_58-f|ground|sit_ground": {
+  "most": 0.0,
+  "below": 0.0,
+  "behind": 0.0,
+  "vertices": 0
+ }
+}
