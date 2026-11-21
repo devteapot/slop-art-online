@@ -278,3 +278,104 @@ A is `7e00f3e7` (main `bd29fb7f` + the `input-latency` instrumentation + the `ur
 - **Resident stimulus → first body write.** The N1 arena drives the authority alone (`mind_act` with no mind process), and the authority is the same in both arms. N1 variant a, law off, 5 subjects × 3 walks, fresh islands, pinned private container, quiet host: a body's queued act waited for the act in progress p50 360 / 343 ms and p95 1.30 / 1.01 s (A / B, n = 10 each; `act_queued`→`act_started` markers), a player's started in 0.3 ms in both. The scripted body's first write is the queue behind the previous `goto`, which runs until steering arrives; a player's `human_act` replaces the act in progress. Reaching 150–300 ms for queued mind acts needs an authority decision (a mind act that may replace, or a next-tick start for an act whose predecessor has physically finished), not a mind change; this branch does not make it.
 
 Evidence: `~/slop-evidence/fast-dispatch-20261120.tar.zst` (`.local/fd/`: driver scripts, preflight, host samples, placement, replica module logs, `ab.json`, the profiled run's `cpu.folded`, the pprof patch; and both checkouts' `.local/living/verify/minds-fd-*` and `core-nav-fd*` run directories).
+
+## Mind acts replace (mind-act-replace, 2026-11-20)
+
+Branch `mind-act-replace`. The parity gap the arena found: a player's command (`human_act`) replaces the act in progress and starts in the same transaction, while a mind's act (`mind_act`, `mind_act_checked`) waits in `act_queue` until the act in progress ends (at most 4 waiting, dropped after 120 s). The branch adds the value-only law **`mind_act_replaces`, off by default**: on, a mind's batch meets the act in progress exactly as a player's command does. Off is main's behaviour (proved below). Nothing is on by default.
+
+### The rule, and what it touches
+
+- **One path.** `acts::submit_player` (`human_act`) and, under the law, `acts::submit_mind` / `submit_checked` (`mind_act`, `mind_act_checked`) run the same step of `acts::submit_inner`: what was waiting in `act_queue` is dropped, and the act in progress (an `ACT` activity) is broken off (`act::cancel`, no reason) unless it is a committed move (`combat::committed`); the new act then starts through `act::begin` in the same transaction, with every gate a player's act meets (combat timing, the skill's checks, sight and reach). A reducer is one transaction: "Every reducer runs inside a database transaction … Either all changes succeed or all are rolled back" ([reducers](https://spacetimedb.com/docs/functions/reducers/)), so no client sees the body between the two acts.
+- **Only a batch that holds an act for the body replaces** (one that `living_rules::acts::parse` accepts for the actor's body). A player's `human_act` reaches the step only with a parsed act; a mind's batch can also be a gaze change (`{"do": "gaze"}`, a mind's act only) or something unreadable, and those replace nothing. Gaze still goes to `attention::set` as before.
+- **Act on act only.** A mind's act already took the body from a graph's activity at once in both arms (`acts::next` waits only for an `ACT`), and a reflex still breaks an act off (`acts::interrupt`). The law changes only what happens when a mind decides while one of its own acts runs.
+- **Nothing new to replicate.** No table, column, view, subscription or reducer signature changed; the law is a `law_override` row like the other value-only laws (`VALUE_ONLY`, class Delivery, `law_override_check` covers it). A world switches it with `set_world_law mind_act_replaces true`, read at the next call with no install.
+- **Diagnostics.** A second value-only law, `latency_acts` (off), logs each deliberate act's course as `input_latency act_*` module-log markers (submit, dropped, queued, started, replaced with its phase and age, done with its outcome code, refused, expired, set aside by a reflex) for every character; `latency_nav_from` logs them for the arena's subjects. `living/tools/act_trace.py` captures them from the replica's module log and reports each act's fate.
+
+### What a player's replacement costs today, and the gaps
+
+The law gives a mind exactly what a player has; it adds no cost. What a replacement costs either controller now:
+
+| | Player (`human_act`) and a mind under the law | Gap? |
+| --- | --- | --- |
+| Work under way | Lost: the walk so far, a performing act's elapsed time, what waited in the queue. | No (physical). |
+| Committed moves | Run their course (`combat::committed`). No deliberate act can be a combat move (real-time skills are refused as acts), so for an `ACT` this guard never fires; combat commitment, cooldowns and recovery hold on the graph and `use_skill` paths, which the law does not touch. | No. |
+| A refused replacement | The old act is broken off **before** the new one is checked (`begin` runs after the cancel), so a replacement that is refused ("no food in your pack") leaves the body idle. `begin` itself checks first for a graph's options ("a higher-priority option that cannot start must not cancel the lower-priority work"). | **Yes, for both.** |
+| Rate | `human_act` spends no input token (`human_move`, `use_skill` and `human_face` do: `input_hz` 30/s, `input_burst` 15), so a player can replace acts without limit. A mind is bounded only by its deliberation cadence (`think_min_s` 20 s for people, plus model time), not by a rule. | **Yes, for both.** |
+| What is told | Nothing about the broken-off act (no outcome line, no `mind_state.last`); a recorded gesture's `skill_use` says "broken off" with no reason. The mind's next prompt shows truthfully what it is doing (`doing … (as you decided)`) and what still waits (`decided, not yet done`). | Minor. |
+| Turning back | `act::turned_back` (a walk given up for another within 3 s is noticed; the sixth in 20 s is told, "You keep turning back and forth …", and asks for a thought) never runs on this path, because the old act is cancelled before `begin` sees it. A graph's walk replaced by another walk is noticed. | **Yes, for both**: the one self-perception of dithering is missing exactly where thrashing would happen. |
+| The same act again | Restarts it (a performing act's elapsed time lost). `begin` continues an orphaned graph activity that matches. | Possible, for both. |
+
+**Proposals (not added; each its own law, off until measured):** `act_replace_checks` (check the new act can start before breaking the old off, for both); `act_input_cost` (a replacing act spends from a bucket: `human_act` from the player's input bucket, a mind's replacing batch from a bucket of the same shape, for example a few replacements per 10 s); restore `turned_back` on the replace path for both; and "the same act continues" (a replacement by an identical act keeps the one under way). None of these is needed for the parity the law gives; the first three are gaps a player has today.
+
+### Measurements
+
+Host: the Spark, private server `slop-actreplace-20261120` (SpacetimeDB 2.14.1) pinned to CPUs 5–9,15–19, the whole series under one `~/slop-mq/battle.lock` hold, every run started at a 1-minute load under 4 with the merge lock free, arms interleaved (off-on, on-off, off-on), a run whose window load passed 8 redone (`arena-off3` three times and `battle-off1`, `town-off3` once: other workers' load; the last attempt counts, all at ≤ 6.4). Build: this branch's code as local commit `62e6dec3` on `fast-dispatch` `e52ec3a2`, since rebased onto main `7499c270` with no change to the act path (main's `act::unstick` and `relocated` only end movements that a teleport or a stall left without an end); the law was the only difference between arms (`latency_acts` on in both). Fake model only; no paid call.
+
+**N1 arena (stimulus → first body write).** `nav_arena.py n1 --law off --subject body --reps 5 --input-latency --world-law mind_act_replaces=false|true`, variants a–d, 5 scripted bodies × 3 walks each, a fresh island per run, 3 runs per arm; no mind process (the arena's `mind_act` stands in for it). Every walk arrived (60/60 per run). Measured from the authority's own markers (`act_trace.py firstwrite`: the `mind_act` entry to the first `body_written` of the new act) and from `nav_report.py`'s act-scoped scores (the first authoritative write of the ordered act, and its physical effect: the first sample whose velocity differs from before, both from the wall send):
+
+| | Off (n) | Off p50 / p90 / p95 (ms) | On (n) | On p50 / p90 / p95 (ms) |
+| --- | ---: | ---: | ---: | ---: |
+| `mind_act` entry → first body write of the new act | 187 | 325 / 750 / 999 | 188 | 0.31 / 0.43 / 0.45 |
+| … variant a / b / c / d p95 | | 1,194 / 823 / 496 / 1,112 | | 0.51 / 0.37 / 0.47 / 0.44 |
+| … started in a later transaction (waited) | 181 / 187 | | 0 / 188 | |
+| Send → first write of the ordered act (`nav_report`) | 120 | 333 / 943 / 1,086 | 120 | 1.2 / 1.5 / 1.6 |
+| Send → its physical effect (`nav_report`) | 120 | 333 / 943 / 1,086 | 120 | 52 / 53 / 53 |
+
+The target was 150–300 ms; on, the body starts the decided act in the transaction that receives it, and its velocity visibly changes 52 ms later (the replacing walk takes over the glide and turns). Off, the wait is the remainder of the walk under way. The arena's older window score (any qualifying velocity change within 2 s of the send, `input_latency.py nav` `total`) does not separate the arms (variant a p50 372–480 off, 379–794 on), because it also counts the previous walk's own segments; the act-scoped scores above do not.
+
+**Battle at a sustained 200** (`battle_diag.py --battle 200 --walkers 16 --minutes 6 --keep-plans --act-trace --fake-acts '[{"do": "goto", "target": "wander"}]'`, `--law mind_act_replaces=true` on): the fake mind thinks for every fighter, and each fighter's compile also decides a short walk (3–9 m), as a model's may. The keeper held 170.7–177.3 fighters alive on average (minimum 152–171), with 495–527 deaths refilled per run.
+
+| | Off r1 / r2 / r3 | On r1 / r2 / r3 |
+| --- | --- | --- |
+| Mind acts decided / started | 1,048 / 833, 1,091 / 854, 1,093 / 847 | 1,083 / 841, 1,071 / 857, 1,096 / 886 |
+| Decided while another act ran | 0, 0, 0 | 0, 0, 0 |
+| Replaced (before their effect) | 0, 0, 0 | 0, 0, 0 |
+| Never landed (refused at start: a committed move under way, "in the middle of a strike" / dodge / heal, as for a player) | 215, 237, 246 | 242, 214, 210 |
+| Started → done | 832, 854, 847 | 840, 857, 886 |
+| Decided → started p50 / p95 (ms) | 0.31 / 0.43, 0.30 / 0.41, 0.30 / 0.44 | 0.30 / 0.41, 0.29 / 0.35, 0.30 / 0.77 |
+| Hits / blocked / dodged / missed | 12,706 / 10,387 / 2,992 / 684; 12,312 / 10,381 / 2,843 / 784; 12,144 / 10,386 / 2,943 / 704 | 12,940 / 9,863 / 3,070 / 823; 12,750 / 10,351 / 3,014 / 810; 12,504 / 10,367 / 2,779 / 769 |
+| Timed defence (blows met by a dodge, block or jump) | 0.501, 0.514, 0.509 | 0.484, 0.520, 0.505 |
+| Contact share; engagements per fighter-minute; contact s per engagement | 0.976, 0.971, 0.972; 0.30, 0.38, 0.41; 192, 152, 143 | 0.966, 0.960, 0.981; 0.39, 0.49, 0.38; 149, 119, 154 |
+| Attacks per contact-minute | 27.2, 27.2, 27.4 | 27.7, 27.5, 27.2 |
+| Ticks/s (mean of 6 windows); tick p50 / p99 (ms, median window) | 41.9, 46.0, 47.2; 11.7 / 25.0, 11.1 / 23.3, 10.7 / 22.1 | 43.6, 44.7, 42.0; 11.7 / 24.2, 11.1 / 23.9, 11.5 / 24.0 |
+
+With a fighter deciding about once every 25 s and its walk lasting 2–3 s, **no mind act was ever decided while another of its acts ran**, so the law had nothing to replace: replacements per fighter-second 0 in both arms, and the combat readings and tick cost differ between arms no more than between runs of one arm. A fight's breaking off is the graph's reflexes (about 11,000 combat uses "broken off" per run in both arms), which the law does not touch. This fixture does not show what a model that issues long acts every few seconds would do in a fight; the town fixture below is the overlap case.
+
+**Routine work in a town** (`act_town.py --minutes 10 --residents 40 --every 40`, island, `--law mind_act_replaces=true` on): 40 seeded residents at their daily ways (keeping their posts, resting, gathering, sleeping); the driver stands in for their minds and gives each an errand (walk to one of its given places, then another) at seeded exponential times, mean 40 s, the same 596 errands in every run; no mind service. This is the overlap stress: a walk across town lasts up to 77 s.
+
+| | Off r1 / r2 / r3 | On r1 / r2 / r3 |
+| --- | --- | --- |
+| Errand legs started (of 1,192) | 891, 882, 887 | 987, 985, 986 |
+| Decided while another act ran: wait for it p50 / p95 | 34.3 / 102.2 s, 35.0 / 105.4 s, 33.6 / 103.5 s | 0.27 / 0.46 ms, 0.27 / 0.48 ms, 0.27 / 0.47 ms |
+| Never started: expired after 120 s / still waiting at the end | 31 / 58, 30 / 61, 31 / 59 | 0 / 12, 0 / 11, 0 / 12 |
+| Replaced mid-walk (age p50 / p95) | 0 | 318 (8.8 / 38.8 s), 320 (8.8 / 38.9 s), 320 (8.7 / 37.4 s) |
+| Legs dropped from the queue by a replacement | 0 | 193, 196, 194 |
+| Legs walked to the end | 860, 851, 856 | 641, 638, 639 |
+| Replacements per resident-minute | 0 | 0.80, 0.80, 0.80 |
+| Routine outcomes ok / failed (`routine_stat`) | 848 / 144, 864 / 136, 879 / 138 | 1,092 / 181, 1,024 / 174, 1,094 / 191 |
+| Graph tasks performed to their end / broken off while performing | 633 / 384, 594 / 399, 604 / 379 | 788 / 521, 779 / 481, 782 / 534 |
+| Of which keeping a post | 136 / 232, 132 / 234, 126 / 235 | 174 / 301, 186 / 265, 168 / 293 |
+| Gathers done per resident-hour | 3.9, 3.6, 3.75 | 7.65, 8.25, 8.25 |
+
+Residents abandon their **errands** more under the law (a third of the legs started are replaced mid-walk and 640 instead of 855 reach their end), and no more of their **routine work**: the share of graph tasks broken off while performing is 37.8–40.2% off and 38.2–40.6% on. They do more routine work on (routine successes +24%, gathers doubled), because a queued errand holds the body (a graph's work waits while an act runs) and, off, errands pile up behind a long walk and run up to two minutes after they were decided, 30 of them never. Which is better depends on what the decisions mean: the fixture's errands are arbitrary and come faster than a walk across town; a real mind's next decision usually depends on what it now perceives.
+
+**Tick cost and genesis.** The law adds one cached law read per `mind_act` call and, when on, a second parse of the batch's acts; nothing per tick. In the battle above, ticks/s were 41.9–47.2 off and 42.0–44.7 on, tick p50 10.7–11.7 against 11.1–11.7 ms and p99 22.1–25.0 against 23.9–24.2 ms (both arms with `latency_acts` logging, about 3 acts a second): within the spread of one arm. Genesis fuel on the island seed (`genesis_fuel.py --seed island`, the private server, rustc 1.99.1), main `7499c270` against this branch: `init` 11.744e9 → 11.761e9 (+0.15%: the shipped script that `init` compiles and validates is two laws longer), the 40 making steps 95.691e9 → 95.699e9 (+0.008%), the largest step 21.10% → 21.11% of the 120e9 budget. The island has no must-not-rise baseline (every seed is on the 10% headroom rule).
+
+**Default off is main** (`det_compare.py`, the Cullet battle of 200, both builds `LIVING_SEED=cullet`, main `7499c270` against this branch on it). Identical over 3,600 ticks (every tick's table hashes, then 113 tables and 46,254 rows at the stop); with 16 players joined on the 10 m ring, identical over 1,500 ticks (44,682 rows). Negative control, the branch against itself with `--candidate-law mind_act_replaces=true` (a new `run` option: a law set on the candidate copy alone before both unpause): it differs from the first tick in `law_override`, `law_change`, `law_revision` and `chronicle` (the law's line, and the ids after it) and in no other table over 3,600 ticks. That battle's fighters act on instinct and no mind acts there, so the law has nothing to do; act-level identity cannot be shown with this tool, because a reducer called from outside the tick takes the wall clock as its time (`common::now_ms`), which differs between the two copies (an attempt that sent the same overlapping walks to both copies at the start tick differed only in those times and what follows from them). The `act_replace` scene, the arena and the town runs show the law's effect where acts overlap.
+
+### Verification
+
+- `just living-check`: ok (457 s), with main's known red `look::tests::the_island_wears_the_pool`. `cargo test -p living-rules`: 361 passed (the new laws in `VALUE_ONLY` go through `law_override_check`'s value-only tests).
+- verify-core: `tick`, `teach`, `refusal`, `committed`, `food` and the new `act_replace` (off: queued, then started when the walk ends, its outcome told; on: replaced at once, the queue dropped, nothing told; a gaze change or an unreadable act replaces nothing) pass; `verify_mechanics.py` 23 of 23.
+- verify-player: `combat.py --scene all` (with main's `teleport`) passes except `bow`, refused "out of breath" after the earlier scenes, which passes alone; `command`, `told`, `outcomes` pass.
+- verify-minds (fake model): `acts`, `dealings`, `roundtrip`, `fast-lane`, `takeover` pass.
+- verify-client: not run; no table, view, subscription or reducer signature changed.
+- Records: `.agents/skills/verify-{core,player,minds}/references/validation/*-mind-act-replace.md`.
+
+### For the GC
+
+- **What on gives:** minds start what they decide at once, as players do: first body write 0.3 ms instead of 325 / 999 ms (p50 / p95), a visible change of course 52 ms after the send; the 150–300 ms target is met. No decision waits two minutes behind an old walk or silently expires.
+- **What on costs:** a mind that decides faster than its acts finish breaks its own acts off (in the town stress, 0.8 replacements per resident-minute, a third of errand legs). Nothing else changes in a 200-fighter battle with the fake model's cadence. Tick cost is unchanged.
+- **Before default-on:** the three gaps above are a player's today and become a mind's with the law: a refused replacement leaves the body idle, replacing has no rate limit, and `turned_back` never notices dithering on this path. Closing the first and third (and a rate law for both) would make default-on safer; a real-model battle and town trial, measuring the same fates with `latency_acts`, would show the actual overlap rate (paid; not run).
+
+Evidence: `~/slop-evidence/mind-act-replace-20261120.tar.zst` with its SHA-256 sidecar (`.local/actreplace/`: the chain scripts, `runs.jsonl`, load samples, `summary.json`, the arena phases, det_compare outputs; and the run directories `.local/living/verify/{core-ar-*,minds-ab-*,minds-at-*}`).
