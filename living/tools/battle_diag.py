@@ -6,6 +6,7 @@ Free: the fake model; scratch `verify-minds-*` databases on the trial stack.
                  [--window 30] [--period 60] [--no-mind] [--fast-lane [--fast-real] [--fake-fast-patch]]
                  [--keep-plans] [--law NAME=VALUE] [--arm LABEL] [--no-refill] [--refill-from 30]
                  [--refill-gap 0.5] [--law NAME=VALUE ...] [--fixed-site X Y]
+                 [--real-minds --allow-live [--concurrency 192] [--save-self]]
 
 Seed `island` (its residents and animals on their own rules). `--battle` minded people
 (`spawn_crowd`) packed onto seed-ordered walkable tiles near the arrival point fight the
@@ -18,6 +19,12 @@ the fight within 9 m of the site, so a battle's drift is the battle's, not the g
 for the unfolded lines, `profile_detail=true` to time the parts of each evaluation). The mind service thinks for all of them on the fake
 model (think 5 s, compile 4 s, consolidation 4 s, talk 2 s), its compile keeping the fight graph,
 unless `--no-mind` (requests to think then stay pending, refreshed with their scene).
+`--real-minds --allow-live` (paid: docs/INPUT_LATENCY.md, "Real-model trial") instead thinks for
+the fighters and their refills with the real models config (living/configs/models.json, its
+`people` mix as every fighter's default: think GLM 5.3 Flash; compile DeepSeek V4.1 Flash on stage,
+GLM off stage), the key from the checkout's `.env` (read, never printed or logged); the walkers
+then have no mind. Their compiles write their own graphs; the fight graph is only how they start.
+Spend is not capped here: run `act_trial.py watch` beside it.
 `--fast-lane` sets the world law `fast_lane_on` (docs/FAST_LANE.md) and answers each fast call
 after 1.0 s (r2e's model p50) with no change (`keep`), so the battle is the same as without it:
 what it adds is the lane's own work (triggers, turns, the `fast_ask` rows, the replies). Each
@@ -334,6 +341,14 @@ def main():
                     help="set a world law after launch (JSON value), e.g. witness_fold_ms=0 or profile_detail=true")
     ap.add_argument("--input-latency", action="store_true",
                     help="record authority and mind timing plus database metrics for a fake-model fast-lane run")
+    ap.add_argument("--real-minds", action="store_true",
+                    help="paid: every fighter's mind (and each refill's) thinks with the real models config, `people` mix; walkers get no mind; needs --allow-live and MISTRAL_API_KEY in the checkout's .env")
+    ap.add_argument("--allow-live", action="store_true", help="required with --real-minds, after authorization for this paid run")
+    ap.add_argument("--fake-provider", action="store_true",
+                    help="with --real-minds: the same models config (profiles, mixes, routing) with every profile sent to the local fake server (model `fake-<model>`, no key): the switch's free test")
+    ap.add_argument("--concurrency", type=int, default=64, help="LIVING_CONCURRENCY for the mind service (the mind's own default is 192)")
+    ap.add_argument("--save-self", action="store_true",
+                    help="before cleanup, keep the fighters' `self` experiences (\"You keep turning back and forth\" lines) in self-lines.json")
     ap.add_argument("--fixed-site", nargs=2, type=float, metavar=("X", "Y"),
                     help="stage a fixed population in stationary, nonlethal fights round this point, for fake-model comparisons")
     a = ap.parse_args()
@@ -341,8 +356,10 @@ def main():
         ap.error("--input-latency requires --fast-lane with the fake model")
     if a.input_latency and not os.environ.get("CARGO_TARGET_DIR"):
         ap.error("--input-latency requires a private CARGO_TARGET_DIR")
+    if a.real_minds and (not (a.allow_live or a.fake_provider) or a.no_mind or a.fast_real or a.fake_acts or a.fake_fast_patch or a.input_latency):
+        ap.error("--real-minds needs --allow-live and excludes --no-mind, --fast-real, --fake-acts, --fake-fast-patch and --input-latency")
     fixed = a.fixed_site is not None
-    if fixed and (not a.keep_plans or a.fast_real or a.no_mind):
+    if fixed and (not a.keep_plans or a.fast_real or a.no_mind or a.real_minds):
         ap.error("--fixed-site needs --keep-plans and a fake mind")
     if fixed:
         a.no_refill = True
@@ -534,7 +551,32 @@ def main():
             # ids are handed out in order, so the next few thousand are theirs (an empty
             # LIVING_ONLY would mean no one).
             ids = list(made) if fixed else list(made) + list(range(max(made) + 1, max(made) + 4001))
-            models, env = vm.model(run, script), {"LIVING_CONCURRENCY": "64"}
+            env = {"LIVING_CONCURRENCY": str(a.concurrency)}
+            if a.real_minds:
+                # Every purpose through the real models config, the `people` mix as the default; only
+                # the fighters and the refills to come (not the walkers) are thought for.
+                models = json.loads((ROOT / "living/configs/models.json").read_text())
+                models["default"] = "people"
+                keys = {p["key_env"] for p in models["profiles"].values()}
+                if a.fake_provider:
+                    fake = vm.model(run, script)["profiles"]["local"]
+                    for name, p in models["profiles"].items():
+                        models["profiles"][name] = dict(fake, model=f"fake-{p['model']}", **{k: p[k] for k in ("overflow", "capacity_overflow") if p.get(k)})
+                    for k in keys:
+                        env[k] = ""
+                    keys = set()
+                dotenv = {}
+                if (ROOT / ".env").exists():
+                    for line in (ROOT / ".env").read_text().splitlines():
+                        k, eq, v = line.strip().partition("=")
+                        if eq and k in keys:
+                            dotenv[k] = v.strip().strip('"').strip("'")
+                if not a.fake_provider and not dotenv.get("MISTRAL_API_KEY"):
+                    raise RuntimeError("--real-minds needs MISTRAL_API_KEY in the checkout's .env")
+                env.update({k: v for k, v in dotenv.items() if v})
+                ids = [i for i in ids if i not in set(made[a.battle:])]
+            else:
+                models = vm.model(run, script)
             if a.input_latency:
                 env["LIVING_INPUT_LATENCY"] = "1"
             if fixed:
@@ -549,6 +591,7 @@ def main():
                     raise RuntimeError(f"--fast-real needs {real['key_env']} in the checkout's .env")
                 models["profiles"]["deepseek-flash"] = real
                 env[real["key_env"]] = key
+            (run.directory / "thinkers.json").write_text(json.dumps(ids))
             run.start(models, ids, seed="island", extra_env=env)
 
         def keep_battle():
@@ -606,7 +649,7 @@ def main():
                 time.sleep(min(0.5, a.refill_gap))
 
         keeper = threading.Thread(target=keep_battle, daemon=True)
-        head = {"arm": a.arm, "fast_real": a.fast_real, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane, "fake_acts": a.fake_acts, "act_trace": a.act_trace,
+        head = {"arm": a.arm, "fast_real": a.fast_real, "real_minds": a.real_minds, "fake_provider": a.fake_provider, "concurrency": a.concurrency, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane, "fake_acts": a.fake_acts, "act_trace": a.act_trace,
                 "nproc": os.cpu_count(), "db_identity": ident, "world_seed": seed["seed"],
                 "layout": [{"id": id, "at": bodies[id]} for id in fighters],
                 "walker_layout": [{"id": id, "at": bodies[id]} for id in made[a.battle:]],
@@ -763,6 +806,15 @@ def main():
                                                 run.directory / "input-latency-authority.jsonl", trace_start)
             except (OSError, ValueError) as error:
                 head["input_latency_capture_error"] = str(error)
+        if a.save_self and "started_ms" in head:
+            try:
+                ever = state.get("ever_fighters", set())
+                lines = [r for r in run.private("SELECT observer, at_ms, kind, text FROM experience WHERE kind = 'self'", "self-lines")
+                         if r["observer"] in ever and r["at_ms"] >= head["started_ms"]]
+                (run.directory / "self-lines.json").write_text(json.dumps(lines))
+                head["self_lines"] = len(lines)
+            except (OSError, ValueError, RuntimeError) as error:
+                head["self_lines_error"] = str(error)
         if a.act_trace and "started_ms" in head:
             try:
                 import act_trace
