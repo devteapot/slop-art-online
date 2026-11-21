@@ -10,7 +10,7 @@ prompt, cached and completion tokens).
                      [--url URL --container C --db DB --minds N] [--diag FILE --collapse-below TPS]
   act_trial.py town-side --instance DIR --url URL --container C [--bench-at MIN ...]
   act_trial.py report-town --instance DIR [--out FILE]
-  act_trial.py report-battle --run-dir DIR [--skip-s 120] [--out FILE]
+  act_trial.py report-battle --run-dir DIR [--skip-s 120] [--until-s S] [--out FILE]
   act_trial.py ledger --ledger FILE
 
 `watch` prices every journaled call from its tokens (`PRICES`, docs/MODEL_COST.md "Prices"; a
@@ -20,6 +20,7 @@ model every `--interval` seconds, and stops the arm's runner (SIGINT by PID, the
 - this arm's spend past min(group cap - the group's earlier arms, total cap - every earlier arm)
   minus `--margin` (calls already in flight when the stop lands);
 - more than 10% of calls failing over the last 2 minutes (at least 20 calls);
+- the host under 40 GB MemAvailable or 45 GB of free disk (`--min-mem-gb`, `--min-disk-gb`);
 - with `--diag` (battle_diag.py's samples): two windows in a row under `--collapse-below` ticks/s;
 - with `--db` and `--minds-ids`: the thinkers' pending `deliberation` rows rising for 3 minutes (7
   samples, each at least the one before, the last above the first by 5 and by a tenth of `--minds`,
@@ -303,6 +304,12 @@ def cmd_watch(a):
             seen_diag = len(lines)
             if low >= 2:
                 checks.append(f"battle collapse: two windows under {a.collapse_below} ticks/s")
+        mem_gb = next((int(l.split()[1]) / 1048576 for l in open("/proc/meminfo") if l.startswith("MemAvailable:")), 0)
+        st = os.statvfs("/")
+        disk_gb = st.f_bavail * st.f_frsize / 2**30
+        rec["mem_available_gb"], rec["disk_free_gb"] = round(mem_gb, 1), round(disk_gb, 1)
+        if mem_gb < a.min_mem_gb or disk_gb < a.min_disk_gb:
+            checks.append(f"host floor: MemAvailable {mem_gb:.0f} GB, disk {disk_gb:.0f} GB free")
         if usd > limit:
             checks.append(f"spend ${usd:.2f} past this arm's limit ${limit:.2f}")
         if n2 >= 20 and f2 / n2 > 0.10:
@@ -667,12 +674,12 @@ def cmd_report_battle(a):
     diag = [json.loads(x) for x in (d / "diag.jsonl").read_text().splitlines() if x.strip()]
     fighters = set(json.loads((d / "fighters-ever.json").read_text()))
     t0 = head["started_ms"] + a.skip_s * 1000
-    t1 = head["ended_ms"]
+    t1 = min(head["ended_ms"], head["started_ms"] + a.until_s * 1000) if a.until_s else head["ended_ms"]
     seconds = (t1 - t0) / 1000
     trace = d / "act-trace.jsonl"
     acts = act_trace.report(trace, fighters, seconds, t0, t1)
     # Fighters in the measured window, by mean alive count (refills come and go).
-    measured = [x for x in diag if x["t_min"] * 60 >= a.skip_s]
+    measured = [x for x in diag if x["t_min"] * 60 >= a.skip_s and (not a.until_s or x["t_min"] * 60 <= a.until_s)]
     alive = [x["fighters_alive"] for x in measured] or [x["fighters_alive"] for x in diag]
     minds = statistics.mean(alive) if alive else len(fighters)
     chars = {}
@@ -767,6 +774,8 @@ def main():
     s.add_argument("--db")
     s.add_argument("--minds", type=int)
     s.add_argument("--minds-ids", help="a JSON list of the thinkers' ids (the backlog counts only theirs)")
+    s.add_argument("--min-mem-gb", type=float, default=40)
+    s.add_argument("--min-disk-gb", type=float, default=45)
     s.add_argument("--diag")
     s.add_argument("--collapse-below", type=float)
     s = sub.add_parser("town-side")
@@ -780,6 +789,7 @@ def main():
     s = sub.add_parser("report-battle")
     s.add_argument("--run-dir", required=True)
     s.add_argument("--skip-s", type=float, default=120)
+    s.add_argument("--until-s", type=float, help="measure only up to this many seconds after the start (to compare arms over the same window)")
     s.add_argument("--out")
     s = sub.add_parser("ledger")
     s.add_argument("--ledger", required=True)
