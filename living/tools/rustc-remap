@@ -1,0 +1,44 @@
+#!/bin/sh
+# The rustc of every cargo build in this repository (.cargo/config.toml, `build.rustc`;
+# docs/TOOLING.md, "Byte-identical wasm"). Native compiles run rustc unchanged. A compile for
+# wasm32-unknown-unknown also gets --remap-path-prefix flags, so a module embeds no host path:
+#
+#   CARGO_HOME           -> /cargo  registry and git crates' panic locations
+#                                   (/home/<user>/.cargo/registry/src/...: the authority wasm
+#                                   differed between dev-box and the Spark, and genesis init
+#                                   fuel by ~0.02%)
+#   this checkout        -> /src    workspace crates are passed relative already; a safety net
+#   the crate's OUT_DIR  -> /out    generated sources a crate includes from the target dir
+#
+# The standard library is already /rustc/<commit>. Both the given and the resolved (symlink-free)
+# spelling of each prefix are mapped. The last matching flag wins, so OUT_DIR (often inside the
+# checkout) comes last. Cargo cannot see flags added here: .cargo/config.toml also gives the
+# wasm target a no-op marker remap, so changing this mapping means bumping that marker, which
+# rebuilds wasm crates and changes sccache's key.
+#
+# `RUSTC` in the environment replaces this script (cargo prefers it over build.rustc); a
+# RUSTC_WRAPPER such as living/tools/sccache-rustc runs it as the compiler.
+wasm=
+prev=
+for a in "$@"; do
+  case "$a" in
+    --target=wasm32-unknown-unknown) wasm=1 ;;
+    wasm32-unknown-unknown) [ "$prev" = --target ] && wasm=1 ;;
+  esac
+  prev=$a
+done
+[ -n "$wasm" ] || exec rustc "$@"
+
+remap() {  # remap FROM TO: FROM as given and as resolved
+  [ -n "$1" ] || return 0
+  set -- "$@" "$(cd "$1" 2>/dev/null && pwd -P)"
+  map="$map --remap-path-prefix=$1=$2"
+  [ -z "$3" ] || [ "$3" = "$1" ] || map="$map --remap-path-prefix=$3=$2"
+}
+map=
+remap "$(cd "$(dirname "$0")/../.." && pwd)" /src
+remap "${CARGO_HOME:-$HOME/.cargo}" /cargo
+remap "${OUT_DIR:-}" /out
+# Word splitting of $map: none of these paths may contain whitespace (cargo's own paths do not).
+# shellcheck disable=SC2086
+exec rustc "$@" $map
