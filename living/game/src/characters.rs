@@ -56,6 +56,14 @@
 //! (`anim::Anim::ground_seat`); the plane lies [`SEAT_SINK`] under the ground at weight 0 and
 //! rises with it. The settle on waking takes the contact too. `LIVING_GAME_SEAT_CONTACT=0`
 //! turns it off.
+//! **Hem against the ground** (hem-ground, docs/seat-contact/hem-ground.md), on the same weighted
+//! plane: a cloth chain's root that the pose puts under it is lifted onto it, [`SEAT_MARGIN`]
+//! above, so the chain and its tails lie on the ground rather than in it; and the character's
+//! skirted pieces ([`SKIRTED_PIECES`]) are drawn with their own copy of the shared toon carrying
+//! the plane ([`seat_clamp`]), whose vertex shaders keep every vertex that far above it
+//! (`toon_light.wesl` `seat_clamp`). The vertices are needed: most of a coat's side panel at the
+//! seat rides the upper leg and hips, which no chain moves. `LIVING_GAME_SEAT_HEM=0` turns both
+//! off (the 2a contact stays).
 //!
 //! `LIVING_GAME_SPRINGS=0` turns the simulation off. Every few seconds it logs its cost;
 //! `LIVING_GAME_PERF=springwake` logs how far each woken character's joints turn per frame, and
@@ -651,7 +659,7 @@ impl Plugin for CharactersPlugin {
             .init_resource::<SpringClock>()
             .init_resource::<SpringStats>()
             .add_systems(Update, (shape, recolor, rig_springs, outfit::dress, rebuilt, frames))
-            .add_systems(PostUpdate, (hips.after(bevy::app::AnimationSystems).before(TransformSystems::Propagate), springs.after(TransformSystems::Propagate).after(crate::lookdev::far_models)));
+            .add_systems(PostUpdate, (hips.after(bevy::app::AnimationSystems).before(TransformSystems::Propagate), springs.after(TransformSystems::Propagate).after(crate::lookdev::far_models), seat_clamp.after(springs)));
     }
 }
 
@@ -1502,12 +1510,15 @@ pub struct SpringSettings {
     pub seat: bool,
     /// Log each seated character's cloth against its ground (`LIVING_GAME_PERF=seat`).
     pub seat_log: bool,
+    /// The hem against the ground (chain roots lifted, skirted pieces clamped, [`seat_clamp`]);
+    /// `LIVING_GAME_SEAT_HEM=0` turns it off, to compare. Only with `seat`.
+    pub hem: bool,
 }
 
 impl SpringSettings {
     fn from_env() -> Self {
         let num = |k: &str, d: f32| std::env::var(k).ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(d);
-        Self { enabled: std::env::var("LIVING_GAME_SPRINGS").map_or(true, |v| v != "0"), budget: num("LIVING_GAME_SPRING_BUDGET", 48.0) as usize, near: num("LIVING_GAME_SPRING_NEAR", 40.0), settle: num("LIVING_GAME_SPRING_SETTLE", 60.0).max(0.0) as u32, wake_log: crate::perf::has("springwake"), far_too: crate::perf::has("springfar"), seat: std::env::var("LIVING_GAME_SEAT_CONTACT").map_or(true, |v| v != "0"), seat_log: crate::perf::has("seat") }
+        Self { enabled: std::env::var("LIVING_GAME_SPRINGS").map_or(true, |v| v != "0"), budget: num("LIVING_GAME_SPRING_BUDGET", 48.0) as usize, near: num("LIVING_GAME_SPRING_NEAR", 40.0), settle: num("LIVING_GAME_SPRING_SETTLE", 60.0).max(0.0) as u32, wake_log: crate::perf::has("springwake"), far_too: crate::perf::has("springfar"), seat: std::env::var("LIVING_GAME_SEAT_CONTACT").map_or(true, |v| v != "0"), seat_log: crate::perf::has("seat"), hem: std::env::var("LIVING_GAME_SEAT_HEM").map_or(true, |v| v != "0") }
     }
 }
 
@@ -1613,6 +1624,16 @@ pub struct SeatAnchor {
 /// rises to where it is as the weight comes up, so the cloth is lifted out, never thrown.
 pub const SEAT_SINK: f32 = 0.25;
 
+/// How far above a seat's weighted plane a cloth chain's root and a seated character's skirted
+/// pieces are kept (m, world; hem-ground): clear of the ground's own drawn surface, under what
+/// shows from the game's camera.
+pub const SEAT_MARGIN: f32 = 0.003;
+
+/// The outfit pieces whose cloth hangs to a seat, by their name's start (as `cloth_check.py`'s
+/// `OUTER`): coats, the smocks with a skirt and aprons. A seated character's are drawn kept above
+/// its seat's plane ([`seat_clamp`]).
+pub const SKIRTED_PIECES: [&str; 4] = ["smock_5", "smock_7", "apron", "coat"];
+
 /// A seat contact for one frame: the plane, raised to the ground by its weight.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Contact {
@@ -1624,6 +1645,22 @@ impl Contact {
     fn new(anchor: &SeatAnchor, weight: f32) -> Option<Self> {
         let w = weight.clamp(0.0, 1.0);
         (w > 0.0).then(|| Contact { point: anchor.point - anchor.normal * (SEAT_SINK * (1.0 - w)), normal: anchor.normal })
+    }
+
+    /// A chain root at `pos` lifted along the normal to `m` above the plane, if it is lower.
+    fn lift(&self, pos: Vec3, m: f32) -> Vec3 {
+        let h = (pos - self.point).dot(self.normal);
+        if h < m {
+            pos + self.normal * (m - h)
+        } else {
+            pos
+        }
+    }
+
+    /// The plane, `m` above it, for the toon shaders' seat clamp: the normal and its offset
+    /// (`toon_light.wesl` `seat_clamp`: kept where `dot(n, p) >= w`).
+    fn shader(&self, m: f32) -> Vec4 {
+        self.normal.extend(self.normal.dot(self.point) + m)
     }
 
     /// A tail `next` on a chain from `pos`, `len` long, kept `r` above the plane: as near
@@ -1677,8 +1714,13 @@ pub struct Springs {
     /// first drawn so (`Time::elapsed_secs`; negative until then).
     ease: Option<(Vec<Quat>, f32)>,
     centres: Vec<(Vec3, f32)>,
-    /// The seat contact this frame, for the cloth groups ([`SeatAnchor`]).
+    /// The seat contact this frame, for the cloth groups ([`SeatAnchor`]), and whether it lifts
+    /// their chains' roots onto the plane (hem-ground, [`SEAT_MARGIN`]).
     contact: Option<Contact>,
+    lift: bool,
+    /// Each joint's local offset as last placed: its rest offset `t`, unless a cloth chain's root
+    /// was lifted onto a seat (written to its `Transform` with the rotation).
+    moved: Vec<Vec3>,
     /// `LIVING_GAME_PERF=seat`: the lowest a cloth joint's tail came above its seat's ground
     /// (m, the unraised ground) since the last report, and how many steps it was in contact.
     seat_low: f32,
@@ -1756,7 +1798,8 @@ pub fn rig_springs(
         let n = joints.len();
         debug!("characters: {} has {n} spring joints, {} collider spheres", model.file, spheres.len());
         let drawn = joints.iter().map(|j| j.r0).collect();
-        commands.entity(e).insert(Springs { joints, groups, spheres, active: false, fresh: true, ran: false, out: vec![(Quat::IDENTITY, GlobalTransform::IDENTITY); n], drawn, held: false, ease: None, centres: vec![], contact: None, seat_low: f32::INFINITY, seat_steps: 0, seat_ground: None, wake: None });
+        let moved = joints.iter().map(|j| j.t).collect();
+        commands.entity(e).insert(Springs { joints, groups, spheres, active: false, fresh: true, ran: false, out: vec![(Quat::IDENTITY, GlobalTransform::IDENTITY); n], drawn, held: false, ease: None, centres: vec![], contact: None, lift: false, moved, seat_low: f32::INFINITY, seat_steps: 0, seat_ground: None, wake: None });
     }
 }
 
@@ -1818,7 +1861,19 @@ impl Springs {
             let sc = ps.x.abs().max(1e-6);
             let j = &mut self.joints[i];
             let g = &self.groups[j.group];
-            let pos = parent.transform_point(j.t);
+            let mut t = j.t;
+            let mut pos = parent.transform_point(t);
+            // A seated character's cloth chain whose root the pose puts under its seat's plane
+            // (a coat's side chain on a thigh lying on the ground) is lifted onto it, its offset
+            // from the bone it hangs on moved with it: the chain then lies on the ground.
+            if let (Some(c), Up::Bone(_), true, true) = (contact, j.parent, g.cloth, self.lift) {
+                let lifted = c.lift(pos, SEAT_MARGIN);
+                if lifted != pos {
+                    pos = lifted;
+                    t = parent.affine().inverse().transform_point3(pos);
+                }
+            }
+            self.moved[i] = t;
             let rest = pr * j.r0;
             let rest_dir = rest * j.axis;
             let len = j.len * sc;
@@ -1858,7 +1913,7 @@ impl Springs {
             let to = (j.tail - pos).try_normalize().unwrap_or(rest_dir);
             let world = Quat::from_rotation_arc(rest_dir.normalize(), to) * rest;
             let local = (pr.inverse() * world).normalize();
-            self.out[i] = (local, parent.mul_transform(Transform { translation: j.t, rotation: local, scale: j.s0 }));
+            self.out[i] = (local, parent.mul_transform(Transform { translation: t, rotation: local, scale: j.s0 }));
         }
         if step.is_some() && low.is_finite() {
             self.seat_low = self.seat_low.min(low);
@@ -1921,6 +1976,9 @@ pub fn springs(
         if sp.contact != contact {
             sp.contact = contact;
         }
+        if sp.lift != settings.hem {
+            sp.lift = settings.hem;
+        }
         sp.seat_ground = seat.filter(|_| settings.seat_log).map(|(a, _)| (a.point, a.normal));
         if sp.active && !now {
             sp.wake = None;
@@ -1978,7 +2036,7 @@ pub fn springs(
                         Up::Bone(b) => writes.get(b).map(|(_, g)| *g).unwrap_or(sp.out[i].1),
                         Up::Joint(k) => shown[k],
                     };
-                    (local, parent.mul_transform(Transform { translation: j.t, rotation: local, scale: j.s0 }))
+                    (local, parent.mul_transform(Transform { translation: sp.moved[i], rotation: local, scale: j.s0 }))
                 }
                 None => sp.out[i],
             };
@@ -1988,6 +2046,10 @@ pub fn springs(
                     turn = turn.max(tf.rotation.angle_between(local).to_degrees());
                 }
                 tf.rotation = local;
+                // A chain's root lifted onto a seat, or back from it (only roots move).
+                if matches!(sp.joints[i].parent, Up::Bone(_)) && sp.groups[sp.joints[i].group].cloth && tf.translation != sp.moved[i] {
+                    tf.translation = sp.moved[i];
+                }
                 *g = global;
             }
             sp.drawn[i] = local;
@@ -2041,6 +2103,97 @@ pub fn springs(
             );
         }
         *stats = SpringStats::default();
+    }
+}
+
+/// Whether an outfit piece's cloth hangs to a seat ([`SKIRTED_PIECES`]).
+pub fn is_skirted(piece: &str) -> bool {
+    SKIRTED_PIECES.iter().any(|p| piece.starts_with(p))
+}
+
+/// On a seated character's skirted piece: drawn with the character's own copy (`own`) of the
+/// shared toon (`shared`), which carries the seat's plane for the vertex shaders ([`seat_clamp`]).
+#[derive(Component)]
+pub struct SeatClamped {
+    shared: Handle<Toon>,
+    own: Handle<Toon>,
+}
+
+/// The hem against the ground, for the skinned cloth (hem-ground): while a character sits on the
+/// ground and gets up ([`SeatAnchor`]), its skirted pieces ([`is_skirted`], near and far meshes)
+/// are drawn with the character's own copy of their shared toon (one a shared toon), whose
+/// `seat` holds the seat's plane, weighted as the chains' contact is, [`SEAT_MARGIN`] up;
+/// `toon_light.wesl` `seat_clamp` keeps every vertex on its side in the main pass, the prepass
+/// and the shadows. As the weight goes the plane sinks ([`SEAT_SINK`]); at 0, or when the anchor
+/// goes, the pieces take their shared toon back and the copy is dropped with its last handle.
+/// Only seated characters' skirted pieces leave their batch: nobody standing or walking changes.
+/// `style::apply`'s rewrites of every toon keep `seat`, so the copies follow the look.
+#[allow(clippy::type_complexity)]
+pub fn seat_clamp(
+    settings: Res<SpringSettings>,
+    mut commands: Commands,
+    seats: Query<(&SeatAnchor, Option<&crate::anim::Anim>, &Children)>,
+    pieces: Query<(&outfit::Piece, &MeshMaterial3d<Toon>, Option<&SeatClamped>)>,
+    clamped: Query<(Entity, &SeatClamped, &ChildOf)>,
+    mut toons: ResMut<Assets<Toon>>,
+) {
+    let on = settings.seat && settings.hem;
+    // Let go: a piece whose character no longer sits (its anchor gone) takes its shared toon back.
+    for (e, c, up) in &clamped {
+        if !on || !seats.contains(up.parent()) {
+            commands.entity(e).try_insert(MeshMaterial3d(c.shared.clone())).try_remove::<SeatClamped>();
+        }
+    }
+    if !on {
+        return;
+    }
+    for (anchor, anim, kids) in &seats {
+        let w = anchor.weight.or(anim.map(|a| a.ground_seat())).unwrap_or(0.0);
+        let plane = Contact::new(anchor, w).map(|c| c.shader(SEAT_MARGIN));
+        // This character's copies, by the shared toon they copy.
+        let mut copies: Vec<(AssetId<Toon>, Handle<Toon>)> = Vec::new();
+        for k in kids.iter() {
+            if let Ok((piece, _, Some(c))) = pieces.get(k) {
+                if is_skirted(&piece.slot) && !copies.iter().any(|(id, _)| *id == c.shared.id()) {
+                    copies.push((c.shared.id(), c.own.clone()));
+                }
+            }
+        }
+        for k in kids.iter() {
+            let Ok((piece, mat, held)) = pieces.get(k) else { continue };
+            if !is_skirted(&piece.slot) {
+                continue;
+            }
+            match (plane, held) {
+                (Some(p), None) => {
+                    let own = match copies.iter().find(|(id, _)| *id == mat.0.id()) {
+                        Some((_, h)) => h.clone(),
+                        None => {
+                            let Some(mut own) = toons.get(&mat.0).cloned() else { continue };
+                            own.extension.params.seat = p;
+                            let h = toons.add(own);
+                            copies.push((mat.0.id(), h.clone()));
+                            h
+                        }
+                    };
+                    commands.entity(k).try_insert((MeshMaterial3d(own.clone()), SeatClamped { shared: mat.0.clone(), own }));
+                }
+                (None, Some(c)) => {
+                    commands.entity(k).try_insert(MeshMaterial3d(c.shared.clone())).try_remove::<SeatClamped>();
+                }
+                _ => {}
+            }
+        }
+        // The plane as weighted this frame, written only when it moved (the ramps in and out).
+        if let Some(p) = plane {
+            for (_, h) in &copies {
+                if toons.get(h).is_some_and(|t| t.extension.params.seat != p) {
+                    if let Some(mut t) = toons.get_mut(h) {
+                        t.extension.params.seat = p;
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -2230,12 +2383,28 @@ mod tests {
             ease: None,
             centres: vec![],
             contact: None,
+            lift: false,
+            moved: vec![Vec3::ZERO],
             seat_low: f32::INFINITY,
             seat_steps: 0,
             seat_ground: None,
             wake: None,
         };
         let e = w.spawn(sp).id();
+        (w, e)
+    }
+
+    /// [`hanging`] with its root 5 cm under the ground (a coat's side chain on a thigh lying on it).
+    fn sunk(cloth: bool, lift: bool) -> (World, Entity) {
+        let (mut w, e) = hanging(cloth);
+        let bone = match w.get::<Springs>(e).unwrap().joints[0].parent {
+            Up::Bone(b) => b,
+            Up::Joint(_) => unreachable!(),
+        };
+        *w.get_mut::<GlobalTransform>(bone).unwrap() = GlobalTransform::from_translation(Vec3::new(0.0, -0.05, 0.0));
+        let mut sp = w.get_mut::<Springs>(e).unwrap();
+        sp.contact = Contact::new(&GROUND, 1.0);
+        sp.lift = lift;
         (w, e)
     }
 
@@ -2295,6 +2464,52 @@ mod tests {
         let pos = Vec3::new(0.0, -0.05, 0.0);
         let t = c.keep(pos, pos + Vec3::new(0.1, -0.3, 0.0).normalize() * 0.3, 0.3, 0.02);
         assert!((t.y - pos.y).abs() < 1e-4 && ((t - pos).length() - 0.3).abs() < 1e-4, "flat, not pushed up through the body: {t}");
+    }
+
+    #[test]
+    fn a_chain_root_in_the_ground_is_lifted_onto_it_with_the_hem() {
+        // hem-ground: the root comes up to the margin, offset from its bone, and the chain lies
+        // on the ground from there; without the lift (or for hair) it stays under, as in 2a.
+        for (cloth, lift, up) in [(true, true, true), (true, false, false), (false, true, false)] {
+            let (mut w, e) = sunk(cloth, lift);
+            run(&mut w, 30, 60);
+            let sp = w.get::<Springs>(e).unwrap();
+            let root = sp.out[0].1.translation();
+            let t = tail(&w, e);
+            if up {
+                assert!((root.y - SEAT_MARGIN).abs() < 1e-5, "the root lies on the ground, a margin up: {root}");
+                assert!((sp.moved[0].y - (0.05 + SEAT_MARGIN)).abs() < 1e-5, "its offset from the bone moved with it: {}", sp.moved[0]);
+                assert!(t.y >= SEAT_MARGIN - 1e-4, "the tail is on the ground's side: {t}");
+            } else {
+                assert!((root.y + 0.05).abs() < 1e-5 && sp.moved[0] == Vec3::ZERO, "left where the bone puts it: {root}");
+            }
+        }
+        // The plane falls away with the weight: a lowered plane lifts nothing above it.
+        let (mut w, e) = sunk(true, true);
+        w.get_mut::<Springs>(e).unwrap().contact = Contact::new(&GROUND, 0.5);
+        run(&mut w, 30, 60);
+        assert_eq!(w.get::<Springs>(e).unwrap().moved[0], Vec3::ZERO, "5 cm under the ground is above a plane 12.5 cm under it");
+    }
+
+    #[test]
+    fn the_vertex_clamp_plane_is_the_contact_a_margin_up() {
+        let c = Contact::new(&SeatAnchor { point: Vec3::new(3.0, 2.0, 1.0), normal: Vec3::Y, weight: None }, 1.0).unwrap();
+        assert_eq!(c.shader(SEAT_MARGIN), Vec4::new(0.0, 1.0, 0.0, 2.0 + SEAT_MARGIN));
+        let half = Contact::new(&GROUND, 0.5).unwrap().shader(0.0);
+        assert!((half.w + SEAT_SINK * 0.5).abs() < 1e-6, "it sinks with the weight: {half}");
+        let tilted = Vec3::new(0.3, 1.0, 0.0).normalize();
+        let p = Contact::new(&SeatAnchor { point: Vec3::new(1.0, 0.5, 0.0), normal: tilted, weight: None }, 1.0).unwrap().shader(0.0);
+        assert!((p.truncate().dot(Vec3::new(1.0, 0.5, 0.0)) - p.w).abs() < 1e-6, "the seat's own point lies on it");
+    }
+
+    #[test]
+    fn skirted_pieces_are_coats_skirted_smocks_and_aprons() {
+        for p in ["coat-m", "coat_2-f", "smock_58-f", "smock_74-m", "apron_58-f"] {
+            assert!(is_skirted(p), "{p}");
+        }
+        for p in ["smock_bands-f", "jersey_coat-f", "trousers-f", "boots-m", "cap"] {
+            assert!(!is_skirted(p), "{p}");
+        }
     }
 
     /// Waking seated (the reseed on re-entry, `spring-near`'s settle): the first drawn frame is

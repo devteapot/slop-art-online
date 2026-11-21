@@ -85,6 +85,9 @@ struct Toon {
     // Per surface (style.rs `Surface`): x 1 / tile size (1/m), y strength, z mapping (0
     // triplanar, 1 planar per face).
     layers: array<vec4<f32>, 18>,
+    // A seated character's skirted piece (characters.rs `seat_clamp`, hem-ground): xyz the seat
+    // plane's upward normal, w its offset a margin up; zero on every shared material.
+    seat: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -122,6 +125,20 @@ fn sway(world: vec3<f32>, origin: vec3<f32>, tag: u32, t: f32) -> vec3<f32> {
     let lean = amp * wind * (gust * 0.8 + swing * (0.35 + 0.25 * wind));
     let off = dir * lean + side * amp * wind * (flutter + swing * 0.25);
     return world + vec3<f32>(off.x, -abs(lean) * 0.15, off.y);
+}
+
+// A seated character's skirted cloth stays on the ground's side of its seat (hem-ground): every
+// vertex below the plane in `toon.seat` (a margin above the weighted ground, characters.rs
+// `seat_clamp`) is moved onto it along its normal, so a coat's panel pressed under a thigh lies
+// flat on the ground. Materials without a seat (all shared ones) are untouched. toon_vertex.wesl
+// and toon_prepass.wesl both apply it, so the lines, depth and shadows agree.
+fn seat_clamp(world: vec3<f32>) -> vec3<f32> {
+    let n = toon.seat.xyz;
+    if (dot(n, n) < 0.25) {
+        return world;
+    }
+    let h = dot(n, world) - toon.seat.w;
+    return select(world, world - n * h, h < 0.0);
 }
 
 fn hash3(p: vec3<f32>) -> f32 {

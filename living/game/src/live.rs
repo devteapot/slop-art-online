@@ -727,6 +727,8 @@ fn bodies(
         }
     }
     let gone: Vec<u32> = live.shown.keys().copied().filter(|id| !scene.shown.contains_key(id)).collect();
+    // Where I am by the authority, for saying how far a sitter was when it left sight.
+    let me_last = me.and_then(|m| live.shown.get(&m)).map(|s| s.last);
     for id in gone {
         // Someone I saw die stays where they fell for a while, playing their death. The body row
         // goes in the same update as the death's `my_combat` row, which `combat::ingest` has
@@ -743,6 +745,14 @@ fn bodies(
         }
         // Out of sight (the authority no longer sends them): fade out rather than vanish.
         if let Some(s) = live.shown.remove(&id) {
+            // A sitter whose body leaves sight before the clips have it off the ground (it walks
+            // off at once by the authority while its drawn body still gets up at its seat): its
+            // seat stays on the fading body, which is never let go of in sight.
+            if s.seat.is_some() {
+                let state = if s.sitting { "seated" } else { "getting up" };
+                let far = me_last.map_or(f32::NAN, |m| m.distance(s.last));
+                info!("seat: #{id} leaves sight {state}, {far:.1} m from me by the authority (its seat goes with its fading body)");
+            }
             match fades.get_mut(s.entity) {
                 Ok(mut f) => {
                     let ghost = edge.as_deref().is_some_and(|e| e.ghosts()) && f.target < 1.0;

@@ -48,7 +48,8 @@
 //!   character's joint turns for its first frames (`springwake:` lines), to see the hand-off.
 //! - `seat`: every 3 s, each seated character's lowest cloth tail above its ground
 //!   (`characters::SeatAnchor`; `seat:` lines), with the contact on or off
-//!   (`LIVING_GAME_SEAT_CONTACT=0`).
+//!   (`LIVING_GAME_SEAT_CONTACT=0`) and the hem against the ground on or off
+//!   (`LIVING_GAME_SEAT_HEM=0`: chain roots lifted, skirted pieces clamped, hem-ground).
 //!
 //! The frame is often limited by neither the GPU nor one system but by the render world's
 //! per-batch work: every distinct material and mesh slab is a batch set per view and pass, and

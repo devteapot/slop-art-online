@@ -5205,6 +5205,11 @@ def seat(run, c):
         sat = sorted({int(m) for m in re.findall(r"seat: #(\d+) sits on the ground", L[:after_up])} & set(ids))
         plays = {int(i): clip for i, clip in re.findall(r"seat: #(\d+) sits on the ground .*?, plays (\S+)", L)}
         rose = sorted({int(m) for m in re.findall(r"seat: #(\d+) is off the ground", L[after_up:])} & set(ids))
+        # A sitter whose body left sight while it got up (the authority walks it off at once and
+        # stops sending it past sight, ~11 m, before its drawn rise ends): its seat went with its
+        # fading body (live.rs `leaves sight`). Accounted for, and named apart.
+        left = {int(i): float(d) for i, d in re.findall(r"seat: #(\d+) leaves sight getting up, (-?[\d.]+|NaN) m from me", L[after_up:]) if int(i) in ids and d != "NaN"}
+        seated_left = sorted({int(i) for i in re.findall(r"seat: #(\d+) leaves sight seated", L[:after_up])} & set(ids))
         lows = [(n, int(k), float(v)) for n, k, v in re.findall(r"seat: (.+?) \S+: (\d+) cloth joints, lowest tail (-?[\d.]+|inf) mm", L) if v != "inf"]
         # The seated characters' springs waking as the camera comes back near (their entities, from
         # their seat reports), after they sat.
@@ -5228,7 +5233,7 @@ def seat(run, c):
         if os.path.exists(frames):
             rows = [tuple(map(int, line.split(","))) for line in open(frames) if line.strip()]
         ms = sorted(r[1] / 1000 for r in rows[len(rows) // 4:])
-        arms[arm] = {"sat": sat, "rose": rose, "cloth_lows_mm": lows, "wakes_deg": wakes, "spring_us_per_char_step": springs,
+        arms[arm] = {"sat": sat, "rose": rose, "left_sight_getting_up": left, "left_sight_seated": seated_left, "cloth_lows_mm": lows, "wakes_deg": wakes, "spring_us_per_char_step": springs,
                      "frames": len(ms), "p50_ms": ms[len(ms) // 2] if ms else None, "p99_ms": ms[math.ceil(len(ms) * .99) - 1] if ms else None,
                      "skirt": [i for i in sat if i in who["skirt"]], "coat": [i for i in sat if i in who["coat"]],
                      "plays": {i: plays.get(i) for i in sat}, "selected": {i: want.get(i) for i in sat}}
@@ -5239,7 +5244,8 @@ def seat(run, c):
         d = dump(out, "seated") or {}
         seen = {x["id"] for x in d.get("seen") or []}
         c.check(s, f"{arm}: a skirted and a coated resident sit on the ground in view", arms[arm]["skirt"] and arms[arm]["coat"] and set(sat) <= seen, f"sat {sat} (skirt {arms[arm]['skirt']}, coat {arms[arm]['coat']}); in view {sorted(seen)}")
-        c.check(s, f"{arm}: everyone who sat got up and was let go of the ground after up", up == "up" and sat and rose == sat, f"sat {sat}, off the ground {rose}")
+        c.check(s, f"{arm}: everyone who sat got up and was let go of the ground after up (or left sight getting up, its seat with it)", up == "up" and sat and sorted(set(rose) | set(left)) == sat and not seated_left and len(rose) >= 1,
+                f"sat {sat}, off the ground {rose}, left sight getting up {left} (m from me), left sight seated {seated_left}")
         variant = [i for i in sat if want.get(i) != "sit_ground"]
         c.check(s, f"{arm}: each sitter plays the seated loop its line selects (a variant for {len(variant)}, the original for {len(sat) - len(variant)})",
                 sat and variant and len(variant) < len(sat) and all(plays.get(i) == want.get(i) for i in sat), f"plays {arms[arm]['plays']}, selected {arms[arm]['selected']}")
