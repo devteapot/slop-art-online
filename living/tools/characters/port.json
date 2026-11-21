@@ -71,37 +71,37 @@
    "classes": {
     "adult-f": {
      "faceprop": {
-      "width": 0.885
+      "width": 1.0
      }
     },
     "adult-m": {
      "faceprop": {
-      "width": 0.86
+      "width": 0.935
      }
     },
     "child-u": {
      "faceprop": {
-      "width": 0.93
+      "width": 0.973
      }
     },
     "elder-f": {
      "faceprop": {
-      "width": 0.865
+      "width": 0.957
      }
     },
     "elder-m": {
      "faceprop": {
-      "width": 0.885
+      "width": 0.961
      }
     },
     "youth-f": {
      "faceprop": {
-      "width": 0.885
+      "width": 1.0
      }
     },
     "youth-m": {
      "faceprop": {
-      "width": 0.865
+      "width": 0.95
      }
     }
    }

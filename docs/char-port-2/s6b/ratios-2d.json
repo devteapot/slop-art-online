@@ -1,0 +1,152 @@
+{
+ "about": "S6b's acceptance numbers: the face's width at the cheek row over the eye spacing by the 2D front-render measure (drawing_spread.face_render, ears masked by ear_id.py; face2d.py's portraits), and the 3D slice (face_width.py) reported. unnarrowed = the installed types; face_step = faceprop at the first factors with the ears (fp21h); rederived = the factors from the 2D measure (fp21i). The drawing: 1.751 (review.jpg) and 1.701 (stage-1).",
+ "types": {
+  "adult-f-a": {
+   "unnarrowed_2d": 1.721,
+   "face_step_2d": 1.569,
+   "rederived_2d": 1.707,
+   "unnarrowed_3d": 1.668,
+   "rederived_3d": 1.668
+  },
+  "adult-f-b": {
+   "unnarrowed_2d": 1.724,
+   "face_step_2d": 1.596,
+   "rederived_2d": 1.724,
+   "unnarrowed_3d": 1.787,
+   "rederived_3d": 1.787
+  },
+  "adult-f-c": {
+   "unnarrowed_2d": 1.774,
+   "face_step_2d": 1.648,
+   "rederived_2d": 1.774,
+   "unnarrowed_3d": 1.913,
+   "rederived_3d": 1.913
+  },
+  "adult-m-a": {
+   "unnarrowed_2d": 1.759,
+   "face_step_2d": 1.618,
+   "rederived_2d": 1.671,
+   "unnarrowed_3d": 1.788,
+   "rederived_3d": 1.702
+  },
+  "adult-m-b": {
+   "unnarrowed_2d": 1.802,
+   "face_step_2d": 1.663,
+   "rederived_2d": 1.728,
+   "unnarrowed_3d": 1.866,
+   "rederived_3d": 1.783
+  },
+  "adult-m-c": {
+   "unnarrowed_2d": 1.884,
+   "face_step_2d": 1.744,
+   "rederived_2d": 1.807,
+   "unnarrowed_3d": 1.942,
+   "rederived_3d": 1.873
+  },
+  "child-u-a": {
+   "unnarrowed_2d": 1.778,
+   "face_step_2d": 1.698,
+   "rederived_2d": 1.765,
+   "unnarrowed_3d": 1.754,
+   "rederived_3d": 1.707
+  },
+  "child-u-b": {
+   "unnarrowed_2d": 1.845,
+   "face_step_2d": 1.716,
+   "rederived_2d": 1.782,
+   "unnarrowed_3d": 1.814,
+   "rederived_3d": 1.767
+  },
+  "child-u-c": {
+   "unnarrowed_2d": 1.889,
+   "face_step_2d": 1.76,
+   "rederived_2d": 1.829,
+   "unnarrowed_3d": 2.082,
+   "rederived_3d": 2.026
+  },
+  "elder-f-a": {
+   "unnarrowed_2d": 1.774,
+   "face_step_2d": 1.569,
+   "rederived_2d": 1.707,
+   "unnarrowed_3d": 1.867,
+   "rederived_3d": 1.787
+  },
+  "elder-f-b": {
+   "unnarrowed_2d": 1.81,
+   "face_step_2d": 1.612,
+   "rederived_2d": 1.737,
+   "unnarrowed_3d": 2.038,
+   "rederived_3d": 1.954
+  },
+  "elder-f-c": {
+   "unnarrowed_2d": 1.853,
+   "face_step_2d": 1.669,
+   "rederived_2d": 1.783,
+   "unnarrowed_3d": 2.111,
+   "rederived_3d": 2.032
+  },
+  "elder-m-a": {
+   "unnarrowed_2d": 1.737,
+   "face_step_2d": 1.605,
+   "rederived_2d": 1.679,
+   "unnarrowed_3d": 1.795,
+   "rederived_3d": 1.746
+  },
+  "elder-m-b": {
+   "unnarrowed_2d": 1.774,
+   "face_step_2d": 1.688,
+   "rederived_2d": 1.745,
+   "unnarrowed_3d": 1.87,
+   "rederived_3d": 1.823
+  },
+  "elder-m-c": {
+   "unnarrowed_2d": 1.845,
+   "face_step_2d": 1.754,
+   "rederived_2d": 1.816,
+   "unnarrowed_3d": 1.931,
+   "rederived_3d": 1.891
+  },
+  "youth-f-a": {
+   "unnarrowed_2d": 1.722,
+   "face_step_2d": 1.568,
+   "rederived_2d": 1.708,
+   "unnarrowed_3d": 1.671,
+   "rederived_3d": 1.671
+  },
+  "youth-f-b": {
+   "unnarrowed_2d": 1.744,
+   "face_step_2d": 1.579,
+   "rederived_2d": 1.744,
+   "unnarrowed_3d": 1.768,
+   "rederived_3d": 1.768
+  },
+  "youth-f-c": {
+   "unnarrowed_2d": 1.787,
+   "face_step_2d": 1.644,
+   "rederived_2d": 1.773,
+   "unnarrowed_3d": 1.911,
+   "rederived_3d": 1.911
+  },
+  "youth-m-a": {
+   "unnarrowed_2d": 1.763,
+   "face_step_2d": 1.602,
+   "rederived_2d": 1.689,
+   "unnarrowed_3d": 1.78,
+   "rederived_3d": 1.708
+  },
+  "youth-m-b": {
+   "unnarrowed_2d": 1.798,
+   "face_step_2d": 1.667,
+   "rederived_2d": 1.742,
+   "unnarrowed_3d": 1.859,
+   "rederived_3d": 1.79
+  },
+  "youth-m-c": {
+   "unnarrowed_2d": 1.843,
+   "face_step_2d": 1.723,
+   "rederived_2d": 1.829,
+   "unnarrowed_3d": 1.934,
+   "rederived_3d": 1.877
+  }
+ }
+}

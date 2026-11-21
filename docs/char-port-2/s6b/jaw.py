@@ -1,56 +1,42 @@
-"""S6b: the three jaw lines stay distinct. The face's width with the ears excluded (the face skin's two small connected
-pieces, welded by position, left out whole) where the plane chin + r H cuts its skin triangles, at 0.08, 0.12, 0.15, 0.18 and 0.20 H; per class,
-the lines a/b/c before and after. It slices the surface: the first version took the vertices within 3 mm of the
-height, and where no vertex row of the jaw's back fell in that band (elder-f-b at 0.15 H) it read the jaw 11.8 mm
-narrow and showed a swap that is not there.
+"""S6b: the three jaw lines stay distinct. The face's width with the ears left out (measure3d.ear_triangles) where
+the level plane chin + r H cuts its skin triangles, at 0.08, 0.12, 0.15, 0.18 and 0.20 H; per class, the lines a/b/c
+before and after. (The first version took the vertices within 3 mm of each height and showed a swap on elder-f-b at
+0.15 H that is not there.) Known-answer test: measure3d_selftest.py.
     python3 jaw.py BEFORE_DIR AFTER_DIR OUT.json"""
-import sys, json, glob, os, numpy as np
-sys.path[:0]=['living/tools']
-from merge_primitives import read_glb, read_accessor
-arr=lambda j,b,i: np.array(read_accessor(j,b,i)[0], float)
-ROWS=(0.08,0.12,0.15,0.18,0.20)
-TY=json.load(open('living/tools/characters/types.json'))['types']
-def widths(path,H):
-    j,b=read_glb(path); node=next(n for n in j['nodes'] if n.get('name')=='Face' and 'mesh' in n)
-    names=[j['nodes'][k]['name'] for k in j['skins'][node['skin']]['joints']]; ears=[i for i,n in enumerate(names) if n.startswith('J_Id_Ear')]
-    for p in j['meshes'][node['mesh']]['primitives']:
-        mn=j['materials'][p['material']]['name']; a=p['attributes']
-        if mn.endswith('Face_00_SKIN'):
-            P=arr(j,b,a['POSITION']).reshape(-1,3); Tr=arr(j,b,p['indices']).reshape(-1,3).astype(int)
-            J=arr(j,b,a['JOINTS_0']).reshape(-1,4).astype(int); W=arr(j,b,a['WEIGHTS_0']).reshape(-1,4)
-            earw=sum(np.where(J==e,W,0).sum(1) for e in ears)
-        if 'EyeIris' in mn: I=arr(j,b,a['POSITION']).reshape(-1,3)
-    front=P[(np.abs(P[:,0])<0.006)&(P[:,2]<I[:,2].mean())]; chin=front[:,1].min()
-    at=np.unique(np.round(P*1e6).astype(np.int64),axis=0,return_inverse=True)[1].ravel(); par=list(range(at.max()+1))
-    def root(x):
-        while par[x]!=x: par[x]=par[par[x]]; x=par[x]
-        return x
-    for t in at[Tr]:
-        r=root(t[0])
-        for v in t[1:]: par[root(v)]=r
-    comp=np.array([root(a) for a in at]); ids,cnt=np.unique(comp,return_counts=True); ear_shells=ids[np.argsort(-cnt)[1:3]]
-    Tr=Tr[~np.isin(comp[Tr[:,0]],ear_shells)]
-    out=[]
-    for r in ROWS:
-        h=chin+r*H; xs=[]
-        for e0,e1 in ((0,1),(1,2),(2,0)):
-            A=P[Tr[:,e0]]; B=P[Tr[:,e1]]; s=(A[:,1]-h)*(B[:,1]-h)<=0
-            t=(h-A[s,1])/np.where(np.abs(B[s,1]-A[s,1])<1e-12,1e-12,B[s,1]-A[s,1]); xs.append(A[s,0]+t*(B[s,0]-A[s,0]))
-        xs=np.concatenate(xs); out.append(round(float((xs.max()-xs.min())*1000),1))
-    return out
-res={}
-for lab,d in zip(('before','after'),sys.argv[1:3]):
-    for f in sorted(glob.glob(d+'/*.glb')):
-        t=os.path.basename(f)[:-4]; res.setdefault(t,{})[lab]=widths(f,TY[t]['head']['height_m'])
-cls={}
-for t,v in res.items(): cls.setdefault(t[:-2],{})[t[-1]]=v
-rep={}
-for c,L in sorted(cls.items()):
-    rep[c]={}
-    for k,r in enumerate(ROWS):
-        bef=[L[x]['before'][k] for x in 'abc']; aft=[L[x]['after'][k] for x in 'abc']
-        ok=lambda v: v[0]>v[1]>v[2]
-        rep[c][r]=dict(before=bef,after=aft,order_before=ok(bef),order_after=ok(aft))
-        flag='' if ok(aft) or not ok(bef) else '  <-- order lost'
-        print(f"{c:8s} {r:.2f} H  before {bef}  after {aft}{flag}")
-json.dump(dict(rows_h=ROWS,classes=rep),open(sys.argv[3],'w'),indent=1)
+import glob, json, os, sys
+from pathlib import Path
+
+sys.path[:0] = [str(Path(__file__).resolve().parent)]
+import measure3d as M  # noqa: E402
+
+ROWS = (0.08, 0.12, 0.15, 0.18, 0.20)
+
+
+def widths(path, H):
+    """The face's width in mm at each of ROWS, in head heights H (m) over the chin."""
+    P, T, iris = M.face(path)
+    c = M.chin(P, iris)
+    face = T[~M.ear_triangles(P, T)]
+    return [round(float(M.width(P, face, c + r * H) * 1000), 1) for r in ROWS]
+
+
+if __name__ == "__main__":
+    TY = json.load(open(Path(__file__).resolve().parents[3] / "living/tools/characters/types.json"))["types"]
+    res = {}
+    for lab, d in zip(("before", "after"), sys.argv[1:3]):
+        for f in sorted(glob.glob(d + "/*.glb")):
+            t = os.path.basename(f)[:-4]
+            res.setdefault(t, {})[lab] = widths(f, TY[t]["head"]["height_m"])
+    cls = {}
+    for t, v in res.items():
+        cls.setdefault(t[:-2], {})[t[-1]] = v
+    rep = {}
+    for c, L in sorted(cls.items()):
+        rep[c] = {}
+        for k, r in enumerate(ROWS):
+            bef = [L[x]["before"][k] for x in "abc"]
+            aft = [L[x]["after"][k] for x in "abc"]
+            ok = lambda v: v[0] > v[1] > v[2]  # noqa: E731
+            rep[c][r] = dict(before=bef, after=aft, order_before=ok(bef), order_after=ok(aft))
+            print(f"{c:8s} {r:.2f} H  before {bef}  after {aft}{'' if ok(aft) or not ok(bef) else '  <-- order lost'}")
+    json.dump(dict(rows_h=ROWS, classes=rep), open(sys.argv[3], "w"), indent=1)

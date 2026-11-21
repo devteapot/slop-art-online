@@ -1,13 +1,42 @@
 # char-port-2 · S6b · Face proportions: the ears and the final checks, and a measure corrected
 
 **Status (2026-11-21): not final.**
-- **Done:** the blink close-up (the GC's (a), with a fix in the eye ink), the ears step, and the final checks below.
-- **The face-width measure was wrong, so the face step's acceptance must be decided again ([below](#the-face-width-measure-corrected)).** By the corrected measure the face step narrowed the faces too far: mean 1.69 against the target's 1.75, and the round line's women to 1.49.
-- **The bundle is not built:** it waits for that decision.
+- **The GC's acceptance:** the 2D front-render measure, ears masked by the ID render ([below](#the-acceptance-the-2d-front-render-measure)).
+- **Done:** the known-answer tests, and the factors re-derived on it. The blink and ears steps are done.
+- **Next:** the two must-fixes (the lid-ink density warnings, the 7 value-end faults), the hair-over-cheek re-check per S6 cut, the full check list on the re-derived factors, the four-body portraits, and the bundle.
 
 Everything here is behind `SLOP_PORT=faceprop`, with S1–S4's port (`jaw,jaw_shell,paint,neck,ink`). With the flag off, a type (adult-f-b: its file and shadow map) and a body (the woman) are byte-identical to before; the body's file differs only in the names of its own pictures.
 
-## The face-width measure, corrected
+## The acceptance: the 2D front-render measure
+
+**The measure** (the GC's, 2026-11-21): the face's width at the cheek row over the eye spacing, measured as `drawing_spread.py` measures Cora's drawing, on the game's front portrait.
+- **The ears are masked by an ID render:** [ear_id.py](ear_id.py) makes a copy of each type whose ears draw pure magenta; [face2d.py](face2d.py) draws each type as a composed person with no hair at image_spread.py's portrait (`idle@2.0`, `0:8:0.36:0.88`); `drawing_spread.face_render` takes the skin run on the cheek row from the face's centre, stopping at the ear's front edge, as the drawing's run stops at the line before her ear ([face2d_measure.py](face2d_measure.py)).
+- **The drawing:** 1.751 (review.jpg) and 1.701 (stage-1's copy). The target is 1.75.
+- **The 3D slice** ([face_width.py](face_width.py)) is reported. It reads higher (mean 1.818 against 1.749 on the re-derived types): it takes in the head's side behind the ear's front edge, which the front view hides behind the ear.
+
+**Known-answer tests** (the GC's standing rule, now in [PLAN.md](../PLAN.md) §7): every tool here passes one before its numbers are used.
+- [measure3d_selftest.py](measure3d_selftest.py): `face_width.py`, `jaw.py`, `ears.py` and `ear_id.py`, on synthetic heads of analytic width with ears (across the cheek row and above it), a nose and irises: 29 checks pass. It caught one assumption on the way, now written into `measure3d.chin`: the chin is found in front of the irises, so the irises must sit behind the face's front, as the generator's do.
+- [../s6/drawing_spread_selftest.py](../s6/drawing_spread_selftest.py): `drawing_spread.py`'s drawing measure, `render` (image_spread.py's) and `face_render`, on synthetic pictures (a drawing with ink lines before the ears; a render with the ears joined; its ear-ID copy, shaded and plain; no ears): 15 checks pass. The S6 drawing results are unchanged by the refactor.
+
+**The factors, re-derived** ([ratios-2d.json](ratios-2d.json)):
+- **The rule:** from each type's two measured points (unnarrowed, and the face step), the ratio's change per unit of narrowing; each class's factor set so its mean is 1.75. The children take half the narrowing that would bring them there.
+- **The women need none:** adult-f and youth-f are at 1.740 and 1.751 unnarrowed. The old tool's 1.90 counted part of the ear.
+
+| Class | Factor (face step → now) | Unnarrowed (a / b / c) | The face step | **Re-derived** | Mean |
+|---|---|---|---|---|---|
+| adult-f | 0.885 → **1.0** | 1.721 / 1.724 / 1.774 | 1.569 / 1.596 / 1.648 | **1.707 / 1.724 / 1.774** | 1.735 |
+| adult-m | 0.86 → **0.935** | 1.759 / 1.802 / 1.884 | 1.618 / 1.663 / 1.744 | **1.671 / 1.728 / 1.807** | 1.735 |
+| child-u | 0.93 → **0.973** | 1.778 / 1.845 / 1.889 | 1.698 / 1.716 / 1.760 | **1.765 / 1.782 / 1.829** | 1.792 |
+| elder-f | 0.865 → **0.957** | 1.774 / 1.810 / 1.853 | 1.569 / 1.612 / 1.669 | **1.707 / 1.737 / 1.783** | 1.742 |
+| elder-m | 0.885 → **0.961** | 1.737 / 1.774 / 1.845 | 1.605 / 1.688 / 1.754 | **1.679 / 1.745 / 1.816** | 1.747 |
+| youth-f | 0.885 → **1.0** | 1.722 / 1.744 / 1.787 | 1.568 / 1.579 / 1.644 | **1.708 / 1.744 / 1.773** | 1.742 |
+| youth-m | 0.865 → **0.95** | 1.763 / 1.798 / 1.843 | 1.602 / 1.667 / 1.723 | **1.689 / 1.742 / 1.829** | 1.753 |
+
+- **Every adult class's mean is within 0.015 of 1.75;** the children 1.792.
+- **The women's a lines read 1.707 with no narrowing,** against 1.721 unnarrowed: the ears step's longer ears reach the cheek row further forward.
+- **Variety:** over the 21 types, 1.721–1.889 (standard deviation 0.050) unnarrowed, **1.671–1.829 (0.047)** re-derived. The lines keep their order, a < b < c, in every class.
+
+## The face-width measure, corrected (3D; superseded as the acceptance by the 2D measure above)
 
 **What was wrong:** the first [face_width.py](face_width.py) left the ears out by their bone weights: the vertices within 3 mm of the cheek row weighing under 0.5 on the ear bones counted as face.
 - The ear's own lower front vertices weigh less than that.
