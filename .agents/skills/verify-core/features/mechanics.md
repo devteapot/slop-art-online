@@ -56,16 +56,55 @@ Two gate flakes on 2026-11-20 (`gate-1120141655-c45a27-a-mechanics`, `gate-11201
 - **Force: a threat is perceived.** `threatened` holds only while a threaten is under way against the walker (phase 1 of its activity, 2 s; `living/authority/src/brain.rs`), and G must evaluate its graph inside that window. Under load G perceived the threat ("a stranger threatens you, fists raised") but never yielded within the 15 s wait. F now threatens in a loop (`first` of the threaten and a 1 s wait, as the killing scene attacks) until G gives in, the wait is 30 s, and F is set idle after.
 - **Force: a wolf does not dare.** Found while proving the two fixes (four parallel fresh worlds, `mechflake-3`): the wolf, just placed beside I, did not see I yet ("stuck: attack: no #I in sight"), so its one-step attack gave up and never balked. The wolf now attempts in the same loop until it balks (20 s), and is set idle after as before.
 
+### Walkers that walk apart, and a fish spoiled in the grant
+
+Gate flakes on 2026-11-20 (`gate-1120231507-0192e9-a-mechanics`: tending; earlier, the tablet chain as in `core-1004`) and their causes (branch `mechanics-flake-2`). All come from 64 fresh worlds of main's module, 4 at a time on a scratch server under the gate's load (`gate-mf2-*-mechanics`; the table below). Each check now waits for its own actors' result, and the driver puts them back together where a scene starts. A failure is still a failure: no check is retried until it passes.
+
+- **Tending wounds.** The blow and the care never started: A and B were 14 to 17 m apart, out of A's sight, when A was told to attack. Two looser checks had let the scene move on while A was still busy:
+  - **planting** passed on any new resource node, and other characters plant too, so A was still walking to its bush;
+  - **conception** passed on any `expecting` row, an animal's included.
+
+  B was placed beside A on the way, and the shelter went there; A then walked on to its bush.
+  - **Fixed:** planting waits for a new berry bush within 3 m of A's chosen spot, and conception for an `expecting` row of A with B.
+  - **Before the blow:** if A and B are more than 2 m apart, B is placed beside A again, and the driver prints that it was (`tending: B was … m from A; placed beside A again`).
+  - **Diagnosis kept:** the tending line prints A's stamina and the A–B distance. On a failure the driver dumps A's feedback and activity.
+- **The tablet chain** (tablet, reading, spear, trade, teaching, and the checks downstream). B was 26 m from A when the give was due. The walkers forage on their spawn graphs, and B was placed beside A before seven setup calls (about a second each under load) and only then set idle. Each give failed, and the sequence went back to its first step: "Walker1 wrote a tablet (×6)".
+  - **Fixed:** A and B are set idle before B is placed. Before the write-and-give, the driver checks the gap and places B again, saying so.
+  - **Diagnosis kept:** the setup line prints the gap. On a failure the driver prints both positions and A's feedback.
+- **Act: conception chosen by both** (C and D; `gate-mf2-d1-3`, `f3-4`). The same setup order: C and D were placed beside A, then the grants ran, and only then were they set to rest. Now they rest first, and D is placed beside C again (said) if they are more than 2 m apart before the two conceive acts. On a failure the driver prints their distance and what each was told.
+- **A fish spoiled between the grant and the read-back** in the smoking scene's `reset_pack` (3 granted, 2 read). It raised, and the whole driver stopped with no results. A shortfall is now topped up before the pack is compared.
+- **Planting, without the loose check, failed once on its own** (`gate-mf2-p4-1`): Walker1 never planted in 90 s while nine others planted 66 bushes. The old check had hidden this. On a failure the driver now prints A's position against the bush, its feedback and its activity, for the next occurrence.
+- **Not fixed here:**
+  - **The threat check** waits on the authority's stuck-activity fix (the Spark's).
+  - **The wolf check failed 3 of 64** (`gate-mf2-d1-2`, `d2-3`, `p4-3`). In `p4-3` the wolf saw I and J 2 to 3 tiles away right after it was placed, and was 14.3 m from I at the end of its 20 s, with no balk and no activity: it walked off before its attack was refused for not daring. On a failure the driver now prints the wolf's distances, activity and feedback.
+  - **"Road, wall and gate built" failed once** (`gate-mf2-p3-3`, the gate not built in 60 s). It now prints A's place, the target tiles, the nodes near them and A's feedback on a failure.
+
+The rounds: `d` on main's driver with diagnostics only; `p` while the fixes went in (the tending and planting fixes from `p1`, the C/D order after `f3`); `f` and `g` on the driver as merged, `g` with the C/D fix. Every run that was not 23/23:
+
+| Round | 23/23 | Failing keys |
+|---|---|---|
+| d1 | 2/4 | wolf; the tablet chain (16/23: tablet, reading, spear, trade, teaching, act conception, death) |
+| d2 | 3/4 | wolf |
+| d3 | 2/4 | tending ×2 (A–B 13.96 and 16.70 m at the blow) |
+| p1, p2, p5 | 4/4 each | |
+| p3 | 3/4 | road, wall and gate built (21/22) |
+| p4 | 2/4 | wolf; planting (Walker1 never planted) |
+| p6 | 3/4 | the tablet chain (18/23; B 26 m away) |
+| p7 | 3/4 | the driver stopped in `reset_pack` (a fish spoiled; 0/0) |
+| f1, f2 | 4/4 each | |
+| f3 | 3/4 | act: conception chosen by both |
+| g1, g2, g3 | 4/4 each | |
+
 ### Recognize and investigate intermittent failures
 
 The preserved `core-1004-proof-mechanics` run passed 16/23 on unchanged product code. It failed tablet transfer, reading, spear crafting, trade, teaching, deliberate conception and expecting-parent retention. Its tablet stayed with Walker1. Walker2 later reported "You failed to accept → Walker1: they moved away". The fresh fix-round runs also retain blocked-path refusals between walkers. Read [the validation record](../references/validation/history.md) for the exact failed keys, outputs and fresh-run counts.
 
 Keep `mechanics.json`, `mechanics.txt` and `stdb-actions.jsonl` for every attempt. A mixed pass count on fresh databases is evidence of intermittent behavior, not permission to waive a failure. Check whether the first failed operation explains later missing rows. Compare actor feedback, positions, inventory, installed graphs and pregnancies before blaming each dependent skill.
 
-`living/authority/src/lib.rs:142,143` and `living/authority/src/seed.rs:869-870` randomize walker placement and genes. `living/authority/src/lib.rs:151` installs their forager repertoire. `living/tools/verify_mechanics.py:77,79` waits before scene setup, and C through J keep their instincts until their later scenes. `place_near` (`living/authority/src/lib.rs`) puts a character 1 m east of its target only when that tile is walkable and free, else on the nearest free walkable tile of the target's ground within 6 m (since `fix-place-free`, 2026-11-11; before, it placed one tile east without checking terrain). `living/authority/src/act.rs:974` rejects a target that moved during an action. `living/authority/src/brain.rs:374,384` resets a failed sequence to its first step, so a failed give can cause repeated writes. Timing, terrain and live neighbours are plausible contributors. A passing rerun does not identify which one caused a preserved failure.
+`living/authority/src/lib.rs:142,143` and `living/authority/src/seed.rs:869-870` randomize walker placement and genes. `living/authority/src/lib.rs:151` installs their forager repertoire. The driver sets A and B idle before placing B beside A (since `mechanics-flake-2`); C through J keep their instincts until their later scenes. `place_near` (`living/authority/src/lib.rs`) puts a character 1 m east of its target only when that tile is walkable and free, else on the nearest free walkable tile of the target's ground within 6 m (since `fix-place-free`, 2026-11-11; before, it placed one tile east without checking terrain). `living/authority/src/act.rs:974` rejects a target that moved during an action. `living/authority/src/brain.rs:374,384` resets a failed sequence to its first step, so a failed give can cause repeated writes. Timing, terrain and live neighbours are plausible contributors. A passing rerun does not identify which one caused a preserved failure.
 
 The gift predicate at `living/tools/verify_mechanics.py:197` accepts any berries in D's inventory, including the three spawn berries and instinct gathering. Its success-feedback check at `living/tools/verify_mechanics.py:199` can match the preceding eat act. A reported gift PASS can coexist with "give berries: the way is blocked". Read the complete inventory and feedback before counting a gift effect.
 
-The conception predicate at `living/tools/verify_mechanics.py:141` accepts any expecting row. Unrelated animal pregnancies can satisfy it before the walkers finish eating and conceiving. The next scene replaces their graphs at `living/tools/verify_mechanics.py:147,148`. The death check at `living/tools/verify_mechanics.py:331,337` requires an actual walker pregnancy, so it can fail downstream. Record this false-positive risk separately from a broken conception or death rule.
+The conception check accepted any expecting row until 2026-11-21. It now waits for an `expecting` row of the two walkers themselves (above), so an animal's pregnancy no longer passes it. The death check needs an actual walker pregnancy too, so a real conception failure shows in both.
 
 To check reproducibility, repeat the mechanics recipe in [SKILL.md](../SKILL.md) at least four times. Give each attempt a fresh `$R-mechanics-1` through `$R-mechanics-4` name and a fresh `verify-core-*` database. Keep all counts and failing keys. If a failure repeats with the same installed graph, valid placement, inventory and actor-specific preconditions, isolate that operation on a fresh scene and treat it as a possible regression. Consistent Cargo failures or the same refusal under controlled preconditions also need investigation. Intermittent mechanics failures stay `FAIL`; only documented product defects such as yielded-healthy seize use `XFAIL KNOWN ISSUE`.
