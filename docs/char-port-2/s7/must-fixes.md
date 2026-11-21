@@ -183,3 +183,39 @@ The band's tolerance is not widened.
 - **The tolerances are not widened.**
 
 **Candidate (c), recorded:** fit the master to the head's depth (its rear stations scaled by the head's own rear depth), so a deeper head keeps the cut within its tolerances. Whether (c) belongs in S8 depends on how many of the town's heads the master fails on. See the town check below.
+
+### The town check: the master on every head the town could give it
+
+**The pool and the rule.** Cullet's town is 64 residents (`town-s6/town.json`, name `cullet`). Under the current pool rule no resident draws `swept_braid`: `person_params.HAIR_STYLES`, which people are drawn from, leaves the masters out, and a master comes only by an explicit `--set hair.style=`. **Under that rule: 0 heads.** To give S8 the number that matters, each resident was checked with the style forced on (their own params, `--set hair.style=swept_braid`). [swept_braid_check.py](swept_braid_check.py) runs `person.py` up to the master's own tolerance check and stops, about 15 s a head.
+
+**Result: 0 of 64 pass (100% fail), the women and girls 0 of 32.**
+
+| Line | Residents | Rear depth (0.49–0.57) | Spread over the face (1.906–2.106) |
+|---|---|---|---|
+| adult-f-a | 7 | 0.679 | 2.000 |
+| adult-f-b | 5 | 0.679 | 2.021 |
+| adult-f-c | 8 | 0.670 | 1.954 |
+| adult-m-a | 8 | 0.648 | 1.985 |
+| adult-m-b | 7 | 0.651 | 1.978 |
+| adult-m-c | 6 | 0.636 | 1.917 |
+| child-u-a | 6 | 0.693 | 2.014 |
+| child-u-b | 3 | 0.694 | 2.078 |
+| child-u-c | 2 | 0.689 | 2.028 |
+| elder-f-b | 3 | 0.677 | **2.157** |
+| elder-m-b | 1 | 0.647 | 1.960 |
+| elder-m-c | 2 | 0.632 | 1.924 |
+| youth-f-b | 1 | 0.679 | 2.020 |
+| youth-f-c | 1 | 0.670 | 1.954 |
+| youth-m-a | 1 | 0.650 | 1.977 |
+| youth-m-b | 2 | 0.653 | 1.972 |
+| youth-m-c | 1 | 0.655 | **1.891** |
+
+- **Every head fails on rear depth:** 0.632–0.694. Four also fail on spread: elder-f-b's three residents at 2.157, and youth-m-c's one at 1.891. Crown lift is within on all (0.118–0.128). Every resident's results are in [final/swept_braid-town.json](final/swept_braid-town.json).
+- **The value is the same for every resident of a line**, whatever their face values, age, build or hair.
+- **The base figure passes, at the edge.** adult-f-b's base figure (`--variant type:adult-f-b`: identity 0, the band's build) reads rear depth 0.567, just inside 0.57. A resident of the same line reads 0.679.
+- **Probes that don't move it:**
+  - the outfit (smock, coat or none);
+  - age (32 or 55);
+  - seed;
+  - the hair's own settings (length, volume, fringe, curl, parting).
+- **So the cause is something on the resident path, constant within a line, that the base figure lacks.** It is not yet found. Candidate (c), fitting the master to head depth, may not be the right remedy until it is.
