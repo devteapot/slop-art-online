@@ -1,6 +1,6 @@
 # Attention budget: who a character keeps track of (design note, v2)
 
-Status: **design only, v2**, 2026-11-22, branch `attention-budget-v2` (Spark), from `origin/main` `a6375a70`. v1 is in history at `a6375a70` (merged from `attention-budget` `112a42bf`). Nothing is built: no law, table, reducer, view, prompt or default changes, and no experiment has run.
+Status: **design only, v2 with v2.1 amendments**, 2026-11-22. v2 was written on branch `attention-budget-v2` (Spark) from `origin/main` `a6375a70`; the v2.1 amendments below are on `attention-exp`, beside the selector they describe. v1 is in history at `a6375a70` (merged from `attention-budget` `112a42bf`). Nothing is built: no law, table, reducer, view, prompt or default changes, and no experiment has run.
 
 **Why v2.** The owner answered v1 on 2026-11-22:
 - on "always in": "can we make this selective? the mind decides who to track, not hardcoded";
@@ -15,6 +15,60 @@ The general coordinator turned that into three changes:
 3. **Salience is information, not an order.**
 
 Plus an experiments section with stop rules. What v1 established is kept: the crowd, promotion with a told reason, the memory consequences, the cost model and the hidden 14-nearest cap in minds' scenes.
+
+## v2.1: amendments after dev-box's answers (2026-11-22)
+
+dev-box answered §12 from main's code (`docs/ATTENTION_BUDGET_DEVBOX_ANSWERS.md` on `attention-budget-devbox` `8a9f8d6a2`). The general coordinator accepted points 1–5 and 7 as written and narrowed point 6. **Where this section and the text below differ, this section holds.** The selector on `attention-exp` (`living/rules/src/heed.rs`) implements it.
+
+**Names.** "attention" already names the gaze band (`authority/src/attention.rs`, `human_gaze`) and the cues (docs/ATTENTION.md); "crowd" names the `crowd_sweep_n` and `crowd_frame_max_ms` laws. In code and from here on:
+
+| This note's v2 word | Name in code |
+|---|---|
+| attention, attend, attended | **heed**, heeded (`living_rules::heed`) |
+| attention policy, `"attend"` reply field | heed policy, `"heed"` field |
+| attention instinct (`attend_person`, …) | heed instinct, `heed_person`, … in `living/seeds/heed.json` |
+| `attention_capacity(a)`, its knack | `heed_capacity(a)`, `heed_knack()` (`watch`) |
+| `attend_on`, `attend_ceiling` | `heed_on`, `heed_ceiling`; and `heed_contact_s` (new, below) |
+| `attend_policy`, `attend_pick`, `attend_effect` | `heed_policy`, `heed_pick`, `heed_effect` |
+| conditions `attended_s`, `acting_on_attended` | `heeded_s`, `acting_on_heeded` |
+| the crowd, `seen_crowd`, the scene's `crowds` | the **throng**, `seen_throng`, the scene's `throngs` |
+| `human_attend`, `mind_attend` | `human_heed`, `mind_heed` |
+
+**1. Forced individuals: contact, not anticipation** (the general coordinator's version of dev-box's point 6). Two kinds of creature are individuals whatever the policy and outside the capacity:
+- **(i) whoever the character is acting on.** Mechanical: one cannot strike a throng figure.
+- **(ii) whoever made contact with it in the last `heed_contact_s` seconds** (a value-only world law, 4 s in the shipped script): a blow of theirs that landed on it, or that it blocked or dodged. Being struck is a percept the body delivers, like today's `attacked` line. After contact one knows who hit one, if they are in sight; if not, it is "struck from somewhere you could not see", as the missile rule already says.
+
+**Not forced:** "winding up at me" and "closing on me". Anticipation is the policy's, through the instinct, which puts them first. A mind that dropped them, or an untrained one with full places, can genuinely be ambushed or flanked: the first blow lands from someone it wasn't tracking, and then the attacker becomes an individual. That is what makes capacity and the `watch` skill matter, and what E4's "blows from unheeded attackers" measures: first blows, not repeated invisible ones. So there are no invisible repeated blows, and "the mind decides" holds for everything before contact. This replaces v1's engaged overflow and §1's "no overflow" row. The instinct (§2.4) drops its `acted_on` rule, now forced.
+
+**2. Hysteresis is seed content.** A rule may carry `"hold_s"`: what it took stays for that long after the rule last took it on its own merit, unless a better rule needs the place. The engine provides only the mechanism (`Held`, `Pick::held`); the instinct sets 5 s on its threat, speaker, watch-for and family rules and 3 s on "who is close" and the score rule. This replaces §2.3's engine-wide `attend_hold_ms`. E3(a) measures the instinct with and without its holds (docs/ATTENTION_E3.md).
+
+**3. Only players have a perceived set** (dev-box point 1). `perceived`, `projected` and the copies exist only for players (`perception::sweep`, `combat::humans`). AI characters and every rule check call the sight rule afresh through `perception::Sensing`.
+- **Players:** the heeded set can replace `far_cap`'s trim at the same point in `sweep_one`, and every copy, tier, cue and frame follows from it. A sight set kept beside the scene in module memory (`Viewer.sight`) serves earshot, the heard-row exclusion and keep margins.
+- **Minds (E4's authority side):** a new heeded set in module memory, keyed by actor. Every `Sensing` reader that should see individuals consults it: graph `Sees`, `Count` (individuals and throng), `Doing`, `Threatened`, the `Nearest`/`Id` targets, cues and first sights, and `scene_json`.
+- **Writers that call `in_sight` directly** must name throng members as throng: speech hearers, fight folds, witness percepts, the combat feed, the fast lane.
+- The selector takes a per-character field of candidates and returns the heeded set, whichever caller asks.
+
+**4. Throng members stay anonymous on every path** (dev-box points 3–5).
+- The combat feed masks actor and target by sight only today; it must mask a throng member too. So must `my_earshot` and the experience lines.
+- **Earshot keeps reading SIGHT, not heed.** `show_earshot` tells a player who hears them, and under-reporting it is a speech-consent problem.
+- **A mind's on-stage detection** (`mind/src/mind.rs`) must count a player in its throng as present, so the level of detail and the rethink gate do not take it off stage.
+- Throngs stay in their own `throngs` array in a mind's scene, never among `creatures` without an id, so recall builds no `person:null` key.
+
+**5. The cost table is an extrapolation** (dev-box point 2). The per-pair cost is not constant: about 2 µs a tick at about 58 in sight, 10.6 µs at about 166 (docs/COMBAT_PHASE.md, Part A). §6's table applies one i to C = 60 and C = 200 alike, and is extrapolated from one density pending E2. dev-box proposes a `far_cap` sweep (0, 48, 32, 16, 8) that would measure the near and far marginal costs and their dependence on C.
+
+**6. `human_heed` shape** (dev-box point 7; SpacetimeDB docs read 2026-11-22: [reducers](https://spacetimedb.com/docs/functions/reducers/), [reducer context](https://spacetimedb.com/docs/functions/reducers/reducer-context), [column types](https://spacetimedb.com/docs/tables/column-types), all version 2.0.0; tuples are not among the listed types and `spacetimedb-sats` 2.14.1 implements no `SpacetimeType` for them, per dev-box's source reading):
+
+```rust
+#[derive(SpacetimeType)]
+pub struct HeedInput { pub pins: Vec<u32>, pub focus: u32 /* 0: none */ }
+#[spacetimedb::reducer]
+pub fn human_heed(ctx: &ReducerContext, input: HeedInput) -> Result<(), String>
+```
+
+- No character argument: the caller's own character comes from `ctx.sender()`, like the other `human_*` reducers.
+- **Hover stays on the client** (a predicted highlight). Only pin and focus changes are sent, batched by the client: one call per change, at most one every 250 ms. Each call spends an input token (`input_hz` / `input_burst`), so alternating reducers cannot raise a client's input rate.
+- The authority derives a player's target from its own aimed acts, `use_skill` targets and the talk addressee, without a call.
+- A click on a throng figure is a `focus` on the nearest throng member at that point, through `pick.rs`.
 
 ## 0. In short
 
