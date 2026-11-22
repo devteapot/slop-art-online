@@ -11,7 +11,8 @@
 //! merit (for its rule's hold), how long each has been heeded and in sight. A full pass runs at
 //! most once per [`PASS_MS`] per character, from its behaviour evaluation (or from any reader that
 //! finds the set older than [`STALE_MS`]); between passes the event pass (`heed::admit`) takes a
-//! windup aimed at it, a creature coming into a full scene, and a cue's match.
+//! windup aimed at it, words to it and a cue's match (contact is forced). Coming into sight and
+//! moving are not events: E2 measured that re-rank too costly in a battle.
 //!
 //! **Forced, outside the capacity, whatever the policy:** whoever the character acts on (its
 //! activity's or move's target) and whoever made contact with it within `heed_contact_s` (a blow
@@ -303,21 +304,18 @@ pub fn pass(ctx: &ReducerContext, me: &Character, at: (f32, f32), seen: &[NearCr
 }
 
 /// `seen` split into the individuals and the throng for `me` (both nearest first, as given): a
-/// full pass when one is due ([`PASS_MS`]), else the event pass for whoever came into sight since
-/// the last. Unchanged (all individuals) when heed does not apply.
+/// full pass when one is due ([`PASS_MS`]). Unchanged (all individuals) when heed does not apply.
 pub fn split(ctx: &ReducerContext, me: &Character, at: (f32, f32), seen: Vec<NearCreature>, now: u64) -> (Vec<NearCreature>, Vec<NearCreature>) {
     if !applies(ctx, me.id) {
         return (seen, Vec::new());
     }
     let due = HEED.with(|m| m.borrow().get(&me.id).map_or(true, |s| s.pass_ms == 0 || now.saturating_sub(s.pass_ms) >= PASS_MS));
+    // Between passes no re-ranking for whoever came into sight or moved: dev-box's E2 (docs/
+    // ATTENTION_E2_COST.md, Q10) measured a per-move re-rank at 0.6-0.9 s/s of the database thread
+    // in a battle. Only the one aiming at the character, contact, words to it and a cue's match
+    // are events; everyone else waits for the 1 Hz pass.
     if due {
         pass(ctx, me, at, &seen, now);
-    } else {
-        // Coming into sight is an event: each newcomer gets the event pass.
-        let new: Vec<NearCreature> = HEED.with(|m| m.borrow().get(&me.id).map(|s| seen.iter().filter(|c| !s.in_sight.contains_key(&c.id)).cloned().collect()).unwrap_or_default());
-        for c in &new {
-            event(ctx, me, at, c, now, |_| {});
-        }
     }
     let (mut ind, mut thr) = (Vec::with_capacity(seen.len()), Vec::new());
     HEED.with(|m| {

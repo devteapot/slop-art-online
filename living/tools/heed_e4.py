@@ -104,12 +104,31 @@ def classify(outcome):
     return "other"
 
 
-def measure(d):
+def load_window(d, loads):
+    """The host's 1-minute load at its highest within the instance's run (its actions log, first
+    line to the mind's stop), from `<loads>/load-<batch>.log` (epoch seconds, then the three loads)."""
+    import datetime
+    d = Path(d)
+    log = Path(loads) / f"load-{d.parent.name}.log"
+    acts = (d / "actions.log").read_text().splitlines() if (d / "actions.log").exists() else []
+    if not log.exists() or not acts:
+        return None
+    day = json.loads((d.parent / "batch.json").read_text())["started"][:10]
+    stamp = lambda hms: datetime.datetime.fromisoformat(f"{day}T{hms}").timestamp()
+    t0 = stamp(acts[0][:8])
+    t1 = next((stamp(a[:8]) for a in acts if "mind stopped" in a), stamp(acts[-1][:8]))
+    vals = [float(x.split()[1]) for x in log.read_text().splitlines() if x.strip() and t0 <= float(x.split()[0]) <= t1]
+    return max(vals) if vals else None
+
+
+def measure(d, loads=None):
     run = pack_arena.load(d)
     base = pack_arena.measure(run)
     S, P, W = run["samples"], set(run["people"]), set(run["wolves"])
     out = {"dir": str(d), "arm": run["arm"], "variant": run["trial"]["variant"], "M2": base.get("M2", {}), "M5": base.get("M5", {}), "M6": base.get("M6", {}),
            "stopped_by": base.get("stopped_by"), "sample_hz": base.get("sample_hz")}
+    out["load_max"] = load_window(d, loads) if loads else None
+    out["valid"] = out["load_max"] is None or out["load_max"] <= 8.0
     if not S:
         return out
     # Subject-minutes from the first wolf windup at any subject to each subject's death or the end.
@@ -178,8 +197,8 @@ def measure(d):
 
 KEYS = [("heed", "first_unheeded_per_subject_min"), ("heed", "first_unheeded_share"), ("heed", "first_unseen"), ("heed", "later_unheeded"),
         ("heed", "windups_heeded_share"), ("M2", "rear_blow_share"), ("M2", "encircled_share_k3"), ("reactions", "per_windup"),
-        ("subjects_blows", "landed"), ("M5", "people_dead"), ("M5", "wolves_dead"), ("M5", "people_health_lost"), ("M5", "wolf_health_lost"),
-        ("M6", "duration_s"), ("capacity", "median"), ("capacity", "share_at_capacity"), ("capacity", "cap_lost_median"), ("capacity", "health_lost_median")]
+        ("subjects_blows", "begun"), ("subjects_blows", "landed"), ("reactions", "windups"), ("M5", "people_dead"), ("M5", "wolves_dead"), ("M5", "people_health_lost"), ("M5", "wolf_health_lost"),
+        ("M6", "to_first_blow_s"), ("M6", "duration_s"), ("capacity", "median"), ("capacity", "share_at_capacity"), ("capacity", "cap_lost_median"), ("capacity", "health_lost_median")]
 
 
 def table(results):
@@ -201,9 +220,13 @@ def table(results):
 
 def report(a):
     dirs = list(pack_arena.instances(a.dirs))
-    results = [measure(d) for d in dirs]
+    results = [measure(d, a.loads) for d in dirs]
+    dropped = [r["dir"] for r in results if not r["valid"]]
+    if dropped:
+        print(f"left out (load over 8 in the run's window): {dropped}")
+    results = [r for r in results if r["valid"]]
     t = table(results)
-    out = {"instances": results, "arms": t}
+    out = {"instances": results, "arms": t, "left_out_for_load": dropped}
     if a.control:
         out["differs_from_control"] = pack_arena.decide(t, a.control)
     bad = sum(r["repeat_invisible_total"] + r["invariant_lines_total"] for r in t.values())
@@ -251,6 +274,7 @@ def main():
     r.add_argument("dirs", nargs="+")
     r.add_argument("--control")
     r.add_argument("--json")
+    r.add_argument("--loads", help="the series' load logs (load-<batch>.log): runs whose window passed load 8 are left out")
     r.set_defaults(f=report)
     sub.add_parser("selftest").set_defaults(f=selftest)
     a = ap.parse_args()
