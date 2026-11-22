@@ -56,6 +56,12 @@ def parse_arm(arm):
     return parts[0], (parts[1] if len(parts) > 1 else "v2"), (int(parts[2][1:]) if len(parts) > 2 else 0)
 
 
+def mixed(arm):
+    """A fourth part `m`: the fixture's `sides_mixed_defence` (block and dodge alternate within each
+    side, instead of one defence per side by id parity)."""
+    return arm.split(".")[3:4] == ["m"]
+
+
 def script_for(arm, side_a):
     base, _, _ = parse_arm(arm)
     src = (ROOT / "living/scripts/skills.rhai").read_text()
@@ -98,6 +104,8 @@ def one(a, arm, rep, out):
         base, inst, rot = parse_arm(arm)
         # Which side the first (lowest-id) fighter joins, set before the fighters are made.
         S.call(db, "set_world_law", ["sides_first", json.dumps(rot)])
+        if mixed(arm):
+            S.call(db, "set_world_law", ["sides_mixed_defence", "true"])
         S.call(db, "spawn_battle_sides", [FIGHTERS, 2])
         sides = {c["id"]: c["name"] for c in S.sql(db, "SELECT id, name FROM community") if c["name"] in ("Side A", "Side B")}
         member = {m["member"]: sides[m["community"]] for m in S.sql(db, "SELECT member, community FROM membership") if m["community"] in sides}
@@ -109,7 +117,7 @@ def one(a, arm, rep, out):
         code, body = S.http(f"/v1/database/{db}/call/install_script", [source])
         if code != 200:
             raise RuntimeError(f"install_script: {code} {body[:300]}")
-        laws = {"heed_trace": True, "sides_first": rot, "heed_instinct": 1 if inst == "v1" else 2}
+        laws = {"heed_trace": True, "sides_first": rot, "heed_instinct": 1 if inst == "v1" else 2, "sides_mixed_defence": mixed(arm)}
         if base != "off":
             laws.update({"heed_on": True, "heed_ceiling": 32})
         for k, v in laws.items():

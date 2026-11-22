@@ -687,7 +687,11 @@ pub fn spawn_battle_sides(ctx: &ReducerContext, n: u32, sides: u32) -> Result<()
         let id = seed::spawn_creature(ctx, &format!("{}{}", letters[side], made / sides as u32 + 1), "person", ctx.database_identity(), false, p, now);
         common::inv_add(ctx, id as u64, "spear", 1);
         ctx.db.membership().insert(Membership { id: 0, community: ids[side], member: id, since_ms: now });
-        let defend = if id % 2 == 0 { "dodge" } else { "block" };
+        // By id parity, as `spawn_battle`. With consecutive ids and two sides that puts every
+        // fighter of one side on block and every one of the other on dodge (E4b, docs/ATTENTION_E4.md
+        // §5); the `sides_mixed_defence` fixture law (off as shipped) alternates them within each side.
+        let dodges = if common::laws(ctx).sides_mixed_defence { (made / sides as u32) % 2 == 0 } else { id % 2 == 0 };
+        let defend = if dodges { "dodge" } else { "block" };
         let graph = format!(
             r#"{{"first":{{"label":"combat","children":[{{"if":{{"cond":{{"threatened":true}},"then":{{"do":{{"skill":"{defend}"}}}}}}}},{{"do":{{"skill":"attack","target":{{"nearest":{{"kind":"person","relation":"enemy"}}}}}}}}]}}}}"#
         );

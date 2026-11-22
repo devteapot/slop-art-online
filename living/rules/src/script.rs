@@ -569,6 +569,9 @@ pub struct Laws {
     /// A fixture switch, 0 as shipped: `spawn_battle_sides` puts its first (lowest-id) fighter on
     /// side index `sides_first` instead of side A, so a series can swap which side has the lower ids.
     pub sides_first: f32,
+    /// A fixture switch, off as shipped: `spawn_battle_sides` alternates block and dodge within each
+    /// side instead of by id parity (which, with consecutive ids, gives each side one defence).
+    pub sides_mixed_defence: bool,
     pub cover_sight_on: bool,
     /// How far a character sees ground by day (metres): the cells of `known_ground` it marks
     /// (docs/MOVEMENT_MIND.md, step 3). At night, its own sight.
@@ -910,6 +913,7 @@ impl Default for Laws {
             heed_trace: false,
             heed_instinct: 2.0,
             sides_first: 0.0,
+            sides_mixed_defence: false,
             cover_sight_on: false,
             ground_sight_m: 24.0,
             known_cells_pass: 0.0,
@@ -3284,6 +3288,7 @@ impl Scripts {
             heed_trace: flag("heed_trace", l.heed_trace),
             heed_instinct: g("heed_instinct", l.heed_instinct).round().clamp(1.0, 2.0),
             sides_first: g("sides_first", l.sides_first).round().clamp(0.0, 3.0),
+            sides_mixed_defence: flag("sides_mixed_defence", l.sides_mixed_defence),
             cover_sight_on: flag("cover_sight_on", l.cover_sight_on),
             ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
             known_cells_pass: g("known_cells_pass", l.known_cells_pass).clamp(0.0, 100_000.0),
@@ -3613,7 +3618,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 33] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 34] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3662,6 +3667,7 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 33] = [
     ("heed_trace", ValueOnly::Delivery),
     ("heed_instinct", ValueOnly::Delivery),
     ("sides_first", ValueOnly::Delivery),
+    ("sides_mixed_defence", ValueOnly::Delivery),
 ];
 
 /// The functions a value-only law may be named in: the constants (`laws`, an overlay's

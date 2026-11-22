@@ -222,6 +222,8 @@ fn laws() {
         heed_instinct: 2.0,
         // A fixture switch, 0 in play: which side spawn_battle_sides puts its first fighter on.
         sides_first: 0.0,
+        // A fixture switch, off in play: spawn_battle_sides alternates block and dodge within a side.
+        sides_mixed_defence: false,
         // A test switch (docs/PERCEPTION.md, "Module memory and rollback"), 0 in play: a step the
         // world fails on purpose, to prove nothing kept in module memory outlives a failed one.
         memory_test: 0.0,
@@ -3271,6 +3273,7 @@ fn law_about(l, name) {
         "heed_trace" => "A test switch that logs how each mind's character keeps track of others in a fight; it is off in play.",
         "heed_instinct" => if l.heed_instinct >= 2.0 { "the starting way of keeping track of others puts whoever one is at enmity with, and whoever goes for someone one watches, before those merely close" } else { "the starting way of keeping track of others is the earlier one, by nearness after threats and one's own people" },
         "sides_first" => "A test switch for a staged battle: which side its first fighter joins; it is 0 in play.",
+        "sides_mixed_defence" => "A test switch for a staged battle: whether each side mixes blockers and dodgers; it is off in play.",
         "far_cap" => if l.far_cap > 0.0 { `a player sees at most ${short(l.far_cap)} others at once, the nearest` } else { "a player sees everyone in sight" },
         "crowd_sweep_n" => if l.crowd_sweep_n > 0.0 { `what a player sees is looked at again less often in a crowd of more than ${short(l.crowd_sweep_n)}` } else { "what a player sees is looked at again at the same pace in any crowd" },
         "crowd_frame_max_ms" => if l.crowd_frame_max_ms > 0.0 { `in a crowd, a player's view of others follows at least every ${short(l.crowd_frame_max_ms)} ms` } else { "in a crowd, a player's view of others follows at least every 100 ms" },
