@@ -152,6 +152,8 @@ fn take_over(ctx: &ReducerContext, p: &mut Presence, now: u64) {
             log::warn!("takeover of {}: the held graph no longer installs ({e})", p.id);
         }
     }
+    // Its person's `my_experience` shows nothing while the minds hold it (`lines_table_on`).
+    crate::frame::lines_resync(ctx, p.player, None);
     log::info!("character {} passed to the minds (its person left)", p.id);
 }
 
@@ -197,6 +199,11 @@ pub fn died(ctx: &ReducerContext, c: &mut Character) {
         c.controller = p.player;
         c.ai = false;
         ctx.db.presence().id().delete(c.id);
+        // Its person's view shows this dead character again if it is the one they play
+        // (`lines_table_on`): its lines, as the caller writes the row.
+        if ctx.db.player().identity().find(p.player).is_some_and(|pl| pl.character == c.id) {
+            crate::frame::lines_resync(ctx, p.player, Some(c.id));
+        }
     }
 }
 

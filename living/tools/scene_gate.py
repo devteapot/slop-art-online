@@ -20,7 +20,9 @@ touches behaviour, these cases with the fake model only:
                  copy_privacy (battle_viewers.py --privacy: the same at battle density, 16 viewers;
                  only when a merge touches COPY_PRIVACY_PATHS), combat_feed (combat_feed.py: a
                  player's combat feed as event rows reaches only its viewer, equals my_combat's
-                 rows and death screen, and the combat_feed_on law off writes none)
+                 rows and death screen, and the combat_feed_on law off writes none), lines_table
+                 (lines_table.py: a player's lines as rows reach only their viewer and equal
+                 my_experience's through a death, a rejoin, a takeover and return, and the law off and on)
   living-mind    mind-unit: its cargo tests (`just living-check` builds the mind, tests only the rules)
   verify-generation  generation-default, generation-island, generation-cullet (generation.py --smoke:
                  its per-world checks, the seed's laws composed over the shipped script among them,
@@ -221,6 +223,10 @@ CASES = {
     # viewer receives a row, the event rows and the `my_combat` rows are the same rows, a death
     # screen reads the same either way, and the law off writes none.
     "combat_feed":  {"skill": "verify-client", "group": "client"},
+    # The same for a player's lines as rows (experience-incremental, `experience_copy`): only its
+    # viewer receives a row, and they are the rows `my_experience` returns it through a death, a
+    # rejoin, a takeover and return, and the lines_table_on law off and on.
+    "lines_table":  {"skill": "verify-client", "group": "client"},
     # verify-generation's light smoke (generation.py --smoke): its per-world checks, the seed's laws
     # composed over the shipped script among them, one case per seed family. The first pass reads
     # the genesis fuel worlds before they are deleted; a retry or main's run launches its own.
@@ -1224,6 +1230,9 @@ class Runner:
                 if "combat_feed" in cases:
                     code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/combat_feed.py", "--run", run], root, ev / "combat_feed.txt", 300)
                     res["combat_feed"] = (code == 0, str(ev / "combat_feed.json"), time.time() - t0)
+                if "lines_table" in cases:
+                    code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/lines_table.py", "--run", run], root, ev / "lines_table.txt", 300)
+                    res["lines_table"] = (code == 0, str(ev / "lines_table.json"), time.time() - t0)
                 return res
             if group == "privacy":
                 return {"copy_privacy": self.copy_privacy(root, run, ev, log, t0)}

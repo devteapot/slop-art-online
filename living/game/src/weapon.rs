@@ -30,7 +30,6 @@
 use crate::net::Net;
 use bevy::prelude::*;
 use living_bindings::*;
-use spacetimedb_sdk::Table;
 use std::collections::HashSet;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -121,13 +120,13 @@ pub fn update(
     let (Some(conn), Some(me)) = (net.conn.as_ref(), net.my_id) else { return };
     // What the authority told me of a blow or a shot on me, newest of those just arrived.
     let mut hit: Option<Experience> = None;
-    for e in conn.db.my_experience().iter().filter(|e| e.observer == me && e.kind == "attacked") {
+    for e in crate::net::my_lines(&conn.db).into_iter().filter(|e| e.observer == me && e.kind == "attacked") {
         if w.told.insert(e.id) && now_ms - (e.at_ms as f64) < TOLD_FRESH_MS && hit.as_ref().is_none_or(|h| e.at_ms >= h.at_ms) {
             hit = Some(e);
         }
     }
     if w.told.len() > 1024 {
-        let live: HashSet<u64> = conn.db.my_experience().iter().map(|e| e.id).collect();
+        let live: HashSet<u64> = crate::net::my_lines(&conn.db).into_iter().map(|e| e.id).collect();
         w.told.retain(|id| live.contains(id));
     }
     let now: HashSet<u32> = crate::net::characters(conn).into_iter().filter(|c| c.id != me && crate::combat::hostile_to_me(conn, c.id, me, now_ms)).map(|c| c.id).collect();

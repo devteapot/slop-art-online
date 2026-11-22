@@ -239,7 +239,7 @@ fn read(net: NonSend<Net>, scene: NonSend<Scene>, mut acts: ResMut<Acts>, mut we
         // "X answers your greeting (nod)." arrives with the resident's `doing` row; the subject is
         // the one who answered.
         // "X greets you (wave)." when someone greets me first.
-        let fresh: Vec<Experience> = conn.db.my_experience().iter().filter(|e| e.observer == me && !town.seen.contains(&e.id) && (e.text.contains("answers your greeting") || e.text.contains("greets you"))).collect();
+        let fresh: Vec<Experience> = crate::net::my_lines(&conn.db).into_iter().filter(|e| e.observer == me && !town.seen.contains(&e.id) && (e.text.contains("answers your greeting") || e.text.contains("greets you"))).collect();
         for e in fresh {
             town.seen.insert(e.id);
             if now - (e.at_ms as f64) < ANSWERED_MS {
@@ -252,7 +252,7 @@ fn read(net: NonSend<Net>, scene: NonSend<Scene>, mut acts: ResMut<Acts>, mut we
     town.greeted_by.retain(|_, t| now - *t < ANSWERED_MS);
     town.greeting = town.greeting.filter(|(_, t)| now - *t < ANSWERED_MS);
     if town.seen.len() > 512 {
-        let live: HashSet<u64> = conn.db.my_experience().iter().map(|e| e.id).collect();
+        let live: HashSet<u64> = crate::net::my_lines(&conn.db).into_iter().map(|e| e.id).collect();
         town.seen.retain(|id| live.contains(id));
     }
 }

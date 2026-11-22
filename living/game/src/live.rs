@@ -719,7 +719,7 @@ fn bodies(
     }
     // Who is speaking: lines I heard (the authority decides earshot), and my own last line.
     let mut talking: HashSet<u32> = me
-        .map(|id| conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < TALKING_S * 1000.0).map(|e| e.subject).collect())
+        .map(|id| crate::net::my_lines(&conn.db).into_iter().filter(|e| e.observer == id && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < TALKING_S * 1000.0).map(|e| e.subject).collect())
         .unwrap_or_default();
     if let (Some(id), Some((t, _))) = (me, input.said.last()) {
         if scene.now_ms - (*t as f64) < TALKING_S * 1000.0 {
@@ -1271,7 +1271,7 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
         conn.db.terrain_chunk().count(),
         edits,
         conn.db.settlement().count(),
-        conn.db.my_experience().count(),
+        crate::net::my_lines(&conn.db).len(),
         live.shown.len(),
         live.lots.values().filter(|e| !e.is_empty()).count(),
         net.window_moves,

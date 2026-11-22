@@ -96,7 +96,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<crate::world::Scene>, looks: Res
     for c in crate::net::characters(conn).into_iter().filter(|c| c.id != me && c.kind == "person") {
         t.met.entry(c.id).or_insert(Met { first_ms: now, ..default() });
     }
-    let mut fresh: Vec<Experience> = conn.db.my_experience().iter().filter(|e| e.observer == me && !t.seen.contains(&e.id)).collect();
+    let mut fresh: Vec<Experience> = crate::net::my_lines(&conn.db).into_iter().filter(|e| e.observer == me && !t.seen.contains(&e.id)).collect();
     fresh.sort_by_key(|e| e.id);
     let mut unheard: Vec<(u32, u64)> = Vec::new();
     for e in fresh {
@@ -149,7 +149,7 @@ pub fn ingest(net: NonSend<Net>, scene: NonSend<crate::world::Scene>, looks: Res
         t.events.drain(..n - 80);
     }
     if t.seen.len() > 4096 {
-        let live: HashSet<u64> = conn.db.my_experience().iter().map(|e| e.id).collect();
+        let live: HashSet<u64> = crate::net::my_lines(&conn.db).into_iter().map(|e| e.id).collect();
         t.seen.retain(|id| live.contains(id));
     }
 }

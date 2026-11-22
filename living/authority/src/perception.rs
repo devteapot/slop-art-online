@@ -2323,6 +2323,17 @@ pub fn set_player(ctx: &ReducerContext, who: Identity, character: u32) {
     } else {
         ctx.db.player().insert(row);
     }
+    // The lines `my_experience` shows this person may now be another character's.
+    crate::frame::lines_resync(ctx, who, current_of(ctx, who).map(|c| c.id));
+}
+
+/// `current` for a reducer: the character `my_experience` and the other `my_*` views show
+/// person `who` now (the same reads, in the same order).
+pub fn current_of(ctx: &ReducerContext, who: Identity) -> Option<Character> {
+    match ctx.db.player().identity().find(who) {
+        Some(p) => ctx.db.character().id().find(p.character).filter(|c| c.controller == who && !c.ai),
+        None => ctx.db.character().controller().filter(who).filter(|c| !c.ai).max_by_key(|c| (c.alive, c.id)),
+    }
 }
 
 /// What I perceive of each creature in my scene, mine included (the projections).
