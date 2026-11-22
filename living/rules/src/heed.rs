@@ -56,6 +56,8 @@ pub const MAX_DEPTH: usize = 6;
 pub const MAX_HOLD_S: f32 = 60.0;
 /// The contact window when the world gives none (`heed_contact_s`).
 pub const DEFAULT_CONTACT_S: f32 = 4.0;
+/// The window closing speed is measured over when the world gives none (`heed_closing_s`).
+pub const DEFAULT_CLOSING_S: f32 = 1.0;
 
 /// The skill whose knack × practice `a.actor.factor` reads in `heed_capacity(a)` when the
 /// script's `heed_knack()` names none.
@@ -794,7 +796,10 @@ pub fn holds(cond: &Cond, c: &Candidate, me: &SelfState, all: &[Candidate]) -> b
 
 /// The sort key of a candidate within a rule (smaller first): the rule's order, then distance,
 /// then id (so the selection never depends on the input's order).
-fn key(rule: &Rule, c: &Candidate, me: &SelfState, all: &[Candidate]) -> (f32, f32, u32) {
+/// The sort key within a rule: the rule's order, then **the incumbent first** (one already heeded
+/// wins an exact tie: mechanism, not policy, so a tie between two equal scores does not flip at
+/// every pass as fighters move), then distance, then id.
+fn key(rule: &Rule, c: &Candidate, me: &SelfState, all: &[Candidate]) -> (f32, u8, f32, u32) {
     let primary = match rule {
         Rule::If { order: Order::Nearest, .. } => c.dist,
         Rule::If { order: Order::Closing, .. } => -c.closing,
@@ -802,7 +807,7 @@ fn key(rule: &Rule, c: &Candidate, me: &SelfState, all: &[Candidate]) -> (f32, f
         Rule::If { order: Order::Longest, .. } => -c.heeded_s.unwrap_or(0.0),
         Rule::Score { weights, .. } => -score(weights, c, me, all),
     };
-    (primary, c.dist, c.id)
+    (primary, u8::from(c.heeded_s.is_none()), c.dist, c.id)
 }
 
 fn score(weights: &[(Cond, f32)], c: &Candidate, me: &SelfState, all: &[Candidate]) -> f32 {
@@ -821,6 +826,56 @@ fn matches(rule: &Rule, c: &Candidate, me: &SelfState, all: &[Candidate]) -> boo
 /// pass. None: no rule takes it.
 pub fn rank_of(policy: &Policy, c: &Candidate, me: &SelfState, all: &[Candidate]) -> Option<usize> {
     policy.rules.iter().position(|r| matches(r, c, me, all))
+}
+
+/// Closing speed smoothed over a window (the world's `heed_closing_s`, [`DEFAULT_CLOSING_S`]):
+/// metres a second toward the observer, from the change in distance across the window, not
+/// between two consecutive passes. One pass's distance noise (a fighter stepping in and out)
+/// otherwise flips a `closing` condition and the score it feeds at every pass (dev-box's E2:
+/// most promotions were that boundary oscillation). The caller keeps one tracker per observer,
+/// observes each creature in sight at each pass and puts the answer in [`Candidate::closing`].
+#[derive(Clone, Debug, Default)]
+pub struct ClosingTracker {
+    window_s: f32,
+    seen: std::collections::HashMap<u32, (std::collections::VecDeque<(f32, f32)>, f32)>,
+}
+
+impl ClosingTracker {
+    pub fn new(window_s: f32) -> ClosingTracker {
+        ClosingTracker { window_s: window_s.max(0.0), seen: Default::default() }
+    }
+
+    /// Record `id` at `dist` metres at time `t_s` (seconds, not decreasing) and return its
+    /// closing speed: the distance from the oldest kept sample (the newest one at least a window
+    /// old, else the oldest) less `dist`, over the time between. 0 until two samples span a
+    /// tenth of the window; the raw two-sample speed with a window of 0.
+    pub fn observe(&mut self, id: u32, t_s: f32, dist: f32) -> f32 {
+        let window = self.window_s;
+        let (q, last) = self.seen.entry(id).or_default();
+        q.push_back((t_s, dist));
+        while q.len() > 2 && q[1].0 <= t_s - window {
+            q.pop_front();
+        }
+        if window <= 0.0 {
+            while q.len() > 2 {
+                q.pop_front();
+            }
+        }
+        let (t0, d0) = q[0];
+        let span = t_s - t0;
+        *last = if span > 0.0 && span >= 0.1 * window { (d0 - dist) / span } else { 0.0 };
+        *last
+    }
+
+    /// The last speed `observe` gave for `id` (an event between passes reads it).
+    pub fn last(&self, id: u32) -> Option<f32> {
+        self.seen.get(&id).map(|(_, v)| *v)
+    }
+
+    /// Forget creatures last observed before `t_s` (gone from sight).
+    pub fn forget_before(&mut self, t_s: f32) {
+        self.seen.retain(|_, (q, _)| q.back().is_some_and(|(t, _)| *t >= t_s));
+    }
 }
 
 /// The full pass. First the forced places ([`forced`]), outside the capacity; then every other
@@ -878,7 +933,7 @@ fn fill(policy: &Policy, me: &SelfState, all: &[Candidate], limits: &Limits, hel
         if limit_hit(n) {
             continue;
         }
-        let mut m: Vec<(usize, (f32, f32, u32))> =
+        let mut m: Vec<(usize, (f32, u8, f32, u32))> =
             all.iter().enumerate().filter(|(i, c)| !taken[*i] && matches(rule, c, me, all)).map(|(i, c)| (i, key(rule, c, me, all))).collect();
         m.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         let limit = match rule.take() {
@@ -1162,6 +1217,62 @@ mod tests {
         let walker = cand(30, "person", 7.0);
         assert_eq!(admit(&p, &walker, &me(), &all, &heeded, &lim(4)), Admit::No);
         assert_eq!(admit(&p, &crowd[0], &me(), &all, &heeded, &lim(4)), Admit::No);
+    }
+
+    #[test]
+    fn the_incumbent_wins_an_exact_tie() {
+        // Two strangers with the same score: the nearer wins a fresh pass; once the farther is
+        // heeded, it keeps the place on the tie (no flip as they move).
+        let p = parse_value(&json!({"heed": [{"score": [{"if": {"fighting": true}, "w": 2}], "take": "rest"}]}), &Known::any()).unwrap();
+        let mut a = cand(1, "person", 5.0);
+        a.fighting = true;
+        let mut b = cand(2, "person", 6.0);
+        b.fighting = true;
+        assert_eq!(ids(&select(&p, &me(), &[a.clone(), b.clone()], &lim(1), &[])), vec![1]);
+        b.heeded_s = Some(0.4);
+        assert_eq!(ids(&select(&p, &me(), &[a.clone(), b.clone()], &lim(1), &[])), vec![2], "the incumbent keeps a tied place");
+        // A strictly better score still wins.
+        a.closing = 2.0;
+        let p2 = parse_value(&json!({"heed": [{"score": [{"if": {"fighting": true}, "w": 2}, {"if": {"closing": {"above": 1}}, "w": 1}], "take": "rest"}]}), &Known::any()).unwrap();
+        assert_eq!(ids(&select(&p2, &me(), &[a, b], &lim(1), &[])), vec![1]);
+    }
+
+    #[test]
+    fn closing_speed_is_smoothed_over_its_window() {
+        // A creature walking in at 2 m/s, its distance jittering ±0.4 m pass to pass (0.2 s),
+        // against a condition at 1 m/s: one pass's speed swings from -2 to 6 m/s.
+        let mut raw = ClosingTracker::new(0.0);
+        let mut smooth = ClosingTracker::new(DEFAULT_CLOSING_S);
+        let (mut flips_raw, mut flips_smooth) = (0, 0);
+        let (mut prev_raw, mut prev_smooth) = (None, None);
+        for k in 0..50 {
+            let t = k as f32 * 0.2;
+            let jitter = if k % 2 == 0 { 0.4 } else { -0.4 };
+            let d = 30.0 - t * 2.0 + jitter;
+            let r = raw.observe(9, t, d) > 1.0;
+            let s = smooth.observe(9, t, d) > 1.0;
+            if k > 5 {
+                flips_raw += usize::from(prev_raw.is_some_and(|p| p != r));
+                flips_smooth += usize::from(prev_smooth.is_some_and(|p| p != s));
+            }
+            prev_raw = Some(r);
+            prev_smooth = Some(s);
+        }
+        assert!(flips_raw >= 20, "the two-pass speed flips across 1 m/s at almost every pass: {flips_raw}");
+        assert!(flips_smooth <= 2, "the 1 s speed does not: {flips_smooth}");
+        // The window's speed is right for a steady walk, and 0 at the first sample.
+        let mut t = ClosingTracker::new(1.0);
+        assert_eq!(t.observe(4, 0.0, 20.0), 0.0);
+        for k in 1..=10 {
+            t.observe(4, k as f32 * 0.2, 20.0 - k as f32 * 0.4);
+        }
+        assert!((t.last(4).unwrap() - 2.0).abs() < 1e-4, "{:?}", t.last(4));
+        // Moving away is negative; gone from sight is forgotten.
+        let mut u = ClosingTracker::new(1.0);
+        u.observe(5, 0.0, 10.0);
+        assert!(u.observe(5, 1.0, 12.0) < 0.0);
+        u.forget_before(2.0);
+        assert!(u.last(5).is_none());
     }
 
     #[test]

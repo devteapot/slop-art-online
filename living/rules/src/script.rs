@@ -558,6 +558,9 @@ pub struct Laws {
     pub heed_on: bool,
     pub heed_ceiling: f32,
     pub heed_contact_s: f32,
+    /// The window closing speed is measured over (seconds; `heed::ClosingTracker`): 0 gives the
+    /// raw two-pass speed.
+    pub heed_closing_s: f32,
     /// A diagnostic, off in play: the heed lines of characters with a mind are logged (E4).
     pub heed_trace: bool,
     pub cover_sight_on: bool,
@@ -897,6 +900,7 @@ impl Default for Laws {
             heed_on: false,
             heed_ceiling: 16.0,
             heed_contact_s: crate::heed::DEFAULT_CONTACT_S,
+            heed_closing_s: crate::heed::DEFAULT_CLOSING_S,
             heed_trace: false,
             cover_sight_on: false,
             ground_sight_m: 24.0,
@@ -3268,6 +3272,7 @@ impl Scripts {
             heed_on: flag("heed_on", l.heed_on),
             heed_ceiling: g("heed_ceiling", l.heed_ceiling).clamp(0.0, 256.0),
             heed_contact_s: g("heed_contact_s", l.heed_contact_s).clamp(0.0, 60.0),
+            heed_closing_s: g("heed_closing_s", l.heed_closing_s).clamp(0.0, 60.0),
             heed_trace: flag("heed_trace", l.heed_trace),
             cover_sight_on: flag("cover_sight_on", l.cover_sight_on),
             ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
@@ -3598,7 +3603,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 30] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 31] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3643,6 +3648,7 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 30] = [
     ("heed_on", ValueOnly::Delivery),
     ("heed_ceiling", ValueOnly::Delivery),
     ("heed_contact_s", ValueOnly::Delivery),
+    ("heed_closing_s", ValueOnly::Delivery),
     ("heed_trace", ValueOnly::Delivery),
 ];
 

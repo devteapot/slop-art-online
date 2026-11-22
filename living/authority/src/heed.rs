@@ -37,7 +37,7 @@
 
 use crate::common::{self, NearCreature};
 use crate::tables::*;
-use living_rules::heed::{self as h, Candidate, Held, Limits, Pick, Place, Policy, SelfState, Visible};
+use living_rules::heed::{self as h, Candidate, ClosingTracker, Held, Limits, Pick, Place, Policy, SelfState, Visible};
 use spacetimedb::ReducerContext;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -71,6 +71,10 @@ struct State {
     cands: Vec<Candidate>,
     /// Cue matches: creature -> when.
     cued: HashMap<u32, u64>,
+    /// Closing speed per creature, smoothed over `heed_closing_s` (the selector's tracker, one per
+    /// observer, observed at each pass; an event between passes reads its last answer).
+    /// With the time its clock starts (ms), so seconds stay small enough for f32.
+    closing: Option<(u64, ClosingTracker)>,
 }
 
 impl State {
@@ -243,20 +247,27 @@ pub fn pass(ctx: &ReducerContext, me: &Character, at: (f32, f32), seen: &[NearCr
     let cap = capacity(ctx, me, now);
     let limits = Limits { capacity: cap, contact_s: common::laws(ctx).heed_contact_s };
     let mine = self_state(ctx, me, now);
-    let (prev_picks, merit, since, in_sight, cued, prev_cap) = HEED.with(|m| {
-        let m = m.borrow();
-        match m.get(&me.id) {
-            Some(s) => (s.picks.clone(), s.merit.clone(), s.since.clone(), s.in_sight.clone(), s.cued.clone(), Some(s.capacity)),
-            None => (Vec::new(), HashMap::new(), HashMap::new(), HashMap::new(), HashMap::new(), None),
+    let (prev_picks, merit, since, in_sight, cued, prev_cap, tracker) = HEED.with(|m| {
+        let mut m = m.borrow_mut();
+        match m.get_mut(&me.id) {
+            Some(s) => (s.picks.clone(), s.merit.clone(), s.since.clone(), s.in_sight.clone(), s.cued.clone(), Some(s.capacity), s.closing.take()),
+            None => (Vec::new(), HashMap::new(), HashMap::new(), HashMap::new(), HashMap::new(), None, None),
         }
     });
+    let window = common::laws(ctx).heed_closing_s;
+    let (base_ms, mut tracker) = tracker.unwrap_or_else(|| (now, ClosingTracker::new(window)));
+    let t_s = now.saturating_sub(base_ms) as f32 / 1000.0;
     let heeded_now: Vec<u32> = prev_picks.iter().map(|p| p.id).collect();
     let mut in_sight2: HashMap<u32, u64> = HashMap::with_capacity(seen.len());
     for c in seen {
         in_sight2.insert(c.id, in_sight.get(&c.id).copied().unwrap_or(now));
     }
     let field = Field::new(ctx, me, at, &heeded_now, &since, &in_sight2, &cued, r, now);
-    let cands: Vec<Candidate> = seen.iter().map(|c| field.candidate(ctx, c)).collect();
+    let mut cands: Vec<Candidate> = seen.iter().map(|c| field.candidate(ctx, c)).collect();
+    for c in &mut cands {
+        c.closing = tracker.observe(c.id, t_s, c.dist);
+    }
+    tracker.forget_before(t_s);
     let held: Vec<Held> = prev_picks
         .iter()
         .filter_map(|p| {
@@ -287,7 +298,7 @@ pub fn pass(ctx: &ReducerContext, me: &Character, at: (f32, f32), seen: &[NearCr
         log::info!("heed pass id={} cap={cap} health={hp:.3} in_sight={} picked={by_rule} forced={} changed={}", me.id, seen.len(), picks.len() - by_rule, (prev_cap != Some(cap)) as u8);
     }
     HEED.with(|m| {
-        m.borrow_mut().insert(me.id, State { picks, merit: merit2, since: since2, in_sight: in_sight2, pass_ms: now, capacity: cap, cands, cued: cued2 });
+        m.borrow_mut().insert(me.id, State { picks, merit: merit2, since: since2, in_sight: in_sight2, pass_ms: now, capacity: cap, cands, cued: cued2, closing: Some((base_ms, tracker)) });
     });
 }
 
@@ -341,6 +352,8 @@ fn event(ctx: &ReducerContext, me: &Character, at: (f32, f32), c: &NearCreature,
         in_sight.entry(c.id).or_insert(now);
         let field = Field::new(ctx, me, at, &heeded, &s.since, &in_sight, &s.cued, r, now);
         let mut cand = field.candidate(ctx, c);
+        // Closing speed as the last pass measured it (0 for one not seen at a pass yet).
+        cand.closing = s.closing.as_ref().and_then(|(_, t)| t.last(c.id)).unwrap_or(0.0);
         tweak(&mut cand);
         let limits = Limits { capacity: s.capacity, contact_s };
         Some((h::admit(&pol, &cand, &mine, &s.cands, &s.picks, &limits), cand))
@@ -572,12 +585,8 @@ impl<'a> Field<'a> {
         let now = self.now;
         let id = c.id;
         let ch = ctx.db.character().id().find(id);
-        // Coming toward me (m/s): the body's velocity along the line to me.
-        let closing = ctx.db.body().id().find(id).filter(|b| now < b.next_ms && (b.vx != 0.0 || b.vy != 0.0)).map_or(0.0, |b| {
-            let (dx, dy) = (self.at.0 - c.pos.0, self.at.1 - c.pos.1);
-            let d = dx.hypot(dy).max(0.01);
-            (b.vx * dx + b.vy * dy) / d
-        });
+        // Coming toward me (m/s): set by the caller from the observer's `ClosingTracker`.
+        let closing = 0.0;
         let person = &*c.kind == "person";
         let made_out = !(person && self.reads.made_out) || ch.as_ref().map_or(true, |t| !crate::perception::regard(ctx, self.me, t, now).far);
         let mut relations = 0u8;

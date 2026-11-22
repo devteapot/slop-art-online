@@ -15,7 +15,7 @@
 //! in as files.
 //!
 //!     living-mind heed-replay --fields FIELDS.jsonl --out PICKS.jsonl
-//!         [--capacity formula|N] [--ceiling N] [--contact-s S] [--no-holds]
+//!         [--capacity formula|N] [--ceiling N] [--contact-s S] [--no-holds] [--closing-s S | --raw-closing]
 //!         [--policies POLICIES.jsonl] [--chosen CHOSEN.jsonl] [--script living/scripts/skills.rhai]
 //!     living-mind heed-replay --ask mind|jev ...   (the model arms: `heed_ask.rs`)
 //!
@@ -31,7 +31,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use living_rules::doing::Phase;
-use living_rules::heed::{self, Admit, Candidate, Held, Known, Limits, Pick, Place, Policy, SelfState, Visible};
+use living_rules::heed::{self, Admit, Candidate, ClosingTracker, Held, Known, Limits, Pick, Place, Policy, SelfState, Visible};
 use living_rules::script::{ActorFacts, Scripts, SkillCtx};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -193,6 +193,13 @@ pub async fn replay_main(root: &Path, args: Vec<String>) -> Result<()> {
         None => law_f32(&scripts, "heed_contact_s").unwrap_or(heed::DEFAULT_CONTACT_S),
     };
     let no_holds = args.iter().any(|a| a == "--no-holds");
+    // Closing speed through the shared tracker over `heed_closing_s` (the authority's way), or
+    // the fields' own per-step value (`--raw-closing`, for comparison).
+    let raw_closing = args.iter().any(|a| a == "--raw-closing");
+    let closing_s: f32 = match arg(&args, "--closing-s") {
+        Some(v) => v.parse().context("--closing-s")?,
+        None => law_f32(&scripts, "heed_closing_s").unwrap_or(heed::DEFAULT_CLOSING_S),
+    };
     let capacity = match arg(&args, "--capacity").as_deref() {
         None | Some("formula") => Capacity::Formula,
         Some(n) => Capacity::Fixed(n.parse().context("--capacity formula|N")?),
@@ -272,6 +279,7 @@ pub async fn replay_main(root: &Path, args: Vec<String>) -> Result<()> {
         let mut since: HashMap<u32, f32> = HashMap::new();
         let mut merit: HashMap<u32, f32> = HashMap::new();
         let picks_of = chosen_at.get(&st.state).cloned().unwrap_or_default();
+        let mut tracker = ClosingTracker::new(closing_s);
         for step in &st.steps {
             // Jev's latest picks at or before this step make those creatures `chosen`.
             let now_chosen: Vec<u32> = picks_of.iter().filter(|(t, _)| *t <= step.t + 1e-3).last().map(|(_, ids)| ids.clone()).unwrap_or_default();
@@ -282,11 +290,21 @@ pub async fn replay_main(root: &Path, args: Vec<String>) -> Result<()> {
                 }
                 c
             };
-            let step_cands: Vec<CandIn> = step.cands.iter().map(mark).collect();
+            let mut step_cands: Vec<CandIn> = step.cands.iter().map(mark).collect();
+            if !raw_closing {
+                for c in &mut step_cands {
+                    c.closing = tracker.observe(c.id, step.t, c.dist);
+                }
+                tracker.forget_before(step.t - 1e-3);
+            }
             let mut events = Vec::new();
             for e in &step.events {
                 let all: Vec<Candidate> = step_cands.iter().map(|c| candidate(c, &heeded, &since, e.t)).collect();
-                let c = candidate(&mark(&e.cand), &heeded, &since, e.t);
+                let mut ec = mark(&e.cand);
+                if !raw_closing {
+                    ec.closing = tracker.last(ec.id).unwrap_or(0.0);
+                }
+                let c = candidate(&ec, &heeded, &since, e.t);
                 let already = heeded.iter().any(|p| p.id == c.id);
                 let verdict = heed::admit(&policy, &c, &me, &all, &heeded, &limits);
                 match verdict {
@@ -348,6 +366,10 @@ pub async fn replay_main(root: &Path, args: Vec<String>) -> Result<()> {
         states += 1;
     }
     w.flush()?;
-    eprintln!("heed-replay: {states} states, {steps_n} steps, {events_n} events -> {out} (ceiling {ceiling}, contact {contact_s} s, holds {})", if no_holds { "off" } else { "on" });
+    eprintln!(
+        "heed-replay: {states} states, {steps_n} steps, {events_n} events -> {out} (ceiling {ceiling}, contact {contact_s} s, holds {}, closing {})",
+        if no_holds { "off" } else { "on" },
+        if raw_closing { "raw".to_string() } else { format!("over {closing_s} s") }
+    );
     Ok(())
 }

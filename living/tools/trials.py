@@ -1798,13 +1798,23 @@ class Instance:
         down_roles, after_s = end.get("side_down", []), float(end.get("after_s", 30))
         down_since = {}
         ids = sorted({i for ids in self.roles.values() for i in ids})
-        if not ids:
+        every = isinstance(spec, dict) and spec.get("all")
+        if not ids and not every:
             return
-        where = " OR ".join(f"id = {i}" for i in ids)
+        # `{"all": true}` (docs/ATTENTION_E3.md): every creature, not only the roles' members.
+        where = "id > 0" if every else " OR ".join(f"id = {i}" for i in ids)
         (self.dir / "arena.json").write_text(json.dumps({"trial": self.trial["name"], "variant": self.variant, "replicate": self.rep,
                                                          "arena": self.trial.get("arena", {}), "roles": self.roles, "end": end}, indent=1))
         pool = concurrent.futures.ThreadPoolExecutor(6)
+        kinds_saved = False
         while not getattr(self, "_bodies_stop", False):
+            if every and not kinds_saved:
+                # Every creature's kind, once (bodies.jsonl names creatures by id only).
+                try:
+                    (self.dir / "kinds.json").write_text(json.dumps({str(c["id"]): c["kind"] for c in self.rows("SELECT id, kind FROM character")}))
+                    kinds_saved = True
+                except RuntimeError:
+                    pass
             tick = time.time()
             try:
                 # The five reads at once (2.14.1's SQL endpoint takes one statement a request), so

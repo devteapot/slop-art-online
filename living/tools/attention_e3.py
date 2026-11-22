@@ -7,11 +7,16 @@ Reads COPIES of the act trial's evidence (never `~/slop-evidence` in place), fre
 decision moments, rebuilds what each subject perceived around each one, and scores the
 heeded sets that `living-mind heed-replay` picks with the shared selector (`living_rules::heed`). Python standard library only. Read-only on its inputs.
 
-  attention_e3.py freeze --src DIR --out STATES.json [--battle 200] [--town 100] [--seed S]
+  attention_e3.py freeze --src DIR --out STATES.json [--battle 200] [--town 100]
+                         [--battle-run DIR ...] [--town-run DIR ...] [--seed S]
   attention_e3.py fields --src DIR --states STATES.json --out FIELDS.jsonl [--step 0.2]
   attention_e3.py score  --src DIR --states STATES.json --fields FIELDS.jsonl --picks PICKS.jsonl --out SCORE.json
 
 `--src` is the directory the act-trial archive was extracted into (it holds `.local/living/...`).
+`--battle-run` / `--town-run` name other recordings instead (the Cullet recordings of
+docs/ATTENTION_E3.md §8): a `battle_diag.py --all-bodies` run folder (every body and use, with
+kinds), and a trials.py instance folder with `record.bodies {"all": true}` (`bodies.jsonl` at 5 Hz,
+`kinds.json`). A state then carries its folder (`dir`).
 
 What is rebuilt, and what is not (stated in the report):
 - Battle (`minds-atb1-off`, `minds-atb1-on`, 200 real minds): every body's position from its
@@ -51,11 +56,15 @@ FIGHT = HOSTILE | {"block", "dodge", "heal"}
 SCENE_HEAD = "# What you perceive right now\n"
 
 
-def battle_dir(src, run):
+def battle_dir(src, run, st=None):
+    if st and st.get("dir"):
+        return st["dir"]
     return os.path.join(src, ".local/living/verify", run)
 
 
-def town_dir(src, run):
+def town_dir(src, run, st=None):
+    if st and st.get("dir"):
+        return st["dir"]
     return os.path.join(src, ".local/living/trials", run)
 
 
@@ -123,6 +132,12 @@ class Battle:
         self.times = [t for t, _ in self.samples]
         self.end = self.times[-1]
         self.people = {c["id"] for c in json.load(open(os.path.join(d, "chars.json")))}
+        # With `--all-bodies`, every creature's kind (people, animals) from the samples.
+        self.kinds = {}
+        for line in gzip.open(os.path.join(d, "combat-samples.jsonl.gz"), "rt"):
+            k = json.loads(line).get("kinds")
+            if k:
+                self.kinds.update({int(i): v for i, v in k.items()})
         self.by_actor = {}
         self.at_target = {}
         for u in self.uses.values():
@@ -132,6 +147,14 @@ class Battle:
         for v in list(self.by_actor.values()) + list(self.at_target.values()):
             v.sort(key=lambda u: u["accepted_ms"])
         self.acts = {k: sorted(v) for k, v in self.acts.items()}
+        # Indexes for the per-step lookups (a dense battle has hundreds in sight).
+        self.actor_times = {k: [u["accepted_ms"] for u in v] for k, v in self.by_actor.items()}
+        self.pair = {}
+        for u in self.uses.values():
+            if u.get("target") and u.get("outcome_ms"):
+                self.pair.setdefault((u["target"], u["actor"]), []).append((u["outcome_ms"], landed(u.get("outcome", "")), contact(u.get("outcome", ""))))
+        for v in self.pair.values():
+            v.sort()
 
     def bodies_at(self, t):
         """Every body's position and velocity at `t` (ms), from the latest sample at or before it."""
@@ -163,14 +186,15 @@ def battle_candidate(B, subject, t, me, other, pos, first_seen, prev_targets):
     closing = 0.0
     if d > 1e-6:
         closing = -((x - me[0]) * vx + (y - me[1]) * vy) / d
-    c = {"id": other, "kind": "person" if other in B.people else "animal", "dist": round(d, 2), "closing": round(closing, 2), "made_out": True,
+    kind = B.kinds.get(other) or ("person" if other in B.people else "animal")
+    c = {"id": other, "kind": kind, "dist": round(d, 2), "closing": round(closing, 2), "made_out": True,
          "in_sight_s": round((t - first_seen) / 1000, 1)}
-    if other in B.people:
+    if kind == "person":
         c["relations"] = 8  # a stranger: these fighters know no one
     # What it visibly does: its latest use whose windup or recovery is under way.
-    us = [u for u in B.by_actor.get(other, []) if u["accepted_ms"] <= t]
-    if us:
-        u = us[-1]
+    i = bisect_right(B.actor_times.get(other, []), t)
+    if i:
+        u = B.by_actor[other][i - 1]
         age = t - u["accepted_ms"]
         if age <= 2000:
             is_ = [u["skill"]] + (["hostile"] if u["skill"] in HOSTILE else []) + (["melee"] if u["skill"] == "strike" else [])
@@ -181,13 +205,15 @@ def battle_candidate(B, subject, t, me, other, pos, first_seen, prev_targets):
                 c["threatening"] = True
             if u["skill"] in FIGHT:
                 c["fighting"] = True
-    mine = [u for u in B.at_target.get(subject, []) if u["actor"] == other and u.get("outcome_ms") and u["outcome_ms"] <= t]
-    hurt = [u for u in mine if landed(u.get("outcome", ""))]
-    if hurt:
-        c["hurt_me_ago_s"] = round((t - max(u["outcome_ms"] for u in hurt)) / 1000, 2)
-    touched = [u for u in mine if contact(u.get("outcome", ""))]
-    if touched:
-        c["contact_ago_s"] = round((t - max(u["outcome_ms"] for u in touched)) / 1000, 2)
+    pv = B.pair.get((subject, other))
+    if pv:
+        j = bisect_right(pv, (t, True, True))
+        hurt = [x[0] for x in pv[:j] if x[1]]
+        touched = [x[0] for x in pv[:j] if x[2]]
+        if hurt:
+            c["hurt_me_ago_s"] = round((t - hurt[-1]) / 1000, 2)
+        if touched:
+            c["contact_ago_s"] = round((t - touched[-1]) / 1000, 2)
     if other in prev_targets:
         c["acted_on"] = True
     return c
@@ -259,6 +285,9 @@ class Town:
         for r in cast.get("roles", {}).get("subject", []):
             hh = {h["id"] for h in r.get("background", {}).get("household", []) if "id" in h}
             self.family[r["id"]] = hh
+        self.load_attempts(d)
+
+    def load_attempts(self, d):
         self.attempts = []
         p = os.path.join(d, "journal/outcomes/act_attempts.jsonl")
         if os.path.exists(p):
@@ -278,6 +307,7 @@ class Town:
                         continue
                     named |= ids_in(act)
                 self.attempts.append({"actor": int(m.group(1)), "at_ms": a["at_ms"], "named": sorted(named)})
+        self.attempts.sort(key=lambda a: a["at_ms"])
 
     def at(self, t):
         i = max(0, min(len(self.samples) - 1, bisect_right(self.times, t) - 1))
@@ -344,6 +374,87 @@ def town_fields(T, st):
     return steps
 
 
+class TownB(Town):
+    """A trials.py instance with `record.bodies {"all": true}`: every creature at 5 Hz
+    (`bodies.jsonl`: position, facing, the fighter row, the activity), kinds (`kinds.json`)."""
+
+    def __init__(self, d):
+        self.d = d
+        self.rows = [json.loads(l) for l in open(os.path.join(d, "bodies.jsonl"))]
+        self.times = [r["ms"] for r in self.rows]
+        kp = os.path.join(d, "kinds.json")
+        self.kinds = {int(k): v for k, v in json.load(open(kp)).items()} if os.path.exists(kp) else {}
+        cast = json.load(open(os.path.join(d, "cast.json"))) if os.path.exists(os.path.join(d, "cast.json")) else {}
+        self.family = {}
+        for r in cast.get("roles", {}).get("subject", []):
+            self.family[r["id"]] = {h["id"] for h in r.get("background", {}).get("household", []) if "id" in h}
+        Town.load_attempts(self, d)
+
+    def row(self, t):
+        i = max(0, min(len(self.rows) - 1, bisect_right(self.times, t) - 1))
+        return self.rows[i]
+
+
+def town_fields_b(T, st, step_s=0.2):
+    subject, t0, sight = st["subject"], st["t_ms"], st["sight"]
+    steps = []
+    first_seen = {}
+    n = int(round((BEFORE_S + WINDOW_S) / step_s))
+    for k in range(n + 1):
+        rel = -BEFORE_S + k * step_s
+        t = t0 + int(round(rel * 1000))
+        r = T.row(t)
+        b = r["b"]
+        if str(subject) not in b or str(subject) in r.get("dead", {}):
+            break
+        me = b[str(subject)]
+        before = T.row(t - 1000)["b"]
+        mine_act = r.get("act", {}).get(str(subject))
+        my_target = mine_act[1] if mine_act else 0
+        cands = []
+        for o, v in b.items():
+            oi = int(o)
+            if oi == subject or o in r.get("dead", {}):
+                continue
+            d = math.hypot(v[0] - me[0], v[1] - me[1])
+            if d > sight + (KEEP_M if oi in first_seen else 0.0):
+                first_seen.pop(oi, None)
+                continue
+            first_seen.setdefault(oi, t if k > 0 else t - 60_000)
+            c = {"id": oi, "kind": T.kinds.get(oi, "person"), "dist": round(d, 2), "made_out": True, "in_sight_s": round((t - first_seen[oi]) / 1000, 1)}
+            if o in before:
+                bd = math.hypot(before[o][0] - me[0], before[o][1] - me[1])
+                c["closing"] = round(bd - d, 2)
+            if oi in T.family.get(subject, set()):
+                c["relations"] = 1
+            f = r.get("f", {}).get(o)
+            if f and f[1] and f[4] > r["ms"]:
+                act_ms, rel_ms, until = f[2], f[3], f[4]
+                now = r["ms"]
+                phase = "winding up" if now < act_ms + (rel_ms - act_ms) * 0.5 else "about to release" if now < rel_ms else "releasing" if now < rel_ms + 150 else "recovering"
+                c["doing"] = {"is": ["hostile"] if f[5] else ["move"], "phase": phase, "at_me": f[5] == subject}
+                c["target"] = f[5]
+                c["fighting"] = True
+                if f[5] == subject and now < rel_ms:
+                    c["threatening"] = True
+            addressed = [a for a in T.attempts if a["actor"] == oi and subject in a["named"] and a["at_ms"] <= t]
+            if addressed:
+                c["addressed_me_ago_s"] = round((t - addressed[-1]["at_ms"]) / 1000, 1)
+            if oi == my_target or any(a["actor"] == subject and oi in a["named"] and 0 <= t - a["at_ms"] <= 10_000 for a in T.attempts):
+                c["acted_on"] = True
+            cands.append(c)
+        steps.append({"t": round(rel, 3), "cands": cands, "events": []})
+    return steps
+
+
+def load_town(d):
+    return TownB(d) if os.path.exists(os.path.join(d, "bodies.jsonl")) else Town(d)
+
+
+def town_fields_any(T, st, step_s):
+    return town_fields_b(T, st, step_s) if isinstance(T, TownB) else town_fields(T, st)
+
+
 # --------------------------------------------------------------------------------------------
 # freeze
 
@@ -352,8 +463,10 @@ def freeze(a):
     rng = random.Random(SEED)
     states = []
     inputs = {}
-    for run in BATTLE_RUNS:
-        d = battle_dir(a.src, run)
+    custom_b = [os.path.abspath(x) for x in (a.battle_run or [])]
+    custom_t = [os.path.abspath(x) for x in (a.town_run or [])]
+    for run in (custom_b or BATTLE_RUNS):
+        d = run if custom_b else battle_dir(a.src, run)
         B = Battle(d)
         pool = []
         for at, sid, sc, f in thinks(d):
@@ -366,22 +479,25 @@ def freeze(a):
             sight = float(sc.get("time", {}).get("sight", 48.0))
             n = sum(1 for o, p in pos.items() if o != sid and math.hypot(p[0] - pos[sid][0], p[1] - pos[sid][1]) <= sight)
             you = sc["you"]
-            pool.append({"kind": "battle", "run": run, "subject": sid, "t_ms": at, "sight": sight, "in_sight": n, "journal": f,
+            pool.append({"kind": "battle", "run": os.path.basename(run), **({"dir": d} if custom_b else {}), "subject": sid, "t_ms": at, "sight": sight, "in_sight": n, "journal": f,
                          "self": {"health": you.get("health"), "energy": you.get("energy"), "hunger": you.get("hunger"), "stamina": you.get("stamina")},
                          "stage": "adult", "knows": you.get("knows_how_to", [])})
         pool.sort(key=lambda s: (s["subject"], s["t_ms"]))
-        take = rng.sample(pool, min(len(pool), a.battle // len(BATTLE_RUNS)))
+        take = rng.sample(pool, min(len(pool), a.battle // len(custom_b or BATTLE_RUNS)))
         states += sorted(take, key=lambda s: s["t_ms"])
-        inputs[run] = {"combat-samples.jsonl.gz": sha256_file(os.path.join(d, "combat-samples.jsonl.gz")), "think requests": len(pool)}
+        inputs[os.path.basename(run)] = {"combat-samples.jsonl.gz": sha256_file(os.path.join(d, "combat-samples.jsonl.gz")), "think requests": len(pool)}
     town_pool = []
-    for run in TOWN_RUNS:
-        d = town_dir(a.src, run)
-        T = Town(d)
+    for run in (custom_t or TOWN_RUNS):
+        d = run if custom_t else town_dir(a.src, run)
+        T = load_town(d)
         for at, sid, sc, f in thinks(d):
             if at < T.times[0] + 60_000 or at + WINDOW_S * 1000 > T.times[-1]:
                 continue
-            s = T.at(at)
-            mem = s["members"]
+            if isinstance(T, TownB):
+                r = T.row(at)
+                mem = {o: {"pos": v[:2], "alive": o not in r.get("dead", {})} for o, v in r["b"].items()}
+            else:
+                mem = T.at(at)["members"]
             if str(sid) not in mem:
                 continue
             me = mem[str(sid)]["pos"]
@@ -390,10 +506,11 @@ def freeze(a):
             if n < 8:
                 continue
             you = sc["you"]
-            town_pool.append({"kind": "town", "run": run, "subject": sid, "t_ms": at, "sight": sight, "in_sight": n, "journal": f,
+            town_pool.append({"kind": "town", "run": os.path.relpath(run, os.path.dirname(os.path.dirname(run))) if custom_t else run, **({"dir": d} if custom_t else {}), "subject": sid, "t_ms": at, "sight": sight, "in_sight": n, "journal": f,
                               "self": {"health": you.get("health"), "energy": you.get("energy"), "hunger": you.get("hunger"), "stamina": you.get("stamina")},
                               "stage": "adult", "knows": you.get("knows_how_to", [])})
-        inputs[run] = {"samples.jsonl": sha256_file(os.path.join(d, "samples.jsonl"))}
+        sample_file = "bodies.jsonl" if isinstance(T, TownB) else "samples.jsonl"
+        inputs[os.path.basename(run) if custom_t else run] = {sample_file: sha256_file(os.path.join(d, sample_file))}
     town_pool.sort(key=lambda s: (s["run"], s["subject"], s["t_ms"]))
     states += sorted(rng.sample(town_pool, min(len(town_pool), a.town)), key=lambda s: (s["run"], s["t_ms"]))
     for i, s in enumerate(states):
@@ -420,11 +537,11 @@ def fields(a):
     with open(a.out, "w") as out:
         for st in data["states"]:
             if st["kind"] == "battle":
-                B = battles.get(st["run"]) or battles.setdefault(st["run"], Battle(battle_dir(a.src, st["run"])))
+                B = battles.get(st["run"]) or battles.setdefault(st["run"], Battle(battle_dir(a.src, st["run"], st)))
                 steps = battle_fields(B, st, a.step)
             else:
-                T = towns.get(st["run"]) or towns.setdefault(st["run"], Town(town_dir(a.src, st["run"])))
-                steps = town_fields(T, st)
+                T = towns.get(st["run"]) or towns.setdefault(st["run"], load_town(town_dir(a.src, st["run"], st)))
+                steps = town_fields_any(T, st, a.town_step)
             s = st["self"]
             rec = {"state": st["state"], "kind": "person", "actor": capacity_actor(st),
                    "self": {"health": s.get("health") or 100.0, "energy": s.get("energy") or 80.0, "hunger": s.get("hunger") or 0.0, "stamina": s.get("stamina") or 60.0, "night": False},
@@ -537,7 +654,7 @@ def score(a):
         m["figures"] = len(ids)
         m["figures_flickering"] = ff
         if st["kind"] == "battle":
-            B = battles.get(st["run"]) or battles.setdefault(st["run"], Battle(battle_dir(a.src, st["run"])))
+            B = battles.get(st["run"]) or battles.setdefault(st["run"], Battle(battle_dir(a.src, st["run"], st)))
             t0 = st["t_ms"]
             # M1: per attacker, its FIRST landed blow in the window: was it heeded when that
             # blow's windup started (heeded already, or taken by the event pass)? And later blows
@@ -568,8 +685,8 @@ def score(a):
             m.update({"windups": windups, "windups_unheeded": windups_un, "first_blows": first, "first_blows_unheeded": first_un,
                       "later_blows": later, "later_blows_unheeded": later_un})
             acted = []
-            p = os.path.join(battle_dir(a.src, st["run"]), "journal/outcomes/act_attempts.jsonl")
-            for line in open(p):
+            p = os.path.join(battle_dir(a.src, st["run"], st), "journal/outcomes/act_attempts.jsonl")
+            for line in (open(p) if os.path.exists(p) else []):
                 x = json.loads(line)
                 mm = re.match(r"deliberate-(\d+)-", x.get("reference", ""))
                 if not mm or int(mm.group(1)) != st["subject"]:
@@ -587,7 +704,7 @@ def score(a):
                 if 0 <= rel <= WINDOW_S and u.get("target"):
                     acted.append(("use", rel, u["target"]))
         else:
-            T = towns.get(st["run"]) or towns.setdefault(st["run"], Town(town_dir(a.src, st["run"])))
+            T = towns.get(st["run"]) or towns.setdefault(st["run"], load_town(town_dir(a.src, st["run"], st)))
             acted = [("act", (x["at_ms"] - st["t_ms"]) / 1000, i) for x in T.attempts if x["actor"] == st["subject"] and 0 <= (x["at_ms"] - st["t_ms"]) / 1000 <= WINDOW_S for i in x["named"]]
         rows = []
         for src, rel, who in acted:
@@ -659,11 +776,14 @@ def main():
     f.add_argument("--out", required=True)
     f.add_argument("--battle", type=int, default=200)
     f.add_argument("--town", type=int, default=100)
+    f.add_argument("--battle-run", action="append", help="a battle_diag.py --all-bodies run folder (instead of the act trial's)")
+    f.add_argument("--town-run", action="append", help="a trials.py instance folder with record.bodies all (instead of the act trial's)")
     g = sub.add_parser("fields")
     g.add_argument("--src", required=True)
     g.add_argument("--states", required=True)
     g.add_argument("--out", required=True)
-    g.add_argument("--step", type=float, default=0.2, help="battle step, seconds (a player's sweep is 0.2 s); the town's samples are 2 s")
+    g.add_argument("--step", type=float, default=0.2, help="battle step, seconds (a player's sweep is 0.2 s)")
+    g.add_argument("--town-step", type=float, default=0.2, help="town step, seconds, for 5 Hz all-bodies towns (the act trial's town samples are 2 s whatever this is)")
     s = sub.add_parser("score")
     s.add_argument("--src", required=True)
     s.add_argument("--states", required=True)
