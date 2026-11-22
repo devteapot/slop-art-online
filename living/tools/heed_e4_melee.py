@@ -76,8 +76,8 @@ def script_for(arm, side_a):
 
 def one(a, arm, rep, out):
     S = det_compare.Server(a.container, a.url)
-    db = f"verify-melee-{arm}-r{rep}-{time.strftime('%H%M%S')}"
-    d = out / f"{arm}-r{rep}"
+    db = f"verify-melee-{arm.replace('.', '-')}-n{rep}-{time.strftime('%H%M%S')}"
+    d = out / f"{arm}-n{rep}"
     d.mkdir(parents=True, exist_ok=True)
     log = lambda m: (d / "actions.log").open("a").write(time.strftime("%H:%M:%S ") + m + "\n")
     with lock:
@@ -166,7 +166,8 @@ def run(a):
                 print(f"{time.strftime('%H:%M:%S')} {arm} r{r} done", flush=True)
             except Exception as e:  # noqa: BLE001 - one run's failure is recorded, the rest go on
                 print(f"{time.strftime('%H:%M:%S')} {arm} r{r} FAILED: {e}", flush=True)
-                (out / f"{arm}-r{r}" / "failed.txt").write_text(repr(e))
+                (out / f"{arm}-n{r}").mkdir(parents=True, exist_ok=True)
+                (out / f"{arm}-n{r}" / "failed.txt").write_text(repr(e))
     return 0
 
 
