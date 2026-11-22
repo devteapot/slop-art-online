@@ -132,6 +132,8 @@ pub mod heard_sounds_table;
 pub mod heard_table;
 pub mod heard_type;
 pub mod hearer_type;
+pub mod heed_policy_table;
+pub mod heed_policy_type;
 pub mod housekeeping_reducer;
 pub mod human_act_reducer;
 pub mod human_face_reducer;
@@ -198,6 +200,7 @@ pub mod mind_consolidated_reducer;
 pub mod mind_cursor_table;
 pub mod mind_cursor_type;
 pub mod mind_fast_done_reducer;
+pub mod mind_heed_reducer;
 pub mod mind_install_reducer;
 pub mod mind_install_way_reducer;
 pub mod mind_judged_reducer;
@@ -524,6 +527,8 @@ pub use heard_sounds_table::*;
 pub use heard_table::*;
 pub use heard_type::Heard;
 pub use hearer_type::Hearer;
+pub use heed_policy_table::*;
+pub use heed_policy_type::HeedPolicy;
 pub use housekeeping_reducer::housekeeping;
 pub use human_act_reducer::human_act;
 pub use human_face_reducer::human_face;
@@ -590,6 +595,7 @@ pub use mind_consolidated_reducer::mind_consolidated;
 pub use mind_cursor_table::*;
 pub use mind_cursor_type::MindCursor;
 pub use mind_fast_done_reducer::mind_fast_done;
+pub use mind_heed_reducer::mind_heed;
 pub use mind_install_reducer::mind_install;
 pub use mind_install_way_reducer::mind_install_way;
 pub use mind_judged_reducer::mind_judged;
@@ -879,6 +885,10 @@ pub enum Reducer {
         asked_ms: u64,
         thought: ThoughtIn,
     },
+    MindHeed {
+        actor: u32,
+        policy: String,
+    },
     MindInstall {
         actor: u32,
         graph: String,
@@ -1047,6 +1057,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindAct { .. } => "mind_act",
             Reducer::MindConsolidated { .. } => "mind_consolidated",
             Reducer::MindFastDone { .. } => "mind_fast_done",
+            Reducer::MindHeed { .. } => "mind_heed",
             Reducer::MindInstall { .. } => "mind_install",
             Reducer::MindInstallWay { .. } => "mind_install_way",
             Reducer::MindJudged { .. } => "mind_judged",
@@ -1203,6 +1214,12 @@ impl __sdk::Reducer for Reducer {
                 asked_ms: asked_ms.clone(),
                 thought: thought.clone(),
             }),
+            Reducer::MindHeed { actor, policy } => {
+                __sats::bsatn::to_vec(&mind_heed_reducer::MindHeedArgs {
+                    actor: actor.clone(),
+                    policy: policy.clone(),
+                })
+            }
             Reducer::MindInstall {
                 actor,
                 graph,
@@ -1486,6 +1503,7 @@ pub struct DbUpdate {
     heard: __sdk::TableUpdate<Heard>,
     heard_asleep: __sdk::TableUpdate<HeardAsleep>,
     heard_sounds: __sdk::TableUpdate<HeardSound>,
+    heed_policy: __sdk::TableUpdate<HeedPolicy>,
     infant_cry: __sdk::TableUpdate<InfantCry>,
     inventory: __sdk::TableUpdate<Inventory>,
     join_request: __sdk::TableUpdate<JoinRequest>,
@@ -1770,6 +1788,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "heard_sounds" => db_update
                     .heard_sounds
                     .append(heard_sounds_table::parse_table_update(table_update)?),
+                "heed_policy" => db_update
+                    .heed_policy
+                    .append(heed_policy_table::parse_table_update(table_update)?),
                 "infant_cry" => db_update
                     .infant_cry
                     .append(infant_cry_table::parse_table_update(table_update)?),
@@ -2289,6 +2310,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.heard_asleep = cache
             .apply_diff_to_table::<HeardAsleep>("heard_asleep", &self.heard_asleep)
             .with_updates_by_pk(|row| &row.id);
+        diff.heed_policy = cache
+            .apply_diff_to_table::<HeedPolicy>("heed_policy", &self.heed_policy)
+            .with_updates_by_pk(|row| &row.actor);
         diff.infant_cry = cache
             .apply_diff_to_table::<InfantCry>("infant_cry", &self.infant_cry)
             .with_updates_by_pk(|row| &row.infant);
@@ -2785,6 +2809,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "heard_sounds" => db_update
                     .heard_sounds
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "heed_policy" => db_update
+                    .heed_policy
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "infant_cry" => db_update
                     .infant_cry
@@ -3297,6 +3324,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "heard_sounds" => db_update
                     .heard_sounds
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "heed_policy" => db_update
+                    .heed_policy
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "infant_cry" => db_update
                     .infant_cry
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3700,6 +3730,7 @@ pub struct AppliedDiff<'r> {
     heard: __sdk::TableAppliedDiff<'r, Heard>,
     heard_asleep: __sdk::TableAppliedDiff<'r, HeardAsleep>,
     heard_sounds: __sdk::TableAppliedDiff<'r, HeardSound>,
+    heed_policy: __sdk::TableAppliedDiff<'r, HeedPolicy>,
     infant_cry: __sdk::TableAppliedDiff<'r, InfantCry>,
     inventory: __sdk::TableAppliedDiff<'r, Inventory>,
     join_request: __sdk::TableAppliedDiff<'r, JoinRequest>,
@@ -3935,6 +3966,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.heard_sounds,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<HeedPolicy>("heed_policy", &self.heed_policy, event);
         callbacks.invoke_table_row_callbacks::<InfantCry>("infant_cry", &self.infant_cry, event);
         callbacks.invoke_table_row_callbacks::<Inventory>("inventory", &self.inventory, event);
         callbacks.invoke_table_row_callbacks::<JoinRequest>(
@@ -4905,6 +4937,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         heard_table::register_table(client_cache);
         heard_asleep_table::register_table(client_cache);
         heard_sounds_table::register_table(client_cache);
+        heed_policy_table::register_table(client_cache);
         infant_cry_table::register_table(client_cache);
         inventory_table::register_table(client_cache);
         join_request_table::register_table(client_cache);
@@ -5073,6 +5106,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "heard",
         "heard_asleep",
         "heard_sounds",
+        "heed_policy",
         "infant_cry",
         "inventory",
         "join_request",

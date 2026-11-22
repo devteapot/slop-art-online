@@ -2169,6 +2169,87 @@ def think_framing_case(run):
     return {'status': 'pass', **result}
 
 
+@case('heed')
+def heed_case(run):
+    """A mind writes whom its character keeps track of (docs/ATTENTION_BUDGET.md §8), through the
+    think reply's `heed` field, the `mind_heed` reducer and the private `heed_policy` row, with the
+    authority's refusal coming back in the next think prompt.
+
+    - **Off (as shipped):** the think system prompt has no heed field and the user prompt no
+      "# Whom you keep track of"; a `heed` in a reply is ignored (no row).
+    - **On** (`set_world_law heed_on true`): the system prompt has the field and its grammar; the
+      user prompt has the section, "by your instinct".
+    - **A valid policy** in a think reply: a `heed_policy` row holds it; the next think prompt says
+      "by your own policy" with the policy's own `why`.
+    - **A refused policy** (an unknown kind): the row keeps the policy before and records the
+      refusal, which the next think prompt shows.
+    - **"instinct"**: the row is gone and the prompt says "by your instinct" again.
+
+    The law is restored at the end."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 1, True)
+    m = next(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    run.admin('set_behavior', m, json.dumps({'wait': 300}))
+    why = 'verifyheedwhy'
+    own = [{'if': {'who': 'person'}, 'order': 'nearest', 'take': 2, 'hold_s': 5, 'why': why}]
+    think = lambda heed: {'thought': 'I look around.', 'intend': ['wait'], 'say': None, 'heed': heed}
+    script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()},
+              'rules': [{'purpose': 'think', 'contains': f'verify {k}', 'times': -1, 'reply': think(v)}
+                        for k, v in (('heed-ignored', own), ('heed-own', own), ('heed-bad', [{'if': {'who': 'dragon'}}]), ('heed-back', 'instinct'))]}
+    run.start(model(run, script), [m])
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'think']
+    msgs = lambda e: {x.get('role'): str(x.get('content', '')) for x in e['body'].get('messages', [])}
+    asked = lambda marker: [msgs(e) for e in requests() if f'verify {marker}' in msgs(e).get('user', '')]
+    row = lambda label: run.private(f'SELECT * FROM heed_policy WHERE actor = {m}', label)
+    prompts, rows = {}, {}
+
+    def think_on(marker, label):
+        run.request(m, marker)
+        prompts[marker] = run.wait(lambda: asked(marker), f'the think request: {label}', 90)[0]
+        return prompts[marker]
+
+    try:
+        run.admin('set_world_law', 'heed_on', 'false')
+        think_on('heed-ignored', 'heed off, a reply with a heed')
+        time.sleep(3.0)
+        rows['off'] = row('row-off')
+        run.admin('set_world_law', 'heed_on', 'true')
+        assert own_laws(lambda q: run.sql(q, 'world-law')).get('heed_on') == 'true'
+        time.sleep(3.0)
+        think_on('heed-own', 'heed on, a valid policy')
+        rows['own'] = run.wait(lambda: [r for r in row('row-own') if why in r['policy']], 'the policy row', 30)
+        think_on('heed-check-own', 'the prompt after the policy')
+        think_on('heed-bad', 'a refused policy')
+        rows['bad'] = run.wait(lambda: [r for r in row('row-bad') if r['refusal']], 'the refusal on the row', 30)
+        think_on('heed-check-bad', 'the prompt after the refusal')
+        think_on('heed-back', 'back to the instinct')
+        run.wait(lambda: not row('row-back'), 'the row gone', 30)
+        think_on('heed-check-back', 'the prompt after going back')
+    finally:
+        run.admin('set_world_law', 'heed_on', 'false')
+    (run.directory / 'heed-prompts.json').write_text(json.dumps(prompts, indent=1))
+    (run.directory / 'heed-rows.json').write_text(json.dumps(rows, indent=1))
+    off, on1, own_p, bad_p, back_p = (prompts[k] for k in ('heed-ignored', 'heed-own', 'heed-check-own', 'heed-check-bad', 'heed-check-back'))
+    checks = {
+        'off_no_field_no_section': '"heed"' not in off['system'] and '# Whom you keep track of' not in off['user'],
+        'off_reply_heed_ignored': rows['off'] == [],
+        'on_system_has_field_and_grammar': '"heed": [rules]' in on1['system'] and 'Whom you keep track of (the heed field)' in on1['system'],
+        'on_user_section_by_instinct': '# Whom you keep track of' in on1['user'] and 'by your instinct' in on1['user'],
+        'own_policy_row_written': bool(rows['own']) and not rows['own'][0]['refusal'],
+        'prompt_by_own_policy_with_its_why': f'by your own policy: {why}' in own_p['user'],
+        'refused_row_keeps_policy_and_says_why': why in rows['bad'][0]['policy'] and '`dragon` is not a kind of creature' in rows['bad'][0]['refusal'],
+        'prompt_shows_the_refusal': 'Your last heed was refused' in bad_p['user'] and '`dragon`' in bad_p['user'],
+        'back_to_instinct': 'by your instinct' in back_p['user'] and 'refused' not in back_p['user'],
+        'no_heed_note_in_the_scene': all('"_heed"' not in p['user'] for p in prompts.values()),
+    }
+    result = {'m': m, 'checks': checks}
+    (run.directory / 'heed.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
 @case('sissly-scene')
 def sissly_scene_case(run):
     """Play-test 6's scene, replayed on the island seed with the fake model (talk-turns,

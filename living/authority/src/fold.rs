@@ -137,6 +137,8 @@ pub fn flush(ctx: &ReducerContext, prev: u64, now: u64) {
             .copied()
             .zip(crate::perception::labels(ctx, &c, &who, now))
             .map(|(x, label)| match ctx.db.character().id().find(x) {
+                // Under heed, someone in the onlooker's throng is no one in particular.
+                Some(_) if crate::heed::masked(ctx, &c, x, now) => (x, crate::heed::throng_label(ctx, c.id, x, now)),
                 Some(t) if !player && label != t.name => (x, format!("{label} (#{})", crate::far::id_for(ctx, &c, &t, now))),
                 _ => (x, label),
             })
@@ -147,6 +149,7 @@ pub fn flush(ctx: &ReducerContext, prev: u64, now: u64) {
         let salient = blows.iter().any(|b| b.start || b.fell);
         let first = &rows[seen_rows[0].0];
         let (a, v) = (if seen_rows[0].1 { 0 } else { first.attacker }, first.victim);
+        let (a, v) = (if crate::heed::masked(ctx, &c, a, now) { 0 } else { a }, if crate::heed::masked(ctx, &c, v, now) { 0 } else { v });
         // Its first blow woke it when it landed; the line itself wakes no one.
         crate::perceive::percept_quiet(ctx, &c, now, "fight", a, v, (first.x, first.y), text, if salient { 0.7 } else { 0.5 });
         common::diag(|| "fold:line", 1);

@@ -1,6 +1,86 @@
-# Attention budget: who a character keeps track of (design note, v2)
+# Attention budget: who a character keeps track of (heed)
 
-Status: **design only, v2**, 2026-11-22, branch `attention-budget-v2` (Spark), from `origin/main` `a6375a70`. v1 is in history at `a6375a70` (merged from `attention-budget` `112a42bf`). Nothing is built: no law, table, reducer, view, prompt or default changes, and no experiment has run.
+Status: **current, built (authority and mind side), off by default**, 2026-11-23, branch `heed` from `origin/main` `5b13f1ba7`. The value-only law `heed_on` stays off until the owner has seen heed in a play-test. The player side (`sweep_one`, `human_heed`, `seen_throng`, the client) is dev-box's and the laptop's, later: see "Player-side interface" below. Everything from "Why v2" on is the design history (v1, v2, v2.1) and the experiments; where it and "Built" differ, "Built" holds.
+
+## Built (2026-11-23)
+
+**The owner's decisions** ("ok" to building heed, 2026-11-23, relayed by the general coordinator):
+- the default instinct is E5's (a′): the person instinct reading the widened `attacker` (docs/ATTENTION_E5.md §8);
+- minds may rewrite it;
+- a person's base capacity is 14; `heed_ceiling` is 16;
+- crowd figures for players in 6 m cells (the player side, later);
+- no Jev;
+- `heed_on` off by default until the owner's play-test.
+
+**What is built** (nothing here runs while `heed_on` is off; then perception, prompts, tables written and the tick are as on main, measured by det_compare):
+
+| Part | Where | What |
+|---|---|---|
+| The selector | `living/rules/src/heed.rs` | The grammar (with E5's fixes: `who` as a relation, an age or `"#41"`; several words in one condition; condition words outside `if`; stray fields and hold over 60 s noted, not refused; every failing rule named), `attacker` (went for me: winding up at me now, or a blow that reached me: landed, blocked or dodged) and `hurt_me` (a blow hurt me), ages (baby, child, adult, old) as perceived, `select`, `admit`, `rank_of`, holds, `ClosingTracker`, `clamp_capacity` |
+| The instincts | `living/seeds/heed.json` | `heed_person` (a′), `heed_wolf`, `heed_deer`, `heed_default` (seed content) |
+| Capacity | `living/scripts/skills.rhai` `heed_capacity(a)` | person 14, wolf 8, deer 6; life stage, wounds, tiredness and lost breath narrow it; the knack of the skill `heed_knack()` names (`watch`) and the `keeping_watch` technique widen it **only in a world that has them**: they are an overlay (`living/seeds/worlds/heed/laws.rhai`) no shipped world names |
+| Laws (value-only) | `skills.rhai`, `rules/src/script.rs` | `heed_on` false; `heed_ceiling` 16; `heed_contact_s` 4; `heed_closing_s` 1; `heed_trace` false (a diagnostic the verify-core heed scene reads) |
+| AI and minds | `living/authority/src/heed.rs` and its readers | the heeded set per character in module memory; a full pass at most once a second; event re-rank only on a windup aimed at it, words to it and a cue's match (contact is forced); forced individuals: whom it acts on and whoever made contact within `heed_contact_s`; every `Sensing` reader consults it (graph `sees`/`count`/`doing`/`threatened`, targets, cues, first sights, `scene_json`, fight folds and witness lines, speech hearers' names, the fast lane, `mind_reach`) |
+| A mind's scene | `perceive.rs` | at most its individuals under `creatures` (no 14-cap under heed); the rest as `throngs` lines (direction, distance band, about how many, spread, heading, what they visibly do); `_stage.throng_players` for the level of detail; `_heed` (below) |
+| The combat feed for minds | `fold.rs`, `perceive.rs` | throng members named as "someone in the throng", never by id |
+| Age | `Candidate.stage` | set by the authority from the character's life stage when made out; `who` `age` reads it |
+| A mind's own policy | table `heed_policy`, reducer `mind_heed` | below |
+| The mind service | `living/mind/src/prompts.rs`, `mind.rs` | under `heed_on`: the think reply's optional `"heed"` field and its grammar in the (cached) think system prompt; the user prompt's "# Whom you keep track of" from the scene's `_heed`; a decision's `heed` sent to `mind_heed`. With the law off, every prompt is as on main |
+
+**A mind's own policy.** A think reply may carry `"heed": [rules]` (or `{"heed": [...]}`, or `"instinct"` to go back). The service sends it, as JSON, to `mind_heed(actor, policy)`. The authority validates it with the shared parser, against the ids its character sees now or has a relation with and the world's kinds:
+- accepted: the `heed_policy` row holds it, with the parser's notes; the next pass runs it;
+- refused: the row keeps the policy before and records the reason (written with `Ok`, since an `Err` would roll the record back);
+- the character's next think prompt shows its capacity, whether it keeps track by its own policy or its instinct, each rule's `why`, the notes, and the last refusal ("Your last heed was refused, so the one before stays: rule 1: `dragon` is not a kind of creature: …"). There is no repair turn.
+
+**Table** (new, private; read by primary key at each pass; parsed once per write, the parse cached in module memory and checked against `written_ms`):
+
+| `heed_policy` | |
+|---|---|
+| `actor` u32, primary key | the character |
+| `policy` String | the accepted policy, `{"heed": [rules]}`; empty: none accepted yet (its instinct) |
+| `written_ms` u64 | when it was accepted |
+| `notes` String | JSON list of the parser's notes on it |
+| `refusal` String | the last refusal's reason; empty when the last policy sent was accepted |
+| `refused_ms` u64 | |
+
+One row per character whose mind wrote a heed; deleted at death (`act::forget_dead`). SpacetimeDB documentation read 2026-11-23 (version 2.0.0; pins 2.14.1): [tables](https://spacetimedb.com/docs/tables/) (private is the default: reducers and the owner read it, clients cannot), [indexes](https://spacetimedb.com/docs/tables/indexes/) (a primary key is an index; lookups by it are the intended per-tick read), [access permissions](https://spacetimedb.com/docs/tables/access-permissions), [reducers](https://spacetimedb.com/docs/functions/reducers/) (module-level state is a hint, never the record; an `Err` rolls back every change) and [error handling](https://spacetimedb.com/docs/functions/reducers/error-handling). Adding a table and a reducer is an automatic migration with no disconnect.
+
+**Left on `heed-e4`** (experiments, not shipped): the E3/E5 tools and launchers, `living-mind heed-replay` and `heed-ask`, the trials, the `heed_instinct` law and the `_v1` instinct, the fixture laws `sides_first`, `sides_minded`, `sides_mixed_defence` (main gets mixed defence from `sides-mixed-defence`) and `heed_fixed_capacity`.
+
+## Player-side interface (for dev-box)
+
+What the player side can rely on, and what it must call. Nothing here is built for players yet: `heed::applies` is false for a character a person plays.
+
+**The selector** (`living_rules::heed`, pure, no world access):
+- `select(policy: &Policy, me: &SelfState, all: &[Candidate], limits: &Limits, held: &[Held]) -> Vec<Pick>`: the full pass. Forced places first (`Place::Acting`, `Place::Contact`; outside the capacity), then the policy's rules in order up to `limits.capacity`, each rule's `hold_s` kept through `held`. Returns the picks in rank order; `Pick { id, place, held }`.
+- `admit(policy, c: &Candidate, me, all, heeded: &[Pick], limits) -> Admit`: the event pass for one candidate (a windup at me, contact, words, a cue): forced, a free place, a displacement, or nothing.
+- `Limits { capacity: usize, contact_s: f32 }`; `Held { id, rule, lapsed_s }`; `SelfState { health, energy, hunger, stamina, night, hurt_ago_s }`.
+- `Candidate { id, kind, stage: Option<Stage>, dist, closing, made_out, relations (rel::FAMILY|FRIEND|ENEMY|STRANGER|COMMUNITY bits), threatening, doing: Option<Visible { is, phase, at_me }>, hurt_me_ago_s, addressed_me_ago_s, acted_on, contact_ago_s, cued, chosen: Option<f32>, heeded_s, in_sight_s, fighting, fallen, acting_on_heeded, loud, lit }`. **For a player, `chosen` carries its pins and focus** (a weight 0..1); the instinct's third rule takes `chosen` creatures (up to 4).
+- `ClosingTracker::new(window_s)`, `.observe(id, t_s, dist) -> f32`, `.forget_before(t_s)`: one per viewer; the answer goes in `Candidate.closing`.
+- `instinct(kind) -> Policy`; `parse_value_notes(v, &Known { met, kind }) -> Result<(Policy, Vec<String>), String>`.
+
+**The authority** (`living/authority/src/heed.rs`):
+- `heed::capacity(ctx, me: &Character, now) -> usize`: the world's `heed_capacity(a)` clamped by `heed_ceiling`.
+- `heed::split(ctx, me, at, seen: Vec<NearCreature>, now) -> (individuals, throng)`: runs a full pass when one is due (at most once a second) and splits what `me` sees. **`sweep_one` should call this in place of `far_cap`'s trim**, once `applies` covers players, and build the copies from the individuals and `seen_throng` from the throng.
+- `heed::windup(ctx, attacker, victim, now)` and `heed::contact(ctx, attacker, victim, outcome, now)` are already called by `act.rs` for every victim (players too); `contact` marks forced individuals while `heed_on` holds.
+- `heed::individual(ctx, me, other, now)` and `heed::masked(ctx, observer, other, now)`: whether `other` is an individual to `me`; every path that names someone (earshot words, the combat feed, experience lines) asks `masked`.
+- `heed::throng_lines` / `throng_label`: how a mind is told its throng (the player side has its own 6 m cells).
+- `heed::applies(ctx, id)` is `heed_on && not played by a person`. The player side extends it (for example a law `heed_players`, off until its own play-test).
+
+**The player's input** (v2.1 point 6; not built):
+
+```rust
+#[derive(SpacetimeType)]
+pub struct HeedInput { pub pins: Vec<u32>, pub focus: u32 /* 0: none */ }
+#[spacetimedb::reducer]
+pub fn human_heed(ctx: &ReducerContext, input: HeedInput) -> Result<(), String>
+```
+
+- The caller's character from `ctx.sender()`; one call per change, at most one every 250 ms, each spending an input token (`input_hz` / `input_burst`).
+- Store it in a **new** private table (never a new column), e.g. `heed_pick { id: u64 pk auto_inc, actor: u32 btree, target: u32, source: String ("pin" | "focus"), weight: f32, until_ms: u64 }`, read by `actor` at the sweep to fill `Candidate.chosen`.
+- A player's own policy, if it ever gets one, goes in the same `heed_policy` table (`actor` pk), written by its own reducer; `mind_heed` is for minds only (its controller check).
+- Crowd figures for a player: `seen_throng` (new, public, RLS `viewer = :sender`), one row per 6 m cell (the owner's decision), from `split`'s throng.
+
 
 **Why v2.** The owner answered v1 on 2026-11-22:
 - on "always in": "can we make this selective? the mind decides who to track, not hardcoded";
@@ -15,6 +95,75 @@ The general coordinator turned that into three changes:
 3. **Salience is information, not an order.**
 
 Plus an experiments section with stop rules. What v1 established is kept: the crowd, promotion with a told reason, the memory consequences, the cost model and the hidden 14-nearest cap in minds' scenes.
+
+## v2.1: amendments after dev-box's answers (2026-11-22)
+
+dev-box answered §12 from main's code (`docs/ATTENTION_BUDGET_DEVBOX_ANSWERS.md` on `attention-budget-devbox` `8a9f8d6a2`). The general coordinator accepted points 1–5 and 7 as written and narrowed point 6. **Where this section and the text below differ, this section holds.** The selector on `attention-exp` (`living/rules/src/heed.rs`) implements it.
+
+**Names.** "attention" already names the gaze band (`authority/src/attention.rs`, `human_gaze`) and the cues (docs/ATTENTION.md); "crowd" names the `crowd_sweep_n` and `crowd_frame_max_ms` laws. In code and from here on:
+
+| This note's v2 word | Name in code |
+|---|---|
+| attention, attend, attended | **heed**, heeded (`living_rules::heed`) |
+| attention policy, `"attend"` reply field | heed policy, `"heed"` field |
+| attention instinct (`attend_person`, …) | heed instinct, `heed_person`, … in `living/seeds/heed.json` |
+| `attention_capacity(a)`, its knack | `heed_capacity(a)`, `heed_knack()` (`watch`) |
+| `attend_on`, `attend_ceiling` | `heed_on`, `heed_ceiling`; and `heed_contact_s`, `heed_closing_s` (new, below) |
+| `attend_policy`, `attend_pick`, `attend_effect` | `heed_policy`, `heed_pick`, `heed_effect` |
+| conditions `attended_s`, `acting_on_attended` | `heeded_s`, `acting_on_heeded` |
+| the crowd, `seen_crowd`, the scene's `crowds` | the **throng**, `seen_throng`, the scene's `throngs` |
+| `human_attend`, `mind_attend` | `human_heed`, `mind_heed` |
+
+**1. Forced individuals: contact, not anticipation** (the general coordinator's version of dev-box's point 6). Two kinds of creature are individuals whatever the policy and outside the capacity:
+- **(i) whoever the character is acting on.** Mechanical: one cannot strike a throng figure.
+- **(ii) whoever made contact with it in the last `heed_contact_s` seconds** (a value-only world law, 4 s in the shipped script): a blow of theirs that landed on it, or that it blocked or dodged. Being struck is a percept the body delivers, like today's `attacked` line. After contact one knows who hit one, if they are in sight; if not, it is "struck from somewhere you could not see", as the missile rule already says.
+
+**Not forced:** "winding up at me" and "closing on me". Anticipation is the policy's, through the instinct, which puts them first. A mind that dropped them, or an untrained one with full places, can genuinely be ambushed or flanked: the first blow lands from someone it wasn't tracking, and then the attacker becomes an individual. That is what makes capacity and the `watch` skill matter, and what E4's "blows from unheeded attackers" measures: first blows, not repeated invisible ones. So there are no invisible repeated blows, and "the mind decides" holds for everything before contact. This replaces v1's engaged overflow and §1's "no overflow" row. The instinct (§2.4) drops its `acted_on` rule, now forced.
+
+**2. Hysteresis is seed content.** A rule may carry `"hold_s"`: what it took stays for that long after the rule last took it on its own merit, unless a better rule needs the place. The engine provides only the mechanism (`Held`, `Pick::held`); the instinct sets 5 s on its threat, speaker, watch-for and family rules and 3 s on "who is close" and the score rule. This replaces §2.3's engine-wide `attend_hold_ms`. E3(a) measures the instinct with and without its holds (docs/ATTENTION_E3.md).
+
+**3. Only players have a perceived set** (dev-box point 1). `perceived`, `projected` and the copies exist only for players (`perception::sweep`, `combat::humans`). AI characters and every rule check call the sight rule afresh through `perception::Sensing`.
+- **Players:** the heeded set can replace `far_cap`'s trim at the same point in `sweep_one`, and every copy, tier, cue and frame follows from it. A sight set kept beside the scene in module memory (`Viewer.sight`) serves earshot, the heard-row exclusion and keep margins.
+- **Minds (E4's authority side):** a new heeded set in module memory, keyed by actor. Every `Sensing` reader that should see individuals consults it: graph `Sees`, `Count` (individuals and throng), `Doing`, `Threatened`, the `Nearest`/`Id` targets, cues and first sights, and `scene_json`.
+- **Writers that call `in_sight` directly** must name throng members as throng: speech hearers, fight folds, witness percepts, the combat feed, the fast lane.
+- The selector takes a per-character field of candidates and returns the heeded set, whichever caller asks.
+
+**4. Throng members stay anonymous on every path** (dev-box points 3–5).
+- The combat feed masks actor and target by sight only today; it must mask a throng member too. So must `my_earshot` and the experience lines.
+- **Earshot keeps reading SIGHT, not heed.** `show_earshot` tells a player who hears them, and under-reporting it is a speech-consent problem.
+- **A mind's on-stage detection** (`mind/src/mind.rs`) must count a player in its throng as present, so the level of detail and the rethink gate do not take it off stage.
+- Throngs stay in their own `throngs` array in a mind's scene, never among `creatures` without an id, so recall builds no `person:null` key.
+
+**5. The cost table is an extrapolation** (dev-box point 2). The per-pair cost is not constant: about 2 µs a tick at about 58 in sight, 10.6 µs at about 166 (docs/COMBAT_PHASE.md, Part A). §6's table applies one i to C = 60 and C = 200 alike, and is extrapolated from one density pending E2. dev-box proposes a `far_cap` sweep (0, 48, 32, 16, 8) that would measure the near and far marginal costs and their dependence on C.
+
+**7. Steadier salience (after dev-box's E2).** E2 ran the v2 instinct at ceiling 16 without holds for 216 viewers: 612 flip-backs within 2 s per viewer-minute, touching 59% of heeded creatures, and 13.4 promotions per viewer-second. dev-box traced most of it to boundary oscillation from noisy features. Two changes in the selector (`heed.rs`):
+- **Closing speed is smoothed.** `ClosingTracker` measures the distance change over a window, the value-only law `heed_closing_s` (1 s in the shipped script), instead of between two consecutive passes. The caller keeps one tracker per observer, observes each creature in sight at each pass and puts the answer in `Candidate.closing`; an event between passes reads its last value. A window of 0 is the old two-pass speed.
+- **The incumbent wins an exact tie** within a rule (the sort key is the rule's order, then incumbent first, then distance, then id). It is mechanism, not policy: it only settles ties the policy left open, so equal scores do not flip at every pass as fighters move. A strictly better score still displaces the incumbent.
+
+On the Cullet battle recording (docs/ATTENTION_E3.md §8) without holds, smoothing cut flicker from 222 to 169 a subject-minute (−24%) and promotions from 3.2 to 2.7 a second. The instinct's holds remain what keeps the throng still (3.4 a minute with them).
+
+**8. What dev-box's E2 measured** (`docs/ATTENTION_E2_COST.md`, branch `attention-e2-doc`, coming to main; prototype on `attention-e2`, never merged):
+- **Holds work live.** With `heed.rs` (`aa3d4d9e2`) and its holds, at 216 viewers and a ceiling of 16, a viewer sees 7–8 flip-backs within 2 s per minute (6% of heeded creatures), against 378 without holds and 612 for a reading of the v2 instinct without any grace.
+- **The combat feed must be filtered by heed, not by sight.** Unfiltered, it was 128,711 rows in one 16-viewer run, naming actors and targets the viewer does not heed. That is a cost and a throng-identity leak (§4 of this list already requires throng anonymity on every path).
+- **Re-ranking:** re-rank only the target, on aim and on contact. Everything else happens at the 5 Hz sweep, because `frame::moved` fires for nearly every fighter every tick (Q10). This narrows §2.3's "evaluate the policy on events, in the tick" to those two events.
+- **§6's cost formula is missing a per-viewer constant.** With nobody heeded, a viewer costs 4.3–5.0 ms/s (dev-box's host), against a budget of about 1.06 ms/s at 216 viewers (600 ms/s for the tick less that host's 371 ms/s with no viewers). **No ceiling, not even 0, fits 216 viewers at 60 Hz on its own.** §6's table and its "a ceiling of 12–16 fits" do not hold.
+  - **Heed still earns its place:** it halves a viewer's per-second cost at 16 viewers (11.1 → 6.5–7.3 ms/s at a ceiling of 16), lifts the saturated 216-viewer tick rate from 16.5 to 21–27, gives one perception rule for players and minds, and makes cost grow with who is heeded rather than with everyone in sight.
+  - **It is not the battle-scale answer on its own.** The per-viewer floor, most of it hearing, views, the frames of unchanged scenes and the combat feed, has to come down too (E2 §4).
+  - The per-heeded cost is not one constant either: about 190 µs/s each for the first 8 (the near, fighting ones), about 60–70 after; 67 ± 22 marginal across ceilings 8–32.
+
+**6. `human_heed` shape** (dev-box point 7; SpacetimeDB docs read 2026-11-22: [reducers](https://spacetimedb.com/docs/functions/reducers/), [reducer context](https://spacetimedb.com/docs/functions/reducers/reducer-context), [column types](https://spacetimedb.com/docs/tables/column-types), all version 2.0.0; tuples are not among the listed types and `spacetimedb-sats` 2.14.1 implements no `SpacetimeType` for them, per dev-box's source reading):
+
+```rust
+#[derive(SpacetimeType)]
+pub struct HeedInput { pub pins: Vec<u32>, pub focus: u32 /* 0: none */ }
+#[spacetimedb::reducer]
+pub fn human_heed(ctx: &ReducerContext, input: HeedInput) -> Result<(), String>
+```
+
+- No character argument: the caller's own character comes from `ctx.sender()`, like the other `human_*` reducers.
+- **Hover stays on the client** (a predicted highlight). Only pin and focus changes are sent, batched by the client: one call per change, at most one every 250 ms. Each call spends an input token (`input_hz` / `input_burst`), so alternating reducers cannot raise a client's input rate.
+- The authority derives a player's target from its own aimed acts, `use_skill` targets and the talk addressee, without a call.
+- A click on a throng figure is a `focus` on the nearest throng member at that point, through `pick.rs`.
 
 ## 0. In short
 

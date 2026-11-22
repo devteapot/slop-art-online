@@ -92,6 +92,8 @@ PRIVATE = ['attention', 'copy_state', 'lines_state', 'applied_gaze', 'cover_grou
            # When what each character can make of others last changed (cullet-sweep,
            # docs/PERCEPTION.md "Module memory and rollback"): the perception sweep's only.
            'knowledge_epoch',
+           # A mind's own heed policy and its last refusal (docs/ATTENTION_BUDGET.md "Built"): mind_heed's.
+           'heed_policy',
            # Who heard each line (docs/COMMUNICATION.md §6); a speaker's person reads its own through my_heard.
            'line_heard',
            # What each player's character senses (the `senses` law), read through my_senses.
@@ -137,7 +139,7 @@ PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block'],
           # The player's look (fov-1): any living character may send it.
           'human_face': [1.0, 0.0], 'human_gaze': [1]}
 MIND = ['mind_routines', 'mind_install', 'mind_install_way', 'mind_say', 'mind_act', 'mind_skip',
-        'mind_consolidated', 'mind_update', 'mind_judged', 'mind_where']
+        'mind_consolidated', 'mind_update', 'mind_judged', 'mind_where', 'mind_heed']
 # Procedures (their answer goes to the caller alone), under the same controller rule: a talk turn's
 # reach (reply-timing, docs/COMMUNICATION.md §21), called for the character and someone else.
 # `mind_act_checked` (bystanders-2) is driven by verify-minds `act-repair` and verify-player `gaze`.
@@ -192,6 +194,8 @@ def mind_args(name, actor, marker):
         'mind_act': [actor, ['{"do":"signal","item":"client-probe"}'], 'probe'],
         # Where the character stands, for a talk turn (talk-places): the same controller rule.
         'mind_where': [actor],
+        # Whom the character keeps track of (heed): the same controller rule; a played character keeps nothing.
+        'mind_heed': [actor, '{"heed": []}'],
         'mind_skip': [actor, 0, t], 'mind_consolidated': [actor, 0],
         'mind_patch': [actor, 'combat', '{"wait":30}', 1, t], 'mind_fast_done': [actor, 1, t],
         'mind_judged': [actor, [{'q': 'client probe', 'value': 0.5, 'choice': '', 'ttl_ms': 1000}]],

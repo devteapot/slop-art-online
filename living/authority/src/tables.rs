@@ -2613,3 +2613,24 @@ pub struct SlowTimer {
     pub scheduled_id: u64,
     pub scheduled_at: ScheduleAt,
 }
+
+/// A character's own heed policy, written by its mind (`mind_heed`; docs/ATTENTION_BUDGET.md §8):
+/// the policy in force (validated JSON, `{"heed": [rules]}`; while there is no row, the species'
+/// instinct), what the validation noted, and the last refusal, which the character's next think
+/// prompt shows until a new policy is accepted. Private: only reducers and the database owner read
+/// it (docs: tables, access permissions). Read by primary key at each heed pass; written only when a
+/// mind sends a policy.
+#[spacetimedb::table(accessor = heed_policy)]
+#[derive(Clone)]
+pub struct HeedPolicy {
+    #[primary_key]
+    pub actor: u32,
+    /// The accepted policy as JSON; empty: none accepted yet (the instinct).
+    pub policy: String,
+    pub written_ms: u64,
+    /// What the accepted policy's validation changed or left out, for the mind (JSON list of words).
+    pub notes: String,
+    /// The last refusal's reason; empty when the last policy sent was accepted.
+    pub refusal: String,
+    pub refused_ms: u64,
+}

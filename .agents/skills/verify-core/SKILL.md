@@ -60,6 +60,8 @@ python3 "$C/scenes.py" truthful_refusals --run "$R" > "$E/truthful_refusals.txt"
 # The fast lane's triggers: the repeat at the law's N, never told; unseen moves not counted (features/fast.md, about 2 min).
 python3 "$C/scenes.py" seen_again --run "$R" > "$E/seen_again.txt" 2>&1
 python3 "$C/scenes.py" dodge_told --run "$R" > "$E/dodge_told.txt" 2>&1
+# Heed for AI characters (the heed_on law, off as shipped): individuals, the counted anonymous throng, forced contact, beside the law off (features/heed.md, about 2.5 min).
+python3 "$C/scenes.py" heed --run "$R" > "$E/heed.txt" 2>&1
 # First sights in a crowd: everyone in sight is told, several in one line (features/sight.md, about 30 s).
 python3 "$C/scenes.py" crowd_sight --run "$R" > "$E/crowd_sight.txt" 2>&1
 # A graph's "stranger" under the stranger_by_name law, off and on (features/graphs.md, about 30 s).

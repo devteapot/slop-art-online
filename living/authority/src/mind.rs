@@ -296,6 +296,53 @@ pub fn rework(ctx: &ReducerContext, actor: u32, name: &str, graph: &str, now: u6
     }
 }
 
+/// A mind sets whom its character keeps track of as individuals (docs/ATTENTION_BUDGET.md §8): a
+/// heed policy, `{"heed": [rules]}` or the bare list, validated as the authority reads it
+/// (`heed::validate`); `"instinct"` (or null) returns the character to its species' instinct. A
+/// refused policy leaves the one in force and records why, which the character's next think prompt
+/// shows; that is written with `Ok`, since an `Err` would roll the record back (docs: reducers,
+/// error handling). Only the character's controller may write it; it takes effect under `heed_on`.
+#[spacetimedb::reducer]
+pub fn mind_heed(ctx: &ReducerContext, actor: u32, policy: String) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
+    let me = authorize(ctx, actor)?;
+    // A character a person plays keeps track with its player's eyes: nothing is kept (as
+    // `mind_update` keeps no cue for one); the player side has its own input.
+    if crate::combat::human(ctx, actor).is_some() {
+        return Ok(());
+    }
+    let now = common::now_ms(ctx);
+    let row = ctx.db.heed_policy().actor().find(actor);
+    let parsed: Result<serde_json::Value, String> =
+        if policy.len() > living_rules::heed::MAX_BYTES { Err(format!("the policy is {} bytes; at most {}", policy.len(), living_rules::heed::MAX_BYTES)) } else { serde_json::from_str(&policy).map_err(|e| format!("not JSON: {e}")) };
+    if matches!(&parsed, Ok(serde_json::Value::Null)) || matches!(&parsed, Ok(serde_json::Value::String(s)) if s == "instinct") {
+        ctx.db.heed_policy().actor().delete(actor);
+        return Ok(());
+    }
+    let verdict = parsed.and_then(|v| crate::heed::validate(ctx, &me, &v, now).map(|(_, notes)| notes));
+    let next = match verdict {
+        Ok(notes) => {
+            // Kept as the mind wrote it (the authority reads it with the same lenient parser).
+            let v: serde_json::Value = serde_json::from_str(&policy).unwrap_or_default();
+            let rules = match &v {
+                serde_json::Value::Array(_) => v.clone(),
+                _ => v.get("heed").cloned().unwrap_or_default(),
+            };
+            HeedPolicy { actor, policy: serde_json::json!({ "heed": rules }).to_string(), written_ms: now, notes: if notes.is_empty() { String::new() } else { serde_json::json!(notes).to_string() }, refusal: String::new(), refused_ms: 0 }
+        }
+        Err(reason) => {
+            let old = row.clone().unwrap_or(HeedPolicy { actor, policy: String::new(), written_ms: 0, notes: String::new(), refusal: String::new(), refused_ms: 0 });
+            HeedPolicy { refusal: reason, refused_ms: now, ..old }
+        }
+    };
+    if row.is_some() {
+        ctx.db.heed_policy().actor().update(next);
+    } else {
+        ctx.db.heed_policy().insert(next);
+    }
+    Ok(())
+}
+
 /// A mind edits its character's routines (one or a few at a time).
 #[spacetimedb::reducer]
 pub fn mind_routines(ctx: &ReducerContext, actor: u32, routines: Vec<RoutineIn>) -> Result<(), String> {
@@ -703,6 +750,8 @@ fn reach(ctx: &ReducerContext, actor: u32, other: u32, now: u64) -> Reach {
     let other = crate::far::resolve(ctx, actor, other);
     let Some(them) = ctx.db.character().id().find(other).filter(|c| c.alive && c.id != actor) else { return r };
     match crate::perception::Sensing::new(ctx, actor, at, now).sensed_id(ctx, now, other) {
+        // Under heed, someone in the character's throng is not perceived as them (nothing when off).
+        Some((_, true)) if crate::heed::masked(ctx, &me, other, now) => return r,
         Some((c, true)) => {
             // A figure too far away to make out is not known to be them (far-label).
             let seen = crate::perception::project(ctx, &me, &them, now);
