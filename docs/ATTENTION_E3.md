@@ -278,6 +278,57 @@ Battle steps are 0.5 s (about 231 in sight × 81 steps a state); town steps are 
 
 **After the run:** report, then stop. The general coordinator decides on (b) and (c).
 
+### 9.1 The run and its result (2026-11-22, 06:41–06:57)
+
+**The run.**
+- **Locks and host:** `battle.lock` held at 06:41 after waiting behind heed-e4 since 06:02; quiet start at load 3.6.
+- **Guard:** ready before the runner (06:41:40). The runner was `trials.py run --batch heedreal1 heed-town` (commit `32d3934c4`, this section's measure frozen in it).
+- **Ended by duration (15.01 minutes)**, no stop rule tripped: 720 calls, 0 failed.
+- **Spend: $0.90 of the $1.50 cap**, by the guard's journal pricing:
+  - GLM Flash: 645 calls (313 consolidate, 154 think, 152 deliberate, 26 act repair), $0.85;
+  - DeepSeek V4.1 Flash: 75 talk calls, $0.05.
+- **Keys:** the `.env` copy was removed at exit, and a scan of the run's 2,209 evidence files found no key value.
+- **Archive:** the trial's own archive-on-cleanup wrote its commitlog archive to `~/slop-evidence`.
+
+**Switches** (`mind-env.json`; main's defaults otherwise):
+- `LIVING_CONCURRENCY` 64;
+- `LIVING_ONLY` the 40 subjects;
+- `LIVING_LLM_PER_MIN` 0;
+- the `people` mix;
+- `LIVING_GREET` / `LIVING_PARK` unset (nearest, concurrent);
+- `LIVING_FAST_FRAME` unset (balanced), `fast_lane_on` off;
+- no `force_outcomes` override;
+- the meters() alarm levels are in (the branch is on main after `61b7b2eb`);
+- Cullet's own laws, no world-law overrides; `heed_on` off (the world runs today's perception; heed is replayed).
+
+**The frozen sample.** State list `086c6f3de6e30bec46a34204bd43cd6228b6135155ef7771820f7cb1493d21ef`; `bodies.jsonl` `6c7705b1…`; files in `.local/attention-e3/real/MANIFEST.sha256`.
+- 138 think requests with a reply and at least 1 in sight.
+- 105 of them name someone in sight: **171 named-in-sight events**.
+
+**M2′** (people a think reply names who were in sight at the request; heeded at that moment):
+
+| Arm | Capacity p50 | Named in sight heeded (n = 171) | Beyond the 8 nearest heeded (n = 14) |
+|---|---|---|---|
+| **(a) the instinct, holds on, the formula's capacity** | 10 | **89.5%** | **14.3%** (2 of 14) |
+| (a) without holds | 10 | 91.8% | 35.7% (5) |
+| (a) at capacity 16 | 16 | 99.4% | 92.9% (13) |
+
+- **Where the named stand:** 92% of named-in-sight people are among the 8 nearest; 64 of the 171 are the nearest.
+- **The 14 beyond the 8 nearest** are at ranks 8, 8, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12, 14 and 15. At the formula's capacity the instinct heeded only the two at rank 8. Two named people stood beyond the 14 the prompt lists (ranks 14 and 15), so they were named from memory.
+- **Secondary** (same states, capacity p50 10):
+  - acts naming an id in sight: 3, all heeded;
+  - promotions 0.26 a second and flicker 3.8 a minute with holds, against 0.52 and 23.2 without.
+
+**Reading.**
+- **The beyond-8 sample is 14, not the 40–130 estimated in §8.**
+  - These minds thought 0.17 times a mind-minute (the island town 0.35).
+  - Most named people are the nearest, as the prompt's 14-nearest list makes likely.
+- **Where it can be read,** the instinct at its formula capacity of 10 misses most of the people a mind thinks about beyond the 8 nearest: 12 of 14.
+  - That is the gap a mind-written policy or Jev could close.
+  - It is a lower bound (§9's bias): the prompt hides everyone past the 14th nearest.
+- **Capacity alone closes it here** (93% at 16): in this town, beyond 8 rarely means beyond 16.
+- **What this cannot say:** with n = 14, no comparison of arms on beyond-8 reaches the frozen decision rule's significance. A comparison of (b) or (c) against (a) at 5 points needs several times this sample: a longer or larger real-mind town, or the 14-nearest cap lifted.
+
 ## Files
 
 - **Code (branch `attention-exp`):**
