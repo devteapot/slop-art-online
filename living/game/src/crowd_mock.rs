@@ -30,7 +30,7 @@
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 /// How often the file is read again (s).
 const POLL_S: f32 = 0.25;
@@ -46,7 +46,27 @@ struct Member {
     id: u32,
     at: Vec2,
     fighting: bool,
+    /// The colour of the body's top garment (the harness: `look.words.top`'s colour word), if any.
+    rgb: Option<[u8; 3]>,
+    fallen: bool,
 }
+
+/// A body in the feed.
+#[derive(Clone, PartialEq)]
+struct Body {
+    id: u32,
+    at: Vec2,
+    fighting: bool,
+    rgb: Option<[u8; 3]>,
+    fallen: bool,
+}
+
+/// Skin and trousers on every figure card (the seed's bottoms are all "dark trousers").
+const SKIN: [u8; 3] = [214, 170, 138];
+const TROUSERS: [u8; 3] = [52, 48, 58];
+const SPEAR: [u8; 3] = [120, 92, 60];
+/// Pick markers: the authority's attended (green) and those v2's order would add (orange).
+const MARK_RGB: [[f32; 3]; 2] = [[0.15, 0.95, 0.35], [1.0, 0.55, 0.1]];
 
 #[derive(Default, Clone, PartialEq)]
 struct Feed {
@@ -62,7 +82,9 @@ struct Feed {
     /// With a focus: the screen fraction from the top (0..1) where the focus's ground point is
     /// put, on the picture's vertical centre line (0.5: the middle).
     focus_at: f32,
-    bodies: Vec<(u32, Vec2, bool)>,
+    bodies: Vec<Body>,
+    /// Ground rings (sim xy, kind 0 the authority's pick, 1 v2's order's addition).
+    marks: Vec<(Vec2, u8)>,
 }
 
 #[derive(Resource)]
@@ -80,6 +102,9 @@ struct Mock {
     disc: Handle<Mesh>,
     stand_mat: Handle<StandardMaterial>,
     fight_mat: Handle<StandardMaterial>,
+    /// Person cards by (top colour, pose: 0 standing, 1 fighting).
+    person_mats: HashMap<([u8; 3], u8), Handle<StandardMaterial>>,
+    ring_mats: Vec<Handle<StandardMaterial>>,
     disc_mat: Handle<StandardMaterial>,
     blob: Handle<Mesh>,
     blob_mat: Handle<StandardMaterial>,
@@ -143,6 +168,54 @@ fn fighting(u: f32, v: f32) -> f32 {
     edge(head.min(torso).min(arms).min(legs).min(spear))
 }
 
+/// Which part of a person card a point is (0 none, 1 head, 2 top and arms, 3 legs, 4 spear) and
+/// its alpha; `fight` picks the pose.
+fn part(u: f32, v: f32, fight: bool) -> (u8, f32) {
+    let p = Vec2::new((u - 0.5) * CARD.0, v * CARD.1);
+    let (head, top, legs, spear) = if fight {
+        (
+            (p - Vec2::new(0.06, 1.5)).length() - 0.12,
+            seg(p, Vec2::new(-0.02, 0.88), Vec2::new(0.04, 1.3), 0.17).min(seg(p, Vec2::new(0.16, 1.28), Vec2::new(0.34, 1.12), 0.05)).min(seg(p, Vec2::new(-0.16, 1.28), Vec2::new(-0.3, 1.02), 0.05)),
+            seg(p, Vec2::new(-0.08, 0.88), Vec2::new(-0.3, 0.04), 0.065).min(seg(p, Vec2::new(0.08, 0.88), Vec2::new(0.28, 0.04), 0.065)),
+            seg(p, Vec2::new(-0.4, 0.75), Vec2::new(0.44, 1.72), 0.022),
+        )
+    } else {
+        (
+            (p - Vec2::new(0.0, 1.58)).length() - 0.12,
+            seg(p, Vec2::new(0.0, 0.92), Vec2::new(0.0, 1.36), 0.17).min(seg(p, Vec2::new(-0.2, 1.36), Vec2::new(-0.24, 0.9), 0.05)).min(seg(p, Vec2::new(0.2, 1.36), Vec2::new(0.24, 0.9), 0.05)),
+            seg(p, Vec2::new(-0.08, 0.9), Vec2::new(-0.1, 0.04), 0.065).min(seg(p, Vec2::new(0.08, 0.9), Vec2::new(0.1, 0.04), 0.065)),
+            f32::MAX,
+        )
+    };
+    let parts = [(1u8, head), (2, top), (3, legs), (4, spear)];
+    let (id, d) = parts.iter().copied().fold((0u8, f32::MAX), |a, b| if b.1 < a.1 { b } else { a });
+    (id, edge(d))
+}
+
+/// A person card in colour: skin, the top garment's colour, dark trousers, a spear when fighting;
+/// a darker outline so neighbouring cards stay apart.
+fn person_image(top: [u8; 3], fight: bool) -> Image {
+    let (w, h) = (54u32, 108u32);
+    let mut px = Vec::with_capacity((w * h * 4) as usize);
+    for j in 0..h {
+        for i in 0..w {
+            let (u, v) = ((i as f32 + 0.5) / w as f32, 1.0 - (j as f32 + 0.5) / h as f32);
+            let (id, a) = part(u, v, fight);
+            let c = match id {
+                1 => SKIN,
+                2 => top,
+                3 => TROUSERS,
+                4 => SPEAR,
+                _ => [0, 0, 0],
+            };
+            // Edge pixels darker: a soft outline.
+            let k = if a < 0.99 { 0.55 } else { 1.0 };
+            px.extend_from_slice(&[(c[0] as f32 * k) as u8, (c[1] as f32 * k) as u8, (c[2] as f32 * k) as u8, (a * 255.0) as u8]);
+        }
+    }
+    Image::new(Extent3d { width: w, height: h, depth_or_array_layers: 1 }, TextureDimension::D2, px, TextureFormat::Rgba8UnormSrgb, RenderAssetUsages::default())
+}
+
 fn setup(mut commands: Commands, file: Res<MockFile>, mut meshes: ResMut<Assets<Mesh>>, mut images: ResMut<Assets<Image>>, mut mats: ResMut<Assets<StandardMaterial>>) {
     let stand_tex = images.add(soft_image(54, 108, standing));
     let fight_tex = images.add(soft_image(54, 108, fighting));
@@ -167,6 +240,14 @@ fn setup(mut commands: Commands, file: Res<MockFile>, mut meshes: ResMut<Assets<
     };
     let stand_mat = card_mat(stand_tex, &mut mats);
     let fight_mat = card_mat(fight_tex, &mut mats);
+    let ring_tex = images.add(soft_image(64, 64, |u, v| {
+        let d = Vec2::new(u - 0.5, v - 0.5).length() * 2.0;
+        if (0.78..=1.0).contains(&d) { 1.0 } else { 0.0 }
+    }));
+    let ring_mats = MARK_RGB
+        .iter()
+        .map(|c| mats.add(StandardMaterial { base_color: Color::srgba(c[0], c[1], c[2], 0.95), base_color_texture: Some(ring_tex.clone()), unlit: true, alpha_mode: AlphaMode::Blend, depth_bias: 60.0, ..default() }))
+        .collect();
     let disc_mat = mats.add(StandardMaterial { base_color: Color::srgba(0.78, 0.30, 0.22, 0.6), base_color_texture: Some(disc_tex), unlit: true, alpha_mode: AlphaMode::Blend, depth_bias: 40.0, ..default() });
     let blob_mat = mats.add(StandardMaterial { base_color: Color::srgba(0.08, 0.08, 0.12, 0.35), base_color_texture: Some(blob_tex), unlit: true, alpha_mode: AlphaMode::Blend, depth_bias: 40.0, ..default() });
     commands.insert_resource(Mock {
@@ -181,6 +262,8 @@ fn setup(mut commands: Commands, file: Res<MockFile>, mut meshes: ResMut<Assets<
         disc: meshes.add(Circle::new(1.0)),
         stand_mat,
         fight_mat,
+        person_mats: HashMap::new(),
+        ring_mats,
         disc_mat,
         blob: meshes.add(Circle::new(0.5)),
         blob_mat,
@@ -200,8 +283,21 @@ fn read_feed(file: &str) -> Option<Feed> {
             .get("bodies")?
             .as_array()?
             .iter()
-            .filter_map(|b| Some((b.get("id")?.as_u64()? as u32, Vec2::new(b.get("x")?.as_f64()? as f32, b.get("y")?.as_f64()? as f32), b.get("fighting").and_then(|f| f.as_bool()).unwrap_or(false))))
+            .filter_map(|b| {
+                Some(Body {
+                    id: b.get("id")?.as_u64()? as u32,
+                    at: Vec2::new(b.get("x")?.as_f64()? as f32, b.get("y")?.as_f64()? as f32),
+                    fighting: b.get("fighting").and_then(|f| f.as_bool()).unwrap_or(false),
+                    rgb: b.get("rgb").and_then(|c| Some([c.get(0)?.as_u64()? as u8, c.get(1)?.as_u64()? as u8, c.get(2)?.as_u64()? as u8])),
+                    fallen: b.get("fallen").and_then(|f| f.as_bool()).unwrap_or(false),
+                })
+            })
             .collect(),
+        marks: v
+            .get("marks")
+            .and_then(|m| m.as_array())
+            .map(|a| a.iter().filter_map(|m| Some((Vec2::new(m.get("x")?.as_f64()? as f32, m.get("y")?.as_f64()? as f32), m.get("kind")?.as_u64()? as u8))).collect())
+            .unwrap_or_default(),
     })
 }
 
@@ -239,6 +335,8 @@ fn update(
     cams: Query<&GlobalTransform, With<Camera3d>>,
     mut tfs: Query<&mut Transform, Without<Camera3d>>,
     time: Res<Time>,
+    mut images: ResMut<Assets<Image>>,
+    mut mats: ResMut<Assets<StandardMaterial>>,
 ) {
     let Some(mut mock) = mock else { return };
     mock.since += time.delta_secs();
@@ -255,7 +353,7 @@ fn update(
         mock.stamp = stamp;
     }
     let perceived: HashSet<u32> = crate::looks::perceived_ids(&net).into_iter().collect();
-    let mut crowd: Vec<Member> = mock.feed.bodies.iter().filter(|(id, _, _)| !perceived.contains(id)).map(|&(id, at, fighting)| Member { id, at, fighting }).collect();
+    let mut crowd: Vec<Member> = mock.feed.bodies.iter().filter(|b| !perceived.contains(&b.id)).map(|b| Member { id: b.id, at: b.at, fighting: b.fighting, rgb: b.rgb, fallen: b.fallen }).collect();
     crowd.sort_by_key(|m| m.id);
     let ids: Vec<u32> = crowd.iter().map(|m| m.id).collect();
     let height = |p: Vec2| island.as_deref().map_or(0.0, |s| s.height(p.x, p.y));
@@ -286,13 +384,37 @@ fn update(
             // 0.7 m and at most half a cell), on a sunflower spiral; fighting first, so the
             // share fighting reads as the cell's share.
             let ell = (r.spread * 2.0).clamp(Vec2::splat(0.7), Vec2::splat(cell * 0.5));
-            let fighting = r.members.iter().filter(|m| m.fighting).count();
-            for k in 0..n {
+            // The row's mix: each card takes one member's (pose, colour), so the cell's figures
+            // carry its histogram of poses and top colours; their places come from the row only.
+            let mut mix: Vec<(u8, Option<[u8; 3]>)> = r.members.iter().map(|m| (if m.fallen { 2 } else { m.fighting as u8 }, m.rgb)).collect();
+            mix.sort_by_key(|(pose, rgb)| (std::cmp::Reverse(*pose), rgb.unwrap_or([0; 3])));
+            // Scatter the mix so colours and poses don't band round the spiral.
+            let len = mix.len();
+            let mix: Vec<_> = (0..len).map(|k| mix[(k * 7 + r.cell.0.unsigned_abs() as usize) % len]).collect();
+            for (k, (pose, rgb)) in mix.into_iter().enumerate() {
                 let t = ((k as f32 + 0.5) / n as f32).sqrt();
                 let a = k as f32 * 2.399_963 + (r.cell.0 * 7 + r.cell.1 * 13) as f32;
                 let p = r.centroid + Vec2::new(a.cos() * ell.x, a.sin() * ell.y) * t;
                 let base = Vec3::new(p.x, height(p), p.y);
-                let mat = if k < fighting { mock.fight_mat.clone() } else { mock.stand_mat.clone() };
+                let mat = match rgb {
+                    Some(c) => mock
+                        .person_mats
+                        .entry((c, pose.min(1)))
+                        .or_insert_with(|| {
+                            let tex = images.add(person_image(c, pose == 1));
+                            mats.add(StandardMaterial { base_color: Color::WHITE, base_color_texture: Some(tex), unlit: true, alpha_mode: AlphaMode::Blend, cull_mode: None, ..default() })
+                        })
+                        .clone(),
+                    None if pose == 1 => mock.fight_mat.clone(),
+                    None => mock.stand_mat.clone(),
+                };
+                if pose == 2 {
+                    // The fallen: the standing card laid on the ground, along a fixed bearing per cell.
+                    let yaw = (r.cell.0 * 3 + r.cell.1 * 5 + k as i32) as f32 * 0.9;
+                    let lying = Transform::from_translation(base + Vec3::Y * 0.08).with_rotation(Quat::from_rotation_y(yaw) * Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2));
+                    drawn.push(commands.spawn((Mesh3d(mock.card.clone()), MeshMaterial3d(mat), lying, Visibility::Visible, bevy::light::NotShadowCaster)).id());
+                    continue;
+                }
                 let card = commands.spawn((Mesh3d(mock.card.clone()), MeshMaterial3d(mat), Transform::from_translation(base + Vec3::Y * (CARD.1 * 0.5)), Visibility::Visible, bevy::light::NotShadowCaster)).id();
                 let blob = commands
                     .spawn((Mesh3d(mock.blob.clone()), MeshMaterial3d(mock.blob_mat.clone()), Transform::from_translation(base + Vec3::Y * 0.05).with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)), Visibility::Visible, bevy::light::NotShadowCaster))
@@ -302,6 +424,15 @@ fn update(
                 drawn.push(blob);
             }
         }
+        for (at, kind) in mock.feed.marks.clone() {
+            let mat = mock.ring_mats[(kind as usize).min(1)].clone();
+            let p = Vec3::new(at.x, height(at) + 0.07, at.y);
+            drawn.push(
+                commands
+                    .spawn((Mesh3d(mock.disc.clone()), MeshMaterial3d(mat), Transform::from_translation(p).with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)).with_scale(Vec3::splat(0.75)), Visibility::Visible, bevy::light::NotShadowCaster))
+                    .id(),
+            );
+        }
         mock.drawn = drawn;
         mock.cards = cards;
         mock.built = Some((mock.feed.seq, ids));
@@ -309,7 +440,7 @@ fn update(
             "seq": mock.feed.seq, "mode": mode, "cell": cell,
             "feed": mock.feed.bodies.len(), "perceived": perceived.len(),
             "members": crowd.len(), "cells": crowd_rows.len(),
-            "rows": crowd_rows.iter().map(|r| serde_json::json!({"cell": [r.cell.0, r.cell.1], "count": r.members.len(), "x": r.centroid.x, "y": r.centroid.y, "spread": [r.spread.x, r.spread.y], "fighting": r.members.iter().filter(|m| m.fighting).count()})).collect::<Vec<_>>(),
+            "rows": crowd_rows.iter().map(|r| serde_json::json!({"cell": [r.cell.0, r.cell.1], "count": r.members.len(), "x": r.centroid.x, "y": r.centroid.y, "spread": [r.spread.x, r.spread.y], "fighting": r.members.iter().filter(|m| m.fighting).count(), "fallen": r.members.iter().filter(|m| m.fallen).count(), "coloured": r.members.iter().filter(|m| m.rgb.is_some()).count()})).collect::<Vec<_>>(),
         });
         let _ = std::fs::write(format!("{}.status.json", mock.file), serde_json::to_string_pretty(&status).unwrap_or_default());
         info!("crowd mock: seq {} {mode} cell {cell} m: {} members in {} cells (feed {}, perceived {})", mock.feed.seq, crowd.len(), crowd_rows.len(), mock.feed.bodies.len(), perceived.len());
