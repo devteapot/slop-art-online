@@ -2,7 +2,18 @@
 
 Status: **built behind `heed_on` (off by default) and measured on the pack arena, fake model, free.** 2026-11-22, branch `heed-e4` (Spark), from `origin/attention-exp` `0aba82f2`. It is the Spark's E4 of docs/ATTENTION_BUDGET.md §8.2 (v2 with the v2.1 amendments). **Nothing merges to main until the owner decides on the law.** The 60-person two-sided melee (`spawn_battle_sides`) waits for `sides-battle-fix` on main. The player side (heed replacing `far_cap`'s trim in `sweep_one`, throng rows to clients) is not built: players keep today's perception even with the law on.
 
-@@RESULTS@@
+## In short
+
+- **Off is the base, byte for byte.** With `heed_on` off the branch's final head runs a Cullet battle of 200 and the E4 pack arena tick for tick and row for row as its base (attention-exp `67a68abd7` + main `aa41242c5`): 3,600 and 7,200 ticks, 113 tables, 43,232 and 105,029 rows identical (§2).
+- **Pack arena (fake model, 6 wolves v 6 spear-carrying people, 108 valid runs): capacity from 4 to 32 does not matter.** At 4, 8, 16, 32 and both formulas, no first blow came from an unheeded attacker in any run (0 of 413 first blows logged in those arms, day and night), every windup aimed at a subject was heeded when it began, no person died, and rear blows, encirclement, the subjects' own blows and the casualties stay within the capacity-16 arm's range, except for scattered differences in both directions (§3.3). By `pack_arena.py`'s rule the answer is **no**: capacity 4 and 8 do not differ from 16 in the direction of more unheeded blows, more rear blows or more deaths.
+- **Why:** the heed instinct's first rule takes any windup aimed at the character in the tick it begins (the event pass displaces the lowest place), so a capacity of even 4 sees every attack coming when at most 2–3 wolves attack one person. Capacity starts to bind only at 1 and 2 (exploratory arms): 3 first blows from an unheeded attacker in 12 runs (at most 0.035 a subject-minute; 17% of one run's first blows), a few windups unheeded (95–97% heeded), and at night more health lost (185 against 95). Not a fight-changing effect even there.
+- **Repeated invisible blows: 0 by construction, asserted:** no blow in any run came from an attacker that had made contact within `heed_contact_s` yet was not an individual at its windup, and no `heed invariant` line was logged. Later blows from an unheeded attacker after the window lapsed: 0.
+- **No wound spiral:** on the formula, capacity fell by a median 0–5% (at most 21%) while health fell by a median 6–31%; nobody's capacity collapsed, because nobody was hurt below a quarter for long, and no one died.
+- **Reactions are not measurable on this fixture:** the people's own starting behaviour (their seeded "stay safe" routine) never blocks or dodges, so blocks and dodges per windup are 0 in every arm, heed off included. The melee (§3.4) has fighters who block and dodge.
+@@MELEE_SHORT@@
+- **AI tick cost at 200 fighters:** heed on adds about 76 ms/s of tick (501 → 577, +15%); its passes cost about 85 ms/s, about 7.5 µs per creature in sight per pass, independent of how many are heeded (§4).
+
+**Validity.** Every pack run ran from a quiet start (merge lock free, load under 4) under `battle.lock`, the trial server pinned to the X925 cores, the load sampled every 10 s; a run whose window passed load 8 was left out and redone (14 of 122 measured runs, mostly from 6 arenas in parallel; later replicates ran 3 at a time). The first 6 day arenas of replicate 1 ran on the old selector (`0aba82f2`) and were stopped and not counted when the selector moved; replicate 1 of the restarted series was redone whole (my own det_compares had run beside it). All counted runs are on the smoothed selector with holds on (`aa3d4d9e2` as merged at `631b496ac`), module `trial-island-d04f5129` built from `631b496ac`.
 
 ## 1. The authority side (behind `heed_on`)
 
@@ -40,20 +51,116 @@ Status: **built behind `heed_on` (off by default) and measured on the pack arena
 
 `living/tools/det_compare.py run --scripts BASE,CAND` (each copy installs its own build's shipped script; the base is `attention-exp` `0aba82f2` exported with `git archive`, built in its own target dir):
 
-@@DET@@
+| Run | Base | Candidate | Ticks | Tables | Rows at the stop | Result |
+|---|---|---|---|---|---|---|
+| Cullet battle of 200 (`spawn_battle`), final head | attention-exp `67a68abd7` + main `aa41242c5` (merge tree `0b1571aac`), its own `skills.rhai` with Cullet's laws | `heed-e4` `596942111` | 3,600 | 113 | 43,232 | **identical** |
+| E4 pack arena (`prepare --arena pack`: 6 bold wolves, 6 spear people on the fighters' graph, island, no minds), final head | the same base | `596942111` | 7,200 | 113 | 105,029 | **identical** |
+| Cullet battle of 200, after the selector merge | attention-exp `67a68abd7` | `631b496ac` | 3,600 | 113 | 47,773 | identical on the rerun; the first try differed from tick 2,707 in `last_look.max_structure`, `seen_structures.ranges` and `deliberation` only (base copy's structure ids at 4,096+, the candidate's at 230: SpacetimeDB 2.14.1's random sequence skip, the known artifact of docs/COMBAT_PHASE.md's det runs; kept as `det2-cullet-off-try1`) |
+| Cullet battle of 200 and pack arena, first build | attention-exp `0aba82f2` | `b5d2e48a0` | 3,600 / 7,200 | 113 | 47,400 / 104,869 | identical |
+
+`prepare --arena pack` is new (`det_compare.py`): it stages the arena on a paused island world the way the trial places it. The people run the fighters' graph there, because no mind runs in a det copy. Each run installs each build's own script (`--scripts`), so the candidate's added laws (`heed_closing_s`, `heed_trace`) are in its copy.
 
 ## 3. E4 fixture
 
-@@FIXTURE@@
+### 3.1 The pack arena
+
+`living/tools/heed_e4_trials.py` writes `living/trials/heed-e4-{day,night}.json`, the variants (`heed-e4-variants.json`) and the fake script (`fake/heed-e4.json`). It is docs/PACK_MIND.md §5's arena, spread start, with these choices made before the first counted run:
+
+- **The people:** 6 adult people of Brackenford, each given a spear, on **their own starting behaviour**: the graph they had (desires over their seeded routines; "stay safe": strike back at whoever hurt one, attack the nearest wolf when one is within 6 m with others near, flee or yield when badly hurt). Their minds run on the fake model, and every deliberation keeps the graph (`"graph": "keep"`) and says nothing. So no reaction is prescribed by the fixture, the heed policy is the instinct, and only capacity varies.
+  - Found in the smokes: the fake model's default deliberation installs `{"wait": 2}` (people stand and are eaten), and clearing their routines leaves their desires with nothing to run. Both were fixed before the first counted run.
+- **The wolves:** 6 bold wolves on the shipped bold instinct, 15–35 m off. The island's other wolves and its deer moved far away and kept still.
+- **Arms (variants):** heed off; heed on with the shipped formula (person 10, wolf 8); the formula with a person's base at **14** (added at the general coordinator's request: heed-town found 10 tracked 2 of 14 named people beyond the 8 nearest, 16 tracked 13); and the people's capacity fixed at **4, 8, 16, 32** (the design's arms) and **1, 2** (exploratory), the wolves on the formula. Ceiling 32. `heed_trace` on in every heed arm.
+- **Runs:** 5 minutes each, day and night (start hour 21: sight 6 m), 6 valid replicates per arm and time, interleaved, through `trials.py run --fake --keep-db`, then `heed_e4.py collect` (the module log's heed lines) and `trials.py clean` (each world paused, confirmed, deleted).
+- **Measured with** `living/tools/heed_e4.py report --loads … --control …/heed-cap16`: `pack_arena.py`'s M2 (rear blows, encirclement), M5 and M6, the subjects' blows (uses), and from the heed lines: first blows by attacker per engagement (20 s) and whether that attacker was an individual to the subject when its windup began, windups heeded, repeated invisible blows, capacity per pass. The decision rule is docs/PACK_MIND.md §5.5's against the capacity-16 arm of the same time of day.
+
+### 3.2 Evidence
+
+Batches `he4nr2`, `he4nr3`, `he4pr4`–`he4pr6`, `he4xr1` (the redone replicate 1) and the top-ups `he4ta`–`he4td`, under `.local/living/trials/` in this worktree (git-ignored), with each batch's load log and the reports in `.local/heed-e4/` (`report-day.json`, `report-night.json`, `series/series.log`). The stopped runs are kept as `.local/heed-e4/aborted-*`. To be archived to `~/slop-evidence/heed-e4-<date>.tar.zst` with its sha256 when the branch's work ends.
+
+### 3.3 Results (median, range over 6 replicates; ◆ differs from capacity 16 by the §5.5 rule; * exploratory)
+
+### Day
+
+| Measure | off | formula (10) | formula, base 14 | 1 * | 2 * | 4 | 8 | **16** (control) | 32 |
+|---|---|---|---|---|---|---|---|---|---|
+| First blows from an unheeded attacker, per subject-minute | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0.035) | 0 (0–0.034) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) |
+| Share of first blows from an unheeded attacker | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0.167) | 0 (0–0.091) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) |
+| Windups at a subject heeded when they began | – | 1 (1–1) | 1 (1–1) | 1 (0.974–1) | 1 (0.949–1) | 1 (1–1) | 1 (1–1) | 1 (1–1) | 1 (1–1) |
+| Rear-blow share | 0.599 (0.429–0.895) | 0.556 (0.469–0.846) | 0.542 (0.407–0.7) | 0.467 (0.238–0.545) | 0.539 (0.4–0.615) | 0.494 (0.333–0.571) | 0.564 (0.5–0.688) | 0.589 (0.4–0.75) | 0.543 (0.5–0.667) |
+| Encircled share (k ≥ 3) | 0.0715 (0–0.143) | 0 (0–0.043) | 0.097 (0–0.377) | 0.0185 (0–0.05) | 0 (0–0.261) | 0 (0–0.107) | 0.342 (0.184–0.5) ◆ | 0.041 (0–0.082) | 0.075 (0–0.281) |
+| Wolf windups at subjects | 24.5 (11–37) | 21.5 (0–58) | 42 (9–52) | 46.5 (38–67) ◆ | 40 (24–63) | 27 (7–86) | 27.5 (8–39) | 24 (15–43) | 32.5 (12–45) |
+| Subjects' blows begun | 22.5 (18–38) | 31 (0–40) | 32 (19–45) | 26.5 (21–31) | 34 (24–40) | 34.5 (9–43) | 27 (19–46) | 28 (20–44) | 35 (28–41) |
+| Subjects' blows landed | 17.5 (12–28) | 24.5 (0–25) | 25.5 (14–30) | 24.5 (18–31) | 26.5 (17–34) | 24.5 (9–36) | 23.5 (16–31) | 22 (16–30) | 27.5 (21–34) |
+| People dead | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) |
+| Wolves dead | 0.5 (0–2) | 1 (0–2) | 0 (0–1) | 0 (0–1) | 0 (0–1) | 1 (0–2) | 1 (0–2) | 1 (0–1) | 0.5 (0–2) |
+| People's health lost | 121 (65–160) | 125 (0–240) | 226 (52–265) | 250 (183–295) | 191 (151–325) | 162 (39–381) | 150 (49–194) | 116 (85–269) | 162 (85–221) |
+| Start to first blow, s | 5.55 (0.9–15.9) | 7.1 (5.3–13.5) | 3.15 (2–7.6) | 5.85 (0.9–11.7) | 3.3 (2.1–12) | 5.65 (1.9–20.1) | 4.55 (1.6–17) | 5.25 (1.5–16.3) | 6.6 (4.7–14.1) |
+| Fight, s | 113 (65.6–212) | 121 (80–293) | 162 (52.3–220) ◆ | 136 (111–300) | 252 (115–298) ◆ | 63.7 (40.7–295) ◆ | 76.2 (55.8–219) | 101 (74.2–145) | 116 (93.7–242) |
+| Share of passes at capacity (more in sight than places) | – | 0 (0–0) | 0 (0–0) | 0.337 (0.209–0.427) ◆ | 0.193 (0.143–0.305) ◆ | 0.095 (0.0756–0.13) ◆ | 0 (0–0.0035) | 0 (0–0) | 0 (0–0) |
+| Capacity lost (formula: the wound spiral) | – | 0 (0–0.1) | 0.0535 (0–0.214) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) |
+| Health lost (lowest) | – | 0.152 (0–0.318) | 0.314 (0.0775–0.489) | 0.544 (0.384–0.643) | 0.27 (0.209–0.598) | 0.236 (0.037–0.648) | 0.235 (0.0365–0.354) | 0.166 (0.042–0.603) | 0.249 (0.149–0.322) |
+
+### Night
+
+| Measure | off | formula (10) | formula, base 14 | 1 * | 2 * | 4 | 8 | **16** (control) | 32 |
+|---|---|---|---|---|---|---|---|---|---|
+| First blows from an unheeded attacker, per subject-minute | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0.037) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) |
+| Share of first blows from an unheeded attacker | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0.2) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) |
+| Windups at a subject heeded when they began | – | 1 (1–1) | 1 (1–1) | 1 (0.95–1) | 1 (1–1) | 1 (1–1) | 1 (1–1) | 1 (1–1) | 1 (1–1) |
+| Rear-blow share | 0.578 (0.412–0.812) | 0.5 (0.333–1) | 0.53 (0.333–0.786) | 0.517 (0.346–0.684) | 0.331 (0–0.833) | 0.4 (0–0.545) | 0.667 (0.25–0.75) | 0.571 (0.188–0.688) | 0.5 (0.4–0.8) |
+| Encircled share (k ≥ 3) | 0.159 (0–0.465) ◆ | 0 (0–0) ◆ | 0.043 (0.043–0.043) ◆ | 0.217 (0.053–0.238) ◆ | – | – | – | 0.182 (0.182–0.182) | – |
+| Wolf windups at subjects | 15.5 (0–41) | 11.5 (0–45) | 13.5 (0–23) | 30.5 (20–39) ◆ | 7 (0–18) | 13 (5–21) | 5 (0–11) | 15 (0–27) | 5 (0–15) |
+| Subjects' blows begun | 16.5 (0–44) | 23 (0–38) | 28.5 (0–36) | 22.5 (16–30) | 8.5 (0–25) | 17 (0–28) | 12.5 (0–26) | 22 (0–32) | 6.5 (0–32) |
+| Subjects' blows landed | 13.5 (0–33) | 15.5 (0–28) | 21.5 (0–27) | 20 (16–24) | 6 (0–14) | 12 (0–23) | 9 (0–20) | 16 (0–23) | 4.5 (0–17) |
+| People dead | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) |
+| Wolves dead | 0 (0–1) | 0 (0–2) | 1 (0–1) | 0 (0–1) | 0 (0–0) | 0 (0–1) | 1 (0–2) | 1 (0–2) | 0 (0–1) |
+| People's health lost | 92.5 (0–274) | 59.5 (0–229) | 84 (0–120) | 186 (140–256) ◆ | 52.5 (0–133) | 65 (0–144) | 29 (0–77) | 95.5 (0–135) | 14 (0–108) |
+| Start to first blow, s | 3.3 (0.5–4.3) | 4.3 (2.9–19) | 3.9 (3.1–19.1) | 3.85 (1.7–34.1) | 10.8 (7.5–53) ◆ | 5.8 (2.9–9.4) | 7 (2.3–15.2) | 3.7 (1.7–5.4) | 7.45 (5.4–11.5) ◆ |
+| Fight, s | 42.1 (33.8–82.7) | 67.2 (14.1–181) | 55.6 (51.9–56.7) | 56.2 (36.2–209) | 44.2 (32.7–61.7) | 42.2 (24.4–136) | 28.9 (26–45.2) | 49.3 (29–142) | 58.8 (27.1–138) |
+| Share of passes at capacity (more in sight than places) | – | 0.0408 (0.0339–0.0596) ◆ | 0 (0–0.0053) | 0.633 (0.599–0.913) ◆ | 0.364 (0.286–0.444) ◆ | 0.221 (0.194–0.261) ◆ | 0.0552 (0.0405–0.0619) ◆ | 0 (0–0) | 0 (0–0) |
+| Capacity lost (formula: the wound spiral) | – | 0 (0–0.2) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) | 0 (0–0) |
+| Health lost (lowest) | – | 0.059 (0–0.411) | 0.0745 (0–0.185) | 0.231 (0.075–0.47) | 0 (0–0.161) | 0.0168 (0–0.161) | 0 (0–0.0375) | 0.121 (0–0.256) | 0 (0–0.189) |
+
+- **Unheeded first blows:** day 2 of 406 first blows, night 1 of 165, all three at capacity 1 or 2. Capacity 4 and up, and both formulas: none.
+- **The flagged differences are scattered and run both ways:** fight length (formula 14 and capacity 2 longer, capacity 4 shorter by day), encirclement at capacity 8 by day, time to the first blow at capacity 2 and 32 by night. None lines up with capacity, and none is a direction the question asks about. At night several arms had engagements in only 4–5 of 6 runs (the wolves did not reach the people), which leaves encirclement undefined there.
+- **Places are full only at 1–4** (by day 10–34% of passes with more in sight than places; at night 22–63%), and from 8 up almost never: 6 wolves and 5 companions rarely exceed 8 in sight.
+
+### 3.4 The two-sided melee
+
+@@MELEE@@
 
 ## 4. AI tick cost
 
-@@COST@@
+`living/tools/battle_diag.py --battle 200 --walkers 0 --no-mind` on the island: 200 minded fighters (`spawn_crowd`, strike; dodge or block when threatened; refilled), no mind service, 5 minutes, profiled 30 s windows each minute, the first window left out as warm-up. Heed off, and on with the shipped formula (capacity 10, ceiling 16), interleaved off, on, off, on, on my private server pinned to the X925 cores (5–9, 15–19), the driver on the A725 cores, under `battle.lock` from a quiet start (load 1.9–3.5 at start, at most 5.1 in any window). `heed_trace` off. Build `596942111`.
+
+| Run | Fighters alive (windows 2–5) | Ticks/s | `tick` ms/s | `heed.pass` ms/s | passes/s | in sight per pass | heeded per pass (forced included) | `perceive.scene_json` ms/s | `brain.noticed` ms/s |
+|---|---|---|---|---|---|---|---|---|---|
+| off 1 | 123 → 77 (refills fell behind) | 59.5–60 | 293 | – | – | – | – | 14.9 | 16.3 |
+| off 2 | 171–176 | 56.8–57.5 | **501** | – | – | – | – | 26.6 | 36.6 |
+| on 1 | 165–180 | 48.7–52.4 | **578** | **85.7** | 323 | 36 | 5.1 | 47.2 | 89.9 |
+| on 2 | 160–177 | 48.2–54.1 | **577** | **84.9** | 316 | 35 | 5.1 | 47.7 | 89.4 |
+
+- **Off 1 is not comparable:** its battle shrank to 77 fighters (the refill fell behind the deaths), so it is left out. Off 2 against the two on runs, at 160–180 fighters each: **heed adds about 76 ms/s of tick** (501 → 577, +15%), and the tick rate falls from about 57 to 48–54 a second on this fixture.
+- **Where it goes.** `heed.pass` is 85 ms/s: about 320 full passes a second (a little under 2 a fighter: the 1 Hz pass from the evaluation, and a pass afresh when a reader finds the set older than 3 s), each about 0.27 ms over about 36 creatures in sight, about **7.5 µs per creature in sight per pass**. It runs inside the evaluation (`brain.noticed`, +53 ms/s, is where the scene is first split). `perceive.scene_json` grows by 21 ms/s: a deliberation's scene now lists all its individuals with no 14-cap and builds its throng lines.
+- **It does not depend on how many are heeded.** The policy reads every candidate in sight; the rules' places (5.1 a pass here, the instinct's) cost little beside building each candidate (its `visibly`, closing, family and made-out reads). So dev-box's split by who is heeded (about 190 µs/s each for the first 8, about 67 beyond; docs/ATTENTION_E2_COST.md) is a player-delivery cost; for AI characters the cost is per creature in sight, and a lower capacity saves nothing here. What would cut it: fewer passes (only the 1 Hz slot, never a stale-read pass), candidates built only for what the policy reads (as `Reads` does for relations), and sharing a creature's visible features across observers within a tick.
+- **Event passes are rare:** 5.8 a second at 200 fighters (windups aimed at one, words, cues), as E2 recommends (only aim and contact; no re-rank on movement or on coming into sight since `ee7a4b92f`).
 
 ## 5. Checks
 
-@@CHECKS@@
+- `just living-check`: passed on `596942111` (authority wasm, mind, viewers, game client and tests, authority unit tests, rules tests, script gate), and on `19a58f8a1` before.
+- **verify-core** (own server `slop-heede4-stdb`, default seed):
+  - the new `heed` scene (`scenes.py heed`, features/heed.md): 17 of 17 on `596942111`, `631b496ac` and `eac8b3880`. Off (the control) and on side by side: O sees S by id and counts 8 off; on with capacity 2, S is throng and O still counts 8; the scene lists at most 2 creatures, the rest as `throngs`, no throng member's id; with capacity 0 the first strike from the throng lands unforeseen, its contact makes the second seen and blocked (module log `heeded_at_windup=0` then `=1`); W's heard and fight lines name no one in its throng. A first version failed its control at night (W at 8 m, beyond night sight); everyone now stands within 5 m.
+  - touched scenes with the law off, all passing: on `596942111` `tick`, `sight`, `crowd_sight`, `cues`, `witness_fold`, `seen_again`, `fov`, `sides_battle`; on `eac8b3880` also `senses`, `stranger_filter`, `scene_lazy`, `doing_seen`, `skirmish`. Evidence `.local/living/verify/core-heed*/`.
+- **verify-minds** `roundtrip`, `acts`, `lod` with the law off: pass (`.local/living/verify/minds-heed-042915-*`). `prompts::tests::a_scenes_stage_mark_never_reaches_a_model` passes.
+- **Rules:** `cargo test -p living-rules heed` (15) after the selector merge.
+- **Not covered:** a player in a mind's throng (no player-side heed exists to put one there; the `_stage` path is covered by the unit test only); a mind-written heed policy (no `heed` reply field yet); verify-client and verify-player (no table, view, reducer or player path changed); paid tiers (none run).
 
 ## 6. Open questions
 
-@@OPEN@@
+1. **The fixture decides the answer.** In this pack arena capacity 4 already suffices because the instinct ranks a windup at oneself first and the event pass gives it a place at once. What would make capacity bite: more attackers on one person than places (a swarm), a mind-written policy without the threat rule (E3's question), or a fixture where noticing someone who is not yet attacking matters (an archer, an ambush from beyond the nearest). Should E4 add a swarm arm (e.g. 6 wolves on 1 person) or wait for the melee and E3(b)?
+2. **AI cost.** 7.5 µs per creature in sight per pass, about 0.27 ms a pass, +15% tick at 200 fighters. Before default-on, the pass should run only at the 1 Hz slot (not again for a stale read), and candidates should read only what the policy reads; worth a measured follow-up.
+3. **The combat feed** is human-only today (`combat::show`), so it reaches no AI or mind; its recipients by heed (dev-box's E2: 128,711 rows in one 16-viewer run) belong to the player side, not built here.
+4. **`loud` and `lit`** are not filled for AI candidates (the instinct's `loud` weight never fires). Hearing a call or seeing a torch at night are perceptible and should feed them.
+5. **Earshot words for a throng** list each throng hearer as "someone in the throng to the …", which repeats in a crowd; a count ("and 5 in the throng") would read better.
+6. **`threatened` desire signal and the throng.** It now counts only windups by individuals, like the `threatened` condition; before heed it counted every windup aimed at one, seen or not (a pre-existing leak with `fov_on`).
+7. Owner: whether the law goes on per world after the player side and E2's ceiling; the person base (10 or 14) is not separated by this fight (the formula and formula-14 arms do not differ from 16 or each other on any fight measure).
