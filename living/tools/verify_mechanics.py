@@ -69,6 +69,33 @@ def wait_for(pred, timeout=40, every=1.0):
     return None
 
 
+# Terrain codes (living_rules::map::Terrain): grass and dirt take a planting; these are walkable.
+GRASS, DIRT = 0, 5
+WALKABLE = {0, 1, 3, 5, 6}
+PLANT_REACH = 20.0
+
+
+def plant_spot(db, ax, ay):
+    """The centre of the nearest grass or dirt tile within PLANT_REACH of (ax, ay) whose straight
+    line from there crosses only walkable tiles, or None. Reads the `terrain_chunk` rows around."""
+    x0, y0, x1, y1 = (int(max(0.0, v)) for v in (ax - PLANT_REACH, ay - PLANT_REACH, ax + PLANT_REACH, ay + PLANT_REACH))
+    ids = sorted({((cy << 16) | cx) for cx in range(x0 // 16, x1 // 16 + 1) for cy in range(y0 // 16, y1 // 16 + 1)})
+    chunks = {int(r["id"]): bytes.fromhex(r["tiles"].removeprefix("0x"))
+              for r in rows(db, "SELECT id, tiles FROM terrain_chunk WHERE " + " OR ".join(f"id = {i}" for i in ids))}
+
+    def tile(x, y):
+        c = chunks.get(((y // 16) << 16) | (x // 16))
+        return c[(y % 16) * 16 + x % 16] if c and x >= 0 and y >= 0 else None
+
+    def straight(tx, ty):
+        n = max(1, int(((tx - ax) ** 2 + (ty - ay) ** 2) ** 0.5 / 0.1))
+        return all(tile(int(ax + (tx - ax) * k / n), int(ay + (ty - ay) * k / n)) in WALKABLE for k in range(n + 1))
+
+    near = sorted(((x + 0.5 - ax) ** 2 + (y + 0.5 - ay) ** 2, x + 0.5, y + 0.5)
+                  for x in range(x0, x1 + 1) for y in range(y0, y1 + 1) if tile(x, y) in (GRASS, DIRT))
+    return next(((x, y) for d, x, y in near if d <= PLANT_REACH ** 2 and straight(x, y)), None)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default="living-verify")
@@ -150,25 +177,40 @@ def main():
     results["teaching"] = bool(taught) and taught[0]["source"].startswith("taught by")
     # 5. Planting a berry bush (off-winter: a fresh world starts in spring).
     before = {r["id"] for r in rows(db, "SELECT id, kind FROM resource_node")}
-    # Planting needs arable ground: walk onto the nearest berry bush's tile first (bushes grow on grass).
+    # Planting needs grass or dirt underfoot (`plant_check`). A walks to the nearest such tile it can
+    # reach in a straight line over walkable ground. The nearest berry bush, used until 2026-11-22,
+    # could lie across a river: A then walked to a far crossing, 220 m in 90 s and still on its way
+    # (gate-1122184906-8bd028-a-mechanics; features/mechanics.md).
     body = rows(db, f"SELECT x, y FROM body WHERE id = {A}")[0]
     ax, ay = float(body["x"]), float(body["y"])
-    bushes = [(float(r["x"]), float(r["y"])) for r in rows(db, "SELECT x, y FROM resource_node WHERE kind = 'berry_bush'")]
-    bush = min(bushes, key=lambda p: (p[0] - ax) ** 2 + (p[1] - ay) ** 2)
-    call(db, "set_behavior", str(A), seq({"do": {"skill": "goto", "target": {"at": [bush[0], bush[1]]}}}, {"do": {"skill": "plant"}}))
+    spot = plant_spot(db, ax, ay)
+    if spot is None:
+        bushes = [(float(r["x"]), float(r["y"])) for r in rows(db, "SELECT x, y FROM resource_node WHERE kind = 'berry_bush'")]
+        near = min(bushes, key=lambda p: (p[0] - ax) ** 2 + (p[1] - ay) ** 2)
+        at = plant_spot(db, *near) or near
+        print(f"  planting: no grass or dirt in a straight walk within {PLANT_REACH:.0f} m of A at ({ax:.1f}, {ay:.1f}); A placed at ({at[0]:.1f}, {at[1]:.1f}) by the bush at ({near[0]:.1f}, {near[1]:.1f})")
+        call(db, "place_at", str(A), at[0], at[1])
+        b = rows(db, f"SELECT x, y FROM body WHERE id = {A}")[0]
+        spot = (float(b["x"]), float(b["y"]))
+    else:
+        print(f"  planting: A at ({ax:.1f}, {ay:.1f}) walks {((spot[0] - ax) ** 2 + (spot[1] - ay) ** 2) ** 0.5:.1f} m to ({spot[0]:.1f}, {spot[1]:.1f})")
+    call(db, "set_behavior", str(A), seq({"do": {"skill": "goto", "target": {"at": [spot[0], spot[1]]}}}, {"do": {"skill": "plant"}}))
     # A's own bush, where A planted it: other characters plant too, and a new node anywhere let the
     # scene go on while A was still walking there (it then walked away from B and the shelter
     # placed beside it, so B was out of A's sight by the tending: features/mechanics.md).
     planted = wait_for(lambda: [r for r in rows(db, "SELECT id, kind, x, y FROM resource_node")
                                 if r["id"] not in before and r["kind"] == "berry_bush"
-                                and (float(r["x"]) - bush[0]) ** 2 + (float(r["y"]) - bush[1]) ** 2 <= 9.0], timeout=90)
+                                and (float(r["x"]) - spot[0]) ** 2 + (float(r["y"]) - spot[1]) ** 2 <= 9.0], timeout=90)
     results["planting"] = bool(planted)
     if not planted:
         b = rows(db, f"SELECT x, y FROM body WHERE id = {A}")[0]
         told = [r["text"][:160] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {A}")
-                if any(w in r["text"] for w in ("plant", "goto", "go to", "berr", "way is"))]
-        print(f"  planting: A at ({float(b['x']):.1f}, {float(b['y']):.1f}), bush at ({bush[0]:.1f}, {bush[1]:.1f}), A started at ({ax:.1f}, {ay:.1f}); "
+                if any(w in r["text"] for w in ("plant", "goto", "go to", "berr", "way is", "grows"))]
+        print(f"  planting: A at ({float(b['x']):.1f}, {float(b['y']):.1f}), spot at ({spot[0]:.1f}, {spot[1]:.1f}), A started at ({ax:.1f}, {ay:.1f}); "
               f"A feedback: {told[-6:]}", rows(db, f"SELECT id, skill, phase, node FROM activity WHERE id = {A}"))
+    # A stops wherever it is: a walk still under way would carry A away from B and the shelter placed
+    # beside it below (the conception failure that came with planting's on dev-box, 2026-11-21).
+    call(db, "set_behavior", str(A), idle)
     # 6. Consensual conception beside a shelter (B joins A, who walked off to plant).
     call(db, "place_near", str(B), str(A))
     print(f"  conception setup: A-B {gap(A, B):.2f} m after place_near")
