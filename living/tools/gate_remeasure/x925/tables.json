@@ -1,0 +1,410 @@
+{
+ "main": {
+  "db": [
+   574.95,
+   565.8,
+   584.1
+  ],
+  "ticks": [
+   58.79,
+   58.74,
+   58.84
+  ],
+  "step_p50": [
+   17,
+   17,
+   17
+  ],
+  "step_p99": [
+   33,
+   33,
+   33
+  ],
+  "step_max": [
+   34.5,
+   34,
+   35
+  ],
+  "over25": [
+   2.04,
+   1.95,
+   2.13
+  ],
+  "skipped": [
+   72.5,
+   69,
+   76
+  ],
+  "human_inputs_s": [
+   294.75,
+   291.9,
+   297.6
+  ],
+  "human_deaths_s": [
+   1.93,
+   1.83,
+   2.03
+  ],
+  "update": [
+   30.75,
+   30.38,
+   31.12
+  ],
+  "views": [
+   15.63,
+   15.38,
+   15.87
+  ],
+  "input": [
+   75.78,
+   75.22,
+   76.35
+  ],
+  "runs": 2,
+  "host": [
+   {
+    "host_busy_cores": 2.13,
+    "runner_cores": 0.0,
+    "runner_peak10s_cores": 0.0,
+    "runner_procs_max": 0
+   },
+   {
+    "host_busy_cores": 2.75,
+    "runner_cores": 0.0,
+    "runner_peak10s_cores": 0.0,
+    "runner_procs_max": 0
+   }
+  ],
+  "privacy": []
+ },
+ "relay": {
+  "db": [
+   457.7,
+   455.6,
+   459.8
+  ],
+  "ticks": [
+   59.92,
+   59.91,
+   59.93
+  ],
+  "step_p50": [
+   17,
+   17,
+   17
+  ],
+  "step_p99": [
+   18,
+   18,
+   18
+  ],
+  "step_max": [
+   33.5,
+   33,
+   34
+  ],
+  "over25": [
+   0.14,
+   0.14,
+   0.14
+  ],
+  "skipped": [
+   5,
+   5,
+   5
+  ],
+  "human_inputs_s": [
+   300.85,
+   300.1,
+   301.6
+  ],
+  "human_deaths_s": [
+   1.92,
+   1.83,
+   2.02
+  ],
+  "update": [
+   7.89,
+   7.84,
+   7.93
+  ],
+  "views": [
+   14.39,
+   14.27,
+   14.52
+  ],
+  "input": [
+   73.47,
+   73.44,
+   73.5
+  ],
+  "relay_cpu": [
+   108.65,
+   107.9,
+   109.4
+  ],
+  "runs": 2,
+  "host": [
+   {
+    "host_busy_cores": 1.73,
+    "runner_cores": 0.0,
+    "runner_peak10s_cores": 0.0,
+    "runner_procs_max": 0
+   },
+   {
+    "host_busy_cores": 1.38,
+    "runner_cores": 0.0,
+    "runner_peak10s_cores": 0.0,
+    "runner_procs_max": 0
+   }
+  ],
+  "privacy": [
+   {
+    "checked": 118726,
+    "violations": 0,
+    "before_first_tick": 0,
+    "by_kind": {
+     "1": 86961,
+     "3": 2027,
+     "4": 24733,
+     "2": 17173,
+     "5": 12565
+    },
+    "examples": []
+   },
+   {
+    "checked": 114285,
+    "violations": 0,
+    "before_first_tick": 0,
+    "by_kind": {
+     "1": 83464,
+     "4": 24090,
+     "3": 2106,
+     "2": 16982,
+     "5": 11733
+    },
+    "examples": []
+   }
+  ]
+ },
+ "relaycut": {
+  "db": [
+   458.1,
+   454.1,
+   462.1
+  ],
+  "ticks": [
+   59.95,
+   59.93,
+   59.96
+  ],
+  "step_p50": [
+   17,
+   17,
+   17
+  ],
+  "step_p99": [
+   18,
+   18,
+   18
+  ],
+  "step_max": [
+   33,
+   33,
+   33
+  ],
+  "over25": [
+   0.1,
+   0.08,
+   0.11
+  ],
+  "skipped": [
+   3.5,
+   3,
+   4
+  ],
+  "human_inputs_s": [
+   299.85,
+   298.9,
+   300.8
+  ],
+  "human_deaths_s": [
+   1.97,
+   1.93,
+   2.02
+  ],
+  "update": [
+   7.86,
+   7.83,
+   7.89
+  ],
+  "views": [
+   14.36,
+   14.35,
+   14.38
+  ],
+  "input": [
+   73.11,
+   73.1,
+   73.12
+  ],
+  "relay_cpu": [
+   108.75,
+   108.4,
+   109.1
+  ],
+  "runs": 2,
+  "host": [
+   {
+    "host_busy_cores": 1.38,
+    "runner_cores": 0.0,
+    "runner_peak10s_cores": 0.0,
+    "runner_procs_max": 0
+   },
+   {
+    "host_busy_cores": 1.38,
+    "runner_cores": 0.0,
+    "runner_peak10s_cores": 0.0,
+    "runner_procs_max": 0
+   }
+  ],
+  "privacy": [
+   {
+    "checked": 117892,
+    "violations": 0,
+    "before_first_tick": 0,
+    "by_kind": {
+     "1": 77937,
+     "3": 1616,
+     "4": 22052,
+     "2": 22670,
+     "5": 15669
+    },
+    "examples": []
+   },
+   {
+    "checked": 115486,
+    "violations": 0,
+    "before_first_tick": 0,
+    "by_kind": {
+     "1": 83588,
+     "4": 23511,
+     "3": 1843,
+     "2": 17409,
+     "5": 12646
+    },
+    "examples": []
+   }
+  ]
+ },
+ "relayd40": {
+  "db": [
+   452.85,
+   450.1,
+   455.6
+  ],
+  "ticks": [
+   59.96,
+   59.96,
+   59.96
+  ],
+  "step_p50": [
+   17,
+   17,
+   17
+  ],
+  "step_p99": [
+   18,
+   18,
+   18
+  ],
+  "step_max": [
+   33,
+   33,
+   33
+  ],
+  "over25": [
+   0.07,
+   0.06,
+   0.08
+  ],
+  "skipped": [
+   2.5,
+   2,
+   3
+  ],
+  "human_inputs_s": [
+   302.35,
+   301.4,
+   303.3
+  ],
+  "human_deaths_s": [
+   2.0,
+   1.98,
+   2.02
+  ],
+  "update": [
+   7.88,
+   7.87,
+   7.88
+  ],
+  "views": [
+   14.19,
+   14.01,
+   14.37
+  ],
+  "input": [
+   72.96,
+   72.56,
+   73.35
+  ],
+  "relay_cpu": [
+   109.25,
+   108.6,
+   109.9
+  ],
+  "runs": 2,
+  "host": [
+   {
+    "host_busy_cores": 1.38,
+    "runner_cores": 0.0,
+    "runner_peak10s_cores": 0.0,
+    "runner_procs_max": 0
+   },
+   {
+    "host_busy_cores": 1.56,
+    "runner_cores": 0.0,
+    "runner_peak10s_cores": 0.0,
+    "runner_procs_max": 0
+   }
+  ],
+  "privacy": [
+   {
+    "checked": 119025,
+    "violations": 0,
+    "before_first_tick": 0,
+    "by_kind": {
+     "1": 84666,
+     "4": 24512,
+     "3": 1833,
+     "2": 18635,
+     "5": 13891
+    },
+    "examples": []
+   },
+   {
+    "checked": 113622,
+    "violations": 0,
+    "before_first_tick": 0,
+    "by_kind": {
+     "1": 80808,
+     "3": 1463,
+     "2": 18229,
+     "4": 22105,
+     "5": 13122
+    },
+    "examples": []
+   }
+  ]
+ }
+}

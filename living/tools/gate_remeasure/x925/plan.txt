@@ -1,0 +1,4 @@
+main main-r1
+relay relay-r1
+main main-r2
+relay relay-r2

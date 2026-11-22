@@ -1,0 +1,6 @@
+cedbfe961dfb3d15e5d38cf76888915b727f22d6276e66c0071841076283de8a  /home/gooning/slop-gate216-x925/wasm/gate216_main.wasm
+8ba992aa2ca8ce7276124a33540887ce0e85fd8e268c8cd25f3f76b9c4c37806  /home/gooning/slop-gate216-x925/wasm/gate216_relay.wasm
+bfadc63a74c6f1e9172c57c4cdf9da028ae9813ffa2d34400470aab5381d6ac9  /home/gooning/slop-gate216-x925/target-gr/release/gate-load
+ae0fc57800fe1f7092629b88c919a0b44ab1e4d396ec533c7bd3b0d7b048ac92  /home/gooning/slop-gate216-x925/target-main/release/gate-load
+dbaa869d2798787a529040960f60e192fcff482d79a55f35d5c06d319a2c7655  /home/gooning/slop-gate216-x925/target-gr/release/relay-proto
+fd346f67c69b4849569c4e76867e85171902be78998b5543c04232292deac922  /home/gooning/slop-gate216-x925/wasm/gate216_cuts.wasm

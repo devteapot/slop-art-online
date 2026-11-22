@@ -1,0 +1,4 @@
+relay relaycut-r1 gate216_cuts.wasm --law sweep_phase_even=true
+relay relayd40-r1 gate216_cuts.wasm
+relay relaycut-r2 gate216_cuts.wasm --law sweep_phase_even=true
+relay relayd40-r2 gate216_cuts.wasm
