@@ -171,10 +171,11 @@ fn contact_at(victim: u32, attacker: u32) -> Option<u64> {
     CONTACT.with(|c| c.borrow().get(&victim).and_then(|v| v.iter().find(|(a, _)| *a == attacker).map(|(_, t)| *t)))
 }
 
-/// A character's heed policy: its species' instinct (no mind writes one yet: `mind_update` has no
-/// `heed` field in E4).
-fn policy(kind: &str) -> Rc<Policy> {
-    INSTINCTS.with(|m| m.borrow_mut().entry(kind.to_string()).or_insert_with(|| Rc::new(h::instinct(kind))).clone())
+/// A character's heed policy: its species' instinct, the version the world's `heed_instinct` law
+/// names (no mind writes one yet: `mind_update` has no `heed` field in E4).
+fn policy(ctx: &ReducerContext, kind: &str) -> Rc<Policy> {
+    let variant = if common::laws(ctx).heed_instinct < 2.0 { "v1" } else { "" };
+    INSTINCTS.with(|m| m.borrow_mut().entry(format!("{kind}/{variant}")).or_insert_with(|| Rc::new(h::instinct_variant(kind, variant))).clone())
 }
 
 /// What a policy's conditions read beyond the cheap facts, so a pass gathers only that.
@@ -244,7 +245,7 @@ fn capacity(ctx: &ReducerContext, me: &Character, now: u64) -> usize {
 /// what it perceives, its capacity, its policy with each rule's hold, the selection kept.
 pub fn pass(ctx: &ReducerContext, me: &Character, at: (f32, f32), seen: &[NearCreature], now: u64) {
     let _span = common::span("heed.pass");
-    let pol = policy(&me.kind);
+    let pol = policy(ctx, &me.kind);
     let r = reads(&pol);
     let cap = capacity(ctx, me, now);
     let limits = Limits { capacity: cap, contact_s: common::laws(ctx).heed_contact_s };
@@ -339,7 +340,7 @@ pub fn split(ctx: &ReducerContext, me: &Character, at: (f32, f32), seen: Vec<Nea
 /// me, a cue's match) on its candidate. Returns whether it is an individual afterwards.
 fn event(ctx: &ReducerContext, me: &Character, at: (f32, f32), c: &NearCreature, now: u64, tweak: impl FnOnce(&mut Candidate)) -> bool {
     let _span = common::detail_span("heed.event");
-    let pol = policy(&me.kind);
+    let pol = policy(ctx, &me.kind);
     let r = reads(&pol);
     let mine = self_state(ctx, me, now);
     let contact_s = common::laws(ctx).heed_contact_s;

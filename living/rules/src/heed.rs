@@ -554,6 +554,17 @@ pub fn instinct(kind: &str) -> Policy {
     parse_value(&instinct_json(kind), &Known::any()).expect("the heed instincts parse")
 }
 
+/// A named earlier version of a species' instinct (`heed_<kind>_<variant>` in the seed, e.g.
+/// `v1`, the person instinct before E4's reweight), else the current one: kept selectable for
+/// comparison (the world law `heed_instinct`).
+pub fn instinct_variant(kind: &str, variant: &str) -> Policy {
+    let all: Value = serde_json::from_str(INSTINCTS).expect("heed instincts json");
+    match all.get(format!("heed_{kind}_{variant}")) {
+        Some(v) if !variant.is_empty() => parse_value(v, &Known::any()).expect("the heed instincts parse"),
+        _ => instinct(kind),
+    }
+}
+
 /// A policy with every rule's hold taken out (for measuring what the holds do).
 pub fn without_holds(p: &Policy) -> Policy {
     let rules = p
@@ -1103,6 +1114,24 @@ mod tests {
         assert_eq!(picks[9].id, 50, "the wolf stands out over the rest of the crowd: {picks:?}");
         assert_eq!(ids(&select(&p, &me(), &all, &lim(2), &[])), vec![1, 2]);
         assert!(select(&p, &me(), &all, &lim(0), &[]).is_empty());
+    }
+
+    #[test]
+    fn the_reweighted_instinct_ranks_enmity_above_nearness_and_v1_does_not() {
+        // Four allies close, an enemy at 6 m, someone 7 m off striking the ally I heed; capacity 2.
+        let mut all: Vec<Candidate> = (0..4).map(|i| cand(10 + i, "person", 1.0 + i as f32 * 0.5)).collect();
+        let mut enemy = cand(1, "person", 6.0);
+        enemy.relations = rel::ENEMY;
+        all.push(enemy);
+        let mut striker = cand(2, "person", 7.0);
+        striker.doing = Some(Visible { is: vec!["strike".into(), "hostile".into()], phase: Some(Phase::WindingUp), at_me: false });
+        striker.acting_on_heeded = true;
+        all.push(striker);
+        assert_eq!(ids(&select(&instinct("person"), &me(), &all, &lim(2), &[])), vec![1, 2]);
+        assert_eq!(ids(&select(&instinct_variant("person", "v1"), &me(), &all, &lim(2), &[])), vec![10, 11]);
+        // An unknown variant is the current instinct.
+        assert_eq!(instinct_variant("person", "v9"), instinct("person"));
+        assert_eq!(instinct_variant("wolf", "v1"), instinct("wolf"));
     }
 
     #[test]

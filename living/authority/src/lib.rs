@@ -681,7 +681,9 @@ pub fn spawn_battle_sides(ctx: &ReducerContext, n: u32, sides: u32) -> Result<()
         if !map.free(p.0, p.1) {
             continue;
         }
-        let side = made as usize % sides;
+        // The `sides_first` fixture law (0 as shipped) rotates which side the first, lowest-id,
+        // fighter joins, so a series can swap the id order between the sides.
+        let side = (made as usize + common::laws(ctx).sides_first as usize) % sides;
         let id = seed::spawn_creature(ctx, &format!("{}{}", letters[side], made / sides as u32 + 1), "person", ctx.database_identity(), false, p, now);
         common::inv_add(ctx, id as u64, "spear", 1);
         ctx.db.membership().insert(Membership { id: 0, community: ids[side], member: id, since_ms: now });

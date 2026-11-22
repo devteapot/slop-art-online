@@ -218,6 +218,10 @@ fn laws() {
         // A diagnostic, off in play: the authority logs each heed pass, windup and blow of a
         // character with a mind (E4, docs/ATTENTION_E4.md).
         heed_trace: false,
+        // Which version of the heed instinct runs (2: current; 1: before E4's reweight, for comparison).
+        heed_instinct: 2.0,
+        // A fixture switch, 0 in play: which side spawn_battle_sides puts its first fighter on.
+        sides_first: 0.0,
         // A test switch (docs/PERCEPTION.md, "Module memory and rollback"), 0 in play: a step the
         // world fails on purpose, to prove nothing kept in module memory outlives a failed one.
         memory_test: 0.0,
@@ -3265,6 +3269,8 @@ fn law_about(l, name) {
         "heed_closing_s" => `whether someone is coming toward one is judged over ${short(l.heed_closing_s)} s, not a glance`,
         "heed_contact_s" => `someone whose blow reached one stays an individual to one for ${short(l.heed_contact_s)} s, whatever one heeds`,
         "heed_trace" => "A test switch that logs how each mind's character keeps track of others in a fight; it is off in play.",
+        "heed_instinct" => if l.heed_instinct >= 2.0 { "the starting way of keeping track of others puts whoever one is at enmity with, and whoever goes for someone one watches, before those merely close" } else { "the starting way of keeping track of others is the earlier one, by nearness after threats and one's own people" },
+        "sides_first" => "A test switch for a staged battle: which side its first fighter joins; it is 0 in play.",
         "far_cap" => if l.far_cap > 0.0 { `a player sees at most ${short(l.far_cap)} others at once, the nearest` } else { "a player sees everyone in sight" },
         "crowd_sweep_n" => if l.crowd_sweep_n > 0.0 { `what a player sees is looked at again less often in a crowd of more than ${short(l.crowd_sweep_n)}` } else { "what a player sees is looked at again at the same pace in any crowd" },
         "crowd_frame_max_ms" => if l.crowd_frame_max_ms > 0.0 { `in a crowd, a player's view of others follows at least every ${short(l.crowd_frame_max_ms)} ms` } else { "in a crowd, a player's view of others follows at least every 100 ms" },

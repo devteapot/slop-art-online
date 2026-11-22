@@ -47,16 +47,29 @@ FIGHTERS = 60
 lock = threading.Lock()
 
 
+def parse_arm(arm):
+    """`<base>[.<instinct>[.<rotation>]]`: base off, formula, formula14, capN (Side A fixed at N, the
+    rest on the formula) or f14 (Side A's person base 14, the rest 10); instinct v2 (current) or v1
+    (`heed_instinct` 1); rotation r0 (Side A has the lower ids, as shipped) or r1 (`sides_first` 1:
+    Side B has them)."""
+    parts = arm.split(".")
+    return parts[0], (parts[1] if len(parts) > 1 else "v2"), (int(parts[2][1:]) if len(parts) > 2 else 0)
+
+
 def script_for(arm, side_a):
+    base, _, _ = parse_arm(arm)
     src = (ROOT / "living/scripts/skills.rhai").read_text()
-    if arm.startswith("cap"):
-        n = float(arm[3:])
-        ids = ", ".join(str(i) for i in sorted(side_a))
+    ids = ", ".join(str(i) for i in sorted(side_a))
+    old = 'let c = switch a.actor.kind { "person" => 10.0,'
+    if base.startswith("cap"):
+        n = float(base[3:])
         src = src.replace(CAP_OLD, CAP_OLD + f"\n    if a.actor.id in [{ids}] {{ return {n}; }}", 1)
-    if arm == "formula14":
-        old = 'let c = switch a.actor.kind { "person" => 10.0,'
+    if base == "formula14":
         assert src.count(old) == 1
         src = src.replace(old, 'let c = switch a.actor.kind { "person" => 14.0,', 1)
+    if base == "f14":
+        assert src.count(old) == 1
+        src = src.replace(old, f'let c = switch a.actor.kind {{ "person" => if a.actor.id in [{ids}] {{ 14.0 }} else {{ 10.0 }},', 1)
     source, _ = install_script.seed_script("cullet", src)
     return source
 
@@ -82,6 +95,9 @@ def one(a, arm, rep, out):
                 time.sleep(5)
         S.call(db, "set_paused", [True])
         before = {r["id"] for r in S.sql(db, "SELECT id FROM character")}
+        base, inst, rot = parse_arm(arm)
+        # Which side the first (lowest-id) fighter joins, set before the fighters are made.
+        S.call(db, "set_world_law", ["sides_first", json.dumps(rot)])
         S.call(db, "spawn_battle_sides", [FIGHTERS, 2])
         sides = {c["id"]: c["name"] for c in S.sql(db, "SELECT id, name FROM community") if c["name"] in ("Side A", "Side B")}
         member = {m["member"]: sides[m["community"]] for m in S.sql(db, "SELECT member, community FROM membership") if m["community"] in sides}
@@ -93,12 +109,13 @@ def one(a, arm, rep, out):
         code, body = S.http(f"/v1/database/{db}/call/install_script", [source])
         if code != 200:
             raise RuntimeError(f"install_script: {code} {body[:300]}")
-        laws = {"heed_trace": True}
-        if arm != "off":
+        laws = {"heed_trace": True, "sides_first": rot, "heed_instinct": 1 if inst == "v1" else 2}
+        if base != "off":
             laws.update({"heed_on": True, "heed_ceiling": 32})
         for k, v in laws.items():
             S.call(db, "set_world_law", [k, json.dumps(v)])
-        (d / "roles.json").write_text(json.dumps({"db": db, "arm": arm, "rep": rep, "side_a": side_a, "side_b": side_b, "laws": laws, "replica": replica}))
+        (d / "roles.json").write_text(json.dumps({"db": db, "arm": arm, "base": base, "instinct": inst, "rotation": rot, "rep": rep, "side_a": side_a, "side_b": side_b,
+                                                   "low_id_side": "A" if min(side_a) < min(side_b) else "B", "laws": laws, "replica": replica}))
         t0 = S.sql(db, "SELECT last_ms FROM clock")[0]["last_ms"]
         S.call(db, "set_paused", [False])
         log(f"unpaused; side A {len(side_a)}, side B {len(side_b)}; laws {laws}")
@@ -185,7 +202,13 @@ def measure(d, loads=None):
     per = lambda n: round(n / minutes, 4) if minutes > 0 else None
     dead_a = sum(1 for i in A if i in chars and not chars[i]["alive"])
     dead_b = sum(1 for i in B if i in chars and not chars[i]["alive"])
-    return {"dir": str(d), "arm": roles["arm"], "broke": summ["broke"], "duration_s": round((end - t0) / 1000, 1),
+    def diff_at(sec):
+        xs = [q for q in summ["samples"] if q["ms"] - t0 <= sec * 1000]
+        return (len(A) - xs[-1]["a"]) - (len(B) - xs[-1]["b"]) if xs else None
+    low = roles.get("low_id_side", "A")
+    return {"dir": str(d), "arm": roles["arm"], "broke": summ["broke"], "low_id_side": low,
+            "low_id_side_broke": None if summ["broke"] is None else summ["broke"] == low,
+            "A_minus_B_dead_60": diff_at(60), "A_minus_B_dead_90": diff_at(90), "duration_s": round((end - t0) / 1000, 1),
             "A_dead": dead_a, "B_dead": dead_b, "A_minus_B_dead": dead_a - dead_b,
             "first_unheeded_per_A_min": per(len(unheeded)), "first_unheeded": len(unheeded), "first_unseen": len(unseen), "first_blows": len(firsts),
             "repeat_invisible": len(invisible), "invariant_lines": sum(1 for t, _, _ in lines if t == "invariant"),
@@ -195,7 +218,7 @@ def measure(d, loads=None):
             "A_share_at_capacity": heed_e4.med(at_cap), "A_cap_lost": heed_e4.med([x for x, _ in spiral]), "A_health_lost": heed_e4.med([y for _, y in spiral])}
 
 
-KEYS = ["A_dead", "B_dead", "A_minus_B_dead", "duration_s", "first_unheeded_per_A_min", "first_unseen", "windups_heeded_share",
+KEYS = ["A_dead", "B_dead", "A_minus_B_dead", "A_minus_B_dead_60", "A_minus_B_dead_90", "duration_s", "first_unheeded_per_A_min", "first_unseen", "windups_heeded_share",
         "reactions_per_blow_reaching_A", "A_landed", "A_share_at_capacity", "A_cap_lost", "A_health_lost"]
 
 
@@ -213,15 +236,38 @@ def report(a):
             have = [v for v in vals if v is not None]
             row[k] = {"median": heed_e4.med(have), "min": min(have) if have else None, "max": max(have) if have else None, "values": vals}
         table[arm] = row
+    # Pooled over rotation (`<base>.<instinct>`), beside each orientation.
+    pooled = defaultdict(list)
+    for r in results:
+        b, i, _ = parse_arm(r["arm"])
+        pooled[f"{b}.{i}"].append(r)
+    for arm, rs in pooled.items():
+        if arm in by:
+            continue
+        row = {"n": len(rs), "broke": [r["broke"] for r in rs], "repeat_invisible_total": sum(r["repeat_invisible"] + r["invariant_lines"] for r in rs)}
+        for k in KEYS:
+            vals = [r[k] for r in rs]
+            have = [v for v in vals if v is not None]
+            row[k] = {"median": heed_e4.med(have), "min": min(have) if have else None, "max": max(have) if have else None, "values": vals}
+        table[arm] = row
     out = {"instances": results, "arms": table}
     if a.control:
         out["differs_from_control"] = pack_arena.decide(table, a.control)
+    if a.control_base:
+        # Each arm against the control base of its own instinct and rotation (or pooled).
+        dec = {}
+        for arm in table:
+            b, i, r = parse_arm(arm)
+            ctl = f"{a.control_base}.{i}" + (f".r{r}" if arm.count(".") == 2 else "")
+            if ctl in table and ctl != arm:
+                dec[arm] = pack_arena.decide({arm: table[arm], ctl: table[ctl]}, ctl).get(arm, {})
+        out["differs_from_control"] = dec
     for arm in sorted(table):
         row = table[arm]
         print(f"\n== {arm} (n={row['n']}; broke {row['broke']}; repeated invisible blows {row['repeat_invisible_total']})")
         for k in KEYS:
             v = row[k]
-            flag = "  DIFFERS" if a.control and out.get("differs_from_control", {}).get(arm, {}).get(k) else ""
+            flag = "  DIFFERS" if (a.control or a.control_base) and out.get("differs_from_control", {}).get(arm, {}).get(k) else ""
             print(f"  {k:32s} median {v['median']!s:>8}  range {v['min']!s}..{v['max']!s}{flag}")
     if a.json:
         Path(a.json).write_text(json.dumps(out, indent=1))
@@ -244,6 +290,7 @@ def main():
     p = sub.add_parser("report")
     p.add_argument("dirs", nargs="+")
     p.add_argument("--control")
+    p.add_argument("--control-base", help="decide each `<base>.<instinct>[.<rotation>]` arm against this base with the same instinct and rotation")
     p.add_argument("--json")
     p.set_defaults(f=report)
     a = ap.parse_args()
