@@ -2,6 +2,14 @@
 
 Status: **measurement**, 2026-11-22, dev-box. The prototype lives on branch `relay-proto` (from `viewer-floor`) and never goes to main. This note is the §2.6 measurement that [BATTLE_DELIVERY_PATHS.md](BATTLE_DELIVERY_PATHS.md) asked for before anyone commits to building a relay.
 
+> **Correction (2026-11-22, the 60 Hz budget): the viewer counts here are upper bounds for strict 60 Hz.**
+> - **Measured** ([BATTLE_CONTRACT_CASES.md](BATTLE_CONTRACT_CASES.md) §4, dev-box, `performance` governor). Strict 60 Hz means at least 59.9 ticks/s, with step p99 within one 16.7 ms slot. It held only up to about **390 ms/s** of database-thread work. Arms at 440–520 ms/s ran 59.0–59.9 ticks/s, with about 1% of steps late.
+> - **What sets the 390** (the tick's own work, commits, or the scheduler) is being measured in HUMAN_FIGHTER_COST.
+> - **Why the counts are upper bounds:** this note counts about 116 viewers with the relay against 96 without on a budget of 600 ms/s for the tick's work (the summary above).
+> - **This note's own runs show it:** its 64-viewer arms (474–512 ms/s) ran 59.3–59.4 ticks/s.
+> - **With 390 ms/s as the budget** (an estimate, on this note's warm figures): about 27 viewers with the relay (R 326.9, 2.30 each) and about 20 without (R 333.8, 2.78 each).
+> - **The recommendation stands:** don't build the relay alone for this gate.
+
 ## Measured, and the recommendation updated
 
 **The relay works, and it is safe, but it does not hold up as the way to 216 viewers.** The measurement is at the contract's density: the 26–32 m ring, about 49 in sight, heed with holds at 16, uninstrumented. Every arm ran on an equally warm host (§2.3).
