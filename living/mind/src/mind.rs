@@ -1888,7 +1888,11 @@ impl Minds {
         if self.actors.lock().unwrap().get(&actor).and_then(|m| m.onstage_until).is_some_and(|t| t > now) {
             return true;
         }
-        let seen = scene.and_then(|s| serde_json::from_str::<Value>(s).ok()).and_then(|v| v["creatures"].as_array().map(|cs| cs.iter().filter_map(|c| c["id"].as_u64()).any(|id| self.is_player(id as u32)))).unwrap_or(false);
+        // A player listed by id, or (heed, docs/ATTENTION_BUDGET.md v2.1 point 4) one in the
+        // character's throng, which the authority counts in `_stage` and no prompt shows.
+        let seen = scene.and_then(|s| serde_json::from_str::<Value>(s).ok()).is_some_and(|v| {
+            v["creatures"].as_array().is_some_and(|cs| cs.iter().filter_map(|c| c["id"].as_u64()).any(|id| self.is_player(id as u32))) || v["_stage"]["throng_players"].as_u64().is_some_and(|n| n > 0)
+        });
         if !seen {
             return false;
         }

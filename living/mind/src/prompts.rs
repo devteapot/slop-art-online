@@ -768,7 +768,26 @@ fn projects_section(out: &mut Segments, projects: &str) {
     }
 }
 
+/// A scene as a model reads it: without the authority's `_stage` (level-of-detail plumbing: how
+/// many players are in a heed throng, docs/ATTENTION_BUDGET.md v2.1 point 4), which is nothing
+/// the character perceives. Unchanged when it has none.
+pub fn model_scene(scene: &str) -> std::borrow::Cow<'_, str> {
+    if !scene.contains("\"_stage\"") {
+        return std::borrow::Cow::Borrowed(scene);
+    }
+    match serde_json::from_str::<serde_json::Value>(scene) {
+        Ok(mut v) => {
+            if let Some(o) = v.as_object_mut() {
+                o.remove("_stage");
+            }
+            std::borrow::Cow::Owned(v.to_string())
+        }
+        Err(_) => std::borrow::Cow::Borrowed(scene),
+    }
+}
+
 pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str, projects: &str) -> String {
+    let scene = &*model_scene(scene);
     let mut out = Segments::default();
     common(c, &mut out);
     out.push(Stability::Character, format!("\n# Your habits (your body keeps to them)\n{habits}\n"));
@@ -1233,6 +1252,7 @@ pub fn fast_user_v(f: FastFrame, reason: &str, persona: &str, experiences: &[Str
 }
 
 pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, reason: &str, repertoire: &str) -> Segments {
+    let scene = &*model_scene(scene);
     let mut out = Segments::default();
     out.push(Stability::Dynamic, format!("\n# Why you are thinking now\n{reason}\n\n"));
     common(c, &mut out);
@@ -1270,6 +1290,7 @@ Feel the moment as the animal does. Answer with ONE JSON object of two short str
 }
 
 pub fn animal_think_user(name: &str, kind: &str, temperament: &str, mind: &[String], experiences: &[String], scene: &str, reason: &str) -> String {
+    let scene = &*model_scene(scene);
     let (scene, smells) = split_smells(scene);
     let mut out = Segments::default();
     out.push(Stability::Character, format!("# Who you are\n{name}, a {kind}.\nYour temperament: {temperament}.\n"));
@@ -1362,6 +1383,7 @@ or {{\"graph\": \"keep\"}} when the impulse needs nothing its instincts don't al
 }
 
 pub fn animal_compile_user(name: &str, kind: &str, impulse: &str, feeling: &str, scene: &str, top: &str, routines: &str) -> String {
+    let scene = &*model_scene(scene);
     let mut out = Segments::default();
     out.push(Stability::Character, format!("{name} the {kind}\n"));
     out.push(Stability::Character, format!("\n\nIts routines (how each has gone):\n{routines}"));
@@ -1652,6 +1674,19 @@ mod tests {
 
     /// The cue field's examples and its schema name no one and no duty: what a mind watches
     /// for is its own (docs/ATTENTION.md).
+    #[test]
+    fn a_scenes_stage_mark_never_reaches_a_model() {
+        // Heed (docs/ATTENTION_BUDGET.md v2.1 point 4): the authority counts players in a mind's
+        // throng under `_stage` for the level of detail; no prompt shows it.
+        let scene = r#"{"_stage":{"throng_players":2},"creatures":[],"throngs":[{"about":5,"dir":"east"}],"you":{"id":1}}"#;
+        let shown = model_scene(scene);
+        assert!(!shown.contains("_stage") && !shown.contains("throng_players") && shown.contains("throngs"), "{shown}");
+        assert!(!think_user(&context("Ivo"), scene, "", "", "", "").contains("throng_players"));
+        // A scene without one passes through untouched.
+        let plain = r#"{"creatures":[{"id":9}],"you":{"id":1}}"#;
+        assert!(matches!(model_scene(plain), std::borrow::Cow::Borrowed(s) if s == plain));
+    }
+
     #[test]
     fn cue_examples_name_no_one() {
         let field = notice_field_for(600.0, 60.0).to_lowercase();

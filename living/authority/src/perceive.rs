@@ -175,6 +175,12 @@ fn witnessed_as(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, subj
         let mut named = crate::perception::labels(ctx, &c, &ids, now).into_iter();
         let a = named.next().unwrap_or_default();
         let b = named.next().unwrap_or_default();
+        // Under heed, someone in the onlooker's throng is no one in particular: told as such,
+        // and not named by id on the line (nothing when the law is off).
+        let (mask_a, mask_b) = (crate::heed::masked(ctx, &c, subject, now), object != 0 && crate::heed::masked(ctx, &c, object, now));
+        let a = if mask_a { crate::heed::throng_label(ctx, c.id, subject, now) } else { a };
+        let b = if mask_b && owned.is_none() { crate::heed::throng_label(ctx, c.id, object, now) } else { b };
+        let (subject, object) = (if mask_a { 0 } else { subject }, if mask_b && owned.is_none() { 0 } else { object });
         let whose = owned.map(|k| common::owner_label(ctx, &c, object, k));
         let b = match &whose {
             Some(Some(name)) => name.clone(),
@@ -221,6 +227,11 @@ pub fn witnessed_shot(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str
         let (template, ids) = if sees_shooter { (seen, vec![subject, object]) } else { (unseen, vec![object]) };
         let mut named = crate::perception::labels(ctx, &c, &ids, now).into_iter();
         let (a, b) = if sees_shooter { (named.next().unwrap_or_default(), named.next().unwrap_or_default()) } else { (String::new(), named.next().unwrap_or_default()) };
+        // Under heed, someone in the onlooker's throng is no one in particular (nothing when off).
+        let (mask_a, mask_b) = (sees_shooter && crate::heed::masked(ctx, &c, subject, now), crate::heed::masked(ctx, &c, object, now));
+        let a = if mask_a { crate::heed::throng_label(ctx, c.id, subject, now) } else { a };
+        let b = if mask_b { crate::heed::throng_label(ctx, c.id, object, now) } else { b };
+        let (subject, object) = (if mask_a { 0 } else { subject }, if mask_b { 0 } else { object });
         let text = rendered(template, &a, &b, object != 0 && c.id == object);
         let sal = if &*c.kind != "person" { salience * 0.5 } else { salience };
         let party = c.id == subject || (object != 0 && c.id == object);
@@ -953,6 +964,11 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     // What the character sees (sight and a clear sight line), each as it perceives them (the
     // `perceived_of` projection a player's view carries too).
     let (in_sight, heard_now) = crate::perception::sensed(ctx, id, at, now);
+    // Under heed (an AI character, the law on): the individuals are listed in full and the rest
+    // of what it sees is its throng, told as anonymous lines (`throngs`); the hidden 14-nearest
+    // cap is gone (docs/ATTENTION_BUDGET.md §7). Earshot still reads sight (speech consent).
+    let heed = crate::heed::applies(ctx, id);
+    let (in_sight, throng) = if heed { crate::heed::split(ctx, &me, at, in_sight, now) } else { (in_sight, Vec::new()) };
     let sc = common::scripts(ctx);
     for c in &in_sight {
         let Some(ch) = ctx.db.character().id().find(c.id) else { continue };
@@ -1057,7 +1073,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             }
         }
         creatures.push(Value::Object(o));
-        if creatures.len() >= 14 {
+        if !heed && creatures.len() >= 14 {
             break;
         }
     }
@@ -1186,11 +1202,26 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
 
     let mut scene = json!({"you": you, "time": time, "creatures": creatures, "resources": resources, "structures": structures, "terrain_near": terrain});
+    if heed {
+        // The throng in its own array, never among `creatures` (no ids: recall builds no key
+        // from it), and how many players are in it for the mind service's level of detail
+        // (`_stage`, which the service strips before any prompt: a player in a mind's throng
+        // keeps it on stage; docs/ATTENTION_BUDGET.md v2.1 point 4).
+        if !throng.is_empty() {
+            scene["throngs"] = Value::Array(crate::heed::throng_lines(ctx, id, at, &throng, now));
+            let players = crate::heed::players_in(ctx, &throng);
+            if players > 0 {
+                scene["_stage"] = json!({"throng_players": players});
+            }
+        }
+    }
     // Whom a line said now would reach, at each way, among the people listed above (earshot;
-    // the rule speech gives the words by), each as the scene shows them.
+    // the rule speech gives the words by), each as the scene shows them. Under heed it reads
+    // sight (speech consent): someone in the throng counts, told as someone in the throng.
     if me.kind == "person" && common::laws(ctx).earshot {
-        let ways = crate::earshot::reach(ctx, id, at, |x| shown_as.contains_key(&x), now);
-        let words = crate::earshot::words(&ways, |x| format!("{} (#{})", common::label_for(ctx, &me, x), shown_as.get(&x).copied().unwrap_or(x)));
+        let in_throng = |x: u32| throng.iter().any(|c| c.id == x);
+        let ways = crate::earshot::reach(ctx, id, at, |x| shown_as.contains_key(&x) || in_throng(x), now);
+        let words = crate::earshot::words(&ways, |x| if in_throng(x) { crate::heed::throng_label(ctx, id, x, now) } else { format!("{} (#{})", common::label_for(ctx, &me, x), shown_as.get(&x).copied().unwrap_or(x)) });
         if !words.is_empty() {
             scene[living_rules::script::speech::EARSHOT] = json!(words);
         }

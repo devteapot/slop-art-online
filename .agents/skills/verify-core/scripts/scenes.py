@@ -7968,5 +7968,150 @@ def truthful_refusals(s):
 
 SCENES["truthful_refusals"] = truthful_refusals
 
+
+def heed(s):
+    """Heed for AI characters (docs/ATTENTION_E4.md; docs/ATTENTION_BUDGET.md v2.1), behind the
+    value-only law `heed_on`, beside its control (the law off, as shipped). On an open line an
+    observer O stands with six people 1-3.5 m east of it, a striker S 6 m east and an onlooker W
+    8 m east (within a said line's reach): 8 others in O's sight. Each character's capacity is fixed per phase by an installed
+    `heed_capacity` that returns a number for O, S and W (the shipped formula for everyone else).
+
+    - **Off:** O's graph `sees` S and `count`s 8 people, as before.
+    - **On, O's capacity 2:** O sees no S by id (S is in its throng), still counts 8 (a throng is
+      counted), and its deliberation scene lists at most its 2 individuals with the rest as
+      anonymous `throngs` lines (no throng member's id anywhere in the scene).
+    - **Forced contact, O's capacity 0, S's 2:** S strikes O twice. O guards whenever it is
+      `threatened`. Off: the first windup is seen and blocked. On: the first is from S in O's
+      throng: not foreseen, it lands; the blow is contact, so S is an individual for
+      `heed_contact_s` and the second windup is seen and blocked. The module log says so
+      (`heed blow … heeded_at_windup=0`, then `=1`) and holds no `heed invariant` line.
+    - **Lines name no throng member (W's capacity 0):** W's fight line for the strike and the line
+      it hears O say are "someone in the throng", with no id; off, they name them.
+
+    The shipped script is restored and the law set off at the end."""
+    line = clear_line(s)
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    o, S, W, *crowd = s.people(9)
+    born = time.monotonic()
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+
+    def caps(**fixed):
+        ids = {"o": o, "S": S, "W": W}
+        head = "".join(f"\n    if a.actor.id == {ids[k]} {{ return {float(v)}; }}" for k, v in fixed.items())
+        src = shipped.replace("fn heed_capacity(a) {", "fn heed_capacity(a) {" + head, 1)
+        assert src != shipped
+        s.call("install_script", src)
+
+    def place():
+        s.call("place_at", o, *line[0])
+        for k, c in enumerate(crowd):
+            s.call("place_at", c, line[1 + k // 2][0] + 0.5 * (k % 2), line[1 + k // 2][1] + (1.0 if k % 2 else -1.0))
+        s.call("place_at", S, *line[6])
+        s.call("place_at", W, *line[8])
+        for c in crowd:
+            s.graph(c, {"wait": 300})
+        s.graph(W, {"wait": 300})
+
+    rounds = iter(range(1000))
+
+    def probe(label):
+        """O says whether it sees S and whether it counts 8 people (one line every 2.2 s)."""
+        tag = f"{label}-{next(rounds)}"
+        t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        tell = [{"if": {"cond": {"sees": {"id": S}}, "then": {"say": f"{tag} sees S"}, "else": {"say": f"{tag} not S"}}}, {"wait": 2.2},
+                {"if": {"cond": {"count": {"of": {"kind": "person"}, "at_least": 8}}, "then": {"say": f"{tag} counts 8"}, "else": {"say": f"{tag} counts fewer"}}}, {"wait": 2.2}]
+        s.graph(o, {"seq": [{"wait": 1.5}, *tell, {"wait": 300}]})
+
+        def said():
+            rows = [r for r in s.rows(f"SELECT * FROM chronicle WHERE kind = 'speech' AND a = {o}") if r["at_ms"] >= t0 and tag in r["text"]]
+            return rows if len(rows) >= 2 else None
+        rows = s.wait(said, seconds=40, every=1)
+        (s.out / f"{s.name}-said-{tag}.json").write_text(json.dumps(rows, indent=2) + "\n")
+        return {"sees_S": any(f"{tag} sees S" in r["text"] for r in rows), "counts_8": any(f"{tag} counts 8" in r["text"] for r in rows), "t0": t0, "tag": tag}
+
+    def duel(label):
+        """S strikes O twice; O blocks whenever threatened. The two strikes' outcomes."""
+        s.call("place_at", S, line[0][0] + 1.0, line[0][1])
+        s.graph(o, {"first": {"label": "guard", "children": [{"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "block"}}}}, {"wait": 0.2}]}})
+        time.sleep(3)
+        t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        s.graph(S, {"seq": [{"do": {"skill": "strike", "target": {"id": o}}}, {"wait": 0.3}, {"do": {"skill": "strike", "target": {"id": o}}}, {"wait": 60 + next(rounds)}]})
+
+        def struck():
+            u = [x for x in s.rows("SELECT * FROM skill_use") if x["at_ms"] >= t0 and x["actor"] == S and x["skill"] == "strike" and x["outcome"]]
+            return u if len(u) >= 2 else None
+        strikes = sorted(s.wait(struck, seconds=30, every=1), key=lambda x: x["at_ms"])
+        s.graph(S, {"wait": 1.0 + 0.01 * next(rounds)})
+        time.sleep(1.5 + law_value(s, "witness_fold_ms") / 1000)
+        uses = [x for x in s.rows("SELECT * FROM skill_use", f"duel-uses-{label}") if x["at_ms"] >= t0]
+        blocks = [x for x in uses if x["actor"] == o and x["skill"] == "block"]
+        seen = [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {W}", f"duel-exp-{label}") if r["at_ms"] >= t0]
+        return {"outcomes": [x["outcome"] for x in strikes[:2]], "blocks": len(blocks), "t0": t0}, seen
+
+    blocked = lambda out: "blocked" in (out or "")
+    try:
+        place()
+        caps(o=2, S=2, W=0)
+        got = probe("off")
+        s.expect("off (as shipped): O sees S and counts 8 people", got["sees_S"] and got["counts_8"], got)
+        heard_off = [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {W}") if r["at_ms"] >= got["t0"] and got["tag"] in r["text"]]
+        s.expect("off: W hears O's line from O by id", heard_off and all(r["subject"] == o for r in heard_off), heard_off)
+        set_law(s, "heed_on", True)
+        time.sleep(2.5)
+        got = probe("on-cap2")
+        s.expect("on, O's capacity 2: S is in O's throng (not seen by id)", not got["sees_S"], got)
+        s.expect("on: a throng's numbers are perceived (O still counts 8 people)", got["counts_8"], got)
+        heard_on = [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {W}", "heard-on") if r["at_ms"] >= got["t0"] and got["tag"] in r["text"]]
+        s.expect("on, W's capacity 0: O's line is heard from someone in the throng, with no id",
+                 heard_on and all(r["subject"] == 0 and "someone in the throng" in r["text"].lower() for r in heard_on), heard_on)
+        # O's deliberation scene: individuals listed, the rest in `throngs`, no throng member's id.
+        time.sleep(max(1.5, 47.0 - (time.monotonic() - born)))
+        stamp = lambda: next((d["updated_ms"] for d in s.rows(f"SELECT actor, updated_ms FROM deliberation WHERE actor = {o}")), -1)
+        before = stamp()
+        s.call("set_behavior", o, json.dumps({"seq": [{"think": "a look around"}, {"wait": 300}]}))
+        row = s.wait(lambda: next((d for d in s.rows(f"SELECT * FROM deliberation WHERE actor = {o}") if d["updated_ms"] > before), None), 20)
+        scene = json.loads(row["scene"])
+        (s.out / f"{s.name}-scene-on.json").write_text(json.dumps(scene, indent=1, ensure_ascii=False) + "\n")
+        listed = [c.get("id") for c in scene.get("creatures", [])]
+        throngs = scene.get("throngs", [])
+        about = sum(t.get("about", 0) for t in throngs)
+        s.expect("on: the scene lists at most O's 2 individuals", len(listed) <= 2, listed)
+        s.expect("on: the rest are anonymous throng lines (count, direction, spread, heading, activity)",
+                 throngs and about >= 8 - len(listed) - 1 and all({"dir", "dist", "about", "across", "moving", "visibly", "kinds"} <= set(t) for t in throngs), throngs)
+        hidden = [c for c in [S, W, *crowd] if c not in listed]
+        text = row["scene"]
+        s.expect("on: no throng member's id appears in the scene", not any(re.search(rf'"id":\s*{c}\b|#{c}\b', text) for c in hidden), hidden)
+        s.expect("on: no player in the throng, so no level-of-detail mark", "_stage" not in scene, list(scene))
+
+        # Forced contact. Off first (the control), then on.
+        set_law(s, "heed_on", False)
+        caps(o=0, S=2, W=0)
+        off, seen_off = duel("off")
+        s.expect("off: O blocks the first strike (seen coming) and the second", blocked(off["outcomes"][0]) and blocked(off["outcomes"][1]), off)
+        fight_off = [r for r in seen_off if r["kind"] == "fight"]
+        s.expect("off: W's fight line names S and O", fight_off and any(r["subject"] in (S, o) for r in fight_off), fight_off)
+        time.sleep(31)
+        set_law(s, "heed_on", True)
+        time.sleep(2.5)
+        on, seen_on = duel("on")
+        s.expect("on, O's capacity 0: the first strike, from O's throng, is not foreseen and lands", not blocked(on["outcomes"][0]), on)
+        s.expect("on: its contact makes S an individual: the second strike is seen coming and blocked", blocked(on["outcomes"][1]), on)
+        fight_on = [r for r in seen_on if r["kind"] == "fight"]
+        s.expect("on, W's capacity 0: W's fight line is about someone in the throng, with no id",
+                 fight_on and all(r["subject"] == 0 and r["object"] == 0 and "someone in the throng" in r["text"].lower() for r in fight_on), fight_on)
+        logs = s.command("logs", "-s", "local", s.db).stdout
+        (s.out / f"{s.name}-module-log.txt").write_text(redact(logs))
+        blows = [l for l in logs.splitlines() if f"heed blow a={S} v={o}" in l]
+        s.expect("the module log: the first blow's maker was not an individual at its windup, the second was",
+                 len(blows) >= 2 and "heeded_at_windup=0" in blows[-2] and "heeded_at_windup=1" in blows[-1], blows[-4:])
+        s.expect("no invisible repeated blow (no `heed invariant` line)", "heed invariant" not in logs, [l for l in logs.splitlines() if "heed invariant" in l][:5])
+    finally:
+        set_law(s, "heed_on", False, check=False)
+        s.call("install_script", shipped, check=False)
+        off_the_line(s, line, [o, S, W, *crowd], dy=48)
+
+
+SCENES["heed"] = heed
+
 if __name__ == "__main__":
     raise SystemExit(main())

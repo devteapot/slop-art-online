@@ -703,6 +703,8 @@ fn reach(ctx: &ReducerContext, actor: u32, other: u32, now: u64) -> Reach {
     let other = crate::far::resolve(ctx, actor, other);
     let Some(them) = ctx.db.character().id().find(other).filter(|c| c.alive && c.id != actor) else { return r };
     match crate::perception::Sensing::new(ctx, actor, at, now).sensed_id(ctx, now, other) {
+        // Under heed, someone in the character's throng is not perceived as them (nothing when off).
+        Some((_, true)) if crate::heed::masked(ctx, &me, other, now) => return r,
         Some((c, true)) => {
             // A figure too far away to make out is not known to be them (far-label).
             let seen = crate::perception::project(ctx, &me, &them, now);

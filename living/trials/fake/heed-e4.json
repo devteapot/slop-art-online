@@ -1,0 +1,26 @@
+{
+ "about": "E4 (docs/ATTENTION_E4.md): fake minds that keep their graph and say nothing, so the arena's people keep the fixture's combat graph and the heed instinct; only capacity varies. Deliberations answer `graph: keep`; thinks say nothing.",
+ "replies": {
+  "think": {
+   "thought": "I keep to what I am doing.",
+   "intend": [],
+   "say": {
+    "text": "",
+    "to": null
+   },
+   "judgments": [],
+   "places": []
+  },
+  "deliberate": {
+   "thought": "I keep to what I am doing.",
+   "plan": "keep",
+   "graph": "keep",
+   "say": {
+    "text": "",
+    "to": null
+   },
+   "acts": []
+  }
+ },
+ "rules": []
+}

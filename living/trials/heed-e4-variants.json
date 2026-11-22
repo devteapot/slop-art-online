@@ -1,0 +1,76 @@
+{
+ "heed-off": {
+  "about": "E4 control: the heed law off (as shipped): everyone in sight is an individual.",
+  "models": {},
+  "env": {}
+ },
+ "heed-formula": {
+  "about": "E4: heed on, every character on the shipped heed_capacity formula, ceiling 32.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "heed_on": true,
+   "heed_ceiling": 32
+  }
+ },
+ "heed-cap4": {
+  "about": "E4: heed on, people's capacity fixed at 4 (wolves on the formula), ceiling 32.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "heed_on": true,
+   "heed_ceiling": 32
+  },
+  "skills_patch": {
+   "people_capacity": [
+    "fn heed_capacity(a) {",
+    "fn heed_capacity(a) {\n    if a.actor.kind == \"person\" { return 4.0; }"
+   ]
+  }
+ },
+ "heed-cap8": {
+  "about": "E4: heed on, people's capacity fixed at 8 (wolves on the formula), ceiling 32.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "heed_on": true,
+   "heed_ceiling": 32
+  },
+  "skills_patch": {
+   "people_capacity": [
+    "fn heed_capacity(a) {",
+    "fn heed_capacity(a) {\n    if a.actor.kind == \"person\" { return 8.0; }"
+   ]
+  }
+ },
+ "heed-cap16": {
+  "about": "E4: heed on, people's capacity fixed at 16 (wolves on the formula), ceiling 32.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "heed_on": true,
+   "heed_ceiling": 32
+  },
+  "skills_patch": {
+   "people_capacity": [
+    "fn heed_capacity(a) {",
+    "fn heed_capacity(a) {\n    if a.actor.kind == \"person\" { return 16.0; }"
+   ]
+  }
+ },
+ "heed-cap32": {
+  "about": "E4: heed on, people's capacity fixed at 32 (wolves on the formula), ceiling 32.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "heed_on": true,
+   "heed_ceiling": 32
+  },
+  "skills_patch": {
+   "people_capacity": [
+    "fn heed_capacity(a) {",
+    "fn heed_capacity(a) {\n    if a.actor.kind == \"person\" { return 32.0; }"
+   ]
+  }
+ }
+}

@@ -550,6 +550,14 @@ pub struct Laws {
     pub cover_brush_on: bool,
     pub cover_eye_height_m: f32,
     pub gaze_on: bool,
+    /// Heed (docs/ATTENTION_BUDGET.md v2.1; `living_rules::heed`): off, everyone in sight is an
+    /// individual, as before. On, an AI character perceives as individuals only those it heeds
+    /// (its capacity, `heed_capacity(a)` clamped to `heed_ceiling`, filled by its heed policy)
+    /// plus whoever it acts on and whoever made contact with it within `heed_contact_s`; the rest
+    /// of what it sees is a throng. Players keep today's perception either way (E4 authority side).
+    pub heed_on: bool,
+    pub heed_ceiling: f32,
+    pub heed_contact_s: f32,
     pub cover_sight_on: bool,
     /// How far a character sees ground by day (metres): the cells of `known_ground` it marks
     /// (docs/MOVEMENT_MIND.md, step 3). At night, its own sight.
@@ -884,6 +892,9 @@ impl Default for Laws {
             cover_brush_on: true,
             cover_eye_height_m: 1.6,
             gaze_on: false,
+            heed_on: false,
+            heed_ceiling: 16.0,
+            heed_contact_s: crate::heed::DEFAULT_CONTACT_S,
             cover_sight_on: false,
             ground_sight_m: 24.0,
             known_cells_pass: 0.0,
@@ -3251,6 +3262,9 @@ impl Scripts {
             cover_brush_on: flag("cover_brush_on", l.cover_brush_on),
             cover_eye_height_m: g("cover_eye_height_m", l.cover_eye_height_m),
             gaze_on: flag("gaze_on", l.gaze_on),
+            heed_on: flag("heed_on", l.heed_on),
+            heed_ceiling: g("heed_ceiling", l.heed_ceiling).clamp(0.0, 256.0),
+            heed_contact_s: g("heed_contact_s", l.heed_contact_s).clamp(0.0, 60.0),
             cover_sight_on: flag("cover_sight_on", l.cover_sight_on),
             ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
             known_cells_pass: g("known_cells_pass", l.known_cells_pass).clamp(0.0, 100_000.0),
@@ -3621,7 +3635,7 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 29] = [
     ("cover_cliff_step_m", ValueOnly::Cover),
     ("gaze_on", ValueOnly::Gaze),
     // heed (docs/ATTENTION_BUDGET.md v2): the switch, the performance ceiling on every capacity
-    // and the contact window, for the authority side to read at its next pass. Not read yet.
+    // and the contact window: read by the authority's heed (authority/src/heed.rs) at its next pass.
     ("heed_on", ValueOnly::Delivery),
     ("heed_ceiling", ValueOnly::Delivery),
     ("heed_contact_s", ValueOnly::Delivery),

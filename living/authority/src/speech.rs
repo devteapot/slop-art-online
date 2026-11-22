@@ -259,8 +259,23 @@ pub fn speak(ctx: &ReducerContext, speaker: u32, text: &str, to: u32, way: &str,
             crate::perceive::heard_asleep(ctx, c, speaker, to, at, &heard_text(c, *d), if addressed { w.addressed } else { w.overheard }, now);
             continue;
         }
-        let news = introduces && crate::perception::introduce(ctx, c.id, speaker, now);
         let addressed = to == c.id || (to == 0 && (close == 1 && *d <= address || naming.contains(&c.id)));
+        // Under heed, a speaker in the hearer's throng is heard as someone in the throng: no name,
+        // no id, no introduction. Words to the hearer itself are an event for whom it heeds first
+        // (they make the speaker `addressing`). Nothing when the law is off.
+        let masked = crate::heed::masked(ctx, c, speaker, now) && !(to == c.id && crate::heed::addressed(ctx, c, speaker, now));
+        if masked {
+            let who = common::capitalized(&crate::heed::throng_label(ctx, c.id, speaker, now));
+            let heard = if to == c.id { format!("{who} says to you: “{text}”") } else { format!("{who} says: “{text}”") };
+            percept(ctx, c, now, &w.kind, 0, if to == c.id { to } else { 0 }, at, heard, if addressed { w.addressed } else { w.overheard });
+            if let Some(mut st) = ctx.db.mind_state().id().find(c.id) {
+                st.heard_ms = now;
+                st.speaker = speaker;
+                ctx.db.mind_state().id().update(st);
+            }
+            continue;
+        }
+        let news = introduces && crate::perception::introduce(ctx, c.id, speaker, now);
         let heard = heard_text(c, *d);
         percept(ctx, c, now, &w.kind, speaker, to, at, heard, if addressed { w.addressed } else { w.overheard });
         // A name that is news is a moment of its own (below the 0.6 that wakes a body's graph, so

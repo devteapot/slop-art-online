@@ -1279,6 +1279,11 @@ fn perform(ctx: &ReducerContext, mut act: Activity, now: u64) -> Result<(), Stri
     act.ends_ms = now + dur.max(100);
     let id = act.id;
     let shape = shape_of(&sc, &act.skill);
+    if act.victim != 0 {
+        // A move aimed at someone is an event for whom they heed, before anything reads it
+        // (the fast lane's count): heed law, nothing when off.
+        crate::heed::windup(ctx, id, act.victim, now);
+    }
     if shape.is_some_and(|s| s.timed) {
         // The windup starts: the cooldown runs, others see it coming, the use is accepted.
         crate::combat::started(ctx, id, &act.skill, now);
@@ -1830,6 +1835,7 @@ fn complete(ctx: &ReducerContext, a: Activity, now: u64) {
             let from = ctx.db.body().id().find(a.id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
             engage(ctx, a.id, now);
             engage(ctx, a.victim, now);
+            crate::heed::contact(ctx, a.id, a.victim, "dodged", now);
             common::count(|k| k.dodged += 1);
             if let Some(vc) = ctx.db.character().id().find(a.victim) {
                 let at_v = ctx.db.body().id().find(a.victim).map(|b| pos(&b, now)).unwrap_or(from);
@@ -2620,6 +2626,7 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.last_look().id().delete(id);
     ctx.db.character_senses().id().delete(id);
     crate::attention::forget(ctx, id);
+    crate::heed::forget(id);
     ctx.db.character_earshot().id().delete(id);
     ctx.db.experience().observer().delete(id);
     ctx.db.line_heard().speaker().delete(id);
@@ -2710,6 +2717,9 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         }
     }
     let code = sc.shapes().code(skill);
+    // The blow reached the victim: contact, which makes its maker an individual to it for
+    // `heed_contact_s` whatever it heeds (heed law; nothing when off).
+    crate::heed::contact(ctx, attacker, victim, match defense { Aim::Dash => "dodged", Aim::Facing => "blocked", _ => "hit" }, now);
     // A missile's shooter is told to the victim only when the victim sees them (`seen_shooter`);
     // the combat feed hides it from whoever does not (`Seen::far_actor`).
     let seen_shooter = missile.is_none() || crate::perception::sees_creature(ctx, victim, attacker, now);
