@@ -62,7 +62,7 @@ async fn main() -> Result<()> {
     }
     // The fast lane's frame (prompts.rs `FastFrame`): checked here for the same reason.
     let fast_frame = prompts::FastFrame::parse(std::env::var("LIVING_FAST_FRAME").ok().as_deref()).map_err(anyhow::Error::msg)?;
-    if fast_frame != prompts::FastFrame::First {
+    if fast_frame != prompts::FastFrame::Balanced {
         log::info!("fast frame: {} (LIVING_FAST_FRAME)", fast_frame.name());
     }
     if std::env::args().nth(1).as_deref() == Some("fast-replay") {

@@ -8,7 +8,7 @@ Designed on `design-fast-lane` and **built on `fast-lane`** (2026-11-12), with t
 - **The fast lane revises between blows.** One small call, on the rethink gate's machinery, writes the character's `combat` branch again, or switches it to a routine the character already has. It answers what the character has just perceived of a fight.
 - **Execution stays real-time in the graph.** The routine's own conditions (`doing`, `threatened`, `near`, stamina) answer a windup on the tick. The fast lane is never on that path, and no body waits for it.
 
-**The frame, re-judged (battle-frame, 2026-11-21):** [FAST_LANE_FRAME.md](FAST_LANE_FRAME.md) diagnoses the act trial's refused battle acts and adds a balanced frame behind the mind's `LIVING_FAST_FRAME` (default `first`, today's frame).
+**The frame, re-judged (battle-frame, 2026-11-21):** [FAST_LANE_FRAME.md](FAST_LANE_FRAME.md) diagnoses the act trial's refused battle acts and adds a balanced frame, the mind's default since then (`LIVING_FAST_FRAME`; `first`, the earlier frame, stays selectable). The lane itself stays off (`fast_lane_on` false).
 
 The rule of [COMBAT_MIND](COMBAT_MIND.md#the-rule-this-design-follows) holds throughout: it is a lane of the mind service chosen by urgency, not a combat planner. Its prompt carries no tactic text, its reply is in the grammar every mind writes, and it is the same for every controller whose mind is running.
 

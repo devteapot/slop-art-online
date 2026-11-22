@@ -1287,9 +1287,18 @@ def fast_lane_case(run):
     assert blows and any(b in why for b in blows), {'why': why, 'blows': blows}
     assert not COUNT_WORDS.search(why) and not COUNT_WORDS.search(text.split('# What has just happened')[1]), 'a count or "again" in the fast prompt'
     assert any('combat branch rewritten' in t['summary'] for t in fast_thoughts()), fast_thoughts()
-    # The default frame is the first one (LIVING_FAST_FRAME unset): no ways listed, no felt body.
+    # The default frame is the balanced one (LIVING_FAST_FRAME unset, docs/FAST_LANE_FRAME.md):
+    # Why now set apart, the six ways side by side, keep first among the replies, and How you
+    # are now last: the eye's own felt body, one line, no number and no count.
     system = '\n'.join(str(m.get('content', '')) for m in first['body'].get('messages', []) if m.get('role') == 'system')
-    assert 'Six ways, side by side' not in system and '# How you are now' not in text, 'the balanced frame without LIVING_FAST_FRAME'
+    assert 'Something has just happened to you (see Why now). Why now is that one event as you perceived it' in system, system[:800]
+    assert 'Six ways, side by side' in system and system.index('- keep it as it is') < system.index('- break contact'), system[:2000]
+    assert system.split('Reply with ONE JSON object, one of:\n')[1].startswith('{"keep": true'), 'keep first among the replies'
+    assert text.index('# What has just happened') < text.index('# How you are now'), text[-800:]
+    felt = text.split('# How you are now\n')[1]
+    assert felt.startswith('How your body feels: ') and felt.strip().count('\n') == 0, felt
+    for word in ('health:', 'stamina', 'people', 'enemies'):
+        assert word not in felt.lower(), f'{word!r} in How you are now: no number or count is told'
     time.sleep(5.5)
     in_gap = [x for x in requests() if x['at_ms'] < first['at_ms'] + 5500]
     assert len(in_gap) == 1, f'{len(in_gap)} fast requests inside the 6 s gap'
@@ -1315,13 +1324,11 @@ def fast_lane_case(run):
 
 @case('fast-frame')
 def fast_frame_case(run):
-    """The balanced fast frame (`LIVING_FAST_FRAME=balanced`, docs/FAST_LANE_FRAME.md) with the
-    fake model: the other strikes at the eye with a spear, the world's `fast_lane_on` law on.
-    One blow taken issues one fast request whose system prompt carries the balanced frame (keeping
-    first, the six ways side by side, the world's rules and grammar as in the first frame) and
-    whose user prompt is the first frame's with How you are now last: the eye's own felt body, in
-    the words its think prompt has. The reply's `combat` branch, one line put first with the fight
-    kept beneath it, is installed through `mind_patch` as any patch is."""
+    """The first fast frame on request (`LIVING_FAST_FRAME=first`, docs/FAST_LANE_FRAME.md), as
+    every trial before battle-frame ran it: one blow taken issues one fast request whose system
+    prompt lists no ways (rewrite, routine, switch, keep: patch first among the replies) and whose
+    user prompt has no How you are now; the reply's `combat` branch is installed through
+    `mind_patch` as any patch is. The balanced default is checked by `fast-lane`."""
     people = prepare(run)
     eye, other = [p['id'] for p in people]
     e = wall_spots(run)['open']
@@ -1331,33 +1338,25 @@ def fast_frame_case(run):
     run.admin('place_at', other, e[0] + 1.2, e[1])
     run.admin('grant_items', other, 'spear', 1)
     run.admin('set_world_law', 'fast_lane_on', 'true')
-    ahead = {'patch': {'label': 'combat', 'graph': {'first': [
-        {'if': {'count': {'of': 'person', 'within': 3, 'at_least': 3}}, 'then': {'do': 'back_off', 'target': 'attacker', 'distance': 4}},
-        {'do': 'block'}, {'wait': 0.7}]}}, 'thought': 'verify fake: one line ahead of my fight.'}
     script = {'replies': {'think': {'thought': 'Someone is hitting me.', 'intend': ['stand my ground'], 'say': None}, 'deliberate': basic_reply()},
-              'rules': [{'purpose': 'fast', 'reply': ahead, 'times': -1}]}
-    run.start(model(run, script), [eye], extra_env={'LIVING_RETHINK_CONFIG': fast_config(run), 'LIVING_FAST_FRAME': 'balanced'})
+              'rules': [{'purpose': 'fast', 'reply': FAST_PATCH, 'times': -1}]}
+    run.start(model(run, script), [eye], extra_env={'LIVING_RETHINK_CONFIG': fast_config(run), 'LIVING_FAST_FRAME': 'first'})
     requests = lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'fast']
     part = lambda x, role: '\n'.join(str(m.get('content', '')) for m in x['body'].get('messages', []) if m.get('role') == role)
     time.sleep(3.0)
     run.admin('set_behavior', other, json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': eye}}}, {'wait': 0.3}]}))
     first = run.wait(lambda: requests() or None, 'a fast request after a blow', 30)[0]
-    run.wait(lambda: [b for b in run.sql(f'SELECT * FROM brain WHERE id = {eye}', 'brain-patched') if b['source'] == 'fast' and '"back_off"' in b['graph'].replace(' ', '')] or None, 'the balanced reply installed', 20)
+    run.wait(lambda: [b for b in run.sql(f'SELECT * FROM brain WHERE id = {eye}', 'brain-patched') if b['source'] == 'fast' and '"wait":0.7' in b['graph'].replace(' ', '')] or None, 'the first-frame reply installed', 20)
     system, user = part(first, 'system'), part(first, 'user')
-    assert 'Something has just happened to you (see Why now). Why now is that one event as you perceived it' in system, system[:800]
-    assert 'Six ways, side by side' in system and system.index('- keep it as it is') < system.index('- break contact'), system[:2000]
-    replies = system.split('Reply with ONE JSON object, one of:\n')[1]
-    assert replies.startswith('{"keep": true'), replies[:200]
-    assert user.startswith('# Who you are') and user.index('# Why now') < user.index('# What has just happened') < user.index('# How you are now'), user[-800:]
-    felt = user.split('# How you are now\n')[1]
-    assert felt.startswith('How your body feels: ') and felt.strip().count('\n') == 0, felt
-    for word in ('health:', 'stamina', 'people', 'enemies'):
-        assert word not in felt.lower(), f'{word!r} in How you are now: no number or count is told'
+    assert 'You may rewrite your `combat` branch, rewrite one of the routines listed under Your routines, switch your `combat` branch to one of them, or keep everything as it is.' in system, system[:800]
+    assert 'Six ways, side by side' not in system and 'Why now is that one event' not in system, system[:1500]
+    assert system.split('Reply with ONE JSON object, one of:\n')[1].startswith('{"patch"'), 'the first frame lists the patch first'
+    assert user.startswith('# Who you are') and '# How you are now' not in user, user[-600:]
     fast = [t for t in run.private(f'SELECT * FROM thought WHERE actor = {eye}', 'thoughts') if t['kind'] == 'fast']
     assert any('combat branch rewritten' in t['summary'] for t in fast), fast
     run.admin('set_behavior', other, json.dumps({'wait': 300}))
     (run.directory / 'fast-prompt.txt').write_text(system[:6000] + '\n----\n' + user)
-    return {'status': 'pass', 'fast_requests': len(requests()), 'felt': felt.strip()}
+    return {'status': 'pass', 'fast_requests': len(requests())}
 
 
 @case('fast-takeover')

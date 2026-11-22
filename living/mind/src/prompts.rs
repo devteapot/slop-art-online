@@ -1086,10 +1086,11 @@ pub fn fast_system() -> String {
 }
 
 /// Which frame the fast lane's prompt is written in (`LIVING_FAST_FRAME`, docs/FAST_LANE_FRAME.md):
-/// `first` (the default) is the frame every trial before battle-frame ran, byte for byte;
-/// `balanced` shows the ways of answering a fight alike, keeps the fight one has beneath any
-/// line one adds, and tells the asker's own felt body. A comparison switch: it changes no rule,
-/// no reply the mind accepts, and nothing outside the fast lane's own prompt.
+/// `balanced` (the default since battle-frame) shows the ways of answering a fight alike, keeps
+/// the fight one has beneath any line one adds, and tells the asker's own felt body; `first` is
+/// the frame every trial before battle-frame ran, byte for byte, kept for replays and comparisons.
+/// It changes no rule, no reply the mind accepts, and nothing outside the fast lane's own prompt;
+/// with the world's `fast_lane_on` off (the shipped law) no fast prompt is ever sent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FastFrame {
     First,
@@ -1099,8 +1100,8 @@ pub enum FastFrame {
 impl FastFrame {
     pub fn parse(v: Option<&str>) -> Result<FastFrame, String> {
         match v.map(str::trim) {
-            None | Some("") | Some("first") => Ok(FastFrame::First),
-            Some("balanced") => Ok(FastFrame::Balanced),
+            None | Some("") | Some("balanced") => Ok(FastFrame::Balanced),
+            Some("first") => Ok(FastFrame::First),
             Some(other) => Err(format!("LIVING_FAST_FRAME={other}: expected first or balanced")),
         }
     }
@@ -1117,7 +1118,7 @@ static FAST_FRAME: std::sync::OnceLock<FastFrame> = std::sync::OnceLock::new();
 
 /// The fast frame this service runs under, read once from `LIVING_FAST_FRAME` (main checks it at start).
 pub fn fast_frame() -> FastFrame {
-    *FAST_FRAME.get_or_init(|| FastFrame::parse(std::env::var("LIVING_FAST_FRAME").ok().as_deref()).unwrap_or(FastFrame::First))
+    *FAST_FRAME.get_or_init(|| FastFrame::parse(std::env::var("LIVING_FAST_FRAME").ok().as_deref()).unwrap_or(FastFrame::Balanced))
 }
 
 /// The fast system prompt in frame `f`.
@@ -1517,7 +1518,7 @@ mod tests {
     /// memory and never spoken (fix-spoken-ids: r2e's minds said three lines with them).
     #[test]
     fn every_speaking_mind_is_told_ids_are_never_spoken() {
-        for (purpose, text) in [("think", think_system()), ("deliberate", deliberate_system()), ("fast", fast_system()), ("fast balanced", fast_system_v(FastFrame::Balanced)), ("talk", talk_system())] {
+        for (purpose, text) in [("think", think_system()), ("deliberate", deliberate_system()), ("fast", fast_system()), ("fast first", fast_system_v(FastFrame::First)), ("talk", talk_system())] {
             assert_eq!(text.matches(IDS_NOT_SPOKEN).count(), 1, "{purpose}");
         }
         assert!(!IDS_NOT_SPOKEN.contains('#'), "one general sentence, no example");

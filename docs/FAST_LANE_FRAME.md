@@ -2,7 +2,7 @@
 
 Branch `battle-frame` (2026-11-21), from main `bf7f59f5`. It re-asks the question of the Nov 19 frame trial (branch `fast-lane-frame` `6533b711`, never merged; its doc is `docs/FAST_LANE_FRAME.md` on that branch) on today's main, which has since gained fast-dispatch (the mind-side index, no convoy) and `mind_act_replaces`. It follows recommendation (a) of [why the fast lane disengages](FAST_LANE_WHY.md).
 
-**Nothing here changes a default.** The world law `fast_lane_on` stays false. The new switch is the mind service's `LIVING_FAST_FRAME`: `first` (the default, today's frame, byte for byte) or `balanced`. It changes the text of the fast lane's prompt and nothing else: no rule, no table, no reducer, no reply the mind accepts.
+**The lane stays off.** The world law `fast_lane_on` stays false, so nothing changes in play. The mind service's `LIVING_FAST_FRAME` is `balanced` by default (since the merge decision of 2026-11-22: any trial or world that turns the lane on gets the less biased frame) or `first` (the frame every earlier trial ran, byte for byte, kept for replays and comparisons). It changes the text of the fast lane's prompt and nothing else: no rule, no table, no reducer, no reply the mind accepts. The runs below were made while `first` was still the default; each named its frame explicitly.
 
 ## 1. Why battle acts were refused (act-trial evidence, read only)
 
@@ -48,7 +48,7 @@ The mind service was saturated (160–199 of 200 fighters with a deliberation pe
 
 ## 2. The balanced frame
 
-`LIVING_FAST_FRAME=balanced` (`prompts.rs` `FastFrame`, `fast_frame_text`, `FAST_WAYS`; `mind/fast.rs`). The service refuses to start on any other value. `battle_diag.py --fast-frame balanced` passes it and records `fast_frame` in `diag-head.json`.
+`LIVING_FAST_FRAME=balanced`, the default (`prompts.rs` `FastFrame`, `fast_frame_text`, `FAST_WAYS`; `mind/fast.rs`); `first` gives the earlier frame, and the service refuses to start on any other value. `battle_diag.py --fast-frame first|balanced` (default balanced) always passes it and records `fast_frame` in `diag-head.json`.
 
 **What changes, all in the fast lane's own prompt:**
 
@@ -80,7 +80,7 @@ The mind service was saturated (160–199 of 200 fighters with a deliberation pe
 
 - `the_balanced_frame_adds_no_tactic_beyond_the_shared_ways`: with the six ways taken out, the balanced frame says none of strike, block, dodge, flee, back off, retreat, escape, run away, safe, survive, danger, should, better, best, must, wise, outrun, miss, attacker, enemy, opening, counter, windup, win, lose, kill, hurt, health, breath, stamina more often than the first frame does. The fight-specific words of the balanced frame are only in the six shared ways.
 - `the_balanced_frame_shows_six_ways_alike`: each way is listed; each non-keep line, put ahead of a strike, is a legal graph with no pruning warning and is taken as a `combat` patch; the lines differ in length by under 60 characters; keep comes first among the replies; the fake model still tells it as purpose `fast`.
-- `the_first_frame_is_the_default_and_unchanged`: unset, empty or `first` gives the first frame; a misspelt value is refused; the first frame's user prompt is `fast_user` exactly, with no felt body; the balanced one adds only How you are now, and nothing when the body is not known.
+- `the_balanced_frame_is_the_default_and_the_first_stays_selectable`: unset or empty gives the balanced frame, `first` the first; a misspelt value is refused; the first frame's user prompt is `fast_user` exactly, with no felt body; the balanced one adds only How you are now, and nothing when the body is not known. `fast-replay` needs `--frame` named, and `--frame first` reproduces the first arm's 388 prompts byte for byte.
 - `every_speaking_mind_is_told_ids_are_never_spoken` now covers the balanced frame too.
 
 ## 3. Replaying saved inputs
@@ -203,9 +203,23 @@ What the live fast replies were (from each run's journal):
 - It does not establish that the balanced lane fights better than no lane. Contact, attacks and damage are still below the lane-off arm. Timed defence is above it by 2 points (14 after the first patch).
 - One persona-less fixture, one site, 6-minute runs, two clean runs an arm (one for lane off).
 - How you are now (the felt body) was in B2 only, so the live comparison changes frame and felt body together; the replay (§3) changed the frame alone.
-- Most of the balanced effect is keeping. Whether the balanced lane is worth its calls over leaving the lane off is a separate design question; this branch changes no default.
+- Most of the balanced effect is keeping. Whether the balanced lane is worth its calls over leaving the lane off is a separate design question; the lane stays off.
+
+**The general coordinator's reading (2026-11-22), for the record:** "The balanced lane mostly answers 'keep', which is close to no lane. A whole-graph patch every blow isn't the missing middle layer. The ATTENTION_BUDGET work and prepared routines that run on their own conditions (R3's veterans) are where that question goes next."
+
+**Merged as:** the tooling (`fast-replay`, the refusal and pairing scripts, the spend guard's fixes below) and the option, with `balanced` as the mind's default and `fast_lane_on` off.
 
 Evidence: `~/slop-battleframe-work/fights/` (`chain.log`, per run `*.run`, `*.log`, `*-loads.txt`, `*-spend.jsonl`, `report-all.json`) and the run directories `.local/living/verify/minds-bf-*` in the worktree, to be archived to `~/slop-evidence/battle-frame-20261122.tar.zst` with its SHA-256 when the branch's work ends.
+
+## 5. The spend guard can no longer watch nothing
+
+On step 3 the first guard was given a journal folder instead of its files (`--journal DIR`); `glob` matched the folder, the reader failed on it, and the replay ran unguarded for about 30 s ($0.12). A second slip in the same series: the guard deduplicated journals by file name, so two arms whose journals share names (`Walker1.jsonl`) were counted as one. Both are fixed in `act_trial.py watch`:
+
+- **Refused at start (exit 2, the runner stopped, no ready file):** a `--journal` that is a directory, one that does not name `.jsonl` files, a wildcard outside the file name, or a journal folder that does not exist within `--ready-wait-s`.
+- **A handshake before paid calls.** `--ready FILE` is written once every journal folder exists; `--pid-file` lets the guard start before its runner. `living-mind fast-replay` makes no model call until its `--guard-ready` file exists (else it exits; `LIVING_REPLAY_UNGUARDED=1` or `--prompts-only` to run without one), and `battle_diag.py` with real calls refuses to start without `--guard-ready` (or an explicit `--unguarded`, recorded in `diag-head.json`), creating the mind's journal folder (`.local/living/journal/verify-<run>`) and waiting for the ready file before it starts the mind.
+- **No silent zero.** With no journal file matched `--first-journal-s` (600 s by default) after the runner is known, the guard stops the runner and exits 3; the ledger records the arm as `unguarded`.
+- **Two journals of one name both count:** copies are told apart from other runs' journals by their first call as well as their name.
+- `living/tools/act_trial_guard_selftest.py [--mind-bin PATH]` checks each case with a `sleep` as the runner and journals it writes (13 checks; free, no server).
 
 ## 4a. Matched fights: the plan as written before the go
 

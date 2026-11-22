@@ -311,20 +311,25 @@ fn replay_row(v: &Value, routines: &[String]) -> Value {
 }
 
 /// `living-mind fast-replay --frame first|balanced --out FILE [--per-actor K] [--limit N]
-/// [--concurrency C] [--route PROFILE] [--prompts-only] RUN_DIR...`: the fast lane's saved
+/// [--concurrency C] [--route PROFILE] [--prompts-only | --guard-ready FILE [--guard-wait-s S]]
+/// RUN_DIR...`: the fast lane's saved
 /// requests sent again, in the first or the balanced frame (docs/FAST_LANE_FRAME.md). The first
 /// frame sends each saved system prompt as it was; the balanced one swaps only its frame text,
 /// so the world's rules and the grammar are the saved bytes in both arms, and the user prompt is
 /// the saved one in both (a saved request has no felt body, so How you are now is not given).
 /// `--prompts-only` writes the prompts and makes no call. Calls go to the fast route (or
-/// `--route`) through the models config (`LIVING_MODELS`), journaled under `<out>.journal/`.
+/// `--route`) through the models config (`LIVING_MODELS`), journaled under `<out>.journal/`, and
+/// only once the spend guard's `--guard-ready` file exists (or `LIVING_REPLAY_UNGUARDED=1`).
 pub async fn replay_main(root: &Path, args: Vec<String>) -> Result<()> {
-    let mut f = prompts::FastFrame::First;
+    let mut f = None;
     let (mut out, mut per_actor, mut limit, mut conc, mut route, mut prompts_only, mut dirs) = (None, usize::MAX, usize::MAX, 8usize, None, false, Vec::new());
+    let (mut guard_ready, mut guard_wait_s) = (None, 120u64);
     let mut it = args.into_iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "--frame" => f = prompts::FastFrame::parse(it.next().as_deref()).map_err(anyhow::Error::msg)?,
+            "--frame" => f = Some(prompts::FastFrame::parse(Some(it.next().as_deref().unwrap_or("?"))).map_err(anyhow::Error::msg)?),
+            "--guard-ready" => guard_ready = it.next().map(std::path::PathBuf::from),
+            "--guard-wait-s" => guard_wait_s = it.next().and_then(|x| x.parse().ok()).unwrap_or(120),
             "--out" => out = it.next().map(std::path::PathBuf::from),
             "--per-actor" => per_actor = it.next().and_then(|x| x.parse().ok()).unwrap_or(usize::MAX),
             "--limit" => limit = it.next().and_then(|x| x.parse().ok()).unwrap_or(usize::MAX),
@@ -335,6 +340,28 @@ pub async fn replay_main(root: &Path, args: Vec<String>) -> Result<()> {
         }
     }
     let out = out.ok_or_else(|| anyhow!("--out FILE is required"))?;
+    // Named every time: a replay of the first frame must say so now that balanced is the default.
+    let f = f.ok_or_else(|| anyhow!("--frame first|balanced is required"))?;
+    if !prompts_only {
+        // Paid calls only under a watching spend guard: the journal folder exists first, and no
+        // call is made until the guard's ready file does (act_trial.py watch --ready).
+        let journal = out.with_extension("journal");
+        std::fs::create_dir_all(&journal)?;
+        match &guard_ready {
+            Some(ready) => {
+                let deadline = std::time::Instant::now() + Duration::from_secs(guard_wait_s);
+                println!("waiting for the spend guard ({}) on {}", ready.display(), journal.display());
+                while !ready.exists() {
+                    if std::time::Instant::now() > deadline {
+                        return Err(anyhow!("no spend guard ready at {} within {guard_wait_s} s: no call made", ready.display()));
+                    }
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                }
+            }
+            None if std::env::var("LIVING_REPLAY_UNGUARDED").as_deref() == Ok("1") => log::warn!("fast-replay: no spend guard (LIVING_REPLAY_UNGUARDED=1)"),
+            None => return Err(anyhow!("model calls need --guard-ready FILE (act_trial.py watch --ready on {}), or LIVING_REPLAY_UNGUARDED=1; --prompts-only makes none", journal.display())),
+        }
+    }
     prompts::set_rules(1, include_str!("../../../scripts/skills.rhai"));
     let first = prompts::fast_frame_text(prompts::FastFrame::First, prompts::frame());
     let mine = prompts::fast_frame_text(f, prompts::frame());
@@ -433,7 +460,7 @@ mod tests {
         let why = user.split("# Why now").nth(1).unwrap().split("# What has just happened").next().unwrap();
         assert!(!why.contains("again") && !why.chars().any(|c| c.is_ascii_digit()), "{why}");
         // The rules text keeps its own words ("ready again 900 ms"); nothing counts anyone's moves.
-        for text in [&user, &prompts::fast_system()] {
+        for text in [&user, &prompts::fast_system(), &prompts::fast_system_v(prompts::FastFrame::First)] {
             assert!(!regex_like_count(text), "a count in the fast lane's prompt");
             for tactic in ["dodge on", "when they wind up", "counter"] {
                 assert!(!text.to_lowercase().contains(tactic), "tactic text {tactic:?} in the fast lane's prompt");
@@ -442,15 +469,18 @@ mod tests {
     }
 
     #[test]
-    fn the_first_frame_is_the_default_and_unchanged() {
-        assert_eq!(prompts::FastFrame::parse(None), Ok(prompts::FastFrame::First));
-        assert_eq!(prompts::FastFrame::parse(Some("")), Ok(prompts::FastFrame::First));
+    fn the_balanced_frame_is_the_default_and_the_first_stays_selectable() {
+        assert_eq!(prompts::FastFrame::parse(None), Ok(prompts::FastFrame::Balanced));
+        assert_eq!(prompts::FastFrame::parse(Some("")), Ok(prompts::FastFrame::Balanced));
+        assert_eq!(prompts::FastFrame::parse(Some("first")), Ok(prompts::FastFrame::First));
         assert!(prompts::FastFrame::parse(Some("balance")).is_err(), "a misspelt frame stops the service");
-        // The default system and user prompts are the first frame's, byte for byte. (The rules
-        // text after the frame is global state other tests change: compared on real journals by
-        // `fast-replay`, whose first arm sends each saved system prompt unchanged.)
-        assert_eq!(prompts::fast_frame(), prompts::FastFrame::First);
-        assert!(prompts::fast_system().starts_with(&prompts::fast_frame_text(prompts::FastFrame::First, prompts::frame())));
+        // The default system prompt is the balanced frame's. (The rules text after the frame is
+        // global state other tests change: compared on real journals by `fast-replay`, whose first
+        // arm sends each saved system prompt unchanged.)
+        assert_eq!(prompts::fast_frame(), prompts::FastFrame::Balanced);
+        assert!(prompts::fast_system().starts_with(&prompts::fast_frame_text(prompts::FastFrame::Balanced, prompts::frame())));
+        // The first frame is unchanged by this branch: the replicates' and the frame trial's words.
+        assert!(prompts::fast_system_v(prompts::FastFrame::First).starts_with(&prompts::fast_frame_text(prompts::FastFrame::First, prompts::frame())));
         let exps = vec!["A stranger attacked you (9 damage)".to_string()];
         let old = prompts::fast_user("A stranger winds up a strike at you", "Wren", &exps, "test", " 0 first", "- stay safe");
         assert_eq!(prompts::fast_user_v(prompts::FastFrame::First, "A stranger winds up a strike at you", "Wren", &exps, "test", " 0 first", "- stay safe", "badly hurt"), old, "the first frame tells no felt body");
