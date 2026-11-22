@@ -76,6 +76,10 @@ struct Attending {
     /// and since when it is heeded.
     heed: HashMap<u32, (usize, u64)>,
     heeded_since: HashMap<u32, u64>,
+    /// The observer's closing tracker (heed's `ClosingTracker`, a 1 s window), with times in
+    /// seconds from this viewer's first pass (`heed_base_ms`; f32 cannot hold epoch seconds).
+    heed_closing: Option<living_rules::heed::ClosingTracker>,
+    heed_base_ms: u64,
 }
 
 /// Visible churn (the coordinator, 2026-11-22): per viewer, a creature in sight that goes from
@@ -249,19 +253,23 @@ fn instinct(id: u32, seen: &HashSet<u32>, near: &HashMap<u32, f32>, kinds: &Hash
 /// what the sweep knows. Simplified, as the fixture needs: `threatening` is a move aimed at me,
 /// `contact_ago_s` and `hurt_me_ago_s` come from my own last hurt (blocks and dodges are not
 /// kept per viewer), `doing`, `addressed`, `cued`, `chosen`, `fallen`, `loud` and `lit` are
-/// empty, relations none, everyone made out, and closing is the raw change of distance between
-/// two sweeps (not smoothed). The own state is a rested, unhurt adult's.
+/// empty, relations none and everyone made out. Closing is heed's own `ClosingTracker` (one per
+/// observer, a 1 s window). The own state is a rested, unhurt adult's.
 #[allow(clippy::too_many_arguments)]
 fn heed_pass(ctx: &ReducerContext, id: u32, seen: &HashSet<u32>, near: &HashMap<u32, f32>, kinds: &HashMap<u32, &str>, engaged: &HashSet<u32>, st: &mut Attending, cap: usize, holds: bool, now: u64) -> HashSet<u32> {
     use living_rules::heed;
     let _span = common::detail_span("attend.features");
     let mine = crate::frame::target_of(id);
+    if st.heed_closing.is_none() {
+        st.heed_closing = Some(heed::ClosingTracker::new(heed::DEFAULT_CLOSING_S));
+        st.heed_base_ms = now;
+    }
     let hurt = ctx.db.vitals().id().find(id).filter(|v| v.hurt_by != 0).map(|v| (v.hurt_by, now.saturating_sub(v.hurt_ms) as f32 / 1000.0));
     let all: Vec<heed::Candidate> = seen
         .iter()
         .map(|&b| {
             let dist = near.get(&b).copied().unwrap_or(f32::MAX);
-            let closing = st.last.get(&b).map_or(0.0, |(d, t)| if now > *t { (d - dist) / ((now - t) as f32 / 1000.0) } else { 0.0 });
+            let closing = st.heed_closing.as_mut().map_or(0.0, |tr| tr.observe(b, now.saturating_sub(st.heed_base_ms) as f32 / 1000.0, dist));
             let first = *st.first_seen.entry(b).or_insert(now);
             let target = crate::frame::target_of(b);
             let hurt_me = hurt.filter(|(by, _)| *by == b).map(|(_, ago)| ago);
@@ -283,8 +291,10 @@ fn heed_pass(ctx: &ReducerContext, id: u32, seen: &HashSet<u32>, near: &HashMap<
             }
         })
         .collect();
-    st.last = all.iter().map(|c| (c.id, (c.dist, now))).collect();
     st.first_seen.retain(|b, _| seen.contains(b));
+    if let Some(tr) = st.heed_closing.as_mut() {
+        tr.forget_before(now.saturating_sub(st.heed_base_ms) as f32 / 1000.0 - 2.0);
+    }
     let held: Vec<heed::Held> = st
         .heed
         .iter()
