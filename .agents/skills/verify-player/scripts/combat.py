@@ -406,7 +406,14 @@ def scene_kill(st):
     # killing row keeps real names.
     knew = sql(st, f"SELECT * FROM acquaintance WHERE observer = {d} AND known = {cid}")
     as_known = mine if knew else "a stranger"
-    hits = [e for e in seen(st) if e["kind"] == 2 and e["actor"] == cid and e["target"] == d]
+    # The killing blow's my_combat row can land a tick after the use reads "killed"; under load
+    # the first read missed it once (gate 2026-11-22, sides-mixed-defence). Poll briefly for it.
+    t_hits = time.time() + 5.0
+    while True:
+        hits = [e for e in seen(st) if e["kind"] == 2 and e["actor"] == cid and e["target"] == d]
+        if hits or final is None or time.time() > t_hits:
+            break
+        time.sleep(0.2)
     killing = sql(st, f"SELECT kind, a, b, text FROM chronicle WHERE kind = 'killing' AND a = {cid} AND b = {d}")
     mh = sql(st, f"SELECT max_hp FROM vitals WHERE id = {d}")
     mh = mh[0]["max_hp"] if mh else 100.0
