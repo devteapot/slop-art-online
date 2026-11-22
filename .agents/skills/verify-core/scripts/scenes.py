@@ -856,7 +856,8 @@ def sides_battle(s):
     authority time: the stance records outlive record housekeeping (they were written due at 0
     and dropped in the first second, sides-battle-fix), fighters fall within 30 s, no skill use
     of a fighter targets a resident or its own side (every use seen: `skill_use` polled each
-    second, which keeps the last 24 per actor), and no resident dies."""
+    second, which keeps the last 24 per actor), no resident dies, and each side mixes block and
+    dodge evenly (within one; by id parity a whole side blocked, sides-mixed-defence)."""
     before = {c["id"] for c in s.rows("SELECT id FROM character")}
     s.call("spawn_battle_sides", SIDES_FIGHTERS, 2)
     chars = s.rows("SELECT id, name, kind, alive, born_ms, died_ms, cause FROM character", "spawned")
@@ -868,6 +869,20 @@ def sides_battle(s):
     s.expect("two side communities", len(sides) == 2, sides)
     side = {m["member"]: m["community"] for m in s.rows("SELECT member, community FROM membership") if m["community"] in sides}
     s.expect("every fighter is a member of one side", all(f in side for f in made), sorted(made - set(side))[:8])
+    # Each side mixes block and dodge (sides-mixed-defence): by id parity with the side by
+    # creation order, one whole side blocked and the other dodged. Read right after the spawn,
+    # before any mind could replace a graph.
+    defence = {}
+    for b in s.rows("SELECT id, graph FROM brain"):
+        if b["id"] in made:
+            g = str(b["graph"])
+            defence[b["id"]] = "dodge" if re.search(r'"skill"\s*:\s*"dodge"', g) else "block" if re.search(r'"skill"\s*:\s*"block"', g) else "?"
+    (s.out / f"{s.name}-defence.json").write_text(json.dumps({str(f): [side.get(f), defence.get(f)] for f in sorted(made)}, indent=1) + "\n")
+    per_side = {sides[c]: {d: sum(1 for f in made if side.get(f) == c and defence.get(f) == d) for d in ("block", "dodge", "?")} for c in sides}
+    print("sides_battle defence by side: " + json.dumps(per_side), flush=True)
+    s.expect("each side mixes block and dodge within one (not one defence per side)",
+             all(v["?"] == 0 and v["block"] > 0 and v["dodge"] > 0 and abs(v["block"] - v["dodge"]) <= 1 for v in per_side.values()),
+             per_side, fatal=False)
 
     def stances():
         parties = s.http_rows("SELECT record, party, role FROM record_party")

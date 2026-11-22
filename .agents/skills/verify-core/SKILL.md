@@ -169,8 +169,9 @@ python3 "$C/scenes.py" low --run "$K" > ".local/living/verify/$K/low.txt" 2>&1
 python3 "$V" cleanup --run "$K" > ".local/living/verify/$K/cleanup.txt" 2>&1
 
 # The battle fixture `spawn_battle_sides` on Cullet's plaza (features/battle.md, "The sides
-# battle fixture"; about 70 s after the launch): 60 fighters in 2 sides fall within 30 s, no
-# use at a resident or the fighter's own side, no resident dies in 60 s. The scene gate runs it
+# battle fixture"; about 70 s after the launch): 60 fighters in 2 sides, each side mixing block
+# and dodge (within one), fall within 30 s, no use at a resident or the fighter's own side, no
+# resident dies in 60 s. The scene gate runs it
 # when a merge touches SIDES_BATTLE_PATHS.
 B=$R-sides
 mkdir -p ".local/living/verify/$B"
