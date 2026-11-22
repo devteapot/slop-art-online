@@ -1,0 +1,387 @@
+{
+ "runs": [
+  {
+   "name": "v0-r1a1",
+   "viewers": 0,
+   "valid": true,
+   "rc": 0,
+   "start_load": 1.08,
+   "window_load_median": 3.25,
+   "window_load_max": 3.41,
+   "cpuset": "5-9,15-19",
+   "ticks_per_s": 60.01,
+   "db_thread_ms_s": 303.8,
+   "tick_call_ms_s": 295.1,
+   "tick_ms_p50": 4.33,
+   "tick_ms_p95": 9.44,
+   "tick_ms_p99": 9.91,
+   "tick_ms_mean": 4.916,
+   "per_s_db_ms": {
+    "n": 59,
+    "mean": 303.5,
+    "p50": 300.0,
+    "p95": 340.0,
+    "max": 350.0
+   },
+   "per_s_ticks": {
+    "p5": 59.0,
+    "min": 58.9
+   },
+   "process_ms_s": 347.4,
+   "views_ms_s": null,
+   "txn_cpu_ms_s_top": {
+    "tick/Reducer": 293.91,
+    "spawn_battle/Reducer": 6.02,
+    "housekeeping/Reducer": 0.5,
+    "tick/Update": 0.33,
+    "call_identity_connected/Reducer": 0.1,
+    "client_disconnected/Reducer": 0.05,
+    "call_identity_connected/Update": 0.01,
+    "spawn_battle/Update": 0.01
+   },
+   "fighters_alive_mean": 197.3,
+   "fighters_alive_min": 193,
+   "refills_per_s": 2.7,
+   "viewer_deaths": null,
+   "keep_alive_window": null,
+   "seen_characters_at_ready": null,
+   "window_s": 60.0
+  },
+  {
+   "name": "v0-r2a1",
+   "viewers": 0,
+   "valid": true,
+   "rc": 0,
+   "start_load": 3.73,
+   "window_load_median": 3.43,
+   "window_load_max": 3.76,
+   "cpuset": "5-9,15-19",
+   "ticks_per_s": 59.98,
+   "db_thread_ms_s": 291.4,
+   "tick_call_ms_s": 283.7,
+   "tick_ms_p50": 3.99,
+   "tick_ms_p95": 9.37,
+   "tick_ms_p99": 9.91,
+   "tick_ms_mean": 4.728,
+   "per_s_db_ms": {
+    "n": 59,
+    "mean": 291.0,
+    "p50": 290.0,
+    "p95": 320.0,
+    "max": 340.0
+   },
+   "per_s_ticks": {
+    "p5": 59.9,
+    "min": 59.0
+   },
+   "process_ms_s": 344.6,
+   "views_ms_s": null,
+   "txn_cpu_ms_s_top": {
+    "tick/Reducer": 282.55,
+    "spawn_battle/Reducer": 4.85,
+    "housekeeping/Reducer": 0.47,
+    "tick/Update": 0.31,
+    "call_identity_connected/Reducer": 0.1,
+    "client_disconnected/Reducer": 0.05,
+    "call_identity_connected/Update": 0.01,
+    "spawn_battle/Update": 0.01
+   },
+   "fighters_alive_mean": 197.8,
+   "fighters_alive_min": 194,
+   "refills_per_s": 2.13,
+   "viewer_deaths": null,
+   "keep_alive_window": null,
+   "seen_characters_at_ready": null,
+   "window_s": 60.0
+  },
+  {
+   "name": "v0-r3a1",
+   "viewers": 0,
+   "valid": true,
+   "rc": 0,
+   "start_load": 3.62,
+   "window_load_median": 3.4,
+   "window_load_max": 3.71,
+   "cpuset": "5-9,15-19",
+   "ticks_per_s": 59.99,
+   "db_thread_ms_s": 289.4,
+   "tick_call_ms_s": 281.6,
+   "tick_ms_p50": 3.83,
+   "tick_ms_p95": 9.31,
+   "tick_ms_p99": 9.89,
+   "tick_ms_mean": 4.69,
+   "per_s_db_ms": {
+    "n": 59,
+    "mean": 288.4,
+    "p50": 290.0,
+    "p95": 319.7,
+    "max": 330.0
+   },
+   "per_s_ticks": {
+    "p5": 59.9,
+    "min": 59.9
+   },
+   "process_ms_s": 345.8,
+   "views_ms_s": null,
+   "txn_cpu_ms_s_top": {
+    "tick/Reducer": 280.5,
+    "spawn_battle/Reducer": 5.14,
+    "housekeeping/Reducer": 0.46,
+    "tick/Update": 0.29,
+    "call_identity_connected/Reducer": 0.09,
+    "client_disconnected/Reducer": 0.04,
+    "call_identity_connected/Update": 0.01,
+    "spawn_battle/Update": 0.01
+   },
+   "fighters_alive_mean": 197.6,
+   "fighters_alive_min": 194,
+   "refills_per_s": 2.32,
+   "viewer_deaths": null,
+   "keep_alive_window": null,
+   "seen_characters_at_ready": null,
+   "window_s": 60.0
+  },
+  {
+   "name": "v16-r1a1",
+   "viewers": 16,
+   "valid": true,
+   "rc": 0,
+   "start_load": 3.23,
+   "window_load_median": 3.46,
+   "window_load_max": 3.91,
+   "cpuset": "5-9,15-19",
+   "ticks_per_s": 59.77,
+   "db_thread_ms_s": 439.4,
+   "tick_call_ms_s": 425.8,
+   "tick_ms_p50": 7.39,
+   "tick_ms_p95": 14.61,
+   "tick_ms_p99": 22.92,
+   "tick_ms_mean": 7.12,
+   "per_s_db_ms": {
+    "n": 59,
+    "mean": 438.4,
+    "p50": 440.0,
+    "p95": 480.0,
+    "max": 520.0
+   },
+   "per_s_ticks": {
+    "p5": 59.0,
+    "min": 58.0
+   },
+   "process_ms_s": 539.0,
+   "views_ms_s": 9.25,
+   "txn_cpu_ms_s_top": {
+    "tick/Reducer": 413.91,
+    "tick/Update": 11.02,
+    "spawn_battle/Reducer": 4.99,
+    "human_move/Reducer": 2.31,
+    "housekeeping/Reducer": 1.49,
+    "admin_set_vitals/Reducer": 0.76,
+    "call_identity_connected/Reducer": 0.45,
+    "client_disconnected/Reducer": 0.26
+   },
+   "fighters_alive_mean": 197.7,
+   "fighters_alive_min": 194,
+   "refills_per_s": 2.22,
+   "viewer_deaths": {
+    "window": 0,
+    "run": 0
+   },
+   "keep_alive_window": {
+    "calls": 199,
+    "hp_restored": 2190.5,
+    "calls_per_s": 3.32
+   },
+   "seen_characters_at_ready": 0.0,
+   "window_s": 60.0
+  },
+  {
+   "name": "v16-r2a1",
+   "viewers": 16,
+   "valid": true,
+   "rc": 0,
+   "start_load": 3.7,
+   "window_load_median": 3.51,
+   "window_load_max": 3.96,
+   "cpuset": "5-9,15-19",
+   "ticks_per_s": 59.92,
+   "db_thread_ms_s": 444.4,
+   "tick_call_ms_s": 430.3,
+   "tick_ms_p50": 7.42,
+   "tick_ms_p95": 15.0,
+   "tick_ms_p99": 23.0,
+   "tick_ms_mean": 7.176,
+   "per_s_db_ms": {
+    "n": 60,
+    "mean": 443.8,
+    "p50": 440.0,
+    "p95": 490.0,
+    "max": 510.0
+   },
+   "per_s_ticks": {
+    "p5": 58.9,
+    "min": 58.0
+   },
+   "process_ms_s": 548.0,
+   "views_ms_s": 9.17,
+   "txn_cpu_ms_s_top": {
+    "tick/Reducer": 418.01,
+    "tick/Update": 11.42,
+    "spawn_battle/Reducer": 5.28,
+    "human_move/Reducer": 2.31,
+    "housekeeping/Reducer": 1.54,
+    "admin_set_vitals/Reducer": 0.75,
+    "call_identity_connected/Reducer": 0.45,
+    "client_disconnected/Reducer": 0.25
+   },
+   "fighters_alive_mean": 197.6,
+   "fighters_alive_min": 195,
+   "refills_per_s": 2.37,
+   "viewer_deaths": {
+    "window": 0,
+    "run": 0
+   },
+   "keep_alive_window": {
+    "calls": 197,
+    "hp_restored": 2142.1,
+    "calls_per_s": 3.28
+   },
+   "seen_characters_at_ready": 0.0,
+   "window_s": 60.0
+  },
+  {
+   "name": "v16-r3a1",
+   "viewers": 16,
+   "valid": true,
+   "rc": 0,
+   "start_load": 3.18,
+   "window_load_median": 3.31,
+   "window_load_max": 3.44,
+   "cpuset": "5-9,15-19",
+   "ticks_per_s": 59.73,
+   "db_thread_ms_s": 444.2,
+   "tick_call_ms_s": 430.5,
+   "tick_ms_p50": 7.45,
+   "tick_ms_p95": 15.03,
+   "tick_ms_p99": 23.01,
+   "tick_ms_mean": 7.199,
+   "per_s_db_ms": {
+    "n": 59,
+    "mean": 443.2,
+    "p50": 450.0,
+    "p95": 481.0,
+    "max": 500.0
+   },
+   "per_s_ticks": {
+    "p5": 58.9,
+    "min": 58.0
+   },
+   "process_ms_s": 554.9,
+   "views_ms_s": 8.41,
+   "txn_cpu_ms_s_top": {
+    "tick/Reducer": 418.72,
+    "tick/Update": 10.89,
+    "spawn_battle/Reducer": 5.44,
+    "human_move/Reducer": 2.21,
+    "housekeeping/Reducer": 1.45,
+    "admin_set_vitals/Reducer": 0.58,
+    "call_identity_connected/Reducer": 0.44,
+    "client_disconnected/Reducer": 0.25
+   },
+   "fighters_alive_mean": 197.5,
+   "fighters_alive_min": 194,
+   "refills_per_s": 2.43,
+   "viewer_deaths": {
+    "window": 0,
+    "run": 0
+   },
+   "keep_alive_window": {
+    "calls": 162,
+    "hp_restored": 1680.5,
+    "calls_per_s": 2.7
+   },
+   "seen_characters_at_ready": 0.0,
+   "window_s": 60.0
+  }
+ ],
+ "arms": {
+  "0": {
+   "db_thread_ms_s": {
+    "n": 3,
+    "mean": 294.87,
+    "sd": 7.8,
+    "min": 289.4,
+    "max": 303.8
+   },
+   "tick_call_ms_s": {
+    "n": 3,
+    "mean": 286.8,
+    "sd": 7.26,
+    "min": 281.6,
+    "max": 295.1
+   },
+   "ticks_per_s": {
+    "n": 3,
+    "mean": 59.99,
+    "sd": 0.02,
+    "min": 59.98,
+    "max": 60.01
+   },
+   "per_s_db_ms_p50_mean": 293.3,
+   "per_s_db_ms_p95_mean": 326.6,
+   "runs": [
+    "v0-r1a1",
+    "v0-r2a1",
+    "v0-r3a1"
+   ]
+  },
+  "16": {
+   "db_thread_ms_s": {
+    "n": 3,
+    "mean": 442.67,
+    "sd": 2.83,
+    "min": 439.4,
+    "max": 444.4
+   },
+   "tick_call_ms_s": {
+    "n": 3,
+    "mean": 428.87,
+    "sd": 2.66,
+    "min": 425.8,
+    "max": 430.5
+   },
+   "ticks_per_s": {
+    "n": 3,
+    "mean": 59.81,
+    "sd": 0.1,
+    "min": 59.73,
+    "max": 59.92
+   },
+   "per_s_db_ms_p50_mean": 443.3,
+   "per_s_db_ms_p95_mean": 483.7,
+   "runs": [
+    "v16-r1a1",
+    "v16-r2a1",
+    "v16-r3a1"
+   ]
+  }
+ },
+ "per_viewer": {
+  "db_thread_ms_s": {
+   "per_viewer": 9.24,
+   "se": 0.3,
+   "range": [
+    8.47,
+    9.69
+   ]
+  },
+  "tick_call_ms_s": {
+   "per_viewer": 8.88,
+   "se": 0.28,
+   "range": [
+    8.17,
+    9.31
+   ]
+  }
+ }
+}
