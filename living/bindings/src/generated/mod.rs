@@ -280,6 +280,8 @@ pub mod record_type;
 pub mod relation_in_type;
 pub mod relation_table;
 pub mod relation_type;
+pub mod relay_event_table;
+pub mod relay_event_type;
 pub mod release_skill_reducer;
 pub mod relook_reducer;
 pub mod remembered_table;
@@ -670,6 +672,8 @@ pub use record_type::Record;
 pub use relation_in_type::RelationIn;
 pub use relation_table::*;
 pub use relation_type::Relation;
+pub use relay_event_table::*;
+pub use relay_event_type::RelayEvent;
 pub use release_skill_reducer::release_skill;
 pub use relook_reducer::relook;
 pub use remembered_table::*;
@@ -1542,6 +1546,7 @@ pub struct DbUpdate {
     record_clock: __sdk::TableUpdate<RecordClock>,
     record_party: __sdk::TableUpdate<RecordParty>,
     relation: __sdk::TableUpdate<Relation>,
+    relay_event: __sdk::TableUpdate<RelayEvent>,
     remembered: __sdk::TableUpdate<Remembered>,
     resource_node: __sdk::TableUpdate<ResourceNode>,
     reveal: __sdk::TableUpdate<Reveal>,
@@ -1945,6 +1950,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(relation_table::parse_table_update(table_update)?),
+                "relay_event" => db_update
+                    .relay_event
+                    .append(relay_event_table::parse_table_update(table_update)?),
                 "remembered" => db_update
                     .remembered
                     .append(remembered_table::parse_table_update(table_update)?),
@@ -2395,6 +2403,7 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.relation = cache
             .apply_diff_to_table::<Relation>("relation", &self.relation)
             .with_updates_by_pk(|row| &row.id);
+        diff.relay_event = self.relay_event.into_event_diff();
         diff.remembered = cache
             .apply_diff_to_table::<Remembered>("remembered", &self.remembered)
             .with_updates_by_pk(|row| &row.id);
@@ -2955,6 +2964,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "relay_event" => db_update
+                    .relay_event
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "remembered" => db_update
                     .remembered
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -3463,6 +3475,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "relay_event" => db_update
+                    .relay_event
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "remembered" => db_update
                     .remembered
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3743,6 +3758,7 @@ pub struct AppliedDiff<'r> {
     record_clock: __sdk::TableAppliedDiff<'r, RecordClock>,
     record_party: __sdk::TableAppliedDiff<'r, RecordParty>,
     relation: __sdk::TableAppliedDiff<'r, Relation>,
+    relay_event: __sdk::TableAppliedDiff<'r, RelayEvent>,
     remembered: __sdk::TableAppliedDiff<'r, Remembered>,
     resource_node: __sdk::TableAppliedDiff<'r, ResourceNode>,
     reveal: __sdk::TableAppliedDiff<'r, Reveal>,
@@ -4045,6 +4061,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Relation>("relation", &self.relation, event);
+        callbacks.invoke_table_row_callbacks::<RelayEvent>("relay_event", &self.relay_event, event);
         callbacks.invoke_table_row_callbacks::<Remembered>("remembered", &self.remembered, event);
         callbacks.invoke_table_row_callbacks::<ResourceNode>(
             "resource_node",
@@ -4942,6 +4959,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         record_clock_table::register_table(client_cache);
         record_party_table::register_table(client_cache);
         relation_table::register_table(client_cache);
+        relay_event_table::register_table(client_cache);
         remembered_table::register_table(client_cache);
         resource_node_table::register_table(client_cache);
         reveal_table::register_table(client_cache);
@@ -5109,6 +5127,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "record_clock",
         "record_party",
         "relation",
+        "relay_event",
         "remembered",
         "resource_node",
         "reveal",

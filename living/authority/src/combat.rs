@@ -138,6 +138,12 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
     if !any_humans(ctx) || common::laws(ctx).vf_feed_off {
         return;
     }
+    // RELAY_PROTOTYPE (branch relay-proto only): one row for the relay, which shows it to those
+    // whose authority-written set holds the actor or the target.
+    if common::laws(ctx).relay_on {
+        crate::relay::event(ctx, &ev);
+        return;
+    }
     let w = common::world(ctx);
     // A far actor (a missile's shooter) only to those who see them.
     let masked = |id: u32| -> std::borrow::Cow<'_, Seen> {

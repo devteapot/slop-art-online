@@ -646,6 +646,11 @@ pub struct Laws {
     pub vf_frame_idle_ms: f32,
     /// ...and no fight event is shown to any player (the combat feed's whole cost, a bound).
     pub vf_feed_off: bool,
+    /// RELAY_PROTOTYPE (branch relay-proto only, docs/RELAY_PROTOTYPE.md; false = today): players'
+    /// copies, cues, fight feed and hearing are left to a delivery relay; the authority keeps
+    /// sight, heed, the perceived set, projections and crowd rows, and writes each fight event
+    /// once to `relay_event`.
+    pub relay_on: bool,
     /// (b) Above this many creatures in sight, a player's sweep comes less often, in proportion
     /// (at most three times the period).
     pub crowd_sweep_n: f32,
@@ -949,6 +954,7 @@ impl Default for Laws {
             vf_hear_every: 1.0,
             vf_frame_idle_ms: 0.0,
             vf_feed_off: false,
+            relay_on: false,
             crowd_sweep_n: 0.0,
             crowd_frame_max_ms: 0.0,
             fighter_bystander_wakes: true,
@@ -3329,6 +3335,7 @@ impl Scripts {
             vf_hear_every: g("vf_hear_every", l.vf_hear_every).clamp(0.0, 1_000.0),
             vf_frame_idle_ms: g("vf_frame_idle_ms", l.vf_frame_idle_ms).clamp(0.0, 10_000.0),
             vf_feed_off: flag("vf_feed_off", l.vf_feed_off),
+            relay_on: flag("relay_on", l.relay_on),
             crowd_sweep_n: g("crowd_sweep_n", l.crowd_sweep_n).clamp(0.0, 10_000.0),
             crowd_frame_max_ms: g("crowd_frame_max_ms", l.crowd_frame_max_ms).clamp(0.0, 2_000.0),
             fighter_bystander_wakes: flag("fighter_bystander_wakes", l.fighter_bystander_wakes),
@@ -3611,7 +3618,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 39] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 40] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3641,6 +3648,8 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 39] = [
     ("vf_hear_every", ValueOnly::Delivery),
     ("vf_frame_idle_ms", ValueOnly::Delivery),
     ("vf_feed_off", ValueOnly::Delivery),
+    // RELAY_PROTOTYPE (branch relay-proto only): read by the sweeps, frames and fight events at their next run.
+    ("relay_on", ValueOnly::Delivery),
     ("crowd_sweep_n", ValueOnly::Delivery),
     ("crowd_frame_max_ms", ValueOnly::Delivery),
     ("fighter_bystander_wakes", ValueOnly::Delivery),

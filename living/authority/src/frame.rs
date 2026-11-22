@@ -709,7 +709,8 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: crate::perception::Swept) 
         ENGAGED.with(|e| e.borrow_mut().clear());
         VIEWERS.with(|v| v.borrow_mut().values_mut().for_each(|e| e.pending.clear()));
     }
-    if delivery {
+    // RELAY_PROTOTYPE (branch relay-proto only): with `relay_on` no engagement or cue work here.
+    if delivery && !common::laws(ctx).relay_on {
         // Who is engaged with whom this tick; those engaged with a viewer join its near tier at once.
         let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
         let engaging = common::detail_span("frames.engaged");

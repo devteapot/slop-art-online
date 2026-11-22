@@ -1,0 +1,17 @@
+[package]
+name = "relay-proto"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# RELAY_PROTOTYPE (branch relay-proto only, docs/RELAY_PROTOTYPE.md): a minimal delivery relay to
+# measure, not a production service. Its own workspace, like gate_load.
+[workspace]
+
+[dependencies]
+living-bindings = { path = "../../bindings" }
+spacetimedb-sdk = "=2.14.1"
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "macros", "io-util"] }
+tokio-tungstenite = "0.27"
+futures-util = "0.3"

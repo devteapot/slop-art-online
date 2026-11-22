@@ -1385,7 +1385,9 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     // VIEWER_FLOOR prototype (branch viewer-floor only): `vf_hear_every` sweeps (1: every one, as
     // on main; 0: never), each viewer on its own phase.
     let hear_every = common::laws(ctx).vf_hear_every.round() as u64;
-    if hear_every == 1 || (hear_every > 1 && (now / SWEEP_MS + id as u64) % hear_every == 0) {
+    // RELAY_PROTOTYPE (branch relay-proto only): with `relay_on` the relay works hearing out.
+    let relay = common::laws(ctx).relay_on;
+    if !relay && (hear_every == 1 || (hear_every > 1 && (now / SWEEP_MS + id as u64) % hear_every == 0)) {
         hear(ctx, id, viewer, here, &seen, now_heard, keep, now);
     }
     drop(hearing);
@@ -1396,7 +1398,9 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     for p in &rows {
         if !seen.contains(&p.body) {
             ctx.db.perceived().id().delete(p.id);
-            crate::frame::drop_copies(ctx, id, viewer, p.body);
+            if !relay {
+                crate::frame::drop_copies(ctx, id, viewer, p.body);
+            }
         }
     }
     drop(rows_out);
@@ -1409,15 +1413,17 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let rows_in = common::detail_span("rows.in");
     for body in &entered {
         ctx.db.perceived().insert(Perceived { id: 0, viewer, body: *body, since_ms: now });
-        // How it moves, as it is now; frames keep it current (`frame.rs`).
-        if let Some(b) = ctx.db.body().id().find(*body) {
+        // How it moves, as it is now; frames keep it current (`frame.rs`). With `relay_on` the relay sends it.
+        if let Some(b) = ctx.db.body().id().find(*body).filter(|_| !relay) {
             crate::frame::new_motion(ctx, id, viewer, &b);
         }
     }
     drop(rows_in);
     drop(sight_rows);
     let scene = common::detail_span("sweep.scene");
-    crate::frame::scene(ctx, id, viewer, &seen, &near, now);
+    if !relay {
+        crate::frame::scene(ctx, id, viewer, &seen, &near, now);
+    }
     drop(scene);
     // The projections, kept or afresh, to the end of the sweep.
     let _projecting = common::detail_span("sweep.project");
@@ -1496,7 +1502,7 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         proj_insert(ctx, pr.into_row(viewer, *body, *body == id, 0));
     }
     // The move of each newcomer that has fought, with the band its projection grants.
-    for body in &entered {
+    for body in entered.iter().filter(|_| !relay) {
         let near = crate::frame::is_near(id, *body);
         crate::frame::show_fighter(ctx, id, viewer, *body, near, true, now, bands.get(body).copied());
         crate::frame::show_doing(ctx, id, viewer, *body, near);
@@ -1927,7 +1933,8 @@ fn kept_sweep(ctx: &ReducerContext, me: &Character, viewer: Identity, w: &World,
     drop(writing);
     // The move of each newcomer that has fought, with the band its projection grants.
     let showing = common::detail_span("project.show");
-    for body in s.entered {
+    let relay = common::laws(ctx).relay_on;
+    for body in s.entered.iter().filter(|_| !relay) {
         let near = crate::frame::is_near(id, *body);
         crate::frame::show_fighter(ctx, id, viewer, *body, near, true, now, bands.get(body).copied());
         crate::frame::show_doing(ctx, id, viewer, *body, near);

@@ -37,6 +37,7 @@ census at the window's start and end, its mean and minimum, the refills).
 import argparse
 import json
 import math
+import os
 import subprocess
 import sys
 import threading
@@ -462,6 +463,17 @@ def one(a, n, out):
         land = lc.sql(db, "SELECT * FROM land", token)[0]
         site = tuple(float(x) for x in a.site.split(",")) if a.site else (land["arrive_x"], land["arrive_y"] - 20.0)
         res["site"], res["arrival"] = list(site), [land["arrive_x"], land["arrive_y"]]
+        relay_p = checker_p = clients_p = None
+        if a.relay:
+            # RELAY_PROTOTYPE (relay-proto): the delivery relay and the privacy checker, each an owner
+            # connection, from the world's first ticks (living/tools/relay_proto).
+            rq = {"uri": lc.URL, "db": db, "token": token}
+            relay_p = lc.Proc([a.relay, "relay"], out / "relay.stderr")
+            relay_p.send(json.dumps({**rq, "listen": f"127.0.0.1:{a.relay_port}", "out": str(out / "relay.json"), "broken": a.relay_broken}))
+            relay_p.expect("relay up", 120)
+            checker_p = lc.Proc([a.relay, "checker"], out / "checker.stderr")
+            checker_p.send(json.dumps({**rq, "out": str(out / "checker.log")}))
+            checker_p.expect("checker up", 120)
         if a.paused_placement and n:
             # The Spark's procedure: paused while the viewers join and are placed, unpaused at `ready`.
             lc.call(db, "set_paused", [True], token)
@@ -505,6 +517,13 @@ def one(a, n, out):
             # tables, as a delivery relay would hold, through the container's owner login.
             relay = subprocess.Popen(["docker", "exec", "-e", "TOKIO_WORKER_THREADS=1", lc.CONTAINER, "spacetime", "subscribe", "-s", "local", "-y", db,
                                       *[f"SELECT * FROM {t}" for t in a.relay_sub.split(",")]], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        if a.relay and n:
+            # The viewers' identities, from gate-load's connection lines; one relay client each.
+            ids = [json.loads(l)["identity"] for l in open(out / f"events-v{n}.jsonl") if '"k": "conn"' in l or '"k":"conn"' in l]
+            clients_p = lc.Proc([a.relay, "clients"], out / "clients.stderr")
+            clients_p.send(json.dumps({"relay": f"ws://127.0.0.1:{a.relay_port}", "viewers": ids, "out": str(out / "clients.json"), "warmup": a.warmup}))
+            clients_p.expect("clients up", 120)
+            res["relay_viewers"] = len(ids)
         keep = None
         if a.keep_alive and n:
             keep = KeepAlive(db, token, a.keep_alive)
@@ -520,6 +539,8 @@ def one(a, n, out):
             loadlog = LoadLog(d / "load.log")
             loadlog.start()
             m0, th0, p0 = tc.scrape(ident), tc.thread_cpu(pid), tc.proc_cpu(pid)
+            relay_cpu0 = tc.proc_cpu(relay_p.p.pid) if relay_p else None
+            relay_t0 = time.time()
         if a.privacy and n:
             priv = Privacy(db, token, out, n, players, a.seconds, a.fighter_tables, a.combat_feed)
         clog0 = clog_state(res["replica"]) if a.clog else None
@@ -572,6 +593,24 @@ def one(a, n, out):
             load.send("fresh off")
         if loadlog:
             loadlog.stop.set()
+        if relay_p and (a.detail or a.flip_off):
+            hz = os.sysconf("SC_CLK_TCK")
+            st = {l.split(":")[0]: int(l.split()[1]) for l in open(f"/proc/{relay_p.p.pid}/status") if l.startswith(("VmRSS", "VmHWM"))}
+            res["relay_process"] = {"cpu_ms_per_s": round((tc.proc_cpu(relay_p.p.pid) - relay_cpu0) / hz / (time.time() - relay_t0) * 1000, 1),
+                                    "rss_kb": st.get("VmRSS"), "hwm_kb": st.get("VmHWM")}
+            if clients_p:
+                res["relay_process"]["clients_cpu_ms_per_s"] = round((tc.proc_cpu(clients_p.p.pid)) / hz / max(time.time() - relay_t0, 1) * 1000, 1)
+        for proc in (clients_p, relay_p, checker_p):
+            if proc:
+                proc.send("stop")
+                try:
+                    proc.p.wait(60)
+                except subprocess.TimeoutExpired:
+                    proc.p.kill()
+        if relay_p:
+            for f in ("relay.json", "clients.json"):
+                if (out / f).exists():
+                    res[f.split(".")[0] + "_summary"] = json.loads((out / f).read_text())
         if a.detail or a.flip_off:
             m1, th1, p1 = tc.scrape(ident), tc.thread_cpu(pid), tc.proc_cpu(pid)
             dur = t1 - t0
@@ -789,6 +828,9 @@ def main():
     ap.add_argument("--fighter-tables", action="store_true", help="the viewers subscribe seen_fighter_copy in place of the fighter views (views step 3; set fighter_tables_on=true)")
     ap.add_argument("--flip-law", default=None, metavar="NAME=VALUE", help="E2: set this world law live --flip-at s into the window (a capacity burst)")
     ap.add_argument("--flip-at", type=float, default=30.0)
+    ap.add_argument("--relay", default="", help="RELAY_PROTOTYPE (relay-proto): the relay_proto binary; runs the relay, the privacy checker and one relay client per viewer (set the relay_on law)")
+    ap.add_argument("--relay-broken", action="store_true", help="the relay applies a transaction's state before its set changes (the privacy probe's known answer)")
+    ap.add_argument("--relay-port", type=int, default=3391)
     ap.add_argument("--relay-sub", default="", help="BATTLE_DELIVERY_PATHS: comma-separated truth tables one privileged subscriber holds over the run (a relay's feed)")
     ap.add_argument("--game-views", action="store_true", help="VIEWER_FLOOR (viewer-floor): the viewers also subscribe the game client's other views (heard_sounds, my_earshot, my_senses, my_act_outcomes, my_offers, my_known_names, my_records, speech_card, cover_law)")
     ap.add_argument("--crowd", action="store_true", help="E2 prototype (attention-e2): the viewers also subscribe seen_crowd (set attend_n and attend_crowd_on)")
