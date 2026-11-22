@@ -245,6 +245,105 @@ Battle steps are 0.5 s (about 231 in sight × 81 steps a state); town steps are 
 - **It fits inside E3's $12 alongside (b) and (c):** recording $1.50 (from the $3 reserve) + (b) on its 100 town states and the 200 battle states under $1 expected (cap $4) + (c) (cap $5).
 - The battle half of M2′ would need a real-mind Cullet battle: about $1.5–2.5 for 60 minds and 6 minutes, from the act trial's $6.7 for 200 minds and 8 minutes. That does not fit beside the town at the caps, and it is a separate ask.
 
+## 9. The real-mind Cullet town (written before the run; the general coordinator's go, 2026-11-22)
+
+**What.** The trial `heed-town` (living/trials/heed-town.json) with real minds: Cullet's own seed and laws (48 m day sight), the first 40 adults minded (all 40 the trial's subject, LIVING_ONLY), nothing scripted, 15 minutes, every creature sampled at 5 Hz (`record.bodies {"all": true}`, with `kinds.json` and `names.json`), every experience and thought. The models file's `people` mix, as the act trial's towns: think and compile on GLM Flash at low effort, talk on DeepSeek V4.1 Flash. Main's mind defaults otherwise. The run records its own switches (`mind-env.json`, `world_laws.json`); they are copied into the result below.
+
+**Money.**
+- **Cap: $1.50, from E3's $3 reserve.** The guard stops the run at $1.40 ($0.10 for calls in flight), priced from the journals at the committed prices (`act_trial.py` `PRICES`).
+- **Expected:** about $0.85 (§8).
+- **Keys:** copied from another trials checkout's `.env` into this worktree without being shown (mode 600), deleted after the run, and never in any evidence.
+
+**Stop rules** (any one stops the run; nothing is re-run without the general coordinator's word):
+1. **The guard first.** `act_trial.py watch --ready --pid-file` is started and watching the run's journal folder (created empty beforehand) before the runner starts. The launcher waits for its ready file. No ready file: no run.
+2. **The cap**, as above.
+3. **Failures:** more than 10% of calls over the last 2 minutes (at least 20 calls). Mistral's capacity blips have tripped this before; a stopped run is reported, not repeated.
+4. **The trial's own runaway rate:** `budget.runaway_calls_per_min` 400, as the act trial's towns.
+5. **The host:** under 40 GB of memory available or 45 GB of free disk (the guard's defaults).
+6. **The measurement rules:** `battle.lock` taken first and held alone while waiting, behind heed-e4; the shared trial-activity lock for the launch; a quiet start (load under 8); the private containers `slop-heede3-*`, SpacetimeDB pinned to CPUs 5–9 and 15–19.
+
+**The measure, frozen now (M2′).** `attention_e3.py named`, defined before the run:
+- **States:** every think request of the 40 subjects that has a reply, from minute 1 to 30 s before the end, with at least 1 other creature in sight (`freeze --town-run <instance> --town 100000 --town-min-sight 1`; the battle part of `freeze` is not used).
+- **Fields:** as §8's town: 0.2 s steps, distance-only sight with the 1 m keep margin, from 10 s before each request.
+- **The arm:** (a), the person instinct as seeded (holds on), smoothed closing over 1 s, the formula's capacity on the subject's body from its prompt, ceiling 16.
+- **Named:** the people the think reply names in its `thought`, `intend` and `say`: a `#id`, `say.to`, a character's full name, or a first name only one character in the world bears (`names.json`, audit truth). The subject itself is not counted.
+- **Counted:** those named who were in the subject's sight at the request's moment (the field at t = 0).
+- **Reported:**
+  - the share of them the arm heeded at that moment, **overall** and **beyond the 8 nearest** (8th or farther by distance in sight);
+  - the beyond-8 sample size;
+  - the spend.
+- **Secondary, same states:** the share with holds off and at capacity 16, and acts naming an id (§3's M2) on this recording.
+
+**The bias, stated before the result.** Today's think prompts list only the 14 nearest creatures (`perceive.rs` `scene_json`'s cap). So a mind names someone farther than the 14th nearest only from memory, and "beyond 8" here mostly means the 9th to 14th nearest. **The result is a lower bound** on how much heed beyond distance matters: with the cap lifted, minds could name people the prompt now hides.
+
+**After the run:** report, then stop. The general coordinator decides on (b) and (c).
+
+### 9.1 The run and its result (2026-11-22, 06:41–06:57)
+
+**The run.**
+- **Locks and host:** `battle.lock` held at 06:41 after waiting behind heed-e4 since 06:02; quiet start at load 3.6.
+- **Guard:** ready before the runner (06:41:40). The runner was `trials.py run --batch heedreal1 heed-town` (commit `32d3934c4`, this section's measure frozen in it).
+- **Ended by duration (15.01 minutes)**, no stop rule tripped: 720 calls, 0 failed.
+- **Spend: $0.90 of the $1.50 cap**, by the guard's journal pricing:
+  - GLM Flash: 645 calls (313 consolidate, 154 think, 152 deliberate, 26 act repair), $0.85;
+  - DeepSeek V4.1 Flash: 75 talk calls, $0.05.
+- **Keys:** the `.env` copy was removed at exit, and a scan of the run's 2,209 evidence files found no key value.
+- **Archive:** the trial's own archive-on-cleanup wrote its commitlog archive to `~/slop-evidence`.
+
+**Switches** (`mind-env.json`; main's defaults otherwise):
+- `LIVING_CONCURRENCY` 64;
+- `LIVING_ONLY` the 40 subjects;
+- `LIVING_LLM_PER_MIN` 0;
+- the `people` mix;
+- `LIVING_GREET` / `LIVING_PARK` unset (nearest, concurrent);
+- `LIVING_FAST_FRAME` unset (balanced), `fast_lane_on` off;
+- no `force_outcomes` override;
+- the meters() alarm levels are in (the branch is on main after `61b7b2eb`);
+- Cullet's own laws, no world-law overrides; `heed_on` off (the world runs today's perception; heed is replayed).
+
+**The frozen sample.** State list `086c6f3de6e30bec46a34204bd43cd6228b6135155ef7771820f7cb1493d21ef`; `bodies.jsonl` `6c7705b1…`; files in `.local/attention-e3/real/MANIFEST.sha256`.
+- 138 think requests with a reply and at least 1 in sight.
+- 105 of them name someone in sight: **171 named-in-sight events**.
+
+**M2′** (people a think reply names who were in sight at the request; heeded at that moment):
+
+| Arm | Capacity p50 | Named in sight heeded (n = 171) | Beyond the 8 nearest heeded (n = 14) |
+|---|---|---|---|
+| **(a) the instinct, holds on, the formula's capacity** | 10 | **89.5%** | **14.3%** (2 of 14) |
+| (a) without holds | 10 | 91.8% | 35.7% (5) |
+| (a) at capacity 16 | 16 | 99.4% | 92.9% (13) |
+
+- **Where the named stand:** 92% of named-in-sight people are among the 8 nearest; 64 of the 171 are the nearest.
+- **The 14 beyond the 8 nearest** are at ranks 8, 8, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12, 14 and 15. At the formula's capacity the instinct heeded only the two at rank 8. Two named people stood beyond the 14 the prompt lists (ranks 14 and 15), so they were named from memory.
+- **Secondary** (same states, capacity p50 10):
+  - acts naming an id in sight: 3, all heeded;
+  - promotions 0.26 a second and flicker 3.8 a minute with holds, against 0.52 and 23.2 without.
+
+**Reading.**
+- **The beyond-8 sample is 14, not the 40–130 estimated in §8.** (Corrected in §9.2: none of the 14 was in the mind's own sight; the real sample is 1.)
+  - These minds thought 0.17 times a mind-minute (the island town 0.35).
+  - Most named people are the nearest, as the prompt's 14-nearest list makes likely.
+- **Where it can be read,** the instinct at its formula capacity of 10 misses most of the people a mind thinks about beyond the 8 nearest: 12 of 14.
+  - That is the gap a mind-written policy or Jev could close.
+  - It is a lower bound (§9's bias): the prompt hides everyone past the 14th nearest.
+- **Capacity alone closes it here** (93% at 16): in this town, beyond 8 rarely means beyond 16.
+- **What this cannot say:** with n = 14, no comparison of arms on beyond-8 reaches the frozen decision rule's significance. A comparison of (b) or (c) against (a) at 5 points needs several times this sample: a longer or larger real-mind town, or the 14-nearest cap lifted.
+
+### 9.2 Correction: who the minds could actually see (2026-11-22, heed-e4's re-check)
+
+§9.1's fields used distance-only sight at the scene's 48 m. Cullet's authority sight also applies cover, walls and the gaze band, and the minds' own scenes listed far fewer people: a median of 2 and a p95 of 7, against 9–11 for distance-only (docs/ATTENTION_E5.md §1). Each named person was checked against the creatures listed in the scene its think request carried, which is the authority's own sight list. Nothing was rerun or paid for: the copies of `heedreal1`'s journal, `states.json` and `named-a.json` were read with `heed_e5_prompts.py`'s parser, on heed-e4.
+
+- **Not one of the 14 named-beyond-8 people was in the subject's scene.** All 14 were named from memory, not from sight.
+  - In 12 of the 14 no listed figure stands at the named person's distance.
+  - In 2 (`t060`, `t101`) a figure too far away to make out stands within 2 m of it. Even then the mind could not tell who that figure was (far-label), so the name still came from memory.
+- **Of all 171 named in sight (distance-only), 111 were in the scene's own list;** the other 60 were named from memory.
+  - Of the 111 visible, the instinct at the formula's capacity heeded **108 (97.3%)**. This is still scored on §9.1's distance-only replay; the authority's narrower sight would leave fewer candidates, so it is not a lower figure.
+  - Only **1** of the 111 stood 8th or farther among what the scene listed. The largest list was 14.
+- **What changes:**
+  - §9.1's "beyond the 8 nearest heeded 14.3% (2 of 14)" measured people the minds could not see. It does not show the instinct missing whom a mind thinks about. **The real beyond-8 sample in this town is 1.**
+  - The overall figure (89.5% of 171) mixes visible and remembered people. Over the visible ones it is 97.3% of 111.
+  - The conclusion that this town cannot discriminate arms on beyond-8 stands, more strongly. E5 (docs/ATTENTION_E5.md, on heed-e4) moves the test to a real-mind melee, whose fields use the scene's own list wherever it holds fewer than the capacity.
+
 ## Files
 
 - **Code (branch `attention-exp`):**

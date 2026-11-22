@@ -1811,7 +1811,10 @@ class Instance:
             if every and not kinds_saved:
                 # Every creature's kind, once (bodies.jsonl names creatures by id only).
                 try:
-                    (self.dir / "kinds.json").write_text(json.dumps({str(c["id"]): c["kind"] for c in self.rows("SELECT id, kind FROM character")}))
+                    chars = self.rows("SELECT id, kind, name FROM character")
+                    (self.dir / "kinds.json").write_text(json.dumps({str(c["id"]): c["kind"] for c in chars}))
+                    # Names too (audit truth, for matching what minds name to ids; docs/ATTENTION_E3.md §9).
+                    (self.dir / "names.json").write_text(json.dumps({str(c["id"]): c["name"] for c in chars}))
                     kinds_saved = True
                 except RuntimeError:
                     pass
