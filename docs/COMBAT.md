@@ -310,7 +310,111 @@ Branch `fix-dodge-told`. In R2's re-run (`r2c`, docs/TRIALS.md) a mind's routine
 
 Checked by verify-core `scenes.py dodge_told`, verify-minds `dodge-told`, verify-player `combat.py --scene early_dodge` and the mind unit test `the_doing_example_uses_a_kind_word`.
 
-## What is missing
+## Two blows due at the same millisecond, and the cadence's order (2026-11-22)
+
+Branch `fair-ties` (Spark). It builds on the blow-order diagnosis: `docs/BLOW_ORDER.md` on branch `blow-order` (c383988d6). That branch is a diagnostic record and is not merged.
+
+### The rule: an exact tie is a fair, deterministic coin
+
+**Before.** The tick handles due rows through B-tree ranges: motion events by `body.next_ms` and activity timers by `activity.ends_ms` (`tick.rs`). Rows with an earlier time went first. Rows due at the **same** millisecond came back in the index's order for equal keys, and the module imposed no order of its own.
+- Two windups of one skill that start in the same tick end at the same millisecond (the spear's `attack` 750 ms, the `strike` 350 ms), so such ties are common.
+- The blow resolved first can kill. The other attacker's activity is then deleted with its body (`die_unseen`), so that blow never lands.
+
+**What decided the order.** The [index documentation](https://spacetimedb.com/docs/tables/indexes/) (2.0.0; the pinned server is 2.14.1) gives no order for rows that share a key. The versioned source (`crates/table/src/table_index/same_key_entry.rs` at `v2.14.1`) shows what the order really was:
+- **Up to 512 rows** with one key (4,096 bytes of 8-byte row pointers): a list in push order. An update is a delete and an insert, so it pushes the row to the end, and a delete is a `swap_remove`.
+- **Beyond 512 rows:** a `HashSet` with `RandomState`. The source's own comment says this "entails that the iteration order is not deterministic".
+
+So the blow written last before the tie resolved first, an order no rule names and no fighter can see. In a very large battle the order was random and broke `det_clock` replay.
+
+**Now.** Each due list is sorted by `(due time, tie_draw(id, tick, salt))` before it is handled (`tick::tie_order`). `tie_draw` is splitmix64 of the id, the tick count and a salt per list (`TIE_MOTION`, `TIE_ACTIVITY`).
+- Earlier due times still go first.
+- Rows due at the same millisecond go in an order drawn afresh every tick from the ids and the tick count alone. Whose blow lands first in an exact tie is a fair coin, unrelated to ids, write history, storage slots or the number of rows sharing the time.
+- It is deterministic: the same under `det_clock` replay on any server.
+- Only the tick's due rows are sorted, and they are already read. In the Cullet battle of 200, ties came in 1,326 of 3,600 ticks, the largest 111 activity rows sharing one millisecond.
+- No table, column, reducer, view, subscription or law changed.
+- A build compiled with `LIVING_DET_NOTIEBREAK` set keeps the index's order, the control for `det_compare`.
+
+**What a fighter notices.** Of two blows that come due at the same moment, either may land first, with even odds, and a lethal one still decides the fight. Nothing changes where the blows end at different times.
+
+**Open, for the owner (a feel question, not part of this change): simultaneous blows trade.** A blow due no later than its attacker's death in the same tick would still land, so a double kill becomes possible.
+- This is the physically fair reading of equal times.
+- It touches the death path: practice, breath, the `skill_use` outcome, a death record that names a dead killer, and a double kill as a new outcome for the client and minds.
+- The coin above can stay until then; trading blows would supersede it.
+
+### The combat cadence's order turns every second
+
+**Before.** A creature in a fight was evaluated when `(id + tick) % every == 0` (15 Hz: every 4th tick), so the id difference of two fighters fixed which of them the cadence reached first after both became ready in the same tick:
+- with a difference of 1 mod 4, the higher id in 3 of 4 phases;
+- with a difference of 3 mod 4, the lower id;
+- with 2 mod 4, even;
+- with 0 mod 4, the same tick, so their blows tie.
+
+**Measured** (free; a local duel fixture, the diagnosis's `spawn_duel` with its `duel` log lines, built on this branch and not committed):
+- **Setup.** Two identical spear duellists, no defence, ids 1–4 apart, the lower id alternately west and east, whose graph is installed first alternating too.
+- **Forced reach at full health.** The duellists start 1.0–1.3 tiles apart, so the first exchange ties and does not kill, and every later exchange starts with both ready together.
+  - The side the cadence favours led **61%** of the later exchanges (by one tick, 16–17 ms; 95% CI 58–65%, bootstrap over duels).
+  - It won **57.2%** of 278 duels (95% CI 51.3–62.9).
+  - With a difference of 2 mod 4 the lead was 50% and the lower id won 17 of 28.
+- **Natural walk-in.** The duellists start 2.5–6 tiles apart at full health. Exchanges did not fall into lockstep (leads of 100–850 ms). The favoured side led 46–49% of exchanges and won 20 of 53 (37.7%, 95% CI 25.9–51.2), so no lead effect.
+
+**Now** (`tick::cadence_turn`). The classes `id % every` keep one phase each, so each class keeps its share of the ticks and a battle's evaluations stay spread over them. Which phase each class holds is a permutation drawn from the second alone (`tick / 60`).
+- Within a second every fighter keeps its exact rhythm.
+- At a second's turn its phase may move, once: one interval of 1 to 7 ticks instead of 4.
+- Which class the cadence reaches first is a fresh draw every second, so no id difference leads.
+- A build compiled with `LIVING_DET_NOCADENCETURN` set keeps the fixed phases, the control for `det_compare`.
+
+Draws per 4-tick block would vary every interval, 1 to 7 ticks, with a mean wait for the next evaluation of 1.8 ticks instead of 1.5. They would gain nothing in a duel: a spear duellist's windups start 1.1–2.3 s apart (median 1.8 s, 6,533 intervals in these runs), so nearly every exchange already gets its own draw.
+
+**Paired re-measurement** (the same duel specifications, seeds 42 and 43, forced reach, id differences 1 and 3, 221 duels per build):
+
+| Build | Favoured side won | Its share of later exchanges led (diff 1 / diff 3) |
+| --- | --- | --- |
+| Tie-break only | 126/221 = 57.0% (50.4–63.4) | 61.8% / 60.6% |
+| Tie-break and cadence turn | 106/221 = 48.0% (41.5–54.5) | 52.3% (48.8–56.1) / 50.2% (47.0–53.6) |
+
+**What a fighter notices.** No id gives a fighter a standing one-tick lead in an exchange; who comes first after a shared pause changes from second to second. A player's own presses (`use_skill`) start when sent, as before; the cadence paces only the graphs that run on it (AI fighters, and a player's command graph in a fight).
+
+### Proof
+
+**Forced same-tick ties.** The diagnosis's fixture with one blow lethal (5 hp, gap 1.0–1.3), three replicates per build:
+
+| Build | Duels (decided by a tie) | The first-written windup resolved first | The lower id won |
+| --- | --- | --- | --- |
+| main `4b9fa89cc` | 208 (207) | **208/208** (95% CI 98.2–100) | 105/208 = 50.5% (43.7–57.2) |
+| tie-break only | 208 (206) | **99/209 = 47.4%** (40.7–54.1) | 99/208 = 47.6% (40.9–54.4) |
+| tie-break and cadence turn | 69 (67) | 33/70 = 47.1% (35.9–58.7) | 39/68 = 57.4% (45.5–68.4) |
+
+On main, the duellist installed second won all 208, because the wake round evaluated it first, so its windup was written first. On the branch it won 98 of 208.
+
+**`det_compare.py`.** Every table hashed every tick, then every row at the stop. Both copies ran their own build's shipped script (`--scripts`). The builds carried a local, uncommitted log under `det_clock`: each tick's ties among due rows in the index's order and in the order taken, and the cadence's due ids. The log changes no state.
+
+| Comparison | Fixture | Result |
+| --- | --- | --- |
+| main against the tie-break | Cullet battle of 200, 3,600 ticks | Identical through tick 30. There were ties at ticks 6, 11, 16, 21 and 29 before then: the coin kept the index's order at 6, 11 and 29, and reordered independent motion steps at 16 and 21 with no effect. Tick 31 is the first difference (`practice`), a tie of 20 motion events at one millisecond that the coin took in another order. |
+| the same, stopped at tick 30 | same | Every table identical at tick 30, except the `det_stop` law's own row and chronicle line (their wall-clock stamps, written by `set_world_law` from outside the tick) |
+| main against the tie-break compiled out (`LIVING_DET_NOTIEBREAK`) | same | Every table identical at the stop (45,263 rows). The per-tick hash differs only in `deliberation`, from tick 1,444: a far handle's raw id in a scene's text, the known server artifact, `det_compare` renames it only at the stop. A first run also differed at the stop in `last_look` and `seen_structures`: raw structure ids after a sequence skip, the same artifact. The re-run was identical. |
+| the tie-break against the tie-break and cadence turn (`LIVING_DET_NOCADENCETURN` as the base) | battle of 200 | Differs from tick 2. Tick 1's cadence sets already differ, but at tick 1 every fighter was evaluated in the wake round its graph's install asked for, so tick 2 is the first tick whose cadence evaluations differ. |
+| main against the branch, and the tie-break against the branch | Cullet with no fighters (`--fighters 0`), 3,600 ticks | **Both identical**: 113 tables, 13,265 rows. Ties came in 87 ticks (82 motion, 5 activity), and the branch took 39 of them in another order with no effect. Nobody was on the cadence. |
+
+**Checks** (on a private 2.14.1 server, A725 cores; see the validation records of verify-core and verify-player for runs and evidence):
+- `cargo test -p living-authority --lib tie_tests`: 5 tests. Earlier due times first; a tie is independent of the rows' input order; a tie is a fair coin for any pair of ids (±2 points over 20,000 ticks, the winner changing in about half of them); the cadence keeps each fighter's rhythm within a second; no id gap leads the cadence (±2 points over 4,000 seconds). Built with both controls set, the four fairness tests fail.
+- `just living-check` passes.
+- verify-core on the final build:
+  - `skirmish` 8 of 8;
+  - `outcomes` 16 of 16, twice;
+  - `committed` 16 of 16 and `dodge_told` 5 of 5;
+  - the mechanics 23 of 23;
+  - `sides_battle` 11 of 11 twice: 4 and 4 fallen by 30 s, 17 and 15 by 60 s. Main, interleaved on the same server, also passed 11 of 11 twice: 5 and 5 fallen by 30 s, 21 and 17 by 60 s.
+- verify-player on the final build: `combat.py --scene all` 57 of 57, the kill and death scenes included.
+- On the tie-break alone, under heavier load, `outcomes` timed out once and `sides_battle` once had no one fallen by 30 s. Neither recurred.
+- Not covered:
+  - ties among missiles (`combat::missiles`);
+  - the `wake` table's storage order. It no longer decides a tie, since two windups started in one tick now tie by the coin whichever is written first;
+  - battles beyond 200 fighters and the 512-row case, which is reasoned from the source;
+  - the sort's cost, which was not measured.
+- Evidence: `~/slop-evidence/fair-ties-20261122.tar.zst` on the Spark, sha256 `70688ebcb34a33b60d2aca61c5e5d716bc9e986932a18d51ce5d00734a1adae5`. It holds the det_compare outputs and tie logs, the duel runs and analysis, the local diagnostic patches and every scene run directory.
+
+
 
 - **More skills, and learning them.** Six skills on a fixed bar; no skill choice, no skill-learning path beyond the seed's newcomer kit and know-how. Classes from combinations are not yet possible beyond what the six allow.
 - **Balance.** Numbers are a first pass, untuned against players. Since "One damage rule" every blow does its full damage, so fights between people end in deaths unless someone breaks off; there is no way to limit a blow's strength yet.
