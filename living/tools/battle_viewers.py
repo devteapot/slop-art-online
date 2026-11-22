@@ -499,6 +499,12 @@ def one(a, n, out):
         if a.keep_fighters:
             keeper = Keeper(db, token, a.fighters, a.keep_fighters)
             keeper.start()
+        relay = None
+        if a.relay_sub:
+            # BATTLE_DELIVERY_PATHS (viewer-floor): one privileged subscriber to the battle's truth
+            # tables, as a delivery relay would hold, through the container's owner login.
+            relay = subprocess.Popen(["docker", "exec", "-e", "TOKIO_WORKER_THREADS=1", lc.CONTAINER, "spacetime", "subscribe", "-s", "local", "-y", db,
+                                      *[f"SELECT * FROM {t}" for t in a.relay_sub.split(",")]], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         keep = None
         if a.keep_alive and n:
             keep = KeepAlive(db, token, a.keep_alive)
@@ -537,6 +543,14 @@ def one(a, n, out):
         c1, t1 = tick_count(ident), time.time()
         if flip:
             res["flip_law"] = flip
+        if relay:
+            alive = relay.poll() is None
+            subprocess.run(["docker", "exec", lc.CONTAINER, "pkill", "-f", "spacetime subscribe"], capture_output=True)
+            try:
+                relay.wait(30)
+            except subprocess.TimeoutExpired:
+                relay.kill()
+            res["relay_sub"] = {"tables": a.relay_sub, "alive_at_window_end": alive, "stderr": (relay.stderr.read() or "")[-400:]}
         if keeper:
             keeper.stop.set()
             res["keeper_window"] = keeper.window(t0, t1)
@@ -775,6 +789,7 @@ def main():
     ap.add_argument("--fighter-tables", action="store_true", help="the viewers subscribe seen_fighter_copy in place of the fighter views (views step 3; set fighter_tables_on=true)")
     ap.add_argument("--flip-law", default=None, metavar="NAME=VALUE", help="E2: set this world law live --flip-at s into the window (a capacity burst)")
     ap.add_argument("--flip-at", type=float, default=30.0)
+    ap.add_argument("--relay-sub", default="", help="BATTLE_DELIVERY_PATHS: comma-separated truth tables one privileged subscriber holds over the run (a relay's feed)")
     ap.add_argument("--game-views", action="store_true", help="VIEWER_FLOOR (viewer-floor): the viewers also subscribe the game client's other views (heard_sounds, my_earshot, my_senses, my_act_outcomes, my_offers, my_known_names, my_records, speech_card, cover_law)")
     ap.add_argument("--crowd", action="store_true", help="E2 prototype (attention-e2): the viewers also subscribe seen_crowd (set attend_n and attend_crowd_on)")
     ap.add_argument("--combat-feed", action="store_true", help="the viewers subscribe combat_feed in place of my_combat (views step 2; set combat_feed_on=true)")
