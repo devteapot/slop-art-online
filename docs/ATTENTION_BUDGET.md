@@ -1,528 +1,588 @@
-# Attention budget: each character keeps track of at most N others (design note)
+# Attention budget: who a character keeps track of (design note, v2)
 
-Status: **design only**, 2026-11-22, branch `attention-budget` (Spark), from `origin/main` `8384dc77`. Nothing is built: no law, table, reducer, view, prompt or default changes. The only file beside this note is a read-only analysis script, [`living/tools/attention_density.py`](../living/tools/attention_density.py), which the numbers below come from.
+Status: **design only, v2**, 2026-11-22, branch `attention-budget-v2` (Spark), from `origin/main` `a6375a70`. v1 is in history at `a6375a70` (merged from `attention-budget` `112a42bf`). Nothing is built: no law, table, reducer, view, prompt or default changes, and no experiment has run.
 
-**The owner's idea** (2026-11-22, on the battle cap): "could a dynamic attention system work? there is a cap but the mind decides who to keep track of. we do kind of the same thing as players no?" This note designs it as a **perception law that is the same for players and minds**: each character perceives at most N others as individuals; *who* fills those places is partly the character's own choice; everyone else in sight is perceived as a crowd.
+**Why v2.** The owner answered v1 on 2026-11-22:
+- on "always in": "can we make this selective? the mind decides who to track, not hardcoded";
+- on the 4 chosen places: "can we make this dynamic so that it can scale with rules/skills so that we can have stats and skills changing how much a mind can keep track";
+- on salience: "maybe a salience system could work/be helpful, but still that should be up to the mind";
+- "so this scales well as a general system";
+- "let's run different experiments in parallel and make informed decisions".
 
-**What it would replace.**
-- **The owner's 2026-11-10 ruling against attention caps** (docs/STRANGERS.md, Decisions 3; docs/BATTLE_SCALE.md: "everything within vision at full detail"). That is the owner's decision to revisit; nothing here assumes it.
-- **`far_cap`** (docs/BATTLE_LAWS.md (a)). It caps only players' sight, so players and minds perceive differently.
-- **A cap minds already have.** A mind's scene lists only the 14 nearest creatures ([`perceive.rs`](../living/authority/src/perceive.rs), `scene_json`: `if creatures.len() >= 14 { break }`). In the 200-mind battle, 14 is the p90 of what the think prompts listed (§3.3). So minds already have a distance-only cap in their prompts, while their graphs and players see everyone. The law would replace that hidden 14 with the same N for everyone.
+The general coordinator turned that into three changes:
+1. **No hard-coded slot classes.** Attention is a policy the mind writes and the authority runs fast.
+2. **Capacity is a Rhai law** over stats, skills and state, clamped by a world performance ceiling.
+3. **Salience is information, not an order.**
+
+Plus an experiments section with stop rules. What v1 established is kept: the crowd, promotion with a told reason, the memory consequences, the cost model and the hidden 14-nearest cap in minds' scenes.
 
 ## 0. In short
 
-- **The rule.** Each character, player or mind, perceives at most **N = 16** others as individuals. The places fill in this order:
-  - **(a) always in:** whoever is attacking or winding up at me, whomever I am acting on, whoever is addressing me, then the nearest within 8 m (the near tier);
-  - **(b) chosen:** for a player, their target, focus, hover, pins and community; for a mind, its cues and the people its relations, family, community and projects name;
-  - **(c) the rest,** by salience and distance.
+- **One law for everyone:** each character perceives at most its **capacity** of others as individuals. Everyone else in sight is a **crowd**: scene lines for a mind, crowd rows per 6 m cell for a player (§5).
+- **Who fills the places is the character's attention policy.**
+  - **What it is:** a ranked list of rules in the behaviour graph's own condition words (`threatened`, `doing`/`phase`, `who` by id, kind, relation or community, `near`, `count`) and salience features.
+  - **Who writes it:** the mind writes and rewrites it, like any graph.
+  - **Who runs it:** the authority, on every tick that brings an event (a windup, a blow, a line, someone coming into sight), and in full at the sweep. Threats never wait on a slow mind.
+  - **No row for a species' instinct:** a character without its own policy uses its species' **attention instinct**.
+- **The starting attention instinct** (seed content, §2.4), for a person:
+  1. whoever is going for me;
+  2. whoever speaks to me;
+  3. whoever I am dealing with;
+  4. whoever my cues or my own choices name;
+  5. family and my community nearby;
+  6. up to 6 nearest within 8 m;
+  7. then whoever stands out, by salience weights the policy states.
 
-  Everyone else in sight is a **crowd**. To a mind, a crowd is a scene line: count, direction, rough area, what is visibly going on. To a player it is crowd rows per 6 m cell, drawn as an impostor crowd.
-- **Threats never wait on a mind.** (a) is computed by the authority every tick from engagement. The slow mind (5–40 s) and Jev (1–3 s) only shape (b), which is standing interest.
-- **Cost.** With crowds, a viewer's cost goes from about C × 130 µs/s (C creatures in sight) to about **N × (i + 10) + (C − N) × 2 + K × 5 µs/s**. Here i is the per-individual delivery cost and K the number of crowd cells. The contract leaves about **1.4–1.7 ms/s per viewer** at 216 viewers. In the worst case (C ≈ 200 in sight) that fits at **N = 16 only once the planned exact view and sweep steps bring i down to about 30–40 µs/s**. At today's i (about 120) no N fits; at N = 24 it is marginal; at N = 32 it fails (§3.2). An attention budget is necessary but not sufficient.
-- **Minds learn only the individuals they attended to,** plus crowd-level facts. That is a narrowing of perception, never an addition, so "minds know only what they perceive" holds. It makes ambushes, crowds as cover and distraction work by the same law for everyone (§4).
-- **Jev as the mind's attention layer** (§7): one TypeSafe request per mind per 1–3 s, only while more than N are in sight. One state (what that mind perceives now), several questions from the mind's own cues, relations and projects. The answers are cached rows that fill (b) and are never waited on.
-  - **Load:** about 2,700 input tokens a request and 20–60 calls a fighter-minute in a battle. In a town it is about zero: off stage nobody calls, and on stage C rarely exceeds N.
-  - **Scale:** a 200-fighter battle-hour is about **5–14 times** the rethink gate's Jev use for 2,000 people for an hour (costs in relative terms; price only in the local prices file).
-  - **Baseline:** the plain rule (cues and named people) is what Jev must beat, in replay first.
-- **Default:** off (N = 0 means everyone in sight is an individual, today's rule). **Recommended N: 16,** with 6 m crowd cells refreshed at 1 Hz and at most 48 cells per viewer. Before the owner decides: the stills at N = 16 and N = 32, and one fake-model battle.
+  A mind may rewrite all of it, including dropping attackers. It can then be ambushed: an emergent consequence, to watch in trials, not a bug.
+- **Players** get the same instinct, edited by their own input (target, focus, pins; a settings surface later). Never by a model.
+- **Capacity** is `attention_capacity(a)`, a Rhai law, the same for players and minds. It is clamped to `attend_ceiling`, a value-only law set from the cost measurements.
+  - **The starting formula** (seed content, §3.2): a person starts at 10, a wolf at 8, a deer at 6. It is scaled by life stage and by knack × practice at a new `watch` skill (up to ×1.6 with practice), +4 for the technique `keeping_watch`, and narrowed by tiredness, wounds and lost breath.
+  - **Range:** an untrained adult keeps track of 10, a practised watcher of 16–20 (clamped to the ceiling), a badly hurt and exhausted one of 3–4.
+- **Storage:** one new private table, `attend_policy`: one row per character whose mind wrote a policy (pk `actor`, the rules as validated JSON, revision, source). Plus `attend_pick`: the controller's explicit picks (player pins and focus, Jev picks), at most 8 per character. Crowds use the public RLS table `seen_crowd` (v1). No new column on any existing table.
+- **Cost:** v1's model with capacity in place of N, and the policy's own evaluation added (about 1 µs per creature in sight a second).
+  - **The ceiling:** at C ≈ 200 in sight, once the planned per-individual work lands, a ceiling of **12–16** fits the 1.4–1.7 ms/s per viewer; 24 does not.
+  - **Variable capacity helps:** with the starting formula most people sit at 10, below the ceiling.
+  - **Provisional ceiling: 16.** It is set by E2's measured per-individual cost.
+- **Experiments** (§8), in parallel:
+  - **E1** (laptop): the stills;
+  - **E2** (dev-box): the real per-individual cost and its answers to §12;
+  - **E3** (Spark): who to track, on recorded battle and town scenes: the instinct alone, free; a mind-written policy, paid and small; Jev attention, paid and small;
+  - **E4** (Spark): capacity 4, 8, 16 and 32 in arenas on the fake model, free.
 
-## 1. The rule
+  E3's paid cap is $12 in all, read from journal spend. Its stop rules are written in §8.3, before any paid call.
 
-### 1.1 Two grains of perception
+## 1. What changed from v1
 
-Sight is unchanged: the same `sight::sees` test (range, field, light, cover, a clear line) decides who is in sight, for players' sweeps, minds' scenes and graphs alike (docs/PERCEPTION.md, "Minds see what their character sees"). The new law decides **at which grain** each creature in sight is perceived:
+| v1 | v2 |
+|---|---|
+| Fixed slot classes: (a) engaged, addressing and near "always in"; (b) 4 chosen places; (c) salience | One ranked **attention policy** per character, written by its mind. The **attention instinct** reproduces (a)–(c) as a starting point only |
+| N, one world number (16) | **Capacity**, a Rhai law over the character's stats, skills and state, clamped by a world **ceiling** |
+| Salience ranked (c) | Salience **features** are conditions a policy may use and weight. Only the instinct uses them by default |
+| Engaged overflow past N, bounded at 8 | No overflow: capacity is the bound. A character swarmed past its capacity loses track of some attackers. E4 measures what that does |
+| Jev fills (b) | Jev is one possible **author or refresher** of the policy, beside the slow mind (§11) |
+
+## 2. The rule: an attention policy, run by the authority
+
+### 2.1 Two grains of perception (unchanged)
+
+Sight decides who is in sight, unchanged for every path (docs/PERCEPTION.md, "Minds see what their character sees"). Attention decides the grain:
 
 | Grain | Who | What is perceived |
 |---|---|---|
-| **Individual** | the attended, at most N (plus engaged overflow, §1.2) | everything perceived today: the projection (name or label, band, look), motion, what they are visibly doing and at whom, speech as speech |
-| **Crowd** | everyone else in sight | per area: count, where, how spread, which way it moves, what is visibly going on (how many fighting, fallen, the kinds present). No identity, health, name or exact pose |
+| **Individual** | the attended, at most the character's capacity | everything perceived today: the projection (name or label, band, look), motion, what they are visibly doing and at whom, speech as speech |
+| **Crowd** | everyone else in sight | per area: count, where, spread, which way it moves, how many fighting or fallen, the kinds present. No identity, health, name or exact pose |
 
-The law is a **world law**, value-only, like the battle laws (docs/LAW_OVERRIDE.md). It changes delivery, scenes, graphs and memory for both controllers at once. `attend_n = 0` switches it off and is exactly today's behaviour; the hidden 14 in minds' scenes stays as it is while the law is off.
+The master switch is the world law `attend_on` (off by default). Off, everything in sight is individual, as today, and minds' scenes keep their hidden 14-nearest cap ([`perceive.rs`](../living/authority/src/perceive.rs) `scene_json`). With it on, the scene lists the attended instead, the same set a player's character gets.
 
-### 1.2 Filling the places, in order
+### 2.2 The policy: ranked rules in the condition grammar
 
-Each character's attended set is refilled at its own cadence (§1.3), in this order. A place taken by a higher class is never given to a lower one.
-
-**(a) Always in.**
-1. **Engaged with me:** anyone whose unexpired move or visible act (a windup, a release, a shot) is aimed at me, and anyone mine is aimed at. This is `frame::engaged_of`, which today is computed only for players. Here it is extended to every character with the law on. An archer winding up at me from 20 m is attended in the tick its aim is seen, as the near tier already does (docs/PERCEPTION.md, "Cues and tiers").
-2. **Addressing me:** a line spoken to me, or an offer, trade or request to me, within its window (the scene's "asked of you").
-3. **The near tier:** the nearest within 8 m (9 m to drop), one already attended counting half a metre nearer, in the places that (b) leaves (below).
-
-The engaged may exceed N. They are few by the fight's physics: in the 200-mind battle the open attacks aimed at one fighter were p50 0, p90 1, at most 3 (§3.3). Overflow is counted and bounded by `attend_engaged_max` (8) so no fixture can fan it out.
-
-**(b) Chosen,** up to `attend_chosen_max` (4) places, reserved only while something chosen is in sight and can be made out. Unused places go back to the near tier and (c).
-
-| Source | Player | Mind |
-|---|---|---|
-| The controller's explicit picks | target or focus (locked), hover held 300 ms, up to 4 pins, through one new reducer `human_attend` | its **cues** that match now (docs/ATTENTION.md: `who` by id or kind, `doing`, `phase`) and, with Jev on, Jev's picks (§7) |
-| The character's own ties (authority facts, the same for both) | family (parents, children, the other parent), the character's community (the game has no party; its community stands in), people it pinned | family, community, people its `relation` rows name (strongest feeling first) and people its projects name |
-
-- **Recognition is the authority's, and only where the character can make someone out.** A person under the far label ("someone too far away to make out", `regard().far`) cannot be picked by id, exactly as a cue cannot match them (docs/ATTENTION.md). A kind or `doing` cue can still pick a crowd member it describes ("a wolf", "someone throwing fire").
-- **Promotion is visible.** A chosen creature that was crowd becomes attended with a told reason (§2.3).
-
-**(c) The rest,** up to N, by **salience, then distance**. Salience is a Rust primitive with world-law weights; Rhai is never run per candidate (docs/CAMERA.md, "Proposed cadence"). Its terms are things visible to anyone:
-- acting on someone I attend (striking my partner, giving to my child);
-- closing on me (approach speed toward me);
-- visibly fighting, fallen, or carrying a light at night;
-- kind (a wolf before a deer);
-- novelty: in sight for under 5 s.
-
-No term reads a role, a duty, a side or a name list we wrote. A seed can weight the terms; it cannot name people.
-
-**Hysteresis.** An attended creature keeps its place for at least `attend_hold_ms` (1,000) unless (a) needs the place. This damps the edge blinking BATTLE_LAWS noted for `far_cap`.
-
-**Where N = 16 goes in a dense melee:** engaged (0–3) first, up to 4 chosen, the near tier, then salience. When more than about 12 stand within 8 m, the farther of them are crowd. That is the law's visible consequence at the recommended N.
-
-### 1.3 Timing: who re-picks how fast
-
-| Class | Computed | Lag after the cause |
-|---|---|---|
-| (a) engaged, addressing | every tick, from the engagement set the frames already keep | none: the tick the windup, blow or line is committed |
-| (a) near tier | at each sweep (players, 200 ms) or evaluation slot (AI, 1 Hz and its wakes and fight cadence) | ≤ 200 ms (player), ≤ 67 ms in a fight (AI at 15 Hz) |
-| (b) from cues, ties, player input | at the same sweep or slot, from indexed rows | ≤ 200 ms after the input or the creature coming into sight |
-| (b) what to choose, for a mind | when the slow mind writes cues or relations (5–40 s a thought; up to ~35 s stale under load, docs/FAST_LANE_FRAME.md on `battle-frame`), or Jev every 1–3 s | seconds to tens of seconds |
-| (c) salience | at the sweep or slot | ≤ 200 ms (player), ≤ 1 s (AI) |
-| Crowd membership and cells | 1 Hz, staggered | ≤ 1 s |
-
-**The slow mind's lag is why (a) must carry every threat.** A mind cannot think "watch the archer" in time to see the arrow. The authority puts anyone aiming at it in (a) in the same tick, whatever the mind chose. (b) is standing interest: who the character cares about or is looking for. A stale (b) costs at most 4 places, never a threat.
-
-### 1.4 What attention changes elsewhere (both controllers)
-
-| Path | Today | With the law on |
-|---|---|---|
-| A player's copies (`seen_body_copy`, `seen_character_copy`, `seen_fighter_copy`, doing, cues) | everyone in sight (`perceived`) | the attended only. Crowd members get crowd rows (§2.2) |
-| A mind's scene (`scene_json`) | the 14 nearest | the attended (≤ N), each as today, plus crowd lines |
-| Behaviour graphs (`sees`, `nearest`, a target) | everyone in sight | individuals: the attended. **Counts** (`count … within`) count the attended and the crowd, since a crowd's numbers are perceived. `nearest` and `attacker` are always in (a) |
-| Aimed acts by id (player and mind) | the target must be in sight | the target must be attended. A player clicking a crowd figure promotes it first (§2.3) |
-| Witnessed events, fight folds (`fold::flush`), first sights | named per creature in sight | named per attended creature. Crowd members' deeds fold into crowd lines ("in the crowd to the north, two fell"). `familiar` rows and first sights only for the attended (a crowd first sight stays one line: "You are among a crowd of about 121 people", `brain.rs` today) |
-| Hearing | a line within earshot is heard from its speaker | a line addressed to me promotes its speaker ((a) 2). Others' lines from crowd members are heard as a crowd member speaking ("someone in the crowd to the east says …"), with no handle |
-| Cues | matched against the scene's creatures | matched against everyone in sight (as now); a match promotes ((b)) |
-
-The fold's naming cost falls with it: `fold.labels`, 43–51 ms/s at 200 fighters, is each onlooker's labels for everyone in its line (docs/BATTLE_SCALE.md, Fix 4).
-
-### 1.5 Laws (value-only, off by default)
-
-| Law | Default | Meaning |
-|---|---|---|
-| `attend_n` | 0 (off) | individuals per character; 0 is today's rule |
-| `attend_chosen_max` | 4 | places (b) may reserve |
-| `attend_engaged_max` | 8 | engaged overflow beyond N |
-| `attend_hold_ms` | 1,000 | minimum hold of a place |
-| `crowd_cell_m` | 6 | crowd cell size (world-aligned squares) |
-| `crowd_hz` | 1 | crowd membership and rows refresh |
-| `crowd_cells_max` | 48 | crowd rows per viewer. Beyond it, the farthest cells merge 2×2 |
-| salience weights | seed data | (c)'s terms |
-
-`far_cap` would be retired once this is built, since it is the player-only special case of this law with (b) and crowds missing.
-
-## 2. What a crowd is
-
-### 2.1 To a mind: scene lines
-
-Each mind's scene gains `crowds`: one entry per compass direction and distance band (within reach, close, a stone's throw, far) that holds crowd members, built from the same cells as the player's rows:
+A policy is a list of at most **12 rules**, read in order. Each rule takes the creatures in sight that match its condition, in its order, up to its `take`, into the places left. Filling stops at the capacity. A creature already taken is not taken again.
 
 ```json
-"crowds": [
-  {"dir": "northeast", "dist": "a stone's throw", "about": 40, "across": "about 20 m",
-   "moving": "toward you", "visibly": "most fighting; 3 fallen", "kinds": "people"}
-]
+{"attend": [
+  {"if": <condition about the one considered>, "order": "nearest", "take": 3, "why": "<own words>"},
+  {"score": [{"if": <condition>, "w": 2.0}, ...], "take": "rest", "why": "<own words>"}
+]}
 ```
 
-- **Counts are rounded** ("about 40") as the existing crowd percept is, and the far label rule applies: a crowd says nothing a far figure would not.
-- **No ids.** A crowd member has no handle until it is attended. A mind can still act on the crowd as a crowd: move away from it, toward it, or watch for a kind or deed in it through a cue.
+- **`if` rules** take the matches, ordered by `order`. The orders are `nearest`, `closing` (fastest toward me), `newest` (in sight the shortest time) and `longest` (attended longest, which keeps a hold).
+- **`score` rules** sum the weights of the conditions each creature meets, and take the highest first, nearer first on ties. This is where salience lives: **as weights a policy chooses**, not as an engine ranking.
+- **`take`** is a count or `"rest"`. The default is all matches.
+- **`why`** is up to 160 characters in the mind's words. It is quoted when the rule promotes someone out of a crowd (§5.3), as a cue's `why` is (docs/ATTENTION.md).
 
-### 2.2 To a player: crowd rows drawn as an impostor crowd
+**Conditions about the one considered.** These are the graph's own words, scoped to the creature being considered instead of "anyone in sight". Each reads only what the character's perception already holds.
 
-This is docs/BATTLE_LAWS.md (a)'s "aggregated far crowd", made general. It uses one new public table with the copy tables' row-level security.
-
-| Column | Type | Note |
+| Condition | Meaning | The graph's word it reuses |
 |---|---|---|
-| `id` | `u64`, primary key | `key(viewer character, cell)`, so a change is one in-place update (`seen_fighter_copy`'s lesson: a keyless table cost 24–43 ms/s more) |
-| `viewer` | `Identity`, btree | the RLS column, `SELECT * FROM seen_crowd WHERE viewer = :sender` |
-| `cx`, `cy` | `i16` | cell index (world-aligned, `crowd_cell_m`) |
-| `count` | `u16` | members in sight in the cell |
-| `x`, `y`, `spread` | `f32` | centroid and spread (the renderer scatters figures in that ellipse) |
-| `heading`, `moving` | `u8`, `u8` | dominant heading (16ths) and the moving share |
-| `fighting`, `fallen` | `u16`, `u16` | members visibly in a fight move; remains in the cell |
-| `kinds` | `u8` | a bitmask of the kinds present |
+| `{"who": 412}`, `{"who": "wolf"}`, `{"who": {"kind": "person", "relation": "family"}}` | by id (one already met, as cues require), kind, or relation: `friend`, `enemy`, `stranger`, `family`, `community` | `Filter` (`graph.rs`), plus `community` |
+| `{"threatened": true}` | this one's attack or throw is winding up at me, or they are threatening me | `Threatened` |
+| `{"doing": {"is": "hostile", "phase": "winding up", "at_me": true}}` | what they visibly do, its phase, whether at me | `DoingCond`, without `who` |
+| `{"attacker": {"within_s": 10}}` | hurt me within the last N seconds | `Attacker`, `HurtWithin` |
+| `{"addressing": {"within_s": 10}}` | spoke, waved or offered to me | `Speaker`, `Hailer`, the scene's "asked of you" |
+| `{"acted_on": true}` | the target of my own act now | my `fighter`/`doing` target |
+| `{"near": 8}` | within N metres | `Near` |
+| `{"cued": true}` | matches one of my cues (docs/ATTENTION.md) | cue matching |
+| `{"chosen": true}` | named in my `attend_pick` rows: a player's pin or focus, or a Jev pick | new (§4) |
+| `{"attended_s": {"above": 2}}` | already attended this long | new |
+| `{"self": <any graph condition>}` | a gate on my own state: `{"self": {"health": {"below": 50}}}` | every self `Cond` (`Health`, `Energy`, `Night`, …) |
+| `all`, `any`, `not` | combinators | `All`, `Any`, `Not` |
 
-About 70 bytes a row; the identity is 32 of them, as Addendum 2 of docs/BATTLE_VIEWERS.md explains. The laptop's client draws each row as `count` generic, non-interactive figures without nameplates, animated locally (fighting or walking by the row's shares), placed by the centroid and spread. Hovering or clicking one is a request to attend (§2.3).
+**Salience features** are conditions too. Nothing ranks by them unless a policy says so.
 
-### 2.3 Promotion: a place and a visible reason
+| Feature | Meaning |
+|---|---|
+| `{"closing": {"above": 1.0}}` | approaching me at over N m/s (the rules' target context already has `closing`) |
+| `{"fighting": true}` | visibly in a fight move |
+| `{"fallen": true}` | down or dead |
+| `{"acting_on_attended": true}` | their visible act is aimed at someone I attend |
+| `{"new": 5}` | in sight for under N seconds |
+| `{"loud": true}` | heard calling, shouting or crying within the hearing law's reach |
+| `{"lit": true}` | carrying a light at night |
 
-A creature moves from crowd to individual only by taking a place, and the reason is told:
+`count` is a gate on the crowd around me, not on the one considered: `{"self": {"count": {"of": "person", "within": 10, "at_least": 20}}}`. It counts the attended and the crowd, because a crowd's numbers are perceived.
 
-- **A mind:** a `noticed` line in its own labels, as cues already write: "You pick out a stranger in the crowd to the north, striking someone you know." For (a), the reason is the engagement or address itself, already told by the blow, windup or line.
-- **A player:** the client's crowd figure turns into the individual, with a short marker saying why (`attacking you`, `your pin`, `your community`, `you looked`), from a reason code on the copy. `human_attend(point)` on a crowd figure promotes the crowd member nearest that point in that cell, within the (b) quota. The reply is the next frame: about one frame interval plus the round trip.
-- **Demotion** is silent, as leaving sight is today. The creature becomes part of its cell's count.
+**What the policy cannot do.**
+- **It cannot see more than sight.** Every condition is read over creatures in sight. A person under the far label ("someone too far away to make out") matches no id and no relation, as cues do.
+- **It cannot exceed capacity.**
+- **It cannot act.** It selects whom the character perceives individually and nothing else.
 
-## 3. Delivery cost
+### 2.3 How fast it runs
 
-### 3.1 The budget, and today's cost
+The authority runs the policy itself; no model is asked.
 
-From docs/COMBAT_PHASE.md ("Budget"):
-- the whole tick call should stay at or below about 600 ms/s;
-- the AI tick body at a sustained 200 fighters is about 300 ms/s, and about 240 after the exact trims;
-- that leaves **300–360 ms/s for everything per viewer**: **1.4–1.7 ms/s per viewer** at 216, or about 7–10 µs/s per (viewer, creature in sight) pair at 160–200 in sight.
+- **On events, in the tick.** The frames already mark what changed (`frame::moved`, `fought`, `did`, `hurt`) and the engagement set (`frame::engaged_of`, extended to every character with the law on). When one of those events involves a creature in a character's sight, the authority evaluates the policy for that one creature and that character, in the same tick. Events are: a windup or release, a blow, a line or gesture, an offer, coming into sight.
+  - If the creature ranks above the lowest attended one, it takes that place.
+  - With the instinct, an archer winding up at me from 20 m is attended in the tick its aim is seen, as v1's (a) and today's near tier do.
+  - The cost is one rule pass per event pair, not per crowd.
+- **In full at the sweep.** The whole policy re-ranks everyone in sight at the character's perception cadence: a player's sweep (200 ms), an AI's evaluation slot (1 Hz, plus wakes and the fight cadence). Crowd members are ranked at the crowd's 1 Hz.
+  - Each creature's features are computed once per pass (distance, closing, kind, relation bit, visibly-doing).
+  - Rules then test those features; no Rhai runs per creature (docs/CAMERA.md, "Proposed cadence").
+- **Hold.** A creature attended for under `attend_hold_ms` (1,000) keeps its place against lower-ranked ones; a higher-ranked one still displaces it. A policy can say more with `attended_s` and `order: "longest"`.
+- **The same code everywhere.** The policy's parser, validator and selector live in the shared rules crate (`living_rules::attention`, pure functions over a candidate list), like the graph's conditions. The authority and E3's replay tool both call it, so the experiments test the code that would run and not a second simulator (AGENTS.md).
 
-Today a pair costs about 130 µs/s, with the copy tables on. That is at 16 viewers on the 10 m ring, where each viewer adds about 12.4 ms/s: views 6.7, call remainder 2.2, sweeps 1.7, frames 1.6, cues 0.2.
+### 2.4 The starting attention instinct (seed content)
 
-### 3.2 The model with attention
+Instincts are only starting graphs. The attention instinct is a starting policy per species, in `living/seeds/instincts.json` beside the behaviour instincts, as keys `attend_person`, `attend_wolf` and `attend_deer`. A world may change it. A character with no `attend_policy` row runs its species' instinct (§4).
 
-Per viewer and second, with C creatures in sight, N attended and K crowd cells:
+**Person** (players and minds alike):
 
-**cost ≈ N × (i + s₅) + (C − N) × s₁ + K × k**
+```json
+{"attend": [
+  {"if": {"any": [{"threatened": true}, {"doing": {"is": "hostile", "at_me": true}}, {"attacker": {"within_s": 10}}]},
+   "order": "nearest", "why": "whoever is going for me"},
+  {"if": {"addressing": {"within_s": 10}}, "order": "newest", "take": 2, "why": "whoever speaks to me"},
+  {"if": {"acted_on": true}, "why": "whoever I am dealing with"},
+  {"if": {"any": [{"cued": true}, {"chosen": true}]}, "order": "nearest", "take": 4, "why": "whoever I watch for"},
+  {"if": {"all": [{"who": {"kind": "person", "relation": "family"}}, {"near": 20}]}, "order": "nearest", "take": 2, "why": "my own people"},
+  {"if": {"near": 8}, "order": "nearest", "take": 6, "why": "who is close"},
+  {"score": [{"if": {"closing": {"above": 1.0}}, "w": 3}, {"if": {"acting_on_attended": true}, "w": 3},
+             {"if": {"fighting": true}, "w": 2}, {"if": {"who": "wolf"}, "w": 2},
+             {"if": {"new": 5}, "w": 1}, {"if": {"loud": true}, "w": 1}],
+   "take": "rest", "why": "whatever stands out"}
+]}
+```
 
-| Term | Value used | Source |
+**Wolf:**
+1. whoever is going for me;
+2. my pack, `{"who": {"kind": "wolf", "relation": "family"}}`, up to 3;
+3. prey or quarry in sight, `{"who": "deer"}` or my `acted_on`, nearest, up to 3;
+4. the nearest within 8 m;
+5. then a score on `closing` and `fighting`.
+
+**Deer:**
+1. any wolf in sight, nearest first;
+2. whoever is going for me;
+3. my herd within 8 m;
+4. then a score on `closing` and `new`.
+
+Every number is seed data. These policies reproduce v1's (a), (b) and (c) for a person, which makes E3's free arm comparable with v1. The prompt's examples (§2.5) are placeholders, never these lines.
+
+### 2.5 Who edits the policy
+
+| Controller | How it edits | Through |
 |---|---|---|
-| s₅: sight for an attended creature, swept at 5 Hz | about 10 µs/s | a sweep costs 339–378 µs at about 90 in sight (16 viewers), about half of it projection, so about 2 µs per creature a sweep |
-| s₁: sight for a crowd member, at the crowd's 1 Hz | about 2 µs/s | the same test, a fifth as often. Crowd members get no projection, copy or frame |
-| i: delivering one individual (copies, frames, cues, projection, its share of views and commit) | **today about 120 µs/s** (the pair average less sight); **about 30–40 after the planned exact steps** | COMBAT_PHASE: converting the remaining views and the exact sweep work "might reach 3–4×". BATTLE_LAWS (a)'s far-cap runs give a marginal 16–40 µs/s per dropped *far* pair (one run each), so far places may already cost less than the average |
-| k: one crowd row, refreshed at 1 Hz with about half the cells changing | about 5 µs/s (assumed) | a primary-key update in place plus about 1 µs of RLS evaluation (the cue and copy tables), as for `seen_fighter_copy` and `combat_feed` (3.3 µs of WASM per event insert) |
+| **A mind** | An optional `"attend"` field in its think and consolidate replies: the full ranked list, replacing the character's policy; `"attend": []` returns it to its instinct. The prompt gains `# What you keep track of`: each rule in the mind's words, how often it took someone in the last minutes, and what it missed (blows from someone it was not keeping track of, told truthfully as such). | `mind_update` gains `attend: Option<AttendIn>` (`None` leaves it), as cues are projected. The mind service validates first; the authority validates again and keeps a refusal with its reason, which the next prompt lists |
+| **Jev** (§11) | Never writes rules. It refreshes `attend_pick` rows, read by the policy's `chosen`. Or it picks which of the mind's saved policies is active. | `mind_attend` (picks), `mind_attend_use` (switch) |
+| **A player** | The instinct reads the player's own input through `chosen` (focus, pins, a held hover, a click on a crowd figure). A settings surface that edits the rules themselves is a later client change. | `human_attend` (v1 §3.5, question 9); later `human_attend_policy`, the same validation |
+
+**The reply grammar** (`prompts.rs`, beside `notice_field`):
+- one line saying the field exists and replaces the list, with the condition words and orders;
+- three placeholder examples: a kind, an id with a deed, a score with two features.
+
+A unit test, as `cue_examples_name_no_one`, fails if the examples name a stranger, an attacker, a guard, a duty or a role, or teach a tactic.
+
+**Validation** (`living_rules::attention::parse`, `deny_unknown_fields`). A policy is refused whole, with the reason kept, when it has:
+- more than 12 rules, or more than 4,096 bytes of JSON;
+- an unknown condition, kind, phase or order;
+- an id the character has never met (no `familiar`, `relation` or known name; `cue_refusal`'s rule);
+- a `take` of 0;
+- a `why` over 160 characters;
+- a `score` with no weights, or a weight outside −10..10.
+
+A refused policy leaves the previous one in force. A policy with no rule that can take a threat is accepted: whether to watch attackers is the mind's choice.
+
+**Played characters keep no mind-written policy**, as they keep no cues (docs/ATTENTION.md, "Who keeps cues"). Their policy is the instinct plus their input.
+
+### 2.6 What attention changes elsewhere (both controllers)
+
+As v1 §1.4, with "the attended" now whatever the policy and capacity give.
+
+| Path | With the law on |
+|---|---|
+| A player's copies (`seen_body_copy`, `seen_character_copy`, `seen_fighter_copy`, doing, cues) | the attended only. Crowd members are counted in crowd rows |
+| A mind's scene (`scene_json`) | the attended, each as today, plus crowd lines (§5.1) |
+| Behaviour graphs (`sees`, `nearest`, targets, `threatened`, `doing`) | individuals: the attended. Counts: the attended and the crowd. A graph that reacts to `threatened` reacts only to threats from the attended, so a policy that drops attackers leaves the graph blind to them |
+| Aimed acts by id | the target must be attended. A player clicking a crowd figure promotes it first, if a `chosen` rule leaves room |
+| Witnessed events, fight folds, first sights | named per attended creature. Crowd members' deeds fold into crowd lines. `familiar` rows and first sights only for the attended |
+| Hearing | a line addressed to me makes its speaker `addressing`, which the instinct ranks second. Other crowd speech is heard as "someone in the crowd to the east says …" |
+| Cues | matched against everyone in sight. A match makes the creature `cued`, which the instinct ranks fourth |
+
+## 3. Capacity: a Rhai law
+
+### 3.1 The law
+
+`attention_capacity(a)` lives in `skills.rhai` (seed overlays may replace it, as Cullet's `laws.rhai` replaces `senses`). It returns how many others the character keeps track of now. The engine clamps the result to `[0, attend_ceiling]`.
+
+- **The same law for players and minds.** It reads only the character's own facts, through the actor context the skill laws already use (`living_rules::script::context::ACTOR`): `kind`, `stage`, `hp`, `vitality`, `energy`, `stamina`, `knows` and `factor`.
+- **Two additions:**
+  - `factor` for a named knack: the declaration says which skill's knack × practice the law reads.
+  - `attend_bonus`: a sum of active temporary effects (§3.4).
+- **Its declaration**, like `senses_law()`:
+
+  ```rhai
+  fn attention_capacity_law() {
+      #{ cadence: "event", topic: "attention", knack: "watch",
+         about: `How many others one keeps track of at once as individuals (everyone else in sight is a crowd): ${attention_about()}` }
+  }
+  ```
+
+  `cadence: "event"` means the engine re-runs it for a character only when an input it reads changes band. The engine knows which fields the law reads (`Reads`), so a wound re-runs it and a step does not. It caches the answer by the inputs' value, as the regard law is cached (docs/PERCEPTION.md, "What an observer perceives of a target"). A world has a handful of distinct inputs, so the law runs rarely.
+- **The character knows its own capacity.** "You can keep track of about 10 people at once; you are tired" goes into `my_senses` for a player and into `you` in a mind's scene. It is a fact of one's own body, as `senses` is.
+
+### 3.2 The starting formula (seed content)
+
+```rhai
+// How many others a creature keeps track of as individuals; everyone else in sight is a crowd
+// (docs/ATTENTION_BUDGET.md). Seed content: a world may change every number. The engine clamps
+// the answer to the world's `attend_ceiling`.
+fn attention_capacity(a) {
+    let c = switch a.actor.kind { "person" => 10.0, "wolf" => 8.0, "deer" => 6.0, _ => 6.0 };
+    c *= switch a.actor.stage { "infant" => 0.3, "child" => 0.7, "elder" => 0.9, _ => 1.0 };
+    // Watchfulness: inborn knack × practice at keeping watch (the `watch` skill): about 1.0
+    // untrained, up to 1.6 with long practice (genes::practice_factor).
+    c *= a.actor.factor;
+    // A technique one can learn or be taught.
+    if knows(a, "keeping_watch") { c += 4.0; }
+    // Tiredness and pain narrow attention; so does being out of breath.
+    if a.actor.energy < 15.0 { c *= 0.6; } else if a.actor.energy < 35.0 { c *= 0.8; }
+    let health = a.actor.hp / (max_hp(a.actor.kind) * a.actor.vitality);
+    if health < 0.25 { c *= 0.6; } else if health < 0.5 { c *= 0.8; }
+    if a.actor.stamina < 10.0 { c *= 0.85; }
+    // Effects that sharpen or dull attention for a while (§3.4).
+    c += a.actor.attend_bonus;
+    max(1.0, floor(c))
+}
+```
+
+| Character | Capacity before the ceiling |
+|---|---|
+| Untrained adult, rested, unhurt | 10 |
+| Adult with long practice at `watch` (factor 1.6) | 16 |
+| … who also knows `keeping_watch` | 20 (clamped to the ceiling, 16 provisional) |
+| Untrained adult, badly hurt (below 25%) and exhausted | 3 |
+| … also out of breath | 3 (10 × 0.6 × 0.6 × 0.85 = 3.06) |
+| Child | 7 |
+| Wolf / deer, unhurt | 8 / 6 |
+
+**The `watch` skill** (seed content, new): "keep watch: stand and look about for a while" (4 s, no target).
+- **Practice:** using it practises it, as any skilled skill (`common::practise`).
+- **Knack:** every founder gets a `knack:watch` gene, as for every skill with a knack (`genes.rs`).
+- **Its effect:** a short `attend_bonus` while it lasts (+2 for 20 s) and faster sweeps of the crowd. It is the in-world way to "look around", the same for players (the skill bar) and minds (a deliberate act or a graph leaf).
+
+**`keeping_watch`** is know-how like any technique: taught, learned from a tablet, or found by experiment (docs/LIVING_CORE.md, know-how).
+
+### 3.3 The ceiling
+
+`attend_ceiling` is a value-only world law (the Delivery class, live-tunable by `law_override`, docs/LAW_OVERRIDE.md). It is not seed content: it is set from measured cost (§6), not from taste.
+- **Provisional value: 16.** E2 measures the per-individual cost, and the ceiling follows from §6's formula.
+- **It caps every character equally.** A world can lower it under load without touching anyone's formula.
+- **The clamp is visible.** The character's own words say "you could keep track of more, but no more than 16 here" only if the world's law text says so. By default the clamp is silent and `law_about` describes it.
+
+### 3.4 What rules and skills can do with it
+
+- **Practice:** `watch`'s factor grows with use; future skills can add their own knack, through the declaration's `knack`.
+- **Know-how:** a technique adds places.
+- **Effects:** a skill's `_done` effects may return `#{ op: "attend", add: 2.0, secs: 20.0 }`. That is a new effect op writing a timed `attend_effect` row (§4), summed into `attend_bonus`. "A rally cry", "a strong brew" or "a blinding flash" (negative) are seed skills a world may add.
+- **State:** any actor field the context exposes. Exposing temperament (`trait:caution`) to laws is a separate context change, not proposed here.
+
+## 4. Storage and tables
+
+Per AGENTS.md: new tables, never new columns (in 2.14.1 appending a column rewrites the table and disconnects every client; docs/BATTLE_VIEWERS.md Addendum 1). The authority's working state lives in module memory, backed by these rows.
+
+| Table | Columns, indexes | Written | Read | Retained, growth |
+|---|---|---|---|---|
+| **`attend_policy`** (new, private) | `actor` u32 pk; `rules` String (the validated JSON, ≤ 4,096 B); `revision` u32; `source` (`mind`, `player`); `refused` String (the last refusal's reason, empty if none); `updated_ms` | `mind_update` with `attend`, `human_attend_policy` (later) | by pk, once per revision: the parsed policy is cached in module memory by `(actor, revision)`, as graphs are | one row per character that has its own policy (none for instinct-only characters); deleted at death (`act::die`), as cues are |
+| **`attend_pick`** (new, private; v1's `attend_choice`) | `id` u64 pk auto-inc; `actor` u32 btree; `target` u32; `source` (`pin`, `focus`, `hover`, `click`, `jev`); `weight` f32; `until_ms` u64 | `human_attend` (rate-limited, one change per 250 ms), `mind_attend` (Jev) | by `actor` at the sweep or slot, for `chosen` | ≤ 8 a character; expired rows deleted once a second by an `until_ms` range, as `reveal` is |
+| **`attend_effect`** (new, private) | `id` pk auto-inc; `actor` btree; `add` f32; `until_ms` | a skill's `attend` effect | by `actor` when capacity is re-run | ≤ a few a character; expired rows deleted as above |
+| **`seen_crowd`** (new, public, RLS `viewer = :sender`) | v1 §2.2: pk `key(viewer, cell)`, `viewer` btree, cell, count, centroid, spread, heading, moving, fighting, fallen, kinds | the crowd pass, 1 Hz, changed cells only | by the one viewer's subscription | ≤ 48 × viewers; about 0.5 MB/s of commitlog at 216 viewers (v1 §3.4) |
+| Module memory | `ATTENDING` (attended set, hold times), `CAPACITY` (by actor, with its inputs' key), parsed policies | the selector | the frames, the scene, graphs, folds | none: a fresh instance re-derives from the rows and the instincts at the next pass. Places may reshuffle once, never wrongly, since the rows are the source |
+
+- **No view, and nothing new for the mind service to subscribe.** The mind sees its own policy's effect through the scene and `# What you keep track of`, which the service builds from rows it already reads plus `attend_policy`. That is a private table, readable by the owner identity the service uses.
+- **The Jev state** is the v1 procedure `mind_attention_state(actor)`. It is returned to the controller only and writes nothing, like `mind_reach`.
+- **Migration:** adding tables is an automatic migration with no disconnect (docs/ATTENTION.md, citing [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/)). `seen_crowd`'s RLS rule disconnects every client once at publish (v1 §3.4).
+
+**SpacetimeDB documentation** (read 2026-11-22 for v1; every page shows version 2.0.0; the pins are 2.14.1):
+- [Row-level security](https://spacetimedb.com/docs/how-to/rls): experimental and unstable; `:sender` is bound to the caller; the owner bypasses it. `seen_crowd` takes the copy tables' safeguards.
+- [Views](https://spacetimedb.com/docs/functions/views/): per-user views cost one computation per subscriber. No view is added.
+- [Event tables](https://spacetimedb.com/docs/tables/event-tables/): never cached by clients, yet logged. Crowd rows are state a reconnect needs, so they are a regular table.
+- [Performance](https://spacetimedb.com/docs/tables/performance/): indexed lookups, small focused tables, private where clients need nothing. Every new read is by pk or `actor`.
+- [Indexes](https://spacetimedb.com/docs/tables/indexes/): B-tree point and range lookups.
+- [Subscriptions](https://spacetimedb.com/docs/clients/subscriptions/): initial rows, then deltas.
+
+## 5. The crowd and promotion (kept from v1)
+
+### 5.1 To a mind
+
+Scene lines per direction and distance band, built from the same cells as the player's rows. Counts are rounded; there are no ids.
+
+```json
+"crowds": [{"dir": "northeast", "dist": "a stone's throw", "about": 40, "across": "about 20 m",
+            "moving": "toward you", "visibly": "most fighting; 3 fallen", "kinds": "people"}]
+```
+
+### 5.2 To a player
+
+One `seen_crowd` row per 6 m world-aligned cell (at most 48, the farthest merging 2×2), drawn by the client as generic, non-interactive figures placed by centroid and spread (v1 §2.2).
+
+### 5.3 Promotion: a place and a told reason
+
+A crowd member becomes an individual only when a rule of the character's policy takes it.
+- **A mind:** told in its own labels, quoting the rule's `why`: "You pick out a stranger in the crowd to the north (whoever stands out)". For threats, the windup or blow is itself the told event.
+- **A player:** sees a short reason marker from the rule (`going for you`, `your pin`, `your people`, `close`).
+- **Demotion** is silent, as leaving sight is.
+
+## 6. Delivery cost with a variable capacity
+
+v1 §3 is kept, with capacity c in place of N and the policy's evaluation added to the crowd's per-creature cost. Per viewer and second, with C in sight and K crowd cells:
+
+**cost ≈ c × (i + 10 µs) + (C − c) × 3 µs + K × 5 µs**
+
+| Term | v1 | v2 |
+|---|---|---|
+| per attended creature: delivery i + sight at 5 Hz | i + 10 µs/s | unchanged |
+| per crowd member | 2 µs/s (sight at 1 Hz) | **3 µs/s**: sight, plus its features and the rules at 1 Hz (about 1 µs: 12 rules on a precomputed feature row) |
+| per crowd row | 5 µs/s (assumed) | unchanged |
+| events | – | one rule pass per event pair in the tick; a few per creature a second in a fight; within the per-attended term |
 
 **Per viewer (ms/s), against a budget of 1.4–1.7:**
 
-| | C ≈ 200 in sight (in the battle), K = 48 | | C ≈ 60 (the edge, the 26–32 m ring), K ≈ 15 | |
+| c | C ≈ 200, K = 48, i today (120) | C ≈ 200, K = 48, i planned (30–40) | C ≈ 60, K ≈ 15, i today | C ≈ 60, K ≈ 15, i planned |
 |---|---|---|---|---|
-| | i today (120) | i planned (30–40) | i today | i planned |
-| Off (everyone individual) | 26 | 8.0–10 | 7.8 | 2.4–3.0 |
-| N = 12 | 2.2 | 1.1–1.2 | 1.7 | 0.7–0.8 |
-| **N = 16** | **2.7** | **1.3–1.4** | 2.2 | 0.8–1.0 |
-| N = 24 | 3.7 | 1.6–1.8 | 3.3 | 1.1–1.4 |
-| N = 32 | 4.7 | 1.9–2.2 | 4.3 | 1.4–1.7 |
+| off (everyone) | 26 | 8–10 | 7.8 | 2.4–3.0 |
+| 8 | 1.9 | 1.1–1.2 | 1.3 | 0.6 |
+| **10** (untrained adult) | 2.1 | **1.2–1.3** | 1.5 | 0.6–0.7 |
+| 12 | 2.4 | 1.3–1.4 | 1.8 | 0.7–0.8 |
+| **16** (provisional ceiling) | 2.9 | **1.4–1.6** | 2.3 | 0.9–1.0 |
+| 24 | 3.9 | 1.7–2.0 | 3.3 | 1.1–1.4 |
+| 32 | 4.9 | 2.0–2.3 | 4.3 | 1.4–1.8 |
 
-**Reading.**
-- **At today's i, no N fits the worst case.** Attention alone is not enough; the per-individual exact work (the remaining views onto tables, the sweep's exact items, docs/COMBAT_PHASE.md "Next") must land too.
-- **With it, N = 16 fits** at C ≈ 200 with a little margin, N = 24 is at or just over the line, and N = 32 fails.
-- **At the edge** (C ≈ 60) every N up to 24 fits once i is down.
-- **The crowd's own cost is small.** Rows: 48 cells × 5 µs/s ≈ 0.24 ms/s per viewer, about 52 ms/s at 216. Sight: 0.4 ms/s per viewer at C = 200, because crowd sight runs at 1 Hz. Crowd sight at 5 Hz would cost 2 ms/s per viewer alone, more than the whole budget.
+- **The ceiling bounds the worst case; the formula sets the typical case.** A battle of untrained adults sits at 10, where the dense case fits with margin once i is down. A ceiling of 16 fits the dense case only at the top of the budget. 24 does not fit.
+- **Before the planned per-individual work, only c ≤ 8 fits (10 at the top of the budget), and only at the battle's edge.** Attention is necessary but not sufficient (v1 §3.2).
+- **The ceiling from E2:** `attend_ceiling ≈ floor((1.5 ms/s − (C − c) × 3 µs − K × 5 µs) / (i + 10 µs))` at the contract's dense case.
+- **AI characters pay too.** 200 fighters running their policies over 200 in sight, at 1 Hz plus events, cost about 200 × 200 × 1 µs ≈ 40 ms/s of the tick. Against that, the fight fold's naming falls from 43–51 ms/s (it names only the attended; docs/BATTLE_SCALE.md, Fix 4), and minds' scenes list fewer creatures. Net about zero, to be measured in E2 and E4.
 
-The model is an estimate, not a measurement. The fake-model battle (§5.2) measures i, s and k directly, and N follows from them: **N ≈ (1.5 ms/s − C × s₁ − K × k) / (i + s₅)**.
+Evidence for C and K (v1 §3.3, `attention_density.py` on the act trial's 200-mind battle): others within 48 m p50 57, p90 169; crowd cells at 6 m beyond 16 attended p50 24, p90 50.
 
-**Cell size.** Crowd rows per viewer in the 200-mind battle (below), beyond the N nearest within 48 m:
+## 7. Minds' prompts and memory
 
-| Cell | N = 16: p50 / p90 / max | N = 24: p50 / p90 / max |
+Kept from v1 §4, with one change: what a mind learns depends on its own policy.
+- **They learn only the individuals they attended to,** plus crowd facts. Attention narrows perception and never adds to it, so "minds know only what they perceive" holds. Now the narrowing is the mind's own choice within its capacity.
+- **The policy is evaluated over what is in sight.** Every feature it reads (a windup aimed at me, a kind, a relation, closeness) is perceptible. The selection is perception run by the law, as recognition was in v1.
+- **The policy is itself memory.** It lives in the mind's store with the concepts it serves, as cues do. `rules` is a projection, and an `attend` reply replaces it. Consolidation may keep, change or drop it; the reorganizer sees `# What you keep track of` like any other line of the mind.
+- **Prompt cost.** A scene lists up to the capacity: about 10 at the starting formula (today's cap is 14), 16 at the ceiling (+2 × 85 tokens on a 4,700-token battle think prompt). `# What you keep track of` adds about 100–300 tokens when a mind has its own policy, and nothing on the instinct (the prompt names it in one line).
+- **The hidden 14-nearest cap is removed** with the law on. The prompt, the graph and memory agree on one attended set, the same for a player's character.
+
+**Emergent consequences.** All are from the same law for everyone; none is scripted.
+- **Ambush.** A mind that rewrote its policy without attackers, or one swarmed past its capacity, does not see some windups. Its graph's `threatened` stays false, and the blow lands.
+- **Crowds as cover, and searching:** as v1 §4.
+- **Distraction:** a policy weighted to `fighting` follows the loud fight and loses the quiet one.
+- **Character shows in attention.** A cautious mind that keeps 4 places for "anyone closing on me" survives ambushes and misses its friends' signals. A sociable one keeps its people and misses the stranger. Both are choices the mind wrote and can revise from what it lived ("I was struck from behind by someone I was not watching").
+- **Skill matters.** A practised watcher keeps track of 16, an untrained one 10, a wounded and exhausted one 3. A wounded fighter loses track of the fight, which may spiral (lower capacity, more unseen blows). E4 watches for that.
+
+## 8. Experiments
+
+Four experiments run in parallel on three machines. Each answers one question, and none depends on another's result to start. E3's free part and E4 need a small build first (§8.4).
+
+| | Machine | Question | Cost |
+|---|---|---|---|
+| **E1** | laptop | Does a 200-fighter battle still read as a battle with c individuals and an impostor crowd? Stills at c = 16 and 32 against everyone-individual, as v1 §5.1 specified (`far_cap` = c as the individuals' mock, 6 m cells, Middle, Far and inside) | free |
+| **E2** | dev-box | The real per-individual cost i (near and far), the crowd row cost k, the answers to §12, and from them `attend_ceiling` (§6's formula). A fake-model battle at 216 and 16 viewers, as v1 §5.2, with capacity fixed at 10, 16 and 24 through the ceiling | free |
+| **E3** | Spark | Who to track: does a mind-written policy or Jev track what the mind later acts on better than the starting instinct, without missing more threats? | free part; paid part ≤ $12 |
+| **E4** | Spark | Does capacity matter in a fight: do low-capacity characters miss more, get flanked more, fight worse? | free (fake model) |
+
+### 8.1 E3: who to track, on recorded scenes
+
+**Inputs** (copied out of `~/slop-evidence` to a scratch directory first, with sha256 recorded; never read in place):
+- **Battle:** the act trial's 200-real-mind battle, both arms (`act-trial-20261121.tar.zst`: `minds-atb1-off-055246`, `minds-atb1-on-060222`). It has 1 Hz body samples with movement segments (so positions replay to any moment), skill uses with accepted and outcome times, act attempts, and every real think and compile prompt and reply.
+- **Town:** the same trial's town arms (40 real minds, 30 minutes; `samples.jsonl`, `side/activities.jsonl.gz`, journals).
+- **Arena:** the pack arena's trial folders (5 Hz bodies, uses; docs/PACK_MIND.md §5), for flanking scenes.
+
+**States.** A frozen random sample of decision moments, drawn before anything runs and hashed:
+- 200 battle states (100 per battle arm);
+- 100 town states, at moments with at least 8 creatures in sight, so the choice matters.
+
+Each state is a subject at the moment of one of its recorded think requests. Its field is rebuilt from the samples through the rules crate:
+- positions along segments;
+- sight from the run's world laws (range, field, light);
+- the map regenerated from the run's seed. If the seed's map does not regenerate identically on this toolchain, cover is ignored and the report says so.
+
+Each state is followed for **30 s**, re-run every second with the arm's policy fixed.
+
+**Arms** (the same states for every arm; capacity from the starting formula with the subject's recorded health, and a second pass at fixed 8 and 16):
+
+| Arm | Policy | Cost |
 |---|---|---|
-| 4 m | 29 / 70 / 83 | 24 / 68 / 80 |
-| **6 m** | **24 / 50 / 63** | **19 / 49 / 60** |
-| 8 m | 20 / 40 / 50 | 17 / 39 / 50 |
+| (a) instinct | the starting attention instinct (§2.4), alone | free |
+| (b) mind-written | one call per state on the subject's own route (the `people` mix's think model, DeepSeek V4.1 Flash): its saved think prompt as it was (its memory, cues, stances and the scene it saw), plus the `attend` reply field (§2.5) and nothing else. Run once per scene: the policy is fixed for the 30 s | paid: about 300 calls |
+| (c) Jev | the instinct, with `chosen` filled by Jev (§11): one TypeSafe `systemone` request per state at its start and every 6 s (5 per state), each with the state's own field and questions from the subject's own cues, relations and concerns. Replay rate only, concurrency ≤ 4 | paid: about 1,500 calls |
 
-These counts are distance only, with no facing or cover, so they are upper bounds: the laptop's still at the battle's edge saw about 50 of 200. **6 m** keeps p90 near the 48-row cap with 2×2 merging beyond it. 4 m would show the crowd's shape better at about 40% more rows. The stills decide between them by eye (§5.1).
+**Measures** (per arm, per scene type, per state, paired across arms):
 
-### 3.3 What the saved battles show
+| Measure | Definition |
+|---|---|
+| **M1 threats missed** | landed blows on the subject within the window whose striker was not attended when the windup started, per 100 landed blows. Also windups aimed at the subject that start unattended, per minute |
+| **M2 acted-on share** | of the creatures the subject later acted on within the window, the share attended when the act was decided (the compile reply's time) and when it started. Acted on means named in an act attempt, the target of a skill use, spoken to, or the target its graph resolved. Also reported for acted-on creatures beyond the 8 nearest, where the arms can differ |
+| **M3 churn** | promotions and demotions per minute; mean hold time |
+| **M4 cost** | tokens, latency and $ per state, from the journals |
+| **M5 validity** | (b): the share of replies that parse into a valid policy, and the refusal reasons; (c): the share of Jev replies used |
+| **Blind check** | 60 states, two fresh Claude subagents, blind to arm: for each arm's attended set, is it a plausible set for this character, given its ties and concerns? |
 
-`attention_density.py` read the act trial's real-mind battle, read-only (`act-trial-20261121.tar.zst`, run `minds-atb1-off-055246`):
-- 200 real minds, minutes 2–8;
-- 84 one-second samples, 16,277 fighter-samples;
-- positions replayed along each segment.
+- **Known bias.** The recorded minds decided with full perception (their prompts listed the 14 nearest). M2 therefore favours distance-like policies, so (a) has an advantage. The beyond-8-nearest share is the fairer comparison.
+- **M1 is counterfactual.** Who would have been attended; the recorded blows happened under full perception.
 
-| Measure | p10 | p50 | p90 | max |
-|---|---:|---:|---:|---:|
-| Others within 3 m | 0 | 1 | 7 | 24 |
-| Others within 8 m (the near tier's reach) | 1 | 4 | 34 | 89 |
-| Others within 20 m | 2 | 14 | 111 | 174 |
-| Others within 48 m (Cullet's day sight) | 10 | 57 | 169 | 196 |
-| Open attacks aimed at one fighter | 0 | 0 | 1 | 3 |
-| Creatures a think prompt listed (capped at 14) | 1 | 6 | 14 | 14 |
-| Think prompt tokens | 4,363 | 4,733 | 6,106 | 11,210 |
+**Decision rules** (frozen with the states):
+- **(b) or (c) is preferred over (a)** if its M2 beyond the 8 nearest is higher by at least 5 points (paired by state, exact sign test p < 0.05), its M1 is no worse by more than 1 per 100 landed blows, and its M3 is at most 1.5× (a)'s.
+- **(c) over (b)** by the same rules.
+- **Otherwise the simpler arm stands:** (a) before (b) before (c).
+- **The report states which held, per scene type,** with every failed state kept.
 
-- **The real-mind battle spreads out:** minds disengage (docs/FAST_LANE_WHY.md). The AI-graph fixture (`spawn_battle`, 200 within 7 m) is denser: about 90 in sight on the 10 m ring and about 160 for 216 viewers at 10 m (docs/BATTLE_LAWS.md, docs/COMBAT_PHASE.md).
-- **Engagement overflow is small:** at most 3 attacks aimed at one fighter at once.
+### 8.2 E4: capacity in arenas (fake model, free)
 
-### 3.4 Data paths (AGENTS.md)
+**Fixtures**, on the trial stack's scratch worlds through `trials.py`, with the subjects' minds on the fake model, so their attention policy is the instinct and only capacity varies:
+1. **The pack arena** (docs/PACK_MIND.md §5): people subjects against a wolf pack, by day and at night. Its measures come from `pack_arena.py`: M2 flanking (coverage, encircled share, rear-blow share), M5 casualties, M6 duration.
+2. **A two-sided melee:** 60 people in 2 sides (`spawn_battle_sides`), no refills, until one side breaks.
 
-| Path | Rows read and written, indexes | Recipients | Frequency | Retained, growth |
-|---|---|---|---|---|
-| Attended set per character | module memory (`ATTENDING`, as the near tier's `Viewer::near`); reads the engagement set, `cue.actor`, `relation` by actor, family and membership by key, `attend_choice.actor` | none (authority working state) | players: each sweep (200 ms); AI: each evaluation slot (1 Hz, wakes, fight cadence) | none. A fresh instance recomputes it at the next sweep or slot (places reshuffle once; hold times are lost). It decides who is delivered, never what a copy holds, the frames' existing rule (docs/PERCEPTION.md, "Module memory") |
-| `attend_choice` (new, private) | `id` pk, `actor` btree, `target` (0 for a kind), `kind`, `source` (player input, pin, Jev), `weight`, `until_ms`; at most 8 a character | owner only | player: on input (rate-limited like `human_gaze`, one change per 250 ms); mind: each Jev refresh (1–3 s) | ≤ 8 × characters; expired rows deleted by an `until_ms` range once a second, as `reveal` is |
-| `seen_crowd` (new, public, RLS) | pk update in place; `viewer` btree | the one viewer | 1 Hz per viewer, changed cells only | ≤ 48 × viewers. Commitlog about 70–100 B a written row: at 216 viewers × about 24 changed cells a second, about 0.5 MB/s, against about 8.4 MB/s for the battle's base commitlog at 216 (docs/BATTLE_VIEWERS.md, commitlog growth). The copies it replaces write far more |
-| Copies of crowd members | none: dropped from `perceived`, motion, fighter, doing and projection | – | – | fewer rows than today |
-| A mind's scene | the attended plus crowd lines, built where `scene_json` is today | the mind service, as today | per deliberation request | no change |
-| Jev state for a mind (§7) | a new **procedure** `mind_attention_state(actor)` returns it to the controller alone and writes nothing, like `mind_reach` | the calling mind service | 1–3 s per mind, only while C > N | none (a procedure's answer is not broadcast) |
+**Arms.** The subjects' capacity is fixed at **4, 8, 16 and 32** by a seed laws overlay that replaces `attention_capacity(a)` for people only. The wolves and the other side keep the starting formula. There is also an arm with the starting formula itself. `attend_ceiling` is 32 in all arms.
 
-**SpacetimeDB documentation consulted** (2026-11-22; every page shows version 2.0.0; the pinned server and crates are 2.14.1; the versioned-source readings are those of docs/BATTLE_VIEWERS.md at `v2.14.1` `a0bf6be`):
-- [Row-level security](https://spacetimedb.com/docs/how-to/rls). "Row Level Security is an experimental, unstable feature … use Views instead." A `:sender` filter is bound to the requesting identity; RLS applies to event tables too; module owners bypass it. No per-row cost is stated. The project accepted RLS conditionally for the copy tables (gate case, kill switch, isolation proofs). `seen_crowd` takes the same safeguards (§5.3). In 2.14.1 a `viewer = :sender` equality is a search argument with delta-index pruning (about 1 µs a row, measured).
-- [Views](https://spacetimedb.com/docs/functions/views/). "Per-user views require separate computation for each subscriber." That cost is why crowds are a table, not a view.
-- [Event tables](https://spacetimedb.com/docs/tables/event-tables/). Rows are never kept in the client cache, and their inserts are still written to the commitlog. A crowd row is current state the client must have after a reconnect, so it is a regular table.
-- [Performance](https://spacetimedb.com/docs/tables/performance/): "prefer indexed lookups over full table scans"; small, focused tables; private tables avoid synchronization. Hence `attend_choice` is private and narrow, and every read is by `actor` or primary key.
-- [Indexes](https://spacetimedb.com/docs/tables/indexes/): B-tree, multi-column; a point lookup by value. Every new read is a single-column point or range read.
-- [Subscriptions](https://spacetimedb.com/docs/clients/subscriptions/): initial rows, then updates; unsubscribing is asynchronous. The client switch is make-before-break, as for the copy tables.
-- **Rollout.** Adding a table does not disconnect clients, but publishing a new RLS rule disconnects every client once (`ensure_disconnect_all_users`, BATTLE_VIEWERS Addendum 1). `seen_crowd` therefore goes in a play-test-free window, with a mind restart.
+**Replicates.** 6 per arm and fixture, interleaved, each with its own world.
 
-### 3.5 Questions for dev-box
+**Measures:**
+- blows landing from unattended attackers, per subject-minute;
+- rear-blow and encircled shares;
+- blocks or dodges per windup aimed at a subject;
+- the subjects' own blows landed;
+- deaths and health lost by side;
+- engagement duration;
+- churn;
+- the share of each subject's time at capacity, and its capacity over time (the wound spiral: does capacity fall faster than health?);
+- an indicative tick cost of the selector per arm (not a measurement series: it runs under the trial-activity lock, not `battle.lock`).
 
-dev-box owns the per-viewer views and copy tables. Each question states the assumption this note makes until it is answered.
+**Decision rule** (`pack_arena.py`'s §5.5 rule): an arm differs from the capacity-16 arm on a measure when its median lies outside the 16-arm's range and at least 2/3 of its replicates do. The question is answered "yes" if capacity 4 and 8 differ in the direction of more unattended blows, more rear blows and more subject deaths. The results tune the seed numbers of §3.2, and they tell the owner what a ceiling of 12 or 16 costs in play.
 
-1. **`perceived` as the attended set.** Can "attended" simply be `perceived` (crowd members get no `perceived` row), so that every copy, tier, cue and frame follows without a second set? Which readers assume `perceived` means everyone in sight: `look.rs`'s relook, offers, aimed-act checks, `heard`, `kept_sweep`? *Assumed: yes, with those readers moved to the sight set where they need it.*
-2. **The cost of one individual today and after the planned steps.** Do you have the L2 split of a pair's cost into near-tier and far-tier pairs at 16 viewers? The far-cap runs suggest a dropped far pair saves 16–40 µs/s against the 130 average. *Assumed: i = 120 today and 30–40 after the remaining views move to tables (§3.2). The far split would raise the usable N.*
-3. **Promotion and demotion churn.** A promotion inserts 3–5 copies; a demotion deletes them. Is it cheaper to keep a demoted creature's copies through a grace period, hidden by a flag, than to re-insert them? Is a tier flip's measured cost a fair proxy? *Assumed: insert and delete, with `attend_hold_ms` 1,000 damping churn to a few changes per viewer a second in a battle.*
-4. **Budgets.** Should crowd rows share the frames' scene-row budget (`SCENE_ROWS_PER_S`, the 250-row floor) and the cue row cap, or have their own? *Assumed: their own small budget (48 rows per viewer per second at most), outside the frames'.*
-5. **`seen_crowd`'s shape.** Is the primary key `key(viewer character, cell)` with in-place update the right choice (the `seen_fighter_copy` lesson)? Is about 70 B a row acceptable to the laptop, or should centroid and spread be quantized to `i16`? *Assumed: pk update, `f32` positions.*
-6. **The RLS publish.** Can `seen_crowd`'s rule ride the next planned disconnect window, with other rule changes, rather than cost its own? *Assumed: its own window, before any play-test with the law on.*
-7. **Projection for crowd members.** Are there paths that iterate `projected` by body and would break when crowd members have no projection, for example `look.rs` relooking every viewer's row of one body? *Assumed: none that cannot read the sight set.*
-8. **The engagement set for AI viewers.** `frame::engaged_of` is computed for humans only. Extending it to every character with the law on means the TARGETS map serves AI too. Any objection on cost at 200 fighters? *Assumed: cheap, since it is already maintained per actor and the change is who it reports to.*
-9. **`human_attend`.** Shape `human_attend(targets: Vec<u32>, point: Option<(f32, f32)>)`, at most 4 pins plus one focus, one change per 250 ms like `human_gaze`, refused for another's character. Does that fit the client's input path? *Assumed: yes.*
+**Stop rules (free):**
+- a quiet start (load below 8, or redo);
+- each world in its own scratch database;
+- a run whose world guard pauses for disk is discarded and redone, not counted;
+- no change of fixture after the first replicate.
 
-## 4. Minds' prompts and memory
+### 8.3 E3's paid part: stop rules, written before any paid call
 
-**They learn only the individuals they attended to.** A mind's scene lists the attended; its experiences name the attended; its memory graph gets nodes only for them. Everything else reaches it as crowd facts: counts, directions, deeds by number.
+1. **The cap: $12 for E3 in all, read from the journals' spend.**
+   - Spend for (b) is priced from its tokens at the committed prices (`act_trial.py` `PRICES`, docs/MODEL_COST.md).
+   - Spend for (c) is the journal's `cost_usd`, which the mind computes from the **local** prices file (`living/mind/src/prices.rs`). Jev's price is never written in this document, a report or a commit.
+   - **Arm caps:** (b) $4, (c) $5. The remaining $3 is a reserve, spent only with the general coordinator's word for a rerun.
+   - Each arm stops at its cap minus $0.25 (calls in flight), and everything stops at $11.50 total.
+2. **The guard runs first.** An `act_trial.py watch`-style guard on each arm's own journal glob is started and confirmed to be reading entries (one fake call seen) before the first paid call. On `battle-frame`, a watcher given a directory exited at once and the replay ran unguarded for 30 s.
+3. **No price, no Jev.** Without a local prices file `cost_usd` is null, the spend cannot be tracked, and (c) does not start.
+4. **Failures.** An arm stops when more than 10% of its last 50 calls fail (at least 20 calls).
+5. **Jev throughput is unknown.**
+   - Concurrency is never above 4.
+   - One HTTP 429, or a p95 latency above 1 s over the last 50 calls, pauses (c) for 5 minutes at half concurrency. A second trip stops it.
+6. **(b) validity.** If more than 30% of the first 50 replies fail validation, (b) stops. The prompt is fixed on the fake model (free), and (b) resumes only with the coordinator's go. What was spent counts toward the cap.
+7. **Frozen inputs.** States, prompts, question templates, models, capacities, measures and decision rules are hashed before the first paid call. Any change after that is a new run needing approval.
+8. **Replays only.** No live world, no real-model mind service, no battle.
+9. **Order.**
+   - (a) runs first, free.
+   - Then the free parts of (b) and (c): prompts only (token counts per request), the fake model through the call path, validation of fake replies.
+   - Then the coordinator's go.
+   - Then (b), and (c) after it, so a (b) problem cannot spend (c)'s share.
 
-**Is that consistent with "minds know only what they perceive"?** Yes, and stricter than today.
-- **Attention narrows perception; it never adds to it.** Every attended creature is in sight by the existing sight rule, and so is every crowd member. Nothing reaches a mind that its character could not perceive.
-- **Recognising someone in a crowd is perception, done by the law.** It happens only where the character can make the person out, and its result is told as a reason ("you pick out …"). Today the mind would have been told about that person anyway, because today everyone in sight is an individual.
-- **The Jev attention layer sees the character's current field** (§7). That field holds the attended, a few unattended candidates the character can make out, and the crowds. Its answers only choose places. Its state never enters a prompt or memory: only the picks do, and a pick is just "this one is attended".
-- **The same holds for players.** Their screen shows the attended and the impostor crowd; their character's lived memory (`mind/lived.rs`) is built from the same experience lines.
+### 8.4 What must be built before E3 and E4
 
-**Today's asymmetry goes away.** A mind's prompt already lists only the 14 nearest, while its graph and its experiences cover everyone in sight. The prompt, the graph and memory would now agree on one attended set, the same for a player's character.
+- **Before E3 (no authority change):** `living_rules::attention` (the grammar, the validator, the selector and the starting instincts as data), and a `living-mind attention-replay` subcommand that builds fields from saved runs and calls the selector. For (b), it sends the `attend` field through the mind's own `Llm`; for (c), the Jev request. The prompt-audit test of §2.5.
+- **Before E4:** the authority side behind `attend_on` (off by default): the selector in the tick, capacity, `attend_policy` and `attend_pick`, the scene's attended list, graphs reading the attended. `seen_crowd` is not needed for E4 (no players), so its RLS publish waits for E2 and the client.
 
-**Prompt cost.** At N = 16 a crowded scene lists 16 instead of 14 creatures: about +2 × 85 tokens on a 4,700-token think prompt (+4%). The crowd lines add about 30–60 tokens each, a few per scene. At N = 24 it would be about +850 tokens (+18%) in crowds.
+## 9. Verification plan (once built)
 
-**Emergent consequences** (none scripted; each follows from the law being the same for everyone):
-- **Ambush and flanking.** While a fighter's places are full of the fight in front, someone walking round the edge is crowd until they wind up at it, and from that tick they are attended ((a)). An attacker who gets close before striking is noticed late by a character whose attention was elsewhere. A character who keeps a place free (a cue on "someone behind me", a player's pin) is harder to surprise.
-- **Crowds as cover.** A thief in a market crowd is one of "about 40 people" to everyone who has not picked them out. Whoever watches for them (a cue on the person, a stance about thieves with a kind-and-deed cue, a guard's pin) picks them out.
-- **Distraction.** A loud fight draws salience ((c): fighting, fallen). Something quieter elsewhere goes to the crowd.
-- **Being known.** People who matter to many (family, those with strong feelings attached) are attended by many and remembered individually. Strangers in a battle are remembered as "the battle at the ford: about 120 fought, many fell", which also compresses memory.
-- **Searching.** A parent looking for a child (family, (b)) picks them out of a crowd as soon as they can be made out. A stranger looking for "the one with the red cloak" can only search by moving closer, unless their cue describes something visible.
-- **Fairness to players.** A player's character is subject to the same law: an AI ambusher can hide in a crowd from the player, and a player can hide from AI minds the same way.
+As v1 §5.3, with the policy's cases. Each touched surface's skill is maintained in the same change (`maintain-verification-skill`), because tables, reducers, the mind protocol and the seed format change shape.
 
-## 5. Tests
+| Surface | New or changed scenes |
+|---|---|
+| verify-core | `attention_policy`: the instinct's order, `take`, `score` weights, capacity reached, the hold; a custom policy without attackers misses a windup and the blow lands; `attend_on` off identical to main (`det_compare`). `attention_capacity`: the law re-run on a wound and on practice, an `attend` effect, the ceiling clamp. `attention_ambush`, `attention_fold` (v1) |
+| verify-generation | the instincts' `attend_*` keys load, and a seed overlay replacing `attention_capacity` validates |
+| verify-client | `crowd_tables.py` (v1): `seen_crowd` isolation; `attend_policy`, `attend_pick` and `attend_effect` refused to players and anonymous |
+| verify-player | `human_attend`: only one's own character, bounds, rate limit, a pin or click becomes `chosen`; a player's character keeps no mind-written policy |
+| verify-minds | `attend-reply`: a reply's `attend` validated, projected, refused with its reason listed in the next prompt; `# What you keep track of`; `attention-jev` (v1) |
+| verify-llm | the Jev attention purpose journaled, `cost_usd` null without a prices file |
+| verify-knowledge | crowd members never become person nodes; the policy kept and faded with its concept |
+| verify-ui (laptop) | crowd figures, click to promote, the reason marker, the capacity shown with the senses |
 
-### 5.1 Stills for the owner (the laptop renders)
+## 10. Default and risks
 
-The question for the owner: does a 200-fighter battle still read as a battle at N individuals plus an impostor crowd? Nothing is built, so the stills use a mock: `far_cap` = N for the individuals (it keeps the engaged and then the nearest, which is (a) and (c) by distance without (b)), and a client-side crowd from an owner SQL read.
+**Default: off** (`attend_on` false). After E2 and E4 it goes on per world by `law_override`, a battle world first. Default-on in play is the owner's call. The starting formula and instincts are seed content, so each world may differ.
 
-**One shot per cell:**
+**Risks to watch in trials.**
+- **Minds dropping attackers.** A rewritten policy without threat rules leaves a mind blind to windups. That is emergent and allowed; trials count it (E3 M1; live trials: blows from unattended attackers per mind-hour, and how many minds rewrote their policy without a threat rule).
+- **Degenerate policies:** a policy that keeps one person only, or that churns (`newest` first in a crowd). The hold time bounds churn; trials report churn per mind.
+- **The wound spiral:** hurt lowers capacity, which lowers awareness, which lets more blows through. It may make fights end faster. E4 measures it; the formula's numbers are seed data to tune.
+- **Players and minds may differ in practice.** A player's instinct follows their input, a mind's is rewritten by thought. Both start equal, and trials compare blows from unattended attackers for players' characters and minds' characters.
+- **Cost.** Capacity bounds the individuals, but the policy's own evaluation is per creature in sight (§6, about 3 µs/s each). If E2 measures it higher, the crowd's rule pass moves to 0.5 Hz.
+- **The reversed 2026-11-10 ruling.** Crowd members get no first sights, no `familiar` rows and no named fight lines. Trials across the switch are not comparable, and every batch record states `attend_on` and the ceiling.
+- **RLS is experimental:** one more RLS table, with the copy tables' safeguards and a disconnect at publish.
 
-| | everyone individual (law off) | N = 32 + crowd | N = 16 + crowd | N = 16, no crowd |
-|---|---|---|---|---|
-| **Middle band, at the edge** (26 m south, facing north) | 1 | 2 | 3 | 4 |
-| **Far band, at the edge** | 5 | 6 | 7 | 8 |
-| **Middle band, inside** (10 m ring, the fight round the player) | 9 | 10 | 11 | – |
+## 11. Jev: one possible author or refresher of the policy
 
-- **World:** Cullet (`LIVING_SEED=cullet`), a fresh world from current main with all battle laws off except `far_cap`, by the world's day (shots between 10:00 and 15:00 world time).
-- **Staging:**
+Kept from v1 §7 (shape, costs, the 2026-11-09 rule), with its role narrowed. **Jev never writes rules and never chooses an act.** It can do one of two things for a mind that has it switched on:
 
-  ```
-  battle_viewers.py --viewers 1 --fighters 200 --sides 2 --ring 26,26
-    --paused-placement --battle-after-placing --keep-alive 0.5
-    --seconds 600 --law far_cap=N
-  ```
+1. **Refresh `chosen`:** the v1 shape.
+   - **Request:** one `systemone` request per mind, only while more is in sight than its capacity, every 1–3 s.
+   - **State:** that mind's own current field, at most about 30 creatures, from `mind_attention_state`.
+   - **Questions:** from the mind's own cue texts, relations, stances and projects, plus "who here is about to matter to you?".
+   - **Answers:** `choice` over handles, written as `attend_pick` rows (source `jev`, weight = probability, 5 s life). The policy reads them only if it has a `chosen` rule; the instinct does, fourth.
+2. **Switch between the mind's own saved policies.**
+   - A mind may keep up to 4 named policies, like routines: "in a crowd", "on watch", "with my children". Its `attend` reply names them; storage is `attend_policy` keyed `(actor, name)` instead of `actor`.
+   - **Question:** one `choice` question, "which of your ways of keeping track fits what you perceive now?", picks the active one.
+   - **Cost:** one question, at most every 10 s, cheaper than option 1.
+   - It is untested; E3's (c) tests option 1 only.
 
-  - Use `--ring 10,10` for the "inside" row. Leave the law out for "off".
-  - `--sides 2` keeps residents alive (docs/BATTLE_LAWS.md §1).
-  - The one viewer is the game client's own player with its own identity, joined, then `place_at` the battle's centre (the arrival less 20 m, as `spawn_battle` takes it) plus 26 m (or 10 m) due south, facing north.
-- **Camera:** north-up (the default bearing), the play camera's own Middle and Far zoom bands (docs/CAMERA.md), no free camera, the battle's centre on the screen's vertical middle.
-- **Timing:** 20 s after `spawn_battle` (about 180 alive), paused for the shot (`set_paused true`). Each arm is its own run at the same moment of its own run, as BATTLE_LAWS' stills were.
-- **The mock crowd** (shots 2, 3, 6, 7, 10, 11):
-  - **Who:** while paused, read `body` positions as the owner and take every creature within the viewer's sight radius and field (from its `my_senses` row) that is not in `seen_bodies`. Cover is ignored in the mock; the JSON says so.
-  - **Cells:** bin them into **6 m** world-aligned cells, with each cell's count, centroid and spread.
-  - **How it is drawn:** `count` generic figures per cell, no nameplates, scattered in the cell's spread ellipse round its centroid, in a fighting idle when the cell's members are within 2 m of another fighter, else standing.
-  - **Second variant:** each cell as one translucent disc sized by count (BATTLE_LAWS' mock), as `-discs`, to judge which reads better.
-  - **Cell size:** additionally shot 3 at 4 m and 8 m cells (3a, 3b), to judge cell size by eye.
-- **Output:** 1920×1080 PNG, UI hidden except nameplates, named `attention-<middle|far|inside>-n<off|32|16>-<crowd|discs|nocrowd>[-4m|-8m].png`. Beside each, a JSON with:
-  - the world time, the fighters alive;
-  - `seen_bodies` count (individuals drawn);
-  - the crowd members and cells drawn, and the cell size;
-  - the `far_cap` value;
-  - the commit and module hash.
-- **What the owner judges:**
-  - **At Middle:** is one's own fight whole at 16, and does the crowd read as the rest of the battle?
-  - **At Far:** does the battle still look like 200 at 16 and 32, and do the figures or the discs read better?
-  - **Inside:** is a 16-place melee enough, with the rest as crowd figures within a few metres?
+**Load and cost** (v1 §7.5): about 2,400–2,700 input tokens a request; 20–60 calls a fighter-minute in a battle, about 0 in a town. A 200-fighter battle-hour is about 5–14 times the rethink gate's Jev use for 2,000 people for an hour. Latency p50 135–174 ms. TypeSafe's rate limits are not recorded in the repository.
 
-### 5.2 One fake-model battle: tick and delivery (once built)
+Jev bills input tokens only, and its price lives only in the local prices file. The plain policy (the instinct, plus the mind's own cues and rules) is the baseline Jev must beat in E3.
 
-On the Spark, after the law and `seen_crowd` are built behind the law (off by default):
+**The 2026-11-09 rule holds.** Jev is not real-time: it refreshes picks every 1–3 s, or switches a policy every 10 s or more. It shapes only who is perceived as an individual, through rules the mind wrote. Threats reach a policy that watches for them in the tick, without Jev.
 
-- **Server and lock.** Its own private SpacetimeDB 2.14.1 container, pinned to the X925 cores (5–9, 15–19), with `battle.lock` held: measurements keep the lock. Quiet start, and a redo only if the load exceeds 8.
-- **Fixture.** `battle_viewers.py` with 200 fighters in 2 sides, `--keep-fighters 1` (a sustained 200), the keep-alive, paused placement, the battle after placing, the copy tables on (the shipped defaults).
-- **Minds.** The fighters' minds on the mind service with verify-llm's fake model, including a fake Jev endpoint that answers attention questions. This needs a `--minds fake` option in `battle_viewers.py`, or `battle_diag.py`'s minded fighters with viewers added; whichever is smaller to build.
-- **Viewers:** 216 `gate-load` players on the 26–32 m ring, and 16 on the 10 m ring, subscribed to `seen_crowd` with the law on.
-- **Arms** (each a `law_override`, no reinstall): `attend_n` 0 (today), 16, 24, with 6 m cells, the crowd at 1 Hz and Jev attention off. One more arm: 16 with fake Jev on.
-- **Runs:** two per arm, interleaved; 20 s warm-up, a 60 s window; L0 and one L1 run of each.
-- **Measured:**
-  - ticks/s, late slots, the tick's p50/p99;
-  - database-thread CPU, views and subscription-evaluation CPU;
-  - **per viewer and per attended individual** (the 0-viewer arm subtracted): this gives i, s₁ and k for §3.2's formula;
-  - rows/s and kB/s per player by table, `seen_crowd` included;
-  - commitlog MB/s;
-  - near and far freshness (p50/p90/p95);
-  - promotions and demotions per viewer-second;
-  - **(a) latency:** from a windup aimed at a viewer to the attacker's first copy row (should be the same tick);
-  - WASM memory;
-  - the minds' prompt tokens (from the fake journals);
-  - fake Jev calls/s and in-flight count.
-- **Pass:** at 216 on the 26–32 m ring, 60 ticks/s with the whole tick call ≤ 600 ms/s at the chosen N; at 16 on the 10 m ring, no regression against `attend_n` 0. If it fails, the measured i says which N would pass.
+## 12. Questions for dev-box (E2)
 
-### 5.3 Verification plan
+v1 §3.5's nine questions stand: `perceived` as the attended set; the per-individual cost split near and far; promotion and demotion churn; crowd rows' budget; `seen_crowd`'s shape; the RLS publish window; projections for crowd members; the engagement set for AI viewers; `human_attend`'s shape. v2 adds two:
 
-Run the surfaces the change touches, and `maintain-verification-skill` on each in the same change, because tables, reducers, the mind protocol and UI controls change shape. Free tiers only.
+10. **Event-driven re-ranking in the tick.** The policy is re-evaluated for one (character, creature) pair when the frames mark that creature changed and it is in the character's sight. Is the frames' changed-set (`frame::moved`, `fought`, `did`, `hurt`) per tick the right hook, and is a per-pair check there affordable at 216 viewers × 200 in sight in a battle? *Assumed: yes, since only pairs with an event are checked, a few per creature a second.*
+11. **Variable capacity.** Copies per viewer now vary between characters and over time (a wound lowers capacity mid-fight, dropping copies). Is there any frame-budget assumption that the scene size changes only with sight? *Assumed: no; a capacity change is a batch of demotions, like creatures leaving sight.*
 
-| Surface | What it drives | New scenes or cases |
-|---|---|---|
-| verify-core | the law on a scratch world | `attention_slots`: engaged and addressing always in, past N; the near tier; (b) by a cue, a relation, family and a pin, with its line; (c) by salience; the hold time; `attend_n` 0 identical to main tick by tick (`det_compare`). `attention_ambush`: a fighter in a crowd winds up at a character whose places are full, and is attended in the same tick. `attention_fold`: crowd deeds fold into crowd lines, and the attended are named. Graphs: `count` counts the crowd, `nearest` stays attended |
-| verify-client | `seen_crowd`'s isolation | `crowd_tables.py`, on `cues.py` and `motion_tables.py`'s harness: A, B, C and anonymous; subscribe by name, subscribe-all, `SELECT * FROM *`, peeking by identity; the kill switch (law off: every crowd row gone in one tick). A negative build without the rule must fail. The gate case `crowd_tables`; `RLS_TABLES` and the owner guard in `drive.py`; `copy_privacy` at battle density with `--crowd` |
-| verify-player | `human_attend` | permissions (only one's own character), bounds (4 pins), rate limit, a pin promotes and a crowd click promotes, an aimed act at an unattended id refused with its reason |
-| verify-minds | the mind with the fake model | `attention-scene`: the scene lists the attended and crowd lines, and the prompt has no crowd ids. `attention-jev`: one request per mind with one state and its own questions, picks written through `mind_attend`, the authority not waiting (a slow fake Jev leaves the plain rule in force), no calls off stage or while C ≤ N |
-| verify-llm | the fake Jev endpoint | the attention purpose journaled, `cost_usd` null without a prices file, a timeout taking the fallback |
-| verify-knowledge | memory | a crowd member never becomes a person node; a promoted one does, from that line on; a crowd's deaths are recalled as crowd events |
-| verify-ui (laptop) | the client | the impostor crowd drawn from `seen_crowd`, click to promote, the reason marker, make-before-break when the law flips |
+## 13. Open questions
 
-## 6. Default, risks and the recommended N
+**For the owner:**
+1. Accept the attention policy and capacity law in place of the 2026-11-10 "no attention cap" ruling, and retire `far_cap`?
+2. The starting formula's numbers: person 10, wolf 8, deer 6; `watch` up to ×1.6; `keeping_watch` +4; tiredness and wounds ×0.6–0.8. These are seed content, to tune after E4.
+3. The crowd's look and cell size, after E1.
+4. Whether a player may later edit the rules themselves (a settings surface), or only pins and focus.
+5. Jev's second role (switching between saved policies): explore it after E3, or not at all?
 
-**Default: off** (`attend_n` 0). It goes on per world by its `law_override` row, first in a battle world after §5.2 passes, then in Cullet after a play-test. A new perception law in play is the owner's call.
-
-**Recommended: N = 16,** with `attend_chosen_max` 4, 6 m crowd cells at 1 Hz, at most 48 cells.
-- **Cost:** it is the only N in §3.2 that fits the per-viewer budget in the worst case (C ≈ 200 in sight), and then only after the planned exact steps.
-- **Prompts:** it keeps minds' prompts near today's 14.
-- **Melee:** it holds the engaged, up to 4 chosen, and about the 12 nearest in a melee.
-- **If §5.2 measures i at 30 µs/s or less,** 24 becomes affordable, and the stills say whether it is worth it.
-
-**Risks.**
-- **The cost model is an estimate.** If i stays near today's 120 µs/s, attention alone does not reach the contract at any N worth playing. The exact steps are a precondition, not an option.
-- **Players see fewer individuals.** Far individuals become crowd figures: no names, health or exact poses beyond N. A newcomer sees a battle as a crowd until they pick people out. The stills are there to judge this.
-- **A reversed ruling.** It reverses the owner's 2026-11-10 rule: crowd members get no first sights, no `familiar` rows and no named fight lines. Trials that counted first sights (docs/STRANGERS.md) are not comparable across the switch; every batch record must state it (as other switches are).
-- **Places churn.** Changes cost copies. The 1 s hold damps it; §5.2 counts it.
-- **RLS is experimental.** One more RLS table, with the copy tables' safeguards and a disconnect at publish.
-- **Behaviour changes for AI graphs.** `sees` and targets read only the attended. A graph that hunted the nearest wolf at 40 m with 30 people around would not see it unless it is salient (a wolf is) or chosen (a cue). `det_compare` proves "off equals main", not that every graph still does what its author meant; verify-core's scenes cover the common conditions.
-- **The Jev layer's load** (§7) is large in battles. It stays a separate switch, and the law works without it.
-
-## 7. Jev as the mind's attention layer
-
-The owner (2026-11-22): "this might be an interesting use of the decision models, you can put many queries in them to run in parallel on the same input that in this case would be what's visible to the player. we could extend the same to a more generalized layer of perception in the mind about attention. worth exploring imo". Design only.
-
-### 7.1 Shape
-
-**One TypeSafe `systemone` request per mind, never mixing minds.** It is MIND_HARNESS §6's batching: one state, many questions, requests concurrent, one in flight per mind, a newer state coalescing an unsent one.
-
-```json
-{"model": "jev-1.14.0",
- "state": {
-   "note": "Everything here is this character's own perception, ties and concerns.",
-   "you": {"doing": "fighting", "body": "hurt", "facing": "north"},
-   "your_people": [{"h": "c3", "tie": "your partner"}],
-   "your_concerns": ["the one who took my fish (watch: 'him, if he comes back')", "project: get the boat built"],
-   "attended": [{"h": "c1", "who": "a stranger", "form": "man", "dir": "north", "dist": "within reach", "visibly": "strike at you, recovering"}, "…"],
-   "also_in_sight": [{"h": "c17", "who": "Bram", "dir": "east", "dist": "a stone's throw", "visibly": "strike at c3, winding up"}, "…"],
-   "crowds": [{"dir": "northeast", "dist": "far", "about": 40, "visibly": "most fighting"}]
- },
- "questions": {
-   "q_cue_1": {"type": "choice", "instructions": "Who here, if anyone, is what you watch for: 'him, if he comes back'?", "options": ["c1", "…", "c22", "no one"]},
-   "q_people": {"type": "choice", "instructions": "Is anyone here acting on someone in `your_people`? Who?", "options": ["…", "no one"]},
-   "q_matter": {"type": "choice", "instructions": "Who here is about to matter to you?", "options": ["…", "no one"]}
- }}
-```
-
-- **The state is what this mind's character perceives now, and nothing else.**
-  - It comes from a new procedure `mind_attention_state(actor)`: returned to the controller alone and written nowhere, like `mind_reach`.
-  - It holds: the attended (≤ N); up to 8–14 unattended candidates it can make out, chosen by salience; its crowds; and its own ties and concerns, which the authority already holds (cues with their `why`, relations, family, community, projects as projected).
-  - Distances and counts are words, because Jev is weak at numbers (docs.typesafe.ai "model jaggedness"; MIND_HARNESS §6).
-  - About 30 creatures at most. Handles (`c1`…) are per request and are not ids the mind keeps.
-- **Questions are `choice` over the state's handles plus "no one".** The answer is a distribution. Picks are the handles at or above `jev.pick_above` (to be tuned in replay), up to the (b) quota.
-
-### 7.2 Where the questions come from
-
-**The mind's own content, in one neutral frame.** We write no tactic or role question.
-- **Each cue's `why`** (the mind's words, ≤ 160 characters; docs/ATTENTION.md). Wrapped as "Who here, if anyone, is what you watch for: '<why>'?". This extends cues past their typed fields: "someone carrying fish" cannot be typed, but Jev can read it against what is visibly going on. A cue's typed match stays the authority's exact rule and is not re-asked.
-- **Relations and family:** "Is anyone here acting on someone in `your_people`? Who?". It is a question about the character's own ties, and it names no deed to look for.
-- **Stances and projects, by their own text:** "Who here, if anyone, bears on this: '<the stance or project in the mind's words>'?". At most 3, the newest.
-- **One general question the rules cannot answer by distance:** "Who here is about to matter to you?". Novelty, approach and fighting are already (c)'s, so no general question repeats them.
-
-**What earlier work settled and this keeps.**
-- **docs/ATTENTION.md:**
-  - cues are typed, at most 8, each serving a stance, project or goal;
-  - the prompt's examples name no one, tested by `cue_examples_name_no_one`;
-  - a cue's `why` is quoted verbatim;
-  - a played character keeps no cues.
-
-  Jev questions inherit all of it: they exist only where a mind wrote a concern, and a played character gets none.
-- **docs/JEV_BEHAVIOR_RESEARCH.md:**
-  - questions stay tied to the character's goals and experience, so actors do not become one prescribed fighter;
-  - no waiting inside a guard;
-  - one shared context per actor, never several actors in one prompt;
-  - pending, valid, expired and failed are distinct states;
-  - answers bind to actor, revision and snapshot time, and stale or out-of-order answers are rejected;
-  - one active batch per actor, with newer snapshots coalesced;
-  - no claimed joint probabilities.
-
-  Here: choice questions are independent, and their picks fill places; they are not multiplied into anything.
-
-### 7.3 What the answers do
-
-- **They fill slot class (b) for minds as cached rows, never waited on.**
-  - The mind writes picks through a new reducer `mind_attend(actor, picks)`, only the controller may call it, as `mind_judged`.
-  - The picks become `attend_choice` rows with source Jev, the answer's probability as weight, and `until_ms` = the snapshot time + 5 s.
-  - At each slot the authority reads them by `actor` with the plain rule's (b): exact cue matches first, then Jev picks by weight, then ties.
-  - Expired, missing or failed answers leave the plain rule in force. The tick never waits for Jev; nothing is asked from inside a reducer.
-- **Beyond battle (design only):**
-  - **Which percepts are worth a thought.** A percept involving a Jev pick passes the rethink gate as cues' reasons do (`rethink.json` `urgent`), so attention and the gate agree on what matters. That reuses the gate's state and adds no question.
-  - **Memory salience.** Experiences involving people a mind attended by choice ((b), not just (a) or (c)) are weighted up at consolidation. A consolidation-time question ("which of these will you remember") would be a separate experiment.
-
-### 7.4 It stays within the 2026-11-09 rule
-
-The owner decided on 2026-11-09 that Jev is not real-time and never drives moment-to-moment choices (MIND_HARNESS §6). Attention stays inside that rule:
-- **The cadence is slow.** It refreshes every 1–3 s, not per tick.
-- **It shapes only who is perceived as an individual, never what is done.** It picks no act, branch, target or timing.
-- **Every threat is outside its reach.** Threats, address and the near tier are the authority's (a), the same tick.
-- **The one indirect effect is bounded and the same for players.** A graph can only target the attended, so Jev can change which *far* individual a graph could take, through at most the (b) quota. A player's attention picks do the same for a player's command graph.
-
-### 7.5 Cost and load
-
-| | Town (Cullet, a mind on stage) | 200-fighter battle |
-|---|---|---|
-| Creatures in sight | about 6–7 mean, 16 max (docs/ATTENTION.md, Cullet's daily life) | p50 57, p90 169 within 48 m (§3.3, distance only) |
-| When it calls | only while C > N (markets, gatherings), on a change of candidates, at most every 3 s, and at least every 30 s while it lasts | while C > N (most fighters), every 1–3 s |
-| Off stage (LOD: no player in the scene, docs/MIND_HARNESS.md §1) | 0 | 0 (a battle with players is on stage) |
-| Calls per character-minute | ≈ 0 on most days, ≤ 2 in a crowd | 20–60 |
-| Input tokens per request | about 2,400–2,700 (2,700 used for sizing): a 30-creature state at about 120 characters an entry (`attention_density.py`: p50 117, p90 144 over 19,524 battle-scene entries), about 1,500 characters of self, ties, concerns and crowds, and 4–6 questions of about 400 characters, at about 0.33–0.4 tokens a character (the gate's replay journals: tokens ≈ 0.33 × state characters plus the questions, so the state is counted once a request, not once a question) | the same |
-| Input tokens per character-hour | ≈ 0 – 0.3 M | 3.2–9.7 M |
-| Against the rethink gate (about 47 calls × 1,500 tokens ≈ 70k tokens per person-hour, MIND_HARNESS §6) | ≤ 5× | 45–140× per character |
-| A whole battle-hour | – | 0.65–1.9 G tokens: **about 5–14 times the rethink gate for 2,000 people for an hour** |
-| Requests a second, 200 characters | ≈ 0 | 67–200 |
-| Latency (p50 / p95) | 136–174 / 174–240 ms (dev-box, `judged_fight.py`); 135 / 171 ms (rethink replay); 138 / 202 ms (gate-quality replay, read here) | the same; the answer's age when used is latency plus half the period, about 0.6–1.7 s, well inside its 5 s life |
-
-- **Price.** Jev bills input tokens only. Its price is not committed; multiply these token counts by the price in the local prices file (`LIVING_PRICES`, `living/configs/prices.local.json` or `~/.config/slop-living/prices.local.json`; shape in `living/configs/prices.example.json`). Journals record `cost_usd` from it, or null without it.
-- **Throughput.** TypeSafe's rate and concurrency limits are not recorded in this repository. MIND_HARNESS §6 sized the gate at 2,000 people as 26 requests a second "on TypeSafe's rate limits"; one battle with attention is 67–200. In-flight load is modest: at about 150 ms a call and a period of 1 s or more, 200 minds need about 30 requests in flight. Before any live battle with Jev attention, ask the provider for the limits, and size the cadence to them (3 s halves the load against 1.5 s).
-- **Levers, in order:** call only while C > N; skip a refresh when the candidates did not change; a longer period; fewer candidates in the state (8 instead of 14 saves about 10% of the tokens).
-
-### 7.6 Players
-
-A player's (b) comes from the player's own input: target, focus, hover, pins and the client's crowd clicks, through `human_attend`. **Never from a model.** It is the same rule with a different controller, as cues are for minds and not for played characters.
-
-### 7.7 Test: replay first, then a small paid trial
-
-Use the `rethink-replay` pattern (`living-mind rethink-replay`, MIND_HARNESS §6), as `fast-replay` did on `battle-frame`.
-
-1. **`living-mind attention-replay --arm rule|jev --n 16 --out FILE RUN_DIR…`** rebuilds each mind's field at 1 Hz from saved runs:
-   - positions from `combat-samples.jsonl.gz` (sight approximated by distance and facing; cover ignored, and said so);
-   - ties from `mind_rows`;
-   - cues from the saved `cue` rows.
-
-   Inputs: the act trial's battle (`minds-atb1-off/on`, 200 real minds), and a town run with a crowd (a market or arrival scene from the strangers trials).
-2. **Three pickers on the same fields:**
-   - **distance:** (a) and nearest, `far_cap`'s rule;
-   - **rule:** (a), cues and named people, then salience;
-   - **Jev:** the rule, with Jev's picks in (b).
-3. **Scored against what the mind actually acted on:** the creatures named by its acts (`act_attempts.jsonl`), its skill uses (`skill-uses.json`), its speech and its compiled graphs' targets within the next 10–30 s. Reported:
-   - the share of those already attended at decision time (recall at N);
-   - how much (b) changed it;
-   - churn per minute.
-
-   A blind check on a sample: is the pick "someone this character would plausibly keep track of", given its ties and concerns?
-4. **Free first:** prompts only (token counts per request, the state's size at 30 creatures), and the fake Jev through the call path.
-5. **The paid part only after the general coordinator approves:** a few hundred states (for example 300 from the battle and 200 from the town), each journaled, with a spend watcher. **The plain rule is the baseline Jev must beat** on recall at N with no more churn. If it does not, attention stays on the plain rule, and Jev keeps its place at the rethink gate.
-
-## 8. Open decisions for the owner
-
-1. **Replace the 2026-11-10 "no attention cap" ruling with this law** (the same for players and minds), and retire `far_cap`?
-2. **N:** recommended 16, judged on the stills (§5.1) and the fake-model battle (§5.2); 24 if the measured cost allows.
-3. **The crowd's look:** impostor figures or discs; 6 m or 4 m cells.
-4. **Memory semantics:** crowd members get no first sight, no `familiar` row and no named fight line, only crowd lines. Accept this, given that trials across the switch are not comparable?
-5. **Players' choice:** clicking a crowd figure promotes it, pins (up to 4) stand in for a mind's relations, and the community stands in for a party. Is that the player's side of (b)?
-6. **Jev attention:** explore it through replay (free), then a small paid replay after the coordinator's approval. Any live battle use waits on the provider's limits and the owner's word on spend at scale.
+**For the general coordinator:**
+1. E3's sub-caps ($4 for (b), $5 for (c), $3 reserve).
+2. Whether E3's (b) should use DeepSeek V4.1 Flash (the battle's think route) or the subject's own recorded route.
+3. The go for the §8.4 builds before E3 and E4 (Opus, by AGENTS.md's routing).
 
 ## Evidence
 
-- `living/tools/attention_density.py` (this branch) on `act-trial-20261121.tar.zst`, run `minds-atb1-off-055246` (copied out of `~/slop-evidence` to the scratchpad; read-only, pinned to CPUs 0–4 and 10–14): every density, cell and scene figure in §3.2–§3.3 and §7.5.
-- `~/slop-evidence/gate-quality-20261112/out/replay-*-jev.journal` (read-only): Jev tokens against state size (1,198 rethink requests: tokens ≈ 0.33 × state characters + a constant; p50 1,555 tokens; latency p50 138 ms, p95 202 ms).
-- Measured costs quoted from docs/COMBAT_PHASE.md, docs/BATTLE_LAWS.md, docs/BATTLE_VIEWERS.md, docs/ATTENTION.md, docs/MIND_HARNESS.md; code read at `origin/main` `8384dc77` (`perception.rs` `sweep_one` and `far_cap`, `frame.rs` `NEAR_MAX` and `engaged_of`, `perceive.rs` `scene_json`, `brain.rs` `noticed`, `attention.rs`, `mind.rs` `mind_reach`).
+- v1 (`a6375a70`): the density, cell and scene figures (`living/tools/attention_density.py` on the act trial's battle), the Jev token figures (the gate-quality replay journals) and the cost inputs (docs/COMBAT_PHASE.md, docs/BATTLE_LAWS.md, docs/BATTLE_VIEWERS.md). No evidence was read for v2.
+- Code read at `origin/main` `a6375a70`:
+  - `living/rules/src/graph.rs`: `Cond`, `Filter`, `Target`, `DoingCond`;
+  - `living/seeds/instincts.json`;
+  - `living/authority/src/tables.rs`: `routine`, `brain`, `judged`, `cue`;
+  - `living/authority/src/mind.rs`: `MindUpdate`, `mind_reach`;
+  - `living/mind/src/prompts.rs`: `notice_field`;
+  - `living/rules/src/script/context.rs`: `ACTOR`;
+  - `living/rules/src/genes.rs`: knack and practice;
+  - `living/scripts/skills.rhai`: `senses`, `senses_law`, `pools`, `appraise`, `attack_done`;
+  - `living/tools/act_trial.py` (`PRICES`), `pack_arena.py`, `battle_diag.py`.
+- The E3 Jev volume (about 1,500 requests at about 2,700 tokens) was checked against its $5 sub-cap with the local prices file without printing the price: it fits.
