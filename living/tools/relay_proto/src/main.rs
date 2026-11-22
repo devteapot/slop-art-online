@@ -652,6 +652,10 @@ fn perc_mode(req: Value) {
     let (uri, db, token) = (req["uri"].as_str().unwrap(), req["db"].as_str().unwrap(), req["token"].as_str().unwrap());
     let out = req["out"].as_str().expect("out").to_string();
     let (keep_n, cap, reach) = (req["keep_n"].as_u64().unwrap_or(24) as usize, req["cap"].as_u64().unwrap_or(16) as usize, req["reach_m"].as_f64().unwrap_or(25.0) as f32);
+    // Extra churn, to match heed's measured turnover: per viewer and round, this share of rounds
+    // swaps the farthest member for the nearest non-member (a deterministic stride, not random).
+    let swap = req["swap"].as_f64().unwrap_or(0.0);
+    let mut swap_acc = 0.0f64;
     let stop = stop_flag();
     let bodies: Arc<Mutex<HashMap<u32, Body>>> = Arc::default();
     let players: Arc<Mutex<HashMap<Identity, u32>>> = Arc::default();
@@ -717,6 +721,16 @@ fn perc_mode(req: Value) {
                     }
                     if !new.contains(id) {
                         new.push(*id);
+                    }
+                }
+                swap_acc += swap;
+                if swap_acc >= 1.0 && new.len() >= cap {
+                    swap_acc -= 1.0;
+                    if let Some((_, out_id)) = near.iter().rev().find(|(_, id)| new.contains(id)).copied() {
+                        if let Some((_, in_id)) = near.iter().find(|(_, id)| !new.contains(id) && !old.contains(id)).copied() {
+                            new.retain(|x| *x != out_id);
+                            new.push(in_id);
+                        }
                     }
                 }
                 let add: Vec<u32> = new.iter().copied().filter(|id| !old.contains(id)).collect();

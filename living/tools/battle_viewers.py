@@ -479,7 +479,7 @@ def one(a, n, out):
             # PERCEPTION_OFF_THREAD (perc-offthread): the off-thread perception stand-in (set the
             # perc_external law), an owner connection applying sets through `perc_apply`.
             perc_p = lc.Proc([a.relay, "perc"], out / "perc.stderr")
-            perc_p.send(json.dumps({"uri": lc.URL, "db": db, "token": token, "out": str(out / "perc.json"), "cap": a.perc_cap, "keep_n": a.perc_keep}))
+            perc_p.send(json.dumps({"uri": lc.URL, "db": db, "token": token, "out": str(out / "perc.json"), "cap": a.perc_cap, "keep_n": a.perc_keep, "swap": a.perc_swap}))
             perc_p.expect("perc up", 120)
         if a.paused_placement and n:
             # The Spark's procedure: paused while the viewers join and are placed, unpaused at `ready`.
@@ -840,6 +840,7 @@ def main():
     ap.add_argument("--relay", default="", help="RELAY_PROTOTYPE (relay-proto): the relay_proto binary; runs the relay, the privacy checker and one relay client per viewer (set the relay_on law)")
     ap.add_argument("--perc", action="store_true", help="PERCEPTION_OFF_THREAD (perc-offthread): with --relay, also run the off-thread perception stand-in (set perc_external)")
     ap.add_argument("--perc-cap", type=int, default=11, help="the stand-in's set size (heed at 16 attends about 10.6 at contract density)")
+    ap.add_argument("--perc-swap", type=float, default=0.0, help="the stand-in's extra churn: the share of viewer rounds that swap one member")
     ap.add_argument("--perc-keep", type=int, default=12, help="the stand-in keeps a member while it stays within this many nearest (sets the churn)")
     ap.add_argument("--relay-broken", action="store_true", help="the relay applies a transaction's state before its set changes (the privacy probe's known answer)")
     ap.add_argument("--relay-port", type=int, default=3391)
