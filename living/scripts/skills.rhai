@@ -134,16 +134,17 @@ fn laws() {
         // A diagnostic, off in play: each deliberate act's course is logged (docs/INPUT_LATENCY.md).
         latency_acts: false,
         // Whether a mind's deliberate acts replace the act in progress as a player's command does
-        // (docs/INPUT_LATENCY.md, "Mind acts replace"). Off: they wait for it to end, as before.
-        mind_act_replaces: false,
+        // (docs/INPUT_LATENCY.md, "Mind acts replace"); on by default since 2026-11-22, the
+        // owner's decision. Off: they wait for it to end, as before.
+        mind_act_replaces: true,
         // A replacing act (a player's, or a mind's under the law above) is checked before what is
         // under way is broken off; each act costs an input as moving does; a walk given up for
-        // another is noticed; the same act again starts over (docs/INPUT_LATENCY.md,
-        // "Act replacement gaps").
+        // another is noticed; the same act again goes on instead of starting over (on by default
+        // since 2026-11-22, the owner's decision) (docs/INPUT_LATENCY.md, "Act replacement gaps").
         act_replace_checks: true,
         act_input_cost: true,
         act_turned_back: true,
-        act_same_continues: false,
+        act_same_continues: true,
         // How a fighter's work is done (docs/BATTLE_SCALE.md, battle-cheap), none of it changing what
         // anyone perceives or does: a move's check before it starts given only the fields it reads;
         // the body's alarms answered from the last answer while no field crosses one of their

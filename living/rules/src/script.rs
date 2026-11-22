@@ -677,7 +677,8 @@ pub struct Laws {
     /// progress as a player's command does (`human_act`): what was waiting is dropped and the act
     /// under way is broken off, unless it is a committed move (docs/INPUT_LATENCY.md, "Mind acts
     /// replace"). Only a batch with at least one act for the body replaces (a gaze change alone
-    /// does not). Off: a mind's acts wait for the act in progress to end, as before.
+    /// does not). On by default since 2026-11-22 (the owner's decision). Off: a mind's acts wait
+    /// for the act in progress to end, as before.
     pub mind_act_replaces: bool,
     /// A replacing act (a player's `human_act`; a mind's under `mind_act_replaces`) is checked
     /// before the act in progress is broken off: `act::begin` meets the act under way as it meets
@@ -693,7 +694,8 @@ pub struct Laws {
     /// thought). Needs `act_replace_checks`. Off: a replacing act's walks are not counted.
     pub act_turned_back: bool,
     /// The same act again (skill, target, item, amount, words) while it runs continues it instead
-    /// of starting it over (a held movement's time is renewed). Needs `act_replace_checks`.
+    /// of starting it over (a held movement's time is renewed). Needs `act_replace_checks`. On by
+    /// default since 2026-11-22 (the owner's decision).
     pub act_same_continues: bool,
     /// A move's check before it starts is given a context of the fields the check reads alone
     /// (its plan; docs/BATTLE_SCALE.md, battle-cheap path 1): the same answer, without gathering
@@ -920,11 +922,11 @@ impl Default for Laws {
             latency_nav_from: 0,
             latency_fast: false,
             latency_acts: false,
-            mind_act_replaces: false,
+            mind_act_replaces: true,
             act_replace_checks: true,
             act_input_cost: true,
             act_turned_back: true,
-            act_same_continues: false,
+            act_same_continues: true,
             check_ctx_plan: true,
             check_ctx_check: false,
             alarm_cells: true,
@@ -4412,8 +4414,10 @@ mod tests {
         assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
         assert!(!l.sweep_keep_memory && !l.sweep_keep_check, "sweeps read heard rows and health afresh by default");
         assert!(l.fighter_bystander_wakes, "a fighter is woken as any bystander by default (docs/COMBAT_PHASE.md)");
-        assert!(!l.mind_act_replaces && !l.latency_acts, "a mind's acts wait for the act in progress, unlogged, by default (docs/INPUT_LATENCY.md)");
-        assert!(l.act_replace_checks && l.act_input_cost && l.act_turned_back && !l.act_same_continues, "a replacing act is checked first, costs an input and is counted for turning back; the same act again restarts (docs/INPUT_LATENCY.md)");
+        assert!(l.mind_act_replaces && !l.latency_acts, "a mind's acts replace the act in progress, unlogged, by default since 2026-11-22 (docs/INPUT_LATENCY.md)");
+        assert!(l.act_replace_checks && l.act_input_cost && l.act_turned_back && l.act_same_continues, "a replacing act is checked first, costs an input and is counted for turning back; the same act again goes on (docs/INPUT_LATENCY.md)");
+        let d = Laws::default();
+        assert_eq!((d.mind_act_replaces, d.act_same_continues), (l.mind_act_replaces, l.act_same_continues), "Laws::default and the shipped script agree");
         assert_eq!((l.combat_eval_hz, l.combat_every_ticks()), (15.0, 4), "fighters evaluated every 4th tick by default");
         assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
         assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");
