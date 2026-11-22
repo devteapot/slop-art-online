@@ -27,7 +27,8 @@
 //! contact mark lapses within `heed_contact_s`. A fresh instance starts with no set: each reader
 //! asks for a pass. Nothing here is written to a table.
 //!
-//! **Instrumentation (E4).** For a character with a mind (`character.ai`), each windup aimed at it
+//! **Instrumentation (E4).** With the diagnostic law `heed_trace` on (off in play), for a character
+//! with a mind (`character.ai`), each windup aimed at it
 //! and each blow that reaches it is logged (`heed windup …`, `heed blow …`), with whether its maker
 //! was an individual to it when the windup began, and each full pass (`heed pass …`: capacity,
 //! health, how many it sees, how many places its rules filled). A blow whose maker made contact within the window before the windup began and
@@ -278,7 +279,7 @@ pub fn pass(ctx: &ReducerContext, me: &Character, at: (f32, f32), seen: &[NearCr
     common::diag(|| "heed:passes", 1);
     common::diag(|| "heed:in_sight", seen.len() as u64);
     common::diag(|| "heed:picked", picks.len() as u64);
-    if me.ai {
+    if me.ai && common::laws(ctx).heed_trace {
         // E4: every pass of a character with a mind (about one a second): its capacity, health,
         // how many it sees and how many places its rules filled, and the forced ones.
         let hp = ctx.db.vitals().id().find(me.id).map(|v| common::needs(&v, now).hp / v.max_hp.max(1.0)).unwrap_or(0.0);
@@ -413,7 +414,7 @@ pub fn windup(ctx: &ReducerContext, attacker: u32, victim: u32, now: u64) {
         // repeated blow). Kept as an error line, counted by the E4 report.
         log::error!("heed invariant: windup by #{attacker} at #{victim} after contact within the window, yet not an individual");
     }
-    if vc.ai {
+    if vc.ai && common::laws(ctx).heed_trace {
         let cap = HEED.with(|m| m.borrow().get(&victim).map_or(0, |s| s.capacity));
         log::info!("heed windup a={attacker} v={victim} seen={} heeded={} contact={} cap={cap}", seen as u8, heeded as u8, contact as u8);
         WINDUPS.with(|w| w.borrow_mut().insert((attacker, victim), Windup { at_ms: now, seen, heeded, contact }));
@@ -448,7 +449,7 @@ pub fn contact(ctx: &ReducerContext, attacker: u32, victim: u32, outcome: &str, 
             s.since.entry(attacker).or_insert(now);
         }
     });
-    if !vc.ai {
+    if !vc.ai || !common::laws(ctx).heed_trace {
         return;
     }
     let first = before.map_or(true, |t| now.saturating_sub(t) > ENGAGEMENT_MS);

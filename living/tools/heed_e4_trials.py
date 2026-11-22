@@ -82,7 +82,7 @@ def capped(n):
 
 
 def variants():
-    on = {"heed_on": True, "heed_ceiling": 32}
+    on = {"heed_on": True, "heed_ceiling": 32, "heed_trace": True}
     v = {"heed-off": {"about": "E4 control: the heed law off (as shipped): everyone in sight is an individual.", "models": {}, "env": {}},
          "heed-formula": {"about": "E4: heed on, every character on the shipped heed_capacity formula, ceiling 32.", "models": {}, "env": {}, "world_laws": on}}
     for n in (4, 8, 16, 32):

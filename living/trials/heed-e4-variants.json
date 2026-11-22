@@ -10,7 +10,8 @@
   "env": {},
   "world_laws": {
    "heed_on": true,
-   "heed_ceiling": 32
+   "heed_ceiling": 32,
+   "heed_trace": true
   }
  },
  "heed-cap4": {
@@ -19,7 +20,8 @@
   "env": {},
   "world_laws": {
    "heed_on": true,
-   "heed_ceiling": 32
+   "heed_ceiling": 32,
+   "heed_trace": true
   },
   "skills_patch": {
    "people_capacity": [
@@ -34,7 +36,8 @@
   "env": {},
   "world_laws": {
    "heed_on": true,
-   "heed_ceiling": 32
+   "heed_ceiling": 32,
+   "heed_trace": true
   },
   "skills_patch": {
    "people_capacity": [
@@ -49,7 +52,8 @@
   "env": {},
   "world_laws": {
    "heed_on": true,
-   "heed_ceiling": 32
+   "heed_ceiling": 32,
+   "heed_trace": true
   },
   "skills_patch": {
    "people_capacity": [
@@ -64,7 +68,8 @@
   "env": {},
   "world_laws": {
    "heed_on": true,
-   "heed_ceiling": 32
+   "heed_ceiling": 32,
+   "heed_trace": true
   },
   "skills_patch": {
    "people_capacity": [

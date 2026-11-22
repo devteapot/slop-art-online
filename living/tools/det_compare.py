@@ -3,7 +3,7 @@
 "Step 3 results"). Python standard library and docker.
 
     det_compare.py prepare --container A --url http://127.0.0.1:PA --volume VOL_A --wasm-dir DIR \
-                   --base BASE.wasm --template TEMPLATE_VOLUME [--fighters 200] [--ticks 3600]
+                   --base BASE.wasm --template TEMPLATE_VOLUME [--fighters 200] [--ticks 3600] [--arena pack]
     det_compare.py delete --container A --db verify-det-<stamp>
     det_compare.py run --template TEMPLATE_VOLUME --wasm-dir DIR --base BASE.wasm \
                    --candidate CAND.wasm --ports PX,PY --out DIR
@@ -290,6 +290,36 @@ def copy_volume(src, dst):
     subprocess.run(["docker", "run", "--rm", "--user", "0", "-v", f"{src}:/from:ro", "-v", f"{dst}:/to", "--entrypoint", "sh", IMAGE, "-c", "cp -a /from/. /to/"], check=True, timeout=1800)
 
 
+def stage_pack_arena(A, db):
+    """E4's pack arena (living/tools/heed_e4_trials.py) staged on a paused island world for an
+    exact comparison: the 6 adult wolves nearest the arrival made bold on their shipped instinct,
+    the 6 adult people nearest them placed 9 m east with a spear each on spawn_battle's combat
+    graph aimed at wolves (dodge and block alternating), the wolves then spread 15-35 m west of
+    them, as the trial places them. No mind runs: the people's graphs act alone."""
+    import heed_e4_trials as fx
+    land = A.sql(db, "SELECT * FROM land")
+    arrive = (land[0]["arrive_x"], land[0]["arrive_y"]) if land else (128.0, 128.0)
+    bodies = {b["id"]: b for b in A.sql(db, "SELECT id, x, y FROM body")}
+    chars = [c for c in A.sql(db, "SELECT id, kind, stage, alive FROM character") if c["alive"] and c["stage"] == 2 and c["id"] in bodies]
+    near = lambda c, p: (bodies[c["id"]]["x"] - p[0]) ** 2 + (bodies[c["id"]]["y"] - p[1]) ** 2
+    wolves = sorted((c for c in chars if c["kind"] == "wolf"), key=lambda c: near(c, arrive))[:6]
+    centre = (sum(bodies[w["id"]]["x"] for w in wolves) / len(wolves), sum(bodies[w["id"]]["y"] for w in wolves) / len(wolves))
+    people = sorted((c for c in chars if c["kind"] == "person"), key=lambda c: near(c, centre))[:6]
+    graphs = json.loads((Path(__file__).resolve().parents[2] / "living/seeds/instincts.json").read_text())
+    here = (centre[0] + 9.0, centre[1])
+    for i, p in enumerate(people):
+        dx, dy = fx.PEOPLE_SPREAD[i % len(fx.PEOPLE_SPREAD)]
+        A.call(db, "place_at", [p["id"], here[0] + dx, here[1] + dy])
+        A.call(db, "grant_items", [p["id"], "spear", 1])
+        A.call(db, "set_behavior", [p["id"], json.dumps(fx.fighter("dodge" if i % 2 == 0 else "block"))])
+    for i, w in enumerate(wolves):
+        dx, dy = fx.WOLF_SPREAD[i % len(fx.WOLF_SPREAD)]
+        A.call(db, "place_at", [w["id"], here[0] + dx, here[1] + dy])
+        A.call(db, "set_background", [w["id"], json.dumps({"pack": "the arena pack", "bold": True}, separators=(",", ":"))])
+        A.call(db, "set_behavior", [w["id"], json.dumps(graphs["wolf_bold"])])
+    print(f"det_compare: pack arena staged: wolves {[w['id'] for w in wolves]}, people {[p['id'] for p in people]} at {here}", flush=True)
+
+
 def prepare(a):
     import genesis_wait
     A = Server(a.container, a.url)
@@ -307,7 +337,10 @@ def prepare(a):
                 raise
             time.sleep(5)
     A.call(db, "set_paused", [True])
-    A.call(db, "spawn_battle", [a.fighters])
+    if a.arena == "pack":
+        stage_pack_arena(A, db)
+    else:
+        A.call(db, "spawn_battle", [a.fighters])
     if a.players:
         # Players watching (exact items): `a.players` fresh identities joined over HTTP (no
         # connection: their characters are human by controller, so the sweeps and frames run for
@@ -333,7 +366,7 @@ def prepare(a):
     t0 = A.sql(db, "SELECT tick FROM clock")[0]["tick"]
     A.call(db, "set_world_law", ["det_clock", "true"])
     A.call(db, "set_world_law", ["det_stop", str(float(t0 + a.ticks))])
-    meta = {"db": db, "start_tick": t0, "stop_tick": t0 + a.ticks, "fighters": a.fighters, "players": a.players, "ring": a.ring, "ticks": a.ticks, "replica": A.newest_replica(), "made_with": a.base}
+    meta = {"db": db, "arena": a.arena, "start_tick": t0, "stop_tick": t0 + a.ticks, "fighters": a.fighters, "players": a.players, "ring": a.ring, "ticks": a.ticks, "replica": A.newest_replica(), "made_with": a.base}
     print(f"det_compare: {db} paused at tick {t0}, battle of {a.fighters}, stop at {t0 + a.ticks}", flush=True)
     subprocess.run(["docker", "kill", "-s", "INT", a.container], check=True, capture_output=True)
     subprocess.run(["docker", "wait", a.container], check=True, capture_output=True, timeout=300)
@@ -478,6 +511,7 @@ def main():
     ap.add_argument("--base")
     ap.add_argument("--candidate")
     ap.add_argument("--fighters", type=int, default=200)
+    ap.add_argument("--arena", choices=["battle", "pack"], default="battle", help="prepare: spawn_battle's battle (default), or E4's pack arena on an island module")
     ap.add_argument("--ticks", type=int, default=3600)
     ap.add_argument("--players", type=int, default=0, help="prepare: players joined (no connection) and placed on --ring round the battle (exact items)")
     ap.add_argument("--ring", default="10,10", help="prepare: the players' ring LO,HI m from the battle's centre")

@@ -7983,8 +7983,9 @@ def heed(s):
     - **Forced contact, O's capacity 0, S's 2:** S strikes O twice. O guards whenever it is
       `threatened`. Off: the first windup is seen and blocked. On: the first is from S in O's
       throng: not foreseen, it lands; the blow is contact, so S is an individual for
-      `heed_contact_s` and the second windup is seen and blocked. The module log says so
-      (`heed blow … heeded_at_windup=0`, then `=1`) and holds no `heed invariant` line.
+      `heed_contact_s` and the second windup is seen and blocked. The module log (the diagnostic
+      law `heed_trace` on) says so (`heed blow … heeded_at_windup=0`, then `=1`) and holds no
+      `heed invariant` line.
     - **Lines name no throng member (W's capacity 0):** W's fight line for the strike and the line
       it hears O say are "someone in the throng", with no id; off, they name them.
 
@@ -8083,7 +8084,8 @@ def heed(s):
         s.expect("on: no throng member's id appears in the scene", not any(re.search(rf'"id":\s*{c}\b|#{c}\b', text) for c in hidden), hidden)
         s.expect("on: no player in the throng, so no level-of-detail mark", "_stage" not in scene, list(scene))
 
-        # Forced contact. Off first (the control), then on.
+        # Forced contact. Off first (the control), then on, with the E4 diagnostic lines logged.
+        set_law(s, "heed_trace", True)
         set_law(s, "heed_on", False)
         caps(o=0, S=2, W=0)
         off, seen_off = duel("off")
@@ -8107,6 +8109,7 @@ def heed(s):
         s.expect("no invisible repeated blow (no `heed invariant` line)", "heed invariant" not in logs, [l for l in logs.splitlines() if "heed invariant" in l][:5])
     finally:
         set_law(s, "heed_on", False, check=False)
+        set_law(s, "heed_trace", False, check=False)
         s.call("install_script", shipped, check=False)
         off_the_line(s, line, [o, S, W, *crowd], dy=48)
 
