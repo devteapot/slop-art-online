@@ -7659,11 +7659,12 @@ SCENES["seen_remains_gaze"] = seen_remains_gaze
 
 def act_replace(s):
     """A mind's act under way and the next one it decides (docs/INPUT_LATENCY.md, "Mind acts
-    replace"; features/acts.md). With `mind_act_replaces` off (as shipped) the next waits in
+    replace"; features/acts.md). With `mind_act_replaces` off (the control; on as shipped since
+    2026-11-22) the next waits in
     `act_queue` for the walk under way to end. On, it replaces the walk as a player's command does
     (`acts::submit_player`): the walk is broken off with no outcome told, what waited is dropped,
     and the new act starts in the same transaction. A gaze change alone, or an act that cannot be
-    read, replaces nothing. The law is set back off at the end."""
+    read, replaces nothing. The law is set back to its shipped value (on) at the end."""
     a, = s.people(1)
     line = open_line(s, 30)
     start, far, back = line[0], line[-1], line[14]
@@ -7705,7 +7706,7 @@ def act_replace(s):
     s.act(a, {"do": "no_such_skill"})
     now = doing()
     s.expect("on: a gaze change or an unreadable act replaces nothing", now and now["started_ms"] == under_way["started_ms"], {"under_way": under_way, "now": now})
-    set_law(s, "mind_act_replaces", False)
+    set_law(s, "mind_act_replaces", True)
     s.graph(a, {"wait": 120})
 
 
@@ -7724,7 +7725,7 @@ def act_gaps(s):
        with nothing written; a second later acts go through again; off, all 40 go through.
     3. `act_turned_back`: seven walks each given up within 3 s for another the other way are
        noticed; the sixth in 20 s is told, "You keep turning back and forth"; off, nothing is told.
-    4. `act_same_continues` (off as shipped): the same walk again while it runs goes on (its start
+    4. `act_same_continues` (on as shipped since 2026-11-22): the same walk again while it runs goes on (its start
        unchanged); off, it starts over.
 
     `mind_act_replaces` is on for the scene; every law is set back at the end."""
@@ -7812,9 +7813,9 @@ def act_gaps(s):
             if same:
                 s.expect("same continues on: the same walk again goes on (its start unchanged)", now and now["started_ms"] == first["started_ms"], {"first": first, "now": now})
             else:
-                s.expect("same continues off (as shipped): the same walk again starts over", now and now["started_ms"] != first["started_ms"] and now["skill"] == "goto", {"first": first, "now": now})
+                s.expect("same continues off (control): the same walk again starts over", now and now["started_ms"] != first["started_ms"] and now["skill"] == "goto", {"first": first, "now": now})
     finally:
-        for law, value in (("mind_act_replaces", False), ("act_replace_checks", True), ("act_input_cost", True), ("act_turned_back", True), ("act_same_continues", False)):
+        for law, value in (("mind_act_replaces", True), ("act_replace_checks", True), ("act_input_cost", True), ("act_turned_back", True), ("act_same_continues", True)):
             set_law(s, law, value, check=False)
         s.graph(a, {"wait": 120})
 
