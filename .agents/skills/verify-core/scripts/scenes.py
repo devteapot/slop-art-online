@@ -169,8 +169,12 @@ def tick(s):
     s.call("grant_items", a, "stone", 1)
     s.graph(a, {"first": [{"do": "rest"}]})
     s.wait(lambda: s.rows(f"SELECT skill FROM activity WHERE id = {a}")[0]["skill"] == "rest")
-    s.graph(a, {"seq": [{"wait": 3}, {"do": "give", "target": {"id": b}, "item": "stone"}, {"wait": 120}]})
-    s.wait(lambda: any(r["skill"] == "wait" and r["qty"] == 3 for r in s.rows(f"SELECT skill, qty FROM activity WHERE id = {a}")))
+    # The giver's wait is 10 s, not 3 (2026-11-22): each poll is a CLI call (about 0.8 s under a
+    # gate), and the first poll came 3.6 s after the graph was installed, after a 3 s wait had
+    # ended, so the scene never saw it (gate 1122175431, batch 54). 10 s also keeps the pause
+    # inside the wait, which a 3 s wait missed once (rates-2).
+    s.graph(a, {"seq": [{"wait": 10}, {"do": "give", "target": {"id": b}, "item": "stone"}, {"wait": 120}]})
+    s.wait(lambda: any(r["skill"] == "wait" and r["qty"] == 10 for r in s.rows(f"SELECT skill, qty FROM activity WHERE id = {a}")))
     s.call("set_paused", True)
     try:
         paused0 = s.rows("SELECT * FROM clock", "paused-clock-before")

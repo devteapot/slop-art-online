@@ -90,7 +90,8 @@ const PERCEIVED: &[&str] = &[
     "SELECT * FROM my_doing",
     "SELECT * FROM my_characters",
     "SELECT * FROM my_vitals",
-    "SELECT * FROM my_experience",
+    // My lines are in the perception set ([`Feed`]): `my_experience`, or `experience_copy` while
+    // `lines_table_on` is on.
     "SELECT * FROM my_places",
     "SELECT * FROM my_inventory",
     "SELECT * FROM my_know_how",
@@ -353,6 +354,9 @@ pub(crate) struct Feed {
     /// `combat_feed_on`: my combat feed from the `combat_feed` event table in place of the
     /// `my_combat` view (read once at connect instead, [`Net::combat_once`]).
     pub combat_feed: bool,
+    /// `lines_table_on`: my lines from `experience_copy` in place of the `my_experience` view
+    /// (experience-incremental; [`my_lines`] reads either).
+    pub lines_table: bool,
 }
 
 const CHARACTERS_VIEW: &str = "SELECT * FROM seen_characters";
@@ -361,21 +365,27 @@ const MOTION_TABLE: &str = "SELECT * FROM seen_body_copy";
 const FIGHTER_TABLE: &str = "SELECT * FROM seen_fighter_copy";
 const COMBAT_VIEW: &str = "SELECT * FROM my_combat";
 const COMBAT_FEED: &str = "SELECT * FROM combat_feed";
+const LINES_VIEW: &str = "SELECT * FROM my_experience";
+const LINES_TABLE: &str = "SELECT * FROM experience_copy";
 
 impl Feed {
     /// Its key in [`Net::perception`].
     fn key(self) -> u32 {
-        self.tiered as u32 | (self.motion_table as u32) << 1 | (self.characters_table as u32) << 2 | (self.fighter_table as u32) << 3 | (self.combat_feed as u32) << 4
+        self.tiered as u32 | (self.motion_table as u32) << 1 | (self.characters_table as u32) << 2 | (self.fighter_table as u32) << 3 | (self.combat_feed as u32) << 4 | (self.lines_table as u32) << 5
     }
 
     fn of_key(k: u32) -> Self {
-        Self { tiered: k & 1 != 0, motion_table: k & 2 != 0, characters_table: k & 4 != 0, fighter_table: k & 8 != 0, combat_feed: k & 16 != 0 }
+        Self { tiered: k & 1 != 0, motion_table: k & 2 != 0, characters_table: k & 4 != 0, fighter_table: k & 8 != 0, combat_feed: k & 16 != 0, lines_table: k & 32 != 0 }
     }
 
     /// Its queries: the characters, my combat feed, then the streams (the motion and fighter
     /// views replaced by their tables).
     pub(crate) fn queries(self) -> Vec<&'static str> {
-        let mut q = vec![if self.characters_table { CHARACTERS_TABLE } else { CHARACTERS_VIEW }, if self.combat_feed { COMBAT_FEED } else { COMBAT_VIEW }];
+        let mut q = vec![
+            if self.characters_table { CHARACTERS_TABLE } else { CHARACTERS_VIEW },
+            if self.combat_feed { COMBAT_FEED } else { COMBAT_VIEW },
+            if self.lines_table { LINES_TABLE } else { LINES_VIEW },
+        ];
         let streams = if self.tiered { TIERED_STREAMS } else { UNTIERED_STREAMS };
         if self.motion_table {
             q.push(MOTION_TABLE);
@@ -394,7 +404,7 @@ impl Feed {
 
     /// Which tables it reads, for the log lines.
     fn tables(self) -> String {
-        format!("tables: motion {} characters {} fighters {} combat_feed {}", self.motion_table, self.characters_table, self.fighter_table, self.combat_feed)
+        format!("tables: motion {} characters {} fighters {} combat_feed {} lines {}", self.motion_table, self.characters_table, self.fighter_table, self.combat_feed, self.lines_table)
     }
 }
 
@@ -407,13 +417,14 @@ pub(crate) struct Delivery {
     pub characters_table: bool,
     pub fighter_tables: bool,
     pub combat_feed: bool,
+    pub lines_table: bool,
 }
 
 impl Delivery {
     /// The perception set they choose: the untiered streams only while both frame laws are off;
     /// each copy table, and the combat feed's event table, while its law is on.
     pub(crate) fn feed(self) -> Feed {
-        Feed { tiered: self.cues || self.tiers, motion_table: self.motion_tables, characters_table: self.characters_table, fighter_table: self.fighter_tables, combat_feed: self.combat_feed }
+        Feed { tiered: self.cues || self.tiers, motion_table: self.motion_tables, characters_table: self.characters_table, fighter_table: self.fighter_tables, combat_feed: self.combat_feed, lines_table: self.lines_table }
     }
 }
 
@@ -498,6 +509,18 @@ struct Cues {
     /// The set in place takes the combat feed from `combat_feed` (for the log lines and the seen
     /// log; the reads take both sources, merged by id).
     combat_feed: AtomicBool,
+    /// The set in place takes my lines from `experience_copy` (for the log lines and the switch;
+    /// the reads take both sources, merged by id: [`my_lines`]).
+    lines_table: AtomicBool,
+}
+
+/// My lines (what `my_experience` returns): from `my_experience` or `experience_copy`, whichever the
+/// set in place subscribes, merged by id while a switch holds both (experience-incremental).
+pub fn my_lines(db: &RemoteTables) -> Vec<Experience> {
+    let mut rows: Vec<Experience> = db.my_experience().iter().collect();
+    let ids: std::collections::HashSet<u64> = rows.iter().map(|e| e.id).collect();
+    rows.extend(db.experience_copy().iter().map(|c| c.row).filter(|e| !ids.contains(&e.id)));
+    rows
 }
 
 /// The most combat feed rows kept for `combat::ingest` between two frames (the oldest go first);
@@ -705,9 +728,14 @@ impl PlayerConnection {
         self.cues.combat_feed.load(Ordering::Relaxed)
     }
 
+    /// Whether the set in place takes my lines from `experience_copy`.
+    pub fn lines_table(&self) -> bool {
+        self.cues.lines_table.load(Ordering::Relaxed)
+    }
+
     /// What the reads take now.
     fn reads(&self) -> Feed {
-        Feed { tiered: !self.untiered(), motion_table: self.motion_table(), characters_table: self.characters_table(), fighter_table: self.fighter_table(), combat_feed: self.combat_feed() }
+        Feed { tiered: !self.untiered(), motion_table: self.motion_table(), characters_table: self.characters_table(), fighter_table: self.fighter_table(), combat_feed: self.combat_feed(), lines_table: self.lines_table() }
     }
 
     /// The others whose fighter rows I read by the set in place (ids), for the seen log and the
@@ -763,7 +791,9 @@ impl PlayerConnection {
         let motion = !feed.motion_table || self.motion_table() || self.db.seen_body_copy().count() > 0 || self.perceived_rows().is_empty();
         let characters = !feed.characters_table || self.characters_table() || self.db.seen_character_copy().count() > 0 || self.perceived_characters().is_empty();
         let fighters = !feed.fighter_table || self.fighter_table() || self.db.seen_fighter_copy().count() > 0 || self.perceived_fighters().is_empty();
-        motion && characters && fighters
+        // My lines: their copies have come, or there are none to wait for.
+        let lines = !feed.lines_table || self.lines_table() || self.db.experience_copy().count() > 0 || self.db.my_experience().count() == 0;
+        motion && characters && fighters && lines
     }
 }
 
@@ -1070,6 +1100,7 @@ fn delivery_laws(l: &living_rules::script::Laws) -> Delivery {
         characters_table: l.characters_table_on,
         fighter_tables: l.fighter_tables_on,
         combat_feed: l.combat_feed_on,
+        lines_table: l.lines_table_on,
     }
 }
 
@@ -1219,6 +1250,7 @@ pub fn perception_law(mut net: NonSendMut<Net>, rules: Option<NonSend<crate::ver
     c.characters_on.store(next.characters_table, Ordering::Relaxed);
     c.fighters_on.store(next.fighter_table, Ordering::Relaxed);
     conn.cues.combat_feed.store(next.combat_feed, Ordering::Relaxed);
+    conn.cues.lines_table.store(next.lines_table, Ordering::Relaxed);
     c.resync(&conn.db);
     let new: std::collections::HashSet<u32> = conn.perceived_rows().into_iter().map(|(id, _)| id).collect();
     let old: std::collections::HashSet<u32> = old_rows.into_iter().map(|(id, _)| id).collect();
@@ -1275,7 +1307,7 @@ pub fn seen_log(net: NonSend<Net>, time: Res<Time>, combat: Option<ResMut<crate:
         "wall_ms": wall_ms,
         "set": set.map(|f| f.tier()),
         "reads": reads.tier(),
-        "tables": {"motion": reads.motion_table, "characters": reads.characters_table, "fighters": reads.fighter_table, "combat_feed": reads.combat_feed},
+        "tables": {"motion": reads.motion_table, "characters": reads.characters_table, "fighters": reads.fighter_table, "combat_feed": reads.combat_feed, "lines": reads.lines_table},
         "rows": conn.perceived_rows(),
         "characters": chars,
         "fighters": fighters,
@@ -1947,28 +1979,43 @@ mod cue_tests {
         Moving { id, x: 0.0, y: 0.0, t_ms: 1, vx: 0.0, vy: 0.0, heading: 0.0, turn: 0.0, turn_s: 0.0, next_ms: 0, speed: 0.0, face_off: 0.0, face_turn: 0.0, face_turn_s: 0.0, running: false }
     }
 
-    const TIERED: Feed = Feed { tiered: true, motion_table: false, characters_table: false, fighter_table: false, combat_feed: false };
-    const UNTIERED: Feed = Feed { tiered: false, motion_table: false, characters_table: false, fighter_table: false, combat_feed: false };
+    const TIERED: Feed = Feed { tiered: true, motion_table: false, characters_table: false, fighter_table: false, combat_feed: false, lines_table: false };
+    const UNTIERED: Feed = Feed { tiered: false, motion_table: false, characters_table: false, fighter_table: false, combat_feed: false, lines_table: false };
     // The shipped laws since bv-defaults-on: both copy tables on (motion_tables_on,
     // characters_table_on). `fighter_tables_on` and `combat_feed_on` as the shipped script has
     // them (dev-box flips their defaults in the client's change set): read, so a flip breaks no test.
-    const SHIPPED_TIERED: Feed = Feed { tiered: true, motion_table: true, characters_table: true, fighter_table: false, combat_feed: false };
-    const SHIPPED_UNTIERED: Feed = Feed { tiered: false, motion_table: true, characters_table: true, fighter_table: false, combat_feed: false };
+    const SHIPPED_TIERED: Feed = Feed { tiered: true, motion_table: true, characters_table: true, fighter_table: false, combat_feed: false, lines_table: false };
+    const SHIPPED_UNTIERED: Feed = Feed { tiered: false, motion_table: true, characters_table: true, fighter_table: false, combat_feed: false, lines_table: false };
 
     /// A shipped set (`SHIPPED_TIERED` or `SHIPPED_UNTIERED`) with the two new laws as shipped.
     fn shipped(f: Feed) -> Feed {
         let l = living_rules::script::Scripts::new(SHIPPED).unwrap().laws();
-        Feed { fighter_table: l.fighter_tables_on, combat_feed: l.combat_feed_on, ..f }
+        Feed { fighter_table: l.fighter_tables_on, combat_feed: l.combat_feed_on, lines_table: l.lines_table_on, ..f }
     }
 
     fn feed_of(cues: bool, tiers: bool, motion_tables: bool, characters_table: bool) -> Feed {
-        Delivery { cues, tiers, motion_tables, characters_table, fighter_tables: false, combat_feed: false }.feed()
+        Delivery { cues, tiers, motion_tables, characters_table, fighter_tables: false, combat_feed: false, lines_table: true }.feed()
+    }
+
+    #[test]
+    fn the_lines_table_takes_experience_copy_in_place_of_my_experience() {
+        // experience-incremental: one query swapped, the key round trip, and the shipped laws on it.
+        let off = Feed { lines_table: false, ..SHIPPED_TIERED };
+        let on = Feed { lines_table: true, ..SHIPPED_TIERED };
+        assert!(off.queries().contains(&LINES_VIEW) && !off.queries().contains(&LINES_TABLE));
+        assert!(on.queries().contains(&LINES_TABLE) && !on.queries().contains(&LINES_VIEW));
+        assert_eq!(on.queries().len(), off.queries().len());
+        assert_eq!(Feed::of_key(on.key()), on);
+        assert_ne!(on.key(), off.key());
+        let l = living_rules::script::Scripts::new(SHIPPED).unwrap().laws();
+        assert!(l.lines_table_on, "the lines table is on as shipped");
+        assert!(delivery_laws(&l).feed().lines_table);
     }
 
     fn feed_of6(k: u32) -> (Delivery, Feed) {
         let b = |i: u32| k & (1 << i) != 0;
-        let d = Delivery { cues: b(0), tiers: b(1), motion_tables: b(2), characters_table: b(3), fighter_tables: b(4), combat_feed: b(5) };
-        (d, Feed { tiered: b(0) || b(1), motion_table: b(2), characters_table: b(3), fighter_table: b(4), combat_feed: b(5) })
+        let d = Delivery { cues: b(0), tiers: b(1), motion_tables: b(2), characters_table: b(3), fighter_tables: b(4), combat_feed: b(5), lines_table: true };
+        (d, Feed { tiered: b(0) || b(1), motion_table: b(2), characters_table: b(3), fighter_table: b(4), combat_feed: b(5), lines_table: true })
     }
 
     #[test]
@@ -1980,11 +2027,12 @@ mod cue_tests {
         assert_eq!(TIERED_STREAMS.len(), 9);
         // My combat feed moved from the base set to this one (`my_combat`, as main subscribed it),
         // so its law can replace it.
-        assert_eq!(UNTIERED.queries(), ["SELECT * FROM seen_characters", "SELECT * FROM my_combat", "SELECT * FROM seen_bodies", "SELECT * FROM seen_fighters", "SELECT * FROM seen_doing"]);
-        let mut tiered = vec![CHARACTERS_VIEW, COMBAT_VIEW];
+        // So did my lines (`my_experience`, experience-incremental), so the lines law can replace it.
+        assert_eq!(UNTIERED.queries(), ["SELECT * FROM seen_characters", "SELECT * FROM my_combat", "SELECT * FROM my_experience", "SELECT * FROM seen_bodies", "SELECT * FROM seen_fighters", "SELECT * FROM seen_doing"]);
+        let mut tiered = vec![CHARACTERS_VIEW, COMBAT_VIEW, LINES_VIEW];
         tiered.extend(TIERED_STREAMS);
         assert_eq!(TIERED.queries(), tiered);
-        for q in UNTIERED_STREAMS.iter().chain(TIERED_STREAMS).chain([&CHARACTERS_VIEW, &CHARACTERS_TABLE, &MOTION_TABLE, &FIGHTER_TABLE, &COMBAT_VIEW, &COMBAT_FEED]) {
+        for q in UNTIERED_STREAMS.iter().chain(TIERED_STREAMS).chain([&CHARACTERS_VIEW, &CHARACTERS_TABLE, &MOTION_TABLE, &FIGHTER_TABLE, &COMBAT_VIEW, &COMBAT_FEED, &LINES_VIEW, &LINES_TABLE]) {
             assert!(!PERCEIVED.contains(q), "{q} is in the base set too");
         }
         for v in MOTION_VIEWS {
@@ -2034,7 +2082,7 @@ mod cue_tests {
             assert_eq!(has("SELECT * FROM seen_body_cue"), f.tiered, "{f:?}");
             assert_eq!(has("SELECT * FROM seen_fighter_cue"), f.tiered, "{f:?}");
             let per = if f.tiered { 2 } else { 1 };
-            let n = 2 + rest.len() - if f.motion_table { per - 1 } else { 0 } - if f.fighter_table { per - 1 } else { 0 };
+            let n = 3 + rest.len() - if f.motion_table { per - 1 } else { 0 } - if f.fighter_table { per - 1 } else { 0 };
             assert_eq!(q.len(), n, "{f:?}: {q:?}");
         }
     }
@@ -2312,11 +2360,11 @@ mod cue_tests {
         let mut rules = crate::verbs::Rules::default();
         rules.take(9, SHIPPED, living_rules::DEFAULT_DAY_MS, &on, 1);
         assert!(rules.applied.is_none(), "compiled with them");
-        assert_eq!(set_of(&rules), Feed { tiered: true, motion_table: true, characters_table: true, fighter_table: true, combat_feed: true });
+        assert_eq!(set_of(&rules), Feed { tiered: true, motion_table: true, characters_table: true, fighter_table: true, combat_feed: true, lines_table: true });
         let off = crate::verbs::overrides_of_rows(&rows(&[("cue_transport_on", "false"), ("near_tier_on", "false"), ("motion_tables_on", "true"), ("characters_table_on", "true"), ("fighter_tables_on", "true"), ("combat_feed_on", "false")]));
         let mut rules = crate::verbs::Rules::default();
         rules.take(9, SHIPPED, living_rules::DEFAULT_DAY_MS, &off, 1);
-        assert_eq!(set_of(&rules), Feed { tiered: false, motion_table: true, characters_table: true, fighter_table: true, combat_feed: false });
+        assert_eq!(set_of(&rules), Feed { tiered: false, motion_table: true, characters_table: true, fighter_table: true, combat_feed: false, lines_table: true });
         // The two new laws off by row on a world whose script has them on: the views first.
         let script_on = SHIPPED.replace("fighter_tables_on: false,", "fighter_tables_on: true,").replace("combat_feed_on: false,", "combat_feed_on: true,");
         let off = crate::verbs::overrides_of_rows(&rows(&[("fighter_tables_on", "false"), ("combat_feed_on", "false")]));

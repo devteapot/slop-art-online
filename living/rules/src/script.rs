@@ -785,6 +785,15 @@ pub struct Laws {
     /// the client reads it), none is written. Delivery only: the `my_combat` view shows the same
     /// either way.
     pub combat_feed_on: bool,
+    /// Whether a player's `my_experience` lines also reach its client as rows of the public
+    /// `experience_copy` table, filtered per client by row-level security (experience-incremental,
+    /// docs/HUMAN_FIGHTER_COST.md §2.5): copies written as lines are released and trimmed, so a new
+    /// line is one row, not the view re-run whole. Off (the kill switch), every copy goes in one
+    /// tick. Delivery only: the view shows the same either way.
+    pub lines_table_on: bool,
+    /// A diagnostic (off in play): every tick, each player's `experience_copy` rows are compared
+    /// with what `my_experience` returns it (`lines_table:differed` must stay 0).
+    pub lines_table_check: bool,
     /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
     /// and counted (`alarm:differed`).
     pub alarm_cells_check: bool,
@@ -991,6 +1000,8 @@ impl Default for Laws {
             characters_table_on: true,
             fighter_tables_on: true,
             combat_feed_on: true,
+            lines_table_on: true,
+            lines_table_check: false,
             alarm_cells_check: false,
             status_parts: true,
             status_parts_check: false,
@@ -3373,6 +3384,8 @@ impl Scripts {
             characters_table_on: flag("characters_table_on", l.characters_table_on),
             fighter_tables_on: flag("fighter_tables_on", l.fighter_tables_on),
             combat_feed_on: flag("combat_feed_on", l.combat_feed_on),
+            lines_table_on: flag("lines_table_on", l.lines_table_on),
+            lines_table_check: flag("lines_table_check", l.lines_table_check),
             alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
             status_parts: flag("status_parts", l.status_parts),
             status_parts_check: flag("status_parts_check", l.status_parts_check),
@@ -3624,7 +3637,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 41] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 43] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3635,6 +3648,9 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 41] = [
     ("fighter_tables_on", ValueOnly::Delivery),
     // views step 2: a player's combat feed as event rows (`combat.rs`, `combat_feed`).
     ("combat_feed_on", ValueOnly::Delivery),
+    // experience-incremental: a player's lines as rows (`frame.rs`, `experience_copy`), and its check.
+    ("lines_table_on", ValueOnly::Delivery),
+    ("lines_table_check", ValueOnly::Delivery),
     // The battle laws' prototypes (docs/BATTLE_LAWS.md), live-tunable: the sweeps read `far_cap`
     // and `crowd_sweep_n`, the frames `crowd_frame_max_ms` and `far_motion_tol_m`, the wakes
     // `fighter_bystander_wakes`, each at its next tick.
