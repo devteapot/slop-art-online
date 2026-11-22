@@ -267,7 +267,10 @@ def build(a):
         lost = [p.name for p in [*bases, assets / "lookdev/anim/own-clips.glb"] if not p.with_suffix(".clips.json").exists()]
         if lost:
             sys.exit(f"render_set: {', '.join(lost)} without its .clips.json sidecar (gen_anim.sh; bundle.py --with-clips packs own-clips.clips.json)")
-        r = subprocess.run([sys.executable, str(REPO / "living/tools/marker_check.py"), *map(str, bases), str(assets / "lookdev/anim/own-clips.glb")],
+        # The checkout's own marker_check.py (the one the set is for); this script's when it has none.
+        checker = Path(repo) / "living/tools/marker_check.py"
+        checker = checker if checker.exists() else REPO / "living/tools/marker_check.py"
+        r = subprocess.run([sys.executable, str(checker), *map(str, bases), str(assets / "lookdev/anim/own-clips.glb")],
                            capture_output=True, text=True)
         if r.returncode != 0:
             sys.exit("render_set: marker_check.py fails on the set's clips (missing contact windows or floor jerk):\n"

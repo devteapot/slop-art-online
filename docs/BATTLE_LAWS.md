@@ -8,7 +8,9 @@ Status: prototypes, measured once each, 2026-11-20. Branch `battle-laws` (dev-bo
 
 **Fixture.**
 - Battle: `spawn_battle`'s fighters attack the nearest person, residents included (the laptop's stills lost 36 residents in one run). For stills and any run where bystanders should live, `battle_viewers.py --sides N` uses the new fixture reducer `spawn_battle_sides(n, sides)`: the fighters are in N sides (communities `Side A`, `Side B`, …, names `A12`, `B7`) with an "enemy" stance record each way between sides, and target the nearest person of an enemy side.
-  - Proved on a Cullet world, 200 fighters in 2 sides for 60 s: 671 skill uses, none at a resident or at the fighter's own side, and none of the 64 residents died.
+  - Proved by verify-core's `sides_battle` scene (sides-battle-fix, 2026-11-22), on a fresh Cullet world, 60 fighters in 2 sides for 60 s, two runs: 2,276 and 2,432 skill uses, none at a resident, at the fighter's own side or at anyone outside the battle; 4 and 6 fighters fallen by 30 s, 14 and 16 by 60 s; 0 of the 64 residents dead. The scene gate runs it when a merge touches the fixture (`SIDES_BATTLE_PATHS`).
+  - Corrected 2026-11-22: the proof first given here (200 fighters, 671 skill uses, no resident dead) was a stalled battle. The fixture wrote its stance records due at 0 and record housekeeping drops every record with `due_ms <= now`, so the stances were gone within a second, every use fell in the first ~2 s and nobody died. On main before the fix the same scene had 78 uses and 0 fallen in 60 s. The fix makes them due never (`u64::MAX`).
+  - Corroboration from the laptop's attention-E1b stills, with the two records set to never expire by owner SQL right after the spawn: 200 fighters in 2 sides on Cullet's flat arrival plaza had 56–64 fallen at 40 s and 83–92 at 52 s, no resident dead. The E1 battle without that workaround stayed at 200 alive for 24 s.
   - The side is the fighter's membership, so a client can tint by side.
   - The measurements below used `spawn_battle` (bystanders could be attacked).
 - Host and server: dev-box, its own server `sg-stdb` (SpacetimeDB 2.14.1), one core type, no pinning.
