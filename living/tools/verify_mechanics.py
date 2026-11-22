@@ -69,16 +69,18 @@ def wait_for(pred, timeout=40, every=1.0):
     return None
 
 
-# Terrain codes (living_rules::map::Terrain): grass and dirt take a planting; these are walkable.
-GRASS, DIRT = 0, 5
+# Terrain codes (living_rules::map::Terrain): grass and dirt take a planting, forest a clearing;
+# these are walkable.
+GRASS, FOREST, DIRT = 0, 1, 5
 WALKABLE = {0, 1, 3, 5, 6}
 PLANT_REACH = 20.0
 
 
-def plant_spot(db, ax, ay):
-    """The centre of the nearest grass or dirt tile within PLANT_REACH of (ax, ay) whose straight
-    line from there crosses only walkable tiles, or None. Reads the `terrain_chunk` rows around."""
-    x0, y0, x1, y1 = (int(max(0.0, v)) for v in (ax - PLANT_REACH, ay - PLANT_REACH, ax + PLANT_REACH, ay + PLANT_REACH))
+def ground_spot(db, ax, ay, kinds, reach=PLANT_REACH):
+    """The centre of the nearest tile of a terrain in `kinds` within `reach` of (ax, ay) whose
+    straight line from there crosses only walkable tiles, or None. Reads the `terrain_chunk` rows
+    around."""
+    x0, y0, x1, y1 = (int(max(0.0, v)) for v in (ax - reach, ay - reach, ax + reach, ay + reach))
     ids = sorted({((cy << 16) | cx) for cx in range(x0 // 16, x1 // 16 + 1) for cy in range(y0 // 16, y1 // 16 + 1)})
     chunks = {int(r["id"]): bytes.fromhex(r["tiles"].removeprefix("0x"))
               for r in rows(db, "SELECT id, tiles FROM terrain_chunk WHERE " + " OR ".join(f"id = {i}" for i in ids))}
@@ -92,8 +94,58 @@ def plant_spot(db, ax, ay):
         return all(tile(int(ax + (tx - ax) * k / n), int(ay + (ty - ay) * k / n)) in WALKABLE for k in range(n + 1))
 
     near = sorted(((x + 0.5 - ax) ** 2 + (y + 0.5 - ay) ** 2, x + 0.5, y + 0.5)
-                  for x in range(x0, x1 + 1) for y in range(y0, y1 + 1) if tile(x, y) in (GRASS, DIRT))
-    return next(((x, y) for d, x, y in near if d <= PLANT_REACH ** 2 and straight(x, y)), None)
+                  for x in range(x0, x1 + 1) for y in range(y0, y1 + 1) if tile(x, y) in kinds)
+    return next(((x, y) for d, x, y in near if d <= reach ** 2 and straight(x, y)), None)
+
+
+def plant_spot(db, ax, ay):
+    """The nearest grass or dirt tile A can walk to in a straight line (`ground_spot`)."""
+    return ground_spot(db, ax, ay, (GRASS, DIRT))
+
+
+def terrain_under(db, who):
+    """The terrain code of the tile under `who`'s body now: its row is a segment (`x`, `y` at
+    `t_ms`, moving at `vx`, `vy` until `next_ms`), so a moving body is past its `x`, `y`. Also
+    whether it is still moving."""
+    b = rows(db, f"SELECT x, y, t_ms, vx, vy, next_ms FROM body WHERE id = {who}")[0]
+    t = max(0, min(int(time.time() * 1000), int(b["next_ms"])) - int(b["t_ms"])) / 1000.0
+    x, y = float(b["x"]) + float(b["vx"]) * t, float(b["y"]) + float(b["vy"]) * t
+    cid = ((int(y) // 16) << 16) | (int(x) // 16)
+    c = rows(db, f"SELECT id, tiles FROM terrain_chunk WHERE id = {cid}")  # two columns: `rows` reads a table with a separator
+    code = bytes.fromhex(c[0]["tiles"].removeprefix("0x"))[(int(y) % 16) * 16 + int(x) % 16] if c else None
+    return code, (float(b["vx"]), float(b["vy"])) != (0.0, 0.0)
+
+
+def clear_ready(db, D):
+    """Stands D on forest for the clearing check, and says how (walked or placed), or why not.
+    Returns whether D stands still on a forest tile."""
+    seq = lambda *steps: json.dumps({"seq": list(steps) + [{"wait": 120}]})
+    # Clearing needs forest underfoot when it starts (`clear_check`). D walks to the nearest forest
+    # tile it can reach in a straight line, or is placed on one by the nearest tree, and the clear
+    # is installed only once D stands still on forest. Until 2026-11-22 D went to the nearest tree by
+    # straight-line distance, then `goto {nearest: forest}`, then `clear`, in one sequence
+    # (features/mechanics.md, "Clearing from the forest's edge"): a goto reports its arrival when
+    # the final approach begins (`motion::FLAG_EARLY`), so the clear could start on the grass beside
+    # the forest ("there is no forest to clear where you stand", 3 of 50 probe runs, each retried
+    # and cleared; gate-1122224047-489894-a-mechanics did not within the 150 s), and the nearest
+    # tree could lie across water ("no path there" on every retry, 2 of 50).
+    body = rows(db, f"SELECT x, y FROM body WHERE id = {D}")[0]
+    dx, dy = float(body["x"]), float(body["y"])
+    spot = ground_spot(db, dx, dy, (FOREST,))
+    if spot is None:
+        trees = [(float(r["x"]), float(r["y"])) for r in rows(db, "SELECT x, y FROM resource_node WHERE kind = 'tree'")]
+        near = min(trees, key=lambda p: (p[0] - dx) ** 2 + (p[1] - dy) ** 2)
+        at = ground_spot(db, *near, (FOREST,)) or near
+        print(f"  clearing: no forest in a straight walk within {PLANT_REACH:.0f} m of D at ({dx:.1f}, {dy:.1f}); D placed at ({at[0]:.1f}, {at[1]:.1f}) by the tree at ({near[0]:.1f}, {near[1]:.1f})")
+        call(db, "place_at", str(D), at[0], at[1])
+    else:
+        print(f"  clearing: D at ({dx:.1f}, {dy:.1f}) walks {((spot[0] - dx) ** 2 + (spot[1] - dy) ** 2) ** 0.5:.1f} m to forest at ({spot[0]:.1f}, {spot[1]:.1f})")
+        call(db, "set_behavior", str(D), seq({"do": {"skill": "goto", "target": {"at": [spot[0], spot[1]]}}}))
+    on_forest = wait_for(lambda: (lambda u: u[0] == FOREST and not u[1])(terrain_under(db, D)), timeout=60, every=0.5)
+    if not on_forest:
+        b = rows(db, f"SELECT x, y FROM body WHERE id = {D}")[0]
+        print(f"  clearing: D not standing on forest after 60 s: at ({float(b['x']):.1f}, {float(b['y']):.1f}), under it {terrain_under(db, D)}")
+    return bool(on_forest)
 
 
 def main():
@@ -431,16 +483,8 @@ def main():
         report_pack_failure("craft")
 
     reset_pack(D)
-    body = rows(db, f"SELECT x, y FROM body WHERE id = {D}")[0]
-    dx, dy = float(body["x"]), float(body["y"])
-    trees = [(float(r["x"]), float(r["y"])) for r in
-             rows(db, "SELECT x, y FROM resource_node WHERE kind = 'tree'")]
-    tree = min(trees, key=lambda p: (p[0] - dx) ** 2 + (p[1] - dy) ** 2)
-    call(db, "set_behavior", str(D), seq(
-        {"do": {"skill": "goto", "target": {"at": list(tree)}}},
-        {"do": {"skill": "goto", "target": {"nearest": "forest"}}},
-        {"do": {"skill": "clear"}},
-    ))
+    clear_ready(db, D)
+    call(db, "set_behavior", str(D), seq({"do": {"skill": "clear"}}))
     results["clearing forest yields wood"] = bool(
         wait_for(lambda: inventory(D).get("wood") == 2, timeout=150))
     if not results["clearing forest yields wood"]:
