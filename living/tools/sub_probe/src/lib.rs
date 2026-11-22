@@ -27,6 +27,8 @@ pub struct Sub {
 pub struct Cfg {
     #[primary_key]
     pub id: u8,
+    /// Who published (the owner): its own HTTP calls are not subscribers.
+    pub owner: Identity,
     pub mode: u8,
     pub k: u32,
     pub rows: u32,
@@ -42,30 +44,53 @@ pub struct Timer {
     pub scheduled_at: ScheduleAt,
 }
 
-/// The row each mode writes: about a motion copy's size (an id, a viewer, a segment).
-macro_rules! probe_row {
-    ($name:ident, $acc:ident, $($attr:tt)*) => {
-        #[spacetimedb::table(accessor = $acc, public)]
-        pub struct $name {
-            #[primary_key]
-            pub id: u64,
-            $($attr)*
-            pub viewer: Identity,
-            pub v: u64,
-            pub t_ms: u64,
-            pub x: f32,
-            pub y: f32,
-            pub vx: f32,
-            pub vy: f32,
-            pub heading: f32,
-            pub turn: f32,
-        }
-    };
+/// The rows each mode writes: about a motion copy's size (an id, a viewer, a segment).
+#[spacetimedb::table(accessor = ri, public)]
+pub struct Ri {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub v: u64,
+    pub t_ms: u64,
+    pub x: f32,
+    pub y: f32,
+    pub vx: f32,
+    pub vy: f32,
+    pub heading: f32,
+    pub turn: f32,
 }
 
-probe_row!(Ri, ri, #[index(btree)]);
-probe_row!(Ru, ru,);
-probe_row!(Pb, pb,);
+#[spacetimedb::table(accessor = ru, public)]
+pub struct Ru {
+    #[primary_key]
+    pub id: u64,
+    pub viewer: Identity,
+    pub v: u64,
+    pub t_ms: u64,
+    pub x: f32,
+    pub y: f32,
+    pub vx: f32,
+    pub vy: f32,
+    pub heading: f32,
+    pub turn: f32,
+}
+
+#[spacetimedb::table(accessor = pb, public)]
+pub struct Pb {
+    #[primary_key]
+    pub id: u64,
+    pub viewer: Identity,
+    pub v: u64,
+    pub t_ms: u64,
+    pub x: f32,
+    pub y: f32,
+    pub vx: f32,
+    pub vy: f32,
+    pub heading: f32,
+    pub turn: f32,
+}
+
 
 /// Private: reached only through `my_pv`.
 #[spacetimedb::table(accessor = pv)]
@@ -98,12 +123,15 @@ pub fn my_pv(ctx: &ViewContext) -> Vec<Pv> {
 
 #[spacetimedb::reducer(init)]
 pub fn init(ctx: &ReducerContext) {
-    ctx.db.cfg().insert(Cfg { id: 0, mode: 0, k: 0, rows: 0, ticks: 0, writes: 0 });
+    ctx.db.cfg().insert(Cfg { id: 0, owner: ctx.sender(), mode: 0, k: 0, rows: 0, ticks: 0, writes: 0 });
     ctx.db.timer().insert(Timer { scheduled_id: 0, scheduled_at: ScheduleAt::Interval(TimeDuration::from_micros(16_667)) });
 }
 
 #[spacetimedb::reducer(client_connected)]
 pub fn connected(ctx: &ReducerContext) {
+    if is_owner(ctx) {
+        return;
+    }
     if ctx.db.sub().identity().find(ctx.sender()).is_none() {
         ctx.db.sub().insert(Sub { identity: ctx.sender() });
     }
@@ -114,6 +142,10 @@ pub fn disconnected(ctx: &ReducerContext) {
     ctx.db.sub().identity().delete(ctx.sender());
 }
 
+fn is_owner(ctx: &ReducerContext) -> bool {
+    ctx.sender() == ctx.database_identity() || ctx.db.cfg().id().find(0).is_some_and(|c| c.owner == ctx.sender())
+}
+
 fn key(n: usize, slot: u32) -> u64 {
     (n as u64) << 16 | slot as u64
 }
@@ -122,7 +154,7 @@ fn key(n: usize, slot: u32) -> u64 {
 /// module's owner may call it.
 #[spacetimedb::reducer]
 pub fn setup(ctx: &ReducerContext, rows: u32) -> Result<(), String> {
-    if ctx.sender() != ctx.database_identity() && ctx.db.sub().identity().find(ctx.sender()).is_some() {
+    if !is_owner(ctx) {
         return Err("setup is the owner's".into());
     }
     for r in ctx.db.ri().iter().collect::<Vec<_>>() {
@@ -158,7 +190,7 @@ pub fn setup(ctx: &ReducerContext, rows: u32) -> Result<(), String> {
 /// Which table the tick writes and how many rows a tick (`mode` as in the module's doc).
 #[spacetimedb::reducer]
 pub fn set(ctx: &ReducerContext, mode: u8, k: u32) -> Result<(), String> {
-    if ctx.sender() != ctx.database_identity() && ctx.db.sub().identity().find(ctx.sender()).is_some() {
+    if !is_owner(ctx) {
         return Err("set is the owner's".into());
     }
     let mut c = ctx.db.cfg().id().find(0).unwrap();
@@ -214,5 +246,17 @@ pub fn tick(ctx: &ReducerContext, _t: Timer) -> Result<(), String> {
         c.writes += 1;
     }
     ctx.db.cfg().id().update(c);
+    Ok(())
+}
+
+/// Stop the tick (before the database is deleted: no scheduled reducer runs while it goes).
+#[spacetimedb::reducer]
+pub fn stop(ctx: &ReducerContext) -> Result<(), String> {
+    if !is_owner(ctx) {
+        return Err("stop is the owner's".into());
+    }
+    for t in ctx.db.timer().iter().collect::<Vec<_>>() {
+        ctx.db.timer().scheduled_id().delete(t.scheduled_id);
+    }
     Ok(())
 }

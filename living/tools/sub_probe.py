@@ -81,11 +81,12 @@ def main():
     procs = []
     log = open(out / "subscribers.log", "w")
     for i in range(counts[0]):
-        p = subprocess.Popen(["docker", "exec", lc.CONTAINER, "spacetime", "subscribe", "-s", "local", "--anonymous", "-y", db, *QUERIES],
+        p = subprocess.Popen(["docker", "exec", "-e", "TOKIO_WORKER_THREADS=1", lc.CONTAINER, "spacetime", "subscribe", "-s", "local", "--anonymous", "-y", db, *QUERIES],
                              stdout=subprocess.DEVNULL, stderr=log)
         procs.append(p)
         if i % 16 == 15:
             time.sleep(1)
+    all_procs = list(procs)
     want = counts[0]
     for _ in range(120):
         n = lc.sql(db, "SELECT COUNT(*) AS n FROM sub", token)[0]["n"]
@@ -95,9 +96,10 @@ def main():
     summary = {"db": db, "k": a.k, "k_public": a.k_public, "rows": a.rows, "arms": []}
     for count in counts:
         while len(procs) > count:
-            p = procs.pop()
-            p.terminate()
-            p.wait(30)
+            # Stopping `docker exec` does not stop the process inside the container: the newest
+            # subscriber there goes first, then its exec.
+            subprocess.run(["docker", "exec", lc.CONTAINER, "pkill", "-n", "-f", "spacetime subscribe"], capture_output=True)
+            procs.pop()  # (its exec ends with whichever subscriber pkill took; all are reaped at the end)
         for _ in range(60):
             n = lc.sql(db, "SELECT COUNT(*) AS n FROM sub", token)[0]["n"]
             if n == count:
@@ -110,8 +112,12 @@ def main():
             k = a.k_public if mode == 3 else a.k
             lc.call(db, "set", [mode, k], token)
             time.sleep(a.warmup)
+            n0 = lc.sql(db, "SELECT COUNT(*) AS n FROM sub", token)[0]["n"]
             d, by, dur = window(ident, pid, a.seconds)
             lc.call(db, "set", [0, 0], token)
+            n = lc.sql(db, "SELECT COUNT(*) AS n FROM sub", token)[0]["n"]
+            if n != n0 or n != count:
+                print(f"WARNING: subscribers {n0} -> {n} during the window (wanted {count})", file=sys.stderr, flush=True)
             ticks = metric(d, "spacetime_txn_cpu_time_sec_count", txn_type="Reducer", reducer="tick") / dur
             arm = {
                 "subscribers": n, "mode": MODES[mode], "k": k if mode != 5 else 0, "seconds": round(dur, 2), "ticks_per_s": round(ticks, 2),
@@ -132,9 +138,13 @@ def main():
             print(json.dumps(arm), flush=True)
             summary["arms"].append(arm)
             (out / f"arm-{n}-{MODES[mode]}.json").write_text(json.dumps({"arm": arm, "diff": d, "threads": by}, indent=1) + "\n")
-    for p in procs:
-        p.terminate()
-        p.wait(30)
+    subprocess.run(["docker", "exec", lc.CONTAINER, "pkill", "-f", "spacetime subscribe"], capture_output=True)
+    for p in all_procs:
+        try:
+            p.wait(30)
+        except subprocess.TimeoutExpired:
+            p.kill()
+    lc.call(db, "stop", [], token)
     # Per written row: each mode against the tick-only arm at the same count.
     base = {x["subscribers"]: x for x in summary["arms"] if x["mode"] == "tick_only"}
     for x in summary["arms"]:
