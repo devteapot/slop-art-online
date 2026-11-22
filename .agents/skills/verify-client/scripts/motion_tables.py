@@ -273,6 +273,11 @@ def main():
     # mirror back on [307, 308, 310]; A's whole view, read by a second query, is not kept to compare).
     back_chars_all, chars_back_all = back_chars, chars_back
     back_chars, chars_back = back_chars & scene, chars_back & scene
+    # And the fighter switch checks (motion-tables-staging-3): A's whole seen_fighters, read by
+    # separate queries across the switch, can gain a passer-by too.
+    fight_off_all = fight_off
+    fight_on, fight_off = fight_on & scene, fight_off & scene
+    fight_back, fight_view_back = fight_back & scene, fight_view_back & scene
     checks.update({
         "law off: the table is empty to the owner within a second": owner_after == 0,
         "law off: A's stream of the table, accepted, ends empty": accepted(off_ev) and off_ev[-1].get("code") == 0 and not final(off_ev, "seen_body_copy"),
@@ -280,7 +285,7 @@ def main():
         "law on again: A's rows return within a second": {r["body"] for r in back} & scene == seen_on,
         "law off: the mirror is empty to the owner within a second, and A's seen_characters view is unchanged": owner_chars == 0 and bool(chars_on) and chars_off == chars_on,
         "law on again: A's mirror returns within a second, on its view's rows": back_chars == chars_back and bool(back_chars),
-        "fighters, law off: the table is empty to the owner within a second, A's seen_fighters view unchanged, from the private tables": owner_fight == 0 and bool(fight_on) and fight_off == fight_on and private_foff == len(fight_on),
+        "fighters, law off: the table is empty to the owner within a second, A's seen_fighters view unchanged, from the private tables": owner_fight == 0 and bool(fight_on) and fight_off == fight_on and private_foff == len(fight_off_all),
         "fighters, law on again: A's rows return within a second, on its view's rows": bool(fight_back) and fight_back == fight_view_back,
         "every switch went through law_override rows, with no reinstall (the script rows' revisions unchanged)": len(override) == len(LAWS) and script_rev == script_rev_after,
     })
