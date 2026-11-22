@@ -40,7 +40,12 @@ touches behaviour, these cases with the fake model only:
 
 The world groups and the tests run at once. A case whose only failures are parts on the red-on-main
 list (a mind test `living-mind::<test>`, a combat scene `combat:<scene>`) passes and says which. Flakes: a failing case runs again once, alone, on a fresh scratch
-database; it fails the gate only when it fails twice. A case that failed twice is then judged on
+database. A rerun that passes excuses the first failure only when every part that failed (a scene's
+check, a combat `scene:check`, a mind test, a minds case's error) matches the case's recorded flake
+(`CASES[c]["flaky"]["parts"]`, from the skill's validation records); then it is `flaky-pass`. Any
+other first failure blocks as `fail-unrecorded-flake`, even when the rerun passes, and so does one
+whose failed parts could not be read (general coordinator, 2026-11-22: a combat `wolves` failure was
+excused under combat's unrelated flake). A case that failed twice is then judged on
 main (the merge's first parent): from the cache of main's results, from the red-on-main list
 when nothing behavioural changed since that entry was last seen red, or by running it on main's
 own checkout and build (twice at most). Red on main too: the case is reported and does not
@@ -107,6 +112,7 @@ verify-gate-<this run>-*: not the paid verify-trial-* batches, nor sao-living_*.
 """
 import concurrent.futures
 import datetime
+import fnmatch
 import json
 import math
 import os
@@ -171,10 +177,13 @@ RENDER_CAMERA = tuple(GAME + p for p in ("camera.rs", "perf.rs", "fade.rs", "env
 RENDER_BOTH = (GAME + "*.wesl", "living/game/Cargo.toml", ".agents/skills/verify-ui/scripts/**")
 
 # Each case: its surface skill and the world group it runs in. Known flakes are from the skills'
-# validation records (each skill's references/validation/); they get the same one retry, never a pass.
+# validation records (each skill's references/validation/): `why` says what was seen and where, and
+# `parts` (fnmatch patterns) are the exact failed parts a passing rerun may excuse. A failure outside
+# them blocks even when its rerun passes (flake_verdict). No `parts`, nothing is excused.
 CASES = {
     "tick":         {"skill": "verify-core", "group": "core",
-                     "flaky": "the pause landed after the giver's 3 s wait once: verify-core validation, rates-2"},
+                     "flaky": {"why": "the pause landed after the giver's 3 s wait once: verify-core validation, rates-2",
+                               "parts": ["pause stops ticks, housekeeping and completion"]}},
     "sight":        {"skill": "verify-core", "group": "core"},
     "senses":       {"skill": "verify-core", "group": "core"},
     "refusal":      {"skill": "verify-core", "group": "core"},
@@ -186,12 +195,19 @@ CASES = {
     "roundtrip":    {"skill": "verify-minds", "group": "minds"},
     "acts":         {"skill": "verify-minds", "group": "minds"},
     "dealings":     {"skill": "verify-minds", "group": "minds",
-                     "flaky": "times out under load (the demand act or the rules' ask late): verify-minds validation, recipes-1, l2c, fix-death-labels"},
+                     "flaky": {"why": "times out under load (the demand act or the rules' ask late): verify-minds validation, recipes-1, l2c, fix-death-labels",
+                               "parts": ["RuntimeError: timed out after *s waiting for demand record",
+                                         "RuntimeError: timed out after *s waiting for authority deliberation or the demand met"]}},
     "conversation": {"skill": "verify-minds", "group": "minds",
-                     "flaky": "the talk-turn count assertion once under load, passed on its retry (scene gate, 2026-11-12)"},
+                     "flaky": {"why": "the talk-turn count assertion once under load, passed on its retry (scene gate, 2026-11-12)",
+                               "parts": ["AssertionError at: assert len([e for e in run.exchanges() if e['purpose'] == 'talk']) == count"]}},
     "combat":       {"skill": "verify-player", "group": "player",
-                     "flaky": "staged fights in town geometry (a bolt into a passer-by, an arrow into a wall): verify-player validation, l2; "
-                              "the kill scene 34/35 then 2/2 (stamina-1)"},
+                     # Re-recorded 2026-11-22: the failures verify-player's records name (stamina-1's kill scene,
+                     # flee-open's breath, committed and jump staging) were staging bugs, since fixed; none is a
+                     # standing flake. A combat failure blocks even when its rerun passes.
+                     "flaky": {"why": "none standing: the recorded combat failures were staging bugs, fixed "
+                                      "(verify-player validation: stamina-1, 2026-11-12-1538-flee-open-combat)",
+                               "parts": []}},
     # Row-level security on the cue event tables is a perception boundary (frame-views): every
     # behavioural merge proves no other identity receives a player's cues.
     "cues":         {"skill": "verify-client", "group": "client"},
@@ -214,8 +230,10 @@ CASES = {
     "generation-cullet":  {"skill": "verify-generation", "group": "generation", "seeds": ("cullet", "cullet-laws")},
     # living-mind's own cargo tests: `just living-check` builds the mind but tests only living-rules.
     "mind-unit":    {"skill": "living-mind", "group": "unit",
-                     "flaky": "timing bounds under load: llm::tests::unreachable_provider_holds_calls (1.97 s against 2 s), "
-                              "fake_transport_records_caching_usage_and_paced_429_recovery (the 180 ms queue wait)"},
+                     "flaky": {"why": "timing bounds under load: llm::tests::unreachable_provider_holds_calls (1.97 s against 2 s), "
+                                      "fake_transport_records_caching_usage_and_paced_429_recovery (the 180 ms queue wait)",
+                               "parts": ["llm::tests::unreachable_provider_holds_calls",
+                                         "llm::tests::fake_transport_records_caching_usage_and_paced_429_recovery"]}},
     # The render group (verify-ui's check.py, one case at a time, after every other group; on the
     # host with a render asset set, `LIVING_GATE_RENDER_ASSETS`): `world` is the seed its world is
     # launched from, `render` the half it belongs to (the class of paths that selects it).
@@ -925,12 +943,56 @@ def listed_parts(reds_path, prefix):
     return {k[len(prefix):] for k in load_json(reds_path, {}) if k.startswith(prefix)}
 
 
+def flake_verdict(case, parts):
+    """Whether a passing rerun excuses `case`'s first failure: (excused, why). Only when every failed
+    part (`parts`, None when they could not be read) matches one of the case's recorded flake parts."""
+    pats = (CASES.get(case, {}).get("flaky") or {}).get("parts") or []
+    if not pats:
+        return False, "no flake is recorded for this case"
+    if not parts:
+        return False, "the first run's failed parts could not be read"
+    # exact first: a recorded source line holds brackets fnmatch would read as a character class
+    other = [x for x in parts if not any(x == pat or fnmatch.fnmatchcase(x, pat) for pat in pats)]
+    if other:
+        return False, "not a recorded flake: " + "; ".join(other)
+    return True, "recorded flake: " + "; ".join(parts)
+
+
+def case_status(case, first_ok, second_ok, parts, main_verdict=None):
+    """A case's status from its first run, its rerun (None when not rerun), the first run's failed
+    parts and main's verdict (for a case that failed twice): (status, blocks, why)."""
+    if first_ok:
+        return "pass", False, ""
+    if second_ok:
+        excused, why = flake_verdict(case, parts)
+        return ("flaky-pass", False, why) if excused else ("fail-unrecorded-flake", True, why)
+    status = {"red-on-main": "red-on-main", "branch": "fail"}.get(main_verdict, "fail-unjudged")
+    return status, status != "red-on-main", ""
+
+
+def minds_parts(r, evidence_dir):
+    """A failing minds case's parts: its error, and for a bare assert the failing source line."""
+    err = (r or {}).get("error")
+    if not err:
+        return None
+    parts = [err]
+    if err.rstrip(": ").strip() == "AssertionError":  # a bare assert says nothing: name its line
+        tb = Path(evidence_dir) / "failure.txt"
+        lines = [l.strip() for l in tb.read_text(errors="replace").splitlines()] if tb.is_file() else []
+        src = [l for l in lines if l.startswith("assert ")]
+        if src:
+            parts = ["AssertionError at: " + src[-1]]
+    return parts
+
+
 class Runner:
     def __init__(self, stamp, env, out, reds_path):
         self.stamp, self.env, self.out, self.reds_path = stamp, env, out, reds_path
         self.runs = []  # every gate run name launched, for the final sweep
         self.procs = set()
         self.notes = {}  # (tag, case) -> what a passing run with listed failures failed
+        self.parts = {}  # (group tag, case) -> a failed run's failed parts (None: could not be read)
+        self.case_parts = {}  # (run tag, case) -> the same, by the tag run_cases was given
         self.smoke_seeds = set()  # seeds whose genesis world the generation smoke reads first
         self.smoke = {}  # (root, seed) -> (failed checks or None when it did not run, evidence)
         self.fresh = 0  # numbers the generation cases' own worlds
@@ -1078,6 +1140,7 @@ class Runner:
             failed = sorted(set(re.findall(r"^test (\S+) \.\.\. FAILED$", text, re.M)))
             listed = listed_parts(self.reds_path, "living-mind::")
             ok = code == 0 or (bool(failed) and set(failed) <= listed)
+            self.parts[(tag, "mind-unit")] = failed or None
             if code and ok:
                 self.notes[(tag, "mind-unit")] = f"only listed red tests failed: {', '.join(failed)}"
             elif code and failed:
@@ -1103,6 +1166,7 @@ class Runner:
                     failed += [f"{seed}:{name}" for name in got[0]] if got[0] is not None else [f"{seed}:(did not run)"]
                 listed = listed_parts(self.reds_path, f"{c}:")
                 ok = not failed or (set(failed) <= listed and not any(f.endswith(":(did not run)") for f in failed))
+                self.parts[(tag, c)] = [f for f in failed if not f.endswith(":(did not run)")] or None
                 if failed:
                     self.notes[(tag, c)] = ("only listed red checks failed: " if ok else "failed: ") + "; ".join(failed)
                 res[c] = (ok, ", ".join(evidence), time.time() - t0)
@@ -1125,6 +1189,7 @@ class Runner:
             for c in cases:
                 r = got.get(c)
                 ok = bool(r) and r.get("status") in ("pass", "xfail")
+                self.parts[(tag, c)] = None if ok else minds_parts(r, Path(root) / ".local/living/verify" / f"{suite}-{c}")
                 res[c] = (ok, str(Path(root) / ".local/living/verify" / f"{suite}-{c}") if r else f"{log} (exit {code}; no result)",
                           time.time() - t0)
             return res
@@ -1169,6 +1234,7 @@ class Runner:
                                root, ev / "combat.txt", 1500)
                 bad = [r for r in load_json(ev / "combat.json", []) if not r.get("ok")]
                 scenes = sorted({str(r.get("scene")) for r in bad})
+                self.parts[(tag, "combat")] = [f"{r.get('scene')}:{r.get('check')}" for r in bad] or None
                 listed = listed_parts(self.reds_path, "combat:")
                 ok = code == 0 or (bool(bad) and set(scenes) <= listed)
                 if code:
@@ -1179,6 +1245,8 @@ class Runner:
                 code = self.sh([sys.executable, ".agents/skills/verify-core/scripts/scenes.py", c, "--run", run], root,
                                ev / f"{c}.txt", 900)
                 res[c] = (code == 0, str(ev / f"{c}-results.json"), time.time() - t0)
+                checks = load_json(ev / f"{c}-results.json", {}).get("checks") or {}
+                self.parts[(tag, c)] = [k for k, v in checks.items() if not (v or {}).get("passed")] or None
             return res
         finally:
             self.cleanup(root, run, log)
@@ -1366,6 +1434,7 @@ def run_cases(runner, root, cases, tag):
             # a note (listed red parts that failed, or which parts failed) travels with the evidence
             note = runner.notes.get((f"{tag}-{run_part(g)}", c))
             ev = f"{ev} [{note}]" if note else ev
+            runner.case_parts[(tag, c)] = None if ok else runner.parts.get((f"{tag}-{run_part(g)}", c))
             say(f"{tag}: {c} {'passed' if ok else 'FAILED'} in {secs:.0f} s ({ev})")
             out[c] = (ok, ev, secs)
 
@@ -1704,17 +1773,16 @@ def cmd_run(a):
     blocking = []
     for c in all_cases:
         runs = [first[c][1]] + ([second[c][1]] if c in second else [])
-        if first[c][0]:
-            status = "pass"
-        elif second[c][0]:
-            status = "flaky-pass"
-        else:
-            status = {"red-on-main": "red-on-main", "branch": "fail"}.get(on_main[c][0], "fail-unjudged")
-            if status != "red-on-main":
-                blocking.append(c)
+        parts = runner.case_parts.get(("a", c))
+        status, blocks, flake_why = case_status(c, first[c][0], second[c][0] if c in second else None, parts,
+                                                on_main[c][0] if c in on_main else None)
+        if blocks:
+            blocking.append(c)
         record["cases"][c] = {"status": status, "skill": CASES[c]["skill"], "evidence": runs,
+                              **({"failed_parts": parts} if status != "pass" else {}),
+                              **({"flake": flake_why} if flake_why else {}),
                               **({"main": {"verdict": on_main[c][0], "evidence": on_main[c][1], "how": on_main[c][2]}} if c in on_main else {}),
-                              **({"known_flake": CASES[c]["flaky"]} if "flaky" in CASES[c] and status != "pass" else {})}
+                              **({"known_flake": CASES[c]["flaky"]["why"]} if "flaky" in CASES[c] and status != "pass" else {})}
     for c in needs_host:
         record["cases"][c] = {"status": "needs-render-host", "skill": "verify-ui", "evidence": [],
                               "why": f"render: not run here; needs a pinned asset set ({RENDER_HOST}); no pass recorded for key {key[:12]}, "
@@ -1733,7 +1801,10 @@ def cmd_run(a):
         if "main" in r:
             line += f"\n  {'':<13} on main: {r['main']['how']}"
         if r["status"] == "flaky-pass":
-            line += f"\n  {'':<13} failed once, passed alone: a flake{' (recorded: ' + r['known_flake'] + ')' if 'known_flake' in r else ', not one the skill records'}"
+            line += f"\n  {'':<13} failed once, passed alone: a {r.get('flake', 'recorded flake')}"
+        if r["status"] == "fail-unrecorded-flake":
+            line += (f"\n  {'':<13} failed once and passed alone, but NOT excused: {r.get('flake')}. If it is truly a flake, "
+                     f"record it in {r['skill']}'s validation records and CASES['{c}']['flaky']['parts']")
         if r["status"] == "red-on-main":
             line += f"\n  {'':<13} red on main too: not this branch's failure; it does not block"
         if r["status"] == "recorded-red-on-main":
@@ -1747,6 +1818,9 @@ def cmd_run(a):
         why = []
         if any(record["cases"][c]["status"] == "fail" for c in blocking):
             why.append("failed twice on the branch and pass on main")
+        unrecorded = [c for c in blocking if record["cases"][c]["status"] == "fail-unrecorded-flake"]
+        if unrecorded:
+            why.append(f"{', '.join(unrecorded)} failed outside a recorded flake (a passing rerun does not excuse it)")
         if unjudged:
             why.append(f"{', '.join(unjudged)} could not be judged on main")
         if needs_host:
