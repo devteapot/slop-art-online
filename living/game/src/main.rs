@@ -19,6 +19,7 @@ mod capture;
 mod characters;
 mod combat;
 mod controls;
+mod crowd_mock;
 mod daylight;
 mod demo;
 mod envs;
@@ -234,6 +235,9 @@ fn main() {
         app.add_plugins(record::RecordPlugin);
         // Every reducer call and its reply, when LIVING_GAME_ACTIONS names a file (actions.rs).
         app.add_plugins(actions::ActionsPlugin);
+        // MOCK (branch attention-e1, never merged): per-cell crowd rows for creatures I do not
+        // perceive, only with LIVING_GAME_DEV_CROWD_MOCK set (crowd_mock.rs).
+        app.add_plugins(crowd_mock::CrowdMockPlugin);
         if let Some(d) = demo::Demo::from_env() {
             app.insert_resource(d);
         }
