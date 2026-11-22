@@ -11,6 +11,8 @@ Free, local, no server: the "runner" is a `sleep`, the journals are files this t
   then stops the runner after --first-journal-s and exits 3, its ledger entry "unguarded";
 - --pid-file: the guard starts first and says ready; the runner starts only after that, and its
   journaled spend is counted; two runs' journals of one file name both count;
+- E5's rules: `--fail-last 50` stops at more than 10% failing of the last 50 calls (and not at 10%
+  or less); `--max-calls-min N` stops above 2N calls over 2 minutes;
 - with --mind-bin, `living-mind fast-replay` without a ready guard makes no call (exits non-zero,
   its journal folder empty).
 """
@@ -20,6 +22,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -48,9 +51,21 @@ def watch(tmp, name, journals, *extra, pid=None, timeout=30):
     return subprocess.run(args + list(extra), capture_output=True, text=True, timeout=timeout)
 
 
-def entry(at_ms, tokens=1000):
+def entry(at_ms, tokens=1000, error=None):
     return json.dumps({"at_ms": at_ms, "model": "deepseek-v4-1-flash-1017", "purpose": "fast", "prompt_tokens": tokens,
-                       "cached_tokens": 0, "completion_tokens": 100, "error": None, "latency_ms": 500, "queue_wait_ms": 0}) + "\n"
+                       "cached_tokens": 0, "completion_tokens": 100, "error": error, "latency_ms": 500, "queue_wait_ms": 0}) + "\n"
+
+
+def e5_rule(tmp, name, lines, *extra):
+    """A guard over one journal written before it starts; True when it stopped its runner."""
+    d = tmp / name
+    d.mkdir()
+    (d / "A1.jsonl").write_text("".join(lines))
+    r = subprocess.Popen(["sleep", "8"])
+    # Reaped as soon as it ends, so a stopped runner is not a zombie the guard still sees alive.
+    threading.Thread(target=r.wait, daemon=True).start()
+    out = watch(tmp, name, [d / "*.jsonl"], "--group-cap", "100", "--total-cap", "100", *extra, pid=r.pid)
+    return "STOP" in out.stdout, out
 
 
 def main():
@@ -119,7 +134,22 @@ def main():
     check(g.returncode == 0 and paired.get("status") == "ended", f"the guarded runner ends normally (exit {g.returncode}, {paired.get('status')})")
     check(calls == 2, f"two runs' journals of one file name both count ({calls} calls)")
 
-    # 6. fast-replay without a ready guard makes no call.
+    # 6. E5's frozen rules: failures over the last 50 calls (the earlier calls all fine, so the
+    # 2-minute rule over every call stays quiet), and the runaway rate.
+    now = int(time.time() * 1000)
+    ok_then_bad = [entry(now - 60_000 + i) for i in range(400)] + [entry(now - 1000 + i, error=("x" if i < 6 else None)) for i in range(50)]
+    stopped, out = e5_rule(tmp, "fail6", ok_then_bad, "--fail-last", "50")
+    check(stopped and "in the last 50 calls" in out.stdout, "6 of the last 50 failing stops the runner (--fail-last 50)")
+    ok_then_5 = [entry(now - 60_000 + i) for i in range(400)] + [entry(now - 1000 + i, error=("x" if i < 5 else None)) for i in range(50)]
+    stopped, out = e5_rule(tmp, "fail5", ok_then_5, "--fail-last", "50")
+    check(not stopped, "5 of the last 50 failing (10%) does not stop it")
+    burst = [entry(now - 90_000 + i * 40) for i in range(2100)]
+    stopped, out = e5_rule(tmp, "runaway", burst, "--max-calls-min", "1000")
+    check(stopped and "runaway" in out.stdout, "2,100 calls over 2 minutes stops the runner (--max-calls-min 1000)")
+    stopped, out = e5_rule(tmp, "busy", burst[:1900], "--max-calls-min", "1000")
+    check(not stopped, "1,900 calls over 2 minutes does not")
+
+    # 7. fast-replay without a ready guard makes no call.
     if a.mind_bin:
         out_file = tmp / "replay.jsonl"
         env = {k: v for k, v in os.environ.items() if k != "LIVING_REPLAY_UNGUARDED"}

@@ -20,6 +20,8 @@ model every `--interval` seconds, and stops the arm's runner (SIGINT by PID, the
 - this arm's spend past min(group cap - the group's earlier arms, total cap - every earlier arm)
   minus `--margin` (calls already in flight when the stop lands);
 - more than 10% of calls failing over the last 2 minutes (at least 20 calls);
+- with `--fail-last N` (E5's frozen rule): more than 10% of the last N calls failing (at least 20);
+- with `--max-calls-min N` (E5's runaway rule): more than 2N calls over the last 2 minutes;
 - the host under 40 GB MemAvailable or 45 GB of free disk (`--min-mem-gb`, `--min-disk-gb`);
 - with `--diag` (battle_diag.py's samples): two windows in a row under `--collapse-below` ticks/s;
 - with `--db` and `--minds-ids`: the thinkers' pending `deliberation` rows rising for 3 minutes (7
@@ -394,6 +396,13 @@ def watch_loop(a):
             checks.append(f"spend ${usd:.2f} past this arm's limit ${limit:.2f}")
         if n2 >= 20 and f2 / n2 > 0.10:
             checks.append(f"call failures {f2}/{n2} over 2 min")
+        if a.fail_last:
+            last = sorted(j.entries(), key=lambda e: e[0])[-a.fail_last:]
+            fl = sum(e[6] for e in last)
+            if len(last) >= 20 and fl / len(last) > 0.10:
+                checks.append(f"call failures {fl}/{len(last)} in the last {a.fail_last} calls")
+        if a.max_calls_min and n2 > 2 * a.max_calls_min:
+            checks.append(f"runaway: {n2} calls over 2 min (above {a.max_calls_min} a minute)")
         if checks and reason is None and alive(a.pid):
             reason = "; ".join(checks)
             stopped_at = time.time()
@@ -925,6 +934,8 @@ def main():
     s.add_argument("--min-disk-gb", type=float, default=45)
     s.add_argument("--diag")
     s.add_argument("--collapse-below", type=float)
+    s.add_argument("--fail-last", type=int, default=0, help="also stop at more than 10%% failing of the last N calls (at least 20; 0: off)")
+    s.add_argument("--max-calls-min", type=float, default=0, help="also stop above this many calls a minute over the last 2 minutes (0: off)")
     s = sub.add_parser("town-side")
     s.add_argument("--instance", required=True)
     s.add_argument("--url", required=True)

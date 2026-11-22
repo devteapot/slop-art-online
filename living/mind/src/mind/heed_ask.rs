@@ -55,6 +55,10 @@ fn arg(args: &[String], name: &str) -> Option<String> {
 }
 
 fn run_dir(src: &Path, st: &Value) -> PathBuf {
+    // A state frozen from a named recording (`attention_e3.py freeze --battle-run`, E5) carries its folder.
+    if let Some(d) = st["dir"].as_str().filter(|d| !d.is_empty()) {
+        return PathBuf::from(d);
+    }
     let run = st["run"].as_str().unwrap_or_default();
     if st["kind"] == "battle" {
         src.join(".local/living/verify").join(run)

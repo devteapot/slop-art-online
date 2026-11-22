@@ -492,7 +492,8 @@ def freeze(a):
         states += sorted(take, key=lambda s: s["t_ms"])
         inputs[os.path.basename(run)] = {"combat-samples.jsonl.gz": sha256_file(os.path.join(d, "combat-samples.jsonl.gz")), "think requests": len(pool)}
     town_pool = []
-    for run in (custom_t or TOWN_RUNS):
+    # With --battle-run and no --town-run, --town 0 skips the act trial's towns (E5 records battles only).
+    for run in (custom_t or (TOWN_RUNS if a.town else [])):
         d = run if custom_t else town_dir(a.src, run)
         T = load_town(d)
         for at, sid, sc, f in thinks(d):

@@ -325,6 +325,7 @@ def main():
     ap.add_argument("--seed", default="island", help="the world seed the harness launches (default island)")
     ap.add_argument("--sides", type=int, default=0, help="E5: `spawn_battle_sides(--battle, N)` with minded fighters (no refills, no walkers) instead of spawn_crowd's battle")
     ap.add_argument("--sides-mixed", action="store_true", help="with --sides: block and dodge mixed within each side (`sides_mixed_defence`)")
+    ap.add_argument("--side-floor", type=float, default=0.0, help="with --sides: end the run at the first sample a side has this share of its fighters or fewer alive (E5: 0.2; 0: off)")
     ap.add_argument("--all-bodies", action="store_true", help="combat-samples keep every body and every use, with kinds (docs/ATTENTION_E3.md)")
     ap.add_argument("--walkers", type=int, default=116)
     ap.add_argument("--minutes", type=float, default=30)
@@ -660,9 +661,10 @@ def main():
                 models["profiles"]["deepseek-flash"] = real
                 env[real["key_env"]] = key
             (run.directory / "thinkers.json").write_text(json.dumps(ids))
-            if (a.fast_real or a.real_minds) and not a.fake_provider and a.guard_ready:
+            if (a.fast_real or a.real_minds) and a.guard_ready:
                 # Paid calls start only under a watching guard (act_trial.py watch --ready): its
                 # journal folder exists first, and the mind starts once the guard says it watches.
+                # (With --fake-provider too, so a free dry run goes through the same handshake.)
                 journal = ROOT / ".local/living/journal" / f"verify-{a.run}"
                 journal.mkdir(parents=True, exist_ok=True)
                 ready = Path(a.guard_ready)
@@ -729,7 +731,7 @@ def main():
                 time.sleep(min(0.5, a.refill_gap))
 
         keeper = threading.Thread(target=keep_battle, daemon=True)
-        head = {"arm": a.arm, "fast_real": a.fast_real, "real_minds": a.real_minds, "fake_provider": a.fake_provider, "fake_script": a.fake_script, "fake_real_profiles": a.fake_real_profiles, "concurrency": a.concurrency, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "sides": a.sides, "sides_mixed": a.sides_mixed, "refill": not a.no_refill and not a.sides, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane, "fast_frame": a.fast_frame, "guard_ready": a.guard_ready, "unguarded": a.unguarded, "fake_acts": a.fake_acts, "act_trace": a.act_trace,
+        head = {"arm": a.arm, "fast_real": a.fast_real, "real_minds": a.real_minds, "fake_provider": a.fake_provider, "fake_script": a.fake_script, "fake_real_profiles": a.fake_real_profiles, "concurrency": a.concurrency, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "sides": a.sides, "sides_mixed": a.sides_mixed, "side_floor": a.side_floor, "refill": not a.no_refill and not a.sides, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane, "fast_frame": a.fast_frame, "guard_ready": a.guard_ready, "unguarded": a.unguarded, "fake_acts": a.fake_acts, "act_trace": a.act_trace,
                 "nproc": os.cpu_count(), "db_identity": ident, "world_seed": seed["seed"],
                 "layout": [{"id": id, "at": bodies[id]} for id in fighters],
                 "walker_layout": [{"id": id, "at": bodies[id]} for id in made[a.battle:]],
@@ -799,7 +801,16 @@ def main():
             if fixed:
                 sample["fighters_alive"] = len(bodies_at_site(f"{k:02d}"))
             sample["rows"] = {tb: count(run, tb) for tb in TABLES}
-            sample["alive"] = sum(1 for c in run.sql("SELECT id, alive FROM character", "census") if c["alive"])
+            census_rows = run.sql("SELECT id, alive FROM character", "census")
+            sample["alive"] = sum(1 for c in census_rows if c["alive"])
+            if a.sides:
+                live = {c["id"] for c in census_rows if c["alive"]}
+                by_side = {}
+                for f, sd in side_of.items():
+                    v = by_side.setdefault(sd, [0, 0])
+                    v[0] += 1
+                    v[1] += f in live
+                sample["sides_alive"] = {sd: v[1] for sd, v in by_side.items()}
             if a.fast_lane:
                 # Fast calls whose request was issued in this window, from their `thought` rows.
                 fast = []
@@ -837,6 +848,10 @@ def main():
             with (run.directory / "diag.jsonl").open("a") as f:
                 f.write(json.dumps(sample) + "\n")
             print(json.dumps({x: sample[x] for x in ("k", "t_min", "ticks_per_s", "tick_p50", "over_16_7", "alive", "respawns", "load_1m")} | {"exp_s": sample["stats"]["experiences_per_s"], "experience_rows": sample["rows"]["experience"]}), flush=True)
+            if a.sides and a.side_floor and any(v[1] <= a.side_floor * v[0] for v in by_side.values()):
+                print(f"side floor: a side is down to {a.side_floor:.0%} of its fighters or fewer: {sample['sides_alive']}", flush=True)
+                head["status"] = "side_floor"
+                break
             low = low + 1 if b["ticks_per_s"] < 2 else 0
             if low >= 2:
                 print("collapse: two windows below 2 ticks a second", flush=True)
