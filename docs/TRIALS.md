@@ -95,6 +95,14 @@ The run stops at `minutes`, at a token cap if the trial or `TRIALS_TOTAL_TOKENS`
 
 Computed from the samples, rows and journal for every instance: survival and time of death, lowest health, hunger at start, peak and end, the first time the subject ate, food gained (with the activity at the time: gather, take, or received while idle), activities by count, nearest approach to each role, the farthest the subject moved in the two minutes after a role was placed, lines said and to whom, scripted lines heard, conversation turns, graph revisions and their plans, refusals (failure feedback in the percepts), errors, relations and judgments at the end, techniques learned, structures built, memories kept by consolidation, model calls and tokens by purpose and model, and the first 40 think, compile and talk replies with their journal references.
 
+## Paid runs: every stop rule in code (2026-11-22)
+
+**Rule (general coordinator, 2026-11-22):** before the first paid call of any run, every frozen stop rule exists in code, in the guard or the launcher, and has been dry-run on the fake model so that it visibly trips. A rule that exists only in the plan is not a guard. The run's report lists each rule with its trip evidence before any spend.
+
+**Why:** in E5 ([ATTENTION_E5.md](ATTENTION_E5.md) on `heed-e4`) six stop rules were frozen, but only some were coded. Rule 6, more than 30% of the first 50 policies invalid, should have stopped arm (b) at about $0.16. It ran to its $1.50 cap instead, and the arm's result was void.
+
+**How:** the spend guard is `act_trial.py watch --ready --pid-file` (battle-frame, 2026-11-22). Paid launchers wait for its ready file, and it refuses to start when it watches no journal. Rules about content or quality, such as validity rates, failure shares or throughput trips, run as code the launcher checks between calls; a written note is not enough. The dry run feeds the fake model replies that break each rule and shows the stop.
+
 ## The Spark setup
 
 The DGX Spark (`gooning@192.168.1.103`, aarch64, 20 cores, 119 GB) also hosts other work, which trials leave alone: the `sao-living_spacetimedb_1` (2.10.1) and `sao-living-neo4j-1` containers and their volumes, `~/dev/slop-art-online`, `~/slop-lab`, `~/kimodo-test`, ComfyUI and any GPU jobs. The runner refuses those container names.
