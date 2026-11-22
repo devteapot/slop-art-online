@@ -709,8 +709,20 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: crate::perception::Swept) 
         ENGAGED.with(|e| e.borrow_mut().clear());
         VIEWERS.with(|v| v.borrow_mut().values_mut().for_each(|e| e.pending.clear()));
     }
-    // RELAY_PROTOTYPE (branch relay-proto only): with `relay_on` no engagement or cue work here.
-    if delivery && !common::laws(ctx).relay_on {
+    // RELAY_PROTOTYPE (branch relay-proto only): with `relay_on` the engagement map is kept (heed
+    // reads it: `target_of`, `aiming`, `engaged_with`), but no near-tier copy or cue is written.
+    if delivery && common::laws(ctx).relay_on {
+        let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
+        let engaged = engaged_of(ctx, now, &ids);
+        let mut by_viewer: HashMap<u32, HashSet<u32>> = HashMap::new();
+        for (&body, viewers) in &engaged {
+            for &v in viewers {
+                by_viewer.entry(v).or_default().insert(body);
+            }
+        }
+        ENGAGED.with(|e| *e.borrow_mut() = by_viewer);
+        PENDING.with(|p| p.borrow_mut().clear());
+    } else if delivery {
         // Who is engaged with whom this tick; those engaged with a viewer join its near tier at once.
         let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
         let engaging = common::detail_span("frames.engaged");
