@@ -34,7 +34,24 @@ Run `python3 living/tools/trial_reclaim.py --dry-run` to write the per-directory
 
 The checked-in [user timer](../living/deploy/systemd/slop-trial-reclaim.timer) wakes its [oneshot service](../living/deploy/systemd/slop-trial-reclaim.service) hourly at :20 local time. The service attempts reclaim at 04:20 or when the latest reading in `~/slop-mq/trial-volume.log` exceeds 140 GB and is no more than 90 minutes old. Point the service working directory at the coordinator's checkout before installing it. The timer waits for the next hourly activation after a missed window. [systemd timer scheduling](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html).
 
-Scheduled reclaim takes the nonblocking `battle.lock`, queue and drainer locks, and exclusive trial activity lock for the full run. It logs and skips if a lock is held, a merge or trial driver is active, the queue is nonempty without `HOLD`, a hosted world cannot be confirmed paused, or the one-minute load exceeds 2.0. It checks load again before the stop. Trial, battle and scene drivers use the corresponding shared activity lock. Keep direct Docker and database administration outside the maintenance window.
+Scheduled reclaim takes the nonblocking `battle.lock`, queue and drainer locks, and exclusive trial activity lock for the full run. It logs and skips if a lock is held, a merge or trial driver is active on the trial server (below), the queue is nonempty without `HOLD`, a hosted world cannot be confirmed paused, or the one-minute load exceeds 2.0. It checks load again before the stop. Trial, battle and scene drivers use the corresponding shared activity lock. Keep direct Docker and database administration outside the maintenance window.
+
+**Which processes block.** `blockers()` in `trial_reclaim.py` reads `/proc` before the inventory and again before the stop. Runs on private SpacetimeDB servers do not block. A process blocks when:
+
+- it is the merge queue (`drain.sh`, `merge2.sh`), which runs the scene gate on the trial server. These always block;
+- it holds `~/slop-mq/trial-activity.lock`, shared or exclusive. This covers any process: a granted entry in `/proc/locks`, or an open file on the lock while another process holds it, such as the child of `flock -s`. The reclaim's own lock and the waiters behind it do not count;
+- it is `verify.py`, `battle_diag.py`, `scene_gate.py` or `trials.py` and targets the trial server. Its arguments or environment (`/proc/<pid>/environ`) name `slop-trials-stdb`, `127.0.0.1:3320` (or `localhost`, `0.0.0.0`, `[::1]`), or a `TRIALS_STDB_*` value `slop-trials-stdb` or `3320`. The tool's default counts when the variable is unset:
+
+  | Tool | Server variables | Default |
+  |---|---|---|
+  | `scene_gate.py` | `--stdb-container`/`--stdb-url`, else `LIVING_GATE_STDB_CONTAINER`/`LIVING_GATE_STDB_URL` | trial server: blocks unless both are overridden |
+  | `trials.py` | `TRIALS_STDB_CONTAINER`, `TRIALS_STDB_PORT` | trial server: blocks unless both are overridden |
+  | `verify.py`, `battle_diag.py` | `LIVING_STDB_CONTAINER`, `LIVING_STDB_URL` | the shared server on 3300: does not block |
+
+- one of those four tools, or any of its descendants, has an established TCP connection to `127.0.0.1:3320`. The check reads `/proc/net/tcp{,6}` and maps socket inodes through `/proc/<pid>/fd`;
+- one of those four tools has an environment that cannot be read, for example a process of another user.
+
+`python3 living/tools/trial_reclaim_selftest.py` covers these cases against a fake `/proc` without touching real processes.
 
 The service creates `~/slop-mq/HOLD` if needed, stops `slop-timer-check.timer` before `slop-disk-clean.timer`, and confirms both timers and the disk-clean service are inactive. On success or failure it starts `slop-disk-clean.service`, restarts both timers, checks their NEXT activations, and removes only the HOLD it created. If a timer cannot be verified, the service retains its HOLD and logs the failure. Scheduled reclaim only removes independently classified verification scratch, fake, or no-model replicas. It archives each eligible commitlog before removal and holds paid and uncertain replicas even when their archives exist. A successful run confirms the kept worlds remain paused and runs the scratch publish, SQL, pause, archive and delete smoke. It logs measured volume GB freed and skips to both `~/slop-mq/disk-alarm.log` and syslog. [systemctl timer inspection](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html) · [SpacetimeDB database HTTP API](https://spacetimedb.com/docs/http/database/).
 

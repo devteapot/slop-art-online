@@ -7659,11 +7659,12 @@ SCENES["seen_remains_gaze"] = seen_remains_gaze
 
 def act_replace(s):
     """A mind's act under way and the next one it decides (docs/INPUT_LATENCY.md, "Mind acts
-    replace"; features/acts.md). With `mind_act_replaces` off (as shipped) the next waits in
+    replace"; features/acts.md). With `mind_act_replaces` off (the control; on as shipped since
+    2026-11-22) the next waits in
     `act_queue` for the walk under way to end. On, it replaces the walk as a player's command does
     (`acts::submit_player`): the walk is broken off with no outcome told, what waited is dropped,
     and the new act starts in the same transaction. A gaze change alone, or an act that cannot be
-    read, replaces nothing. The law is set back off at the end."""
+    read, replaces nothing. The law is set back to its shipped value (on) at the end."""
     a, = s.people(1)
     line = open_line(s, 30)
     start, far, back = line[0], line[-1], line[14]
@@ -7705,7 +7706,7 @@ def act_replace(s):
     s.act(a, {"do": "no_such_skill"})
     now = doing()
     s.expect("on: a gaze change or an unreadable act replaces nothing", now and now["started_ms"] == under_way["started_ms"], {"under_way": under_way, "now": now})
-    set_law(s, "mind_act_replaces", False)
+    set_law(s, "mind_act_replaces", True)
     s.graph(a, {"wait": 120})
 
 
@@ -7724,7 +7725,7 @@ def act_gaps(s):
        with nothing written; a second later acts go through again; off, all 40 go through.
     3. `act_turned_back`: seven walks each given up within 3 s for another the other way are
        noticed; the sixth in 20 s is told, "You keep turning back and forth"; off, nothing is told.
-    4. `act_same_continues` (off as shipped): the same walk again while it runs goes on (its start
+    4. `act_same_continues` (on as shipped since 2026-11-22): the same walk again while it runs goes on (its start
        unchanged); off, it starts over.
 
     `mind_act_replaces` is on for the scene; every law is set back at the end."""
@@ -7812,14 +7813,160 @@ def act_gaps(s):
             if same:
                 s.expect("same continues on: the same walk again goes on (its start unchanged)", now and now["started_ms"] == first["started_ms"], {"first": first, "now": now})
             else:
-                s.expect("same continues off (as shipped): the same walk again starts over", now and now["started_ms"] != first["started_ms"] and now["skill"] == "goto", {"first": first, "now": now})
+                s.expect("same continues off (control): the same walk again starts over", now and now["started_ms"] != first["started_ms"] and now["skill"] == "goto", {"first": first, "now": now})
     finally:
-        for law, value in (("mind_act_replaces", False), ("act_replace_checks", True), ("act_input_cost", True), ("act_turned_back", True), ("act_same_continues", False)):
+        for law, value in (("mind_act_replaces", True), ("act_replace_checks", True), ("act_input_cost", True), ("act_turned_back", True), ("act_same_continues", True)):
             set_law(s, law, value, check=False)
         s.graph(a, {"wait": 120})
 
 
 SCENES["act_gaps"] = act_gaps
+
+
+def far_spot(s, at, lo=40.0, hi=70.0):
+    """A walkable tile `lo`..`hi` m from `at` (beyond any day's sight from it)."""
+    W, H, walk = tile_grid(s)
+    for r in range(int(lo), int(hi), 3):
+        for k in range(24):
+            x, y = at[0] + r * math.cos(k * math.pi / 12), at[1] + r * math.sin(k * math.pi / 12)
+            if all(walk(x + i, y + j) for i in (-1, 0, 1) for j in (-1, 0, 1)):
+                return (int(x) + 0.5, int(y) + 0.5)
+    raise RuntimeError("no far walkable spot")
+
+
+def truthful_refusals(s):
+    """Truthful refusals (docs/TRUTHFUL_REFUSALS.md; `brain.rs`
+    `Ev::unresolved`, `living_rules::acts::parse`): an act's refusal, and a graph leaf's failure,
+    say what actually happened, each beside a control. A's acts go through `mind_act` (a mind's
+    path; verify-player `refusals.py` drives the same through `human_act`).
+
+    1. Not acts, named for what they are (code `unreadable`): speech, a graph node, a skill that
+       does not exist, keys that are neither.
+    2. Roles nobody fills for A now (code `unknown`): attacker, speaker, hailer, suitor, partner,
+       parent ("nobody has hurt you in the last minute", ...).
+    3. A place name A does not hold (code `unknown`, "you know no place called ..."), also one only
+       B holds (own rows only); controls: A's own place, and `{"place": "home"}` with no "home"
+       row walks to A's own home position.
+    4. Sight (code `unseen`, "no #C in sight") for C beyond sight; control: a wave at B beside A is
+       done.
+    5. B killed beside A: "#B is dead: their remains lie in sight" (code `refused`); C killed out of
+       sight stays "no #C in sight" (a death not seen is not told).
+    6. A bush beside A stripped bare: gathering the nearest berry bush is refused "every berry bush
+       in sight is bare" (code `refused`); control: before, the same act starts.
+    7. Graph leaves: a `goto` to an unknown place leaves A "stuck: goto: you know no place called
+       ..."; a `say` to the speaker with no one speaking is told "nobody has spoken to you".
+    """
+    bushes = [(r["x"], r["y"]) for r in s.rows("SELECT x, y, kind FROM resource_node") if r["kind"] == "berry_bush"]
+    center = open_patch(s, 10, avoid=bushes)
+    a, b, c = s.people(3)
+    s.call("place_at", a, *center)
+    s.call("place_at", b, center[0] + 2.0, center[1])
+    far = far_spot(s, center)
+    s.call("place_at", c, *far)
+    time.sleep(1.0)
+    # A mind's outcome is its `act` line (the `act_outcome` row with its code is a played
+    # character's: verify-player `refusals.py` checks the codes).
+    outs = lambda: [r for r in s.http_rows(f"SELECT id, kind, text FROM experience WHERE observer = {a}") if r["kind"] == "act"]
+    last = lambda: max([r["id"] for r in s.http_rows(f"SELECT id FROM experience WHERE observer = {a}")] or [0])
+    evidence = {"a": a, "b": b, "c": c, "center": center, "far": far}
+    bad = lambda r: "did not work out" in r["text"] or "could not" in r["text"]
+
+    def refused(node, code, why, name, starts=False):
+        """`code`: the outcome code a player's row carries for it (the line is the same)."""
+        mark = last()
+        s.act(a, node)
+        got = s.wait(lambda: [r for r in outs() if r["id"] > mark and bad(r)], 8)[-1]
+        evidence[name] = {"node": node, "line": got, "code_for_a_player": code}
+        text = got["text"]
+        ok = (why in text) if starts else (text.endswith(f": {why}.") or text.endswith(f": {why}"))
+        s.expect(f"{name}: told \"{why}\"", ok and "in sight" not in text.replace(why, ""), got)
+        time.sleep(0.3)
+        return got
+
+    def started(node, skill, name, goal=None):
+        mark = last()
+        s.act(a, node)
+        act = s.wait(lambda: [d for d in s.http_rows(f"SELECT skill, node FROM activity WHERE id = {a}") if d["skill"] == skill and d["node"] == 65534], 8)
+        no = [r for r in outs() if r["id"] > mark and bad(r)]
+        steer = s.http_rows(f"SELECT goal, gx, gy FROM steer WHERE id = {a}")
+        evidence[name] = {"node": node, "activity": act, "refusals": no, "steer": steer}
+        s.expect(f"{name} (control): it starts, nothing refused", act and not no, evidence[name])
+        if goal:
+            s.expect(f"{name}: the walk's goal is {goal[0]:.1f}, {goal[1]:.1f}", steer and math.dist((steer[0]["gx"], steer[0]["gy"]), goal) < 1.5, evidence[name])
+        s.call("place_at", a, *center)
+        time.sleep(0.8)
+
+    try:
+        # 1. Not acts.
+        refused({"say": "Stop!"}, "unreadable", "`say` is speech, not an act: speak it instead", "speech")
+        refused({"wait": 20}, "unreadable", "`wait` is a behavior-graph node, not a one-off act", "graph node", starts=True)
+        refused({"do": "call", "speech": "Stop!"}, "unreadable", "`call` is not a skill, so not an act", "unknown skill")
+        refused({"act": {"do": "wave", "target": {"id": b}}}, "unreadable", "`act`: neither a skill nor a behavior-graph node", "wrapper", starts=True)
+        # 2. Roles nobody fills.
+        wave = lambda t: {"do": "wave", "target": t}
+        refused(wave("attacker"), "unknown", "nobody has hurt you in the last minute", "attacker")
+        refused(wave("speaker"), "unknown", "nobody has spoken to you in the last minute", "speaker")
+        refused(wave("hailer"), "unknown", "nobody has greeted you in the last minute", "hailer")
+        refused(wave("suitor"), "unknown", "nobody has offered to start a family with you lately", "suitor")
+        refused(wave("partner"), "unknown", "you have no partner (the other parent of your youngest child)", "partner")
+        me = s.rows(f"SELECT parent_a, parent_b, home_x, home_y FROM character WHERE id = {a}")[0]
+        if me["parent_a"] == 0 and me["parent_b"] == 0:
+            refused(wave("parent"), "unknown", "you have no parent", "parent")
+        # 3. Places: own rows only.
+        well = (center[0] + 4.0, center[1])
+        s.call("mind_update", a, {"persona": None, "relations": [], "beliefs": None, "judgments": [], "places": [{"name": "verify well", "x": well[0], "y": well[1]}], "thought": None, "replace": False, "cues": None})
+        s.call("mind_update", b, {"persona": None, "relations": [], "beliefs": None, "judgments": [], "places": [{"name": "verify b only", "x": well[0], "y": well[1] + 2}], "thought": None, "replace": False, "cues": None})
+        goto = lambda name: {"do": "goto", "target": {"place": name}}
+        refused(goto("verify nowhere"), "unknown", 'you know no place called "verify nowhere"', "unknown place")
+        refused(goto("verify b only"), "unknown", 'you know no place called "verify b only"', "another's place")
+        refused(goto("2 berry bush around [432, 226]"), "unknown", 'you know no place called "2 berry bush around [432, 226]"', "a remembered resource line")
+        # 4. Sight.
+        refused(wave({"id": c}), "unseen", f"no #{c} in sight", "beyond sight")
+        mark = last()
+        s.act(a, wave({"id": b}))
+        done = s.wait(lambda: [r for r in outs() if r["id"] > mark], 10)
+        evidence["wave at b"] = done
+        s.expect("a wave at B beside A (control): done", done[-1]["text"].startswith("You did what you had decided"), done)
+        # 3 (controls).
+        started(goto("verify well"), "goto", "A's own place", goal=well)
+        if any(r["name"].lower() == "home" for r in s.rows(f"SELECT name FROM place WHERE actor = {a}")):
+            s.expect("A has no \"home\" row (the home control needs none)", False, me)
+        s.call("place_at", a, *center)
+        started(goto("home"), "goto", "{\"place\": \"home\"} without a home row: A's own home", goal=(me["home_x"], me["home_y"]))
+        # 7. Graph leaves.
+        s.graph(a, {"do": "goto", "target": {"place": "verify nowhere"}})
+        st = s.wait(lambda: [r for r in s.http_rows(f"SELECT status FROM mind_state WHERE id = {a}") if "you know no place called" in r["status"]], 8)
+        evidence["graph leaf"] = st
+        s.expect("graph leaf: stuck, 'goto: you know no place called \"verify nowhere\"'", st[0]["status"] == 'stuck: goto: you know no place called "verify nowhere"', st)
+        t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        s.graph(a, {"say": {"text": "Verify hello", "to": "speaker"}})
+        own = s.wait(lambda: [r for r in s.http_rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}") if r["kind"] == "own" and r["at_ms"] >= t0 and "nobody has spoken to you" in r["text"]], 8)
+        evidence["say leaf"] = own
+        s.expect("say leaf: told 'nobody has spoken to you in the last minute'", own, own)
+        s.graph(a, {"wait": 120})
+        s.call("place_at", a, *center)
+        # 6. Bare.
+        s.call("place_resource", a, "berry_bush", 0.0, 3.0, 0.0, 0)
+        bush = s.wait(lambda: [r for r in s.rows("SELECT id, kind, x, y, amount FROM resource_node") if r["kind"] == "berry_bush" and math.dist((r["x"], r["y"]), (center[0], center[1] + 3.0)) < 2.0], 5)[0]
+        evidence["bush"] = bush
+        started({"do": "gather", "target": {"nearest": "berry_bush"}}, "gather", "gather the nearest berry bush while it has berries")
+        s.graph(a, {"first": [{"do": "gather", "target": {"id": bush["id"]}}, {"wait": 1}]})
+        s.wait(lambda: [r for r in s.http_rows(f"SELECT amount FROM resource_node WHERE id = {bush['id']}") if r["amount"] < 1.0], 60)
+        s.graph(a, {"wait": 120})
+        time.sleep(1.0)
+        refused({"do": "gather", "target": {"nearest": "berry_bush"}}, "refused", "every berry bush in sight is bare", "bare bush")
+        # 5. Dead.
+        s.call("kill", b, "verify truthful refusals")
+        s.wait(lambda: [r for r in s.rows("SELECT owner, kind FROM structure") if r["kind"] == "remains" and r["owner"] == b], 8)
+        refused(wave({"id": b}), "refused", f"#{b} is dead: their remains lie in sight", "dead in sight")
+        s.call("kill", c, "verify truthful refusals")
+        refused(wave({"id": c}), "unseen", f"no #{c} in sight", "dead out of sight")
+    finally:
+        (s.out / f"{s.name}-evidence.json").write_text(json.dumps(evidence, indent=1, default=str) + "\n")
+        s.graph(a, {"wait": 120})
+
+
+SCENES["truthful_refusals"] = truthful_refusals
 
 if __name__ == "__main__":
     raise SystemExit(main())

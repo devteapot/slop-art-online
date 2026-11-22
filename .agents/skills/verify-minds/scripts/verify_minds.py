@@ -2460,11 +2460,13 @@ def talk_places_case(run):
     knows a place "verify well" at tile 20 (admin `mind_update`, as its mind would write it).
 
     1. A asks H "Where can I find berries around here?" (admin `mind_say`). H's talk prompt has
-       "# Places you know, from where you stand" with `"verify well" at [x, y], 16 m east` and
+       "# Places you know, from where you stand" with `"verify well" at [x, y], 16 m east` and,
+       apart since truthful-refusals, "# Resources you have seen, from where you stand" with
        `3 berry bush around [x, y], <N> m <dir>: seen day …` (H's `seen_stock` row), from where H
        stands (`mind_reach`, reply-timing; before, the `standing` row `mind_where` wrote), and
        its "# Now" says H stands still and where A is.
-    2. H's think prompt's "# Places you remember" has the well's coordinates without a way, and
+    2. H's think prompt's "# Places you remember" has the well's coordinates without a way and no
+       bush (named places only), "# Resources you have seen (not places: …)" has the bushes, and
        its scene's `places` has the well with the way (`dir`, `dist`, known-ground's remembered
        places): the way is given once, by the scene.
     3. H steps off again; A gathers the three (admin `mind_act`); H comes back. Its row is gone,
@@ -2520,13 +2522,16 @@ def talk_places_case(run):
     body = next(b for b in run.private('SELECT id, x, y FROM body', 'bodies-h') if b['id'] == h)
     here = (body['x'], body['y'])
     way = lambda to: way_words(here, to)
-    section = talk1.split('# Places you know, from where you stand\n', 1)[1].split('\n#', 1)[0] if '# Places you know, from where you stand' in talk1 else ''
+    part = lambda text, head: text.split(head + '\n', 1)[1].split('\n#', 1)[0] if head + '\n' in text else ''
+    section = part(talk1, '# Places you know, from where you stand')
+    seen1 = part(talk1, '# Resources you have seen, from where you stand')
     well_line = f'"verify well" at [{well[0]:.0f}, {well[1]:.0f}], {way(well)}'
     bush_head = f'3 berry bush around [{first["x"]:.0f}, {first["y"]:.0f}], {way((first["x"], first["y"]))}: seen day '
     run.admin('set_behavior', h, json.dumps({'think': 'I finished my plan. verify talk-places think'}))
     think = run.wait(lambda: [sent_text(e) for e in requests('think') if 'verify talk-places think' in sent_text(e)], 'H think prompt', 60)[0]
     (run.directory / 'prompt-think.txt').write_text(think)
-    remember = think.split('# Places you remember\n', 1)[1].split('\n#', 1)[0] if '# Places you remember' in think else ''
+    remember = part(think, '# Places you remember')
+    seen_think = part(think, '# Resources you have seen (not places: reach one with {"at": [x, y]})')
     # The scene's own entry for the well (one JSON object in the prompt's scene).
     scene_well = None
     for m in re.finditer(r'\{[^{}]*"verify well"[^{}]*\}', think):
@@ -2549,15 +2554,16 @@ def talk_places_case(run):
     time.sleep(1.0)
     talk2 = talk_prompt('verify places two')
     (run.directory / 'prompt-talk-2.txt').write_text(talk2)
-    section2 = talk2.split('# Places you know, from where you stand\n', 1)[1].split('\n#', 1)[0] if '# Places you know, from where you stand' in talk2 else ''
+    section2 = part(talk2, '# Resources you have seen, from where you stand')
     checks = {
         'three_bushes_placed': len(ours) == 3,
         'h_remembers_the_three': first['count'] == 3 and first['gone_ms'] == 0,
         'talk_prompt_lists_places_from_where_h_stands': bool(section),
         'now_says_h_stands_still_and_where_a_is': re.search(r'You are standing still[ .]', talk1) is not None and re.search(r'\n.+ is \d+ m \w+ of you\.|\n.+ is right beside you\.', talk1) is not None,
         'the_well_with_its_way': any(l.startswith('- ' + well_line) for l in section.splitlines()),
-        'the_bushes_with_their_way_and_when_seen': any(l.startswith('- ' + bush_head) for l in section.splitlines()),
+        'the_bushes_with_their_way_and_when_seen_apart': any(l.startswith('- ' + bush_head) for l in seen1.splitlines()) and 'berry bush' not in section,
         'think_prompt_places_without_the_way': any(l == f'- "verify well" at [{well[0]:.0f}, {well[1]:.0f}]' for l in remember.splitlines()),
+        'think_prompt_bushes_apart_from_places': 'berry bush around [' in seen_think and 'berry bush' not in remember,
         'think_scene_gives_the_way_once': scene_well is not None and f'{scene_well.get("dist", -1):.0f} m {scene_well.get("dir")}' == way(well)
                                           and not any(way(well) in l for l in remember.splitlines()),
         'unchanged_while_away': away is not None and away['gone_ms'] == 0 and away['count'] == 3,
@@ -2565,7 +2571,7 @@ def talk_places_case(run):
         'talk_prompt_says_gone_when_last_here': any('berry bush around [' in l and ': gone when you were last here, day ' in l and '(3 seen day ' in l for l in section2.splitlines()),
     }
     result = {'h': h, 'a': a, 'ours': ours, 'well': well, 'here': here, 'first': first, 'away': away, 'gone': gone,
-              'section': section, 'remember': remember, 'scene_well': scene_well, 'section2': section2, 'checks': checks}
+              'section': section, 'seen': seen1, 'remember': remember, 'seen_think': seen_think, 'scene_well': scene_well, 'section2': section2, 'checks': checks}
     (run.directory / 'talk-places.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
     assert all(checks.values()), checks
     return {'status': 'pass', **result}
@@ -4599,7 +4605,7 @@ def act_repair_case(run, case):
     assert len(repair_calls) == len(spoken) == len(speech) == 1, (repair_calls, spoken, speech)
     assert [json.loads(a) for a in original_attempt['acts']] == [original, gift], original_attempt
     refusal = original_attempt['refused'][0]['refusal']
-    assert 'unknown skill `go`' in refusal and 'goto' in refusal.partition('Valid one-off act names: ')[2].split(', '), refusal
+    assert '`go` is not a skill' in refusal and 'goto' in refusal.partition('Valid one-off act names: ')[2].split(', '), refusal
     messages = repair_calls[0]['request']['messages']
     assert json.loads(messages[-1]['content'])['rejected'] == original_attempt['refused']
     assert [json.loads(a) for a in retry['acts']] == [replacement], retry

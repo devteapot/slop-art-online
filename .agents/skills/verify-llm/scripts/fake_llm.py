@@ -145,6 +145,25 @@ class Script:
         self.lock = threading.Lock()
         self.log = log
         self.sequence = 0
+        self.samples = {}
+        self.turns = {}
+
+    def sample(self, path, purpose, body):
+        """The next recorded call for `purpose` from a `samples` file (see fake-llm.md): the
+        speaking person's own calls when the prompt names them (`# Who you are (<name>)`), else
+        the purpose's pool (`*`), each list replayed in order and from the start again."""
+        if path not in self.samples:
+            self.samples[path] = json.loads(Path(path).read_text())
+        pools = self.samples[path].get(purpose) or {}
+        user = '\n'.join(m.get('content', '') or '' for m in body.get('messages', []) if m.get('role') == 'user')
+        who = re.search(r'# Who you are \(([^)]+)\)', user)
+        key = who[1] if who and pools.get(who[1]) else '*'
+        pool = pools.get(key) or []
+        if not pool:
+            return None
+        turn = self.turns.get((path, purpose, key), 0)
+        self.turns[(path, purpose, key)] = turn + 1
+        return pool[turn % len(pool)]
 
     def note(self, record):
         """Log a batch poll or cancel, only for a script with a `batch` section (other
@@ -175,6 +194,23 @@ class Script:
             if action.get('cite'):
                 reply = cite(reply, body)
             content = action.get('content', json.dumps(reply))
+            recorded = self.sample(action['samples'], purpose, body) if action.get('samples') else None
+            if recorded:
+                # A recorded call: its latency and usage, and its reply unless the rule gives one.
+                action['delay_s'] = recorded['latency_ms'] / 1000 * float(action.get('latency_scale', 1))
+                if recorded.get('usage'):
+                    action['usage'] = recorded['usage']
+                if recorded.get('content') is not None and 'reply' not in action and 'content' not in action:
+                    content = recorded['content']
+                    if purpose == 'talk':
+                        # Spoken to the person this prompt is face to face with, not the recorded one.
+                        try:
+                            said = json.loads(content)
+                        except ValueError:
+                            said = None
+                        if isinstance(said, dict) and 'to' in said:
+                            said['to'] = valid_reply('talk', body)['to']
+                            content = json.dumps(said)
             if action.get('repair'):
                 content = '```json\n' + json.dumps(reply)[:-1] + ',}\n```'
             if action.get('content_parts'):
@@ -188,6 +224,10 @@ class Script:
                       'batch_job': batch_job}
             if timing is not None:
                 record['timing'] = timing
+            if self.data.get('log_body') is False:
+                # Long load runs: the request's size instead of its body (the mind's journal keeps it).
+                record.update(body_excerpt=record['body_excerpt'][:200], body=None, body_chars=len(json.dumps(body)),
+                              content=content if len(str(content)) <= 200 else str(content)[:200])
             with self.log.open('a') as stream:
                 stream.write(json.dumps(record) + '\n')
         return action, content

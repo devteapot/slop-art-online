@@ -55,6 +55,12 @@ Each rule overlays `defaults`. Available response fields:
 | `usage` | Exact usage object. Default prompt 12, completion 5, total 17, cached 8, reasoning 2 (`completion_tokens_details`). Omit individual fields to prove unknown values remain null. |
 | `finish_reason` | The choice's `finish_reason`, default `stop` (direct and batch). |
 | `headers` | Response header map, including Retry-After and optional provider rate-limit headers. |
+| `samples` | Path to a recorded-calls file (below): the reply's latency, usage and content come from the next recorded call for the request's purpose. |
+| `latency_scale` | With `samples`: multiplies each recorded latency (default 1). |
+
+## Recorded calls (`samples`)
+
+A rule with `"samples": "<path>"` answers from real calls recorded in a file shaped `{purpose: {"*": [call, …], "<name>": [call, …]}}`, each call `{"latency_ms", "usage", "content"}` (`living/tools/pool_study.py samples` builds one per model from mind journals). A request whose user prompt names its person (`# Who you are (<name>)`) takes that person's calls, else the purpose's pool `*`; each list is replayed in order and starts again at its end (one counter per file, purpose and list, under the script's lock). The call's latency becomes the delay (times `latency_scale`) and its usage the envelope's `usage`. Its content becomes the reply unless the rule gives `reply` or `content`; a call recorded with `"content": null` keeps the fake's valid reply (memory work, whose recorded patches name another world's ids). A recorded `talk` reply is addressed to the person this prompt is face to face with. Combine with `headers` to send a provider's rate-limit headers (`x-ratelimit-limit-req-minute`, `x-ratelimit-limit-tokens-minute`), which the mind's pacing learns. A top-level `"log_body": false` keeps each log line short (no `body`, a 200-character excerpt and content, and `body_chars`), for load runs of thousands of calls.
 
 ## Citing the request (`cite`)
 
