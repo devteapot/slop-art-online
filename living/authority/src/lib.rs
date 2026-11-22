@@ -639,7 +639,8 @@ pub fn spawn_battle(ctx: &ReducerContext, n: u32) -> Result<(), String> {
 /// Each side is a community (`Side A`, `Side B`, …); an open stance record each way between every
 /// two sides says `enemy`, so a fighter's target, the nearest person of `relation: enemy`, is
 /// someone of another side (residents of no side are not enemies). The side is the fighter's
-/// membership, and its name's prefix (`A12`), for a client that tints by side.
+/// membership, and its name's prefix (`A12`), for a client that tints by side. Half of each
+/// side dodges incoming windups and half blocks (alternating within the side; not by id parity).
 #[spacetimedb::reducer]
 pub fn spawn_battle_sides(ctx: &ReducerContext, n: u32, sides: u32) -> Result<(), String> {
     use spacetimedb::rand::Rng;
@@ -684,7 +685,10 @@ pub fn spawn_battle_sides(ctx: &ReducerContext, n: u32, sides: u32) -> Result<()
         let id = seed::spawn_creature(ctx, &format!("{}{}", letters[side], made / sides as u32 + 1), "person", ctx.database_identity(), false, p, now);
         common::inv_add(ctx, id as u64, "spear", 1);
         ctx.db.membership().insert(Membership { id: 0, community: ids[side], member: id, since_ms: now });
-        let defend = if id % 2 == 0 { "dodge" } else { "block" };
+        // Block and dodge alternate within each side by the fighter's index in its side, so every
+        // side gets an even mix (within one). By id parity, as `spawn_battle` does, consecutive
+        // ids put one whole side on block and the other on dodge (docs/BATTLE_LAWS.md).
+        let defend = if (made / sides as u32) % 2 == 0 { "dodge" } else { "block" };
         let graph = format!(
             r#"{{"first":{{"label":"combat","children":[{{"if":{{"cond":{{"threatened":true}},"then":{{"do":{{"skill":"{defend}"}}}}}}}},{{"do":{{"skill":"attack","target":{{"nearest":{{"kind":"person","relation":"enemy"}}}}}}}}]}}}}"#
         );
