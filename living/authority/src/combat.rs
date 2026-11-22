@@ -723,6 +723,13 @@ pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f3
     let _span = common::span("use_skill");
     crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
+    use_skill_as(ctx, me, skill, target, x, y, "player")
+}
+
+/// `use_skill` for a given character, its attempt recorded from `source` ("player"; "npc" for an
+/// NPC body service's batched intent, `npc_intents`, NPC-MEASURE only): the same checks, costs
+/// and effects whoever sends it.
+pub fn use_skill_as(ctx: &ReducerContext, me: Character, skill: String, target: u32, x: f32, y: f32, source: &str) -> Result<(), String> {
     let sc = common::scripts(ctx);
     let Some(shape) = sc.combat(&skill).filter(|_| sc.shapes().on_bar(&skill)) else {
         return Err(format!("{skill} is not on the skill bar"));
@@ -734,7 +741,7 @@ pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f3
     if !crate::motion::spend_input(ctx, me.id, now) {
         return Err("too many inputs".into());
     }
-    let use_id = attempt(ctx, me.id, &skill, "player", target, (x, y), now);
+    let use_id = attempt(ctx, me.id, &skill, source, target, (x, y), now);
     let refuse = |why: String| {
         outcome_of(ctx, use_id, &format!("refused: {why}"), now);
         let at = ctx.db.body().id().find(me.id).map(|b| pos(&b, now)).unwrap_or((x, y));
@@ -799,6 +806,11 @@ pub fn release_skill(ctx: &ReducerContext, skill: String) -> Result<(), String> 
     let _span = common::span("release_skill");
     crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
+    release_skill_as(ctx, me, skill)
+}
+
+/// `release_skill` for a given character (NPC-MEASURE: `npc_intents`).
+pub fn release_skill_as(ctx: &ReducerContext, me: Character, skill: String) -> Result<(), String> {
     let now = common::now_ms(ctx);
     if let Some(a) = ctx.db.activity().id().find(me.id).filter(|a| a.skill == skill && a.node == act::PLAYER) {
         act::let_go(ctx, a, now);

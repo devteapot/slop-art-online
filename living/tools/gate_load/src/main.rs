@@ -34,6 +34,7 @@
 //! one stands, prints `{"event":"ready"}`, waits for `go`, plays until `stop`, then prints
 //! `{"event":"done",…}`.
 
+mod npc;
 mod soak;
 
 use living_bindings::*;
@@ -1634,8 +1635,10 @@ fn main() {
         Some("observe") => observe_mode(),
         Some("mind") => mind_mode(),
         Some("soak") => soak::run(),
+        // NPC-MEASURE (branch npc-measure only): a stand-in NPC body service (npc.rs).
+        Some("npc") => npc::run(),
         m => {
-            eprintln!("usage: gate-load players|relay|watch|observe|mind|soak (got {m:?})");
+            eprintln!("usage: gate-load players|relay|watch|observe|mind|soak|npc (got {m:?})");
             std::process::exit(2);
         }
     }

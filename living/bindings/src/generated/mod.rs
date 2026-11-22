@@ -244,6 +244,11 @@ pub mod my_sex_table;
 pub mod my_sex_type;
 pub mod my_skill_uses_table;
 pub mod my_vitals_table;
+pub mod npc_external_set_reducer;
+pub mod npc_external_table;
+pub mod npc_external_type;
+pub mod npc_intent_type;
+pub mod npc_intents_reducer;
 pub mod own_habits_reducer;
 pub mod pasture_table;
 pub mod pasture_type;
@@ -642,6 +647,11 @@ pub use my_sex_table::*;
 pub use my_sex_type::MySex;
 pub use my_skill_uses_table::*;
 pub use my_vitals_table::*;
+pub use npc_external_set_reducer::npc_external_set;
+pub use npc_external_table::*;
+pub use npc_external_type::NpcExternal;
+pub use npc_intent_type::NpcIntent;
+pub use npc_intents_reducer::npc_intents;
 pub use own_habits_reducer::own_habits;
 pub use pasture_table::*;
 pub use pasture_type::Pasture;
@@ -945,6 +955,13 @@ pub enum Reducer {
     MindWhere {
         actor: u32,
     },
+    NpcExternalSet {
+        ids: Vec<u32>,
+        on: bool,
+    },
+    NpcIntents {
+        batch: Vec<NpcIntent>,
+    },
     OwnHabits,
     PercApply {
         diffs: Vec<PercDiff>,
@@ -1071,6 +1088,8 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindSkip { .. } => "mind_skip",
             Reducer::MindUpdate { .. } => "mind_update",
             Reducer::MindWhere { .. } => "mind_where",
+            Reducer::NpcExternalSet { .. } => "npc_external_set",
+            Reducer::NpcIntents { .. } => "npc_intents",
             Reducer::OwnHabits => "own_habits",
             Reducer::PercApply { .. } => "perc_apply",
             Reducer::PlaceAt { .. } => "place_at",
@@ -1315,6 +1334,17 @@ impl __sdk::Reducer for Reducer {
                     actor: actor.clone(),
                 })
             }
+            Reducer::NpcExternalSet { ids, on } => {
+                __sats::bsatn::to_vec(&npc_external_set_reducer::NpcExternalSetArgs {
+                    ids: ids.clone(),
+                    on: on.clone(),
+                })
+            }
+            Reducer::NpcIntents { batch } => {
+                __sats::bsatn::to_vec(&npc_intents_reducer::NpcIntentsArgs {
+                    batch: batch.clone(),
+                })
+            }
             Reducer::OwnHabits => __sats::bsatn::to_vec(&own_habits_reducer::OwnHabitsArgs {}),
             Reducer::PercApply { diffs } => {
                 __sats::bsatn::to_vec(&perc_apply_reducer::PercApplyArgs {
@@ -1555,6 +1585,7 @@ pub struct DbUpdate {
     my_sex: __sdk::TableUpdate<MySex>,
     my_skill_uses: __sdk::TableUpdate<SkillUse>,
     my_vitals: __sdk::TableUpdate<Vitals>,
+    npc_external: __sdk::TableUpdate<NpcExternal>,
     pasture: __sdk::TableUpdate<Pasture>,
     perceived: __sdk::TableUpdate<Perceived>,
     persona: __sdk::TableUpdate<Persona>,
@@ -1937,6 +1968,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_vitals" => db_update
                     .my_vitals
                     .append(my_vitals_table::parse_table_update(table_update)?),
+                "npc_external" => db_update
+                    .npc_external
+                    .append(npc_external_table::parse_table_update(table_update)?),
                 "pasture" => db_update
                     .pasture
                     .append(pasture_table::parse_table_update(table_update)?),
@@ -2395,6 +2429,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.motion_seen = cache
             .apply_diff_to_table::<MotionSeen>("motion_seen", &self.motion_seen)
+            .with_updates_by_pk(|row| &row.id);
+        diff.npc_external = cache
+            .apply_diff_to_table::<NpcExternal>("npc_external", &self.npc_external)
             .with_updates_by_pk(|row| &row.id);
         diff.pasture = cache
             .apply_diff_to_table::<Pasture>("pasture", &self.pasture)
@@ -2963,6 +3000,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_vitals" => db_update
                     .my_vitals
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "npc_external" => db_update
+                    .npc_external
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "pasture" => db_update
                     .pasture
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -3480,6 +3520,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_vitals" => db_update
                     .my_vitals
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "npc_external" => db_update
+                    .npc_external
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "pasture" => db_update
                     .pasture
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3793,6 +3836,7 @@ pub struct AppliedDiff<'r> {
     my_sex: __sdk::TableAppliedDiff<'r, MySex>,
     my_skill_uses: __sdk::TableAppliedDiff<'r, SkillUse>,
     my_vitals: __sdk::TableAppliedDiff<'r, Vitals>,
+    npc_external: __sdk::TableAppliedDiff<'r, NpcExternal>,
     pasture: __sdk::TableAppliedDiff<'r, Pasture>,
     perceived: __sdk::TableAppliedDiff<'r, Perceived>,
     persona: __sdk::TableAppliedDiff<'r, Persona>,
@@ -4094,6 +4138,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Vitals>("my_vitals", &self.my_vitals, event);
+        callbacks.invoke_table_row_callbacks::<NpcExternal>(
+            "npc_external",
+            &self.npc_external,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Pasture>("pasture", &self.pasture, event);
         callbacks.invoke_table_row_callbacks::<Perceived>("perceived", &self.perceived, event);
         callbacks.invoke_table_row_callbacks::<Persona>("persona", &self.persona, event);
@@ -5002,6 +5051,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_sex_table::register_table(client_cache);
         my_skill_uses_table::register_table(client_cache);
         my_vitals_table::register_table(client_cache);
+        npc_external_table::register_table(client_cache);
         pasture_table::register_table(client_cache);
         perceived_table::register_table(client_cache);
         persona_table::register_table(client_cache);
@@ -5172,6 +5222,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_sex",
         "my_skill_uses",
         "my_vitals",
+        "npc_external",
         "pasture",
         "perceived",
         "persona",

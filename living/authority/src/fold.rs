@@ -58,9 +58,16 @@ pub fn blow(ctx: &ReducerContext, now: u64, attacker: u32, victim: u32, outcome:
     let r = crate::perception::widest_sight(ctx, &w, now);
     let sets = common::laws(ctx).onlookers_from_sets;
     let mut onlookers = Vec::new();
+    // NPC-MEASURE (branch npc-measure only), `memory_off` (a measuring switch, 0 off): the upper
+    // bound of deriving witness lines outside the tick. 1: players are not onlookers here; 2: no
+    // one is, and only a fight's first landed blow is tested, for the bystanders it wakes.
+    let memory_off = common::laws(ctx).memory_off;
     for (c, d) in crate::perceive::minds_near(ctx, at, r, now, &[attacker, victim]) {
         // As `perceive::percept_seen`: only minds and players read it.
         if !c.alive || c.stage == 0 {
+            continue;
+        }
+        if (memory_off >= 1.0 && !c.ai) || (memory_off >= 2.0 && !wake) {
             continue;
         }
         let Some((eye, heading)) = ctx.db.body().id().find(c.id).map(|b| (pos(&b, now), common::facing_at(&b, now))) else { continue };
@@ -81,7 +88,9 @@ pub fn blow(ctx: &ReducerContext, now: u64, attacker: u32, victim: u32, outcome:
                 Some(v) => v,
                 None => crate::perception::sees_creature(ctx, c.id, attacker, now),
             };
-        onlookers.push(if sees_shooter { c.id } else { c.id | UNSEEN_SHOOTER });
+        if memory_off < 2.0 {
+            onlookers.push(if sees_shooter { c.id } else { c.id | UNSEEN_SHOOTER });
+        }
         if wake && (missile.is_none() || &*c.kind == "person") {
             common::diag(|| "woke:fight", 1);
             common::wake_bystander(ctx, c.id, now);

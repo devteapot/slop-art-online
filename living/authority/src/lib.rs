@@ -41,6 +41,7 @@ mod fold;
 mod fast;
 mod known;
 mod latency;
+mod npc;
 
 use spacetimedb::{ReducerContext, ScheduleAt, Table, ViewContext};
 use std::time::Duration;
@@ -926,6 +927,12 @@ pub fn human_move(ctx: &ReducerContext, dx: f32, dy: f32, run: bool) -> Result<(
     let _span = common::span("human_move");
     crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
+    human_move_as(ctx, me, dx, dy, run)
+}
+
+/// `human_move` for a given character (NPC-MEASURE: `npc_intents`): the same steering, rates and
+/// rules whoever sends it.
+pub(crate) fn human_move_as(ctx: &ReducerContext, me: Character, dx: f32, dy: f32, run: bool) -> Result<(), String> {
     latency::nav(ctx, me.id, "human_move", 0, format_args!(""));
     if !dx.is_finite() || !dy.is_finite() {
         return Err("direction must be finite".into());

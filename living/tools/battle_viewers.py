@@ -645,6 +645,15 @@ def one(a, n, out):
         if a.keep_fighters and a.fighters - a.humans > 0:
             keeper = Keeper(db, token, a.fighters - a.humans, a.keep_fighters)
             keeper.start()
+        npc_p = None
+        if a.npc_share is not None:
+            # NPC-MEASURE (npc-measure): the stand-in NPC body service (gate-load `npc`), an owner
+            # connection driving the fighters with `id % 4 < share` through `npc_intents` (set the
+            # npc_external_on law); with share 0 it only records the fighter rows (the AI arm).
+            npc_p = lc.Proc([a.load, "npc"], out / "npc.stderr")
+            npc_p.send(json.dumps({"uri": lc.URL, "db": db, "token": token, "out": str(out), "share": a.npc_share, "decide_ms": a.npc_decide_ms, "react": True}))
+            npc_p.expect("ready", 120)
+            npc_p.send("go")
         relay = None
         if a.relay_sub:
             # BATTLE_DELIVERY_PATHS (viewer-floor): one privileged subscriber to the battle's truth
@@ -730,6 +739,10 @@ def one(a, n, out):
                                         "calls_per_s": round((keep.calls - k0[0]) / (t1 - t0), 2)}
         if load:
             load.send("fresh off")
+        if npc_p:
+            npc_p.send("stop")
+            res["npc"] = npc_p.expect("done", 60)
+            res["npc"]["window"] = [t0, t1]
         if watch:
             watch.send("stop")
             try:
@@ -996,6 +1009,8 @@ def main():
     ap.add_argument("--humans", type=int, default=0, help="BATTLE_CONTRACT_CASES (contract-cases): this many of the --fighters are human clients (gate-load's battle role, GATE_216's decisions), placed in the fighters' 7 m; the AI fighters are the rest")
     ap.add_argument("--walkers", type=int, default=0, help="contract-cases: also this many walkers at lot doors round the settlements (GATE_216's walkers)")
     ap.add_argument("--fight-ms", type=int, default=250, help="contract-cases: a human fighter's decision period (GATE_216: 250 ms ±10%%)")
+    ap.add_argument("--npc-share", type=int, default=None, help="NPC-MEASURE (npc-measure): run the stand-in NPC body service driving the fighters with id %% 4 < SHARE (0: record only); set npc_external_on")
+    ap.add_argument("--npc-decide-ms", type=int, default=100, help="npc-measure: each driven NPC's decision period")
     ap.add_argument("--watch", action="store_true", help="contract-cases: run the tick watcher (gate-load watch) for the steps' intervals (result steps)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()

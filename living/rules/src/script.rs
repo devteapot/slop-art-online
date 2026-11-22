@@ -801,6 +801,14 @@ pub struct Laws {
     /// GATE-REMEASURE (branch gate-remeasure only; a measuring switch, off): a player first swept
     /// by an instance takes the least-loaded sweep phase instead of its id's.
     pub sweep_phase_even: bool,
+    /// NPC-MEASURE (branch npc-measure only; a measuring switch, off): characters listed in the
+    /// authority's `npc_external` table are not evaluated by their graphs; an NPC body service
+    /// drives them with batched intents (`npc_intents`), which go through the player's input path.
+    pub npc_external_on: bool,
+    /// NPC-MEASURE (branch npc-measure only; a measuring switch, 0 off): the upper bound of deriving
+    /// witness lines outside the tick. 1: players are not judged onlookers of others' blows; 2: no
+    /// one is, and a fight's first landed blow is still tested for the bystanders it wakes.
+    pub memory_off: f32,
     /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
     /// and counted (`alarm:differed`).
     pub alarm_cells_check: bool,
@@ -1011,6 +1019,8 @@ impl Default for Laws {
             lines_table_check: false,
             onlookers_from_sets: false,
             sweep_phase_even: false,
+            npc_external_on: false,
+            memory_off: 0.0,
             alarm_cells_check: false,
             status_parts: true,
             status_parts_check: false,
@@ -3397,6 +3407,8 @@ impl Scripts {
             lines_table_check: flag("lines_table_check", l.lines_table_check),
             onlookers_from_sets: flag("onlookers_from_sets", l.onlookers_from_sets),
             sweep_phase_even: flag("sweep_phase_even", l.sweep_phase_even),
+            npc_external_on: flag("npc_external_on", l.npc_external_on),
+            memory_off: g("memory_off", l.memory_off).clamp(0.0, 2.0),
             alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
             status_parts: flag("status_parts", l.status_parts),
             status_parts_check: flag("status_parts_check", l.status_parts_check),
@@ -3648,7 +3660,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 45] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 47] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3665,6 +3677,8 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 45] = [
     // gate-remeasure: measuring switches on the relay arm (HUMAN_FIGHTER_COST §7).
     ("onlookers_from_sets", ValueOnly::Delivery),
     ("sweep_phase_even", ValueOnly::Delivery),
+    ("npc_external_on", ValueOnly::Delivery),
+    ("memory_off", ValueOnly::Delivery),
     // The battle laws' prototypes (docs/BATTLE_LAWS.md), live-tunable: the sweeps read `far_cap`
     // and `crowd_sweep_n`, the frames `crowd_frame_max_ms` and `far_motion_tol_m`, the wakes
     // `fighter_bystander_wakes`, each at its next tick.

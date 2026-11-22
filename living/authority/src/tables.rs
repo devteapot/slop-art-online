@@ -2613,3 +2613,13 @@ pub struct SlowTimer {
     pub scheduled_id: u64,
     pub scheduled_at: ScheduleAt,
 }
+
+/// NPC-MEASURE (branch npc-measure only, docs/NPC_CLIENT_SERVICE.md): a character driven by an NPC
+/// body service. While the `npc_external_on` law holds, its graph is not evaluated (`brain::evaluate`)
+/// and its acts come as batched intents (`npc_intents`) through the player's input path. Private.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = npc_external)]
+pub struct NpcExternal {
+    #[primary_key]
+    pub id: u32,
+}

@@ -171,6 +171,11 @@ struct Ev<'a> {
 /// holding (sleeping until rested, not until barely awake). Movement and combat stay reactive.
 
 pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
+    // NPC-MEASURE (branch npc-measure only): a character an NPC body service drives is not
+    // evaluated by its graph (`npc_external_on`, off).
+    if crate::npc::external(ctx, id) {
+        return;
+    }
     let load = common::detail_span("brain.load");
     let part = common::detail_span("load.rows");
     let Some(me) = ctx.db.character().id().find(id) else { return };
