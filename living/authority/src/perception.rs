@@ -1382,7 +1382,12 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         check_gather(ctx, id, here, gather, &crowd, sight_chunks.as_deref(), &seen, &now_heard, now);
     }
     let keep = shared.as_deref().map(|sh| (sh.keep, sh.keep_check));
-    hear(ctx, id, viewer, here, &seen, now_heard, keep, now);
+    // VIEWER_FLOOR prototype (branch viewer-floor only): `vf_hear_every` sweeps (1: every one, as
+    // on main; 0: never), each viewer on its own phase.
+    let hear_every = common::laws(ctx).vf_hear_every.round() as u64;
+    if hear_every == 1 || (hear_every > 1 && (now / SWEEP_MS + id as u64) % hear_every == 0) {
+        hear(ctx, id, viewer, here, &seen, now_heard, keep, now);
+    }
     drop(hearing);
     // What it remembers of resources here (talk-places): the look a mind takes at its noticing.
     crate::stock::look(ctx, &me, here, || sight, now);

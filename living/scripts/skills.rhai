@@ -211,6 +211,13 @@ fn laws() {
         attend_crowd_on: false,
         attend_vis_on: false,
         attend_throng_sight_ms: 0.0,
+        // VIEWER_FLOOR prototype (branch viewer-floor only; measuring switches, today's behaviour
+        // here): lines released every vf_lines_ms (0: 100), heard rows every vf_hear_every sweeps
+        // (0: never), an empty scene's frames every vf_frame_idle_ms (0: as now), no fight shown.
+        vf_lines_ms: 0.0,
+        vf_hear_every: 1.0,
+        vf_frame_idle_ms: 0.0,
+        vf_feed_off: false,
         // ...a player's sweep less often above this many in sight (at most 3x the period)...
         crowd_sweep_n: 0.0,
         // ...the longest interval between its frames in a crowd (ms; 0: the built-in 100)...
@@ -3246,6 +3253,10 @@ fn law_about(l, name) {
         "attend_grace_ms" => if l.attend_grace_ms > 0.0 { `one a player stops attending stays in view for ${short(l.attend_grace_ms)} ms` } else { "one a player stops attending leaves view at once" },
         "attend_throng_sight_ms" => if l.attend_throng_sight_ms > 0.0 { `a player looks again at the crowd about every ${short(l.attend_throng_sight_ms)} ms (a measuring switch)` } else { "a player looks again at everyone in sight at every glance" },
         "attend_vis_on" => if l.attend_vis_on { "how often a figure flips between crowd and individual is counted (a measuring switch)" } else { "no one counts figures flipping between crowd and individual" },
+        "vf_lines_ms" => if l.vf_lines_ms > 0.0 { `a player's lines reach them at most every ${short(l.vf_lines_ms)} ms (a measuring switch)` } else { "a player's lines reach them at once" },
+        "vf_hear_every" => if l.vf_hear_every < 0.5 { "a player hears no one out of sight (a measuring switch)" } else if l.vf_hear_every > 1.5 { `a player listens out of sight at every ${short(l.vf_hear_every)}th glance (a measuring switch)` } else { "a player listens at every glance" },
+        "vf_frame_idle_ms" => if l.vf_frame_idle_ms > 0.0 { `a player who sees no one is updated every ${short(l.vf_frame_idle_ms)} ms (a measuring switch)` } else { "a player who sees no one is updated as often as anyone" },
+        "vf_feed_off" => if l.vf_feed_off { "no player is shown fights (a measuring switch)" } else { "players are shown the fights they see" },
         "attend_crowd_on" => if l.attend_crowd_on { "a player sees the unattended in sight as a crowd" } else { "a player is told nothing of the unattended" },
         "far_cap" => if l.far_cap > 0.0 { `a player sees at most ${short(l.far_cap)} others at once, the nearest` } else { "a player sees everyone in sight" },
         "crowd_sweep_n" => if l.crowd_sweep_n > 0.0 { `what a player sees is looked at again less often in a crowd of more than ${short(l.crowd_sweep_n)}` } else { "what a player sees is looked at again at the same pace in any crowd" },

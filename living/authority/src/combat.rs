@@ -134,7 +134,8 @@ fn insert(ctx: &ReducerContext, id: u32, viewer: Identity, now: u64, ev: &Seen, 
 /// a death, which leaves with the body in the same update so the client keeps the corpse.
 pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
     let _detail = common::detail_span("combat.show");
-    if !any_humans(ctx) {
+    // VIEWER_FLOOR prototype (branch viewer-floor only): `vf_feed_off`, no fight shown (a bound).
+    if !any_humans(ctx) || common::laws(ctx).vf_feed_off {
         return;
     }
     let w = common::world(ctx);

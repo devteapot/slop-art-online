@@ -1,0 +1,19 @@
+[package]
+name = "sub-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# A standalone measuring module (docs/VIEWER_FLOOR.md, branch viewer-floor only): not a member of
+# the living workspace, never published to a world.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+spacetimedb = { version = "=2.14.1", features = ["unstable"] }
+log = "0.4"
+
+[profile.release]
+opt-level = 3

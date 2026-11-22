@@ -618,6 +618,9 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: crate::perception::Swept) 
             log::info!("motion tables off: {n} copies moved back to the private tables");
         }
     }
+    let scheduling = common::detail_span("frames.schedule");
+    // VIEWER_FLOOR prototype (branch viewer-floor only): an empty scene's frames at most this often.
+    let idle_ms = common::laws(ctx).vf_frame_idle_ms as u64;
     let due: Vec<(u32, Viewer)> = VIEWERS.with(|v| {
         let mut v = v.borrow_mut();
         let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
@@ -650,6 +653,7 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: crate::perception::Swept) 
                 m if m > 0.0 => (far as u64 * 1000 / SCENE_ROWS_PER_S).clamp(FRAME_MIN_MS, m as u64),
                 _ => interval(far),
             };
+            let every = if idle_ms > 0 && n_all == 0 { every.max(idle_ms) } else { every };
             if e.last_ms == 0 {
                 // A first frame comes within one interval, staggered by character so a crowd's
                 // frames spread over the ticks.
@@ -678,6 +682,7 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: crate::perception::Swept) 
         common::diag(|| "frames:rows", rows as u64);
         served.into_iter().filter_map(|id| v.remove(&id).map(|e| (id, e))).collect()
     });
+    drop(scheduling);
     if common::profiling() {
         let frames: Vec<_> = due.iter()
             .map(|(id, viewer)| (*id, viewer.scene.as_ref().map_or(0, |scene| scene.len())))
@@ -688,6 +693,7 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: crate::perception::Swept) 
     let mut served = HashSet::with_capacity(due.len());
     for (id, mut e) in due {
         served.insert(id);
+        let _detail = common::detail_span("frame.one");
         frame(ctx, id, &mut e, now, on, trace.as_mut());
         VIEWERS.with(|v| v.borrow_mut().insert(id, e));
     }
@@ -706,8 +712,10 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: crate::perception::Swept) 
     if delivery {
         // Who is engaged with whom this tick; those engaged with a viewer join its near tier at once.
         let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
+        let engaging = common::detail_span("frames.engaged");
         let engaged = engaged_of(ctx, now, &ids);
         engaged_tiers(ctx, now, &engaged);
+        drop(engaging);
         if on {
             let cue_budget = (CUE_ROWS_PER_TICK * budget / FRAME_ROWS_PER_TICK).max(CUE_ROWS_MIN);
             cues(ctx, now, &served, &engaged, cue_budget, trace.as_mut());
@@ -1003,6 +1011,7 @@ fn fighter_cue(ctx: &ReducerContext, who: Identity, body: u32, now: u64) -> Opti
 
 fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, on: bool, mut trace: Option<&mut crate::frame_trace::Trace>) {
     let upto = SEQ.with(|s| s.get());
+    let copy_states = common::detail_span("frame.copy_state");
     // Where its motion copies are; with the `motion_tables_on` law on, a viewer whose copies are
     // still private has them moved to `seen_body_copy` here, all at once (`to_public`).
     let mut public = public_of(ctx, v.who);
@@ -1019,6 +1028,8 @@ fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, on: bool, mut 
         let n = crate::perception::fill_mirror(ctx, v.who);
         common::diag(|| "characters_table:filled", n as u64);
     }
+    drop(copy_states);
+    let scene_span = common::detail_span("frame.scene");
     if let Some(scene) = v.scene.as_ref() {
         let since = if v.full { 0 } else { v.seq };
         let full = v.full;
@@ -1085,6 +1096,8 @@ fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, on: bool, mut 
         v.full = false;
         v.seq = upto;
     }
+    drop(scene_span);
+    let feed_span = common::detail_span("frame.feed");
     // The onlookers' feed: what happened in sight since the last frame, then what expired.
     for (ev, amount) in std::mem::take(&mut v.events) {
         let row = crate::combat::feed_row(ctx, v.who, now, &ev, amount, ONLOOKER_MS);
@@ -1094,15 +1107,24 @@ fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, on: bool, mut 
         let (_, row) = v.feed.pop_front().unwrap();
         ctx.db.combat_seen().id().delete(row);
     }
-    if now.saturating_sub(v.lines_ms) >= LINES_MS {
+    drop(feed_span);
+    // VIEWER_FLOOR prototype: `vf_lines_ms` (0: the built-in interval).
+    let lines_ms = match common::laws(ctx).vf_lines_ms as u64 {
+        0 => LINES_MS,
+        ms => ms,
+    };
+    if now.saturating_sub(v.lines_ms) >= lines_ms {
+        let _detail = common::detail_span("frame.lines");
         v.lines_ms = now;
         release_lines(ctx, id);
     }
     if now.saturating_sub(v.senses_ms) >= SENSES_MS {
+        let _detail = common::detail_span("frame.senses");
         v.senses_ms = now;
         show_senses(ctx, id, v, now);
     }
     if now.saturating_sub(v.earshot_ms) >= EARSHOT_MS {
+        let _detail = common::detail_span("frame.earshot");
         v.earshot_ms = now;
         show_earshot(ctx, id, v, now);
     }
