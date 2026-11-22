@@ -4,6 +4,12 @@ Status: **measurement**, 2026-11-22, dev-box. The measuring code is on branch `c
 
 [BATTLE_CONTRACT_CASES.md](BATTLE_CONTRACT_CASES.md) found that a human fighter adds **3.1–3.7 ms/s** of the database thread on top of an AI fighter's 1.4, though it runs no behaviour graph. Before the conclusion "the architecture can't meet the gate" goes to the owner, this note asks whether that cost is inherent or fixable, part by part. It also asks what sets the strict 60 Hz threshold of about 390 ms/s.
 
+> **Update (2026-11-22, the held-back levers measured, §7).** Strict 60 Hz holds with none of them on the relay arm, alone or together.
+> - **Re-testing the unheeded every 500 ms** (`attend_throng_sight_ms`), **onlookers from the last sweep's sets** (`onlookers_from_sets`) and **even sweep phases** (`sweep_phase_even`) move the database thread by no more than the runs' own spread (about 506 ± 5 ms/s).
+> - **The even phases are the best:** 59.6 ticks/s, step p99 18–19 ms against base's 20 ms. They change no rule.
+> - **The projections cut** is at most about 5 ms/s on the relay arm (estimate). The 38 ms/s figure was main without heed.
+> - The gate still needs about 506 → 390 ms/s; perception off the thread is the only cut of that size.
+
 > **Update (2026-11-22, measured after cuts 1 and 2, §6).** With `seed-once` and `experience-incremental` on main (`4b9fa89cc`), the gate case still misses strict 60 Hz on every path.
 > - **Main as shipped:** 56.5 ticks/s.
 > - **Direct with the plausible cuts:** 58.2 ticks/s, 594 ms/s (614 before).
@@ -253,6 +259,130 @@ Only then would reusing the last answer give the same result. A "loose" count (b
 **Evidence:**
 - Branches `sweep-unchanged` (`f6ce05a8a`: the counter, logged only while profiling) and `gate-remeasure`, never for main.
 - Runs: dev-box `.local/gr/runs/` (`series.log`, `tables.json`, `gr_tables.py`); archived to `~/archive/worktree-evidence-20261122/gate-remeasure.tar.zst` (sha256 beside it).
+
+## 7. The held-back levers on the relay arm, measured (2026-11-22)
+
+**Bottom line: it doesn't.** Strict 60 Hz holds with none of the three levers, alone or together.
+- **The best is (c), the even sweep phases.** Ticks/s stay at 59.6, and the step p99 drops from 20 ms to 18–19 ms: one to two milliseconds over the slot.
+- **No lever moves the database thread beyond the runs' own spread** (about ±5 ms/s around 506). The gate needs about 506 → 390.
+- **The projections cut is not a lever either** (§7.3): at most about 5 ms/s on this arm (estimate).
+
+### 7.1 The arms
+
+**The fixture.** It is §6.1's relay arm:
+- 100 human fighters and 116 walkers;
+- the players read `experience_copy`;
+- warm, `performance` governor, L0, two runs per arm, interleaved.
+
+**The branch.** `gate-remeasure` `d40a876f0` (prototype + main `4b9fa89cc`), module `5535ab5b545c`, never for main.
+
+**Each lever is a value-only law, off by default:**
+- **(a)** `attend_throng_sight_ms=500`, the prototype's existing law;
+- **(b)** `onlookers_from_sets=true`, new;
+- **(c)** `sweep_phase_even=true`, new.
+
+**The gate before the series:**
+- det_compare (16 players, 200 fighters, 1,800 ticks, 113 tables) against main `5f3f6f080` was **identical** with every new law off;
+- the negative control, `onlookers_from_sets=true`, differed in 1,800 of 1,800 ticks, among them `experience`, `line_seen` and `fight_seen`.
+
+| Arm | Ticks/s | Step p50 / p99 / max (ms) | Steps later than 25 ms | Grid steps skipped (60 s) | DB thread, ms/s |
+|---|---:|---|---:|---:|---:|
+| Base | 59.58 (59.56–59.59) | 17 / 20 / 34–37 | 0.70% | 25 | 506 (501–511) |
+| (a) throng re-tests every 500 ms | 59.45 (59.31–59.58) | 17 / 19–32 / 34–35 | 0.92% | 25–41 | 517 (509–525) |
+| (b) onlookers from the sets | 59.47 (59.43–59.51) | 17 / 21–22 / 35–37 | 0.88% | 29–34 | 501 (497–505) |
+| **(c) even sweep phases** | **59.59** (59.51–59.68) | 17 / **18–19** / 34–35 | **0.67%** | 19–29 | 508 (502–513) |
+| (a) + (b) + (c) | 59.45 (59.44–59.46) | 17 / 21–23 / 35 | 0.90% | 32–33 | 513 (510–515) |
+
+**The strict line** is at least 59.9 ticks/s with step p99 within one 16.7 ms slot. **No arm reaches it.**
+
+**What the fight was in every arm:**
+- 296–300 inputs a second;
+- 1.9–2.1 deaths a second among the human fighters;
+- 0 privacy violations in 113,000–125,000 checked rows per run of the spectators' and walkers' streams.
+
+**Runner listeners.** A run is marked when they average over 0.5 cores or pass 1.5 cores in any 10 s.
+- Base r1 averaged 0.52 cores. It was marked and redone as r3, and the table uses r2 and r3.
+- **Base r1 itself** (kept in `runs-flagged/`): 59.48 ticks/s, p99 21, 0.87% late, 509 ms/s.
+- Every other run stayed under 0.35 cores average and 0.77 in any 10 s.
+
+**Reading the table:**
+- **Base** reproduces §6.1: 59.6 ticks/s, p99 19–20 ms, 0.65–0.70% late, 506–508 ms/s.
+- **(a) and (b) do not show the work they were estimated to save.**
+  - §2.1 and §2.3 estimated (b) at 0.1–0.15 ms/s per human, 10–15 ms/s for 100.
+  - (b) measured −5 ms/s, inside the base's range.
+  - (a)'s second run was the worst of the series (p99 32 ms, 1.15% late). One run does not show whether that is (a) or chance.
+  - These runs are L0, so where the work went is not split.
+- **(c) is the only one that moves the spread**, as §4's replay predicted. It changes nothing in the mean, and the threshold estimate there (390 → about 410 ms/s) still leaves the gate about 100 ms/s short.
+- **All three together are no better than base.**
+
+### 7.2 What each lever changes in timing
+
+All three act on players only: the sweep and its sets belong to players. No mind is told anything differently, and no AI fighter's perception changes.
+
+| Lever | What changes, and by how much | Visible? | Fairness |
+|---|---|---|---|
+| (a) `attend_throng_sight_ms=500` | A creature in a player's unheeded crowd keeps its last sight result for up to 500 ms. While that holds, it can stay in the crowd up to 500 ms after it left sight, and heed can pick it from there. | Hardly: the crowd rows are rewritten once a second. A figure may linger up to 0.5 s at the edge of sight. | Players against players: none, since every player has the same delay. Players against minds: a player's crowd lags by up to 0.5 s; a mind's perception does not use a crowd. |
+| (b) `onlookers_from_sets=true` | A player onlooker's witness test for a blow uses its sight from its last sweep, up to 200 ms old, instead of now. A blow by or on a creature that came into sight in the last 200 ms is missed. One by a creature that just left is counted. | A witness line at the edge of sight can come or go. | **It matters a little.** Witness lines are learning evidence (`experience`, `line_seen`, `fight_seen`, as det_compare's negative showed). A player onlooker's evidence is up to one sweep behind an AI onlooker's at the same place. |
+| (c) `sweep_phase_even=true` | A player's sweep phase is chosen once, at its first sweep: the least-loaded of the 12 groups. Its sweep can start up to 200 ms later than its id would give. Afterwards it is swept every 200 ms as before. | No. | None. Every player is still swept every 200 ms. Each player's phase differs, as it already does by id. |
+
+(c) is the one lever that changes no rule.
+
+### 7.3 The projections cut: a bounded estimate, nothing built
+
+**The 38 ms/s figure was main without heed.** It came from `u-B50L2-r1` (§6.2: main's laws, 66 players, L2), where a player has about 96 creatures in sight per sweep.
+
+**On the relay arm, heed caps that at about 15.** `hL2-B50r-r1` (§1, the relay arm with heed, 66 players, L2) projects in **11.2 ms/s**, not 38.
+
+| L2, 66 players | `sweep.project` | of which the per-row test | writes | the law | building rows | rest | Rows tested per s | Rows projected again per s |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Main, no heed (`u-B50L2-r1`) | 38.3 | 16.3 | 9.0 | 3.9 | 3.3 | 5.8 | 31,384 | 1,519 |
+| Relay arm, heed (`hL2-B50r-r1`) | 11.2 | 3.5 | 2.9 | 1.3 | 1.2 | 2.3 | 4,918 | 330 |
+
+- "Building rows" is `project.as`. On main, "rest" includes `project.show` (2.0), which the relay does not run.
+- On main, the 1,519 rows projected again a second split into:
+  - 668 newcomers inserted;
+  - 486 updated;
+  - **365 that came out the same (24%).**
+- On main, the test read health 8,411 times a second.
+
+**What kind of change it is.**
+- **It is already incremental.** Under `regard_cache` (on by default), `kept_sweep` projects a row again only when one of its inputs changed:
+  - it came into sight;
+  - a distance band of the law was crossed;
+  - health changed at the precision the law gives;
+  - knowledge or a reveal changed;
+  - the character's record was marked.
+
+  `regard_cache_check` compares every kept row with a fresh projection.
+- **What is left is a polled test of every row on every sweep.** It computes the distance band, reads health where the law shows it, and looks up the marks.
+
+**What a cut could be:**
+1. **On-change, exact.** Health writes and the sight pass's own distances mark the rows they affect, and the sweep tests only marked rows.
+   - It changes nothing anyone is told: the rows stay equal to a fresh projection, and `regard_cache_check` still proves it.
+   - It saves at most the test: 3.5 ms/s for 66 players at L2, so **about 5 for 100** at L2 and less at L0.
+   - The "same" re-projections cannot be avoided without projecting.
+2. **Fewer tests, a timing change.** Each row is tested every second sweep.
+   - It saves about half the test, **about 2–3 ms/s**.
+   - A name shown only within a distance, or health drifting between blows (its regeneration), reaches a player up to 200 ms later. Blows still reach at once, through `health_moved`.
+   - It affects players only. Minds read the regard law in the rules, not the projected rows.
+
+**So the projections can give at most about 5 ms/s on this arm, about 1% of the tick.** That is not a lever for strict 60 Hz.
+
+### 7.4 Where this leaves the gate
+
+- **The relay arm needs about 506 → 390 ms/s**, a 23% cut, with all of the levers here giving at most about 10 (estimate).
+- **§3's remaining step is perception off the database thread** (stage 2, [PERCEPTION_OFF_THREAD.md](PERCEPTION_OFF_THREAD.md)). It is the only measured or estimated cut of that size.
+- (c) is worth keeping with it: it changes no rule and takes one to two milliseconds off the step p99.
+
+**Evidence:**
+- **Branch** `gate-remeasure` `d40a876f0`: the two new laws in `perception.rs`, `fold.rs` and `living/rules`; `living/tools/gate_remeasure/`.
+- **Runs:** dev-box `.local/lv/`:
+  - `series-lv.sh` and `series-lv-redo.sh`;
+  - `runs/` with `series.log`, `tables.json` and `runners.log`;
+  - `runs-flagged/lv-base-r1`;
+  - det_compare in `det-off/` and `det-negative/`.
+- **Archived** to `~/archive/worktree-evidence-20261122/levers.tar.zst` (sha256 beside it).
+- **The projections figures** come from the module logs of `u-B50L2-r1` (this note's `gate-remeasure.tar.zst`) and `hL2-B50r-r1` (`human-fighter-cost.tar.zst`). They were summed from the L2 timing-span lines and the `diag` and `sweep kept` lines.
 
 ## Evidence
 
