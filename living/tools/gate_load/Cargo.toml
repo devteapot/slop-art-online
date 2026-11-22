@@ -12,3 +12,6 @@ publish = false
 living-bindings = { path = "../../bindings" }
 spacetimedb-sdk = "=2.14.1"
 serde_json = "1"
+# BATTLE_CONTRACT_CASES (branch contract-cases): a human fighter reads what it sees from the
+# delivery relay (relay_proto) in the relay arms.
+tungstenite = "0.27"

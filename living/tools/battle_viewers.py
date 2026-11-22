@@ -37,6 +37,7 @@ census at the window's start and end, its mean and minimum, the refills).
 import argparse
 import json
 import math
+import os
 import subprocess
 import sys
 import threading
@@ -91,15 +92,115 @@ def replica_log(replica):
     return "\n".join(out) + "\n"
 
 
+def conn_lines(path, want, limit=60):
+    """gate-load's `conn` lines, waiting until all `want` are on disk (its event log is buffered)."""
+    t = time.time()
+    while True:
+        got = [json.loads(l) for l in open(path) if '"k": "conn"' in l or '"k":"conn"' in l]
+        if len(got) >= want or time.time() - t > limit:
+            return got
+        time.sleep(0.5)
+
+
+def hexid(v):
+    """An identity as SQL's JSON gives it, as its 64 hex digits (gate-load's `conn` lines)."""
+    import re
+    m = re.search(r"[0-9a-fA-F]{64}", json.dumps(v))
+    return m.group(0).lower() if m else None
+
+
+def battle_spots(center, n, radius):
+    """n places within `radius` m of the centre, evenly (gate.py's battle placement)."""
+    out = []
+    for i in range(n):
+        ang, rr = i * 2.399963, radius * math.sqrt((i + 0.5) / max(n, 1))
+        out.append((center[0] + rr * math.cos(ang), center[1] + rr * math.sin(ang)))
+    return out
+
+
+def walker_spots(db, token, n):
+    """GATE_216's walkers: at lot doors, round the settlements in turn (gate.py `walker_spots`)."""
+    if not n:
+        return []
+    by = {}
+    for l in sorted(lc.sql(db, "SELECT * FROM lot", token), key=lambda l: l["id"]):
+        by.setdefault(l["settlement"], []).append(l)
+    order = sorted(by)
+    out, k = [], 0
+    while len(out) < n:
+        s = by[order[k % len(order)]]
+        lot = s[(k // len(order)) * 7 % len(s)]
+        out.append((lot["door_x"], lot["door_y"]))
+        k += 1
+    return out
+
+
+def steps_from(path, t0, t1):
+    """The steps in the window from the tick watcher's unconfirmed connection (`u,tick,last_ms,arrival_us`):
+    the interval between consecutive steps' own times (the clock's `last_ms`), and the grid steps skipped."""
+    ticks = {}
+    for line in open(path):
+        f = line.strip().split(",")
+        if len(f) != 4 or f[0] != "u":
+            continue
+        tick, last, arr = int(f[1]), int(f[2]), int(f[3])
+        if t0 * 1e6 <= arr < t1 * 1e6:
+            ticks.setdefault(tick, last)
+    ks = sorted(ticks)
+    iv = sorted(ticks[b] - ticks[a] for a, b in zip(ks, ks[1:]) if b == a + 1 and ticks[b] >= ticks[a])
+    if not iv:
+        return {"steps": len(ks)}
+    q = lambda p: iv[min(len(iv) - 1, int(p * len(iv)))]
+    span = ticks[ks[-1]] - ticks[ks[0]]
+    return {"steps": len(ks), "span_ms": span, "steps_per_s": round((len(ks) - 1) / span * 1000, 2) if span else None,
+            "interval_ms": {"p50": q(0.5), "p95": q(0.95), "p99": q(0.99), "max": iv[-1]},
+            "over_25ms_pct": round(100 * sum(1 for x in iv if x > 25) / len(iv), 2), "over_50ms": sum(1 for x in iv if x > 50),
+            "grid_skipped": max(0, round(span / 16.667) - (len(ks) - 1))}
+
+
+def humans_from(path, h, t0, t1):
+    """The human fighters' play in the window (gate-load's events): inputs a second by kind, deaths
+    (each a fallen fighter that rejoins), and how their released moves came out."""
+    ins, deaths, joins, outs, refused = {}, 0, 0, {}, {}
+    seen_use = {}
+    for line in open(path):
+        e = json.loads(line)
+        if e.get("p", h) >= h or not (t0 * 1e6 <= e.get("ts", 0) < t1 * 1e6):
+            continue
+        k = e.get("k")
+        if k == "in":
+            key = e["r"] if e["r"] != "skill" else f"skill:{e['skill']}"
+            ins[key] = ins.get(key, 0) + 1
+        elif k == "death":
+            deaths += 1
+        elif k == "alive":
+            joins += 1
+        elif k == "use" and e.get("out"):
+            seen_use[(e["p"], e["use"])] = e
+    for e in seen_use.values():
+        word = e["out"].split(":")[0].split(",")[0].split("(")[0].strip()[:40]
+        if e.get("acc"):
+            outs.setdefault(e["skill"], {}).setdefault(word, 0)
+            outs[e["skill"]][word] += 1
+        else:
+            refused.setdefault(e["skill"], {}).setdefault(word, 0)
+            refused[e["skill"]][word] += 1
+    dt = t1 - t0
+    return {"inputs_per_s": {k: round(v / dt, 2) for k, v in sorted(ins.items())}, "inputs_total_per_s": round(sum(ins.values()) / dt, 1),
+            "deaths": deaths, "deaths_per_s": round(deaths / dt, 3), "rejoined": joins, "outcomes": outs, "refused": refused}
+
+
 class KeepAlive(threading.Thread):
     """The agreed keep-alive fixture (battle-views, 2026-11-19): every `every` s, each viewer
     character (a `player` row's) below its full health is set back to it with the admin's
     `admin_set_vitals` (a test fixture through the generic admin reducer, no game rule). Counts the
     calls and the health restored (from `vitals` as SQL reads it: settled at its last write)."""
 
-    def __init__(self, db, token, every):
+    def __init__(self, db, token, every, only=None):
         super().__init__(daemon=True)
         self.db, self.token, self.every = db, token, every
+        # contract-cases: only these players (identities' hex), the spectators; None: every player.
+        self.only = only
         self.stop = threading.Event()
         self.calls = self.failed = 0
         self.restored = 0.0
@@ -108,7 +209,7 @@ class KeepAlive(threading.Thread):
     def run(self):
         while not self.stop.wait(self.every):
             try:
-                chars = {r["character"] for r in lc.sql(self.db, "SELECT character FROM player", self.token)}
+                chars = {r["character"] for r in lc.sql(self.db, "SELECT identity, character FROM player", self.token) if self.only is None or hexid(r["identity"]) in self.only}
                 hurt = [r for r in lc.sql(self.db, "SELECT id, hp, max_hp FROM vitals", self.token) if r["id"] in chars and r["hp"] < r["max_hp"]]
             except RuntimeError:
                 continue
@@ -430,16 +531,21 @@ def clog_zstd(replica):
 def spawn(db, token, a):
     """The battle: `spawn_battle`, or with `--sides N` the fixture `spawn_battle_sides` (fighters in
     N sides that fight each other and leave bystanders be; docs/BATTLE_LAWS.md)."""
+    ai = a.fighters - a.humans
+    if ai <= 0:
+        return
     if a.sides:
-        lc.call(db, "spawn_battle_sides", [a.fighters, a.sides], token)
+        lc.call(db, "spawn_battle_sides", [ai, a.sides], token)
     else:
-        lc.call(db, "spawn_battle", [a.fighters], token)
+        lc.call(db, "spawn_battle", [ai], token)
 
 
 def one(a, n, out):
     stamp = time.strftime("%Y%m%d-%H%M%S")
     db = f"verify-lookcost-{a.label}-v{n}-{stamp}"
-    res = {"viewers": n, "fighters": a.fighters, "db": db}
+    res = {"viewers": n, "fighters": a.fighters, "humans": a.humans, "walkers": a.walkers, "db": db}
+    total = n + a.humans + a.walkers
+    watch = None
     load = None
     priv = None
     try:
@@ -457,28 +563,66 @@ def one(a, n, out):
         # With no viewers there is no placement to wait for, so `--battle-after-placing` spawns the
         # battle here too: the 0-viewer arm is the same battle, the subtraction baseline (before
         # 2026-11-20 it had none).
-        if not a.battle_after_placing or not n:
+        if not a.battle_after_placing or not total:
             spawn(db, token, a)
         land = lc.sql(db, "SELECT * FROM land", token)[0]
         site = tuple(float(x) for x in a.site.split(",")) if a.site else (land["arrive_x"], land["arrive_y"] - 20.0)
         res["site"], res["arrival"] = list(site), [land["arrive_x"], land["arrive_y"]]
-        if a.paused_placement and n:
+        relay_p = checker_p = clients_p = None
+        if a.relay:
+            # RELAY_PROTOTYPE (relay-proto): the delivery relay and the privacy checker, each an owner
+            # connection, from the world's first ticks (living/tools/relay_proto).
+            rq = {"uri": lc.URL, "db": db, "token": token}
+            relay_p = lc.Proc([a.relay, "relay"], out / "relay.stderr")
+            relay_p.send(json.dumps({**rq, "listen": f"127.0.0.1:{a.relay_port}", "out": str(out / "relay.json"), "broken": a.relay_broken}))
+            relay_p.expect("relay up", 120)
+            checker_p = lc.Proc([a.relay, "checker"], out / "checker.stderr")
+            checker_p.send(json.dumps({**rq, "out": str(out / "checker.log")}))
+            checker_p.expect("checker up", 120)
+        perc_p = None
+        if a.relay and a.perc:
+            # PERCEPTION_OFF_THREAD (perc-offthread): the off-thread perception stand-in (set the
+            # perc_external law), an owner connection applying sets through `perc_apply`.
+            perc_p = lc.Proc([a.relay, "perc"], out / "perc.stderr")
+            perc_p.send(json.dumps({"uri": lc.URL, "db": db, "token": token, "out": str(out / "perc.json"), "cap": a.perc_cap, "keep_n": a.perc_keep, "swap": a.perc_swap}))
+            perc_p.expect("perc up", 120)
+        if a.watch:
+            # BATTLE_CONTRACT_CASES (contract-cases): the tick watcher (gate-load `watch`, as GATE_216):
+            # two owner connections subscribing `clock`, which every tick writes; the steps' intervals.
+            watch = lc.Proc([a.load, "watch"], out / "watch.stderr")
+            watch.send(json.dumps({"uri": lc.URL, "db": db, "token": token, "out": str(out / "ticks-watch.csv")}))
+            watch.expect("ready", 120)
+        if a.paused_placement and total:
             # The Spark's procedure: paused while the viewers join and are placed, unpaused at `ready`.
             lc.call(db, "set_paused", [True], token)
-        if n:
-            players = [{"token": lc.new_identity(), "name": f"Watch{i}", "role": "walk"} for i in range(n)]
+        if total:
+            # BATTLE_CONTRACT_CASES (contract-cases): `--humans` human fighters first (GATE_216's battle
+            # role, placed in the fighters' 7 m), then the `n` spectators, then `--walkers` at lot doors.
+            players = ([{"token": lc.new_identity(), "name": f"Human{i}", "role": "battle"} for i in range(a.humans)]
+                       + [{"token": lc.new_identity(), "name": f"Watch{i}", "role": "walk"} for i in range(n)]
+                       + [{"token": lc.new_identity(), "name": f"Walk{i}", "role": "walk"} for i in range(a.walkers)])
             load = lc.Proc([a.load, "players"], out / f"players-v{n}.stderr")
             load.send(json.dumps({"uri": lc.URL, "db": db, "events": str(out / f"events-v{n}.jsonl"), "battle": list(site),
-                                  "behaviour": {"walk_period_ms": 1500, "rejoin_s": 3}, "players": players, "client": "gate",
+                                  "relay": f"ws://127.0.0.1:{a.relay_port}" if a.relay and a.humans else None,
+                                  "behaviour": {"walk_period_ms": 1500, "fight_period_ms": a.fight_ms, "rejoin_s": 3, "pools": True}, "players": players, "client": "gate",
                                   "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables, "character_tables": a.character_tables, "fighter_tables": a.fighter_tables,
-                                  "combat_feed": a.combat_feed, "fresh_every": a.fresh_every}))
+                                  "combat_feed": a.combat_feed, "crowd": a.crowd, "lines_table": a.lines_table, "game_views": a.game_views, "fresh_every": a.fresh_every}))
             joined = load.expect("joined", 900)
             lo, hi = (float(x) for x in a.ring.split(",")) if a.ring else (0.0, 6.0)
-            for i, p in enumerate(sorted(joined["players"], key=lambda p: p["p"])):
-                # Within 6 m of the centre (the default), or spread over the ring `--ring LO,HI` m.
-                ang, rr = i * 2.399963, (lo * lo + (hi * hi - lo * lo) * ((i + 0.5) / n)) ** 0.5
+            humans_at = battle_spots(site, a.humans, 7.0)
+            walkers_at = walker_spots(db, token, a.walkers)
+            for k, p in enumerate(sorted(joined["players"], key=lambda p: p["p"])):
+                i = k - a.humans
+                if k < a.humans:
+                    x, y = humans_at[k]
+                elif i >= n:
+                    x, y = walkers_at[i - n]
+                else:
+                    # Within 6 m of the centre (the default), or spread over the ring `--ring LO,HI` m.
+                    ang, rr = i * 2.399963, (lo * lo + (hi * hi - lo * lo) * ((i + 0.5) / n)) ** 0.5
+                    x, y = site[0] + rr * math.cos(ang), site[1] + rr * math.sin(ang)
                 try:
-                    lc.call(db, "place_at", [p["id"], site[0] + rr * math.cos(ang), site[1] + rr * math.sin(ang)], token)
+                    lc.call(db, "place_at", [p["id"], x, y], token)
                 except RuntimeError as e:
                     if "no such body" in str(e):
                         # Killed before it was placed: it joins again (gate-load); counted in its deaths.
@@ -495,13 +639,33 @@ def one(a, n, out):
             if a.paused_placement:
                 lc.call(db, "set_paused", [False], token)
             load.send("go")
+            if a.humans:
+                load.send("battle")
         keeper = None
-        if a.keep_fighters:
-            keeper = Keeper(db, token, a.fighters, a.keep_fighters)
+        if a.keep_fighters and a.fighters - a.humans > 0:
+            keeper = Keeper(db, token, a.fighters - a.humans, a.keep_fighters)
             keeper.start()
+        relay = None
+        if a.relay_sub:
+            # BATTLE_DELIVERY_PATHS (viewer-floor): one privileged subscriber to the battle's truth
+            # tables, as a delivery relay would hold, through the container's owner login.
+            relay = subprocess.Popen(["docker", "exec", "-e", "TOKIO_WORKER_THREADS=1", lc.CONTAINER, "spacetime", "subscribe", "-s", "local", "-y", db,
+                                      *[f"SELECT * FROM {t}" for t in a.relay_sub.split(",")]], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        if a.relay and total:
+            # The viewers' identities, from gate-load's connection lines; one relay client each. A human
+            # fighter reads the relay from gate-load itself (contract-cases), so it is not among them.
+            ids = [e["identity"] for e in conn_lines(out / f"events-v{n}.jsonl", total) if e.get("role") != "Battle"]
+            clients_p = lc.Proc([a.relay, "clients"], out / "clients.stderr")
+            clients_p.send(json.dumps({"relay": f"ws://127.0.0.1:{a.relay_port}", "viewers": ids, "out": str(out / "clients.json"), "warmup": a.warmup}))
+            clients_p.expect("clients up", 120)
+            res["relay_viewers"] = len(ids)
+            (out / "relay-ids.json").write_text(json.dumps(ids) + "\n")
         keep = None
         if a.keep_alive and n:
-            keep = KeepAlive(db, token, a.keep_alive)
+            # Only the spectators are kept alive: human fighters fall and rejoin (contract-cases).
+            conns = conn_lines(out / f"events-v{n}.jsonl", total)
+            spect = {c["identity"] for c in conns if a.humans <= c["p"] < a.humans + n}
+            keep = KeepAlive(db, token, a.keep_alive, spect if (a.humans or a.walkers) else None)
             keep.start()
         time.sleep(a.warmup)
         d = out / f"v{n}"
@@ -514,6 +678,8 @@ def one(a, n, out):
             loadlog = LoadLog(d / "load.log")
             loadlog.start()
             m0, th0, p0 = tc.scrape(ident), tc.thread_cpu(pid), tc.proc_cpu(pid)
+            relay_cpu0 = tc.proc_cpu(relay_p.p.pid) if relay_p else None
+            relay_t0 = time.time()
         if a.privacy and n:
             priv = Privacy(db, token, out, n, players, a.seconds, a.fighter_tables, a.combat_feed)
         clog0 = clog_state(res["replica"]) if a.clog else None
@@ -522,8 +688,29 @@ def one(a, n, out):
         f0 = keeper.refills if keeper else 0
         if load:
             load.send("fresh on")
-        time.sleep(a.seconds)
+        flip = None
+        if a.flip_law:
+            # E2 (attention-e2): one law set live mid-window (a capacity burst); its time is kept so
+            # the ticks around it can be read from ticks.json.
+            name, _, value = a.flip_law.partition("=")
+            time.sleep(a.flip_at)
+            t_flip = time.time()
+            lc.call(db, "set_world_law", [name, value], token)
+            flip = {"law": name, "value": value, "at": t_flip, "acked": time.time()}
+            time.sleep(max(0.0, a.seconds - a.flip_at))
+        else:
+            time.sleep(a.seconds)
         c1, t1 = tick_count(ident), time.time()
+        if flip:
+            res["flip_law"] = flip
+        if relay:
+            alive = relay.poll() is None
+            subprocess.run(["docker", "exec", lc.CONTAINER, "pkill", "-f", "spacetime subscribe"], capture_output=True)
+            try:
+                relay.wait(30)
+            except subprocess.TimeoutExpired:
+                relay.kill()
+            res["relay_sub"] = {"tables": a.relay_sub, "alive_at_window_end": alive, "stderr": (relay.stderr.read() or "")[-400:]}
         if keeper:
             keeper.stop.set()
             res["keeper_window"] = keeper.window(t0, t1)
@@ -543,14 +730,42 @@ def one(a, n, out):
                                         "calls_per_s": round((keep.calls - k0[0]) / (t1 - t0), 2)}
         if load:
             load.send("fresh off")
+        if watch:
+            watch.send("stop")
+            try:
+                watch.p.wait(30)
+            except subprocess.TimeoutExpired:
+                watch.p.kill()
+            res["steps"] = steps_from(out / "ticks-watch.csv", t0, t1)
+        if a.humans:
+            res["humans_window"] = humans_from(out / f"events-v{n}.jsonl", a.humans, t0, t1)
         if loadlog:
             loadlog.stop.set()
+        if relay_p and (a.detail or a.flip_off):
+            hz = os.sysconf("SC_CLK_TCK")
+            st = {l.split(":")[0]: int(l.split()[1]) for l in open(f"/proc/{relay_p.p.pid}/status") if l.startswith(("VmRSS", "VmHWM"))}
+            res["relay_process"] = {"cpu_ms_per_s": round((tc.proc_cpu(relay_p.p.pid) - relay_cpu0) / hz / (time.time() - relay_t0) * 1000, 1),
+                                    "rss_kb": st.get("VmRSS"), "hwm_kb": st.get("VmHWM")}
+            if clients_p:
+                res["relay_process"]["clients_cpu_ms_per_s"] = round((tc.proc_cpu(clients_p.p.pid)) / hz / max(time.time() - relay_t0, 1) * 1000, 1)
+        if perc_p and (a.detail or a.flip_off):
+            res.setdefault("relay_process", {})["perc_cpu_ms_per_s"] = round(tc.proc_cpu(perc_p.p.pid) / os.sysconf("SC_CLK_TCK") / max(time.time() - relay_t0, 1) * 1000, 1)
+        for proc in (clients_p, relay_p, checker_p, perc_p):
+            if proc:
+                proc.send("stop")
+                try:
+                    proc.p.wait(60)
+                except subprocess.TimeoutExpired:
+                    proc.p.kill()
+        if relay_p:
+            for f in ("relay.json", "clients.json", "perc.json"):
+                if (out / f).exists():
+                    res[f.split(".")[0] + "_summary"] = json.loads((out / f).read_text())
         if a.detail or a.flip_off:
             m1, th1, p1 = tc.scrape(ident), tc.thread_cpu(pid), tc.proc_cpu(pid)
             dur = t1 - t0
             diff = {k: m1.get(k, 0.0) - m0.get(k, 0.0) for k in sorted(set(m0) | set(m1))}
             (d / "metrics.json").write_text(json.dumps({"seconds": dur, "before": m0, "after": m1, "diff": {k: v for k, v in diff.items() if v}}, indent=1) + "\n")
-            import os
             hz = os.sysconf("SC_CLK_TCK")
             by = {}
             for tid, (name, cpu1) in th1.items():
@@ -677,6 +892,15 @@ def one(a, n, out):
             load.send("stop")
             try:
                 done = load.expect("done", 300)
+                # E2 (attention-e2): what the viewers received, by table, over the whole run
+                # (inserts, updates, deletes; gate-load counts from its subscription on).
+                tables = {}
+                for pl in done.get("players", []):
+                    for t, n in (pl.get("events") or {}).items():
+                        acc = tables.setdefault(t, [0, 0, 0])
+                        for i in range(3):
+                            acc[i] += n[i]
+                res["viewer_rows_by_table"] = tables
                 # Motion freshness over the window, pooled over the sampled viewers (gate-load `fresh`).
                 fresh = {"near": {}, "all": {}, "players": 0}
                 for pl in done.get("players", []):
@@ -751,11 +975,28 @@ def main():
     ap.add_argument("--full-log", action="store_true", help="with --detail: read the replica's whole module log from the server's data directory")
     ap.add_argument("--flip-off", action="store_true", help="after the window, turn motion_tables_on off and time the kill switch's tick")
     ap.add_argument("--fighter-tables", action="store_true", help="the viewers subscribe seen_fighter_copy in place of the fighter views (views step 3; set fighter_tables_on=true)")
+    ap.add_argument("--flip-law", default=None, metavar="NAME=VALUE", help="E2: set this world law live --flip-at s into the window (a capacity burst)")
+    ap.add_argument("--flip-at", type=float, default=30.0)
+    ap.add_argument("--relay", default="", help="RELAY_PROTOTYPE (relay-proto): the relay_proto binary; runs the relay, the privacy checker and one relay client per viewer (set the relay_on law)")
+    ap.add_argument("--perc", action="store_true", help="PERCEPTION_OFF_THREAD (perc-offthread): with --relay, also run the off-thread perception stand-in (set perc_external)")
+    ap.add_argument("--perc-cap", type=int, default=11, help="the stand-in's set size (heed at 16 attends about 10.6 at contract density)")
+    ap.add_argument("--perc-swap", type=float, default=0.0, help="the stand-in's extra churn: the share of viewer rounds that swap one member")
+    ap.add_argument("--perc-keep", type=int, default=12, help="the stand-in keeps a member while it stays within this many nearest (sets the churn)")
+    ap.add_argument("--relay-broken", action="store_true", help="the relay applies a transaction's state before its set changes (the privacy probe's known answer)")
+    ap.add_argument("--relay-port", type=int, default=3391)
+    ap.add_argument("--relay-sub", default="", help="BATTLE_DELIVERY_PATHS: comma-separated truth tables one privileged subscriber holds over the run (a relay's feed)")
+    ap.add_argument("--game-views", action="store_true", help="VIEWER_FLOOR (viewer-floor): the viewers also subscribe the game client's other views (heard_sounds, my_earshot, my_senses, my_act_outcomes, my_offers, my_known_names, my_records, speech_card, cover_law)")
+    ap.add_argument("--crowd", action="store_true", help="E2 prototype (attention-e2): the viewers also subscribe seen_crowd (set attend_n and attend_crowd_on)")
     ap.add_argument("--combat-feed", action="store_true", help="the viewers subscribe combat_feed in place of my_combat (views step 2; set combat_feed_on=true)")
     ap.add_argument("--keep-world", action="store_true", help="leave the world paused at the end instead of deleting it (read back as paused)")
     ap.add_argument("--clog", action="store_true", help="record the replica's commitlog growth on disk over the window, and its compressed size after the world is deleted, zstd -3 and -6 (result clog)")
     ap.add_argument("--sides", type=int, default=0, help="the fighters in this many sides (2-4) that fight each other, not bystanders (spawn_battle_sides)")
     ap.add_argument("--privacy", action="store_true", help="copy-privacy: prove each viewer receives only its own copy rows (needs --motion-tables --character-tables and both laws on); <out>/privacy-v<count>.json, exit 1 on a failed check")
+    ap.add_argument("--lines-table", action="store_true", help="experience-incremental's measurement: the players read experience_copy in place of my_experience")
+    ap.add_argument("--humans", type=int, default=0, help="BATTLE_CONTRACT_CASES (contract-cases): this many of the --fighters are human clients (gate-load's battle role, GATE_216's decisions), placed in the fighters' 7 m; the AI fighters are the rest")
+    ap.add_argument("--walkers", type=int, default=0, help="contract-cases: also this many walkers at lot doors round the settlements (GATE_216's walkers)")
+    ap.add_argument("--fight-ms", type=int, default=250, help="contract-cases: a human fighter's decision period (GATE_216: 250 ms ±10%%)")
+    ap.add_argument("--watch", action="store_true", help="contract-cases: run the tick watcher (gate-load watch) for the steps' intervals (result steps)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     if a.privacy and (a.flip_off or not (a.motion_tables and a.character_tables) or not {"motion_tables_on=true", "characters_table_on=true"} <= set(a.law)):

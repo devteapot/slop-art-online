@@ -266,6 +266,60 @@ struct Player {
     fresh: bool,
     /// The copy rows this connection received and whose they were (copy-privacy).
     privacy: Arc<Mutex<Privacy>>,
+    /// BATTLE_CONTRACT_CASES (branch contract-cases): with the relay on, the bodies of my perceived
+    /// set as the delivery relay (relay_proto) sends them; a human fighter aims from these.
+    relay_bodies: Arc<Mutex<HashMap<u32, Moving>>>,
+}
+
+/// BATTLE_CONTRACT_CASES: one WebSocket to the delivery relay for a human fighter (relay_proto's
+/// frame format: a 28-byte header, then items; body 1, fighter 2, doing 3, gone 4, event 5,
+/// hearing bucket 6). Keeps the bodies of its set; counts frames and items in `relay_frames`.
+fn relay_feed(url: String, identity: Identity, bodies: Arc<Mutex<HashMap<u32, Moving>>>, counts: Counts) {
+    std::thread::spawn(move || {
+        let (mut ws, _) = match tungstenite::connect(url.as_str()) {
+            Ok(x) => x,
+            Err(e) => panic!("relay feed {url}: {e}"),
+        };
+        ws.send(tungstenite::Message::text(identity.to_hex().to_string())).expect("relay hello");
+        loop {
+            let Ok(m) = ws.read() else { return };
+            let f = m.into_data();
+            if f.len() < 28 {
+                continue;
+            }
+            let u64_at = |o: usize| u64::from_le_bytes(f[o..o + 8].try_into().unwrap());
+            let u32_at = |o: usize| u32::from_le_bytes(f[o..o + 4].try_into().unwrap());
+            let f32_at = |o: usize| f32::from_le_bytes(f[o..o + 4].try_into().unwrap());
+            let mut items = 0u64;
+            let mut b = bodies.lock().unwrap();
+            let mut o = 28;
+            while o < f.len() {
+                items += 1;
+                match f[o] {
+                    1 => {
+                        let id = u32_at(o + 1);
+                        b.insert(id, Moving { id, t_ms: u64_at(o + 5), x: f32_at(o + 13), y: f32_at(o + 17), vx: f32_at(o + 21), vy: f32_at(o + 25), heading: f32_at(o + 29),
+                                              turn: 0.0, turn_s: 0.0, next_ms: 0, speed: 0.0, face_off: 0.0, face_turn: 0.0, face_turn_s: 0.0, running: false });
+                        o += 33;
+                    }
+                    2 => o += 19,
+                    3 => o += 18,
+                    4 => {
+                        b.remove(&u32_at(o + 1));
+                        o += 5;
+                    }
+                    5 => o += 22,
+                    6 => o += 4,
+                    _ => break,
+                }
+            }
+            drop(b);
+            let mut c = counts.lock().unwrap();
+            let e = c.entry("relay_frames").or_default();
+            e[0] += 1;
+            e[1] += items;
+        }
+    });
 }
 
 /// Every `seen_body_copy` and `seen_character_copy` row a viewer receives (its initial rows, then
@@ -483,6 +537,7 @@ fn hook(p: &Player, log: &Log, own: Identity) {
     count!(conn, p.counts, seen_fighters_near);
     count!(conn, p.counts, seen_fighters_far);
     count!(conn, p.counts, seen_fighter_copy);
+    count!(conn, p.counts, experience_copy);
     count!(conn, p.counts, seen_doing_near);
     count!(conn, p.counts, seen_doing_far);
     count!(conn, p.counts, my_vitals);
@@ -781,6 +836,16 @@ struct Card {
     reach: f32,
     /// Windup plus recovery: how long a timed move holds me (what the game shows by the clip).
     hold_ms: u64,
+    /// The pool its cost is paid from ("stamina", "focus"; else energy) and the technique it needs
+    /// (BATTLE_CONTRACT_CASES: the game client refuses a move short of breath or not known itself).
+    pool: String,
+    knows: String,
+}
+
+/// A pool's level now from its row (living_rules::pools::level).
+fn pool_level(value: f32, rate: f32, from_ms: u64, at_ms: u64, cap: f32, now: u64) -> f32 {
+    let start = at_ms.max(from_ms);
+    (value + rate * (now.saturating_sub(start) as f32 / 1000.0)).clamp(0.0, cap.max(0.0))
 }
 
 /// Rejoin after death, as a person at the death screen presses "arrive again".
@@ -819,7 +884,7 @@ fn fight(p: &Player, log: &Log, cards: &HashMap<String, Card>, center: (f32, f32
         if c.own || c.id == me || c.kind != "person" {
             continue;
         }
-        let Some(b) = seen_body(db, c.id) else { continue };
+        let Some(b) = seen_body(db, c.id).or_else(|| p.relay_bodies.lock().unwrap().get(&c.id).cloned()) else { continue };
         let at = pos(&b, now);
         let d = dist(here, at) * if c.id == current { 0.7 } else { 1.0 };
         if best.is_none_or(|(_, _, bd)| d < bd) {
@@ -827,6 +892,13 @@ fn fight(p: &Player, log: &Log, cards: &HashMap<String, Card>, center: (f32, f32
         }
     }
     let vit = db.my_vitals().id().find(&me);
+    // BATTLE_CONTRACT_CASES (contract-cases): with `pools`, a move is tried only when its pool has
+    // its cost and the character knows it, as the game client checks before sending (verbs.rs).
+    let pools = cfg["pools"].as_bool().unwrap_or(false);
+    let (stamina, focus) = vit.as_ref().map_or((100.0, 100.0), |v| {
+        (pool_level(v.stamina, v.stamina_rate, v.stamina_from_ms, v.at_ms, v.stamina_max, now), pool_level(v.focus, v.focus_rate, v.focus_from_ms, v.at_ms, v.focus_max, now))
+    });
+    let known: Vec<String> = if pools { db.my_know_how().iter().filter(|k| k.actor == me).map(|k| k.technique).collect() } else { Vec::new() };
     let (hp, max_hp, energy) = vit.map_or((1.0, 1.0, 100.0), |v| (v.hp, v.max_hp.max(1.0), v.energy));
     let ready = db.my_readiness().iter().find(|r| r.id == me);
     let held = p.st.lock().unwrap().held_until.is_some_and(|h| Instant::now() < h);
@@ -834,7 +906,17 @@ fn fight(p: &Player, log: &Log, cards: &HashMap<String, Card>, center: (f32, f32
     let ok = |skill: &str, dash: bool| -> bool {
         let Some(card) = cards.get(skill) else { return false };
         let cooled = ready.as_ref().is_none_or(|r| r.ready.iter().all(|x| x.skill != skill || x.at_ms <= now));
-        cooled && (dash || !busy) && energy >= card.cost
+        let paid = if !pools {
+            energy >= card.cost
+        } else {
+            let have = match card.pool.as_str() {
+                "stamina" => stamina,
+                "focus" => focus,
+                _ => energy,
+            };
+            have >= card.cost && (card.knows.is_empty() || known.iter().any(|k| *k == card.knows))
+        };
+        cooled && (dash || !busy) && paid
     };
     let arrows: u32 = db.my_inventory().iter().filter(|i| i.owner == me as u64 && i.item == "arrow").map(|i| i.qty).sum();
     let reach = |s: &str| cards.get(s).map_or(1.6, |c| c.reach);
@@ -940,7 +1022,17 @@ fn players_mode() {
     // A player's combat feed as event rows (views step 2, `combat_feed_on`): `combat_feed` in
     // place of the `my_combat` view.
     let combat_feed = req["combat_feed"].as_bool().unwrap_or(false);
+    // E2 prototype (branch attention-e2): the crowd rows of the unattended (`attend_crowd_on`).
+    let crowd = req["crowd"].as_bool().unwrap_or(false);
+    // VIEWER_FLOOR (branch viewer-floor): the views the game client subscribes beyond this tool's
+    // base set (living/game/src/net.rs `PERCEIVED` and `STATIC`), so a viewer costs what a real
+    // client's subscriptions cost.
+    let game_views = req["game_views"].as_bool().unwrap_or(false);
+    let lines_table = req["lines_table"].as_bool().unwrap_or(false);
     let fresh_every = req["fresh_every"].as_u64().unwrap_or(0) as usize;
+    // BATTLE_CONTRACT_CASES (branch contract-cases): the delivery relay's WebSocket; with it, each
+    // `battle` player reads its set's bodies from the relay (the relay arms: no copies are written).
+    let relay_url = req["relay"].as_str().map(str::to_string);
     let started = Instant::now();
     let mut players = Vec::new();
     for (idx, p) in req["players"].as_array().unwrap().iter().enumerate() {
@@ -954,8 +1046,11 @@ fn players_mode() {
         let (conn, identity) = connect(&uri, &db, p["token"].as_str().unwrap(), client.confirmed());
         log.put(json!({"k": "conn", "p": idx, "role": format!("{role:?}"), "identity": identity.to_hex().to_string(), "ts": t, "connected": unix_us()}));
         let fresh = fresh_every > 0 && idx % fresh_every == 0;
-        let pl = Player { idx, role, name: p["name"].as_str().unwrap().to_string(), conn, counts: Arc::default(), st: Arc::default(), applied: Arc::default(), errors: Arc::default(), fresh, privacy: Arc::default() };
+        let pl = Player { idx, role, name: p["name"].as_str().unwrap().to_string(), conn, counts: Arc::default(), st: Arc::default(), applied: Arc::default(), errors: Arc::default(), fresh, privacy: Arc::default(), relay_bodies: Arc::default() };
         hook(&pl, &log, identity);
+        if let (Some(url), Role::Battle) = (relay_url.as_ref(), role) {
+            relay_feed(url.clone(), identity, pl.relay_bodies.clone(), pl.counts.clone());
+        }
         let mut queries = client.base();
         // What the game client subscribes with the tiers (frame-views): the two tiers of each
         // perception view in place of the view; with cues, also the three cue event tables.
@@ -982,6 +1077,16 @@ fn players_mode() {
         if combat_feed {
             queries.retain(|q| q.as_str() != "SELECT * FROM my_combat");
             queries.push("SELECT * FROM combat_feed".to_string());
+        }
+        let _ = crowd;
+        // experience-incremental's measurement: my lines from `experience_copy` in place of the
+        // `my_experience` view, as the game client reads them while `lines_table_on` is on.
+        if lines_table {
+            queries.retain(|q| q.as_str() != "SELECT * FROM my_experience");
+            queries.push("SELECT * FROM experience_copy".to_string());
+        }
+        if game_views {
+            queries.extend(["heard_sounds", "my_earshot", "my_senses", "my_act_outcomes", "my_offers", "my_known_names", "my_records", "speech_card", "cover_law"].map(|t| format!("SELECT * FROM {t}")));
         }
         subscribe(&pl, queries);
         players.push(pl);
@@ -1030,7 +1135,7 @@ fn players_mode() {
         subscribe(p, windows(at.0, at.1, size, client));
     }
     wait_applied(&players, 2, "windows", Duration::from_secs(180));
-    let cards: HashMap<String, Card> = players[0].conn.db.skill_card().iter().map(|c| (c.skill.clone(), Card { cost: c.cost, reach: c.reach, hold_ms: (c.windup_ms + c.recover_ms) as u64 })).collect();
+    let cards: HashMap<String, Card> = players[0].conn.db.skill_card().iter().map(|c| (c.skill.clone(), Card { cost: c.cost, reach: c.reach, hold_ms: (c.windup_ms + c.recover_ms) as u64, pool: c.pool.clone(), knows: c.knows.clone() })).collect();
     let held: Vec<Value> = players.iter().map(|p| json!({"bodies": seen_body_count(&p.conn.db), "characters": seen_characters_of(&p.conn.db).len()})).collect();
     println!("{}", json!({"event": "ready", "after_s": started.elapsed().as_secs_f32(), "cards": cards.keys().collect::<Vec<_>>(), "held": held}));
     let _ = std::io::stdout().flush();
