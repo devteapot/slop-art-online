@@ -58,6 +58,8 @@ Status: **built behind `heed_on` (off by default) and measured on the pack arena
 | Cullet battle of 200, after the selector merge | attention-exp `67a68abd7` | `631b496ac` | 3,600 | 113 | 47,773 | identical on the rerun; the first try differed from tick 2,707 in `last_look.max_structure`, `seen_structures.ranges` and `deliberation` only (base copy's structure ids at 4,096+, the candidate's at 230: SpacetimeDB 2.14.1's random sequence skip, the known artifact of docs/COMBAT_PHASE.md's det runs; kept as `det2-cullet-off-try1`) |
 | Cullet battle of 200 and pack arena, first build | attention-exp `0aba82f2` | `b5d2e48a0` | 3,600 / 7,200 | 113 | 47,400 / 104,869 | identical |
 
+**The comparison can see heed:** the same pack template with `--candidate-law heed_on=true` on the candidate alone differs at every tick: in the law's own rows from the first, and in the world's state from 8 ticks in (`experience`, `familiar`, `sex_seen`: first sights of throng members not told), 36 tables at the stop.
+
 `prepare --arena pack` is new (`det_compare.py`): it stages the arena on a paused island world the way the trial places it. The people run the fighters' graph there, because no mind runs in a det copy. Each run installs each build's own script (`--scripts`), so the candidate's added laws (`heed_closing_s`, `heed_trace`) are in its copy.
 
 ## 3. E4 fixture
@@ -75,7 +77,7 @@ Status: **built behind `heed_on` (off by default) and measured on the pack arena
 
 ### 3.2 Evidence
 
-Batches `he4nr2`, `he4nr3`, `he4pr4`–`he4pr6`, `he4xr1` (the redone replicate 1) and the top-ups `he4ta`–`he4td`, under `.local/living/trials/` in this worktree (git-ignored), with each batch's load log and the reports in `.local/heed-e4/` (`report-day.json`, `report-night.json`, `series/series.log`). The stopped runs are kept as `.local/heed-e4/aborted-*`. To be archived to `~/slop-evidence/heed-e4-<date>.tar.zst` with its sha256 when the branch's work ends.
+Batches `he4nr2`, `he4nr3`, `he4pr4`–`he4pr6`, `he4xr1` (the redone replicate 1) and the top-ups `he4ta`–`he4td`, under `.local/living/trials/` in this worktree (git-ignored), with each batch's load log and the reports in `.local/heed-e4/` (`report-day.json`, `report-night.json`, `series/series.log`). The stopped runs are kept as `.local/heed-e4/aborted-*`. All of it (`.local/heed-e4/`, the trial batches, the verify runs `core-heed*`, `minds-heed*`, `minds-bdh*`, and the modules' sha256 in `wasm.sha256`) is archived as `~/slop-evidence/heed-e4-20261122.tar.zst` (sha256 `e000e7d7f3d3b756876624110e3b7fa21b99303861851ac2e9c9f278de925116`, beside it). The private servers and their volumes were removed afterwards.
 
 ### 3.3 Results (median, range over 6 replicates; ◆ differs from capacity 16 by the §5.5 rule; * exploratory)
 
