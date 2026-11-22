@@ -28,8 +28,9 @@
 //! contact mark lapses within `heed_contact_s`. A fresh instance starts with no set: each reader
 //! asks for a pass. Nothing here is written to a table.
 //!
-//! **Instrumentation (E4).** With the diagnostic law `heed_trace` on (off in play), for a character
-//! with a mind (`character.ai`), each windup aimed at it
+//! **Instrumentation (E4).** With the diagnostic law `heed_trace` on (off in play), for every
+//! character the authority runs (with the heed law off too, then everyone counts as heeded), each
+//! windup aimed at it
 //! and each blow that reaches it is logged (`heed windup …`, `heed blow …`), with whether its maker
 //! was an individual to it when the windup began, and each full pass (`heed pass …`: capacity,
 //! health, how many it sees, how many places its rules filled). A blow whose maker made contact within the window before the windup began and
@@ -291,7 +292,7 @@ pub fn pass(ctx: &ReducerContext, me: &Character, at: (f32, f32), seen: &[NearCr
     common::diag(|| "heed:passes", 1);
     common::diag(|| "heed:in_sight", seen.len() as u64);
     common::diag(|| "heed:picked", picks.len() as u64);
-    if me.ai && common::laws(ctx).heed_trace {
+    if common::laws(ctx).heed_trace {
         // E4: every pass of a character with a mind (about one a second): its capacity, health,
         // how many it sees and how many places its rules filled, and the forced ones.
         let hp = ctx.db.vitals().id().find(me.id).map(|v| common::needs(&v, now).hp / v.max_hp.max(1.0)).unwrap_or(0.0);
@@ -402,7 +403,15 @@ fn event(ctx: &ReducerContext, me: &Character, at: (f32, f32), c: &NearCreature,
 /// if heed applies to it and it sees the attacker; and, for a victim with a mind, what held then
 /// (for [`contact`]'s log).
 pub fn windup(ctx: &ReducerContext, attacker: u32, victim: u32, now: u64) {
+    let trace = common::laws(ctx).heed_trace;
     if !applies(ctx, victim) {
+        // With the law off (or a player), everyone in sight is an individual: traced as such,
+        // for an arm without heed to be measured the same way (E4).
+        if trace && crate::combat::human(ctx, victim).is_none() {
+            let seen = crate::perception::sees_creature(ctx, victim, attacker, now);
+            log::info!("heed windup a={attacker} v={victim} seen={} heeded={} contact=0 cap=0", seen as u8, seen as u8);
+            WINDUPS.with(|w| w.borrow_mut().insert((attacker, victim), Windup { at_ms: now, seen, heeded: seen, contact: false }));
+        }
         return;
     }
     let Some(vc) = ctx.db.character().id().find(victim) else { return };
@@ -425,7 +434,7 @@ pub fn windup(ctx: &ReducerContext, attacker: u32, victim: u32, now: u64) {
         // repeated blow). Kept as an error line, counted by the E4 report.
         log::error!("heed invariant: windup by #{attacker} at #{victim} after contact within the window, yet not an individual");
     }
-    if vc.ai && common::laws(ctx).heed_trace {
+    if trace {
         let cap = HEED.with(|m| m.borrow().get(&victim).map_or(0, |s| s.capacity));
         log::info!("heed windup a={attacker} v={victim} seen={} heeded={} contact={} cap={cap}", seen as u8, heeded as u8, contact as u8);
         WINDUPS.with(|w| w.borrow_mut().insert((attacker, victim), Windup { at_ms: now, seen, heeded, contact }));
@@ -437,7 +446,8 @@ pub fn windup(ctx: &ReducerContext, attacker: u32, victim: u32, now: u64) {
 /// with a mind (E4): whether it is the attacker's first in an engagement, and what held when its
 /// windup began.
 pub fn contact(ctx: &ReducerContext, attacker: u32, victim: u32, outcome: &str, now: u64) {
-    if !on(ctx) || attacker == 0 || attacker == victim {
+    let trace = common::laws(ctx).heed_trace;
+    if !(on(ctx) || trace) || attacker == 0 || attacker == victim {
         return;
     }
     let before = contact_at(victim, attacker);
@@ -447,20 +457,21 @@ pub fn contact(ctx: &ReducerContext, attacker: u32, victim: u32, outcome: &str, 
         v.retain(|(a, t)| *a != attacker && now.saturating_sub(*t) <= ENGAGEMENT_MS);
         v.push((attacker, now));
     });
-    if !applies(ctx, victim) {
+    if crate::combat::human(ctx, victim).is_some() {
         return;
     }
-    let Some(vc) = ctx.db.character().id().find(victim) else { return };
-    // The attacker is an individual from now on (forced): its place in the set changes too.
-    HEED.with(|m| {
-        if let Some(s) = m.borrow_mut().get_mut(&victim) {
-            s.picks.retain(|p| p.id != attacker);
-            s.picks.insert(0, Pick::new(attacker, Place::Contact));
-            s.merit.remove(&attacker);
-            s.since.entry(attacker).or_insert(now);
-        }
-    });
-    if !vc.ai || !common::laws(ctx).heed_trace {
+    if applies(ctx, victim) {
+        // The attacker is an individual from now on (forced): its place in the set changes too.
+        HEED.with(|m| {
+            if let Some(s) = m.borrow_mut().get_mut(&victim) {
+                s.picks.retain(|p| p.id != attacker);
+                s.picks.insert(0, Pick::new(attacker, Place::Contact));
+                s.merit.remove(&attacker);
+                s.since.entry(attacker).or_insert(now);
+            }
+        });
+    }
+    if !trace {
         return;
     }
     let first = before.map_or(true, |t| now.saturating_sub(t) > ENGAGEMENT_MS);
