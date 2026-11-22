@@ -471,7 +471,7 @@ def one(a, n, out):
             load.send(json.dumps({"uri": lc.URL, "db": db, "events": str(out / f"events-v{n}.jsonl"), "battle": list(site),
                                   "behaviour": {"walk_period_ms": 1500, "rejoin_s": 3}, "players": players, "client": "gate",
                                   "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables, "character_tables": a.character_tables, "fighter_tables": a.fighter_tables,
-                                  "combat_feed": a.combat_feed, "crowd": a.crowd, "fresh_every": a.fresh_every}))
+                                  "combat_feed": a.combat_feed, "crowd": a.crowd, "game_views": a.game_views, "fresh_every": a.fresh_every}))
             joined = load.expect("joined", 900)
             lo, hi = (float(x) for x in a.ring.split(",")) if a.ring else (0.0, 6.0)
             for i, p in enumerate(sorted(joined["players"], key=lambda p: p["p"])):
@@ -775,6 +775,7 @@ def main():
     ap.add_argument("--fighter-tables", action="store_true", help="the viewers subscribe seen_fighter_copy in place of the fighter views (views step 3; set fighter_tables_on=true)")
     ap.add_argument("--flip-law", default=None, metavar="NAME=VALUE", help="E2: set this world law live --flip-at s into the window (a capacity burst)")
     ap.add_argument("--flip-at", type=float, default=30.0)
+    ap.add_argument("--game-views", action="store_true", help="VIEWER_FLOOR (viewer-floor): the viewers also subscribe the game client's other views (heard_sounds, my_earshot, my_senses, my_act_outcomes, my_offers, my_known_names, my_records, speech_card, cover_law)")
     ap.add_argument("--crowd", action="store_true", help="E2 prototype (attention-e2): the viewers also subscribe seen_crowd (set attend_n and attend_crowd_on)")
     ap.add_argument("--combat-feed", action="store_true", help="the viewers subscribe combat_feed in place of my_combat (views step 2; set combat_feed_on=true)")
     ap.add_argument("--keep-world", action="store_true", help="leave the world paused at the end instead of deleting it (read back as paused)")

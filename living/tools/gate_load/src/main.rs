@@ -943,6 +943,10 @@ fn players_mode() {
     let combat_feed = req["combat_feed"].as_bool().unwrap_or(false);
     // E2 prototype (branch attention-e2): the crowd rows of the unattended (`attend_crowd_on`).
     let crowd = req["crowd"].as_bool().unwrap_or(false);
+    // VIEWER_FLOOR (branch viewer-floor): the views the game client subscribes beyond this tool's
+    // base set (living/game/src/net.rs `PERCEIVED` and `STATIC`), so a viewer costs what a real
+    // client's subscriptions cost.
+    let game_views = req["game_views"].as_bool().unwrap_or(false);
     let fresh_every = req["fresh_every"].as_u64().unwrap_or(0) as usize;
     let started = Instant::now();
     let mut players = Vec::new();
@@ -988,6 +992,9 @@ fn players_mode() {
         }
         if crowd {
             queries.push("SELECT * FROM seen_crowd".to_string());
+        }
+        if game_views {
+            queries.extend(["heard_sounds", "my_earshot", "my_senses", "my_act_outcomes", "my_offers", "my_known_names", "my_records", "speech_card", "cover_law"].map(|t| format!("SELECT * FROM {t}")));
         }
         subscribe(&pl, queries);
         players.push(pl);

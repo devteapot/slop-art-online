@@ -179,6 +179,7 @@ def one(run):
         out["wait_ms_p99"] = None if p is None else (p * 1000 if math.isfinite(p) else "inf")
     if (v / "ticks.json").exists():
         tj = json.loads((v / "ticks.json").read_text())
+    if (v / "ticks.json").exists() and tj.get("body_ms"):  # L0 (--no-profile) runs log no tick bodies
         out["tick_body_p50_ms"], out["tick_body_p99_ms"] = tj["body_ms"].get("p50"), tj["body_ms"].get("p99")
         out["tick_over_16_7_pct"] = tj.get("body_over_16_7_ms_pct")
         gaps = tj.get("gap_slots", {})
