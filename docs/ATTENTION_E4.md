@@ -10,6 +10,7 @@ Status: **built behind `heed_on` (off by default) and measured on the pack arena
 - **Repeated invisible blows: 0 by construction, asserted:** no blow in any run came from an attacker that had made contact within `heed_contact_s` yet was not an individual at its windup, and no `heed invariant` line was logged. Later blows from an unheeded attacker after the window lapsed: 0.
 - **No wound spiral:** on the formula, capacity fell by a median 0–5% (at most 21%) while health fell by a median 6–31%; nobody's capacity collapsed, because nobody was hurt below a quarter for long, and no one died.
 - **Reactions are not measurable on this fixture:** the people's own starting behaviour (their seeded "stay safe" routine) never blocks or dodges, so blocks and dodges per windup are 0 in every arm, heed off included. The melee (§3.4) has fighters who block and dodge.
+- **Corrected by E4b (§7):** the melee result below was measured with Side A always the side that blocks and never dodges; with the sides swapped, most of it was that. Under the reweighted instinct capacity 4 and 8 fight as well as 16.
 - **The 60-person two-sided melee (no minds, 54 runs): capacity does matter there.** Side A at capacity 1, 2 or 4 lost all 18 fights and at 8 lost 4 of the 5 decided, killing a median 1–4.5 enemies against 15 at capacity 16 and 22.5 at 32. Unheeded first blows explain 1 and 2 only (24% and 6% of first blows); at 4–8 the cause is that the instinct's "who is close" rule fills a small capacity with one's own side, so enemies not yet striking stay in the throng and are not attacked. By the strict §5.5 rule only 1 and 2 differ from 16 (the melee's spread is wide); the direction at 4 and 8 is consistent in all 12 runs (§3.4).
 - **AI tick cost at 200 fighters:** heed on adds about 76 ms/s of tick (501 → 577, +15%); its passes cost about 85 ms/s, about 7.5 µs per creature in sight per pass, independent of how many are heeded (§4).
 
@@ -190,3 +191,100 @@ Evidence: `.local/heed-e4/melee/` (per run `roles.json`, `summary.json`, `charac
 5. **Earshot words for a throng** list each throng hearer as "someone in the throng to the …", which repeats in a crowd; a count ("and 5 in the throng") would read better.
 6. **`threatened` desire signal and the throng.** It now counts only windups by individuals, like the `threatened` condition; before heed it counted every windup aimed at one, seen or not (a pre-existing leak with `fov_on`).
 7. Owner: whether the law goes on per world after the player side and E2's ceiling. The person base (10 or 14) is not separated by these fights: the formula and formula-14 arms differ from 16, and from each other, on no fight measure in either fixture.
+
+## 7. E4b: the reweighted instinct, the side-swapped melee and the side asymmetry
+
+The general coordinator's go, 2026-11-22: free, on heed-e4. Build `06a5fd9a4`; series `.local/heed-e4b/` (archived, below).
+
+### 7.1 The instinct reweight (seed content, `living/seeds/heed.json`)
+
+`heed_person` now ranks two new rules **above family and plain nearness**, after threats, words and cues:
+
+```json
+{"if": {"who": {"kind": "person", "relation": "enemy"}}, "order": "nearest", "hold_s": 5, "why": "whoever stands against me"},
+{"if": {"all": [{"acting_on_heeded": true}, {"doing": {"is": "hostile"}}]}, "order": "nearest", "hold_s": 3, "why": "whoever is going for someone I watch"},
+```
+
+- **"Enemy"** is the graph's relation word: a relation row the mind wrote, or the communities' open `enemy` stance record. In the melee that means every fighter of the other side. The authority reads relations only when the policy names them.
+- **The second rule** takes whoever visibly strikes at someone one heeds.
+- **The previous instinct is kept** as `heed_person_v1`. The value-only law `heed_instinct` (2 as shipped, 1 for the old one) selects it, through `living_rules::heed::instinct_variant`.
+- A unit test pins the behaviour: with 4 allies close, an enemy at 6 m and a striker at 7 m, capacity 2 takes the enemy and the striker; v1 takes the two nearest allies.
+
+### 7.2 The design and the replicate count
+
+- **Fixture:** E4's melee (§3.4), with one new fixture law, `sides_first`, 0 as shipped. It sets which side `spawn_battle_sides` puts its first, lowest-id fighter on:
+  - **r0:** Side A has the lower ids;
+  - **r1:** Side B has them.
+- **Arms:** Side A fixed at capacity 4, 8 or 16 (Side B on the formula); Side A's person base 14 against 10; both sides on the formula. Each under the new instinct (v2) and the old (v1), each in both id orders: **6 replicates each, 12 per arm pooled.** Heed off in both id orders: 10 each.
+- **All of it:** 140 runs from a quiet start, under `battle.lock`, the server pinned to the X925 cores, 3 at a time; host load at most 4.3. None left out.
+- **The replicate count.** Before choosing it, I bootstrapped E4's melee runs: how often would capacity 4 or 8 meet the median-and-range rule against 16, at n per arm?
+
+  | Measure | n = 4 | n = 6 | n = 8 | n = 12 |
+  |---|---|---|---|---|
+  | A dead less B dead at 60 s, capacity 4 | 0.25 | 0.16 | 0.05 | 0.03 |
+  | the same, capacity 8 | 0.21 | 0.10 | 0.02 | 0.01 |
+  | Side B dead | 0.18 | 0.10 | 0.03 | 0.01 |
+
+  - **More replicates make the rule harder, not easier,** because the control's min–max range only widens. The melee snowballs: one side breaks, the 16-arm itself spans 1–24 enemies killed.
+  - So no replicate count makes 4 and 8 likely to pass this rule. I kept 6 per arm and id order, so each orientation is judged as E4 was, and the pooled 12 are reported beside it with a sign test on decided fights.
+
+### 7.3 Results
+
+| Instinct | Side A | Side A won–lost (neither) | id order r0 (A blocks, lower ids) | r1 (A dodges, higher ids) | A dead less B dead at 90 s, median | at the end | A's blows landed | first blows from the unheeded |
+|---|---|---|---|---|---|---|---|---|
+| v2 | capacity 4 | 6–4 (2) | 2–4 | 4–0 | -0.5 | -5.0 | 166.0 | 3 of 4402 |
+| v2 | capacity 8 | 5–4 (3) | 2–3 | 3–1 | -0.5 | -6.0 | 183.5 | 0 of 4358 |
+| v2 | **capacity 16** (control) | 5–5 (2) | 2–3 | 3–2 | 0.0 | -2.5 | 181.0 | 0 of 4631 |
+| v2 | person base 14 against 10 | 5–5 (2) | 3–1 | 2–4 | 1.5 | 3.0 | 175.0 | 0 of 4849 |
+| v2 | both sides on the formula (symmetric) | 5–5 (2) | 2–2 | 3–3 | -3.0 | -9.0 | 173.5 | 0 of 4232 |
+| v1 | capacity 4 | 3–6 (3) | 0–4 | 3–2 | 6 | 9.0 | 136.5 | 1 of 4268 |
+| v1 | capacity 8 | 4–7 (1) | 1–5 | 3–2 | 2.0 | 12.0 | 181.5 | 0 of 4218 |
+| v1 | **capacity 16** (control) | 4–8 (0) | 3–3 | 1–5 | 2.5 | 11.0 | 161.0 | 0 of 4943 |
+| v1 | person base 14 against 10 | 4–6 (2) | 0–5 | 4–1 | 2.5 | 5.0 | 175.5 | 0 of 4700 |
+| v1 | both sides on the formula (symmetric) | 2–8 (2) | 0–5 | 2–3 | 4.5 | 14.0 | 178.5 | 0 of 4356 |
+
+**Against the median-and-range rule:** no capacity or base arm differs from capacity 16 on any fight measure, in either instinct, in either id order or pooled. That covers deaths, enemies killed, the death difference at 60 s, 90 s and the end, blows landed, unheeded first blows and reactions. The only exceptions are single-orientation flags in both directions: under v1, blows landed at capacity 4 in r0 and the death difference at capacity 8 in r1. Capacity's own measure, the share of passes at capacity, differs as it must. **Capacity 4 and 8 do not meet the rule.**
+
+**Reading.**
+- **With the new instinct, capacity 4 and 8 fight as well as 16.** Pooled over both id orders, Side A won–lost: capacity 4 **6–4**, capacity 8 5–4, capacity 16 5–5. Unheeded first blows: 3 of 4,402 at capacity 4, none at 8.
+- **With the old instinct, a capped Side A does no better at 16 than at 4 or 8** once the id order is swapped: 4–8 at 16, 3–6 at 4, 4–7 at 8. Its losses gather in r0, where Side A is the blocking side (§7.4).
+- **E4's §3.4 finding needs this correction.** Side A losing every fight at capacity 4 was measured only in r0. There, Side A was also the side whose every fighter blocks and never dodges. The swap shows most of that loss was the fixture's defence split; capacity alone accounts for little of it in the old instinct, and none in the new.
+- **Base 14 against 10** does not separate in either instinct: 5–5 (v2), 4–6 (v1).
+- **The reweight also evens the symmetric arm:** both sides on the formula went 5–5 under v2, against 2–8 under v1. Under v1 Side A lost all 5 decided r0 fights, where A was the blocking side.
+
+### 7.4 The side asymmetry: the fixture, not the engine's id order
+
+**With heed off, symmetric** (`heed_e4b_side.py`):
+
+| Defence by side | id order | n | the low-id side broke | the low-id side's dead less the other's, median at the end |
+|---|---|---|---|---|
+| one defence per side (as shipped) | r0 | 10 | 7 of 10 | +18 |
+| one defence per side | r1 | 10 | 7 of 9 | +13 |
+| one defence per side | both | 20 | **14 of 19** (p = 0.064) | +15 |
+| **mixed within each side** (`sides_mixed_defence`) | both | 16 | **4 of 6** (p = 0.69); 10 of 16 ended with neither side broken | +2 |
+
+- **Side A as such** broke 9 times and Side B 10, so the community makes no difference. The side with the lower ids broke 14 of 19 in both id orders.
+- **The low-id side was always the side that blocks.** `spawn_battle_sides` (`authority/src/lib.rs`, the `defend` line) chooses each fighter's side by creation order (`made % sides`) and its defence by id parity (`id % 2 == 0` → dodge, else block).
+  - With consecutive ids, one whole side blocks and the other whole side dodges.
+  - In these worlds the first fighter's id is odd, so the low-id side was always the blocking side, whichever side `sides_first` named.
+- **With the defence alternated within each side** (the new fixture law `sides_mixed_defence`, off as shipped), the asymmetry goes:
+  - 4 of 6 decided, against 14 of 19;
+  - a median death difference of +2, against +15;
+  - most fights left undecided within 5 minutes.
+- **So in this fixture a side that only dodges beats a side that only blocks, about 3 to 1.** That is a balance question about block and dodge, not an engine fairness bug. `spawn_battle` (lib.rs, `defend` by id parity, everyone against the nearest person) has no sides, so it is unaffected.
+
+**Where id order does enter the tick** (read-only, `authority/src/tick.rs` and callers). None of these showed an effect once the defence was mixed:
+1. **Motion and activity** are processed in the order of their `next_ms` and `ends_ms` indexes. Ties within a tick fall back to the index's own order, so two blows completing in the same tick resolve in that order: the first can kill before the second lands.
+2. **Combat cadence** evaluates a fighter when `(id + tick) % every == 0`, so fighters are staggered by id class. Each pair's reaction delays are 1 and 3 ticks one way or the other, symmetric over pairs.
+3. **Slots and wakes:** 1 Hz slots run in id order. Bystander wakes are rotated by tick count since the wake-order fix (docs/COMBAT_PHASE.md).
+4. **Tie-breaks:** the heed selector breaks exact ties by id (lower first), and `Sensing`'s nearest order by gather index. Both apply only at equal distances.
+
+If a fairness check is wanted beyond this fixture, item 1 (same-tick blow resolution order) is the one that can decide a duel; a paired det test with two duellists swapped would measure it.
+
+### 7.5 Checks and evidence
+
+- `just living-check` passed on `06a5fd9a4`.
+- `cargo test -p living-rules heed`: 16 pass, the reweight's own test among them.
+- verify-core `heed`: 17 of 17 with the new instinct (run `core-heed6-174824`).
+- **Off-identity holds by construction:** every new law defaults to today's behaviour; `heed_instinct` is read only under `heed_on`, and `sides_first` and `sides_mixed_defence` only by `spawn_battle_sides`.
+- **Evidence:** `.local/heed-e4b/` (`runs/`, `runs-off/`, `runs-mixed/`, `report.json`, `side*.json`, `winloss.txt`, load logs), archived as `~/slop-evidence/heed-e4b-20261122.tar.zst` (sha256 `39f41976d02cd7a64d5b2ffb2308e2dd15a2112b42057b23a9cd2e65aefcbb34`).
