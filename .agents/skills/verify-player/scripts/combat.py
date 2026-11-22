@@ -1107,19 +1107,57 @@ def scene_heal(st):
     check(st, "heal mends yourself (HEALED, health up)", u and "healed" in u["outcome"] and ev and h1 is not None and h0 is not None, f"{u and u['outcome']} hp {h0:.1f}->{h1:.1f}")
 
 
+def body_now(st, cid):
+    """Where a body is now: its row is a segment (`x`, `y` at `t_ms`, moving at `vx`, `vy` until
+    `next_ms`), so a walking body is up to a segment's length past its `x`, `y` (`common::pos`,
+    turns aside)."""
+    r = sql(st, f"SELECT x, y, t_ms, vx, vy, next_ms FROM body WHERE id = {cid}")
+    if not r:
+        return None
+    b = r[0]
+    t = max(0, min(int(time.time() * 1000), b["next_ms"]) - b["t_ms"]) / 1000.0
+    return (b["x"] + b["vx"] * t, b["y"] + b["vy"] * t)
+
+
 def scene_wolves(st):
     cid = me(st)
     ws = wolves(st)
     check(st, "the seed placed a bold pack", len(ws) >= 3, ws)
     if not ws:
         return
-    wp = body(st, ws[0])
-    call(st, "place_at", [cid, wp[0] + 5.0, wp[1]], "admin")
+    w = ws[0]
+
+    # The player goes where the wolf can see it, and again while the wolf has walked off before
+    # turning on it (wolves-scene, 2026-11-22; features/combat.md, Gotchas):
+    # - A wolf attacks only a person it sees within 10 m (`nearest` resolves by sight), and brush
+    #   and rock block sight even at 5 m by day: a spot 5 m east of the wolf was hidden from it in
+    #   2 of 15 placements. Sight is the same both ways (`Map::sight_clear`), so the player's own
+    #   `seen_characters` holding the wolf says the wolf sees the player. Each spot round the wolf
+    #   is tried in turn until one is seen.
+    # - A wandering wolf keeps walking until its graph looks again; placed beside where it was, the
+    #   player was soon more than 10 m behind it (1 in 15). So while no blow has come, a wolf more
+    #   than 7 m off has the player placed beside it again.
+    def place():
+        for dx, dy in ((5.0, 0.0), (-5.0, 0.0), (0.0, 5.0), (0.0, -5.0), (3.5, 3.5), (-3.5, 3.5), (3.5, -3.5), (-3.5, -3.5)):
+            wp = body_now(st, w)
+            call(st, "place_at", [cid, wp[0] + dx, wp[1] + dy], "admin")
+            t = time.time() + 1.5
+            while time.time() < t:
+                if any(r["id"] == w for r in sql(st, "SELECT id FROM seen_characters", "player")):
+                    return (dx, dy)
+                time.sleep(0.25)
+        return None
+
+    spots = []
     t = time.time() + 20
     hit = []
     while time.time() < t and not hit:
+        wp, pp = body_now(st, w), body_now(st, cid)
+        if not spots or (wp and pp and math.dist(wp, pp) > 7.0):
+            spots.append(place())
         hit = [e for e in seen(st) if e["target"] == cid and e["actor"] in ws and e["kind"] in (2, 4)]
         time.sleep(0.3)
+    check(st, "the player stands where the first bold wolf sees it", any(spots), f"offsets {spots} from wolf {w}")
     check(st, "bold wolves attack a healthy adult player", hit, [(e["actor"], e["kind"], round(e["amount"], 1)) for e in hit][:3])
 
 
