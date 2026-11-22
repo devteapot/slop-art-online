@@ -4,6 +4,11 @@ Status: **measurement**, 2026-11-22, dev-box. The measuring code is on branch `c
 
 [BATTLE_CONTRACT_CASES.md](BATTLE_CONTRACT_CASES.md) found that a human fighter adds **3.1–3.7 ms/s** of the database thread on top of an AI fighter's 1.4, though it runs no behaviour graph. Before the conclusion "the architecture can't meet the gate" goes to the owner, this note asks whether that cost is inherent or fixable, part by part. It also asks what sets the strict 60 Hz threshold of about 390 ms/s.
 
+> **Update (2026-11-22, the gate case re-read at microsecond resolution, §8).** The line was fixed and committed by the Spark before any result was read (`us_reread.py`, `gate216-x925` **`5956bc2da`**): at least 59.9 ticks/s, the p99 of step intervals from `arrival_us` within 17.5 ms, and at most 0.5% over 25 ms.
+> - **On the dev-box every arm fails every part of the line:** main as shipped, direct, the relay and every lever arm.
+> - **The best is (c):** 59.68 ticks/s, a p99 of 25.2 ms and 1.03% over 25 ms.
+> - **What a client sees on the dev-box is wider than the server's 1 ms step times** (an arrival p99 of 25–27 ms against 18–23 on the relay arms). The watching client shares the host with the server, the driven clients and the relay.
+
 > **Update (2026-11-22, the held-back levers measured, §7).** Strict 60 Hz holds with none of them on the relay arm, alone or together.
 > - **Re-testing the unheeded every 500 ms** (`attend_throng_sight_ms`), **onlookers from the last sweep's sets** (`onlookers_from_sets`) and **even sweep phases** (`sweep_phase_even`) move the database thread by no more than the runs' own spread (about 506 ± 5 ms/s).
 > - **The even phases are the best:** 59.6 ticks/s, step p99 18–19 ms against base's 20 ms. They change no rule.
@@ -383,6 +388,55 @@ All three act on players only: the sweep and its sets belong to players. No mind
   - det_compare in `det-off/` and `det-negative/`.
 - **Archived** to `~/archive/worktree-evidence-20261122/levers.tar.zst` (sha256 beside it).
 - **The projections figures** come from the module logs of `u-B50L2-r1` (this note's `gate-remeasure.tar.zst`) and `hL2-B50r-r1` (`human-fighter-cost.tar.zst`). They were summed from the L2 timing-span lines and the `diag` and `sweep kept` lines.
+
+## 8. The gate case re-read at microsecond resolution (2026-11-22)
+
+**The line and the method came first.** Both were committed by the Spark in `living/tools/gate_remeasure/x925/us_reread.py` on branch `gate216-x925`, commit **`5956bc2da`**, before any microsecond result was computed. They are the same for both hosts.
+
+**The line:**
+- at least **59.9 ticks/s**;
+- the **p99 of step intervals from `arrival_us` within 17.5 ms**: the contract's "approximately 16.7 ms" plus 0.8 ms for measurement and scheduling jitter;
+- **at most 0.5% of intervals over 25 ms.**
+
+**The method:**
+- Input: the run's `ticks-watch.csv` from `gate-load watch`, with lines `c|u,tick,last_ms,arrival_us`.
+- Only the unconfirmed connection's lines (`u`), as `steps_from()` uses.
+- Each tick's first arrival inside the run's window (`v0/result.json` `window.t0`/`t1`).
+- An interval is `arrival_us(tick + 1) − arrival_us(tick)`, taken only between consecutive ticks.
+- The p99 is the nearest rank: the sorted intervals at index `int(0.99 n)`.
+- Ticks/s are the run's own (`ticks_per_s`).
+
+**On the dev-box the script ran unmodified** (sha256 `41684705…`) on the archived runs of §6.1 and §7. The run folders already had the layout it expects. All runs were pre-fair-ties (before main `0877fe93a`), on the `performance` governor.
+
+**What it measures:** `arrival_us` is when the watching client received the tick's row. It adds delivery jitter to the tick's own timing, so it measures what a client experiences, which is arguably the right thing for the contract. On the dev-box the watching client runs on the same host as the server, the 216 driven clients and the relay.
+
+| Arm (two runs each) | Ticks/s | Step p50 / p99 / max, `arrival_us` (ms) | Over 25 ms | Against the line |
+|---|---:|---|---:|---|
+| Main as shipped (§6.1) | 56.33, 56.64 | 17.0–17.2 / 34.1–34.8 / 44–46 | 7.8–8.3% | **fail** |
+| Direct, the plausible cuts (§6.1) | 58.51, 57.89 | 16.8–16.9 / 30.4–32.1 / 40–41 | 3.6–4.6% | **fail** |
+| Relay (§6.1) | 59.58, 59.64 | 16.7 / 25.9–26.1 / 35 | 1.37% | **fail** |
+| Relay base (§7; r2, r3) | 59.56, 59.59 | 16.7 / 25.6–25.7 / 37–38 | 1.23–1.32% | **fail** |
+| (a) `attend_throng_sight_ms=500` | 59.58, 59.31 | 16.7–16.9 / 25.6–27.4 / 34–36 | 1.18–2.67% | **fail** |
+| (b) `onlookers_from_sets` | 59.51, 59.43 | 16.7–16.8 / 27.0–27.2 / 35–36 | 1.66–2.55% | **fail** |
+| (c) `sweep_phase_even` | 59.68, 59.51 | 16.7–16.8 / 25.2–25.7 / 35–36 | 1.03–1.23% | **fail** |
+| All three | 59.46, 59.44 | 16.7 / 26.3 / 34–37 | 1.63–1.71% | **fail** |
+
+**Every arm fails every part of the line on the dev-box:**
+- **Ticks/s** reached at most 59.68.
+- **The arrival p99** is 25–35 ms. It is not near 17.5.
+- **Over 25 ms**, the best was 1.03%.
+- **Base r1**, kept out for its runner-listener mark, gives the same: 59.48 ticks/s, p99 26.4 ms, 1.49%.
+
+**The microsecond read is wider than §6's and §7's 1 ms read of `last_ms`:**
+- On the relay arms, the arrival p99 is 25–27 ms, against 18–23 ms from the server's step times (one run 32).
+- The share over 25 ms is about twice as large.
+
+So on the dev-box, a client sees the tick's spread plus about 4–7 ms more at the p99. That is delivery on a host that also runs the server, the driven clients and the relay. Unlike the X925 relay run, which missed only the slot by 1 ms at 1 ms resolution, nothing on the dev-box is close to the line. This does not change §7's bottom line.
+
+**Evidence:**
+- `us_reread-devbox.json` (the script's output) and a copy of the script, in `.local/us/`;
+- archived to `~/archive/worktree-evidence-20261122/us-reread.tar.zst` (sha256 beside it);
+- the runs themselves are §6.1's (`gate-remeasure.tar.zst`) and §7's (`levers.tar.zst`).
 
 ## Evidence
 
