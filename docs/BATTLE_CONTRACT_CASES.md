@@ -226,7 +226,7 @@ The privacy probe (`26c71b96e`, the fixed naming) rode along in every relay arm:
   - fighters' perception in a melee (in sight and heed at the ceiling).
 
   These are the same per-character costs PERCEPTION_OFF_THREAD named.
-- **A finding about the budget the earlier notes used.** VIEWER_FLOOR, RELAY_PROTOTYPE and PERCEPTION_OFF_THREAD counted viewers that fit "at 60 Hz" with the whole tick's work at or below 600 ms/s. Measured here, arms at 450–520 ms/s already miss about 1% of steps (59.2–59.4 ticks/s). Strict 60 Hz holds only to about 390–400 ms/s on the dev-box. Those counts are therefore upper bounds for strict cadence. This note does not correct them; that is the coordinator's call.
+- **A finding about the budget the earlier notes used.** VIEWER_FLOOR, RELAY_PROTOTYPE and PERCEPTION_OFF_THREAD counted viewers that fit "at 60 Hz" with the whole tick's work at or below 600 ms/s. Measured here, arms at 450–520 ms/s already miss about 1% of steps (59.2–59.4 ticks/s). Strict 60 Hz holds only to about 390–400 ms/s on the dev-box. Those counts are therefore upper bounds for strict cadence. Each of those notes carries a correction box in the same docs change.
 
 ## 5. Not measured
 
