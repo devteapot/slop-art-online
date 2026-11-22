@@ -320,7 +320,7 @@ Battle steps are 0.5 s (about 231 in sight × 81 steps a state); town steps are 
   - promotions 0.26 a second and flicker 3.8 a minute with holds, against 0.52 and 23.2 without.
 
 **Reading.**
-- **The beyond-8 sample is 14, not the 40–130 estimated in §8.**
+- **The beyond-8 sample is 14, not the 40–130 estimated in §8.** (Corrected in §9.2: none of the 14 was in the mind's own sight; the real sample is 1.)
   - These minds thought 0.17 times a mind-minute (the island town 0.35).
   - Most named people are the nearest, as the prompt's 14-nearest list makes likely.
 - **Where it can be read,** the instinct at its formula capacity of 10 misses most of the people a mind thinks about beyond the 8 nearest: 12 of 14.
@@ -328,6 +328,21 @@ Battle steps are 0.5 s (about 231 in sight × 81 steps a state); town steps are 
   - It is a lower bound (§9's bias): the prompt hides everyone past the 14th nearest.
 - **Capacity alone closes it here** (93% at 16): in this town, beyond 8 rarely means beyond 16.
 - **What this cannot say:** with n = 14, no comparison of arms on beyond-8 reaches the frozen decision rule's significance. A comparison of (b) or (c) against (a) at 5 points needs several times this sample: a longer or larger real-mind town, or the 14-nearest cap lifted.
+
+### 9.2 Correction: who the minds could actually see (2026-11-22, heed-e4's re-check)
+
+§9.1's fields used distance-only sight at the scene's 48 m. Cullet's authority sight also applies cover, walls and the gaze band, and the minds' own scenes listed far fewer people: a median of 2 and a p95 of 7, against 9–11 for distance-only (docs/ATTENTION_E5.md §1). Each named person was checked against the creatures listed in the scene its think request carried, which is the authority's own sight list. Nothing was rerun or paid for: the copies of `heedreal1`'s journal, `states.json` and `named-a.json` were read with `heed_e5_prompts.py`'s parser, on heed-e4.
+
+- **Not one of the 14 named-beyond-8 people was in the subject's scene.** All 14 were named from memory, not from sight.
+  - In 12 of the 14 no listed figure stands at the named person's distance.
+  - In 2 (`t060`, `t101`) a figure too far away to make out stands within 2 m of it. Even then the mind could not tell who that figure was (far-label), so the name still came from memory.
+- **Of all 171 named in sight (distance-only), 111 were in the scene's own list;** the other 60 were named from memory.
+  - Of the 111 visible, the instinct at the formula's capacity heeded **108 (97.3%)**. This is still scored on §9.1's distance-only replay; the authority's narrower sight would leave fewer candidates, so it is not a lower figure.
+  - Only **1** of the 111 stood 8th or farther among what the scene listed. The largest list was 14.
+- **What changes:**
+  - §9.1's "beyond the 8 nearest heeded 14.3% (2 of 14)" measured people the minds could not see. It does not show the instinct missing whom a mind thinks about. **The real beyond-8 sample in this town is 1.**
+  - The overall figure (89.5% of 171) mixes visible and remembered people. Over the visible ones it is 97.3% of 111.
+  - The conclusion that this town cannot discriminate arms on beyond-8 stands, more strongly. E5 (docs/ATTENTION_E5.md, on heed-e4) moves the test to a real-mind melee, whose fields use the scene's own list wherever it holds fewer than the capacity.
 
 ## Files
 
