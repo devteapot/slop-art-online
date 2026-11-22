@@ -269,6 +269,10 @@ def main():
     seen_on, seen_off_all = seen_on & scene, seen_off
     seen_off = seen_off & scene
     chars_on, chars_off = chars_on & scene, chars_off & scene
+    # The same for the mirror's return (motion-tables-staging-2: gate 1122235743 failed it with the
+    # mirror back on [307, 308, 310]; A's whole view, read by a second query, is not kept to compare).
+    back_chars_all, chars_back_all = back_chars, chars_back
+    back_chars, chars_back = back_chars & scene, chars_back & scene
     checks.update({
         "law off: the table is empty to the owner within a second": owner_after == 0,
         "law off: A's stream of the table, accepted, ends empty": accepted(off_ev) and off_ev[-1].get("code") == 0 and not final(off_ev, "seen_body_copy"),
@@ -283,7 +287,7 @@ def main():
     result = {"a": a, "b": b, "c": c, "f": f, "dist": {k: round(math.dist(pos[a], pos[k]), 2) for k in (b, c, f)},
               "rows": {w: len(r) for w, r in got.items()}, "a_table": sorted(by_body), "a_view": sorted(a_view),
               "near": sorted(a_near), "far": sorted(a_far), "off": {"owner_rows": owner_after, "seen": sorted(seen_off), "private": private_off},
-              "back": len(back), "fighters": {"a": sorted(f_by_body), "view": sorted(a_fview), "near": sorted(a_fnear), "far": sorted(a_ffar), "owner_after_off": owner_fight, "back": sorted(fight_back)}, "mirror": {"a": sorted(a_mirror), "view": sorted(a_chars), "owner_after_off": owner_chars, "back": sorted(back_chars)}, "checks": checks}
+              "back": len(back), "fighters": {"a": sorted(f_by_body), "view": sorted(a_fview), "near": sorted(a_fnear), "far": sorted(a_ffar), "owner_after_off": owner_fight, "back": sorted(fight_back)}, "mirror": {"a": sorted(a_mirror), "view": sorted(a_chars), "owner_after_off": owner_chars, "back": sorted(back_chars), "view_back": sorted(chars_back_all), "back_all": sorted(back_chars_all)}, "checks": checks}
     (out / "motion_tables.json").write_text(json.dumps(result, indent=1) + "\n")
     for k, v in checks.items():
         print(("PASS " if v else "FAIL ") + k)
