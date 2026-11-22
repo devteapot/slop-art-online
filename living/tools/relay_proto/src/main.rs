@@ -234,11 +234,15 @@ impl State {
         self.txs += 1;
         self.changes += batch.len() as u64;
         let mut ticked = false;
+        // A transaction is a new tick's only when the clock's tick moved: housekeeping (1 Hz) and
+        // an install write the clock row too, with the same tick, and must count as later messages.
         for c in &batch {
             if let Change::Tick(t, ms) = c {
-                self.tick = *t;
-                self.tick_ms = *ms;
-                ticked = true;
+                if *t != self.tick {
+                    self.tick = *t;
+                    self.tick_ms = *ms;
+                    ticked = true;
+                }
             }
         }
         if ticked {
@@ -497,7 +501,7 @@ fn checker_mode(req: Value) {
         match conn.advance_one_message() {
             Ok(true) => {
                 let batch = std::mem::take(&mut *buf.lock().unwrap());
-                let t = batch.iter().find_map(|c| if let Change::Tick(t, _) = c { Some(*t) } else { None });
+                let t = batch.iter().find_map(|c| if let Change::Tick(t, _) = c { Some(*t) } else { None }).filter(|t| *t != tick);
                 match t {
                     Some(t) => {
                         tick = t;
