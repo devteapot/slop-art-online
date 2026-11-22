@@ -243,6 +243,8 @@ pub mod my_vitals_table;
 pub mod own_habits_reducer;
 pub mod pasture_table;
 pub mod pasture_type;
+pub mod perc_apply_reducer;
+pub mod perc_diff_type;
 pub mod perceived_table;
 pub mod perceived_type;
 pub mod persona_in_type;
@@ -635,6 +637,8 @@ pub use my_vitals_table::*;
 pub use own_habits_reducer::own_habits;
 pub use pasture_table::*;
 pub use pasture_type::Pasture;
+pub use perc_apply_reducer::perc_apply;
+pub use perc_diff_type::PercDiff;
 pub use perceived_table::*;
 pub use perceived_type::Perceived;
 pub use persona_in_type::PersonaIn;
@@ -934,6 +938,9 @@ pub enum Reducer {
         actor: u32,
     },
     OwnHabits,
+    PercApply {
+        diffs: Vec<PercDiff>,
+    },
     PlaceAt {
         id: u32,
         x: f32,
@@ -1057,6 +1064,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindUpdate { .. } => "mind_update",
             Reducer::MindWhere { .. } => "mind_where",
             Reducer::OwnHabits => "own_habits",
+            Reducer::PercApply { .. } => "perc_apply",
             Reducer::PlaceAt { .. } => "place_at",
             Reducer::PlaceNear { .. } => "place_near",
             Reducer::PlaceResource { .. } => "place_resource",
@@ -1300,6 +1308,11 @@ impl __sdk::Reducer for Reducer {
                 })
             }
             Reducer::OwnHabits => __sats::bsatn::to_vec(&own_habits_reducer::OwnHabitsArgs {}),
+            Reducer::PercApply { diffs } => {
+                __sats::bsatn::to_vec(&perc_apply_reducer::PercApplyArgs {
+                    diffs: diffs.clone(),
+                })
+            }
             Reducer::PlaceAt { id, x, y } => {
                 __sats::bsatn::to_vec(&place_at_reducer::PlaceAtArgs {
                     id: id.clone(),

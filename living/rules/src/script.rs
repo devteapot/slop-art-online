@@ -651,6 +651,10 @@ pub struct Laws {
     /// sight, heed, the perceived set, projections and crowd rows, and writes each fight event
     /// once to `relay_event`.
     pub relay_on: bool,
+    /// PERCEPTION_OFF_THREAD prototype (branch perc-offthread only; false = today): players' perceived
+    /// sets come from outside the tick (`perc_apply`); the scheduled sweep does no sight, heed,
+    /// hearing or crowd work for players.
+    pub perc_external: bool,
     /// (b) Above this many creatures in sight, a player's sweep comes less often, in proportion
     /// (at most three times the period).
     pub crowd_sweep_n: f32,
@@ -955,6 +959,7 @@ impl Default for Laws {
             vf_frame_idle_ms: 0.0,
             vf_feed_off: false,
             relay_on: false,
+            perc_external: false,
             crowd_sweep_n: 0.0,
             crowd_frame_max_ms: 0.0,
             fighter_bystander_wakes: true,
@@ -3336,6 +3341,7 @@ impl Scripts {
             vf_frame_idle_ms: g("vf_frame_idle_ms", l.vf_frame_idle_ms).clamp(0.0, 10_000.0),
             vf_feed_off: flag("vf_feed_off", l.vf_feed_off),
             relay_on: flag("relay_on", l.relay_on),
+            perc_external: flag("perc_external", l.perc_external),
             crowd_sweep_n: g("crowd_sweep_n", l.crowd_sweep_n).clamp(0.0, 10_000.0),
             crowd_frame_max_ms: g("crowd_frame_max_ms", l.crowd_frame_max_ms).clamp(0.0, 2_000.0),
             fighter_bystander_wakes: flag("fighter_bystander_wakes", l.fighter_bystander_wakes),
@@ -3618,7 +3624,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 40] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 41] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3650,6 +3656,8 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 40] = [
     ("vf_feed_off", ValueOnly::Delivery),
     // RELAY_PROTOTYPE (branch relay-proto only): read by the sweeps, frames and fight events at their next run.
     ("relay_on", ValueOnly::Delivery),
+    // PERCEPTION_OFF_THREAD prototype (branch perc-offthread only): read by the sweeps at their next run.
+    ("perc_external", ValueOnly::Delivery),
     ("crowd_sweep_n", ValueOnly::Delivery),
     ("crowd_frame_max_ms", ValueOnly::Delivery),
     ("fighter_bystander_wakes", ValueOnly::Delivery),

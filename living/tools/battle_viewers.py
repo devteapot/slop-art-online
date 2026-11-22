@@ -474,6 +474,13 @@ def one(a, n, out):
             checker_p = lc.Proc([a.relay, "checker"], out / "checker.stderr")
             checker_p.send(json.dumps({**rq, "out": str(out / "checker.log")}))
             checker_p.expect("checker up", 120)
+        perc_p = None
+        if a.relay and a.perc:
+            # PERCEPTION_OFF_THREAD (perc-offthread): the off-thread perception stand-in (set the
+            # perc_external law), an owner connection applying sets through `perc_apply`.
+            perc_p = lc.Proc([a.relay, "perc"], out / "perc.stderr")
+            perc_p.send(json.dumps({"uri": lc.URL, "db": db, "token": token, "out": str(out / "perc.json")}))
+            perc_p.expect("perc up", 120)
         if a.paused_placement and n:
             # The Spark's procedure: paused while the viewers join and are placed, unpaused at `ready`.
             lc.call(db, "set_paused", [True], token)
@@ -601,7 +608,9 @@ def one(a, n, out):
                                     "rss_kb": st.get("VmRSS"), "hwm_kb": st.get("VmHWM")}
             if clients_p:
                 res["relay_process"]["clients_cpu_ms_per_s"] = round((tc.proc_cpu(clients_p.p.pid)) / hz / max(time.time() - relay_t0, 1) * 1000, 1)
-        for proc in (clients_p, relay_p, checker_p):
+        if perc_p and (a.detail or a.flip_off):
+            res.setdefault("relay_process", {})["perc_cpu_ms_per_s"] = round(tc.proc_cpu(perc_p.p.pid) / os.sysconf("SC_CLK_TCK") / max(time.time() - relay_t0, 1) * 1000, 1)
+        for proc in (clients_p, relay_p, checker_p, perc_p):
             if proc:
                 proc.send("stop")
                 try:
@@ -609,7 +618,7 @@ def one(a, n, out):
                 except subprocess.TimeoutExpired:
                     proc.p.kill()
         if relay_p:
-            for f in ("relay.json", "clients.json"):
+            for f in ("relay.json", "clients.json", "perc.json"):
                 if (out / f).exists():
                     res[f.split(".")[0] + "_summary"] = json.loads((out / f).read_text())
         if a.detail or a.flip_off:
@@ -829,6 +838,7 @@ def main():
     ap.add_argument("--flip-law", default=None, metavar="NAME=VALUE", help="E2: set this world law live --flip-at s into the window (a capacity burst)")
     ap.add_argument("--flip-at", type=float, default=30.0)
     ap.add_argument("--relay", default="", help="RELAY_PROTOTYPE (relay-proto): the relay_proto binary; runs the relay, the privacy checker and one relay client per viewer (set the relay_on law)")
+    ap.add_argument("--perc", action="store_true", help="PERCEPTION_OFF_THREAD (perc-offthread): with --relay, also run the off-thread perception stand-in (set perc_external)")
     ap.add_argument("--relay-broken", action="store_true", help="the relay applies a transaction's state before its set changes (the privacy probe's known answer)")
     ap.add_argument("--relay-port", type=int, default=3391)
     ap.add_argument("--relay-sub", default="", help="BATTLE_DELIVERY_PATHS: comma-separated truth tables one privileged subscriber holds over the run (a relay's feed)")

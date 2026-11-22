@@ -641,6 +641,111 @@ fn clients_mode(req: Value) {
     std::process::exit(0);
 }
 
+
+/// PERCEPTION_OFF_THREAD (branch perc-offthread): the stand-in for an off-thread perception computer.
+/// It subscribes bodies and players as the owner and, for each player every 200 ms (a quarter of
+/// them every 50 ms), picks a set by a geometric rule: the nearest 16 creatures within 25 m, a member
+/// kept while it stays within the nearest 24 (hysteresis, so sets churn as heed's do rather than
+/// every sweep). It sends each round's changes in one `perc_apply` call. It is not the sight rule
+/// or heed: it stands for their output, so the authority's cost of applying sets can be measured.
+fn perc_mode(req: Value) {
+    let (uri, db, token) = (req["uri"].as_str().unwrap(), req["db"].as_str().unwrap(), req["token"].as_str().unwrap());
+    let out = req["out"].as_str().expect("out").to_string();
+    let (keep_n, cap, reach) = (req["keep_n"].as_u64().unwrap_or(24) as usize, req["cap"].as_u64().unwrap_or(16) as usize, req["reach_m"].as_f64().unwrap_or(25.0) as f32);
+    let stop = stop_flag();
+    let bodies: Arc<Mutex<HashMap<u32, Body>>> = Arc::default();
+    let players: Arc<Mutex<HashMap<Identity, u32>>> = Arc::default();
+    let conn = DbConnection::builder().with_uri(uri.to_string()).with_database_name(db.to_string()).with_token(Some(token.to_string())).build().expect("connect");
+    let b = bodies.clone();
+    conn.db.body().on_insert(move |_, r| {
+        b.lock().unwrap().insert(r.id, r.clone());
+    });
+    let b = bodies.clone();
+    conn.db.body().on_update(move |_, _, r| {
+        b.lock().unwrap().insert(r.id, r.clone());
+    });
+    let b = bodies.clone();
+    conn.db.body().on_delete(move |_, r| {
+        b.lock().unwrap().remove(&r.id);
+    });
+    let pl = players.clone();
+    conn.db.player().on_insert(move |_, r| {
+        pl.lock().unwrap().insert(r.identity, r.character);
+    });
+    let pl = players.clone();
+    conn.db.player().on_update(move |_, _, r| {
+        pl.lock().unwrap().insert(r.identity, r.character);
+    });
+    conn.subscription_builder().on_error(|_, e| panic!("subscribe: {e}")).subscribe(vec!["SELECT * FROM body".to_string(), "SELECT * FROM player".to_string()]);
+    conn.run_threaded();
+    let mut sets: HashMap<Identity, Vec<u32>> = HashMap::new();
+    let (mut calls, mut adds, mut dels, mut rounds, mut busy_us) = (0u64, 0u64, 0u64, 0u64, 0u64);
+    let started = Instant::now();
+    let mut phase = 0usize;
+    println!("{}", json!({"event": "perc up"}));
+    while !stop.load(Ordering::SeqCst) {
+        let t0 = Instant::now();
+        let now = now_us() / 1000;
+        let diffs: Vec<PercDiff> = {
+            let bodies = bodies.lock().unwrap();
+            let players = players.lock().unwrap();
+            let pos = |b: &Body| {
+                let dt = now.saturating_sub(b.t_ms) as f32 / 1000.0;
+                (b.x + b.vx * dt, b.y + b.vy * dt)
+            };
+            let mut viewers: Vec<(Identity, u32)> = players.iter().map(|(v, c)| (*v, *c)).collect();
+            viewers.sort_by_key(|(_, c)| *c);
+            let mut diffs = Vec::new();
+            for (i, (v, c)) in viewers.iter().enumerate() {
+                if i % 4 != phase {
+                    continue;
+                }
+                let Some(me) = bodies.get(c) else { continue };
+                let (mx, my) = pos(me);
+                let mut near: Vec<(f32, u32)> = bodies.values().filter(|b| b.id != *c).filter_map(|b| {
+                    let (x, y) = pos(b);
+                    let d = ((x - mx).powi(2) + (y - my).powi(2)).sqrt();
+                    (d <= reach).then_some((d, b.id))
+                }).collect();
+                near.sort_by(|a, b| a.0.total_cmp(&b.0));
+                let rank: HashMap<u32, usize> = near.iter().enumerate().map(|(k, (_, id))| (*id, k)).collect();
+                let old = sets.get(v).cloned().unwrap_or_default();
+                let mut new: Vec<u32> = old.iter().copied().filter(|id| rank.get(id).is_some_and(|k| *k < keep_n)).collect();
+                for (_, id) in &near {
+                    if new.len() >= cap {
+                        break;
+                    }
+                    if !new.contains(id) {
+                        new.push(*id);
+                    }
+                }
+                let add: Vec<u32> = new.iter().copied().filter(|id| !old.contains(id)).collect();
+                let del: Vec<u32> = old.iter().copied().filter(|id| !new.contains(id)).collect();
+                if !add.is_empty() || !del.is_empty() {
+                    adds += add.len() as u64;
+                    dels += del.len() as u64;
+                    diffs.push(PercDiff { viewer: *v, character: *c, add, del });
+                }
+                sets.insert(*v, new);
+            }
+            diffs
+        };
+        phase = (phase + 1) % 4;
+        rounds += 1;
+        if !diffs.is_empty() {
+            calls += 1;
+            let _ = conn.reducers.perc_apply(diffs);
+        }
+        busy_us += t0.elapsed().as_micros() as u64;
+        std::thread::sleep(Duration::from_millis(50).saturating_sub(t0.elapsed()));
+    }
+    let secs = started.elapsed().as_secs_f64();
+    std::fs::write(&out, json!({"seconds": secs, "rounds": rounds, "calls": calls, "adds": adds, "dels": dels, "busy_us": busy_us,
+        "viewers": sets.len(), "mean_set": if sets.is_empty() { 0.0 } else { sets.values().map(|s| s.len()).sum::<usize>() as f64 / sets.len() as f64 }}).to_string()).unwrap();
+    println!("{}", json!({"event": "perc done"}));
+    std::process::exit(0);
+}
+
 fn main() {
     let mode = std::env::args().nth(1).unwrap_or_default();
     let mut line = String::new();
@@ -650,6 +755,7 @@ fn main() {
         "relay" => relay_mode(req),
         "checker" => checker_mode(req),
         "clients" => clients_mode(req),
+        "perc" => perc_mode(req),
         m => panic!("mode {m:?}: relay, checker or clients"),
     }
 }

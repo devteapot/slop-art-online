@@ -1125,7 +1125,9 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Swept {
         CHANGED.with(|c| c.borrow_mut().retain(|id, _| ctx.db.character().id().find(*id).is_some_and(|c| c.alive)));
     }
     let humans = crate::combat::humans(ctx);
-    if humans.is_empty() {
+    // PERCEPTION_OFF_THREAD prototype (branch perc-offthread only): with `perc_external` the sets
+    // come from `perc_apply`; no scheduled sweep for players.
+    if humans.is_empty() || common::laws(ctx).perc_external {
         return Swept { ids: Vec::new(), health: HashMap::new() };
     }
     let crowd_n = common::laws(ctx).crowd_sweep_n;
@@ -2736,4 +2738,52 @@ pub fn drop_mirrors(ctx: &ReducerContext) -> usize {
         crate::frame::set_copy_state(ctx, CopyState { mirrored: false, ..s });
     }
     ids.len()
+}
+
+// ---- PERCEPTION_OFF_THREAD prototype (branch perc-offthread only, never for main) ----------
+
+/// One viewer's change of perceived set, worked out outside the tick: the creatures that came
+/// into it and those that left it.
+#[derive(spacetimedb::SpacetimeType, Clone, Debug)]
+pub struct PercDiff {
+    pub viewer: Identity,
+    pub character: u32,
+    pub add: Vec<u32>,
+    pub del: Vec<u32>,
+}
+
+/// With `perc_external`: apply sets worked out outside the tick, as the sweep applies its own:
+/// `perceived` rows in and out, and each newcomer's projection (its name or label as this viewer
+/// knows it) written, a leaver's removed. The admin's (the off-thread computer's) only.
+#[spacetimedb::reducer]
+pub fn perc_apply(ctx: &ReducerContext, diffs: Vec<PercDiff>) -> Result<(), String> {
+    crate::require_admin(ctx)?;
+    if !common::laws(ctx).perc_external {
+        return Err("perc_external is off".into());
+    }
+    let now = common::now_ms(ctx);
+    let _timer = common::span("perc.apply");
+    for d in diffs {
+        let Some(me) = ctx.db.character().id().find(d.character) else { continue };
+        let rows: Vec<Perceived> = ctx.db.perceived().viewer().filter(d.viewer).collect();
+        for p in rows.iter().filter(|p| d.del.contains(&p.body)) {
+            ctx.db.perceived().id().delete(p.id);
+            for q in ctx.db.projected().by_viewer_body().filter((d.viewer, p.body)).collect::<Vec<_>>() {
+                if !q.own {
+                    proj_delete(ctx, q.id);
+                }
+            }
+        }
+        for b in d.add {
+            if b == d.character || rows.iter().any(|p| p.body == b) {
+                continue;
+            }
+            ctx.db.perceived().insert(Perceived { id: 0, viewer: d.viewer, body: b, since_ms: now });
+            if let Some(t) = ctx.db.character().id().find(b) {
+                let pr = project(ctx, &me, &t, now);
+                proj_insert(ctx, pr.into_row(d.viewer, b, false, 0));
+            }
+        }
+    }
+    Ok(())
 }
