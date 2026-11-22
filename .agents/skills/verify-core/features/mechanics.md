@@ -120,6 +120,32 @@ The planting check's remaining flake, found and fixed on branch `planting-flake`
 - **The fix, in the fixture only.** A walks to the centre of the nearest grass or dirt tile within 20 m whose straight line from A crosses only walkable tiles (`plant_spot`, reading `terrain_chunk`); the check waits for a new bush within 3 m of that spot. Where there is none (36 of the 2,000 spawns), A is placed at the nearest bush (`place_at`) and the driver says so. After the planting wait A is set idle, so a walk still under way cannot carry A off from B and the shelter. The failure line prints A's position, the spot and A's feedback, as before.
 - **The proof.** Fresh worlds as the gate drives them (`--gate-world`), 4 at a time beside six busy loops on the server's cores (host load 9–13): the fixed driver passed planting 30 of 30 (25 random spawns, 3 from the failing start, 2 probing the fallback, one of which took it), 28 of them 23/23. The two others failed "blows land on the yielded" in one round, with planting passed: not this change (validation record `2026-11-22-1933-planting-flake.md`). From the twelve blocked starts above the new spots were reached in 0–7 s.
 
+### Clearing from the forest's edge
+
+The clearing check's first-run red, found and fixed on branch `clearing-flake` (2026-11-22). It blocked `wolves-scene`'s gate, batch 59 (`gate-1122224047-489894-a-mechanics`). D's last line there was "You failed to clear: there is no forest to clear where you stand", D's pack stayed empty, and the rerun passed.
+
+- **The cause, in the fixture.** The driver sent D in one sequence:
+  1. to the nearest tree by straight-line distance;
+  2. then `goto {nearest: forest}`;
+  3. then `clear`.
+
+  `clear_check` needs forest underfoot when the clear starts. Two things in that sequence can fail it:
+  - **An early arrival.** A `goto` reports its arrival when the final approach begins (`motion::FLAG_EARLY`, within the `slow_radius` law's 1.2 m), and the body glides on to the spot. The next step starts at once. So the clear could start on the grass beside the forest tile and fail with the gate's own line. The failed sequence then starts again from the tree.
+  - **A tree across water.** As with the planting bush, the nearest tree by straight line can be across water. Its `goto` then fails "no path there" on every retry, or takes a long way round (115 s once).
+- **The evidence.** `.local/mc/clear_probe.py` runs the driver's exact sequence and samples the walker's position, the tile under it and its activity. It ran on default-seed scratch worlds on a private server (`mc-stdb`), 5 walkers at a time, each from a random spot within 150 m of where they spawned, with an empty pack:
+  - **Round `c4`** (50 runs, each run's own feedback lines only): 3 first clears failed "no forest to clear where you stand". In each, the walker was sampled on grass with the clear under way, beside the forest. All three were retried and cleared within the 150 s.
+  - **Two more runs of `c4`**, from the same beach, never cleared. The tree was across water, and every retry failed "no path there".
+  - **Not reproduced:** the gate's run, where the first failure was never followed by a clear within 150 s. The gate's server was running the whole scene gate. Why its retry did not clear is not established. The fix removes the failure the retry recovered from.
+  - **Discarded counts.** An earlier probe round (`c1`) counted feedback lines carried over from a walker's previous runs, and `c2` reused walkers until they were exhausted.
+- **The fix, in the fixture only** (`clear_ready`):
+  - D walks to the centre of the nearest forest tile within 20 m whose straight line from D crosses only walkable tiles. It is found with `ground_spot`, which `plant_spot` now also uses.
+  - Where there is none, D is placed on the forest tile nearest the nearest tree (`place_at`), and the driver says so.
+  - The clear is installed only once D stands still on a forest tile (`terrain_under`, which reads the body's segment and `terrain_chunk`).
+  - The failure line says where D stands and on what, when it is not on forest after 60 s.
+- **The proof.** See validation record `2026-11-22-2256-clearing-flake.md`.
+  - `fixed_probe.py`, the fixed staging: 60 runs from random spots, all 60 cleared, every walker standing on forest before its clear, and no clear refused.
+  - The fixed driver as the gate drives it (`--gate-world`), on 8 fresh default worlds 4 at a time: 8 of 8 at 23/23. Seven walked 0–17 m to forest; one took the placement (no forest in a straight walk within 20 m).
+
 ### Recognize and investigate intermittent failures
 
 The preserved `core-1004-proof-mechanics` run passed 16/23 on unchanged product code. It failed tablet transfer, reading, spear crafting, trade, teaching, deliberate conception and expecting-parent retention. Its tablet stayed with Walker1. Walker2 later reported "You failed to accept → Walker1: they moved away". The fresh fix-round runs also retain blocked-path refusals between walkers. Read [the validation record](../references/validation/history.md) for the exact failed keys, outputs and fresh-run counts.
