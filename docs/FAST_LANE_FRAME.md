@@ -108,13 +108,106 @@ The mind service was saturated (160–199 of 200 fighters with a deliberation pe
 
 Free-part evidence: `~/slop-battleframe-work/replay/` (`free-first.jsonl`, `free-balanced.jsonl`: every prompt as it would be sent; `fake-*.jsonl` and their journals; `frame-first.txt`, `frame-balanced.txt`), and §1's per-act tables `diag-minds-atb1-{off,on}-*.json`; to be archived to `~/slop-evidence/battle-frame-20261121.tar.zst` with its SHA-256 when the branch's work ends. Verification: `mind/fast.rs` and `prompts.rs` unit tests (139 pass), verify-minds `fast-lane`, `fast-frame`, `fast-takeover` pass (`minds-bf-215732`, private server `slop-battleframe-20261121`, SpacetimeDB 2.14.1).
 
-### Paid part: the plan (not run; waits for the coordinator's go)
+### Paid part: results (2026-11-21, 23:15 CET, after the coordinator's go)
+
+**The balanced frame mostly keeps.** On the same 258 inputs it kept the fight as it is three times as often, wrote a retreat a sixth as often, and pressed no less. The effect comes mostly from choosing keep: in a live fight, the lane would mostly leave the fixture's fight alone.
+
+- **Run.** Branch `battle-frame` `1175a611`. DeepSeek V4.1 Flash (the fast route, thinking off), concurrency 6 a frame, both frames at once. **$0.615** by the journals (first $0.319, balanced $0.296); 516 calls, 0 failed. Guards: `act_trial.py watch` per frame on its own journal ($0.75 each). The first watcher was given a directory, not a glob, and exited at once; the replay ran unguarded for about 30 s (it had spent $0.12) until a watcher per process took over.
+- **Switches.** Only the frame differs. The first arm's system prompt is the saved bytes; the balanced arm swaps the frame text. Both arms send the saved user prompt (no How you are now). No world and no laws are involved.
+
+Paired by input (`living/tools/battle_frame_pairs.py`). Shares are of all 258 replies. "Only first" and "only balanced" count the inputs where the measure held in one frame and not the other. p is an exact two-sided sign test on those two counts.
+
+| Measure | First | Balanced | Only first | Only balanced | p |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Keep reply | 17.1% | 75.2% | 6 | 156 | <0.001 |
+| Patch | 76.7% | 20.5% | 150 | 5 | <0.001 |
+| Switch or routine | 5.4% | 3.1% | 12 | 6 | 0.24 |
+| Kept (keep, or a patch keeping the fixture's fight whole) | 21.3% | 75.2% | 9 | 148 | <0.001 |
+| Pressed (an explicit press, or the press way) | 5.0% | 8.1% | 12 | 20 | 0.22 |
+| Any retreat | 49.2% | 8.5% | 114 | 9 | <0.001 |
+| Unconditioned retreat | 22.1% | 1.6% | 55 | 2 | <0.001 |
+| Retreat ahead of the first attack | 38.8% | 6.6% | 91 | 8 | <0.001 |
+| Any attack | 70.2% | 19.8% | 140 | 10 | <0.001 |
+| Unusable | 0.8% | 1.2% | 2 | 3 | 1.0 |
+| Copied an example's numbers | 0.4% | 5.4% | 1 | 14 | 0.001 |
+
+Among the patches only (198 first, 53 balanced):
+- Explicit press: 6.6% vs 39.6%.
+- Unconditioned retreat: 28.8% vs 7.5%.
+- Retreat guards reading stamina: 43% vs 18%. Reading health: 20% vs 59%.
+- No balanced patch kept the fixture's three lines exactly: 50 of 53 strike the attacker rather than the nearest person, and 35 of 53 keep heal-self.
+- Some keep replies give a thought of wanting to get clear but keep anyway ("I need to get clear of #434 …").
+
+**Rule for the fights:** go if the balanced frame keeps or presses more without more retreats. It did, so the fights below were started.
+
+### Paid part: the plan as written before the go
 
 - **Arms.** The 258 first requests per fighter, each sent once in each frame: 516 calls on DeepSeek V4.1 Flash (the fast route, thinking off), concurrency 8, first and balanced interleaved by input. Model, rules text, grammar and user prompt held fixed; only the frame differs.
 - **Measures, per arm and paired by input:** reply kinds; among patches, the fixture's fight kept whole, an unconditioned retreat, a retreat ahead of the first attack, any attack, an explicit press, retreat guards by what they read, lines per patch; which of the six ways a reply takes up (its line's shape in the patch), and whether it copies the example's numbers; replies the live lane could not use. Paired: for each input, kept-fight and unconditioned-retreat in one frame against the other (discordant pairs counted both ways).
 - **Cost.** At the Nov 19 rate (13.6k prompt tokens, 10.9k cached; 0.30 / 0.007 / 1.20 USD per million in / cached / out; about 250 tokens out) a call costs about $0.0012: **about $0.65** for the 516 calls. Stop: `act_trial.py watch` on the replay's journal stops the replay by PID at $1.50, or at more than 10% failed calls over 2 minutes.
 
-## 4. Matched small fights: the plan (after the go)
+## 4. Matched fights: results (2026-11-21 23:25 – 2026-11-22 01:17 CET)
+
+**With the balanced frame, the lane no longer makes fighters fight less.** In the clean runs:
+- **Contact:** 76% with the balanced frame, against 46% with the first frame and 95% with the lane off.
+- **Attacks per contact-minute:** 25.8, against 16.2 with the first frame and 27.7 lane off. Fighters in contact swing as often as with the lane off.
+- **Damage:** dealt and taken return most of the way to the lane-off level.
+- **Time away:** 24%, against 59% with the first frame.
+- **Timed defence:** 54% (67% after a fighter's first patch), against 62% / 72% with the first frame and 52% lane off.
+- **Returns after a retreat:** fewer fighters come back within 10 s (39% vs 62%), and the retreat rate is about the same.
+
+The lane with the balanced frame is mostly a lane that keeps: 82–84% of its live replies were keep, against 23–27% with the first frame. It costs about twice as much a run ($0.48–0.53 against $0.27–0.28), because fighters who stay in the fight are hit more and so trigger more fast calls.
+
+- **Runs.** Branch `battle-frame` `1175a611`. `battle_diag.py --battle 100 --walkers 16 --minutes 6 --keep-plans`, island seed 7, site (406.5, 237.5). Private server `slop-battleframe-20261121` (SpacetimeDB 2.14.1) and the runs pinned to CPUs 5–9,15–19. Driven by `series.sh` under one `battle.lock` hold per series, each run started at a 1-minute load under 4 with the merge lock free, launched through `flock -s ~/slop-mq/trial-activity.lock`. Every run held 59.5–60 ticks a second.
+- **Switches.** A: `fast_lane_on` false. B1: `fast_lane_on` true with the shipped caps, real fast calls (DeepSeek V4.1 Flash), `LIVING_FAST_FRAME=first`. B2: the same with `LIVING_FAST_FRAME=balanced`. In every arm: all other purposes on the fake model (think 5 s, compile keep), `LIVING_SKILL_TIMINGS` unset (on), every law as shipped on main (`mind_act_replaces` false), no personas ("(no persona yet)").
+- **Validity (the load rule, redo above 8 in the run).** The host was busy with other workers' builds that night. Valid: A-1 (max load 6.8), B1-1 (5.1), B1-2 (7.3), B2-2 (4.2), B2-4 (6.2). Over 8: A-2 (9.5 for 40 s), A-3 (30.5), A-4 (23.5), B2-1 (14.9), B2-3 (10.3 for 160 s). The invalid runs are shown, and each lies within the spread of its arm's valid runs. The lane-off arm has one clean run; its four runs agree within 2.6 points of contact.
+- **Spend.** $2.59 for the fights (B1 $0.284, $0.273; B2 $0.528, $0.484, $0.528, $0.494). **$3.21 in total** with the replay, of the $8 cap. No guard stopped a run. Every world was deleted, the key copy was removed, and no evidence file holds a key.
+
+| run | contact % | engagements/f-min | attacks/f-min | attacks/contact-min | retreats/f-min | re-engaged 10 s % | timed defence % | after patch % | dmg taken/dealt per f-min | away % | idle or away % | deaths | ticks/s | fast calls | patched fighters |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| A-1 | 95.1 | 0.62 | 26.38 | 27.7 | 0.00 | nan | 51.7 | – | 131.9 / 141.6 | 4.4 | 71.7 | 243 | 59.9 | 0 | 0 |
+| A-2 | 94.0 | 0.88 | 26.73 | 28.4 | 0.00 | nan | 49.5 | – | 134.4 / 145.3 | 5.4 | 71.7 | 241 | 59.9 | 0 | 0 |
+| A-3 | 96.6 | 0.49 | 26.68 | 27.6 | 0.00 | nan | 50.2 | – | 136.0 / 146.9 | 1.6 | 70.8 | 260 | 59.5 | 0 | 0 |
+| A-4 | 94.6 | 0.73 | 26.86 | 28.4 | 0.00 | nan | 49.7 | – | 135.1 / 145.9 | 3.7 | 71.2 | 250 | 59.8 | 0 | 0 |
+| B1-1 | 49.2 | 2.11 | 7.92 | 16.1 | 0.90 | 65.8 | 60.0 | 70.6 | 27.3 / 29.4 | 53.2 | 88.2 | 33 | 60.0 | 365 | 119 |
+| B1-2 | 41.7 | 2.22 | 6.81 | 16.3 | 0.75 | 57.8 | 64.4 | 74.0 | 21.0 / 23.1 | 64.2 | 87.8 | 22 | 60.0 | 353 | 112 |
+| B2-1 | 81.4 | 1.55 | 21.18 | 26.0 | 0.78 | 42.9 | 52.1 | 62.1 | 102.8 / 111.2 | 20.1 | 73.2 | 190 | 60.0 | 668 | 81 |
+| B2-2 | 75.1 | 1.77 | 19.52 | 26.0 | 0.62 | 43.3 | 53.6 | 66.4 | 93.4 / 101.1 | 25.9 | 76.4 | 160 | 60.0 | 680 | 92 |
+| B2-3 | 76.9 | 1.28 | 19.69 | 25.6 | 0.53 | 48.2 | 54.6 | 63.3 | 93.1 / 99.7 | 23.4 | 75.8 | 165 | 60.0 | 676 | 80 |
+| B2-4 | 76.3 | 1.32 | 19.51 | 25.6 | 0.86 | 34.3 | 53.9 | 67.2 | 91.2 / 97.2 | 21.3 | 74.8 | 168 | 60.0 | 625 | 84 |
+
+The Nov 19 measures, means of the valid runs:
+
+| Measure | A, lane off (A-1) | B1, first frame (B1-1, B1-2) | B2, balanced (B2-2, B2-4) |
+| --- | ---: | ---: | ---: |
+| Contact | 95.1% | 45.5% | 75.7% |
+| Aimed attacks: attempts per fighter-minute; per contact-minute | 26.4; 27.7 | 7.4; 16.2 | 19.5; 25.8 |
+| Retreats per fighter-minute; re-engaged within 10 s | 0; – | 0.83; 61.8% | 0.74; 38.8% |
+| Timed defence, sampled blows; after the target's first patch | 51.7%; – | 62.2%; 72.3% | 53.8%; 66.8% |
+| Damage taken / dealt per fighter-minute | 131.9 / 141.6 | 24.2 / 26.3 | 92.3 / 99.2 |
+| Away; idle or away | 4.4%; 71.7% | 58.7%; 88.0% | 23.6%; 75.6% |
+| Deaths in 6 minutes | 243 | 33, 22 | 160, 168 |
+
+What the live fast replies were (from each run's journal):
+
+| Run | Fast calls | Keep | Patch | Switch / routine | Patches with a retreat | … unconditioned | Failed |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| B1-1 | 365 | 23% | 64% | 12% | 47% of calls | 23% | 2% |
+| B1-2 | 353 | 27% | 65% | 7% | 48% | 23% | 1% |
+| B2-1 | 668 | 83% | 11% | 3% | 8% | 1% | 1% |
+| B2-2 | 680 | 83% | 12% | 4% | 9% | 1% | 0% |
+| B2-3 | 676 | 84% | 10% | 4% | 7% | 1% | 1% |
+| B2-4 | 625 | 82% | 14% | 2% | 11% | 2% | 2% |
+
+**What this does not establish.**
+- It does not establish that the balanced lane fights better than no lane. Contact, attacks and damage are still below the lane-off arm. Timed defence is above it by 2 points (14 after the first patch).
+- One persona-less fixture, one site, 6-minute runs, two clean runs an arm (one for lane off).
+- How you are now (the felt body) was in B2 only, so the live comparison changes frame and felt body together; the replay (§3) changed the frame alone.
+- Most of the balanced effect is keeping. Whether the balanced lane is worth its calls over leaving the lane off is a separate design question; this branch changes no default.
+
+Evidence: `~/slop-battleframe-work/fights/` (`chain.log`, per run `*.run`, `*.log`, `*-loads.txt`, `*-spend.jsonl`, `report-all.json`) and the run directories `.local/living/verify/minds-bf-*` in the worktree, to be archived to `~/slop-evidence/battle-frame-20261122.tar.zst` with its SHA-256 when the branch's work ends.
+
+## 4a. Matched fights: the plan as written before the go
 
 - **Arms.** A: the lane off (every purpose on the fake model, as the replicates' A) — free. B1: the lane on, first frame, real fast calls. B2: the lane on, balanced frame, real fast calls. All on `battle_diag.py --battle 100 --walkers 16 --keep-plans --fixed-site 406.5 237.5`, island world seed 7 (the Nov 19 site and formation), 6 minutes, measured from minute 1. Two runs of each, interleaved A B1 B2 A B1 B2, under one `~/slop-mq/battle.lock` hold, each started with the merge lock free and a 1-minute load under 4, redone if the load passes 8 in its measured window; the server and the mind pinned to CPUs 5–9,15–19, no builds during the series.
 - **Switches, recorded per run:** `fast_lane_on` false (A) or true (B1, B2) with the shipped caps; `LIVING_FAST_FRAME` first or balanced; every purpose but `fast` on the fake model (think 5 s, compile "keep"); `LIVING_SKILL_TIMINGS` unset (on); `force_outcomes` and every other law as shipped on main; `mind_act_replaces` false (main's default); no personas (main's fixture: "(no persona yet)").
