@@ -195,6 +195,9 @@ fn laws() {
         // can read (`experience_copy`, written as lines are released; experience-incremental) as
         // well as through `my_experience`; off: the kill switch. The client reads either the same.
         lines_table_on: true, lines_table_check: false,
+        // gate-remeasure's measuring switches (off): onlookers judged by the last sweep's sight;
+        // the sweep phases spread evenly.
+        onlookers_from_sets: false, sweep_phase_even: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
@@ -3290,6 +3293,8 @@ fn law_about(l, name) {
         "characters_table_on" => if l.characters_table_on { "what each player perceives of others reaches it as rows meant for that player alone" } else { "what each player perceives of others reaches it through what it may look at" },
         "fighter_tables_on" => if l.fighter_tables_on { "how the fighters a player sees move and fare reaches it as rows meant for that player alone" } else { "how the fighters a player sees move and fare reaches it through what it may look at" },
         "lines_table_on" => if l.lines_table_on { "what reaches each player's senses reaches it as rows meant for that player alone" } else { "what reaches each player's senses reaches it through what it may look at" },
+        "onlookers_from_sets" => if l.onlookers_from_sets { "a player sees a blow if it was in sight at its last glance (a measuring switch)" } else { "a player sees a blow if it is in sight when it lands" },
+        "sweep_phase_even" => if l.sweep_phase_even { "players' glances are spread evenly in time (a measuring switch)" } else { "each player glances on a beat of its own" },
         "lines_table_check" => "a diagnostic: each player's lines as rows are checked against what it may look at",
         "combat_feed_on" => if l.combat_feed_on { "what each player sees of fights reaches it as rows meant for that player alone" } else { "what each player sees of fights reaches it through what it may look at" },
         "motion_tables_on" => if l.motion_tables_on { "how others move reaches each player as rows meant for that player alone" } else { "how others move reaches each player through what it may look at" },

@@ -56,6 +56,7 @@ pub fn blow(ctx: &ReducerContext, now: u64, attacker: u32, victim: u32, outcome:
     let w = common::world(ctx);
     let map = common::map(ctx);
     let r = crate::perception::widest_sight(ctx, &w, now);
+    let sets = common::laws(ctx).onlookers_from_sets;
     let mut onlookers = Vec::new();
     for (c, d) in crate::perceive::minds_near(ctx, at, r, now, &[attacker, victim]) {
         // As `perceive::percept_seen`: only minds and players read it.
@@ -65,10 +66,21 @@ pub fn blow(ctx: &ReducerContext, now: u64, attacker: u32, victim: u32, outcome:
         let Some((eye, heading)) = ctx.db.body().id().find(c.id).map(|b| (pos(&b, now), common::facing_at(&b, now))) else { continue };
         // A shot is seen where it struck (`witnessed_shot`), a blow by who struck it (`witnessed`).
         let seen_by = if missile.is_some() { victim } else { attacker };
-        if !crate::perception::in_sight(ctx, &map, c.id, eye, heading, seen_by, at, d, &w, now, false) {
+        // GATE-REMEASURE (branch gate-remeasure only), `onlookers_from_sets`: a player onlooker's
+        // last sweep's sight (at most one sweep old) in place of a sight test now; minds test.
+        let from_set = sets.then(|| crate::perception::last_sight_has(c.id, seen_by)).flatten();
+        let saw = match from_set {
+            Some(v) => v,
+            None => crate::perception::in_sight(ctx, &map, c.id, eye, heading, seen_by, at, d, &w, now, false),
+        };
+        if !saw {
             continue;
         }
-        let sees_shooter = missile.is_none() || crate::perception::sees_creature(ctx, c.id, attacker, now);
+        let sees_shooter = missile.is_none()
+            || match sets.then(|| crate::perception::last_sight_has(c.id, attacker)).flatten() {
+                Some(v) => v,
+                None => crate::perception::sees_creature(ctx, c.id, attacker, now),
+            };
         onlookers.push(if sees_shooter { c.id } else { c.id | UNSEEN_SHOOTER });
         if wake && (missile.is_none() || &*c.kind == "person") {
             common::diag(|| "woke:fight", 1);

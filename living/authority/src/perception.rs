@@ -1085,6 +1085,9 @@ thread_local! {
     /// (b) battle law `crowd_sweep_n`: how many each player saw at its last sweep (module memory;
     /// a fresh instance sweeps at the ordinary period until it knows).
     static SEEN_N: RefCell<HashMap<u32, usize>> = RefCell::new(HashMap::new());
+    /// GATE-REMEASURE (branch gate-remeasure only), the `onlookers_from_sets` law: each player
+    /// character's last sweep's in-sight set (before heed and `far_cap`), for an onlooker's blow.
+    static SIGHT_LAST: RefCell<HashMap<u32, HashSet<u32>>> = RefCell::new(HashMap::new());
     /// The knowledge epochs each player's rows were last projected at, and the targets a
     /// reveal held for it then.
     static PROJECTED: RefCell<HashMap<u32, ((u64, u64), HashSet<u32>)>> = RefCell::new(HashMap::new());
@@ -1131,6 +1134,7 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Swept {
         return Swept { ids: Vec::new(), health: HashMap::new() };
     }
     let crowd_n = common::laws(ctx).crowd_sweep_n;
+    let even = common::laws(ctx).sweep_phase_even;
     let due: Vec<(u32, Identity)> = LAST.with(|l| {
         let mut l = l.borrow_mut();
         let ids: HashSet<u32> = humans.iter().map(|(h, _)| *h).collect();
@@ -1138,13 +1142,23 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Swept {
         PROJECTED.with(|p| p.borrow_mut().retain(|id, _| ids.contains(id)));
         KEPT.with(|k| k.borrow_mut().retain(|id, _| ids.contains(id)));
         HEARD_KEPT.with(|k| k.borrow_mut().retain(|id, _| ids.contains(id)));
+        SIGHT_LAST.with(|k| k.borrow_mut().retain(|id, _| ids.contains(id)));
         let who: HashSet<Identity> = humans.iter().map(|(_, w)| *w).collect();
         TOUCHED.with(|t| t.borrow_mut().retain(|w, _| who.contains(w)));
         humans
             .into_iter()
             .filter(|(id, _)| {
                 // A character first seen by this instance starts on its own phase.
-                let last = *l.entry(*id).or_insert_with(|| turn_before(*id, now));
+                let last = match l.get(id) {
+                    Some(t) => *t,
+                    None => {
+                        // GATE-REMEASURE (branch gate-remeasure only), `sweep_phase_even`: the
+                        // least-loaded of the phase groups, not the id's.
+                        let t = if even { even_turn(&l, now) } else { turn_before(*id, now) };
+                        l.insert(*id, t);
+                        t
+                    }
+                };
                 // (b) `crowd_sweep_n`: in a crowd larger than n, the period grows with it (at most 3x).
                 let period = match crowd_n {
                     n if n > 0.0 => {
@@ -1192,6 +1206,27 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Swept {
 fn turn_before(id: u32, now: u64) -> u64 {
     let phase = (id as u64).wrapping_mul(37) % SWEEP_GROUPS * SWEEP_MS / SWEEP_GROUPS;
     now - (now + SWEEP_MS - phase) % SWEEP_MS
+}
+
+/// GATE-REMEASURE (branch gate-remeasure only), `sweep_phase_even`: the latest moment at or before
+/// `now` on the phase group holding the fewest of the players this instance sweeps (ties: the
+/// lowest group), so the sweeps spread evenly over the period's ticks whatever the players' ids.
+fn even_turn(last: &HashMap<u32, u64>, now: u64) -> u64 {
+    let width = SWEEP_MS / SWEEP_GROUPS;
+    let mut count = [0u32; SWEEP_GROUPS as usize];
+    for t in last.values() {
+        count[((t % SWEEP_MS) / width).min(SWEEP_GROUPS - 1) as usize] += 1;
+    }
+    let g = (0..SWEEP_GROUPS as usize).min_by_key(|g| (count[*g], *g)).unwrap_or(0) as u64;
+    let phase = g * width;
+    now - (now + SWEEP_MS - phase) % SWEEP_MS
+}
+
+/// GATE-REMEASURE (branch gate-remeasure only), `onlookers_from_sets`: whether player character
+/// `id`'s last sweep had `body` in sight (`None`: no sweep of it in this instance; the caller tests
+/// sight itself).
+pub fn last_sight_has(id: u32, body: u32) -> Option<bool> {
+    SIGHT_LAST.with(|s| s.borrow().get(&id).map(|set| set.contains(&body)))
 }
 
 /// Work out one player's perceived set now (also right after a join or a return).
@@ -1324,6 +1359,9 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         }
     }
     drop(sight_span);
+    if common::laws(ctx).onlookers_from_sets {
+        SIGHT_LAST.with(|s| s.borrow_mut().insert(id, seen.clone()));
+    }
     // (a) battle law `far_cap` (docs/BATTLE_LAWS.md): at most this many seen, whoever is engaged
     // with the player first, then the nearest; the rest are neither seen nor heard this sweep.
     let mut capped: HashSet<u32> = HashSet::new();

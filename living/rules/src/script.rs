@@ -794,6 +794,13 @@ pub struct Laws {
     /// A diagnostic (off in play): every tick, each player's `experience_copy` rows are compared
     /// with what `my_experience` returns it (`lines_table:differed` must stay 0).
     pub lines_table_check: bool,
+    /// GATE-REMEASURE (branch gate-remeasure only; a measuring switch, off): a player onlooker of a
+    /// blow is judged by its last sweep's sight (at most one sweep, 200 ms, old) instead of a sight
+    /// test at the blow; minds still test.
+    pub onlookers_from_sets: bool,
+    /// GATE-REMEASURE (branch gate-remeasure only; a measuring switch, off): a player first swept
+    /// by an instance takes the least-loaded sweep phase instead of its id's.
+    pub sweep_phase_even: bool,
     /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
     /// and counted (`alarm:differed`).
     pub alarm_cells_check: bool,
@@ -1002,6 +1009,8 @@ impl Default for Laws {
             combat_feed_on: true,
             lines_table_on: true,
             lines_table_check: false,
+            onlookers_from_sets: false,
+            sweep_phase_even: false,
             alarm_cells_check: false,
             status_parts: true,
             status_parts_check: false,
@@ -3386,6 +3395,8 @@ impl Scripts {
             combat_feed_on: flag("combat_feed_on", l.combat_feed_on),
             lines_table_on: flag("lines_table_on", l.lines_table_on),
             lines_table_check: flag("lines_table_check", l.lines_table_check),
+            onlookers_from_sets: flag("onlookers_from_sets", l.onlookers_from_sets),
+            sweep_phase_even: flag("sweep_phase_even", l.sweep_phase_even),
             alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
             status_parts: flag("status_parts", l.status_parts),
             status_parts_check: flag("status_parts_check", l.status_parts_check),
@@ -3637,7 +3648,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 43] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 45] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3651,6 +3662,9 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 43] = [
     // experience-incremental: a player's lines as rows (`frame.rs`, `experience_copy`), and its check.
     ("lines_table_on", ValueOnly::Delivery),
     ("lines_table_check", ValueOnly::Delivery),
+    // gate-remeasure: measuring switches on the relay arm (HUMAN_FIGHTER_COST §7).
+    ("onlookers_from_sets", ValueOnly::Delivery),
+    ("sweep_phase_even", ValueOnly::Delivery),
     // The battle laws' prototypes (docs/BATTLE_LAWS.md), live-tunable: the sweeps read `far_cap`
     // and `crowd_sweep_n`, the frames `crowd_frame_max_ms` and `far_motion_tol_m`, the wakes
     // `fighter_bystander_wakes`, each at its next tick.
