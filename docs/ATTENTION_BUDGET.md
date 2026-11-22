@@ -62,6 +62,15 @@ dev-box answered §12 from main's code (`docs/ATTENTION_BUDGET_DEVBOX_ANSWERS.md
 
 On the Cullet battle recording (docs/ATTENTION_E3.md §8) without holds, smoothing cut flicker from 222 to 169 a subject-minute (−24%) and promotions from 3.2 to 2.7 a second. The instinct's holds remain what keeps the throng still (3.4 a minute with them).
 
+**8. What dev-box's E2 measured** (`docs/ATTENTION_E2_COST.md`, branch `attention-e2-doc`, coming to main; prototype on `attention-e2`, never merged):
+- **Holds work live.** With `heed.rs` (`aa3d4d9e2`) and its holds, at 216 viewers and a ceiling of 16, a viewer sees 7–8 flip-backs within 2 s per minute (6% of heeded creatures), against 378 without holds and 612 for a reading of the v2 instinct without any grace.
+- **The combat feed must be filtered by heed, not by sight.** Unfiltered, it was 128,711 rows in one 16-viewer run, naming actors and targets the viewer does not heed. That is a cost and a throng-identity leak (§4 of this list already requires throng anonymity on every path).
+- **Re-ranking:** re-rank only the target, on aim and on contact. Everything else happens at the 5 Hz sweep, because `frame::moved` fires for nearly every fighter every tick (Q10). This narrows §2.3's "evaluate the policy on events, in the tick" to those two events.
+- **§6's cost formula is missing a per-viewer constant.** With nobody heeded, a viewer costs 4.3–5.0 ms/s (dev-box's host), against a budget of about 1.06 ms/s at 216 viewers (600 ms/s for the tick less that host's 371 ms/s with no viewers). **No ceiling, not even 0, fits 216 viewers at 60 Hz on its own.** §6's table and its "a ceiling of 12–16 fits" do not hold.
+  - **Heed still earns its place:** it halves a viewer's per-second cost at 16 viewers (11.1 → 6.5–7.3 ms/s at a ceiling of 16), lifts the saturated 216-viewer tick rate from 16.5 to 21–27, gives one perception rule for players and minds, and makes cost grow with who is heeded rather than with everyone in sight.
+  - **It is not the battle-scale answer on its own.** The per-viewer floor, most of it hearing, views, the frames of unchanged scenes and the combat feed, has to come down too (E2 §4).
+  - The per-heeded cost is not one constant either: about 190 µs/s each for the first 8 (the near, fighting ones), about 60–70 after; 67 ± 22 marginal across ceilings 8–32.
+
 **6. `human_heed` shape** (dev-box point 7; SpacetimeDB docs read 2026-11-22: [reducers](https://spacetimedb.com/docs/functions/reducers/), [reducer context](https://spacetimedb.com/docs/functions/reducers/reducer-context), [column types](https://spacetimedb.com/docs/tables/column-types), all version 2.0.0; tuples are not among the listed types and `spacetimedb-sats` 2.14.1 implements no `SpacetimeType` for them, per dev-box's source reading):
 
 ```rust

@@ -503,7 +503,7 @@ def freeze(a):
             me = mem[str(sid)]["pos"]
             sight = float(sc.get("time", {}).get("sight", 48.0))
             n = sum(1 for o, m in mem.items() if int(o) != sid and m.get("alive", True) and math.hypot(m["pos"][0] - me[0], m["pos"][1] - me[1]) <= sight)
-            if n < 8:
+            if n < a.town_min_sight:
                 continue
             you = sc["you"]
             town_pool.append({"kind": "town", "run": os.path.relpath(run, os.path.dirname(os.path.dirname(run))) if custom_t else run, **({"dir": d} if custom_t else {}), "subject": sid, "t_ms": at, "sight": sight, "in_sight": n, "journal": f,
@@ -720,6 +720,78 @@ def score(a):
     print(json.dumps(agg, indent=1))
 
 
+def named_in_reply(reply, names):
+    """The people a think reply names: `#id`s and the addressee of its `say` anywhere in its
+    thought, intentions and speech, and characters' names written out (a full name, else a first
+    name that only one character in the world bears). `names`: id -> name (audit truth)."""
+    try:
+        r = json.loads(reply[reply.find("{"):reply.rfind("}") + 1])
+    except ValueError:
+        return set()
+    text = json.dumps({k: r.get(k) for k in ("thought", "intend", "say")}, ensure_ascii=False)
+    ids = {int(x) for x in re.findall(r"#(\d+)", text)}
+    say = r.get("say")
+    if isinstance(say, dict) and isinstance(say.get("to"), int):
+        ids.add(say["to"])
+    full = {n: int(i) for i, n in names.items() if n and " " in n}
+    first = {}
+    for i, n in names.items():
+        if n:
+            first.setdefault(n.split()[0], set()).add(int(i))
+    taken = set()
+    for n, i in sorted(full.items(), key=lambda x: -len(x[0])):
+        if re.search(r"\b" + re.escape(n) + r"\b", text):
+            ids.add(i)
+            taken.add(n.split()[0])
+    for f, ii in first.items():
+        if len(ii) == 1 and f not in taken and re.search(r"\b" + re.escape(f) + r"\b", text):
+            ids |= ii
+    return ids
+
+
+def named(a):
+    """M2' (docs/ATTENTION_E3.md §9, frozen before the real-mind run): for each state (a think
+    request), the people its reply names who were in the subject's sight at the request's moment
+    (the field at t = 0); the share the arm heeded at that moment, overall and beyond the 8 nearest."""
+    data = json.load(open(a.states))
+    fld = {json.loads(l)["state"]: json.loads(l) for l in open(a.fields)}
+    picks = {}
+    for line in open(a.picks):
+        r = json.loads(line)
+        picks.setdefault(r["state"], []).append(r)
+    rows = []
+    replies = {}
+    for st in data["states"]:
+        d = town_dir(a.src, st["run"], st)
+        key = (d, st["journal"])
+        if key not in replies:
+            m = {}
+            for line in open(os.path.join(d, "journal", st["journal"])):
+                e = json.loads(line)
+                if e.get("purpose") == "think" and e.get("reply"):
+                    m[e["at_ms"]] = e["reply"]
+            replies[key] = m
+        reply = replies[key].get(st["t_ms"])
+        if not reply or st["state"] not in fld:
+            continue
+        names = json.load(open(os.path.join(d, "names.json"))) if os.path.exists(os.path.join(d, "names.json")) else {}
+        who = named_in_reply(reply, names) - {st["subject"]}
+        steps = [x for x in fld[st["state"]]["steps"] if x["t"] <= 1e-9]
+        if not steps:
+            continue
+        cands = sorted(steps[-1]["cands"], key=lambda c: c["dist"])
+        rank = {c["id"]: i for i, c in enumerate(cands)}
+        ps = [r for r in picks.get(st["state"], []) if r["t"] <= 1e-9]
+        heeded = {p[0] for p in ps[-1]["picks"]} if ps else set()
+        for i in who:
+            if i in rank:
+                rows.append({"state": st["state"], "id": i, "rank": rank[i], "heeded": i in heeded, "beyond8": rank[i] >= 8})
+    out = {"named_in_sight": share(rows), "named_beyond8": share(rows, lambda r: r["beyond8"]), "states_with_a_named_in_sight": len({r["state"] for r in rows}),
+           "states": len(data["states"]), "rows": rows}
+    json.dump(out, open(a.out, "w"), indent=1)
+    print(json.dumps({k: v for k, v in out.items() if k != "rows"}))
+
+
 def share(rows, pred=lambda r: True):
     rs = [r for r in rows if pred(r)]
     return [round(100.0 * sum(1 for r in rs if r["heeded"]) / len(rs), 1) if rs else None, len(rs)]
@@ -776,6 +848,7 @@ def main():
     f.add_argument("--out", required=True)
     f.add_argument("--battle", type=int, default=200)
     f.add_argument("--town", type=int, default=100)
+    f.add_argument("--town-min-sight", type=int, default=8, help="a town state needs at least this many in sight (8; §9's M2' uses 1)")
     f.add_argument("--battle-run", action="append", help="a battle_diag.py --all-bodies run folder (instead of the act trial's)")
     f.add_argument("--town-run", action="append", help="a trials.py instance folder with record.bodies all (instead of the act trial's)")
     g = sub.add_parser("fields")
@@ -790,8 +863,14 @@ def main():
     s.add_argument("--fields", required=True)
     s.add_argument("--picks", required=True)
     s.add_argument("--out", required=True)
+    n = sub.add_parser("named")
+    n.add_argument("--src", required=True)
+    n.add_argument("--states", required=True)
+    n.add_argument("--fields", required=True)
+    n.add_argument("--picks", required=True)
+    n.add_argument("--out", required=True)
     a = ap.parse_args()
-    {"freeze": freeze, "fields": fields, "score": score}[a.cmd](a)
+    {"freeze": freeze, "fields": fields, "score": score, "named": named}[a.cmd](a)
 
 
 if __name__ == "__main__":

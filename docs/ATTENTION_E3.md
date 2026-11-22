@@ -245,6 +245,39 @@ Battle steps are 0.5 s (about 231 in sight × 81 steps a state); town steps are 
 - **It fits inside E3's $12 alongside (b) and (c):** recording $1.50 (from the $3 reserve) + (b) on its 100 town states and the 200 battle states under $1 expected (cap $4) + (c) (cap $5).
 - The battle half of M2′ would need a real-mind Cullet battle: about $1.5–2.5 for 60 minds and 6 minutes, from the act trial's $6.7 for 200 minds and 8 minutes. That does not fit beside the town at the caps, and it is a separate ask.
 
+## 9. The real-mind Cullet town (written before the run; the general coordinator's go, 2026-11-22)
+
+**What.** The trial `heed-town` (living/trials/heed-town.json) with real minds: Cullet's own seed and laws (48 m day sight), the first 40 adults minded (all 40 the trial's subject, LIVING_ONLY), nothing scripted, 15 minutes, every creature sampled at 5 Hz (`record.bodies {"all": true}`, with `kinds.json` and `names.json`), every experience and thought. The models file's `people` mix, as the act trial's towns: think and compile on GLM Flash at low effort, talk on DeepSeek V4.1 Flash. Main's mind defaults otherwise. The run records its own switches (`mind-env.json`, `world_laws.json`); they are copied into the result below.
+
+**Money.**
+- **Cap: $1.50, from E3's $3 reserve.** The guard stops the run at $1.40 ($0.10 for calls in flight), priced from the journals at the committed prices (`act_trial.py` `PRICES`).
+- **Expected:** about $0.85 (§8).
+- **Keys:** copied from another trials checkout's `.env` into this worktree without being shown (mode 600), deleted after the run, and never in any evidence.
+
+**Stop rules** (any one stops the run; nothing is re-run without the general coordinator's word):
+1. **The guard first.** `act_trial.py watch --ready --pid-file` is started and watching the run's journal folder (created empty beforehand) before the runner starts. The launcher waits for its ready file. No ready file: no run.
+2. **The cap**, as above.
+3. **Failures:** more than 10% of calls over the last 2 minutes (at least 20 calls). Mistral's capacity blips have tripped this before; a stopped run is reported, not repeated.
+4. **The trial's own runaway rate:** `budget.runaway_calls_per_min` 400, as the act trial's towns.
+5. **The host:** under 40 GB of memory available or 45 GB of free disk (the guard's defaults).
+6. **The measurement rules:** `battle.lock` taken first and held alone while waiting, behind heed-e4; the shared trial-activity lock for the launch; a quiet start (load under 8); the private containers `slop-heede3-*`, SpacetimeDB pinned to CPUs 5–9 and 15–19.
+
+**The measure, frozen now (M2′).** `attention_e3.py named`, defined before the run:
+- **States:** every think request of the 40 subjects that has a reply, from minute 1 to 30 s before the end, with at least 1 other creature in sight (`freeze --town-run <instance> --town 100000 --town-min-sight 1`; the battle part of `freeze` is not used).
+- **Fields:** as §8's town: 0.2 s steps, distance-only sight with the 1 m keep margin, from 10 s before each request.
+- **The arm:** (a), the person instinct as seeded (holds on), smoothed closing over 1 s, the formula's capacity on the subject's body from its prompt, ceiling 16.
+- **Named:** the people the think reply names in its `thought`, `intend` and `say`: a `#id`, `say.to`, a character's full name, or a first name only one character in the world bears (`names.json`, audit truth). The subject itself is not counted.
+- **Counted:** those named who were in the subject's sight at the request's moment (the field at t = 0).
+- **Reported:**
+  - the share of them the arm heeded at that moment, **overall** and **beyond the 8 nearest** (8th or farther by distance in sight);
+  - the beyond-8 sample size;
+  - the spend.
+- **Secondary, same states:** the share with holds off and at capacity 16, and acts naming an id (§3's M2) on this recording.
+
+**The bias, stated before the result.** Today's think prompts list only the 14 nearest creatures (`perceive.rs` `scene_json`'s cap). So a mind names someone farther than the 14th nearest only from memory, and "beyond 8" here mostly means the 9th to 14th nearest. **The result is a lower bound** on how much heed beyond distance matters: with the cap lifted, minds could name people the prompt now hides.
+
+**After the run:** report, then stop. The general coordinator decides on (b) and (c).
+
 ## Files
 
 - **Code (branch `attention-exp`):**
