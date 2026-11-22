@@ -1245,8 +1245,12 @@ class Runner:
                 code = self.sh([sys.executable, ".agents/skills/verify-core/scripts/scenes.py", c, "--run", run], root,
                                ev / f"{c}.txt", 900)
                 res[c] = (code == 0, str(ev / f"{c}-results.json"), time.time() - t0)
-                checks = load_json(ev / f"{c}-results.json", {}).get("checks") or {}
-                self.parts[(tag, c)] = [k for k, v in checks.items() if not (v or {}).get("passed")] or None
+                got = load_json(ev / f"{c}-results.json", {})
+                checks = got.get("checks") or {}
+                # a scene that stopped on an exception records it as `error`: that is a failed part too
+                failed = [k for k, v in checks.items() if not (v or {}).get("passed")]
+                failed += [f"error: {got['error']}"] if got.get("error") else []
+                self.parts[(tag, c)] = failed or None
             return res
         finally:
             self.cleanup(root, run, log)
