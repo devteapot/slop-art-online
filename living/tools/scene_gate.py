@@ -8,7 +8,8 @@ that moves bodies can pass it and still break a scene (fix-place-free, e3f0527f:
 touches behaviour, these cases with the fake model only:
 
   verify-core    tick, sight, senses, refusal (one default-seed world), skirmish (an island world),
-                 mechanics (its own default-seed world)
+                 mechanics (its own default-seed world), sides_battle (a Cullet world: the battle
+                 fixture spawn_battle_sides, only when a merge touches SIDES_BATTLE_PATHS)
   verify-minds   roundtrip, acts, dealings, conversation (each its own world, the real living-mind)
   verify-player  combat (combat.py --scene all: the staged fights, an island world)
   verify-client  cues (cues.py: the cue event tables reach only their viewer under row-level
@@ -147,6 +148,14 @@ COPY_PRIVACY_PATHS = ("living/authority/src/frame.rs", "living/authority/src/per
                       "living/tools/battle_viewers.py", "living/tools/gate_load/", ".agents/skills/verify-client/scripts/probe/",
                       ".agents/skills/verify-client/scripts/motion_tables.py", ".agents/skills/verify-client/scripts/cues.py")
 
+# sides_battle runs only when a merge touches the battle fixture (`spawn_battle_sides` in lib.rs),
+# the stance records it writes and their housekeeping (records.rs), how a graph's `nearest` target
+# reads a relation or stance (brain.rs), how a blow lands (combat.rs), or the scene and battle
+# driver (sides-battle-fix, 2026-11-22: the fixture's stances were dropped in their first second).
+SIDES_BATTLE_PATHS = ("living/authority/src/lib.rs", "living/authority/src/records.rs", "living/authority/src/brain.rs",
+                      "living/authority/src/combat.rs", "living/rules/src/records.rs",
+                      "living/tools/battle_viewers.py", ".agents/skills/verify-core/scripts/scenes.py")
+
 # The render group (gate-render, 2026-11-20): verify-ui's drawing cases, for merges that change how
 # the client draws people, the camera or sight. Each glob's `*` stays within a folder, `**` crosses
 # folders. The group is split in two halves by path (render-autosplit, 2026-11-21; the whole group
@@ -171,6 +180,9 @@ CASES = {
     "refusal":      {"skill": "verify-core", "group": "core"},
     "skirmish":     {"skill": "verify-core", "group": "island"},
     "mechanics":    {"skill": "verify-core", "group": "mechanics"},
+    # The battle fixture on Cullet's plaza (sides-battle-fix): 60 fighters in 2 sides fall within
+    # 30 s, no use targets a resident or the fighter's own side, no resident dies in 60 s.
+    "sides_battle": {"skill": "verify-core", "group": "battle", "paths": SIDES_BATTLE_PATHS},
     "roundtrip":    {"skill": "verify-minds", "group": "minds"},
     "acts":         {"skill": "verify-minds", "group": "minds"},
     "dealings":     {"skill": "verify-minds", "group": "minds",
@@ -1120,7 +1132,7 @@ class Runner:
         ev = Path(root) / ".local/living/verify" / run
         ev.mkdir(parents=True, exist_ok=True)
         log = ev / "gate.log"
-        seed = "world" if group in {"core", "mechanics", "client"} else "island"
+        seed = "world" if group in {"core", "mechanics", "client"} else "cullet" if group == "battle" else "island"
         # Mechanics uses the raw CLI, so the gate process supervises its world instead of an inactivity lease.
         launch_args = ("--driver-pid", str(os.getpid())) if group == "mechanics" else ()
         try:
@@ -1432,6 +1444,9 @@ def judge_on_main(a, runner, repo, base, cases, record):
         if "mechanics" in todo and "--gate-world" not in (root / "living/tools/verify_mechanics.py").read_text():
             verdict["mechanics"] = ("unknown", "", f"main {base[:10]}'s mechanics driver predates gate integration")
             todo.remove("mechanics")
+        if "sides_battle" in todo and "sides_battle" not in (root / ".agents/skills/verify-core/scripts/scenes.py").read_text():
+            verdict["sides_battle"] = ("unknown", "", f"main {base[:10]}'s verify-core scenes predate sides_battle")
+            todo.remove("sides_battle")
         for need in ("gate-", "--no-unit-tests"):
             if need not in (root / ".agents/skills/verify-minds/scripts/verify_minds.py").read_text():
                 for c in todo:
