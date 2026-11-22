@@ -652,7 +652,7 @@ def one(a, n, out):
             # npc_external_on law); with share 0 it only records the fighter rows (the AI arm).
             npc_p = lc.Proc([a.load, "npc"], out / "npc.stderr")
             npc_p.send(json.dumps({"uri": lc.URL, "db": db, "token": token, "out": str(out), "share": a.npc_share, "decide_ms": a.npc_decide_ms, "react": True}))
-            npc_p.expect("ready", 120)
+            res["npc_ready"] = npc_p.expect("ready", 120)
             npc_p.send("go")
         relay = None
         if a.relay_sub:

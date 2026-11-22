@@ -115,7 +115,7 @@ pub fn run() {
         dodge_code.store(c.code as u64, Ordering::Relaxed);
     }
     *guard_codes.lock().unwrap() = ["block", "heal", "jump"].iter().filter_map(|s| cards.get(*s).map(|c| c.code)).collect();
-    println!("{}", json!({"event": "ready", "cards": cards.keys().collect::<Vec<_>>()}));
+    println!("{}", json!({"event": "ready", "codes": cards.values().map(|c| (c.skill.clone(), c.code)).collect::<HashMap<_, _>>()}));
     let _ = std::io::stdout().flush();
     wait_for(&lines, "go");
     let stop = Arc::new(AtomicBool::new(false));
