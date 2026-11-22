@@ -355,6 +355,7 @@ pub mod slumber_type;
 pub mod spawn_battle_reducer;
 pub mod spawn_battle_sides_reducer;
 pub mod spawn_crowd_reducer;
+pub mod spawn_duel_reducer;
 pub mod spawn_newcomer_reducer;
 pub mod spawn_skirmish_reducer;
 pub mod speech_card_table;
@@ -743,6 +744,7 @@ pub use slumber_type::Slumber;
 pub use spawn_battle_reducer::spawn_battle;
 pub use spawn_battle_sides_reducer::spawn_battle_sides;
 pub use spawn_crowd_reducer::spawn_crowd;
+pub use spawn_duel_reducer::spawn_duel;
 pub use spawn_newcomer_reducer::spawn_newcomer;
 pub use spawn_skirmish_reducer::spawn_skirmish;
 pub use speech_card_table::*;
@@ -989,6 +991,17 @@ pub enum Reducer {
         n: u32,
         minded: bool,
     },
+    SpawnDuel {
+        gap: f32,
+        dx: f32,
+        dy: f32,
+        between: u32,
+        low_west: bool,
+        hold_east: bool,
+        defend: String,
+        hp: f32,
+        east_first: bool,
+    },
     SpawnNewcomer {
         name: String,
     },
@@ -1067,6 +1080,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SpawnBattle { .. } => "spawn_battle",
             Reducer::SpawnBattleSides { .. } => "spawn_battle_sides",
             Reducer::SpawnCrowd { .. } => "spawn_crowd",
+            Reducer::SpawnDuel { .. } => "spawn_duel",
             Reducer::SpawnNewcomer { .. } => "spawn_newcomer",
             Reducer::SpawnSkirmish { .. } => "spawn_skirmish",
             Reducer::StopGenesis => "stop_genesis",
@@ -1388,6 +1402,27 @@ impl __sdk::Reducer for Reducer {
                     minded: minded.clone(),
                 })
             }
+            Reducer::SpawnDuel {
+                gap,
+                dx,
+                dy,
+                between,
+                low_west,
+                hold_east,
+                defend,
+                hp,
+                east_first,
+            } => __sats::bsatn::to_vec(&spawn_duel_reducer::SpawnDuelArgs {
+                gap: gap.clone(),
+                dx: dx.clone(),
+                dy: dy.clone(),
+                between: between.clone(),
+                low_west: low_west.clone(),
+                hold_east: hold_east.clone(),
+                defend: defend.clone(),
+                hp: hp.clone(),
+                east_first: east_first.clone(),
+            }),
             Reducer::SpawnNewcomer { name } => {
                 __sats::bsatn::to_vec(&spawn_newcomer_reducer::SpawnNewcomerArgs {
                     name: name.clone(),

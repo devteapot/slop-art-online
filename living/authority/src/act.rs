@@ -1278,6 +1278,9 @@ fn perform(ctx: &ReducerContext, mut act: Activity, now: u64) -> Result<(), Stri
     }
     act.ends_ms = now + dur.max(100);
     let id = act.id;
+    if DUEL_LOG {
+        log::info!("duel windup t={now} id={id} skill={} victim={} ends={}", act.skill, act.victim, act.ends_ms);
+    }
     let shape = shape_of(&sc, &act.skill);
     if shape.is_some_and(|s| s.timed) {
         // The windup starts: the cooldown runs, others see it coming, the use is accepted.
@@ -1670,13 +1673,23 @@ fn finish_as(ctx: &ReducerContext, a: Activity, ok: bool, why: &str, now: u64, c
     report(ctx, &a, ok, why, now, code);
 }
 
+/// The blow-order diagnostic (branch blow-order, not for main): windups, completions, blows and
+/// dropped acts of the dead, in the order the tick resolves them, as module log lines.
+const DUEL_LOG: bool = true;
+
 /// Advance an activity whose timer is due.
 pub fn progress(ctx: &ReducerContext, a: Activity, now: u64) {
     if ctx.db.character().id().find(a.id).map_or(true, |c| !c.alive) {
+        if DUEL_LOG {
+            log::info!("duel drop t={now} id={} skill={} phase={} ends={}", a.id, a.skill, a.phase, a.ends_ms);
+        }
         ctx.db.activity().id().delete(a.id);
         return;
     }
     if a.phase == 1 {
+        if DUEL_LOG {
+            log::info!("duel complete t={now} id={} skill={} victim={} ends={}", a.id, a.skill, a.victim, a.ends_ms);
+        }
         return complete(ctx, a, now);
     }
     common::diag(|| "act:other", 1);
@@ -2722,6 +2735,9 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         _ => k.hits += 1,
     });
     if defense == Aim::Dash {
+        if DUEL_LOG {
+            log::info!("duel dodged t={now} a={attacker} v={victim}");
+        }
         // Its onlookers see the dodge (`fold`); a dodged first blow wakes none of them, as before.
         let hb = if seen_shooter { attacker } else { 0 };
         let start = now.saturating_sub(v.hurt_ms) > 30_000 || v.hurt_by != hb;
@@ -2765,6 +2781,9 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     v.hurt_by = hurt_by;
     v.rate_key = 0;
     let dead = v.hp <= 0.0;
+    if DUEL_LOG {
+        log::info!("duel blow t={now} a={attacker} v={victim} amount={amount:.3} hp={:.3} blocked={} dead={dead}", v.hp, defense == Aim::Facing);
+    }
     ctx.db.vitals().id().update(v);
     shown(if defense == Aim::Facing { living_rules::combat::seen::BLOCKED } else { living_rules::combat::seen::HIT }, amount);
     // What its onlookers saw (`fold`): every blow. A fight's first blow wakes them, as its own

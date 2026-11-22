@@ -695,6 +695,62 @@ pub fn spawn_battle_sides(ctx: &ReducerContext, n: u32, sides: u32) -> Result<()
     Ok(())
 }
 
+/// Diagnostic fixture (a test, no game rule; docs/BLOW_ORDER.md): two identical spear duellists
+/// `gap` tiles apart on an east–west line at (`dx`, `dy`) from `spawn_battle`'s spot, each
+/// attacking the other by id. The second is the first's clone: the same sex, age, genes and ways,
+/// vitals, breath and items. `between` people are made (and killed 60 tiles north) between the
+/// two, so their ids differ by `between + 1` (their combat-cadence class). `low_west`: the lower id
+/// stands west. The west one's graph is installed first, whatever its id (a graph's install wakes
+/// its character), or the east one's with `east_first`. `hp` above 0 sets both healths (5: one
+/// spear blow kills, so the first blow resolved decides). `hold_east`: the east one only waits (`{"wait":120}`) until its attack graph is
+/// installed with `set_behavior` (an offset start). `defend`: "" none, else the skill each uses
+/// when threatened. Refused where either spot is not free.
+#[spacetimedb::reducer]
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_duel(ctx: &ReducerContext, gap: f32, dx: f32, dy: f32, between: u32, low_west: bool, hold_east: bool, defend: String, hp: f32, east_first: bool) -> Result<(), String> {
+    require_admin(ctx)?;
+    let now = common::now_ms(ctx);
+    let map = common::map(ctx);
+    let spot = if ctx.db.land().id().find(0).is_some() { let a = island::arrival(ctx); (a.0, a.1 - 20.0) } else { (55.0, 60.0) };
+    let c = map.nearest_walkable(spot.0, spot.1).ok_or("no room")?;
+    let (cx, cy) = (c.0 + dx, c.1 + dy);
+    let west = (cx - gap / 2.0, cy);
+    let east = (cx + gap / 2.0, cy);
+    for p in [west, east, ((west.0 + east.0) / 2.0, cy)] {
+        if !map.free(p.0, p.1) {
+            return Err(format!("({:.1}, {:.1}) is not free", p.0, p.1));
+        }
+    }
+    let (lo_at, hi_at) = if low_west { (west, east) } else { (east, west) };
+    let age = common::life_of(ctx, "person").age_at(0.25, common::pace(&common::world(ctx)));
+    let sex = Some(living_rules::sex::Sex::Male);
+    let me = ctx.database_identity();
+    let lo = seed::spawn_sexed(ctx, "DuelLow", "person", me, false, lo_at, now, age, (0, 0), sex);
+    let far = map.nearest_walkable(cx, cy + 60.0).ok_or("no room for the fillers")?;
+    for i in 0..between {
+        let f = seed::spawn_sexed(ctx, &format!("Filler{}", i + 1), "person", me, false, far, now, age, (0, 0), sex);
+        act::die(ctx, f, "a duel fixture's filler", now, 0, living_rules::outcome::death::OTHER);
+    }
+    let hi = seed::spawn_sexed(ctx, "DuelHigh", "person", me, false, hi_at, now, age, (0, 0), sex);
+    let g = ctx.db.genome().id().find(lo).ok_or("no genome")?;
+    ctx.db.genome().id().update(Genome { id: hi, ..g });
+    let v = ctx.db.vitals().id().find(lo).ok_or("no vitals")?;
+    let v = if hp > 0.0 { Vitals { hp: hp.min(v.max_hp), ..v } } else { v };
+    ctx.db.vitals().id().update(Vitals { id: lo, ..v.clone() });
+    ctx.db.vitals().id().update(Vitals { id: hi, ..v });
+    let (w, e) = if low_west { (lo, hi) } else { (hi, lo) };
+    let order = if east_first { [(e, w), (w, e)] } else { [(w, e), (e, w)] };
+    for (me_id, other) in order {
+        common::inv_add(ctx, me_id as u64, "spear", 1);
+        let guard = if defend.is_empty() { String::new() } else { format!(r#"{{"if":{{"cond":{{"threatened":true}},"then":{{"do":{{"skill":"{defend}"}}}}}}}},"#) };
+        let graph = format!(r#"{{"first":{{"label":"combat","children":[{guard}{{"do":{{"skill":"attack","target":{{"id":{other}}}}}}}]}}}}"#);
+        let graph = if hold_east && me_id == e { r#"{"wait":120}"#.to_string() } else { graph };
+        mind::set_graph(ctx, me_id, &graph, "fight", "duel", now)?;
+    }
+    log::info!("spawn_duel: low {lo} high {hi} west {w} east {e} gap {gap} at ({cx:.2}, {cy:.2}) between {between} hold_east {hold_east} defend '{defend}' hp {hp} east_first {east_first}");
+    Ok(())
+}
+
 /// Benchmark and test support: `n` people in two sides `spacing` tiles apart near the
 /// arrival point (or the map centre), fighting the other side with the starter skills on a
 /// behavior graph (strike in reach, bow shots at range, block or dodge when threatened, a
