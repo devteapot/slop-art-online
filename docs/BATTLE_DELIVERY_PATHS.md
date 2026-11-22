@@ -258,7 +258,13 @@ From 2.41 ms/s a viewer (contract density, plausible cuts, attention 16, game vi
 3. Minds and attention: whether the attention design expects minds' attended sets in authority tables (the relay leaves minds as they are).
 4. Any SpacetimeDB release after 2.14.1 tried, and breakage met.
 
-**Answers: pending** when this note was written. Nothing above depends on them. The X925 figures are VIEWER_FLOOR's scaling, and §3's IDC limits are FLOORS' readings of the 2.14.1 source.
+**Answers (2026-11-22), in full in [RELAY_PROTOTYPE.md](RELAY_PROTOTYPE.md) §5:**
+- X925 at L0 is being measured.
+- No IDC latency has ever been measured, and nobody has met the outbox limit. §3's case against delivery databases rests on the 2.14.1 source alone.
+- Minds keep their attended sets in module memory, so they are unaffected by a relay.
+- No newer SpacetimeDB has been tried.
+
+**Measured since (RELAY_PROTOTYPE): the relay saves less than §2.4 estimated.** At 64 viewers, warm, it measured 2.30 ms/s per viewer against 2.78 direct, not 1.2, so about 116 viewers fit, not 185. The recommendation there is updated: measure perception off the thread (stage 2) before building.
 
 ## 7. What this study did not do
 

@@ -2,6 +2,11 @@
 
 Status: **measurement and design note**, 2026-11-22, dev-box. Nothing here is built on main. The measuring code is on branch `viewer-floor` (from `attention-e2`), never for main; this note goes to main alone on the docs-only branch `viewer-floor-doc`.
 
+> **Correction (2026-11-22, [RELAY_PROTOTYPE.md](RELAY_PROTOTYPE.md) §2.3): the per-viewer costs below are about 18% low, and the viewer counts about 18% high.**
+> - **Cause:** the dev-box runs the `powersave` governor. Any process waking often warms the host and makes the 60 Hz tick cheaper: a do-nothing 200 µs loop cut the 0-viewer battle by 12%. Each viewer arm's own clients warmed the host, but the quiet 0-viewer reference was cold.
+> - **Remeasured with every arm warm, at 64 viewers** (contract density, uninstrumented): the floor is **2.10** ms/s per viewer (here 1.78); plausible cuts with heed at 16 are **2.78** (here 2.36). The warm budget at 216 is 266 ms/s (1.23 per viewer), so about **96** viewers fit (here about 92 with the game's views).
+> - **The bottom line stands:** 216 at 60 Hz does not fit.
+
 ## Bottom line
 
 **With every plausible cut, 216 viewers at 60 Hz in a 200-fighter battle does not fit on either host.**
