@@ -839,6 +839,88 @@ def skirmish(s):
     s.expect("the dead leave no fighter or readiness rows", not [x for x in s.rows("SELECT id FROM fighter") + s.rows("SELECT id FROM readiness") if x["id"] in gone])
 
 
+SIDES_FIGHTERS = 60
+SIDES_WINDOW_MS = 60_000
+SIDES_FIRST_FALL_MS = 30_000
+RECORD_COMMUNITY = 1 << 40  # living_rules::records::COMMUNITY: a record party that is a community
+
+
+def sides_battle(s):
+    """The battle fixture `spawn_battle_sides` (docs/BATTLE_LAWS.md) on Cullet's arrival plaza
+    (`--seed cullet`): 60 spear fighters in 2 sides, each side a community with an `enemy`
+    stance record toward the other, targeting the nearest person of an enemy side. Over 60 s of
+    authority time: the stance records outlive record housekeeping (they were written due at 0
+    and dropped in the first second, sides-battle-fix), fighters fall within 30 s, no skill use
+    of a fighter targets a resident or its own side (every use seen: `skill_use` polled each
+    second, which keeps the last 24 per actor), and no resident dies."""
+    before = {c["id"] for c in s.rows("SELECT id FROM character")}
+    s.call("spawn_battle_sides", SIDES_FIGHTERS, 2)
+    chars = s.rows("SELECT id, name, kind, alive, born_ms, died_ms, cause FROM character", "spawned")
+    made = {c["id"] for c in chars if c["id"] not in before}
+    s.expect("sides fighters created", len(made) == SIDES_FIGHTERS, len(made))
+    start = min(c["born_ms"] for c in chars if c["id"] in made)
+    residents = {c["id"] for c in chars if c["id"] not in made and c["alive"] and c["kind"] == "person"}
+    sides = {c["id"]: c["name"] for c in s.rows("SELECT id, name FROM community") if c["name"] in ("Side A", "Side B")}
+    s.expect("two side communities", len(sides) == 2, sides)
+    side = {m["member"]: m["community"] for m in s.rows("SELECT member, community FROM membership") if m["community"] in sides}
+    s.expect("every fighter is a member of one side", all(f in side for f in made), sorted(made - set(side))[:8])
+
+    def stances():
+        parties = s.http_rows("SELECT record, party, role FROM record_party")
+        ours = {p["record"] for p in parties if p["role"] == "holder" and p["party"] - RECORD_COMMUNITY in sides and p["party"] >= RECORD_COMMUNITY}
+        return [r for r in s.http_rows("SELECT id, kind, open, due_ms, terms FROM record") if r["id"] in ours]
+
+    uses = {}
+    gaps = []
+    dead = {}
+    stance_at_3s = None
+    now = start
+    while now < start + SIDES_WINDOW_MS:
+        time.sleep(1)
+        now = s.http_rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        by_actor = {}
+        for u in s.http_rows("SELECT * FROM skill_use"):
+            if u["actor"] in made:
+                by_actor.setdefault(u["actor"], []).append(u)
+        for actor, rows in by_actor.items():
+            # The table keeps 24 uses an actor: a full set none of which was seen, after some were, may hide uses.
+            if len(rows) >= 24 and any(u["actor"] == actor for u in uses.values()) and not any(u["id"] in uses for u in rows):
+                gaps.append((actor, now))
+            for u in rows:
+                uses[u["id"]] = u
+        for c in s.http_rows("SELECT id, alive, died_ms, cause FROM character"):
+            if not c["alive"] and (c["id"] in made or c["id"] in residents) and c["id"] not in dead:
+                dead[c["id"]] = c
+        if stance_at_3s is None and now >= start + 3000:
+            stance_at_3s = stances()
+    (s.out / f"{s.name}-uses.json").write_text(json.dumps(sorted(uses.values(), key=lambda u: u["id"]), indent=1) + "\n")
+    (s.out / f"{s.name}-dead.json").write_text(json.dumps(list(dead.values()), indent=1) + "\n")
+
+    fallen = [c for c in dead.values() if c["id"] in made]
+    by30 = [c for c in fallen if c["died_ms"] - start <= SIDES_FIRST_FALL_MS]
+    res_dead = [c for c in dead.values() if c["id"] in residents]
+    aimed = [u for u in uses.values() if u["target"]]
+    at_residents = [u for u in aimed if u["target"] in residents]
+    at_own = [u for u in aimed if u["target"] in made and side.get(u["target"]) == side.get(u["actor"])]
+    at_other = [u for u in aimed if u["target"] not in made and u["target"] not in residents]
+    accepted = [u for u in uses.values() if u["accepted_ms"]]
+    summary = {"fighters": len(made), "sides": len(sides), "residents": len(residents), "uses": len(uses),
+               "accepted": len(accepted), "aimed": len(aimed), "fallen_by_30s": len(by30), "fallen_by_60s": len(fallen),
+               "residents_dead": len(res_dead), "window_s": round((now - start) / 1000, 1)}
+    (s.out / f"{s.name}-summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    print("sides_battle: " + json.dumps(summary), flush=True)
+    s.expect("the enemy stance records outlive record housekeeping (open, never due, 3 s after the spawn)",
+             stance_at_3s is not None and len(stance_at_3s) == 2 and all(r["open"] and r["due_ms"] == 2**64 - 1 for r in stance_at_3s),
+             stance_at_3s, fatal=False)
+    s.expect("every use was seen (no full window of unseen uses)", not gaps, gaps[:5], fatal=False)
+    s.expect("fighters fall within 30 s", len(by30) > 0, summary, fatal=False)
+    s.expect("fighters use their skills on someone", len(aimed) > 0, summary, fatal=False)
+    s.expect("no use targets a resident", not at_residents, at_residents[:5], fatal=False)
+    s.expect("no use targets the fighter's own side", not at_own, at_own[:5], fatal=False)
+    s.expect("no use targets anyone outside the battle", not at_other, at_other[:5], fatal=False)
+    s.expect("no resident dies over 60 s", not res_dead, res_dead[:5], fatal=False)
+
+
 def wall_geometry(s):
     """Tile centres on this world's own map: an `eye` tile, a `hidden` one at most 4 tiles away
     on one axis with only rock or wall between (within even night sight), and an `open` one
@@ -5525,6 +5607,7 @@ def alert_after_hit(s):
 
 
 SCENES["alert_after_hit"] = alert_after_hit
+SCENES["sides_battle"] = sides_battle
 
 
 

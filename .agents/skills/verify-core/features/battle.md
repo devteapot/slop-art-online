@@ -130,3 +130,18 @@ On a launched default-seed run (`scenes.py <case> --run "$R"`):
 The rules tests `attention_cues_are_the_world_s_laws` (the laws' defaults and descriptions), `alarm_cells_give_the_law_s_answer_at_every_moment` (a cell's answer is the law's at every millisecond of five fighters' rows) and `fold::tests` (the line's words, counts and order) and the authority's `fold::tests` (each blow in exactly one window per onlooker) cover the rest offline. `profile_detail` (a diagnostic law) times the parts of each evaluation while profiling. The scale evidence is `living/tools/battle_diag.py` (docs/BATTLE_SCALE.md).
 
 Not covered here: a scripted scene for `fighter_bystander_wakes` off, `combat_eval_hz` or `sweep_keep_memory` (their exactness off is det_compare's, their effect on is in docs/COMBAT_PHASE.md "Part B" and "Next"), a missile's folded line (unit test only), a held-back wake delivered late in the scene (B's window may be free when A strikes; the bound holds either way), remains noticed once each in a long battle (`battle_diag.py`), and players' views (unchanged; verify-player `combat.py`).
+
+## The sides battle fixture
+
+`spawn_battle_sides(n, sides)` (an admin fixture, no game rule; docs/BATTLE_LAWS.md §1) packs `n` spear fighters near the arrival point in 2-4 sides. Each side is a community (`Side A`, `Side B`, …; names `A12`, `B7`). An open `stance` record each way between every two sides says `enemy`, due never (`u64::MAX`). Each fighter's graph blocks or dodges when threatened, else `attack`s the nearest person of `relation: enemy`, which a person of no side (a resident) never is.
+
+Until sides-battle-fix (2026-11-22) the fixture wrote those records due at 0. Record housekeeping (1 Hz) drops every record with `due_ms <= now`, so the stances were gone within a second. The fighters then found no enemy in sight after their first blows and nobody fell.
+
+**`sides_battle`** (`--seed cullet`, a fresh world: the scene counts every living person not spawned by it as a resident; about 70 s after the launch):
+- 60 fighters in 2 sides on Cullet's arrival plaza, watched for 60 s of authority time from their `born_ms`.
+- `skill_use` (the last 24 uses of each actor, outcomes kept after death) and `character` are read over HTTP each second, so every use is seen. A full set of 24 unseen rows after earlier ones were seen would be a gap, which fails the check `every use was seen`.
+- Checks: the two stance records exist, open and never due, 3 s after the spawn; fighters fall within 30 s; fighters aim uses at someone; no use targets a resident, the fighter's own side or anyone outside the battle; no resident dies in the 60 s.
+- Evidence in the run folder: `sides_battle-summary.json` (fighters, sides, residents, uses, accepted, aimed, fallen by 30 s and 60 s, residents dead), `sides_battle-uses.json` (every use seen), `sides_battle-dead.json`, `sides_battle-spawned.json`.
+- On main before the fix it fails: the stances are gone at 3 s, 78 uses in all, 0 fallen in 60 s. With the fix: 2,276 and 2,432 uses, 4 and 6 fallen by 30 s (first at 5.7 s and 18.3 s), 14 and 16 by 60 s, no resident dead (validation record 2026-11-22, sides-battle-fix).
+- Stochastic: who falls when varies; it asserts at least one fallen by 30 s, never a count.
+- The scene gate runs it (`sides_battle`, a Cullet world) when a merge touches `SIDES_BATTLE_PATHS` in `living/tools/scene_gate.py`.
