@@ -53,6 +53,10 @@ def script_for(arm, side_a):
         n = float(arm[3:])
         ids = ", ".join(str(i) for i in sorted(side_a))
         src = src.replace(CAP_OLD, CAP_OLD + f"\n    if a.actor.id in [{ids}] {{ return {n}; }}", 1)
+    if arm == "formula14":
+        old = 'let c = switch a.actor.kind { "person" => 10.0,'
+        assert src.count(old) == 1
+        src = src.replace(old, 'let c = switch a.actor.kind { "person" => 14.0,', 1)
     source, _ = install_script.seed_script("cullet", src)
     return source
 
@@ -232,7 +236,7 @@ def main():
     r.add_argument("--url", required=True)
     r.add_argument("--wasm", required=True, help="the module file in the server's /wasm mount")
     r.add_argument("--out", required=True)
-    r.add_argument("--arms", default="off,formula,cap1,cap2,cap4,cap8,cap16,cap32")
+    r.add_argument("--arms", default="off,formula,formula14,cap1,cap2,cap4,cap8,cap16,cap32")
     r.add_argument("--replicates", type=int, default=6)
     r.add_argument("--parallel", type=int, default=3)
     r.add_argument("--minutes", type=float, default=5)

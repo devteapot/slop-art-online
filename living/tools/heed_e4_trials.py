@@ -15,6 +15,7 @@ graph aimed at wolves) is kept for `det_compare.py prepare --arena pack`, which 
 Arms (variants), the same trial file:
   heed-off      the law off: everyone in sight is an individual (today)
   heed-formula  heed on, the shipped `heed_capacity(a)` formula for everyone, ceiling 32
+  heed-formula14  the same with a person's base at 14 instead of 10
   heed-capN     heed on, the people's capacity fixed at N (4, 8, 16, 32; 1 and 2 exploratory),
                 the wolves on the formula, ceiling 32
 """
@@ -48,7 +49,7 @@ def trial(night):
         "life": {"stop_on_death": False},
         "end": {"side_down": ["subject", "pack"], "after_s": 20},
         "record": {"bodies": {"hz": 5}, "uses": True, "thoughts": True, "experiences": True},
-        "variants": ["heed-off", "heed-formula", "heed-cap1", "heed-cap2", "heed-cap4", "heed-cap8", "heed-cap16", "heed-cap32"],
+        "variants": ["heed-off", "heed-formula", "heed-formula14", "heed-cap1", "heed-cap2", "heed-cap4", "heed-cap8", "heed-cap16", "heed-cap32"],
         "minds": {"roles": ["subject"], "concurrency": 8},
         "arena": {"people": "subject", "wolves": "pack", "night": night, "start": "spread", "deer": False},
         "subject": {"pick": {"kind": "person", "stage": 2, "count": 6, "bg": {"town": "Brackenford"}}, "clear_items": True, "clear_routines": False},
@@ -76,6 +77,8 @@ def trial(night):
 
 
 CAP_OLD = "fn heed_capacity(a) {"
+BASE10 = 'let c = switch a.actor.kind { "person" => 10.0,'
+BASE14 = 'let c = switch a.actor.kind { "person" => 14.0,'
 
 
 def capped(n):
@@ -86,6 +89,10 @@ def variants():
     on = {"heed_on": True, "heed_ceiling": 32, "heed_trace": True}
     v = {"heed-off": {"about": "E4 control: the heed law off (as shipped): everyone in sight is an individual.", "models": {}, "env": {}},
          "heed-formula": {"about": "E4: heed on, every character on the shipped heed_capacity formula, ceiling 32.", "models": {}, "env": {}, "world_laws": on}}
+    # The formula with the person base at 14 instead of 10 (the general coordinator, 2026-11-22:
+    # heed-town found 10 tracked 2 of 14 people named beyond the 8 nearest, 16 tracked 13).
+    v["heed-formula14"] = {"about": "E4: heed on, the shipped formula with a person's base at 14 (not 10), ceiling 32.", "models": {}, "env": {}, "world_laws": on,
+                           "skills_patch": {"person_base_14": [BASE10, BASE14]}}
     # 4, 8, 16 and 32 are the design's arms (docs/ATTENTION_BUDGET.md §8.2); 1 and 2 are
     # exploratory, added before the first replicate to see where capacity begins to bind.
     for n in (1, 2, 4, 8, 16, 32):
