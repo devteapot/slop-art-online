@@ -648,6 +648,16 @@ install -m 0755 living/tools/build-slot /Users/carlid/dev/slop-art-online/.local
 - **Not fixed.** Two waiters can both judge the same slot dead and one can remove the other's fresh claim (unchanged from before; the slots are advisory).
 - **Other machines.** The Spark's merge queue uses its own copy (`~/slop-mq/build-slot`); it is not this file.
 
+## The dev-box's CPU governor
+
+**Since 2026-11-22T12:25:36+01:00 (11:25:36 UTC) the dev-box runs the `performance` governor on all 32 cores** (owner's approval, through the general coordinator). The driver is `amd-pstate-epp`; setting the governor also sets every core's energy-performance preference to `performance`. Before that it ran `powersave` with preference `balance_performance`.
+
+**Why.** Under `powersave` the cores' power states made a busy host faster than a quiet one: a do-nothing process waking every 200 µs made a 200-fighter battle's tick 12% cheaper ([RELAY_PROTOTYPE.md](RELAY_PROTOTYPE.md)). A measurement compared against a quieter reference read low (VIEWER_FLOOR's per-viewer costs by about 18%), and the gate's timing-sensitive scenes depended on what else was running.
+
+**How it persists.** `cpupower` is not installed, and neither `tuned` nor `power-profiles-daemon` runs. A oneshot unit, `/etc/systemd/system/cpu-governor-performance.service` (enabled, `WantedBy=multi-user.target`), writes `performance` to every `/sys/devices/system/cpu/cpu*/cpufreq/scaling_governor` at boot. Check: `cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor | sort | uniq -c` and the same for `energy_performance_preference`; `systemctl status cpu-governor-performance`.
+
+**Measurements before and after the switch are not comparable.** Record the governor with every cost measurement (`host.json`), and compare only runs on the same governor. Runs before the switch should still have been measured warm (a poller keeping the host busy) to approximate it.
+
 ## Measurements (dev-box, 2026-11-11)
 
 All runs used `CARGO_BUILD_JOBS=12` on the 32-core dev-box while other workers were building. The load average at each run's start (and the range during it) is given because it moved the numbers more than anything else. Before/after arms on the same change are interleaved A B B A. The runs used a scratch clone of the repository and private target folders; reflink snapshots gave each warm arm the same starting state. The raw records are in each run's JSON (`check.py --json`) and the step logs.
