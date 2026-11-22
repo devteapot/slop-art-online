@@ -4,6 +4,13 @@ Status: **measurement**, 2026-11-22, dev-box. The measuring code is on branch `c
 
 [BATTLE_CONTRACT_CASES.md](BATTLE_CONTRACT_CASES.md) found that a human fighter adds **3.1–3.7 ms/s** of the database thread on top of an AI fighter's 1.4, though it runs no behaviour graph. Before the conclusion "the architecture can't meet the gate" goes to the owner, this note asks whether that cost is inherent or fixable, part by part. It also asks what sets the strict 60 Hz threshold of about 390 ms/s.
 
+> **Update (2026-11-22, measured after cuts 1 and 2, §6).** With `seed-once` and `experience-incremental` on main (`4b9fa89cc`), the gate case still misses strict 60 Hz on every path.
+> - **Main as shipped:** 56.5 ticks/s.
+> - **Direct with the plausible cuts:** 58.2 ticks/s, 594 ms/s (614 before).
+> - **The relay:** 59.6 ticks/s, step p99 19 ms, 0.65% of steps late, 508 ms/s (520 before). One millisecond over the slot.
+>
+> Cut 3 (b): **56% of a melee's sight tests have exactly the inputs of the viewer's last sweep**, over the 20% bar, but the sight tests are a small part of the sweep. Reusing them saves at most about 16 ms/s for 66 players (estimate).
+
 ## Bottom line
 
 **The extra cost is mostly fixable work, not physics, but no single cut is enough.**
@@ -191,6 +198,61 @@ A human fighter replaces an AI fighter's combat evaluations (`eval.combat`, abou
 - **Human fighters on X925:** scaled by the same-code ratio (BATTLE_CONTRACT_CASES §3).
 - **A less aggressive human driver:** some of the blow and death costs are the workload's. A real player's rate is not known.
 - **L2's own cost:** the L2 runs ran slower (54.9 ticks/s at B50), so the per-part figures are given two ways and are shares, not totals.
+
+## 6. Measured after cuts 1 and 2 (2026-11-22)
+
+**What landed.**
+- **Cut 1, `seed-once`** (main `9ed12f51d`): a rejoin's kit no longer parses the seed. `join` costs 5.0–5.4 ms per call against 9.3 before.
+- **Cut 2, `experience-incremental`** (main `4b9fa89cc`): a player's lines are rows of `experience_copy`, and `my_experience`'s re-runs are gone. That was 10.4 ms/s in a battle with 66 players, about 0.15 each.
+- **Cut 3** (heed re-ranked only on change) waits for heed, which is not on main; (b) below measures main's own sweep instead.
+
+### 6.1 The gate case again
+
+**The fixture:**
+- 100 human fighters and 116 walkers, the case of BATTLE_CONTRACT_CASES (A100);
+- the players read `experience_copy`, as the shipped client does;
+- warm, `performance` governor, L0, two runs per arm, the runner listeners sampled (none over the mark).
+
+**The arms:**
+1. **Main as shipped** (`4b9fa89cc`): main has none of the prototype's plausible cuts (heed, the `vf_*` laws).
+2. **Direct and relay** on `gate-remeasure` (`6eaf3a53c`): the prototype of BATTLE_CONTRACT_CASES with that main merged in and its bindings regenerated. These two compare with BATTLE_CONTRACT_CASES §2.1.
+
+| Arm | Ticks/s | Step p50 / p99 / max (ms) | Steps later than 25 ms | Grid steps skipped (60 s) | DB thread, ms/s | Before the cuts (BATTLE_CONTRACT_CASES) |
+|---|---:|---|---:|---:|---:|---|
+| Main as shipped | 56.5 | 17 / 34 / 38–39 | 6.2% | 201–220 | 620 (612–628) | – |
+| Direct, the plausible cuts | 58.2 | 17 / 33–34 / 35–36 | 3.1% | 88–126 | 594 (591–597) | 57.7; 33 / 3.8%; 614 |
+| **Relay** | **59.6** | 17 / **19** / 35 | **0.65%** | 21–25 | **508** (506–511) | 59.2; 28 / 1.3%; 520 |
+
+- **Strict 60 Hz** (at least 59.9 ticks/s, step p99 within one 16.7 ms slot) **holds on no path.** The relay is the closest: p99 19 ms, one in about 150 steps late.
+- **The cuts took about 20 ms/s off the direct arm and 12 off the relay arm.**
+- **The fight was real:** about 3 inputs a second per human fighter, and 1.7–2.1 deaths a second among them.
+- **The relay arm's privacy:** 0 violations in 233,317 rows of the spectators' and walkers' streams.
+
+### 6.2 Cut 3 (b): sight tests whose inputs did not change
+
+**On main**, a player's sweep runs the sight rule over every candidate (there is no heed). For a sight test (viewer V, candidate C) between V's consecutive sweeps, **"unchanged" means bit-identical inputs:**
+- V's eye position, facing and sight distance;
+- C's position;
+- whether C was already seen (the kept margin);
+- the light on C.
+
+Only then would reusing the last answer give the same result. A "loose" count (both moved under 5 cm, facing within 1°, the rest equal) is given for context only.
+
+| Run (B50-like: 200 fighters of which 50 human, 16 spectators; main's laws; L1) | Candidates | Exactly unchanged | Loosely unchanged | Sweeps with V's own eye unchanged |
+|---|---:|---:|---:|---:|
+| `u-B50-r1` | 4,291,073 | **56.2%** | 56.5% | 70.9% |
+| `u-B50-r2` | 4,418,327 | **55.8%** | 56.1% | 70.9% |
+
+- **The share is far above the 20% bar.** In a melee most fighters stand while they wind up, block or recover, and so do the spectators between steps. What moves moves more than 5 cm, so the loose count adds almost nothing.
+- **But the sight tests are a small part of the sweep.** At L2 (one run, `u-B50L2-r1`, 66 players):
+  - the sweeps cost 98.9 ms/s, of which the sight tests (`sight.player_candidates`) 28.0. That figure includes the counter's own bookkeeping, so it is an upper bound.
+  - Projections cost more (38.3 ms/s).
+- **So reusing the unchanged 56% saves at most about 16 ms/s for 66 players** at L2, before the cost of keeping each viewer's last inputs. That is about 0.1–0.2 ms/s per player at L0 (estimate).
+- It would change no rule: the same function on the same inputs.
+
+**Evidence:**
+- Branches `sweep-unchanged` (`f6ce05a8a`: the counter, logged only while profiling) and `gate-remeasure`, never for main.
+- Runs: dev-box `.local/gr/runs/` (`series.log`, `tables.json`, `gr_tables.py`); archived to `~/archive/worktree-evidence-20261122/gate-remeasure.tar.zst` (sha256 beside it).
 
 ## Evidence
 
