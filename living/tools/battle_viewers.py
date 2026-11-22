@@ -524,6 +524,7 @@ def one(a, n, out):
             clients_p.send(json.dumps({"relay": f"ws://127.0.0.1:{a.relay_port}", "viewers": ids, "out": str(out / "clients.json"), "warmup": a.warmup}))
             clients_p.expect("clients up", 120)
             res["relay_viewers"] = len(ids)
+            (out / "relay-ids.json").write_text(json.dumps(ids) + "\n")
         keep = None
         if a.keep_alive and n:
             keep = KeepAlive(db, token, a.keep_alive)
