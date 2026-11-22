@@ -763,6 +763,9 @@ pub fn my_deliberations(ctx: &ViewContext) -> Vec<Deliberation> {
 
 #[spacetimedb::reducer]
 pub fn join(ctx: &ReducerContext, name: String) -> Result<(), String> {
+    // HUMAN_FIGHTER_COST (branch contract-cases only): the input reducer's own span, logged only while
+    // profiling is on (the tick sets the instance's flag), so an L0 run is unchanged.
+    let _span = common::span("join");
     crate::floor::ready(ctx)?;
     join_with(ctx, name, None)
 }
@@ -793,15 +796,23 @@ fn join_with(ctx: &ReducerContext, name: String, sex: Option<living_rules::sex::
     let arrive = island::arrival(ctx);
     let at = map.nearest_walkable(arrive.0, arrive.1).ok_or("no room")?;
     let age = common::life_of(ctx, "person").age_at(0.25, common::pace(&common::world(ctx)));
+    let part = common::span("join.spawn");
     let id = seed::spawn_sexed(ctx, &name, "person", ctx.sender(), false, at, now, age, (0, 0), sex);
     perception::set_player(ctx, ctx.sender(), id);
+    drop(part);
+    let part = common::span("join.graph");
     mind::set_graph(ctx, id, WAITING_GRAPH, WAITING, "human", now)?;
+    drop(part);
     // What the world gives every newcomer (the seed's `newcomer`): nothing of anyone before.
+    let part = common::span("join.kit");
     seed::newcomer_kit(ctx, id, now);
     presence::start(ctx, id, ctx.sender(), now);
     combat::invalidate_humans(ctx);
+    drop(part);
     // What the newcomer perceives is there from the first frame, not after a sweep.
+    let part = common::span("join.sweep");
     perception::sweep_now(ctx, id, ctx.sender(), now);
+    drop(part);
     perception::fail_for_test(ctx, 5, "join")
 }
 
@@ -909,6 +920,9 @@ pub fn human_gaze(ctx: &ReducerContext, band: u8) -> Result<(), String> {
 /// changes are rate-limited by the `input_hz`/`input_burst` laws.
 #[spacetimedb::reducer]
 pub fn human_move(ctx: &ReducerContext, dx: f32, dy: f32, run: bool) -> Result<(), String> {
+    // HUMAN_FIGHTER_COST (branch contract-cases only): the input reducer's own span, logged only while
+    // profiling is on (the tick sets the instance's flag), so an L0 run is unchanged.
+    let _span = common::span("human_move");
     crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     latency::nav(ctx, me.id, "human_move", 0, format_args!(""));

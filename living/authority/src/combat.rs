@@ -718,6 +718,9 @@ fn my_character(ctx: &ReducerContext) -> Result<Character, String> {
 /// told back through `my_combat` (`REFUSED`), so the reducer itself succeeds.
 #[spacetimedb::reducer]
 pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f32) -> Result<(), String> {
+    // HUMAN_FIGHTER_COST (branch contract-cases only): the input reducer's own span, logged only while
+    // profiling is on (the tick sets the instance's flag), so an L0 run is unchanged.
+    let _span = common::span("use_skill");
     crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     let sc = common::scripts(ctx);
@@ -791,6 +794,9 @@ pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f3
 /// Let go of a held skill (the guard).
 #[spacetimedb::reducer]
 pub fn release_skill(ctx: &ReducerContext, skill: String) -> Result<(), String> {
+    // HUMAN_FIGHTER_COST (branch contract-cases only): the input reducer's own span, logged only while
+    // profiling is on (the tick sets the instance's flag), so an L0 run is unchanged.
+    let _span = common::span("release_skill");
     crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     let now = common::now_ms(ctx);
