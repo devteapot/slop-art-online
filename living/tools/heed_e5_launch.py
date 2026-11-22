@@ -67,6 +67,8 @@ def main():
     ap.add_argument("--interval", type=float, default=30)
     ap.add_argument("--dry-run-price", action="append", default=[])
     ap.add_argument("--prompts", help="c: the --prompts-only output (est_tokens per request), to fit the state list to the budget")
+    ap.add_argument("--tag", default="", help="a re-run's suffix: arm and group `e5<part><tag>`, a separate ledger entry with its own cap")
+    ap.add_argument("--cap", type=float, help="this part's cap in USD when the general coordinator approved another than the frozen one")
     ap.add_argument("--max-calls-min", type=float, help="the runaway rule's calls a minute (phase 1: 1000; off for b and c unless given)")
     ap.add_argument("--min-mem-gb", type=float, default=40, help="the guard's host floor: MemAvailable (rule 7)")
     ap.add_argument("--min-disk-gb", type=float, default=45, help="the guard's host floor: free disk (rule 7)")
@@ -87,7 +89,7 @@ def main():
             ap.error("--part b|c needs --out and --runner-bin")
         out = Path(a.out)
         journal = out / "calls.journal"
-        arm = f"e5{a.part}"
+        arm = f"e5{a.part}{a.tag}"
         cmd = [a.runner_bin, "heed-replay", *runner_args, "--out", str(out / "calls.jsonl")]
     out.mkdir(parents=True, exist_ok=True)
     # Rule 8: the frozen inputs are hashed before any call; against a manifest, a change refuses.
@@ -143,9 +145,11 @@ def main():
             ap.error("--part c sets --limit itself")
         runner_args += ["--limit", str(n)]
         cmd = [a.runner_bin, "heed-replay", *runner_args, "--out", str(out / "calls.jsonl")]
-    guard_cmd = [sys.executable, "-I", str(ROOT / "living/tools/act_trial.py"), "watch", "--arm", arm, "--group", f"e5{a.part}",
+    cap = a.cap if a.cap is not None else CAPS[a.part]
+    print(f"part {a.part}{a.tag}: cap ${cap:.2f} (stops ${MARGIN:.2f} below), everything ${TOTAL:.2f}", flush=True)
+    guard_cmd = [sys.executable, "-I", str(ROOT / "living/tools/act_trial.py"), "watch", "--arm", arm, "--group", f"e5{a.part}{a.tag}",
                  "--ledger", a.ledger, "--log", str(out / "guard.log"), "--pid-file", str(pidf), "--journal", str(journal / "*.jsonl"),
-                 "--ready", str(ready), "--group-cap", str(CAPS[a.part]), "--total-cap", str(TOTAL), "--margin", str(MARGIN),
+                 "--ready", str(ready), "--group-cap", str(cap), "--total-cap", str(TOTAL), "--margin", str(MARGIN),
                  "--interval", str(a.interval), "--fail-last", str(FAIL_LAST), "--min-mem-gb", str(a.min_mem_gb), "--min-disk-gb", str(a.min_disk_gb)]
     runaway = a.max_calls_min if a.max_calls_min is not None else (MAX_CALLS_MIN if a.part == "p1" else None)
     if runaway:

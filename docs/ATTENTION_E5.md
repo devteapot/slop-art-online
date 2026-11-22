@@ -265,6 +265,57 @@ The recording ran on 10b84aee2, which changes only tools and the mind's `heed-as
 - Anything about the side asymmetry.
 - **Sight and rank are distance-only:** the replay's in-sight set and ranks use distance only, with the scene-only filter applied to named people.
 
+## 7. The (b) re-run with the fixed grammar (plan, frozen 2026-11-22 before any paid call)
+
+The general coordinator kept mind-written heed policies in the design ("the mind decides who to track") and approved one re-run of (b). §6 stands as recorded.
+
+**What was fixed, with no paid call** (commit a4733f5b7):
+- **The grammar** (`living_rules::heed`) accepts the forms minds reached for:
+  - `who` with a relation and no kind.
+  - A relation word, an age word or `"#41"` as `who`.
+  - Ages as something perceived: baby, child, adult, old. The authority sets a creature's age only when it is made out.
+  - Several words in one condition, all of which must hold.
+  - A score rule written inside `if`.
+- **Accepted with a note:** a `hold_s` over 60 is held for 60, and stray fields are left out. Entries with neither `if` nor `score` are left out the same way.
+- **Refusals** name every failing rule and what to write instead.
+- **The prompt section** lists kinds, ages and relations.
+- **Free parse rates:**
+  - Re-parsing (b)'s 440 recorded replies: 136 → 382 valid (86.8%).
+  - The fake model under the new prompt and caller: 370 of 468 first replies valid (79.1%).
+- **The replay's fields now carry:**
+  - each creature's seen age, from the scenes' `form`;
+  - one's own side as community, not stranger.
+- **Every stop rule of §4 is in code**, and each was dry-run until it tripped:
+  - rule 5 (Jev throughput) and rule 6 (more than 30% of the first 50 replies invalid) are in the `heed-ask` caller;
+  - rules 2–4 and 7 are in the guard;
+  - rule 8 is in the launcher;
+  - rule 1 is covered by the selftest.
+
+**The run.**
+- **States:** (b) on all 615 frozen paid states of §6 (sha256 `d3f369f4…`).
+  - The caller is `heed-replay --ask mind` with one repair turn (`--repair 1`): a refused or unusable first reply is sent its reason once and answered again.
+  - Concurrency 8, on the recorded route (GLM Flash, low effort).
+- **Guard:** `heed_e5_launch.py --part b --tag 2 --cap 2.90`. The arm and group are `e5b2`, with their own ledger entry; everything stays within $27, after $10.80 spent.
+- **Cap $2.90; the guard stops at $2.40.**
+  - Estimate: about $0.0032 a call (4.5k completion tokens). About 615 first calls plus about 130 repairs gives about $2.39.
+  - The stop may land before the last states; any states not covered are reported.
+- **Stop rules on:** all eight of §4.
+- **Frozen inputs** (`.local/heed-e5/rerun/frozen-manifest.json`, checked by the launcher before the first call). sha256 prefixes:
+
+| Input | sha256 |
+|---|---|
+| `states-paid.json` | `0c9fbb547a0b3b6b` |
+| `picks-a10.jsonl` (capacities) | `9455eaf6b6020d43` |
+| `fields-v2.jsonl` | `ec42efdac26a535f` |
+| `prompts-b-new.jsonl` | `50a5fbc42407aa96` |
+| the `living-mind` binary | `5efedb154241b294` |
+
+**Scoring.**
+- (a) is re-scored on the corrected fields as the baseline only; it stays closed as an arm.
+- (b) is replayed with its final policy per state. A state whose policy is still refused after the repair keeps the instinct.
+- Both arms are compared on the full frozen set with §3's decision rule, unchanged.
+- **Parse rates are reported twice:** at the first reply, and after the repair turn.
+
 ## Sources
 
 - Prompt-length table: `.local/heed-e4/prompts*.json` on heed-e4 (copied with the session's evidence); tool `living/tools/heed_e5_prompts.py`.
