@@ -208,6 +208,10 @@ fn laws() {
         far_motion_tol_m: 0.0,
         // ...and how often one in a fight weighs what to do (docs/BATTLE_LAWS.md (d)): 15, as before.
         combat_eval_hz: 15.0,
+        // heed (docs/ATTENTION_BUDGET.md v2): off; the ceiling on every capacity, set from cost;
+        // how long a creature that made contact (a blow that landed, was blocked or dodged) stays
+        // an individual whatever one heeds.
+        heed_on: false, heed_ceiling: 16.0, heed_contact_s: 4.0,
         // A test switch (docs/PERCEPTION.md, "Module memory and rollback"), 0 in play: a step the
         // world fails on purpose, to prove nothing kept in module memory outlives a failed one.
         memory_test: 0.0,
@@ -305,6 +309,31 @@ fn senses(a) {
     let s = #{ sight: sight_in(light_of(a)), hearing: hearing_of_people() };
     if law("fov_on") { s.field = sight_field(a); }
     s
+}
+
+// ---- heed (docs/ATTENTION_BUDGET.md v2; not yet read by the authority) ----------------------
+// How many others a creature heeds: keeps track of as individuals; everyone else in sight is a
+// throng. Seed content: a world may change every number. The engine clamps the answer to the
+// world's heed ceiling (a law). `a.actor.factor` is the inborn knack times practice at the skill
+// `heed_knack()` names (1.0 untrained, up to 1.6 with long practice); a world without that skill
+// reads 1.0.
+fn heed_knack() { "watch" }
+fn heed_capacity(a) {
+    let c = switch a.actor.kind { "person" => 10.0, "wolf" => 8.0, "deer" => 6.0, _ => 6.0 };
+    c *= switch a.actor.stage { "infant" => 0.3, "child" => 0.7, "elder" => 0.9, _ => 1.0 };
+    c *= a.actor.factor;
+    // A technique one can learn or be taught (a world that has it: keeping_watch).
+    if knows(a, "keeping_watch") { c += 4.0; }
+    // Tiredness and pain narrow attention; so does being out of breath.
+    if a.actor.energy < 15.0 { c *= 0.6; } else if a.actor.energy < 35.0 { c *= 0.8; }
+    let health = a.actor.hp / (max_hp(a.actor.kind) * a.actor.vitality);
+    if health < 0.25 { c *= 0.6; } else if health < 0.5 { c *= 0.8; }
+    if a.actor.stamina < 10.0 { c *= 0.85; }
+    if c < 1.0 { 1.0 } else { c.floor() }
+}
+fn heed_capacity_law() {
+    #{ cadence: "event",
+       about: "How many others one keeps track of at once as individuals; everyone else in sight is seen as a throng. Tiredness, wounds and lost breath narrow it; practice at keeping watch widens it." }
 }
 
 // Band numbers are stable protocol values: Middle 0, Far 1, Near 2.
@@ -3225,6 +3254,9 @@ fn law_about(l, name) {
         "memory_test" => "A test switch that makes one step of the world fail on purpose; it is off in play.",
         "det_clock" => "A test switch that makes the world's time and chance follow its steps alone, to compare two builds; it is off in play.",
         "det_stop" => "A test switch that pauses the world at a given step; it is off in play.",
+        "heed_on" => if l.heed_on { "one keeps track of only so many others as individuals; everyone else in sight is a throng" } else { "everyone in sight is perceived as an individual" },
+        "heed_ceiling" => `no one keeps track of more than ${short(l.heed_ceiling)} others as individuals at once`,
+        "heed_contact_s" => `someone whose blow reached one stays an individual to one for ${short(l.heed_contact_s)} s, whatever one heeds`,
         "far_cap" => if l.far_cap > 0.0 { `a player sees at most ${short(l.far_cap)} others at once, the nearest` } else { "a player sees everyone in sight" },
         "crowd_sweep_n" => if l.crowd_sweep_n > 0.0 { `what a player sees is looked at again less often in a crowd of more than ${short(l.crowd_sweep_n)}` } else { "what a player sees is looked at again at the same pace in any crowd" },
         "crowd_frame_max_ms" => if l.crowd_frame_max_ms > 0.0 { `in a crowd, a player's view of others follows at least every ${short(l.crowd_frame_max_ms)} ms` } else { "in a crowd, a player's view of others follows at least every 100 ms" },

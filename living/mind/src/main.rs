@@ -60,6 +60,9 @@ async fn main() -> Result<()> {
     if frame != prompts::Frame::Character {
         log::info!("prompt frame: {} (LIVING_FRAME)", frame.name());
     }
+    if std::env::args().nth(1).as_deref() == Some("heed-replay") {
+        return mind::heed::replay_main(&root, std::env::args().skip(2).collect()).await;
+    }
     if std::env::args().nth(1).as_deref() == Some("rethink-replay") {
         return mind::rethink::replay_main(&root, std::env::args().skip(2).collect()).await;
     }

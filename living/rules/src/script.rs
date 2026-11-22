@@ -3437,6 +3437,32 @@ impl Scripts {
         (!s.takes.is_empty() || !s.gives.is_empty()).then(|| (s.takes.clone(), s.gives.clone()))
     }
 
+    /// How many others the character heeds (keeps track of as individuals) now: the world's
+    /// `heed_capacity(a)` law (docs/ATTENTION_BUDGET.md §3), with `a.actor.factor` the knack ×
+    /// practice of the skill `heed_knack()` names (`watch` when the script names none), clamped
+    /// to `[0, ceiling]` ([`crate::heed::clamp_capacity`]; the ceiling is the world's
+    /// `heed_ceiling`, which the caller reads). An `Err` when the script has no such law or it
+    /// fails; the caller decides what that means.
+    pub fn heed_capacity(&self, ctx: &SkillCtx, ceiling: f32) -> Result<usize, String> {
+        if !self.has("heed_capacity") {
+            return Err("the script has no heed_capacity law".into());
+        }
+        let knack = if self.has("heed_knack") {
+            self.engine
+                .call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "heed_knack", ())
+                .map_err(|e| format!("heed_knack: {e}"))?
+                .into_string()
+                .map_err(|t| format!("heed_knack must name a skill, not {t}"))?
+        } else {
+            crate::heed::DEFAULT_KNACK.to_string()
+        };
+        let mut c = ctx.clone();
+        c.skill = knack;
+        let d = self.call("heed_capacity", &c)?;
+        let n = number(&d).ok_or("heed_capacity must return a number")?;
+        Ok(crate::heed::clamp_capacity(n, ceiling))
+    }
+
     /// Generic numeric query, e.g. `attack_cooldown`.
     pub fn number(&self, f: &str, ctx: &SkillCtx, default: f64) -> f64 {
         if !self.has(f) {
@@ -3554,7 +3580,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 26] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 29] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3594,6 +3620,11 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 26] = [
     ("cover_brush_min_fill", ValueOnly::Cover),
     ("cover_cliff_step_m", ValueOnly::Cover),
     ("gaze_on", ValueOnly::Gaze),
+    // heed (docs/ATTENTION_BUDGET.md v2): the switch, the performance ceiling on every capacity
+    // and the contact window, for the authority side to read at its next pass. Not read yet.
+    ("heed_on", ValueOnly::Delivery),
+    ("heed_ceiling", ValueOnly::Delivery),
+    ("heed_contact_s", ValueOnly::Delivery),
 ];
 
 /// The functions a value-only law may be named in: the constants (`laws`, an overlay's

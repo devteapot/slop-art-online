@@ -22,6 +22,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{oneshot, Semaphore};
 
 mod animal;
+pub mod heed;
 mod dealings;
 mod judge;
 mod lived;
