@@ -529,7 +529,7 @@ def check_render_logs():
 
 
 def make_glb(path, animations):
-    doc = json.dumps({"asset": {"version": "2.0"}, "animations": [{"channels": []}] * animations}).encode()
+    doc = json.dumps({"asset": {"version": "2.0"}, "nodes": [], "animations": [{"channels": []}] * animations}).encode()
     doc += b" " * (-len(doc) % 4)
     import struct
     Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -543,6 +543,9 @@ def make_render_set(t, repo, book_generations=("c4-a", "c4-b")):
     a = Path(repo) / "living/game/assets"
     make_glb(a / "lookdev/vroid-Fake.glb", 0)
     make_glb(a / "lookdev/anim/vroid-Fake.glb", 2)
+    # Clip files carry their .clips.json sidecar (render_set.py refuses a set without one since
+    # clip-markers; docs/CLIP_MARKERS.md). No looping gaits here, so marker_check has nothing to fault.
+    (a / "lookdev/anim/vroid-Fake.clips.json").write_text("{}\n")
     for d, f in (("view", "v.glb"), ("textures", "ground.png"), ("envs/cullet", "quay.glb")):
         (a / d).mkdir(parents=True, exist_ok=True)
         (a / d / f).write_bytes(d.encode())
@@ -550,6 +553,7 @@ def make_render_set(t, repo, book_generations=("c4-a", "c4-b")):
     trees = " ".join(f"{d}={sh(f'git rev-parse HEAD:living/tools/{d}', repo).strip()}" for d in ("blender", "characters", "textures"))
     b = Path(t, "bundle")
     make_glb(b / "living/game/assets/lookdev/anim/own-clips.glb", 3)
+    (b / "living/game/assets/lookdev/anim/own-clips.clips.json").write_text("{}\n")
     (b / "living/game/assets/lookdev/types").mkdir(parents=True)
     (b / "living/game/assets/lookdev/types/adult-f.glb").write_bytes(b"type")
     (b / "living/game/assets/characters").mkdir(parents=True)
@@ -585,6 +589,9 @@ def check_render_set():
         for d in ("blender", "characters", "textures"):
             os.makedirs(os.path.join(repo, "living/tools", d))
             Path(repo, "living/tools", d, "x.py").write_text(d)
+        # The synthetic clip files have no gaits to check: the checkout's marker_check.py (which
+        # render_set.py runs) passes them, as the real one does a set whose markers are sound.
+        Path(repo, "living/tools/marker_check.py").write_text("print('markers: ok (selftest stand-in)')\n")
         for w, g in (("cullet", "c4-b"), ("island", "c4-a")):
             os.makedirs(os.path.join(repo, "living/seeds/worlds", w))
             Path(repo, "living/seeds/worlds", w, "looks.json").write_text(json.dumps({"looks": {"generation": g}}))
