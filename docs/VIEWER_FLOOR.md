@@ -7,6 +7,29 @@ Status: **measurement and design note**, 2026-11-22, dev-box. Nothing here is bu
 > - **Remeasured with every arm warm, at 64 viewers** (contract density, uninstrumented): the floor is **2.10** ms/s per viewer (here 1.78); plausible cuts with heed at 16 are **2.78** (here 2.36). The warm budget at 216 is 266 ms/s (1.23 per viewer), so about **96** viewers fit (here about 92 with the game's views).
 > - **The bottom line stands:** 216 at 60 Hz does not fit.
 
+> **Correction (2026-11-22, the X925 column, §6 and §7.2): X925 is cheaper per viewer than the dev-box, not dearer.**
+> - **Source:** the Spark's measurement, branch `x925-floor` (`7062c4d47`); evidence `~/slop-evidence/x925-floor-20261122.tar.zst` on the Spark (sha256 `11f128a8…`). The dev-box's own run of the same fixture is in [BATTLE_CONTRACT_CASES.md](BATTLE_CONTRACT_CASES.md) §3.
+> - **Cause:** §6's ratio of 1.16 set X925's per-viewer figure, from main `1511d5e8` (battle-laws), against the dev-box's 11.08. `1511d5e8` had neither the fighter copy table (`fighter_tables_on`) nor the combat feed (`combat_feed_on`); the dev-box's figure had both. So the ratio compared delivery paths, not cores.
+> - **Measured on identical code:** main `d0c2f4e85`, Cullet, 200 sustained fighters, 16 viewers on the 10 m ring as shipped, L0.
+>
+>   | | X925, pinned (3 runs) | Dev-box, `performance`, warm (2 runs) | X925 / dev-box |
+>   |---|---:|---:|---:|
+>   | Battle, 0 viewers, ms/s | 294.9 | 321.5 | **0.92** (0.90–0.95) |
+>   | Per viewer, ms/s | 9.24 | 10.81 | **0.86** (0.73–0.96) |
+> - **§7.2's X925 column, redone (an estimate):**
+>   - The playable case's f on the dev-box is 3.01 ms/s on the `performance` governor (64 viewers, [PERCEPTION_OFF_THREAD.md](PERCEPTION_OFF_THREAD.md) §2.2), plus 0.05 for the game's views: 3.06.
+>   - On X925 that is × 0.86, so about 2.6 (2.2–2.9). B = 600 − 295 = 305.
+>   - That gives **about 116 viewers at 60 Hz on X925 (104–137)**, in place of 93. On the dev-box, on the same governor, it is about 92.
+>   - The Spark's own estimate of 145–164 took the `powersave`-era 2.41 and a ratio against the dev-box's `powersave` reference of 377.6. Both are superseded.
+> - **§6's "the gate is not decided by the host" no longer holds:** X925 fits about a quarter more viewers. **The bottom line stands:** 216 at 60 Hz fits on neither host.
+
+> **Correction (2026-11-22, the 60 Hz budget): the viewer counts below are upper bounds for strict 60 Hz.**
+> - **Measured** ([BATTLE_CONTRACT_CASES.md](BATTLE_CONTRACT_CASES.md) §4, dev-box, `performance` governor). Strict 60 Hz means at least 59.9 ticks/s, with step p99 within one 16.7 ms slot. It held only up to about **390 ms/s** of database-thread work. Arms at 440–520 ms/s ran 59.0–59.9 ticks/s, with about 1% of steps late.
+> - **What sets the 390** (the tick's own work, commits, or the scheduler) is being measured in HUMAN_FIGHTER_COST.
+> - **Why the counts are upper bounds:** §6 and §7 count N = B / f with B = 600 − R, the tick's work allowed up to 600 ms/s.
+> - **With B = 390 − R instead** (an estimate), the playable case fits about 23 viewers on the dev-box (R 318.8, f 3.06 on the `performance` governor) and about 36 on X925 (R 295, f ≈ 2.6), not 92 and 116.
+> - **The bottom line stands:** 216 at 60 Hz does not fit.
+
 ## Bottom line
 
 **With every plausible cut, 216 viewers at 60 Hz in a 200-fighter battle does not fit on either host.**
