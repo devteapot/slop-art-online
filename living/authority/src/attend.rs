@@ -23,6 +23,7 @@ use std::collections::{HashMap, HashSet};
 use spacetimedb::{Identity, ReducerContext, Table};
 
 use crate::common;
+use crate::tables::vitals as _;
 
 /// The crowd as one viewer receives it: one row per cell with members in sight that it does not
 /// attend. `id` is the viewer's character (high 32 bits), the merge level (bits 30-31) and the
@@ -64,6 +65,78 @@ struct Attending {
     /// speed) and when it came into sight (`new`).
     last: HashMap<u32, (f32, u64)>,
     first_seen: HashMap<u32, u64>,
+    /// In sight at the last pass, and the visible-churn counts (`attend_vis_on`).
+    seen_prev: HashSet<u32>,
+    vis: Vis,
+    /// Crowd at the last pass, and when each was last tested by the sight rule, with the result
+    /// (`attend_throng_sight_ms`).
+    crowd_prev: HashSet<u32>,
+    throng: HashMap<u32, (u64, bool)>,
+    /// Policies 3 and 4 (heed): each heeded one's rule and when it last had its place on merit,
+    /// and since when it is heeded.
+    heed: HashMap<u32, (usize, u64)>,
+    heeded_since: HashMap<u32, u64>,
+}
+
+/// Visible churn (the coordinator, 2026-11-22): per viewer, a creature in sight that goes from
+/// individual to crowd and back (or back the other way) within 2 s and within 5 s, as the
+/// viewer would see a figure flip. Counted only with `attend_vis_on`; logged once per 10 s
+/// bucket per viewer as an `attend-vis` line.
+#[derive(Default, Debug)]
+pub struct Vis {
+    /// Each creature's last change of grain while in sight: when, and whether to individual.
+    last: HashMap<u32, (u64, bool)>,
+    bucket: u64,
+    pub flips: u32,
+    pub back2: u32,
+    pub back5: u32,
+    pub affected: HashSet<u32>,
+    pub attended: HashSet<u32>,
+}
+
+impl Vis {
+    /// Creature `body`, in sight before and now, changed grain at `now` (to individual or not).
+    pub fn change(&mut self, body: u32, to_individual: bool, now: u64) {
+        self.flips += 1;
+        if let Some((t, dir)) = self.last.get(&body) {
+            if *dir != to_individual {
+                let dt = now.saturating_sub(*t);
+                if dt <= 2_000 {
+                    self.back2 += 1;
+                }
+                if dt <= 5_000 {
+                    self.back5 += 1;
+                    self.affected.insert(body);
+                }
+            }
+        }
+        self.last.insert(body, (now, to_individual));
+    }
+
+    /// Creature `body` left sight: its history ends (coming back into sight is not a flip).
+    pub fn gone(&mut self, body: u32) {
+        self.last.remove(&body);
+    }
+
+    /// The bucket's summary when `now` starts a new 10 s bucket (then reset), else None.
+    pub fn roll(&mut self, now: u64) -> Option<(u64, u32, u32, u32, usize, usize)> {
+        let b = now / 10_000;
+        if self.bucket == 0 {
+            self.bucket = b;
+            return None;
+        }
+        if b == self.bucket {
+            return None;
+        }
+        let out = (self.bucket, self.flips, self.back2, self.back5, self.affected.len(), self.attended.len());
+        self.bucket = b;
+        self.flips = 0;
+        self.back2 = 0;
+        self.back5 = 0;
+        self.affected.clear();
+        self.attended.clear();
+        Some(out)
+    }
 }
 
 #[derive(Default)]
@@ -75,6 +148,13 @@ struct Crowd {
 }
 
 thread_local! {
+    /// The person instinct of the shared selector (`living_rules::heed`, copied from attention-exp
+    /// c18ca061), with its holds (policy 3) and without (policy 4).
+    static HEED: (living_rules::heed::Policy, living_rules::heed::Policy) = {
+        let p = living_rules::heed::instinct("person");
+        let bare = living_rules::heed::without_holds(&p);
+        (p, bare)
+    };
     static ATT: RefCell<HashMap<u32, Attending>> = RefCell::new(HashMap::new());
     static CROWD: RefCell<HashMap<u32, Crowd>> = RefCell::new(HashMap::new());
 }
@@ -165,6 +245,73 @@ fn instinct(id: u32, seen: &HashSet<u32>, near: &HashMap<u32, f32>, kinds: &Hash
     keep
 }
 
+/// Policies 3 and 4: the shared selector `living_rules::heed::select` over candidates built from
+/// what the sweep knows. Simplified, as the fixture needs: `threatening` is a move aimed at me,
+/// `contact_ago_s` and `hurt_me_ago_s` come from my own last hurt (blocks and dodges are not
+/// kept per viewer), `doing`, `addressed`, `cued`, `chosen`, `fallen`, `loud` and `lit` are
+/// empty, relations none, everyone made out, and closing is the raw change of distance between
+/// two sweeps (not smoothed). The own state is a rested, unhurt adult's.
+#[allow(clippy::too_many_arguments)]
+fn heed_pass(ctx: &ReducerContext, id: u32, seen: &HashSet<u32>, near: &HashMap<u32, f32>, kinds: &HashMap<u32, &str>, engaged: &HashSet<u32>, st: &mut Attending, cap: usize, holds: bool, now: u64) -> HashSet<u32> {
+    use living_rules::heed;
+    let _span = common::detail_span("attend.features");
+    let mine = crate::frame::target_of(id);
+    let hurt = ctx.db.vitals().id().find(id).filter(|v| v.hurt_by != 0).map(|v| (v.hurt_by, now.saturating_sub(v.hurt_ms) as f32 / 1000.0));
+    let all: Vec<heed::Candidate> = seen
+        .iter()
+        .map(|&b| {
+            let dist = near.get(&b).copied().unwrap_or(f32::MAX);
+            let closing = st.last.get(&b).map_or(0.0, |(d, t)| if now > *t { (d - dist) / ((now - t) as f32 / 1000.0) } else { 0.0 });
+            let first = *st.first_seen.entry(b).or_insert(now);
+            let target = crate::frame::target_of(b);
+            let hurt_me = hurt.filter(|(by, _)| *by == b).map(|(_, ago)| ago);
+            heed::Candidate {
+                id: b,
+                kind: kinds.get(&b).map_or_else(String::new, |k| k.to_string()),
+                dist,
+                closing,
+                made_out: true,
+                threatening: engaged.contains(&b) && target == Some(id),
+                hurt_me_ago_s: hurt_me,
+                acted_on: mine == Some(b),
+                contact_ago_s: hurt_me,
+                heeded_s: st.heeded_since.get(&b).map(|t| now.saturating_sub(*t) as f32 / 1000.0),
+                in_sight_s: now.saturating_sub(first) as f32 / 1000.0,
+                fighting: crate::frame::aiming(b),
+                acting_on_heeded: target.is_some_and(|t| st.now.contains(&t)),
+                ..Default::default()
+            }
+        })
+        .collect();
+    st.last = all.iter().map(|c| (c.id, (c.dist, now))).collect();
+    st.first_seen.retain(|b, _| seen.contains(b));
+    let held: Vec<heed::Held> = st
+        .heed
+        .iter()
+        .filter(|(b, _)| seen.contains(b))
+        .map(|(b, (rule, merit))| heed::Held { id: *b, rule: *rule, lapsed_s: now.saturating_sub(*merit) as f32 / 1000.0 })
+        .collect();
+    let me = heed::SelfState { health: 100.0, energy: 100.0, hunger: 0.0, stamina: 100.0, night: false, hurt_ago_s: hurt.map(|(_, a)| a) };
+    let _rules = common::detail_span("attend.rules");
+    let picks = HEED.with(|(with, bare)| heed::select(if holds { with } else { bare }, &me, &all, &heed::Limits::new(cap), if holds { &held } else { &[] }));
+    drop(_rules);
+    let mut next: HashMap<u32, (usize, u64)> = HashMap::new();
+    for p in &picks {
+        if let Some(r) = p.place.rule() {
+            let merit = if p.held { st.heed.get(&p.id).map_or(now, |(_, m)| *m) } else { now };
+            next.insert(p.id, (r, merit));
+        }
+    }
+    st.heed = next;
+    let keep: HashSet<u32> = picks.iter().map(|p| p.id).collect();
+    for b in &keep {
+        st.heeded_since.entry(*b).or_insert(now);
+    }
+    st.heeded_since.retain(|b, _| keep.contains(b));
+    common::diag(|| "attend:held", picks.iter().filter(|p| p.held).count() as u64);
+    keep
+}
+
 /// The creatures viewer `id` attends among `seen` (with their distances in `near`; `crowd` is the
 /// sweep's gather, for kinds). Policies 0 and 1: the engaged always, past capacity (v1's rule);
 /// then the places left. Policy 2: the instinct's ranked order, bounded by capacity (v2: no
@@ -178,7 +325,10 @@ pub fn choose(ctx: &ReducerContext, id: u32, seen: &HashSet<u32>, near: &HashMap
         let mut a = a.borrow_mut();
         let st = a.entry(id).or_default();
         let mut keep: HashSet<u32>;
-        if laws.attend_policy >= 2.0 {
+        if laws.attend_policy >= 3.0 {
+            let kinds: HashMap<u32, &str> = crowd.iter().filter(|(c, _)| seen.contains(&c.id)).map(|(c, _)| (c.id, &*c.kind)).collect();
+            keep = heed_pass(ctx, id, seen, near, &kinds, &engaged, st, n, laws.attend_policy < 4.0, now);
+        } else if laws.attend_policy >= 2.0 {
             let kinds: HashMap<u32, &str> = crowd.iter().filter(|(c, _)| seen.contains(&c.id)).map(|(c, _)| (c.id, &*c.kind)).collect();
             keep = instinct(id, seen, near, &kinds, &engaged, st, n, now);
         } else {
@@ -228,6 +378,31 @@ pub fn choose(ctx: &ReducerContext, id: u32, seen: &HashSet<u32>, near: &HashMap
         });
         let graced = st.grace.len() as u64;
         keep.extend(st.grace.keys().copied());
+        if laws.attend_vis_on {
+            // A change of grain counts only for a creature in sight at both passes.
+            for &b in seen.iter() {
+                if !st.seen_prev.contains(&b) {
+                    continue;
+                }
+                let (was, is) = (st.now.contains(&b), keep.contains(&b));
+                if was != is {
+                    st.vis.change(b, is, now);
+                }
+            }
+            for b in st.seen_prev.iter().copied().filter(|b| !seen.contains(b)).collect::<Vec<_>>() {
+                st.vis.gone(b);
+            }
+            st.vis.attended.extend(keep.iter().copied());
+            if let Some((bucket, flips, back2, back5, affected, attended)) = st.vis.roll(now) {
+                log::info!("attend-vis {{\"viewer\":{id},\"bucket\":{bucket},\"flips\":{flips},\"back2\":{back2},\"back5\":{back5},\"affected\":{affected},\"attended\":{attended}}}");
+            }
+            st.seen_prev = seen.clone();
+        }
+        if laws.attend_throng_sight_ms > 0.0 {
+            st.crowd_prev = seen.iter().copied().filter(|b| !keep.contains(b)).collect();
+            let crowd = &st.crowd_prev;
+            st.throng.retain(|b, _| crowd.contains(b));
+        }
         st.now = keep.clone();
         common::diag(|| "attend:promoted", promoted);
         common::diag(|| "attend:demoted", demoted);
@@ -378,4 +553,59 @@ pub fn clear_crowd(ctx: &ReducerContext, id: u32, viewer: Identity) {
 /// Whether viewer `id` holds any attention state (so the sweep clears it when the law goes off).
 pub fn active(id: u32) -> bool {
     ATT.with(|a| a.borrow().contains_key(&id)) || CROWD.with(|c| c.borrow().contains_key(&id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Vis;
+
+    #[test]
+    fn flip_backs_are_counted_within_2_and_5_seconds() {
+        let mut v = Vis::default();
+        let t = 1_700_000_000_000u64;
+        v.roll(t + 1_000);
+        // Creature 1: individual -> crowd at 1.0 s, back at 2.5 s (1.5 s: both windows), then
+        // crowd again at 6.0 s (3.5 s: the 5 s window only).
+        v.change(1, false, t + 1_000);
+        v.change(1, true, t + 2_500);
+        v.change(1, false, t + 6_000);
+        // Creature 2: to crowd at 1.0 s, back at 7.5 s (6.5 s: neither).
+        v.change(2, false, t + 1_000);
+        v.change(2, true, t + 7_500);
+        // Creature 3: leaves sight in between, so its return is not a flip-back.
+        v.change(3, false, t + 1_000);
+        v.gone(3);
+        v.change(3, true, t + 1_500);
+        v.attended.extend([1, 2, 3, 4]);
+        assert_eq!((v.flips, v.back2, v.back5), (7, 1, 2));
+        assert_eq!(v.affected.len(), 1);
+        let rolled = v.roll(t + 12_000).unwrap();
+        assert_eq!(rolled, ((t + 1_000) / 10_000, 7, 1, 2, 1, 4));
+        assert_eq!((v.flips, v.back2, v.back5, v.affected.len(), v.attended.len()), (0, 0, 0, 0, 0));
+        assert_eq!(v.roll(t + 15_000), None);
+    }
+}
+
+/// `attend_throng_sight_ms`: the last sight result for `body`, when it was crowd at viewer `id`'s
+/// last pass and was tested less than `ms` ago (else None: test it).
+pub fn throng_cached(id: u32, body: u32, now: u64, ms: u64) -> Option<bool> {
+    ATT.with(|a| {
+        let a = a.borrow();
+        let st = a.get(&id)?;
+        if !st.crowd_prev.contains(&body) {
+            return None;
+        }
+        st.throng.get(&body).filter(|(t, _)| now.saturating_sub(*t) < ms).map(|(_, r)| *r)
+    })
+}
+
+/// `attend_throng_sight_ms`: `body` was just tested by viewer `id`'s sweep.
+pub fn throng_tested(id: u32, body: u32, now: u64, saw: bool) {
+    ATT.with(|a| {
+        if let Some(st) = a.borrow_mut().get_mut(&id) {
+            if st.crowd_prev.contains(&body) {
+                st.throng.insert(body, (now, saw));
+            }
+        }
+    })
 }

@@ -11,6 +11,8 @@ pub mod doing;
 pub mod fire;
 pub mod fold;
 pub mod graph;
+// E2 (branch attention-e2): the shared selector, copied from attention-exp c18ca061 (living/rules/src/heed.rs).
+pub mod heed;
 pub mod height;
 pub mod host;
 pub mod land;

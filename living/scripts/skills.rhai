@@ -209,6 +209,8 @@ fn laws() {
         attend_reorder_ms: 1000.0,
         attend_grace_ms: 0.0,
         attend_crowd_on: false,
+        attend_vis_on: false,
+        attend_throng_sight_ms: 0.0,
         // ...a player's sweep less often above this many in sight (at most 3x the period)...
         crowd_sweep_n: 0.0,
         // ...the longest interval between its frames in a crowd (ms; 0: the built-in 100)...
@@ -3242,6 +3244,8 @@ fn law_about(l, name) {
         "attend_policy" => if l.attend_policy >= 2.0 { "a player attends as a person's instinct does: who goes for them, their own target, the nearest, then what stands out" } else if l.attend_policy >= 1.0 { "a player's attention is redrawn often (a measuring switch)" } else { "a player attends the nearest first" },
         "attend_reorder_ms" => `a redrawn attention changes every ${short(l.attend_reorder_ms)} ms (a measuring switch)`,
         "attend_grace_ms" => if l.attend_grace_ms > 0.0 { `one a player stops attending stays in view for ${short(l.attend_grace_ms)} ms` } else { "one a player stops attending leaves view at once" },
+        "attend_throng_sight_ms" => if l.attend_throng_sight_ms > 0.0 { `a player looks again at the crowd about every ${short(l.attend_throng_sight_ms)} ms (a measuring switch)` } else { "a player looks again at everyone in sight at every glance" },
+        "attend_vis_on" => if l.attend_vis_on { "how often a figure flips between crowd and individual is counted (a measuring switch)" } else { "no one counts figures flipping between crowd and individual" },
         "attend_crowd_on" => if l.attend_crowd_on { "a player sees the unattended in sight as a crowd" } else { "a player is told nothing of the unattended" },
         "far_cap" => if l.far_cap > 0.0 { `a player sees at most ${short(l.far_cap)} others at once, the nearest` } else { "a player sees everyone in sight" },
         "crowd_sweep_n" => if l.crowd_sweep_n > 0.0 { `what a player sees is looked at again less often in a crowd of more than ${short(l.crowd_sweep_n)}` } else { "what a player sees is looked at again at the same pace in any crowd" },

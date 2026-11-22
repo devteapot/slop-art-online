@@ -630,6 +630,12 @@ pub struct Laws {
     pub attend_grace_ms: f32,
     /// ...and the crowd written as `seen_crowd` rows (6 m cells, 1 Hz, at most 48 a viewer).
     pub attend_crowd_on: bool,
+    /// ...and per viewer the figures that flip between individual and crowd within 2 s and 5 s
+    /// are counted and logged (`attend-vis` lines; a measuring switch).
+    pub attend_vis_on: bool,
+    /// ...and a creature that was crowd at the last pass keeps its last sight result this long
+    /// (ms; 0: tested at every sweep, as everyone else): v2's throng sighted at about 1 Hz.
+    pub attend_throng_sight_ms: f32,
     /// (b) Above this many creatures in sight, a player's sweep comes less often, in proportion
     /// (at most three times the period).
     pub crowd_sweep_n: f32,
@@ -927,6 +933,8 @@ impl Default for Laws {
             attend_reorder_ms: 1_000.0,
             attend_grace_ms: 0.0,
             attend_crowd_on: false,
+            attend_vis_on: false,
+            attend_throng_sight_ms: 0.0,
             crowd_sweep_n: 0.0,
             crowd_frame_max_ms: 0.0,
             fighter_bystander_wakes: true,
@@ -3297,10 +3305,12 @@ impl Scripts {
             attend_on: flag("attend_on", l.attend_on),
             attend_ceiling: g("attend_ceiling", l.attend_ceiling).clamp(0.0, 10_000.0),
             attend_burst_cap: g("attend_burst_cap", l.attend_burst_cap).clamp(0.0, 10_000.0),
-            attend_policy: g("attend_policy", l.attend_policy).clamp(0.0, 2.0),
+            attend_policy: g("attend_policy", l.attend_policy).clamp(0.0, 4.0),
             attend_reorder_ms: g("attend_reorder_ms", l.attend_reorder_ms).clamp(50.0, 600_000.0),
             attend_grace_ms: g("attend_grace_ms", l.attend_grace_ms).clamp(0.0, 600_000.0),
             attend_crowd_on: flag("attend_crowd_on", l.attend_crowd_on),
+            attend_vis_on: flag("attend_vis_on", l.attend_vis_on),
+            attend_throng_sight_ms: g("attend_throng_sight_ms", l.attend_throng_sight_ms).clamp(0.0, 10_000.0),
             crowd_sweep_n: g("crowd_sweep_n", l.crowd_sweep_n).clamp(0.0, 10_000.0),
             crowd_frame_max_ms: g("crowd_frame_max_ms", l.crowd_frame_max_ms).clamp(0.0, 2_000.0),
             fighter_bystander_wakes: flag("fighter_bystander_wakes", l.fighter_bystander_wakes),
@@ -3583,7 +3593,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 33] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 35] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3606,6 +3616,8 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 33] = [
     ("attend_reorder_ms", ValueOnly::Delivery),
     ("attend_grace_ms", ValueOnly::Delivery),
     ("attend_crowd_on", ValueOnly::Delivery),
+    ("attend_vis_on", ValueOnly::Delivery),
+    ("attend_throng_sight_ms", ValueOnly::Delivery),
     ("crowd_sweep_n", ValueOnly::Delivery),
     ("crowd_frame_max_ms", ValueOnly::Delivery),
     ("fighter_bystander_wakes", ValueOnly::Delivery),

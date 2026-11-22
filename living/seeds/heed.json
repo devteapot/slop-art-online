@@ -1,0 +1,352 @@
+{
+ "_doc": "Starting heed policies (heed instincts) per species: seed content, docs/ATTENTION_BUDGET.md §2.4. A character without its own policy keeps track of others by its species' entry (heed_<kind>), else heed_default. A mind may rewrite all of it. Whom one is acting on, and whoever made contact with one within the world's heed_contact_s, are individuals whatever the policy (the engine's, not a rule here). hold_s is hysteresis as policy content: what a rule took stays for that long unless a better rule needs the place. Grammar: living/rules/src/heed.rs.",
+ "heed_person": {
+  "heed": [
+   {
+    "if": {
+     "any": [
+      {
+       "threatened": true
+      },
+      {
+       "doing": {
+        "is": "hostile",
+        "at_me": true
+       }
+      },
+      {
+       "attacker": {
+        "within_s": 10
+       }
+      }
+     ]
+    },
+    "order": "nearest",
+    "hold_s": 5,
+    "why": "whoever is going for me"
+   },
+   {
+    "if": {
+     "addressing": {
+      "within_s": 10
+     }
+    },
+    "order": "newest",
+    "take": 2,
+    "hold_s": 5,
+    "why": "whoever speaks to me"
+   },
+   {
+    "if": {
+     "any": [
+      {
+       "cued": true
+      },
+      {
+       "chosen": true
+      }
+     ]
+    },
+    "order": "nearest",
+    "take": 4,
+    "hold_s": 5,
+    "why": "whoever I watch for"
+   },
+   {
+    "if": {
+     "all": [
+      {
+       "who": {
+        "kind": "person",
+        "relation": "family"
+       }
+      },
+      {
+       "near": 20
+      }
+     ]
+    },
+    "order": "nearest",
+    "take": 2,
+    "hold_s": 5,
+    "why": "my own people"
+   },
+   {
+    "if": {
+     "near": 8
+    },
+    "order": "nearest",
+    "take": 6,
+    "hold_s": 3,
+    "why": "who is close"
+   },
+   {
+    "score": [
+     {
+      "if": {
+       "closing": {
+        "above": 1.0
+       }
+      },
+      "w": 3
+     },
+     {
+      "if": {
+       "acting_on_heeded": true
+      },
+      "w": 3
+     },
+     {
+      "if": {
+       "fighting": true
+      },
+      "w": 2
+     },
+     {
+      "if": {
+       "who": "wolf"
+      },
+      "w": 2
+     },
+     {
+      "if": {
+       "new": 5
+      },
+      "w": 1
+     },
+     {
+      "if": {
+       "loud": true
+      },
+      "w": 1
+     }
+    ],
+    "take": "rest",
+    "hold_s": 3,
+    "why": "whatever stands out"
+   }
+  ]
+ },
+ "heed_wolf": {
+  "heed": [
+   {
+    "if": {
+     "any": [
+      {
+       "threatened": true
+      },
+      {
+       "doing": {
+        "is": "hostile",
+        "at_me": true
+       }
+      },
+      {
+       "attacker": {
+        "within_s": 10
+       }
+      }
+     ]
+    },
+    "order": "nearest",
+    "hold_s": 5,
+    "why": "whoever is going for me"
+   },
+   {
+    "if": {
+     "who": {
+      "kind": "wolf",
+      "relation": "family"
+     }
+    },
+    "order": "nearest",
+    "take": 3,
+    "hold_s": 5,
+    "why": "my pack"
+   },
+   {
+    "if": {
+     "who": "deer"
+    },
+    "order": "nearest",
+    "take": 3,
+    "hold_s": 5,
+    "why": "what I hunt"
+   },
+   {
+    "if": {
+     "near": 8
+    },
+    "order": "nearest",
+    "hold_s": 3,
+    "why": "who is close"
+   },
+   {
+    "score": [
+     {
+      "if": {
+       "closing": {
+        "above": 1.0
+       }
+      },
+      "w": 3
+     },
+     {
+      "if": {
+       "fighting": true
+      },
+      "w": 2
+     }
+    ],
+    "take": "rest",
+    "hold_s": 3,
+    "why": "whatever stands out"
+   }
+  ]
+ },
+ "heed_deer": {
+  "heed": [
+   {
+    "if": {
+     "who": "wolf"
+    },
+    "order": "nearest",
+    "hold_s": 5,
+    "why": "wolves"
+   },
+   {
+    "if": {
+     "any": [
+      {
+       "threatened": true
+      },
+      {
+       "doing": {
+        "is": "hostile",
+        "at_me": true
+       }
+      },
+      {
+       "attacker": {
+        "within_s": 10
+       }
+      }
+     ]
+    },
+    "order": "nearest",
+    "hold_s": 5,
+    "why": "whoever is going for me"
+   },
+   {
+    "if": {
+     "all": [
+      {
+       "who": "deer"
+      },
+      {
+       "near": 8
+      }
+     ]
+    },
+    "order": "nearest",
+    "hold_s": 3,
+    "why": "my herd"
+   },
+   {
+    "score": [
+     {
+      "if": {
+       "closing": {
+        "above": 1.0
+       }
+      },
+      "w": 3
+     },
+     {
+      "if": {
+       "new": 5
+      },
+      "w": 1
+     }
+    ],
+    "take": "rest",
+    "hold_s": 3,
+    "why": "whatever stands out"
+   }
+  ]
+ },
+ "heed_default": {
+  "heed": [
+   {
+    "if": {
+     "any": [
+      {
+       "threatened": true
+      },
+      {
+       "doing": {
+        "is": "hostile",
+        "at_me": true
+       }
+      },
+      {
+       "attacker": {
+        "within_s": 10
+       }
+      }
+     ]
+    },
+    "order": "nearest",
+    "hold_s": 5,
+    "why": "whoever is going for me"
+   },
+   {
+    "if": {
+     "addressing": {
+      "within_s": 10
+     }
+    },
+    "order": "newest",
+    "take": 2,
+    "hold_s": 5,
+    "why": "whoever speaks to me"
+   },
+   {
+    "if": {
+     "near": 8
+    },
+    "order": "nearest",
+    "take": 6,
+    "hold_s": 3,
+    "why": "who is close"
+   },
+   {
+    "score": [
+     {
+      "if": {
+       "closing": {
+        "above": 1.0
+       }
+      },
+      "w": 3
+     },
+     {
+      "if": {
+       "fighting": true
+      },
+      "w": 2
+     },
+     {
+      "if": {
+       "new": 5
+      },
+      "w": 1
+     }
+    ],
+    "take": "rest",
+    "hold_s": 3,
+    "why": "whatever stands out"
+   }
+  ]
+ }
+}

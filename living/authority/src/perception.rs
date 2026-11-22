@@ -1292,14 +1292,31 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let crowd = common::creatures_near_filed(ctx, here, reach, now);
     let sight_chunks = (gather < reach).then(|| living_rules::map::chunks_around(here.0, here.1, gather));
     drop(gathering);
+    // E2 prototype (`attend.rs`): the throng's sight at a lower rate (`attend_throng_sight_ms`,
+    // off: 0); a crowd member's last result stands until it is that old.
+    let throng_ms = { let l = common::laws(ctx); if l.attend_on { l.attend_throng_sight_ms as u64 } else { 0 } };
     for (c, chunk) in &crowd {
         if c.id == id || c.dist > gather || sight_chunks.as_ref().is_some_and(|k| !k.contains(chunk)) {
             continue;
         }
         candidates += 1;
+        if throng_ms > 0 {
+            if let Some(saw) = crate::attend::throng_cached(id, c.id, now, throng_ms) {
+                common::diag(|| "attend:throng_cached", 1);
+                if saw {
+                    seen.insert(c.id);
+                    near.insert(c.id, c.dist);
+                }
+                continue;
+            }
+        }
         let glow = if lit { common::glow_of(ctx, c.id, w, now) } else { 0.0 };
         let kept = had.contains(&c.id).then_some(keep);
-        if living_rules::sight::sees(map, here, heading, c.pos, c.dist, &senses, glow, kept) {
+        let saw = living_rules::sight::sees(map, here, heading, c.pos, c.dist, &senses, glow, kept);
+        if throng_ms > 0 {
+            crate::attend::throng_tested(id, c.id, now, saw);
+        }
+        if saw {
             seen.insert(c.id);
             near.insert(c.id, c.dist);
         }

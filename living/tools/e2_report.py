@@ -95,6 +95,40 @@ def diag_window(log, t0, t1):
     return {k: v / n for k, v in sums.items()} if n else {}, n
 
 
+def visible_churn(log, t0, t1):
+    """From the `attend-vis` lines (attend_vis_on): 10 s buckets lying wholly inside [t0, t1].
+    Per viewer-minute, flip-backs within 2 s and within 5 s; the share of attended creatures
+    affected (affected over attended, per bucket, mean); the worst viewer by flip-backs within
+    5 s a minute."""
+    per = {}
+    for line in open(log, errors="replace"):
+        i = line.find("attend-vis {")
+        if i < 0:
+            continue
+        try:
+            d = json.loads(line[i + 11:])
+        except ValueError:
+            continue
+        lo, hi = d["bucket"] * 10, d["bucket"] * 10 + 10
+        if lo < t0 or hi > t1:
+            continue
+        per.setdefault(d["viewer"], []).append(d)
+    if not per:
+        return None
+    rates = {}
+    shares = []
+    for v, bs in per.items():
+        mins = len(bs) * 10 / 60
+        rates[v] = (sum(b["back2"] for b in bs) / mins, sum(b["back5"] for b in bs) / mins)
+        shares += [b["affected"] / b["attended"] for b in bs if b["attended"]]
+    worst = max(rates.items(), key=lambda kv: kv[1][1])
+    return {"viewers": len(rates), "buckets": sum(len(b) for b in per.values()),
+            "back2_per_viewer_min": round(statistics.mean(r[0] for r in rates.values()), 2),
+            "back5_per_viewer_min": round(statistics.mean(r[1] for r in rates.values()), 2),
+            "share_attended_affected": round(statistics.mean(shares), 4) if shares else None,
+            "worst_viewer": {"viewer": worst[0], "back2_per_min": round(worst[1][0], 2), "back5_per_min": round(worst[1][1], 2)}}
+
+
 def one(run):
     run = Path(run)
     bv = json.loads((run / "battle-viewers.json").read_text())
@@ -131,6 +165,12 @@ def one(run):
         "grace_per_viewer": round(dg.get("attend:grace", 0) / sweeps, 2) if sweeps else None,
         "crowd_cells_per_viewer_s": round(dg.get("crowd:cells", 0) / max(n, 1), 2),
         "crowd_writes_per_viewer_s": round((dg.get("crowd:insert", 0) + dg.get("crowd:update", 0) + dg.get("crowd:delete", 0)) / max(n, 1), 2),
+        # The battle itself (a stalled fight measures delivery without combat): blows struck a second
+        # (`fold:blow`: hit, blocked, dodged or missed), fighters fallen in the window (the keeper's
+        # refills), and the share alive at the window's end (the keeper's census).
+        "blows_s": round(dg.get("fold:blow", 0), 1),
+        "fallen_window": (row.get("keeper_window") or {}).get("refills"),
+        "alive_end_share": round(kw["alive_end"] / kw["target"], 3) if (kw := row.get("keeper_window")) and kw.get("target") else None,
     }
     wc = metric_sum(diff, "spacetime_reducer_wait_time_sec_count", reducer="scheduled reducer")
     if wc:
@@ -155,6 +195,10 @@ def one(run):
                 return {"ticks": len(ts), "body_max_ms": max((r[bi] for r in ts), default=None),
                         "body_sum_ms": round(sum(r[bi] for r in ts), 2), "missed_slots": sum(r[gi] - 1 for r in ts)}
             out["burst"] = {"law": f"{flip['law']}={flip['value']}", "before_1s": around(at - 1e6, at), "after_1s": around(at, at + 1e6)}
+    if (v / "module.log").exists():
+        vc = visible_churn(v / "module.log", w.get("t0", 0), w.get("t1", 9e18))
+        if vc:
+            out["visible_churn"] = vc
     if (v / "rss.json").exists():
         r = json.loads((v / "rss.json").read_text())
         out["rss_mb"], out["hwm_mb"] = round(r.get("VmRSS", 0) / 1e6, 1), round(r.get("VmHWM", 0) / 1e6, 1)
@@ -216,7 +260,8 @@ def selftest():
             r = d / name
             (r / f"v{n}").mkdir(parents=True)
             t0 = 1_700_000_000.0
-            (r / "battle-viewers.json").write_text(json.dumps({"laws": ["attend_n=16"], "rows": [{"viewers": n, "ticks_per_s": ticks, "window": {"t0": t0, "t1": t0 + 10}}]}))
+            (r / "battle-viewers.json").write_text(json.dumps({"laws": ["attend_n=16"], "rows": [{"viewers": n, "ticks_per_s": ticks, "window": {"t0": t0, "t1": t0 + 10},
+                                                                                              "keeper_window": {"target": 200, "alive_end": 190, "refills": 37}}]}))
             secs = 10.0
             diff = {
                 'spacetime_txn_cpu_time_sec_sum{db="x",reducer="tick",txn_type="Reducer"}': 3.0,
@@ -238,9 +283,16 @@ def selftest():
             for i in range(12):  # 10 inside the window, 2 outside
                 ts = datetime.datetime.fromtimestamp(t0 - 5 if i == 0 else t0 + 15 if i == 11 else t0 + i - 0.5, datetime.timezone.utc)
                 inside = i not in (0, 11)
-                dg = {"sweep:viewers": 80, "sweep:seen": seen * 80, "attend:dropped": dropped * 80, "attend:promoted": 8,
+                dg = {"fold:blow": 12, "sweep:viewers": 80, "sweep:seen": seen * 80, "attend:dropped": dropped * 80, "attend:promoted": 8,
                       "attend:demoted": 8, "crowd:cells": 160, "crowd:insert": 4, "crowd:update": 12, "crowd:delete": 4} if inside else {"sweep:viewers": 999999}
                 lines.append(f"{ts.isoformat().replace('+00:00', 'Z')}  INFO: housekeeping x: diag: {json.dumps(dg)}")
+            if name == "n16-r1":
+                # Viewer 7: three buckets inside the window... the window is 10 s here, so one bucket
+                # [t0, t0+10) fits; one bucket outside. Viewer 8 likewise, with fewer flips.
+                b0 = int(t0 // 10)
+                lines.append(f"2023-11-14T22:13:21Z  INFO: x: attend-vis {json.dumps({'viewer': 7, 'bucket': b0, 'flips': 20, 'back2': 3, 'back5': 6, 'affected': 4, 'attended': 20})}")
+                lines.append(f"2023-11-14T22:13:21Z  INFO: x: attend-vis {json.dumps({'viewer': 8, 'bucket': b0, 'flips': 5, 'back2': 1, 'back5': 2, 'affected': 1, 'attended': 10})}")
+                lines.append(f"2023-11-14T22:13:21Z  INFO: x: attend-vis {json.dumps({'viewer': 7, 'bucket': b0 + 1, 'flips': 99, 'back2': 99, 'back5': 99, 'affected': 9, 'attended': 9})}")
             (r / f"v{n}" / "module.log").write_text("\n".join(lines) + "\n")
             (r / f"v{n}" / "rss.json").write_text(json.dumps({"VmRSS": 1.5e9, "VmHWM": 2.0e9}))
             if name.startswith("burst"):
@@ -276,6 +328,12 @@ def selftest():
         expect("only diag lines inside the window", r1["diag_seconds"] == 10 and r1["sweeps_s"] == 80.0, (r1["diag_seconds"], r1["sweeps_s"]))
         expect("attended and in sight per sweep", r1["attended_per_sweep"] == 16.0 and r1["in_sight_per_sweep"] == 86.0, (r1["attended_per_sweep"], r1["in_sight_per_sweep"]))
         expect("churn and crowd writes per viewer-second", r1["promoted_per_viewer_s"] == 0.5 and r1["crowd_writes_per_viewer_s"] == 1.25 and r1["crowd_cells_per_viewer_s"] == 10.0, r1)
+        vc = r1.get("visible_churn") or {}
+        expect("visible churn: buckets inside the window only, per viewer-minute, share, worst viewer",
+               vc.get("buckets") == 2 and vc.get("back2_per_viewer_min") == 12.0 and vc.get("back5_per_viewer_min") == 24.0
+               and vc.get("share_attended_affected") == 0.15 and vc.get("worst_viewer") == {"viewer": 7, "back2_per_min": 18.0, "back5_per_min": 36.0}, vc)
+        expect("the battle: blows a second, fallen in the window, alive at its end",
+               r1["blows_s"] == 12.0 and r1["fallen_window"] == 37 and r1["alive_end_share"] == 0.95, (r1["blows_s"], r1["fallen_window"], r1["alive_end_share"]))
         expect("WASM memory and RSS", r1["wasm_mb"] == 200.0 and r1["rss_mb"] == 1500.0 and r1["hwm_mb"] == 2000.0, r1)
         s = summarize([r1, one(a2), one(b1)], [one(z)])
         arm = {a["arm"]: a for a in s["arms"]}
