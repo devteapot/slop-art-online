@@ -1,6 +1,6 @@
 # E3: who to track, on recorded scenes
 
-Status: **E3(a) run (free); the free fake-model parts of (b) and (c) run; the guards dry-run; no paid call.** 2026-11-22, branch `attention-exp` (Spark). It is the Spark's part of docs/ATTENTION_BUDGET.md §8 (v2 with the v2.1 amendments). No paid call has been made. Nothing merges to main until the owner decides on the law.
+Status: **E3(a) run on the act trial (free) and on new Cullet recordings (free, fake model, §8); the free fake-model parts of (b) and (c) run; the guards dry-run; (b) and (c) held (the general coordinator, 2026-11-22); no paid call.** 2026-11-22, branch `attention-exp` (Spark). It is the Spark's part of docs/ATTENTION_BUDGET.md §8 (v2 with the v2.1 amendments). No paid call has been made. Nothing merges to main until the owner decides on the law.
 
 **The question.** Does a mind-written heed policy (b) or Jev's picks (c) keep track of what the mind later acts on better than the starting heed instinct (a), without missing more first blows and without more flicker?
 
@@ -188,6 +188,63 @@ heed_e3_launch.py --arm c --out .local/attention-e3/paid/c --runner-bin <living-
     --ask jev --states ... --fields .local/attention-e3/fields.jsonl --picks ... --concurrency 4
 ```
 
+## 8. E3(a) on Cullet recordings (fake model), and the acted-on source
+
+The general coordinator held (b) and (c) after §6, and asked for scenes where the choice matters: Cullet (48 m day sight), every body sampled.
+
+**The validity rule.** In fake-model scenes, what a character acts on comes from instinct graphs and fixed replies, so (b) and (c) would be scored against the baseline's own behaviour. These recordings are used only for missed first blows, flicker, promotions and the size of the beyond-8 sample. Acted-on needs real minds.
+
+**Recordings** (free; private containers `slop-heede3-stdb` and `slop-heede3-neo4j`, the SpacetimeDB one pinned to CPUs 5–9 and 15–19; `battle.lock` taken first and held alone while waiting; the shared trial-activity lock per launch; quiet start, load under 8):
+
+| Recording | How | What it holds |
+|---|---|---|
+| Battle | `battle_diag.py --seed cullet --battle 200 --walkers 16 --minutes 8 --all-bodies` (`spawn_crowd`, fake model, refills; not `spawn_battle_sides`) | every body with its segment, every use, every creature's kind, at 1 Hz; 454 samples; about 58 ticks a second. The host load rose to about 26 from other work during it, which does not change positions or uses |
+| Town | the new trial `living/trials/heed-town.json` (Cullet, the first 40 adults minded, fake model, 15 minutes, `record.bodies {"hz": 5, "all": true}`), batch `heedtown1`; a second replicate as `heedtown3` | every creature at 5 Hz |
+
+- `heedtown2` failed at start: the trial's laws guard refused the world because I changed `skills.rhai` (the new `heed_closing_s`) after its module was built. It was re-recorded as `heedtown3` with a fresh build.
+- `heedtown3` was cut at 13.3 of 15 minutes by a T3 server restart (04:41). Its live journal was copied into the instance by hand (`PARTIAL.txt` says so); 13 minutes of every body are kept.
+- The tools' own archive-on-cleanup wrote commitlog archives of the battle, `heedtown1` and the failed `heedtown2` into `~/slop-evidence`. None was deleted.
+
+**Frozen sample.** State list `5fc810bee9160cdebfabb3869f04b03552db38621e57fc04a8a3faa487d07566`; tool `61a523a3…`; all files in `.local/attention-e3/cullet/MANIFEST.sha256`.
+- 200 battle states from 1,811 think requests, median 231 in sight.
+- 100 town states (47 from `heedtown1`, 53 from `heedtown3`) from a pool of 141 with at least 8 in sight, median 11 in sight.
+
+Battle steps are 0.5 s (about 231 in sight × 81 steps a state); town steps are 0.2 s.
+
+**Results** (the instinct; the formula's capacity, p50 8 in the battle because fighters are hurt and tired, 10 in town):
+
+| Arm | Scene | Promotions /s | Flicker /min | Figures flickering | First blows unheeded |
+|---|---|---|---|---|---|
+| smoothed closing (1 s), holds on | battle | 0.79 | **3.4** | 5.5% | 0 of 174 |
+| smoothed closing, holds off | battle | 2.67 | 169 | 75.0% | 0 of 174 |
+| two-pass closing (window 0, E2's), holds off | battle | 3.23 | 222 | 79.9% | 0 of 174 |
+| segment velocity, holds off | battle | 2.86 | 182 | 75.9% | 0 of 174 |
+| smoothed, holds on, capacity 8 / 16 | battle | 0.78 / 1.64 | 3.4 / 6.4 | 5.7% / 5.5% | 0 / 0 |
+| smoothed closing, holds on | town | 0.17 | **5.7** | 4.2% | – |
+| smoothed closing, holds off | town | 0.38 | 22.6 | 14.3% | – |
+| two-pass closing, holds off | town | 0.43 | 27.5 | 16.5% | – |
+| smoothed, holds on, capacity 8 / 16 | town | 0.19 / 0.12 | 7.3 / 0.2 | 6.7% / 0.3% | – |
+
+**Reading.**
+- **No first blow from an unheeded attacker** (437 windups aimed at subjects, all heeded at their start).
+- **The holds are what keep the throng still:** −98% flicker in the battle, −75% in town.
+- **Smoothing closing speed helps without holds:** −24% flicker in the battle, −18% in town. With holds the methods are within noise of each other.
+- **The incumbent tie-break is built in on every arm,** so it was not measured apart.
+- **Flicker at 0.5 s steps cannot see flips faster than a step,** so the battle's figures are lower bounds.
+- **The fake beyond-8 sample:** 9 acted-on creatures in the battle (graph targets, the nearest) and 0 in town (fake replies name no one). As expected, there is no valid acted-on signal here.
+
+**The cheapest valid acted-on source** (for the general coordinator, before any paid call):
+- **No acted-on signal in fake scenes is mind-independent.** The graph targets are the instinct graphs' nearest. Addressing and blows are inputs to the heed instinct itself, so scoring against them is circular.
+- **Acts naming an id are too rare even with real minds.** The act trial's island towns: 0.007–0.021 per mind-minute. A 40-mind, 12-minute town gives about 10, about 3 of them beyond the 8 nearest (31% of others in sight are beyond the 8 nearest in the Cullet town).
+- **Proposed instead: M2′, the people a real mind's think reply names** (its `thought`, `intend` and `say` by name, id or addressee).
+  - It is mind-driven and comes before its acts.
+  - In the act trial's real island town, minds thought 0.35 times a mind-minute and 95% of replies named someone (2.0 people on average). That is about 0.7 named-person events a mind-minute, 35 times the id-act rate.
+  - **Bias:** a think prompt lists only the 14 nearest creatures (the hidden cap), so the beyond-8 part is people 9th to 14th nearest plus those named from memory while in sight.
+- **The recording:** `heed-town` on Cullet with real minds (the `people` mix, as the act trial's town), 40 minds, 15 minutes, every body sampled, under `act_trial.py watch --ready --pid-file` with its stop rules. Expected: about 420 named-person events, perhaps 40–130 beyond the 8 nearest and in sight.
+- **Cost:** the act trial's 30-minute 40-mind towns cost $2.07–2.10 (committed prices, its ledger), about $0.069 a minute. Cullet's think prompts are about 0.82 the island's at the median (10.7k against 13.0k characters, fake journals). So 15 minutes is about **$0.85**. Proposed cap **$1.50**.
+- **It fits inside E3's $12 alongside (b) and (c):** recording $1.50 (from the $3 reserve) + (b) on its 100 town states and the 200 battle states under $1 expected (cap $4) + (c) (cap $5).
+- The battle half of M2′ would need a real-mind Cullet battle: about $1.5–2.5 for 60 minds and 6 minutes, from the act trial's $6.7 for 200 minds and 8 minutes. That does not fit beside the town at the caps, and it is a separate ask.
+
 ## Files
 
 - **Code (branch `attention-exp`):**
@@ -197,5 +254,6 @@ heed_e3_launch.py --arm c --out .local/attention-e3/paid/c --runner-bin <living-
   - `living/seeds/worlds/heed/laws.rhai` (the `watch` skill and the `keeping_watch` technique, as an overlay only);
   - `living/mind/src/mind/heed.rs` (`living-mind heed-replay`), `heed_ask.rs` (the model arms);
   - `living/tools/heed_e3_launch.py` (an arm under its guard);
+  - `living/tools/battle_diag.py --seed --all-bodies`, `trials.py` `record.bodies {"all": true}`, `living/trials/heed-town.json` (the Cullet recordings);
   - `living/tools/attention_e3.py` (freeze, fields, score).
 - **Evidence (worktree `.local/attention-e3/`, untracked):** `states.json`, `fields.jsonl`, `picks-<arm>.jsonl`, `score-<arm>.json`, `MANIFEST.sha256`, the extracted copies under `src/`. To be archived to `~/slop-evidence/attention-e3-<date>.tar.zst` with its sha256 when the branch's work ends.
