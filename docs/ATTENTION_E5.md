@@ -1,4 +1,4 @@
-# E5: who to heed in a real-mind battle (proposal)
+# E5: who to heed in a real-mind battle (proposal, then results in §6)
 
 Status: **proposal only: design and cost estimate.** 2026-11-22, branch `heed-e4` (Spark). No paid call has been made and no run was started for it; the only work done is the prompt-length and sample-size measurements below, on existing recordings. The general coordinator approved writing it. Nothing merges to main until the owner decides on the heed law. Jev's price is never written here: it is read from the local prices file.
 
@@ -146,6 +146,124 @@ A battle mind costs about 2.5 times a town mind: it thinks about 1.6 times a min
 - **`attention_e3.py freeze --melee-run`:** states from the recording, fields from its bodies at the authority's own sight. Where the scene lists fewer than the capacity, its list is the in-sight set (the town caveat of §1).
 - **Optionally, the throng bound of §1** (8 lines).
 - **For phase 3 only:** the `"heed"` reply field and `heed_policy` rows (a new private table, no new column), verified with verify-minds (a new `heed-reply` case) and verify-client (the table refused to players).
+
+## 6. Results (2026-11-22)
+
+**Verdict: (a), the person instinct, stands.** Neither paid arm met the decision rule, and (b) broke stop rule 6, so its comparison is void (below). Phase 3 was not run. Spend: **$10.80 of $27**.
+
+**Before phase 1: heed off is identical to main** (det_compare `--scripts`, each copy running its own build's script; main 9ed12f51d).
+
+| Build | Cullet battle of 200 | Pack arena |
+|---|---|---|
+| e3aedad30 | identical: 3,600 ticks, 113 tables, 48,298 rows | identical: 7,200 ticks, 104,799 rows |
+| af71d96e6 (the E5 build) | identical: 3,600 ticks, 48,298 rows | identical: 7,200 ticks, 104,799 rows |
+
+The recording ran on 10b84aee2, which changes only tools and the mind's `heed-ask` caller after af71d96e6.
+
+**Phase 0 (free, fake model).**
+- **The recording smoke** (120 minds, 3 min):
+  - Casualties appeared.
+  - `_stage` reached no prompt (0 of 731 think prompts).
+  - 584 of 731 think scenes carried throng lines.
+  - The longest scene listed 41 people: the 32 heeded plus forced ones, most of them attacking the subject.
+- **Freeze, fields and replay** work. The (a) replay gives the same output on a rerun.
+- **(b) and (c) callers:**
+  - (b): 363 of 363 valid on the fake.
+  - (c): 1,815 requests, 0 errors.
+  - Both fed back through the replay.
+- **The guard and launcher** (`living/tools/heed_e5_launch.py`):
+  - Caps $20 / $2 / $5 within $27, with one ledger.
+  - Stop rules 3 and 4 in `act_trial.py watch` (`--fail-last`, `--max-calls-min`), selftested.
+  - In a battle dry run priced absurdly, the guard stopped the run at its cap and the world was deleted.
+  - (c) refuses to run without the local price and fits its state list to the budget.
+- **Fixes found on the way:**
+  - The mind binary was stale. It was rebuilt, and the paid runs used the fresh one.
+  - `battle_diag --side-floor 0.2` now implements §2's early end.
+- **Prompt size at capacity 32** against the act trial at the 14-cap (same characters per token):
+  - Think prompts are +39% at p50, deliberate +8%.
+  - About +16% input per call.
+
+**Phase 1, the recording.**
+- **Every run:**
+  - Laws: `heed_on`, `heed_fixed_capacity` 32, `heed_ceiling` 32, `heed_instinct` 2, `heed_trace`, `sides_minded`, `sides_mixed_defence` ON, `sides_first` 0.
+  - Minds: the `people` mix, `LIVING_CONCURRENCY` 64.
+  - Setup: Cullet (world seed 83); the server pinned to CPUs 5–9 and 15–19; started at load 1.2–3.6.
+
+| Run | Length | Alive at end, A / B (of 60) | Spend | Errors | Think requests |
+|---|---|---|---|---|---|
+| r1 `minds-e5p1r1-185243` | 4.5 min (side floor) | 35 / 7 | $2.36 | 0 | 589 |
+| r2 `minds-e5p1r2-190102` | 5.5 min (side floor) | 32 / 7 | $2.97 | 0 | 804 |
+| r3 `minds-e5p1r3-191356` | 4.5 min (side floor) | 34 / 5 | $2.42 | 0 | 611 |
+| r4 `minds-e5p1r4-191918` | 2.4 min (side floor) | 41 / 7 | $1.30 | 0 | 193 |
+
+- **Every run ended at the side floor, and side B lost all four**, with mixed defence on. E4b's heed-off melee had 4 of 6. The likely suspects are the fixture's id order and spawn ring, not heed; this was not investigated.
+- **Stop-or-extend.**
+  - After run 2: 454 named-beyond-8 events, above the 200 threshold.
+  - After run 4: **773** (2,169 states, 1,843 named people in the subject's own scene, 709 beyond capacity). This clears both the 300 rule and the 480 planning figure.
+
+**Phase 2: the paid states.**
+- **Which states:** the 615 frozen states holding a named-beyond-8 event, in frozen order. M2″ is scored only on those, and (b) on all 2,169 could not fit its cap.
+- **Hashes:** states sha256 `d3f369f4…`, parent `d61e4e8b…`.
+- **Timing:** the states file and both prompts-only files were written before the first paid call (19:33–19:35 against 19:35:53).
+
+| Arm | Calls | Spend | How it ended |
+|---|---|---|---|
+| (b) GLM Flash low | 476 | $1.51 | stopped by the guard at its cap |
+| (c) Jev | 3,075 (615 states, all fitted) | $0.23 | ended normally |
+
+- **(b):**
+  - Each call wrote about 4.4k completion tokens, which §4's estimate left out.
+  - 468 states were answered before the stop. 440 replies held a `heed` field.
+  - **Only 136 policies passed the shared parser.** The refusals:
+
+| Reason | Count |
+|---|---|
+| `who` as an object without `kind` | 46 |
+| `hold_s` above 60 | 45 |
+| `child` as a kind of creature | 43 |
+| condition shape | 30 |
+| `score` or `order` misplaced | 29 |
+| other | 111 |
+
+- **(c):** 0 errors, 0 HTTP 429s, worst sliding p95 182 ms (stop rule 5 never near).
+
+**A broken stop rule.** Rule 6 (over 30% of (b)'s first 50 replies failing the heed grammar) was not implemented in the launcher.
+- 35 of the first 50 failed, so **(b) should have stopped at about $0.16, but it ran to $1.51**, inside its cap.
+- Under the frozen rules, (b)'s comparison below is therefore void: the heed section must be fixed on the fake model first, and any re-run needs the general coordinator's word.
+- Stop rules 1–5, 7 and 8 held:
+  - Rule 5 was not implemented either, but would not have tripped.
+  - Rule 8 held by the files' times.
+
+**The comparison** (`living/tools/heed_e5_compare.py`):
+- **Measures:**
+  - M2″: named people in the subject's own scene, beyond the 8 nearest, that the arm heeded.
+  - M1: first blows from the unheeded, per 100 first blows.
+  - Flicker: per subject-minute.
+- **States:** every arm is scored on the same states.
+
+| States | Arm | M2″ beyond 8 (n) | Δ vs (a) | Arm-only / (a)-only events | Sign test p | M1 per 100 | Flicker | Heeded mean |
+|---|---|---|---|---|---|---|---|---|
+| 615 | (a) base 10 | 54.5% (773) | – | – | – | 0.0 (448 first blows) | 77.1 | 10.6 |
+| 615 | (a) base 14 | 59.2% | +4.7 | 54 / 17 | 0.00001 | 0.0 | 103.4 (1.34×) | 14.3 |
+| 615 | (c) | 54.2% | −0.3 | 0 / 2 | 0.5 | 0.0 | 70.8 (0.92×) | 10.6 |
+| 468 | (a) base 10 | 54.2% (589) | – | – | – | 0.0 (327) | 77.2 | 10.5 |
+| 468 | (b) (void) | 56.0% | +1.8 | 36 / 25 | 0.20 | 0.31 | 64.5 (0.83×) | 9.5 |
+| 468 | (c) | 53.8% | −0.4 | 0 / 2 | 0.5 | 0.0 | 70.8 | 10.5 |
+
+- **(c)'s picks almost never change the heeded set:** 0.3% of events. Jev's `chosen` people were nearly always heeded already.
+- **(c) against (b)** (on (b)'s 468 states): −2.2 points, p=0.13.
+- **(b) on its 136 accepted policies only** (170 events):
+  - 60.0% against 53.5% for (a); 36 events where only (b) heeds against 25 where only (a) does; p=0.20.
+  - These policies keep fewer people individually (6.9 against 10.5) and flicker half as much.
+  - One first blow (of 100) came from someone the arm did not heed.
+- **Base 14:** shown without its own rule, as §3 says. It gains 4.7 points (p<0.001), short of the 5-point bar, with flicker at 1.34×.
+- **M1 is 0 for (a) and (c)** in every state, and no later blow came from an unheeded attacker: forced contact and the windup event pass hold.
+
+**What this does not establish.**
+- Who heeds what live (phase 3).
+- Whether a fixed heed section makes (b) better.
+- Anything about the side asymmetry.
+- **Sight and rank are distance-only:** the replay's in-sight set and ranks use distance only, with the scene-only filter applied to named people.
 
 ## Sources
 
