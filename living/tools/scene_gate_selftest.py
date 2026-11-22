@@ -339,6 +339,77 @@ def check_seed_fresh():
             seed_fresh.compile_seed = original[3]
 
 
+def check_flake_scope():
+    """A passing rerun excuses a first failure only when every failed part matches the case's
+    recorded flake (general coordinator, 2026-11-22: a combat `wolves` failure was excused under
+    combat's unrelated flake). The parts come from each case's own result files."""
+    cs, fv = scene_gate.case_status, scene_gate.flake_verdict
+    tick = "pause stops ticks, housekeeping and completion"
+    expect("flakes: a recorded flake part, rerun passing, is a flaky-pass that does not block",
+           cs("tick", False, True, [tick])[:2] == ("flaky-pass", False), cs("tick", False, True, [tick]))
+    wolves = "wolves:bold wolves attack a healthy adult player"
+    expect("flakes: combat failing in wolves, rerun passing, blocks as fail-unrecorded-flake",
+           cs("combat", False, True, [wolves])[:2] == ("fail-unrecorded-flake", True), cs("combat", False, True, [wolves]))
+    expect("flakes: a recorded part plus an unrecorded one blocks",
+           cs("tick", False, True, [tick, "nominal 60 Hz ticks advance"])[:2] == ("fail-unrecorded-flake", True))
+    expect("flakes: unknown failed parts (no result file), rerun passing, blocks",
+           cs("tick", False, True, None)[:2] == ("fail-unrecorded-flake", True) and "could not be read" in cs("tick", False, True, None)[2])
+    expect("flakes: a case with no flake record, rerun passing, blocks",
+           cs("sight", False, True, ["anything"])[:2] == ("fail-unrecorded-flake", True) and "no flake is recorded" in fv("sight", ["x"])[1])
+    expect("flakes: a pass is a pass; a double failure goes to main's verdict as before",
+           cs("tick", True, None, None)[:2] == ("pass", False) and cs("tick", False, False, [tick], "red-on-main")[:2] == ("red-on-main", False)
+           and cs("tick", False, False, [tick], "branch")[:2] == ("fail", True) and cs("tick", False, False, [tick])[:2] == ("fail-unjudged", True))
+    expect("flakes: the recorded mind tests and minds timeouts match by name; others do not",
+           fv("mind-unit", ["llm::tests::unreachable_provider_holds_calls"])[0]
+           and not fv("mind-unit", ["llm::tests::something_else"])[0]
+           and fv("dealings", ["RuntimeError: timed out after 60s waiting for demand record"])[0]
+           and not fv("dealings", ["RuntimeError: timed out after 90s waiting for demand met"])[0])
+    expect("flakes: every recorded flake has a why and a parts list; combat excuses nothing",
+           all(isinstance(c.get("flaky"), dict) and "why" in c["flaky"] and isinstance(c["flaky"].get("parts"), list)
+               for c in scene_gate.CASES.values() if "flaky" in c) and scene_gate.CASES["combat"]["flaky"]["parts"] == [])
+    with tempfile.TemporaryDirectory(prefix="flake-selftest-") as t:
+        root = Path(t)
+        (root / "failure.txt").write_text("Traceback (most recent call last):\n  File \"x.py\", line 1, in f\n"
+                                          "    assert len([e for e in run.exchanges() if e['purpose'] == 'talk']) == count\nAssertionError\n")
+        parts = scene_gate.minds_parts({"status": "fail", "error": "AssertionError: "}, root)
+        expect("flakes: a bare minds assert is named by its source line, and conversation's recorded one matches",
+               parts and parts[-1].startswith("AssertionError at: assert len(") and fv("conversation", parts)[0], parts)
+        reds = root / "reds.json"
+        reds.write_text("{}")
+
+        class Fake(Runner):
+            def __init__(self):
+                super().__init__("fixture", dict(os.environ), root, reds)
+
+            def world(self, root, run, seed, log, *args):
+                return True
+
+            def cleanup(self, root, run, log):
+                return 0
+
+            def sh(self, cmd, cwd, log, timeout, stdout=None, env=None):
+                ev = Path(cwd) / ".local/living/verify" / f"gate-fixture-{self.tag}"
+                ev.mkdir(parents=True, exist_ok=True)
+                if any(str(x).endswith("combat.py") for x in cmd):
+                    (ev / "combat.json").write_text(json.dumps([{"scene": "wolves", "check": "bold wolves attack a healthy adult player", "ok": False},
+                                                                {"scene": "kill", "check": "dies", "ok": True}]))
+                    return 1
+                if any(str(x).endswith("scenes.py") for x in cmd):
+                    (ev / "tick-results.json").write_text(json.dumps({"checks": {tick: {"passed": False}, "scene actors created": {"passed": True}}}))
+                    return 1
+                return 0
+
+        r = Fake()
+        r.tag = "a-player"
+        got = scene_gate.run_cases(r, root, ["combat"], "a")
+        expect("flakes: combat's failed parts are read from combat.json as scene:check",
+               r.case_parts.get(("a", "combat")) == [wolves], (got, r.case_parts))
+        r.tag = "a-core"
+        scene_gate.run_cases(r, root, ["tick"], "a")
+        expect("flakes: a verify-core scene's failed parts are its failed checks",
+               r.case_parts.get(("a", "tick")) == [tick], r.case_parts)
+
+
 def check_generation_group():
     """The generation cases: the genesis worlds' smoke first, a world of their own otherwise; a
     failing check passes only when the red-on-main list holds it as a part."""
@@ -885,6 +956,7 @@ def main():
     check_genesis_live()
     check_seed_fresh()
     check_generation_group()
+    check_flake_scope()
     check_staged_genesis()
     check_render_selection()
     check_render_load()
