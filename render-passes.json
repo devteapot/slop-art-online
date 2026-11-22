@@ -140,8 +140,8 @@
     "set": "79072c65d37f"
   },
   "ddfbf8390bb0730d08e9af76bd62371fc287a292": {
-    "at": "2026-11-22T18:51:27+01:00",
-    "base": "f778090a698567a17c27deea49d0190dc99dc102",
+    "at": "2026-11-22T19:58:44+01:00",
+    "base": "cc590da77fd747206e9ca23832c93c71a60d241b",
     "cases": {
       "camera-faces": "pass",
       "camera-lod": "pass",
@@ -150,18 +150,18 @@
       "looks": "pass",
       "seat": "pass"
     },
-    "evidence": "/home/carlid/.t3/worktrees/slop-art-online/coord-devbox-a85b508681228e52/.local/living/verify/gate-1122183002-0c18a0",
+    "evidence": "/home/carlid/.t3/worktrees/slop-art-online/coord-devbox-a85b508681228e52/.local/living/verify/gate-1122193749-a7f28a",
     "halves": [
       "character",
       "camera"
     ],
-    "head": "74a59f56e3ec97f6955573a2d857d904a32ff01d",
+    "head": "6a987909d505bc8a75765c300edbc77b15d6039b",
     "host": "dev-box",
     "load": [
       {
-        "end": 5.47,
+        "end": 4.31,
         "group": "render",
-        "start": 14.54,
+        "start": 4.83,
         "tag": "a-render"
       }
     ],
