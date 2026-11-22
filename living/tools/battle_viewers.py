@@ -606,7 +606,7 @@ def one(a, n, out):
                                   "relay": f"ws://127.0.0.1:{a.relay_port}" if a.relay and a.humans else None,
                                   "behaviour": {"walk_period_ms": 1500, "fight_period_ms": a.fight_ms, "rejoin_s": 3, "pools": True}, "players": players, "client": "gate",
                                   "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables, "character_tables": a.character_tables, "fighter_tables": a.fighter_tables,
-                                  "combat_feed": a.combat_feed, "crowd": a.crowd, "game_views": a.game_views, "fresh_every": a.fresh_every}))
+                                  "combat_feed": a.combat_feed, "crowd": a.crowd, "lines_table": a.lines_table, "game_views": a.game_views, "fresh_every": a.fresh_every}))
             joined = load.expect("joined", 900)
             lo, hi = (float(x) for x in a.ring.split(",")) if a.ring else (0.0, 6.0)
             humans_at = battle_spots(site, a.humans, 7.0)
@@ -992,6 +992,7 @@ def main():
     ap.add_argument("--clog", action="store_true", help="record the replica's commitlog growth on disk over the window, and its compressed size after the world is deleted, zstd -3 and -6 (result clog)")
     ap.add_argument("--sides", type=int, default=0, help="the fighters in this many sides (2-4) that fight each other, not bystanders (spawn_battle_sides)")
     ap.add_argument("--privacy", action="store_true", help="copy-privacy: prove each viewer receives only its own copy rows (needs --motion-tables --character-tables and both laws on); <out>/privacy-v<count>.json, exit 1 on a failed check")
+    ap.add_argument("--lines-table", action="store_true", help="gate-remeasure: the players read experience_copy in place of my_experience, as the shipped client")
     ap.add_argument("--humans", type=int, default=0, help="BATTLE_CONTRACT_CASES (contract-cases): this many of the --fighters are human clients (gate-load's battle role, GATE_216's decisions), placed in the fighters' 7 m; the AI fighters are the rest")
     ap.add_argument("--walkers", type=int, default=0, help="contract-cases: also this many walkers at lot doors round the settlements (GATE_216's walkers)")
     ap.add_argument("--fight-ms", type=int, default=250, help="contract-cases: a human fighter's decision period (GATE_216: 250 ms ±10%%)")

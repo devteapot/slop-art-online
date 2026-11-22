@@ -538,6 +538,7 @@ fn hook(p: &Player, log: &Log, own: Identity) {
     count!(conn, p.counts, seen_fighters_far);
     count!(conn, p.counts, seen_fighter_copy);
     count!(conn, p.counts, seen_crowd);
+    count!(conn, p.counts, experience_copy);
     count!(conn, p.counts, seen_doing_near);
     count!(conn, p.counts, seen_doing_far);
     count!(conn, p.counts, my_vitals);
@@ -1028,6 +1029,9 @@ fn players_mode() {
     // base set (living/game/src/net.rs `PERCEIVED` and `STATIC`), so a viewer costs what a real
     // client's subscriptions cost.
     let game_views = req["game_views"].as_bool().unwrap_or(false);
+    // gate-remeasure: my lines from `experience_copy` in place of `my_experience`, as the game client
+    // reads them while `lines_table_on` is on (experience-incremental, on main).
+    let lines_table = req["lines_table"].as_bool().unwrap_or(false);
     let fresh_every = req["fresh_every"].as_u64().unwrap_or(0) as usize;
     // BATTLE_CONTRACT_CASES (branch contract-cases): the delivery relay's WebSocket; with it, each
     // `battle` player reads its set's bodies from the relay (the relay arms: no copies are written).
@@ -1079,6 +1083,10 @@ fn players_mode() {
         }
         if crowd {
             queries.push("SELECT * FROM seen_crowd".to_string());
+        }
+        if lines_table {
+            queries.retain(|q| q.as_str() != "SELECT * FROM my_experience");
+            queries.push("SELECT * FROM experience_copy".to_string());
         }
         if game_views {
             queries.extend(["heard_sounds", "my_earshot", "my_senses", "my_act_outcomes", "my_offers", "my_known_names", "my_records", "speech_card", "cover_law"].map(|t| format!("SELECT * FROM {t}")));
