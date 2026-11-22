@@ -70,7 +70,7 @@ flowchart LR
 | `reveal`, `acquaintance` (private) | what a skill use revealed to an observer, until when; whose name a character was told | per appraisal; per introduction |
 | `connection`, `presence` (private) | open client connections; per played character, whether its person is there and whether the minds control it | per connection; per takeover or handback |
 
-Motion is steered (see [steering locomotion](#steering-locomotion)): a body stores an analytic segment (a turn, then straight) and the time steering looks again. Clients extrapolate; the server writes only at steering updates. Needs are analytic (`value + rate × elapsed`) and settled on change. The tick processes only due rows through btree ranges on `next_*_ms`, so an idle world costs almost nothing.
+Motion is steered (see [steering locomotion](#steering-locomotion)): a body stores an analytic segment (a turn, then straight) and the time steering looks again. Clients extrapolate; the server writes only at steering updates. Needs are analytic (`value + rate × elapsed`) and settled on change. The tick processes only due rows through btree ranges on `next_*_ms`, so an idle world costs almost nothing. Due rows go in due-time order, and rows due at the same millisecond in a fair order drawn from their ids and the tick count ([combat](COMBAT.md#two-blows-due-at-the-same-millisecond-and-the-cadences-order-2026-11-22)).
 
 ### Data model: game state vs. mind (agreed 2026-09-26)
 

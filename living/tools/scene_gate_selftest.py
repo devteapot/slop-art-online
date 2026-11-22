@@ -409,6 +409,24 @@ def check_flake_scope():
         expect("flakes: a verify-core scene's failed parts are its failed checks",
                r.case_parts.get(("a", "tick")) == [tick], r.case_parts)
 
+        class Raised(Fake):
+            def sh(self, cmd, cwd, log, timeout, stdout=None, env=None):
+                ev = Path(cwd) / ".local/living/verify" / f"gate-fixture-{self.tag}"
+                ev.mkdir(parents=True, exist_ok=True)
+                if any(str(x).endswith("scenes.py") for x in cmd):
+                    (ev / "tick-results.json").write_text(json.dumps({"checks": {"scene actors created": {"passed": True}},
+                                                                     "error": "TimeoutError: tick: condition did not become true in 30 s"}))
+                    return 1
+                return 0
+
+        r2 = Raised()
+        r2.tag = "a-core"
+        scene_gate.run_cases(r2, root, ["tick"], "a")
+        raised = r2.case_parts.get(("a", "tick"))
+        expect("flakes: a scene that stopped on an exception names it as a failed part (not 'could not be read')",
+               raised == ["error: TimeoutError: tick: condition did not become true in 30 s"]
+               and "could not be read" not in scene_gate.flake_verdict("tick", raised)[1], raised)
+
 
 def check_generation_group():
     """The generation cases: the genesis worlds' smoke first, a world of their own otherwise; a

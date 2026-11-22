@@ -16,9 +16,7 @@
 
 use crate::phase::Phase;
 use bevy::prelude::*;
-use living_bindings::*;
 use living_rules::script::speech::{Carry, WaySpec, SAY};
-use spacetimedb_sdk::Table;
 use std::collections::HashMap;
 
 /// Characters a second a line is spoken at.
@@ -208,12 +206,12 @@ fn lines(mut m: ResMut<Mouths>, net: NonSend<crate::net::Net>, scene: NonSend<cr
         // A reply's mouth starts with its bubble, at speaking pace (reply-pace, `heard::paced`),
         // worked out only when a new row comes.
         let mut pace: Option<HashMap<u64, f64>> = None;
-        for e in conn.db.my_experience().iter().filter(|e| e.observer == me && e.subject != me && now - (e.at_ms as f64) < 10_000.0) {
+        for e in crate::net::my_lines(&conn.db).into_iter().filter(|e| e.observer == me && e.subject != me && now - (e.at_ms as f64) < 10_000.0) {
             if m.read.contains_key(&e.id) {
                 continue;
             }
             let pace = pace.get_or_insert_with(|| {
-                let rows: Vec<_> = conn.db.my_experience().iter().filter(|e| e.observer == me).collect();
+                let rows: Vec<_> = crate::net::my_lines(&conn.db).into_iter().filter(|e| e.observer == me).collect();
                 crate::heard::pace_rows(rows.iter()).into_iter().map(|(e, _, p)| (e.id, p.shown_ms)).collect()
             });
             let start = pace.get(&e.id).copied().unwrap_or(e.at_ms as f64);

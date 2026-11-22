@@ -8,7 +8,6 @@ use bevy::input::gestures::RotationGesture;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::pbr::{DistanceFog, FogFalloff};
 use bevy::prelude::*;
-use living_bindings::*;
 
 pub const SKY: Color = Color::srgb(0.62, 0.74, 0.86);
 
@@ -392,11 +391,8 @@ fn talk_partner(net: &Net, scene: &Scene, input: &Input) -> Option<u32> {
     let (conn, me) = (net.conn.as_ref()?, net.my_id?);
     let (mine, _) = scene.shown.get(&me)?;
     let near = |id: u32, r: f32| scene.shown.get(&id).is_some_and(|(p, _)| p.distance(*mine) < r);
-    use spacetimedb_sdk::Table;
-    let heard = conn
-        .db
-        .my_experience()
-        .iter()
+    let heard = crate::net::my_lines(&conn.db)
+        .into_iter()
         .filter(|e| e.observer == me && e.kind == "speech" && scene.now_ms - (e.at_ms as f64) < 8_000.0 && near(e.subject, 8.0))
         .max_by_key(|e| e.at_ms)
         .map(|e| e.subject);

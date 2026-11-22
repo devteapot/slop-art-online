@@ -87,6 +87,8 @@ pub mod doing_type;
 pub mod earshot_way_type;
 pub mod expecting_table;
 pub mod expecting_type;
+pub mod experience_copy_table;
+pub mod experience_copy_type;
 pub mod experience_table;
 pub mod experience_type;
 pub mod familiar_table;
@@ -178,6 +180,8 @@ pub mod line_heard_table;
 pub mod line_heard_type;
 pub mod line_seen_table;
 pub mod line_seen_type;
+pub mod lines_state_table;
+pub mod lines_state_type;
 pub mod look_line_table;
 pub mod look_line_type;
 pub mod look_table;
@@ -475,6 +479,8 @@ pub use doing_type::Doing;
 pub use earshot_way_type::EarshotWay;
 pub use expecting_table::*;
 pub use expecting_type::Expecting;
+pub use experience_copy_table::*;
+pub use experience_copy_type::ExperienceCopy;
 pub use experience_table::*;
 pub use experience_type::Experience;
 pub use familiar_table::*;
@@ -566,6 +572,8 @@ pub use line_heard_table::*;
 pub use line_heard_type::LineHeard;
 pub use line_seen_table::*;
 pub use line_seen_type::LineSeen;
+pub use lines_state_table::*;
+pub use lines_state_type::LinesState;
 pub use look_line_table::*;
 pub use look_line_type::LookLine;
 pub use look_table::*;
@@ -1459,6 +1467,7 @@ pub struct DbUpdate {
     doing_seen: __sdk::TableUpdate<DoingSeen>,
     expecting: __sdk::TableUpdate<Expecting>,
     experience: __sdk::TableUpdate<Experience>,
+    experience_copy: __sdk::TableUpdate<ExperienceCopy>,
     familiar: __sdk::TableUpdate<Familiar>,
     far_handle: __sdk::TableUpdate<FarHandle>,
     fast_ask: __sdk::TableUpdate<FastAsk>,
@@ -1493,6 +1502,7 @@ pub struct DbUpdate {
     law_revision: __sdk::TableUpdate<LawRevision>,
     line_heard: __sdk::TableUpdate<LineHeard>,
     line_seen: __sdk::TableUpdate<LineSeen>,
+    lines_state: __sdk::TableUpdate<LinesState>,
     look: __sdk::TableUpdate<Look>,
     look_line: __sdk::TableUpdate<LookLine>,
     lot: __sdk::TableUpdate<Lot>,
@@ -1703,6 +1713,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "experience" => db_update
                     .experience
                     .append(experience_table::parse_table_update(table_update)?),
+                "experience_copy" => db_update
+                    .experience_copy
+                    .append(experience_copy_table::parse_table_update(table_update)?),
                 "familiar" => db_update
                     .familiar
                     .append(familiar_table::parse_table_update(table_update)?),
@@ -1805,6 +1818,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "line_seen" => db_update
                     .line_seen
                     .append(line_seen_table::parse_table_update(table_update)?),
+                "lines_state" => db_update
+                    .lines_state
+                    .append(lines_state_table::parse_table_update(table_update)?),
                 "look" => db_update
                     .look
                     .append(look_table::parse_table_update(table_update)?),
@@ -2219,6 +2235,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.experience = cache
             .apply_diff_to_table::<Experience>("experience", &self.experience)
             .with_updates_by_pk(|row| &row.id);
+        diff.experience_copy = cache
+            .apply_diff_to_table::<ExperienceCopy>("experience_copy", &self.experience_copy)
+            .with_updates_by_pk(|row| &row.id);
         diff.familiar = cache
             .apply_diff_to_table::<Familiar>("familiar", &self.familiar)
             .with_updates_by_pk(|row| &row.id);
@@ -2318,6 +2337,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.line_seen = cache
             .apply_diff_to_table::<LineSeen>("line_seen", &self.line_seen)
             .with_updates_by_pk(|row| &row.id);
+        diff.lines_state = cache
+            .apply_diff_to_table::<LinesState>("lines_state", &self.lines_state)
+            .with_updates_by_pk(|row| &row.viewer);
         diff.look = cache
             .apply_diff_to_table::<Look>("look", &self.look)
             .with_updates_by_pk(|row| &row.id);
@@ -2707,6 +2729,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "experience" => db_update
                     .experience
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "experience_copy" => db_update
+                    .experience_copy
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "familiar" => db_update
                     .familiar
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2808,6 +2833,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "line_seen" => db_update
                     .line_seen
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "lines_state" => db_update
+                    .lines_state
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "look" => db_update
                     .look
@@ -3212,6 +3240,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "experience" => db_update
                     .experience
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "experience_copy" => db_update
+                    .experience_copy
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "familiar" => db_update
                     .familiar
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3313,6 +3344,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "line_seen" => db_update
                     .line_seen
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "lines_state" => db_update
+                    .lines_state
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "look" => db_update
                     .look
@@ -3647,6 +3681,7 @@ pub struct AppliedDiff<'r> {
     doing_seen: __sdk::TableAppliedDiff<'r, DoingSeen>,
     expecting: __sdk::TableAppliedDiff<'r, Expecting>,
     experience: __sdk::TableAppliedDiff<'r, Experience>,
+    experience_copy: __sdk::TableAppliedDiff<'r, ExperienceCopy>,
     familiar: __sdk::TableAppliedDiff<'r, Familiar>,
     far_handle: __sdk::TableAppliedDiff<'r, FarHandle>,
     fast_ask: __sdk::TableAppliedDiff<'r, FastAsk>,
@@ -3681,6 +3716,7 @@ pub struct AppliedDiff<'r> {
     law_revision: __sdk::TableAppliedDiff<'r, LawRevision>,
     line_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
     line_seen: __sdk::TableAppliedDiff<'r, LineSeen>,
+    lines_state: __sdk::TableAppliedDiff<'r, LinesState>,
     look: __sdk::TableAppliedDiff<'r, Look>,
     look_line: __sdk::TableAppliedDiff<'r, LookLine>,
     lot: __sdk::TableAppliedDiff<'r, Lot>,
@@ -3856,6 +3892,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<DoingSeen>("doing_seen", &self.doing_seen, event);
         callbacks.invoke_table_row_callbacks::<Expecting>("expecting", &self.expecting, event);
         callbacks.invoke_table_row_callbacks::<Experience>("experience", &self.experience, event);
+        callbacks.invoke_table_row_callbacks::<ExperienceCopy>(
+            "experience_copy",
+            &self.experience_copy,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Familiar>("familiar", &self.familiar, event);
         callbacks.invoke_table_row_callbacks::<FarHandle>("far_handle", &self.far_handle, event);
         callbacks.invoke_table_row_callbacks::<FastAsk>("fast_ask", &self.fast_ask, event);
@@ -3930,6 +3971,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<LineHeard>("line_heard", &self.line_heard, event);
         callbacks.invoke_table_row_callbacks::<LineSeen>("line_seen", &self.line_seen, event);
+        callbacks.invoke_table_row_callbacks::<LinesState>("lines_state", &self.lines_state, event);
         callbacks.invoke_table_row_callbacks::<Look>("look", &self.look, event);
         callbacks.invoke_table_row_callbacks::<LookLine>("look_line", &self.look_line, event);
         callbacks.invoke_table_row_callbacks::<Lot>("lot", &self.lot, event);
@@ -4844,6 +4886,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         doing_seen_table::register_table(client_cache);
         expecting_table::register_table(client_cache);
         experience_table::register_table(client_cache);
+        experience_copy_table::register_table(client_cache);
         familiar_table::register_table(client_cache);
         far_handle_table::register_table(client_cache);
         fast_ask_table::register_table(client_cache);
@@ -4878,6 +4921,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         law_revision_table::register_table(client_cache);
         line_heard_table::register_table(client_cache);
         line_seen_table::register_table(client_cache);
+        lines_state_table::register_table(client_cache);
         look_table::register_table(client_cache);
         look_line_table::register_table(client_cache);
         lot_table::register_table(client_cache);
@@ -5010,6 +5054,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "doing_seen",
         "expecting",
         "experience",
+        "experience_copy",
         "familiar",
         "far_handle",
         "fast_ask",
@@ -5044,6 +5089,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "law_revision",
         "line_heard",
         "line_seen",
+        "lines_state",
         "look",
         "look_line",
         "lot",

@@ -227,6 +227,10 @@ thread_local! {
     static MOTION_TABLES: Cell<Option<bool>> = const { Cell::new(None) };
     /// The `characters_table_on` law at the last tick (as `MOTION_TABLES`).
     static CHAR_TABLES: Cell<Option<bool>> = const { Cell::new(None) };
+    /// The `lines_table_on` law at the last tick (as `MOTION_TABLES`).
+    static LINES_TABLE: Cell<Option<bool>> = const { Cell::new(None) };
+    /// `lines_table_check`'s running total: viewer-ticks compared, differed, ticks since the last log.
+    static LINES_CHECKED: Cell<(u64, u64, u64)> = const { Cell::new((0, 0, 0)) };
     /// The `fighter_tables_on` law at the last tick (as `MOTION_TABLES`).
     static FIGHTER_TABLES: Cell<Option<bool>> = const { Cell::new(None) };
     /// Whether `copy_state` may hold a row (`None`: not looked at in this instance). Never set
@@ -524,6 +528,7 @@ pub fn all_full() {
     MOTION_TABLES.with(|m| m.set(None));
     CHAR_TABLES.with(|m| m.set(None));
     FIGHTER_TABLES.with(|m| m.set(None));
+    LINES_TABLE.with(|m| m.set(None));
 
     TARGETS.with(|t| TARGET_DIRTY.with(|d| d.borrow_mut().extend(t.borrow().keys().copied())));
 }
@@ -587,6 +592,19 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: crate::perception::Swept) 
             common::diag(|| "characters_table:dropped", n as u64);
             log::info!("characters table off: {n} mirror rows dropped");
         }
+    }
+    // The `lines_table_on` law (experience-incremental): on, each player's lines are also rows of
+    // `experience_copy`; off, the first tick to see it so drops every copy.
+    let lines = common::laws(ctx).lines_table_on;
+    if all_back(LINES_TABLE.with(|m| m.replace(Some(lines))), lines) {
+        let n = drop_line_copies(ctx);
+        if n > 0 {
+            common::diag(|| "lines_table:dropped", n as u64);
+            log::info!("lines table off: {n} line copies dropped");
+        }
+    }
+    if common::laws(ctx).lines_table_check {
+        check_line_copies(ctx);
     }
     // The `fighter_tables_on` law (views step 3): as the motion tables, for the fighter copies.
     let fighters = common::laws(ctx).fighter_tables_on;
@@ -1008,6 +1026,10 @@ fn frame(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64, on: bool, mut 
     if CHAR_TABLES.with(|m| m.get()) == Some(true) && !crate::perception::mirrored(ctx, v.who) {
         let n = crate::perception::fill_mirror(ctx, v.who);
         common::diag(|| "characters_table:filled", n as u64);
+    }
+    if LINES_TABLE.with(|m| m.get()) == Some(true) && ctx.db.lines_state().viewer().find(v.who).is_none() {
+        let n = lines_resync(ctx, v.who, crate::perception::current_of(ctx, v.who).map(|c| c.id));
+        common::diag(|| "lines_table:filled", n as u64);
     }
     if let Some(scene) = v.scene.as_ref() {
         let since = if v.full { 0 } else { v.seq };
@@ -1579,6 +1601,9 @@ const SEEN_FIGHTER_COPY_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("
 // Row-level security for a player's combat feed as events (views step 2, `combat_feed_on`).
 #[spacetimedb::client_visibility_filter]
 const COMBAT_FEED_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT * FROM combat_feed WHERE viewer = :sender");
+// Row-level security for a player's copies of its lines (experience-incremental, `lines_table_on`).
+#[spacetimedb::client_visibility_filter]
+const EXPERIENCE_COPY_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT * FROM experience_copy WHERE viewer = :sender");
 
 /// A creature's band as this viewer perceives it now (255 while its projection hides health),
 /// with its projection row.
@@ -1608,14 +1633,19 @@ fn show_band(ctx: &ReducerContext, who: Identity, body: u32, now: u64) {
     }
 }
 
-/// Release a character's staged experience lines and keep the newest [`LINES_SHOWN`].
+/// Release a character's staged experience lines and keep the newest [`LINES_SHOWN`]; with the
+/// `lines_table_on` law, the copies of the viewer whose copies hold this character follow.
 fn release_lines(ctx: &ReducerContext, id: u32) {
     let staged: Vec<LineSeen> = ctx.db.line_seen().by_observer_shown().filter((id, false)).collect();
     if staged.is_empty() {
         return;
     }
+    let copies: Vec<Identity> = ctx.db.lines_state().character().filter(id).map(|s| s.viewer).collect();
     for mut l in staged {
         l.shown = true;
+        for who in &copies {
+            line_copy_put(ctx, *who, &l.line);
+        }
         ctx.db.line_seen().id().update(l);
     }
     let mut shown: Vec<u64> = ctx.db.line_seen().by_observer_shown().filter((id, true)).map(|l| l.id).collect();
@@ -1623,9 +1653,88 @@ fn release_lines(ctx: &ReducerContext, id: u32) {
         shown.sort_unstable();
         for old in &shown[..shown.len() - LINES_SHOWN] {
             ctx.db.line_seen().id().delete(*old);
+            ctx.db.experience_copy().id().delete(*old);
             crate::outcomes::dropped(ctx, *old);
         }
     }
+}
+
+/// A copy of a shown line for viewer `who` (a row already there, module memory that missed a
+/// rollback, is replaced, not a duplicate key).
+fn line_copy_put(ctx: &ReducerContext, who: Identity, line: &Experience) {
+    ctx.db.experience_copy().id().delete(line.id);
+    ctx.db.experience_copy().insert(ExperienceCopy { id: line.id, viewer: who, row: line.clone() });
+}
+
+/// Make viewer `who`'s `experience_copy` rows whole for `character` (the one `my_experience` shows
+/// it now; `None`: no lines, a character the minds hold), in this transaction, and record it
+/// (`lines_state`). Only while the `lines_table_on` law is on; returns the rows written.
+pub fn lines_resync(ctx: &ReducerContext, who: Identity, character: Option<u32>) -> usize {
+    if !common::laws(ctx).lines_table_on {
+        return 0;
+    }
+    for r in ctx.db.experience_copy().viewer().filter(who).collect::<Vec<_>>() {
+        ctx.db.experience_copy().id().delete(r.id);
+    }
+    let rows: Vec<LineSeen> = character.map(|c| ctx.db.line_seen().by_observer_shown().filter((c, true)).collect()).unwrap_or_default();
+    for l in &rows {
+        line_copy_put(ctx, who, &l.line);
+    }
+    let state = LinesState { viewer: who, character: character.unwrap_or(0) };
+    if ctx.db.lines_state().viewer().find(who).is_some() {
+        ctx.db.lines_state().viewer().update(state);
+    } else {
+        ctx.db.lines_state().insert(state);
+    }
+    rows.len()
+}
+
+/// The kill switch of the `lines_table_on` law: every line copy and every viewer's record go in
+/// this transaction.
+fn drop_line_copies(ctx: &ReducerContext) -> usize {
+    let ids: Vec<u64> = ctx.db.experience_copy().iter().map(|r| r.id).collect();
+    for id in &ids {
+        ctx.db.experience_copy().id().delete(*id);
+    }
+    for s in ctx.db.lines_state().iter().map(|s| s.viewer).collect::<Vec<_>>() {
+        ctx.db.lines_state().viewer().delete(s);
+    }
+    ids.len()
+}
+
+/// The `lines_table_check` law (a diagnostic, off in play): every viewer whose copies are whole
+/// holds exactly the rows `my_experience` returns it (`perception::current_of`, its shown lines).
+/// A difference counts `lines_table:differed` and is logged; the viewers compared count
+/// `lines_table:checked`.
+fn check_line_copies(ctx: &ReducerContext) {
+    let (mut checked, mut differed) = (0u64, 0u64);
+    for s in ctx.db.lines_state().iter().collect::<Vec<_>>() {
+        let want: Vec<Experience> = crate::perception::current_of(ctx, s.viewer)
+            .map(|c| ctx.db.line_seen().by_observer_shown().filter((c.id, true)).map(|l| l.line).collect())
+            .unwrap_or_default();
+        let mut want: Vec<(u64, Experience)> = want.into_iter().map(|e| (e.id, e)).collect();
+        let mut have: Vec<(u64, Experience)> = ctx.db.experience_copy().viewer().filter(s.viewer).map(|r| (r.id, r.row)).collect();
+        want.sort_by_key(|x| x.0);
+        have.sort_by_key(|x| x.0);
+        checked += 1;
+        common::diag(|| "lines_table:checked", 1);
+        if want != have {
+            differed += 1;
+            common::diag(|| "lines_table:differed", 1);
+            log::error!("lines table: {}'s copies ({} rows) differ from my_experience ({} rows)", s.viewer, have.len(), want.len());
+        }
+    }
+    // A running total, logged every 600 ticks (readable without profiling).
+    LINES_CHECKED.with(|c| {
+        let (n, d, t) = c.get();
+        let (n, d, t) = (n + checked, d + differed, t + 1);
+        if t >= 600 {
+            log::info!("lines table check: {n} viewer-ticks compared, {d} differed (600 ticks)");
+            c.set((0, 0, 0));
+        } else {
+            c.set((n, d, t));
+        }
+    });
 }
 
 /// An experience line was written for a player's character: staged for its next frame.
@@ -1699,10 +1808,12 @@ mod tests {
         MOTION_TABLES.with(|m| m.set(Some(false)));
         CHAR_TABLES.with(|m| m.set(Some(false)));
         FIGHTER_TABLES.with(|m| m.set(Some(false)));
+        LINES_TABLE.with(|m| m.set(Some(false)));
         all_full();
         assert_eq!(MOTION_TABLES.with(|m| m.get()), None);
         assert_eq!(CHAR_TABLES.with(|m| m.get()), None);
         assert_eq!(FIGHTER_TABLES.with(|m| m.get()), None);
+        assert_eq!(LINES_TABLE.with(|m| m.get()), None);
         // A copy moved either way holds the same row the motion views return.
         let m = Moving { id: 5, x: 1.5, y: -2.0, t_ms: 77, vx: 0.5, vy: 0.25, heading: 1.0, turn: 0.1, turn_s: 0.3, next_ms: 99, speed: 1.2, face_off: 0.2, face_turn: -0.1, face_turn_s: 0.4, running: true };
         let private = MotionSeen::with(key(3, 5), Identity::ZERO, &m);
