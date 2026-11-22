@@ -535,7 +535,9 @@ impl<'a> Ev<'a> {
             (0.0, 0.0, 0.0)
         };
         // An attack or a threat aimed at me right now.
-        let threatened = if self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now) { 1.0 } else { 0.0 };
+        // Under heed, only a windup by an individual weighs: one from the throng is not seen coming.
+        let (ctx, heed) = (self.ctx, self.heed);
+        let threatened = if ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now && (!heed || crate::heed::individual(ctx, me, a.id, now))) { 1.0 } else { 0.0 };
         // Company is one's own kind (people for a person, the herd or pack for an animal).
         let kind = self.me.kind.clone();
         let people = self.creatures().iter().filter(|c| *c.kind == *kind).count() as f32;

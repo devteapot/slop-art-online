@@ -1,11 +1,11 @@
 {
  "title": "E4 heed arena: 6 bold wolves v 6 people with spears, spread start, night",
- "about": "docs/ATTENTION_E4.md: the pack arena (docs/PACK_MIND.md \u00a75) with people who fight back on spawn_battle's combat graph aimed at wolves (block or dodge when threatened, else attack the nearest wolf). Only the people's heed capacity varies between arms (variants in living/trials/heed-e4-variants.json). The island's other wolves and its deer are moved to the settlement farthest from the arena and kept still. Nothing learned here is kept: the world is deleted after the evidence is taken.",
+ "about": "docs/ATTENTION_E4.md: the pack arena (docs/PACK_MIND.md \u00a75), the people carrying spears and on their own starting behaviour (their fake minds install it and keep it). Only the people's heed capacity varies between arms (variants in living/trials/heed-e4-variants.json). The island's other wolves and its deer are moved to the settlement farthest from the arena and kept still. Nothing learned here is kept: the world is deleted after the evidence is taken.",
  "world": {
   "seed": "island",
   "start_hour": 21
  },
- "minutes": 6,
+ "minutes": 5,
  "life": {
   "stop_on_death": false
  },
@@ -25,7 +25,14 @@
   "experiences": true
  },
  "variants": [
-  "heed-off"
+  "heed-off",
+  "heed-formula",
+  "heed-cap1",
+  "heed-cap2",
+  "heed-cap4",
+  "heed-cap8",
+  "heed-cap16",
+  "heed-cap32"
  ],
  "minds": {
   "roles": [
@@ -50,7 +57,7 @@
    }
   },
   "clear_items": true,
-  "clear_routines": true
+  "clear_routines": false
  },
  "cast": {
   "pack": {
@@ -219,62 +226,7 @@
     {
      "do": "graph",
      "who": "subject",
-     "graphs": [
-      {
-       "first": {
-        "label": "combat",
-        "children": [
-         {
-          "if": {
-           "cond": {
-            "threatened": true
-           },
-           "then": {
-            "do": {
-             "skill": "dodge"
-            }
-           }
-          }
-         },
-         {
-          "do": {
-           "skill": "attack",
-           "target": {
-            "nearest": "wolf"
-           }
-          }
-         }
-        ]
-       }
-      },
-      {
-       "first": {
-        "label": "combat",
-        "children": [
-         {
-          "if": {
-           "cond": {
-            "threatened": true
-           },
-           "then": {
-            "do": {
-             "skill": "block"
-            }
-           }
-          }
-         },
-         {
-          "do": {
-           "skill": "attack",
-           "target": {
-            "nearest": "wolf"
-           }
-          }
-         }
-        ]
-       }
-      }
-     ],
+     "graph": "original",
      "after": 1
     },
     {

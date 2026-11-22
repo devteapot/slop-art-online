@@ -14,6 +14,38 @@
    "heed_trace": true
   }
  },
+ "heed-cap1": {
+  "about": "E4: heed on, people's capacity fixed at 1 (wolves on the formula), ceiling 32.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "heed_on": true,
+   "heed_ceiling": 32,
+   "heed_trace": true
+  },
+  "skills_patch": {
+   "people_capacity": [
+    "fn heed_capacity(a) {",
+    "fn heed_capacity(a) {\n    if a.actor.kind == \"person\" { return 1.0; }"
+   ]
+  }
+ },
+ "heed-cap2": {
+  "about": "E4: heed on, people's capacity fixed at 2 (wolves on the formula), ceiling 32.",
+  "models": {},
+  "env": {},
+  "world_laws": {
+   "heed_on": true,
+   "heed_ceiling": 32,
+   "heed_trace": true
+  },
+  "skills_patch": {
+   "people_capacity": [
+    "fn heed_capacity(a) {",
+    "fn heed_capacity(a) {\n    if a.actor.kind == \"person\" { return 2.0; }"
+   ]
+  }
+ },
  "heed-cap4": {
   "about": "E4: heed on, people's capacity fixed at 4 (wolves on the formula), ceiling 32.",
   "models": {},
