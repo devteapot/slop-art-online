@@ -328,7 +328,7 @@ The general coordinator kept mind-written heed policies in the design ("the mind
 - All 615 states. 777 calls: 615 first replies and 162 repair turns.
 - 0 errors. No stop rule tripped: rule 6 saw 43 of the first 53 replies valid.
 - **Spend $2.31** of the $2.90 cap; the guard's stop was at $2.40. Mean completion: 4.2k tokens a call.
-- E5's total is now **$13.11 of $27**.
+- E5's total is now **$13.10 of $27**.
 - **Switches:**
   - The recording's laws as in §6 (`heed_on`, `heed_fixed_capacity` 32, `heed_ceiling` 32, `heed_instinct` 2, `sides_mixed_defence` ON, `sides_minded`, `sides_first` 0, the `people` mix).
   - (b) on the subject's recorded route (GLM Flash, low effort) with `--repair 1`, concurrency 8, all eight stop rules on.
