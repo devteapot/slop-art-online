@@ -410,11 +410,41 @@ On main, the duellist installed second won all 208, because the wake round evalu
 - Not covered:
   - ties among missiles (`combat::missiles`);
   - the `wake` table's storage order. It no longer decides a tie, since two windups started in one tick now tie by the coin whichever is written first;
-  - battles beyond 200 fighters and the 512-row case, which is reasoned from the source;
-  - the sort's cost, which was not measured.
+  - battles beyond 200 fighters and the 512-row case, which is reasoned from the source.
 - Evidence: `~/slop-evidence/fair-ties-20261122.tar.zst` on the Spark, sha256 `70688ebcb34a33b60d2aca61c5e5d716bc9e986932a18d51ce5d00734a1adae5`. It holds the det_compare outputs and tie logs, the duel runs and analysis, the local diagnostic patches and every scene run directory.
 
+### Cost (measured 2026-11-22, branch `fair-ties-cost`)
 
+**The sorts and the turn themselves: about 0.04 ms/s of the database thread, under 1 µs a tick.** This was measured with a local measuring build (main `0877fe93a` with a detail span around each sort and around `cadence_turn`, an empty span for the stopwatch's own floor, and counts of the rows sorted; never committed). One run at `profile_detail`, with the module's whole log read:
+
+| Span | Calls/s | ms/s | Mean µs a tick (p99) |
+| --- | ---: | ---: | ---: |
+| `tie.sort.motion` | 60 | 0.030 | 0.49 (0.90) |
+| `tie.sort.activity` | 60 | 0.005 | 0.08 (0.29) |
+| `tie.cadence_turn` | 60 | 0.011 | 0.19 (0.43) |
+| `tie.empty` (the stopwatch's floor) | 60 | 0.003 | 0.04 (0.05) |
+| `tick`, for scale | 60 | 345.7 | 5,763 |
+
+About 1.8 due rows a tick are sorted in each list (106 motion and 112 activity rows a second): the battle's due lists are short most ticks, and only a tick's ties take the coin's hash.
+
+**The whole tick, A/B: no difference beyond the runs' spread.**
+- **Fixture:** `battle_viewers.py` on Cullet compiled in (`LIVING_SEED=cullet`), 200 AI fighters kept at 200 (`--keep-fighters 1`; 197.4 alive on average), 0 viewers, 20 s warm-up, a 60 s window, a fresh world per run. Profiling was off (L0, `--detail --no-profile`: the server's metrics and thread CPU only).
+- **Host:** the private server `slop-ftcost-stdb` pinned to the X925 cores (5–9, 15–19), with the driver, the metric sampler and the keeper on the A725 cores. The governor was `performance`.
+- **Discipline:** one series under `~/slop-mq/battle.lock`, every run started with the merge lock free and the 1-minute load under 4 (0.8–2.8). The window's load rose at most 0.65 above its running minimum and ended at most 2.6, so no run needed a redo. Interleaved B F C C F B, then B F F B.
+- **Per-second figures:** the tick's metrics were sampled every second, and the p95 is over each run's 60 one-second samples.
+
+| Arm | Runs | Ticks/s | Tick WASM ms/s, mean (runs) | Tick WASM ms/s, per-second p95 | Whole tick call ms/s | DB thread CPU ms/s |
+| --- | ---: | ---: | --- | ---: | ---: | ---: |
+| main before fair-ties, `85a7478c6` | 4 | 59.97 | 281.6 (277.8–287.6) | 301.7 | 290.4 | 298.6 |
+| main with fair-ties, `0877fe93a` | 4 | 59.97 | 284.6 (281.7–292.3) | 301.5 | 293.4 | 301.5 |
+| `0877fe93a` with the tie-break and the turn compiled out | 2 | 59.97 | 281.0 (275.5–286.6) | 303.2 | 289.4 | 297.5 |
+
+- **Fair-ties less before:** +3.0 ms/s tick WASM, 95% CI −5.5 to +11.5 (Welch over the runs). For the whole tick call it is +3.0 (±9.3), and for the database thread +2.8 (±9.7).
+- **The p95 of the one-second figures:** 301.5 against 301.7.
+- **The runs' spread:** between runs of one arm, 10 ms/s (the control's two runs are 11 apart). The spans bound the code's own share at about 0.04 ms/s. Anything beyond that in the A/B would come from the battle going differently (which blow lands first, which fighter the cadence reaches first), not from the sort. The A/B cannot resolve it.
+- **Evidence:** `~/slop-evidence/fair-ties-cost-20261122.tar.zst` on the Spark, sha256 `a103ad367dcca3db9a243913bec782b2ecec45a73e72b81a40330f465d3b14e7`. It holds every run's `battle_viewers` output, the per-second metric samples, the module logs, the driver, the analysis and the measuring patch.
+
+## What is missing
 
 - **More skills, and learning them.** Six skills on a fixed bar; no skill choice, no skill-learning path beyond the seed's newcomer kit and know-how. Classes from combinations are not yet possible beyond what the six allow.
 - **Balance.** Numbers are a first pass, untuned against players. Since "One damage rule" every blow does its full damage, so fights between people end in deaths unless someone breaks off; there is no way to limit a blow's strength yet.
