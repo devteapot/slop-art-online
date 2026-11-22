@@ -1,0 +1,45 @@
+{
+ "kind": "life",
+ "title": "Heed E3: a Cullet town of minds, every body sampled",
+ "about": "docs/ATTENTION_E3.md: the recording for E3's town states. Cullet's own seed and laws (48 m day sight); the mind service thinks for the first 40 adults of the first town by id, all 40 the trial's subject (LIVING_ONLY), nothing scripted or repurposed. Every creature's body, fighter row, activity and vitals are sampled 5 times a second (record.bodies all), with every experience and thought. Run on the fake model (`--fake`) for missed first blows, flicker, promotions and the size of the beyond-8 sample; a real-mind run of it is the proposal for the acted-on measure (not run).",
+ "gradient": "None: a recording, not an experiment.",
+ "world": {
+  "seed": "cullet"
+ },
+ "minutes": 15,
+ "keep_db": true,
+ "subject": {
+  "pick": {
+   "kind": "person",
+   "stage": 2,
+   "group": 0,
+   "count": 40
+  },
+  "clear_items": false,
+  "clear_routines": false
+ },
+ "cast": {},
+ "timeline": [],
+ "minds": {
+  "concurrency": 64
+ },
+ "life": {
+  "snapshot_min": 60,
+  "stop_on_death": false
+ },
+ "probes": [],
+ "budget": {
+  "runaway_calls_per_min": 400
+ },
+ "record": {
+  "bodies": {
+   "hz": 5,
+   "all": true
+  },
+  "experiences": true,
+  "thoughts": true
+ },
+ "variants": [
+  "default"
+ ]
+}

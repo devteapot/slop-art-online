@@ -28,7 +28,7 @@ dev-box answered §12 from main's code (`docs/ATTENTION_BUDGET_DEVBOX_ANSWERS.md
 | attention policy, `"attend"` reply field | heed policy, `"heed"` field |
 | attention instinct (`attend_person`, …) | heed instinct, `heed_person`, … in `living/seeds/heed.json` |
 | `attention_capacity(a)`, its knack | `heed_capacity(a)`, `heed_knack()` (`watch`) |
-| `attend_on`, `attend_ceiling` | `heed_on`, `heed_ceiling`; and `heed_contact_s` (new, below) |
+| `attend_on`, `attend_ceiling` | `heed_on`, `heed_ceiling`; and `heed_contact_s`, `heed_closing_s` (new, below) |
 | `attend_policy`, `attend_pick`, `attend_effect` | `heed_policy`, `heed_pick`, `heed_effect` |
 | conditions `attended_s`, `acting_on_attended` | `heeded_s`, `acting_on_heeded` |
 | the crowd, `seen_crowd`, the scene's `crowds` | the **throng**, `seen_throng`, the scene's `throngs` |
@@ -55,6 +55,12 @@ dev-box answered §12 from main's code (`docs/ATTENTION_BUDGET_DEVBOX_ANSWERS.md
 - Throngs stay in their own `throngs` array in a mind's scene, never among `creatures` without an id, so recall builds no `person:null` key.
 
 **5. The cost table is an extrapolation** (dev-box point 2). The per-pair cost is not constant: about 2 µs a tick at about 58 in sight, 10.6 µs at about 166 (docs/COMBAT_PHASE.md, Part A). §6's table applies one i to C = 60 and C = 200 alike, and is extrapolated from one density pending E2. dev-box proposes a `far_cap` sweep (0, 48, 32, 16, 8) that would measure the near and far marginal costs and their dependence on C.
+
+**7. Steadier salience (after dev-box's E2).** E2 ran the v2 instinct at ceiling 16 without holds for 216 viewers: 612 flip-backs within 2 s per viewer-minute, touching 59% of heeded creatures, and 13.4 promotions per viewer-second. dev-box traced most of it to boundary oscillation from noisy features. Two changes in the selector (`heed.rs`):
+- **Closing speed is smoothed.** `ClosingTracker` measures the distance change over a window, the value-only law `heed_closing_s` (1 s in the shipped script), instead of between two consecutive passes. The caller keeps one tracker per observer, observes each creature in sight at each pass and puts the answer in `Candidate.closing`; an event between passes reads its last value. A window of 0 is the old two-pass speed.
+- **The incumbent wins an exact tie** within a rule (the sort key is the rule's order, then incumbent first, then distance, then id). It is mechanism, not policy: it only settles ties the policy left open, so equal scores do not flip at every pass as fighters move. A strictly better score still displaces the incumbent.
+
+On the Cullet battle recording (docs/ATTENTION_E3.md §8) without holds, smoothing cut flicker from 222 to 169 a subject-minute (−24%) and promotions from 3.2 to 2.7 a second. The instinct's holds remain what keeps the throng still (3.4 a minute with them).
 
 **6. `human_heed` shape** (dev-box point 7; SpacetimeDB docs read 2026-11-22: [reducers](https://spacetimedb.com/docs/functions/reducers/), [reducer context](https://spacetimedb.com/docs/functions/reducers/reducer-context), [column types](https://spacetimedb.com/docs/tables/column-types), all version 2.0.0; tuples are not among the listed types and `spacetimedb-sats` 2.14.1 implements no `SpacetimeType` for them, per dev-box's source reading):
 

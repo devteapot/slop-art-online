@@ -212,6 +212,9 @@ fn laws() {
         // how long a creature that made contact (a blow that landed, was blocked or dodged) stays
         // an individual whatever one heeds.
         heed_on: false, heed_ceiling: 16.0, heed_contact_s: 4.0,
+        // ...and the window closing speed is measured over (seconds): smoothed, so one sweep's
+        // step does not flip who stands out.
+        heed_closing_s: 1.0,
         // A test switch (docs/PERCEPTION.md, "Module memory and rollback"), 0 in play: a step the
         // world fails on purpose, to prove nothing kept in module memory outlives a failed one.
         memory_test: 0.0,
@@ -3256,6 +3259,7 @@ fn law_about(l, name) {
         "det_stop" => "A test switch that pauses the world at a given step; it is off in play.",
         "heed_on" => if l.heed_on { "one keeps track of only so many others as individuals; everyone else in sight is a throng" } else { "everyone in sight is perceived as an individual" },
         "heed_ceiling" => `no one keeps track of more than ${short(l.heed_ceiling)} others as individuals at once`,
+        "heed_closing_s" => `whether someone is coming toward one is judged over ${short(l.heed_closing_s)} s, not a glance`,
         "heed_contact_s" => `someone whose blow reached one stays an individual to one for ${short(l.heed_contact_s)} s, whatever one heeds`,
         "far_cap" => if l.far_cap > 0.0 { `a player sees at most ${short(l.far_cap)} others at once, the nearest` } else { "a player sees everyone in sight" },
         "crowd_sweep_n" => if l.crowd_sweep_n > 0.0 { `what a player sees is looked at again less often in a crowd of more than ${short(l.crowd_sweep_n)}` } else { "what a player sees is looked at again at the same pace in any crowd" },

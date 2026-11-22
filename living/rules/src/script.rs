@@ -3580,7 +3580,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 29] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 30] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3625,6 +3625,7 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 29] = [
     ("heed_on", ValueOnly::Delivery),
     ("heed_ceiling", ValueOnly::Delivery),
     ("heed_contact_s", ValueOnly::Delivery),
+    ("heed_closing_s", ValueOnly::Delivery),
 ];
 
 /// The functions a value-only law may be named in: the constants (`laws`, an overlay's

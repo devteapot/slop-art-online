@@ -8,7 +8,7 @@ Free: the fake model; scratch `verify-minds-*` databases on the trial stack.
                  [--refill-gap 0.5] [--law NAME=VALUE ...] [--fixed-site X Y]
                  [--real-minds --allow-live [--concurrency 192] [--save-self]]
 
-Seed `island` (its residents and animals on their own rules). `--battle` minded people
+Seed `island` by default (`--seed`, e.g. `cullet` for docs/ATTENTION_E3.md's recording; its residents and animals on their own rules). `--battle` minded people
 (`spawn_crowd`) packed onto seed-ordered walkable tiles near the arrival point fight the
 nearest person: strike; dodge or block when threatened; heal below half (knowing
 wound_tending). `--walkers` more walk as foragers. A fighter who dies is replaced (the load
@@ -146,14 +146,18 @@ def initial_formation(run, token, world, count, walkers, anchor=None):
     return site, slots, list(offsite), staging
 
 
-def capture_combat(run, token, roster, stop, first_ms, path):
-    """Save observations across the entire run, including gaps between profiling windows."""
+def capture_combat(run, token, roster, stop, first_ms, path, all_bodies=False):
+    """Save observations across the entire run, including gaps between profiling windows. With
+    `all_bodies` (`--all-bodies`, docs/ATTENTION_E3.md) every body is kept, not only the
+    roster's, with every creature's kind (`kinds`, read every 30 samples)."""
     def query(sql):
         return authority_sql(run, token, sql)
 
     since = first_ms
+    n = 0
     with gzip.open(path, "wt", compresslevel=3) as stream:
         while True:
+            n += 1
             loop_start = time.monotonic()
             at_ms = time.time_ns() // 1_000_000
             try:
@@ -165,11 +169,16 @@ def capture_combat(run, token, roster, stop, first_ms, path):
                 hurt = query("SELECT id, observer, at_ms, text FROM experience "
                              f"WHERE kind = 'attacked' AND at_ms >= {since}")
                 # Bodies vanish at death. Roster entries persist for event attribution.
+                keep = (lambda b: True) if all_bodies else (lambda b: b["id"] in fighters)
                 sample = {"at_ms": at_ms, "fighters": fighters,
-                          "bodies": [b for b in bodies if b["id"] in fighters],
+                          "bodies": [b for b in bodies if keep(b)],
                           "activities": [a for a in activities if a["id"] in fighters],
                           "uses": [u for u in uses if u["actor"] in fighters or u["target"] in fighters],
                           "hurt": [h for h in hurt if h["observer"] in fighters and ": " in h["text"]]}
+                if all_bodies:
+                    sample["uses"] = uses
+                    if n % 30 == 1:
+                        sample["kinds"] = {str(c["id"]): c["kind"] for c in query("SELECT id, kind FROM character")}
                 since = max(first_ms, at_ms - 2000)
             except (OSError, ValueError) as e:
                 sample = {"at_ms": at_ms, "error": str(e)}
@@ -313,6 +322,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run", required=True, help="a new run name starting with minds-")
     ap.add_argument("--battle", type=int, default=100)
+    ap.add_argument("--seed", default="island", help="the world seed the harness launches (default island)")
+    ap.add_argument("--all-bodies", action="store_true", help="combat-samples keep every body and every use, with kinds (docs/ATTENTION_E3.md)")
     ap.add_argument("--walkers", type=int, default=116)
     ap.add_argument("--minutes", type=float, default=30)
     ap.add_argument("--window", type=int, default=30)
@@ -391,7 +402,7 @@ def main():
     try:
         target = os.environ.get("CARGO_TARGET_DIR")
         target_args = ["--target-dir", target] if target else []
-        run.harness("launch", "--seed", "island", "--archive-commitlog",
+        run.harness("launch", "--seed", a.seed, "--archive-commitlog",
                     "--driver-pid", str(os.getpid()), *target_args)
         token = authority_token()
         run.harness("doctor")
@@ -626,7 +637,7 @@ def main():
                     if time.time() > deadline:
                         raise RuntimeError(f"no spend guard ready at {ready} within {a.guard_wait_s:.0f} s: no paid call made")
                     time.sleep(0.5)
-            run.start(models, ids, seed="island", extra_env=env)
+            run.start(models, ids, seed=a.seed, extra_env=env)
 
         def keep_battle():
             # Refills arrive one at a time, at most one each `--refill-gap` seconds, from
@@ -733,7 +744,7 @@ def main():
                 f.write(json.dumps(out) + "\n")
             return out
         sampler = threading.Thread(target=capture_combat, args=(run, token, roster, stop_capture, first_ms,
-                                  run.directory / "combat-samples.jsonl.gz"))
+                                  run.directory / "combat-samples.jsonl.gz", a.all_bodies))
         sampler.start()
         if not fixed:
             keeper.start()
