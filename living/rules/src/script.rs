@@ -572,6 +572,12 @@ pub struct Laws {
     /// A fixture switch, off as shipped: `spawn_battle_sides` alternates block and dodge within each
     /// side instead of by id parity (which, with consecutive ids, gives each side one defence).
     pub sides_mixed_defence: bool,
+    /// A fixture switch, off as shipped: `spawn_battle_sides` makes minded fighters (controlled by
+    /// the world's admin, thought for by a mind service).
+    pub sides_minded: bool,
+    /// A recording switch, 0 as shipped: every character's heed capacity is this (clamped by the
+    /// ceiling) instead of the `heed_capacity(a)` law (E5's wide-view recording).
+    pub heed_fixed_capacity: f32,
     pub cover_sight_on: bool,
     /// How far a character sees ground by day (metres): the cells of `known_ground` it marks
     /// (docs/MOVEMENT_MIND.md, step 3). At night, its own sight.
@@ -914,6 +920,8 @@ impl Default for Laws {
             heed_instinct: 2.0,
             sides_first: 0.0,
             sides_mixed_defence: false,
+            sides_minded: false,
+            heed_fixed_capacity: 0.0,
             cover_sight_on: false,
             ground_sight_m: 24.0,
             known_cells_pass: 0.0,
@@ -3289,6 +3297,8 @@ impl Scripts {
             heed_instinct: g("heed_instinct", l.heed_instinct).round().clamp(1.0, 2.0),
             sides_first: g("sides_first", l.sides_first).round().clamp(0.0, 3.0),
             sides_mixed_defence: flag("sides_mixed_defence", l.sides_mixed_defence),
+            sides_minded: flag("sides_minded", l.sides_minded),
+            heed_fixed_capacity: g("heed_fixed_capacity", l.heed_fixed_capacity).round().clamp(0.0, 256.0),
             cover_sight_on: flag("cover_sight_on", l.cover_sight_on),
             ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
             known_cells_pass: g("known_cells_pass", l.known_cells_pass).clamp(0.0, 100_000.0),
@@ -3618,7 +3628,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 34] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 36] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3668,6 +3678,8 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 34] = [
     ("heed_instinct", ValueOnly::Delivery),
     ("sides_first", ValueOnly::Delivery),
     ("sides_mixed_defence", ValueOnly::Delivery),
+    ("sides_minded", ValueOnly::Delivery),
+    ("heed_fixed_capacity", ValueOnly::Delivery),
 ];
 
 /// The functions a value-only law may be named in: the constants (`laws`, an overlay's

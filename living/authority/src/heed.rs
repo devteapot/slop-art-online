@@ -224,6 +224,12 @@ fn reads(p: &Policy) -> Reads {
 /// by `heed_ceiling`. A script without the law (or one that fails) heeds no one by rule: only the
 /// forced ones are individuals, and the failure is logged once per pass.
 fn capacity(ctx: &ReducerContext, me: &Character, now: u64) -> usize {
+    // A recording that fixes everyone's capacity (E5: `heed_fixed_capacity`, 0 as shipped), still
+    // clamped by the ceiling.
+    let laws = common::laws(ctx);
+    if laws.heed_fixed_capacity > 0.0 {
+        return h::clamp_capacity(laws.heed_fixed_capacity as f64, laws.heed_ceiling);
+    }
     let sc = common::scripts(ctx);
     let w = common::world(ctx);
     let mut actor = crate::act::facts(ctx, me.id, now);

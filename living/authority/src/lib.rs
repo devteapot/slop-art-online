@@ -684,7 +684,11 @@ pub fn spawn_battle_sides(ctx: &ReducerContext, n: u32, sides: u32) -> Result<()
         // The `sides_first` fixture law (0 as shipped) rotates which side the first, lowest-id,
         // fighter joins, so a series can swap the id order between the sides.
         let side = (made as usize + common::laws(ctx).sides_first as usize) % sides;
-        let id = seed::spawn_creature(ctx, &format!("{}{}", letters[side], made / sides as u32 + 1), "person", ctx.database_identity(), false, p, now);
+        // The `sides_minded` fixture law (off as shipped): fighters a mind service may think for,
+        // controlled by the world's admin as `spawn_crowd`'s minded walkers (E5's real-mind melee).
+        let minded = common::laws(ctx).sides_minded;
+        let controller = if minded { common::world(ctx).admin } else { ctx.database_identity() };
+        let id = seed::spawn_creature(ctx, &format!("{}{}", letters[side], made / sides as u32 + 1), "person", controller, minded, p, now);
         common::inv_add(ctx, id as u64, "spear", 1);
         ctx.db.membership().insert(Membership { id: 0, community: ids[side], member: id, since_ms: now });
         // By id parity, as `spawn_battle`. With consecutive ids and two sides that puts every

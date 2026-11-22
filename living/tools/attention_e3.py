@@ -483,7 +483,12 @@ def freeze(a):
                          "self": {"health": you.get("health"), "energy": you.get("energy"), "hunger": you.get("hunger"), "stamina": you.get("stamina")},
                          "stage": "adult", "knows": you.get("knows_how_to", [])})
         pool.sort(key=lambda s: (s["subject"], s["t_ms"]))
-        take = rng.sample(pool, min(len(pool), a.battle // len(custom_b or BATTLE_RUNS)))
+        if getattr(a, "battle_all", False):
+            # E5 (docs/ATTENTION_E5.md §3): every think request with a reply and at least
+            # `--battle-min-sight` others in sight, not a sample.
+            take = [s for s in pool if s["in_sight"] >= a.battle_min_sight]
+        else:
+            take = rng.sample(pool, min(len(pool), a.battle // len(custom_b or BATTLE_RUNS)))
         states += sorted(take, key=lambda s: s["t_ms"])
         inputs[os.path.basename(run)] = {"combat-samples.jsonl.gz": sha256_file(os.path.join(d, "combat-samples.jsonl.gz")), "think requests": len(pool)}
     town_pool = []
@@ -783,10 +788,24 @@ def named(a):
         rank = {c["id"]: i for i, c in enumerate(cands)}
         ps = [r for r in picks.get(st["state"], []) if r["t"] <= 1e-9]
         heeded = {p[0] for p in ps[-1]["picks"]} if ps else set()
+        listed = None
+        if getattr(a, "scene_only", False):
+            # E5's M2'' (docs/ATTENTION_E5.md §3): only people the subject's own scene listed (the
+            # authority's sight: cover, walls, the gaze band; docs/ATTENTION_E3.md §9.2). One named
+            # but not listed was named from memory.
+            sc = None
+            for line in open(os.path.join(d, "journal", st["journal"])):
+                e = json.loads(line)
+                if e.get("purpose") == "think" and e.get("at_ms") == st["t_ms"]:
+                    sc = scene_of(e)
+                    break
+            listed = {c.get("id") for c in (sc or {}).get("creatures", [])}
         for i in who:
-            if i in rank:
-                rows.append({"state": st["state"], "id": i, "rank": rank[i], "heeded": i in heeded, "beyond8": rank[i] >= 8})
-    out = {"named_in_sight": share(rows), "named_beyond8": share(rows, lambda r: r["beyond8"]), "states_with_a_named_in_sight": len({r["state"] for r in rows}),
+            if i in rank and (listed is None or i in listed):
+                rows.append({"state": st["state"], "id": i, "rank": rank[i], "heeded": i in heeded, "beyond8": rank[i] >= 8,
+                             "beyond_capacity": rank[i] >= (ps[-1]["capacity"] if ps else 10)})
+    out = {"named_in_sight": share(rows), "named_beyond8": share(rows, lambda r: r["beyond8"]), "named_beyond_capacity": share(rows, lambda r: r.get("beyond_capacity")),
+           "scene_only": bool(getattr(a, "scene_only", False)), "states_with_a_named_in_sight": len({r["state"] for r in rows}),
            "states": len(data["states"]), "rows": rows}
     json.dump(out, open(a.out, "w"), indent=1)
     print(json.dumps({k: v for k, v in out.items() if k != "rows"}))
@@ -850,6 +869,8 @@ def main():
     f.add_argument("--town", type=int, default=100)
     f.add_argument("--town-min-sight", type=int, default=8, help="a town state needs at least this many in sight (8; §9's M2' uses 1)")
     f.add_argument("--battle-run", action="append", help="a battle_diag.py --all-bodies run folder (instead of the act trial's)")
+    f.add_argument("--battle-all", action="store_true", help="every think request with --battle-min-sight others in sight, not a sample (E5)")
+    f.add_argument("--battle-min-sight", type=int, default=9)
     f.add_argument("--town-run", action="append", help="a trials.py instance folder with record.bodies all (instead of the act trial's)")
     g = sub.add_parser("fields")
     g.add_argument("--src", required=True)
@@ -869,6 +890,7 @@ def main():
     n.add_argument("--fields", required=True)
     n.add_argument("--picks", required=True)
     n.add_argument("--out", required=True)
+    n.add_argument("--scene-only", action="store_true", help="count only people the subject's own scene listed (E5's M2'')")
     a = ap.parse_args()
     {"freeze": freeze, "fields": fields, "score": score, "named": named}[a.cmd](a)
 

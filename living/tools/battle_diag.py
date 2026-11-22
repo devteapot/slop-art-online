@@ -323,6 +323,8 @@ def main():
     ap.add_argument("--run", required=True, help="a new run name starting with minds-")
     ap.add_argument("--battle", type=int, default=100)
     ap.add_argument("--seed", default="island", help="the world seed the harness launches (default island)")
+    ap.add_argument("--sides", type=int, default=0, help="E5: `spawn_battle_sides(--battle, N)` with minded fighters (no refills, no walkers) instead of spawn_crowd's battle")
+    ap.add_argument("--sides-mixed", action="store_true", help="with --sides: block and dodge mixed within each side (`sides_mixed_defence`)")
     ap.add_argument("--all-bodies", action="store_true", help="combat-samples keep every body and every use, with kinds (docs/ATTENTION_E3.md)")
     ap.add_argument("--walkers", type=int, default=116)
     ap.add_argument("--minutes", type=float, default=30)
@@ -483,70 +485,100 @@ def main():
                 # A refill can die during setup. The keeper will try a new fighter.
                 pass
 
-        made = spawn(a.battle + a.walkers)
-        if len(made) != a.battle + a.walkers:
-            raise RuntimeError(f"spawned only {len(made)} of {a.battle + a.walkers} initial walkers")
-        fighters = made[:a.battle]
-        # The authority snaps a placement if its tile is occupied. Clear the whole
-        # formation, including slots unused by smaller arms, before placing anyone.
-        all_slots = slots + walker_slots
-        assigned = set(formation + walker_slots)
-        ambient_moved = {}
-        at_ms = time.time_ns() // 1_000_000
-        before_formation = run.private(
-            "SELECT id, x, y, vx, vy, t_ms, next_ms, heading, turn, turn_s FROM body",
-            "before-formation")
-        for body in before_formation:
-            x, y = pose(body, at_ms)
-            tile = (math.floor(x) + 0.5, math.floor(y) + 0.5)
-            if tile in assigned:
-                run.admin("place_at", body["id"], *staging)
-                if body["id"] in before:
-                    ambient_moved[body["id"]] = (x, y)
-        for id, into in zip(fighters, slots):
-            if fixed:
+        if a.sides:
+            # E5 (docs/ATTENTION_E5.md): the two-sided melee with minds. `spawn_battle_sides`
+            # makes the fighters (minded by the `sides_minded` law, block and dodge mixed within
+            # each side by `sides_mixed_defence`), round the same site; each gets its fight as one
+            # desire, so a compile that keeps the plan keeps it.
+            run.admin("set_world_law", "sides_minded", "true")
+            run.admin("set_world_law", "sides_mixed_defence", "true" if a.sides_mixed else "false")
+            have = {c["id"] for c in run.sql("SELECT id FROM character", "chars")}
+            run.admin("spawn_battle_sides", a.battle, a.sides)
+            comm = {c["id"]: c["name"] for c in run.sql("SELECT id, name FROM community", "sides-communities")}
+            member = {m["member"]: comm.get(m["community"]) for m in run.sql("SELECT member, community FROM membership", "sides-membership")}
+            made = sorted(c["id"] for c in run.sql("SELECT id, name, alive FROM character", "chars") if c["id"] not in have and c["alive"])
+            if len(made) != a.battle:
+                raise RuntimeError(f"spawn_battle_sides made {len(made)} of {a.battle}")
+            fighters = list(made)
+            walkers = set()
+            ambient_moved = {}
+            side_of = {f: member.get(f) for f in fighters}
+            (run.directory / "sides.json").write_text(json.dumps({str(f): s for f, s in side_of.items()}))
+            per_side = {}
+            for f in fighters:
+                k_side = per_side.setdefault(side_of[f], 0)
+                per_side[side_of[f]] = k_side + 1
+                dodges = (k_side % 2 == 0) if a.sides_mixed else (f % 2 == 0)
+                fight = [{"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "dodge" if dodges else "block"}}}},
+                         {"do": {"skill": "attack", "target": {"nearest": {"kind": "person", "relation": "enemy"}}}}]
+                run.admin("set_behavior", f, json.dumps({"desires": [{"want": "fight", "weight": {"base": 5.0}, "do": {"first": {"label": "combat", "children": fight}}}]}))
+            bodies = {b["id"]: (b["x"], b["y"]) for b in run.private("SELECT id, x, y FROM body", "initial-bodies")}
+            state["ever_fighters"] = set(fighters)
+        else:
+            made = spawn(a.battle + a.walkers)
+            if len(made) != a.battle + a.walkers:
+                raise RuntimeError(f"spawned only {len(made)} of {a.battle + a.walkers} initial walkers")
+            fighters = made[:a.battle]
+            # The authority snaps a placement if its tile is occupied. Clear the whole
+            # formation, including slots unused by smaller arms, before placing anyone.
+            all_slots = slots + walker_slots
+            assigned = set(formation + walker_slots)
+            ambient_moved = {}
+            at_ms = time.time_ns() // 1_000_000
+            before_formation = run.private(
+                "SELECT id, x, y, vx, vy, t_ms, next_ms, heading, turn, turn_s FROM body",
+                "before-formation")
+            for body in before_formation:
+                x, y = pose(body, at_ms)
+                tile = (math.floor(x) + 0.5, math.floor(y) + 0.5)
+                if tile in assigned:
+                    run.admin("place_at", body["id"], *staging)
+                    if body["id"] in before:
+                        ambient_moved[body["id"]] = (x, y)
+            for id, into in zip(fighters, slots):
+                if fixed:
+                    run.admin("place_at", id, *into)
+                else:
+                    fighter(id, into)
+            for id, into in zip(made[a.battle:], walker_slots):
                 run.admin("place_at", id, *into)
-            else:
-                fighter(id, into)
-        for id, into in zip(made[a.battle:], walker_slots):
-            run.admin("place_at", id, *into)
-        bodies = {b["id"]: (b["x"], b["y"])
-                  for b in run.private("SELECT id, x, y FROM body", "initial-bodies")}
-        misplaced = [(id, into, bodies.get(id)) for id, into in zip(made, all_slots)
-                     if bodies.get(id) != into]
-        if misplaced:
-            (run.directory / "misplaced.json").write_text(json.dumps(misplaced))
-            raise RuntimeError("the authority could not place every spawned person in their seed-defined slot")
-        walkers = set(made[a.battle:])
-        state["ever_fighters"] = set(fighters)
+            bodies = {b["id"]: (b["x"], b["y"])
+                      for b in run.private("SELECT id, x, y FROM body", "initial-bodies")}
+            misplaced = [(id, into, bodies.get(id)) for id, into in zip(made, all_slots)
+                         if bodies.get(id) != into]
+            if misplaced:
+                (run.directory / "misplaced.json").write_text(json.dumps(misplaced))
+                raise RuntimeError("the authority could not place every spawned person in their seed-defined slot")
+            walkers = set(made[a.battle:])
+            state["ever_fighters"] = set(fighters)
 
-        def bodies_at_site(label):
-            alive = {c["id"] for c in run.sql("SELECT id, alive FROM character", f"fixed-alive-{label}") if c["alive"]}
-            spots = {b["id"]: (b["x"], b["y"]) for b in
-                     run.private("SELECT id, x, y FROM body", f"fixed-bodies-{label}")
-                     if b["id"] in alive and b["id"] in fighters and math.dist((b["x"], b["y"]), site) <= 16}
-            if len(spots) != a.battle:
-                raise RuntimeError(f"fixed fixture {label}: {len(spots)} of {a.battle} fighters at the site")
-            return spots
+            def bodies_at_site(label):
+                alive = {c["id"] for c in run.sql("SELECT id, alive FROM character", f"fixed-alive-{label}") if c["alive"]}
+                spots = {b["id"]: (b["x"], b["y"]) for b in
+                         run.private("SELECT id, x, y FROM body", f"fixed-bodies-{label}")
+                         if b["id"] in alive and b["id"] in fighters and math.dist((b["x"], b["y"]), site) <= 16}
+                if len(spots) != a.battle:
+                    raise RuntimeError(f"fixed fixture {label}: {len(spots)} of {a.battle} fighters at the site")
+                return spots
 
-        if fixed:
-            # Each fighter strikes its two nearest rivals within 1.6 m in turn, standing still;
-            # strikes do no damage (the laws above), so the same 200 fight for the whole run.
-            spots = bodies_at_site("start")
-            (run.directory / "fixed-layout.json").write_text(json.dumps([spots[f] for f in fighters]))
-            for fighter_id in fighters:
-                neighbors = sorted((math.dist(spots[fighter_id], spot), other) for other, spot in spots.items()
-                                   if other != fighter_id)
-                rivals = [other for distance, other in neighbors if distance <= 1.6][:2]
-                if not rivals:
-                    raise RuntimeError(f"fixed fighter {fighter_id} has no opponent in strike range")
-                strikes = []
-                for other in rivals:
-                    strikes.extend([{"do": {"skill": "strike", "target": {"id": other}}}, {"wait": 0.5}])
-                run.admin("set_behavior", fighter_id, json.dumps({"desires": [
-                    {"want": "fight", "weight": {"base": 5.0},
-                     "do": {"seq": {"label": "combat", "children": strikes}}}
-                ]}))
+            if fixed:
+                # Each fighter strikes its two nearest rivals within 1.6 m in turn, standing still;
+                # strikes do no damage (the laws above), so the same 200 fight for the whole run.
+                spots = bodies_at_site("start")
+                (run.directory / "fixed-layout.json").write_text(json.dumps([spots[f] for f in fighters]))
+                for fighter_id in fighters:
+                    neighbors = sorted((math.dist(spots[fighter_id], spot), other) for other, spot in spots.items()
+                                       if other != fighter_id)
+                    rivals = [other for distance, other in neighbors if distance <= 1.6][:2]
+                    if not rivals:
+                        raise RuntimeError(f"fixed fighter {fighter_id} has no opponent in strike range")
+                    strikes = []
+                    for other in rivals:
+                        strikes.extend([{"do": {"skill": "strike", "target": {"id": other}}}, {"wait": 0.5}])
+                    run.admin("set_behavior", fighter_id, json.dumps({"desires": [
+                        {"want": "fight", "weight": {"base": 5.0},
+                         "do": {"seq": {"label": "combat", "children": strikes}}}
+                    ]}))
         state["fighters"] = list(fighters)
         if not a.no_mind:
             replies = {"think": {"thought": "diag fixture: I keep fighting.", "intend": [], "say": None, "judgments": []},
@@ -567,6 +599,9 @@ def main():
                 fight_reply = dict(fight_reply, acts=json.loads(a.fake_acts))
             fight = [{"purpose": "deliberate", "contains": f"# Who you are (Walker{n})", "delay_s": 4.0, "times": -1,
                       "reply": fight_reply} for n in range(1, a.battle + 1)]
+            if a.sides:
+                # The sides fighters' names are A1, B1, ...: every compile keeps the plan.
+                fight = [{"purpose": "deliberate", "delay_s": 4.0, "times": -1, "reply": {"graph": "keep", "plan": "diag fixture: keep fighting"}}]
             replies["fast"] = {"keep": True, "thought": "diag fixture: as it is."}
             if a.fake_fast_patch:
                 replies["fast"] = {"patch": {"label": "combat", "graph": {"first": [
@@ -576,7 +611,7 @@ def main():
             # The minds of everyone spawned, and of the fighters spawned later to refill the battle:
             # ids are handed out in order, so the next few thousand are theirs (an empty
             # LIVING_ONLY would mean no one).
-            ids = list(made) if fixed else list(made) + list(range(max(made) + 1, max(made) + 4001))
+            ids = list(made) if (fixed or a.sides) else list(made) + list(range(max(made) + 1, max(made) + 4001))
             env = {"LIVING_CONCURRENCY": str(a.concurrency)}
             if a.real_minds:
                 # Every purpose through the real models config, the `people` mix as the default; only
@@ -694,7 +729,7 @@ def main():
                 time.sleep(min(0.5, a.refill_gap))
 
         keeper = threading.Thread(target=keep_battle, daemon=True)
-        head = {"arm": a.arm, "fast_real": a.fast_real, "real_minds": a.real_minds, "fake_provider": a.fake_provider, "fake_script": a.fake_script, "fake_real_profiles": a.fake_real_profiles, "concurrency": a.concurrency, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane, "fast_frame": a.fast_frame, "guard_ready": a.guard_ready, "unguarded": a.unguarded, "fake_acts": a.fake_acts, "act_trace": a.act_trace,
+        head = {"arm": a.arm, "fast_real": a.fast_real, "real_minds": a.real_minds, "fake_provider": a.fake_provider, "fake_script": a.fake_script, "fake_real_profiles": a.fake_real_profiles, "concurrency": a.concurrency, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "sides": a.sides, "sides_mixed": a.sides_mixed, "refill": not a.no_refill and not a.sides, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane, "fast_frame": a.fast_frame, "guard_ready": a.guard_ready, "unguarded": a.unguarded, "fake_acts": a.fake_acts, "act_trace": a.act_trace,
                 "nproc": os.cpu_count(), "db_identity": ident, "world_seed": seed["seed"],
                 "layout": [{"id": id, "at": bodies[id]} for id in fighters],
                 "walker_layout": [{"id": id, "at": bodies[id]} for id in made[a.battle:]],
@@ -746,7 +781,7 @@ def main():
         sampler = threading.Thread(target=capture_combat, args=(run, token, roster, stop_capture, first_ms,
                                   run.directory / "combat-samples.jsonl.gz", a.all_bodies))
         sampler.start()
-        if not fixed:
+        if not fixed and not a.sides:
             keeper.start()
         deadline = t_start + a.minutes * 60
         while time.time() < deadline:
