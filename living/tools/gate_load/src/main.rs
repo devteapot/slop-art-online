@@ -483,6 +483,7 @@ fn hook(p: &Player, log: &Log, own: Identity) {
     count!(conn, p.counts, seen_fighters_near);
     count!(conn, p.counts, seen_fighters_far);
     count!(conn, p.counts, seen_fighter_copy);
+    count!(conn, p.counts, seen_crowd);
     count!(conn, p.counts, seen_doing_near);
     count!(conn, p.counts, seen_doing_far);
     count!(conn, p.counts, my_vitals);
@@ -940,6 +941,8 @@ fn players_mode() {
     // A player's combat feed as event rows (views step 2, `combat_feed_on`): `combat_feed` in
     // place of the `my_combat` view.
     let combat_feed = req["combat_feed"].as_bool().unwrap_or(false);
+    // E2 prototype (branch attention-e2): the crowd rows of the unattended (`attend_crowd_on`).
+    let crowd = req["crowd"].as_bool().unwrap_or(false);
     let fresh_every = req["fresh_every"].as_u64().unwrap_or(0) as usize;
     let started = Instant::now();
     let mut players = Vec::new();
@@ -982,6 +985,9 @@ fn players_mode() {
         if combat_feed {
             queries.retain(|q| q.as_str() != "SELECT * FROM my_combat");
             queries.push("SELECT * FROM combat_feed".to_string());
+        }
+        if crowd {
+            queries.push("SELECT * FROM seen_crowd".to_string());
         }
         subscribe(&pl, queries);
         players.push(pl);

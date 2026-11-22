@@ -615,6 +615,21 @@ pub struct Laws {
     /// Battle laws (docs/BATTLE_LAWS.md, prototypes, 0 = off in play). (a) At most this many
     /// creatures a player sees at once: the nearest, and whoever is engaged with it first.
     pub far_cap: f32,
+    /// E2 prototype (branch attention-e2 only, docs/ATTENTION_E2_COST.md, after ATTENTION_BUDGET
+    /// v2; false / 0 = off): a player attends at most its capacity of others as individuals, the
+    /// rest of those in sight as crowd. The prototype's capacity is `attend_ceiling`, or
+    /// `attend_burst_cap` when that is above 0 and lower (a capacity drop, flipped live)...
+    pub attend_on: bool,
+    pub attend_ceiling: f32,
+    pub attend_burst_cap: f32,
+    /// ...chosen by this policy: 0 the nearest, 1 a rank drawn afresh every `attend_reorder_ms`,
+    /// 2 the person instinct's order (engaged, my target, 6 nearest within 8 m, then a score)...
+    pub attend_policy: f32,
+    pub attend_reorder_ms: f32,
+    /// ...a dropped creature still delivered this long (ms; 0: dropped at once)...
+    pub attend_grace_ms: f32,
+    /// ...and the crowd written as `seen_crowd` rows (6 m cells, 1 Hz, at most 48 a viewer).
+    pub attend_crowd_on: bool,
     /// (b) Above this many creatures in sight, a player's sweep comes less often, in proportion
     /// (at most three times the period).
     pub crowd_sweep_n: f32,
@@ -905,6 +920,13 @@ impl Default for Laws {
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
             far_cap: 0.0,
+            attend_on: false,
+            attend_ceiling: 16.0,
+            attend_burst_cap: 0.0,
+            attend_policy: 0.0,
+            attend_reorder_ms: 1_000.0,
+            attend_grace_ms: 0.0,
+            attend_crowd_on: false,
             crowd_sweep_n: 0.0,
             crowd_frame_max_ms: 0.0,
             fighter_bystander_wakes: true,
@@ -3272,6 +3294,13 @@ impl Scripts {
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
             far_cap: g("far_cap", l.far_cap).clamp(0.0, 10_000.0),
+            attend_on: flag("attend_on", l.attend_on),
+            attend_ceiling: g("attend_ceiling", l.attend_ceiling).clamp(0.0, 10_000.0),
+            attend_burst_cap: g("attend_burst_cap", l.attend_burst_cap).clamp(0.0, 10_000.0),
+            attend_policy: g("attend_policy", l.attend_policy).clamp(0.0, 2.0),
+            attend_reorder_ms: g("attend_reorder_ms", l.attend_reorder_ms).clamp(50.0, 600_000.0),
+            attend_grace_ms: g("attend_grace_ms", l.attend_grace_ms).clamp(0.0, 600_000.0),
+            attend_crowd_on: flag("attend_crowd_on", l.attend_crowd_on),
             crowd_sweep_n: g("crowd_sweep_n", l.crowd_sweep_n).clamp(0.0, 10_000.0),
             crowd_frame_max_ms: g("crowd_frame_max_ms", l.crowd_frame_max_ms).clamp(0.0, 2_000.0),
             fighter_bystander_wakes: flag("fighter_bystander_wakes", l.fighter_bystander_wakes),
@@ -3554,7 +3583,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 26] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 33] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3569,6 +3598,14 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 26] = [
     // and `crowd_sweep_n`, the frames `crowd_frame_max_ms` and `far_motion_tol_m`, the wakes
     // `fighter_bystander_wakes`, each at its next tick.
     ("far_cap", ValueOnly::Delivery),
+    // E2 prototype (branch attention-e2 only): read by the sweeps at their next run.
+    ("attend_on", ValueOnly::Delivery),
+    ("attend_ceiling", ValueOnly::Delivery),
+    ("attend_burst_cap", ValueOnly::Delivery),
+    ("attend_policy", ValueOnly::Delivery),
+    ("attend_reorder_ms", ValueOnly::Delivery),
+    ("attend_grace_ms", ValueOnly::Delivery),
+    ("attend_crowd_on", ValueOnly::Delivery),
     ("crowd_sweep_n", ValueOnly::Delivery),
     ("crowd_frame_max_ms", ValueOnly::Delivery),
     ("fighter_bystander_wakes", ValueOnly::Delivery),

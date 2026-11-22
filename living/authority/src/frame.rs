@@ -411,6 +411,16 @@ pub fn scene(ctx: &ReducerContext, id: u32, who: Identity, seen: &HashSet<u32>, 
     }
 }
 
+/// Whether creature `id`'s move is aimed at someone now (E2 prototype's crowd rows, `attend.rs`).
+pub fn aiming(id: u32) -> bool {
+    TARGETS.with(|t| t.borrow().get(&id).is_some_and(|t| t.fighter.is_some()))
+}
+
+/// Whom creature `id`'s move, or else its visible act, is aimed at now (E2 prototype, `attend.rs`).
+pub fn target_of(id: u32) -> Option<u32> {
+    TARGETS.with(|t| t.borrow().get(&id).and_then(|t| t.fighter.or(t.doing).map(|(b, _)| b)))
+}
+
 /// The creatures engaged with viewer `id` at the last tick (battle law `far_cap` keeps them).
 pub fn engaged_with(id: u32) -> HashSet<u32> {
     ENGAGED.with(|g| g.borrow().get(&id).cloned()).unwrap_or_default()

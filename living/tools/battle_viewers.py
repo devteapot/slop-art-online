@@ -471,7 +471,7 @@ def one(a, n, out):
             load.send(json.dumps({"uri": lc.URL, "db": db, "events": str(out / f"events-v{n}.jsonl"), "battle": list(site),
                                   "behaviour": {"walk_period_ms": 1500, "rejoin_s": 3}, "players": players, "client": "gate",
                                   "tiers": a.tiers, "cues": a.cues, "motion_tables": a.motion_tables, "character_tables": a.character_tables, "fighter_tables": a.fighter_tables,
-                                  "combat_feed": a.combat_feed, "fresh_every": a.fresh_every}))
+                                  "combat_feed": a.combat_feed, "crowd": a.crowd, "fresh_every": a.fresh_every}))
             joined = load.expect("joined", 900)
             lo, hi = (float(x) for x in a.ring.split(",")) if a.ring else (0.0, 6.0)
             for i, p in enumerate(sorted(joined["players"], key=lambda p: p["p"])):
@@ -522,8 +522,21 @@ def one(a, n, out):
         f0 = keeper.refills if keeper else 0
         if load:
             load.send("fresh on")
-        time.sleep(a.seconds)
+        flip = None
+        if a.flip_law:
+            # E2 (attention-e2): one law set live mid-window (a capacity burst); its time is kept so
+            # the ticks around it can be read from ticks.json.
+            name, _, value = a.flip_law.partition("=")
+            time.sleep(a.flip_at)
+            t_flip = time.time()
+            lc.call(db, "set_world_law", [name, value], token)
+            flip = {"law": name, "value": value, "at": t_flip, "acked": time.time()}
+            time.sleep(max(0.0, a.seconds - a.flip_at))
+        else:
+            time.sleep(a.seconds)
         c1, t1 = tick_count(ident), time.time()
+        if flip:
+            res["flip_law"] = flip
         if keeper:
             keeper.stop.set()
             res["keeper_window"] = keeper.window(t0, t1)
@@ -677,6 +690,15 @@ def one(a, n, out):
             load.send("stop")
             try:
                 done = load.expect("done", 300)
+                # E2 (attention-e2): what the viewers received, by table, over the whole run
+                # (inserts, updates, deletes; gate-load counts from its subscription on).
+                tables = {}
+                for pl in done.get("players", []):
+                    for t, n in (pl.get("events") or {}).items():
+                        acc = tables.setdefault(t, [0, 0, 0])
+                        for i in range(3):
+                            acc[i] += n[i]
+                res["viewer_rows_by_table"] = tables
                 # Motion freshness over the window, pooled over the sampled viewers (gate-load `fresh`).
                 fresh = {"near": {}, "all": {}, "players": 0}
                 for pl in done.get("players", []):
@@ -751,6 +773,9 @@ def main():
     ap.add_argument("--full-log", action="store_true", help="with --detail: read the replica's whole module log from the server's data directory")
     ap.add_argument("--flip-off", action="store_true", help="after the window, turn motion_tables_on off and time the kill switch's tick")
     ap.add_argument("--fighter-tables", action="store_true", help="the viewers subscribe seen_fighter_copy in place of the fighter views (views step 3; set fighter_tables_on=true)")
+    ap.add_argument("--flip-law", default=None, metavar="NAME=VALUE", help="E2: set this world law live --flip-at s into the window (a capacity burst)")
+    ap.add_argument("--flip-at", type=float, default=30.0)
+    ap.add_argument("--crowd", action="store_true", help="E2 prototype (attention-e2): the viewers also subscribe seen_crowd (set attend_n and attend_crowd_on)")
     ap.add_argument("--combat-feed", action="store_true", help="the viewers subscribe combat_feed in place of my_combat (views step 2; set combat_feed_on=true)")
     ap.add_argument("--keep-world", action="store_true", help="leave the world paused at the end instead of deleting it (read back as paused)")
     ap.add_argument("--clog", action="store_true", help="record the replica's commitlog growth on disk over the window, and its compressed size after the world is deleted, zstd -3 and -6 (result clog)")

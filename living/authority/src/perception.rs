@@ -1321,6 +1321,26 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         }
         common::diag(|| "far_cap:dropped", capped.len() as u64);
     }
+    // E2 prototype (`attend.rs`, branch attention-e2 only): off unless `attend_on`, and then
+    // only without `far_cap`. The unattended are neither seen nor heard, as `far_cap`'s dropped.
+    if common::laws(ctx).attend_on && cap == 0 {
+        let keep = crate::attend::choose(ctx, id, &seen, &near, &crowd, now);
+        for b in seen.iter().copied().filter(|b| !keep.contains(b)).collect::<Vec<_>>() {
+            seen.remove(&b);
+            near.remove(&b);
+            capped.insert(b);
+        }
+        common::diag(|| "attend:dropped", capped.len() as u64);
+        if common::laws(ctx).attend_crowd_on {
+            let members: Vec<(u32, (f32, f32), f32, &str)> =
+                crowd.iter().filter(|(c, _)| capped.contains(&c.id)).map(|(c, _)| (c.id, c.pos, c.facing, &*c.kind)).collect();
+            crate::attend::crowd(ctx, id, viewer, here, &members, now);
+        } else {
+            crate::attend::clear_crowd(ctx, id, viewer);
+        }
+    } else if crate::attend::active(id) {
+        crate::attend::clear(ctx, id, viewer);
+    }
     SEEN_N.with(|s| s.borrow_mut().insert(id, seen.len()));
     common::diag(|| "sweep:candidates", candidates);
     common::diag(|| "sweep:seen", seen.len() as u64);
@@ -2171,6 +2191,9 @@ pub fn health_moved(ctx: &ReducerContext, id: u32, now: u64) {
 /// A player's character died: it perceives nothing any more.
 pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
     crate::frame::forget(ctx, id);
+    if crate::attend::active(id) {
+        crate::attend::clear(ctx, id, viewer);
+    }
     for p in ctx.db.perceived().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.perceived().id().delete(p);
     }

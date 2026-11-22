@@ -198,6 +198,17 @@ fn laws() {
         // Battle laws (docs/BATTLE_LAWS.md, prototypes; 0 or the value here is off in play):
         // at most this many creatures a player sees at once (the nearest, engaged first)...
         far_cap: 0.0,
+        // E2 prototype (branch attention-e2 only; false / 0 is off): a player attends at most
+        // its capacity (attend_ceiling, or attend_burst_cap when lower) of others, by a policy
+        // (0 nearest, 1 reordered every attend_reorder_ms, 2 the person instinct's order), a
+        // dropped one kept attend_grace_ms, the rest as crowd rows.
+        attend_on: false,
+        attend_ceiling: 16.0,
+        attend_burst_cap: 0.0,
+        attend_policy: 0.0,
+        attend_reorder_ms: 1000.0,
+        attend_grace_ms: 0.0,
+        attend_crowd_on: false,
         // ...a player's sweep less often above this many in sight (at most 3x the period)...
         crowd_sweep_n: 0.0,
         // ...the longest interval between its frames in a crowd (ms; 0: the built-in 100)...
@@ -3225,6 +3236,13 @@ fn law_about(l, name) {
         "memory_test" => "A test switch that makes one step of the world fail on purpose; it is off in play.",
         "det_clock" => "A test switch that makes the world's time and chance follow its steps alone, to compare two builds; it is off in play.",
         "det_stop" => "A test switch that pauses the world at a given step; it is off in play.",
+        "attend_on" => if l.attend_on { `a player attends at most ${short(l.attend_ceiling)} others at once; the rest in sight are a crowd` } else { "a player attends everyone in sight" },
+        "attend_ceiling" => `no one attends more than ${short(l.attend_ceiling)} others at once (when attention is on)`,
+        "attend_burst_cap" => if l.attend_burst_cap > 0.0 { `for now everyone attends at most ${short(l.attend_burst_cap)} (a measuring switch)` } else { "no one's attention is cut short" },
+        "attend_policy" => if l.attend_policy >= 2.0 { "a player attends as a person's instinct does: who goes for them, their own target, the nearest, then what stands out" } else if l.attend_policy >= 1.0 { "a player's attention is redrawn often (a measuring switch)" } else { "a player attends the nearest first" },
+        "attend_reorder_ms" => `a redrawn attention changes every ${short(l.attend_reorder_ms)} ms (a measuring switch)`,
+        "attend_grace_ms" => if l.attend_grace_ms > 0.0 { `one a player stops attending stays in view for ${short(l.attend_grace_ms)} ms` } else { "one a player stops attending leaves view at once" },
+        "attend_crowd_on" => if l.attend_crowd_on { "a player sees the unattended in sight as a crowd" } else { "a player is told nothing of the unattended" },
         "far_cap" => if l.far_cap > 0.0 { `a player sees at most ${short(l.far_cap)} others at once, the nearest` } else { "a player sees everyone in sight" },
         "crowd_sweep_n" => if l.crowd_sweep_n > 0.0 { `what a player sees is looked at again less often in a crowd of more than ${short(l.crowd_sweep_n)}` } else { "what a player sees is looked at again at the same pace in any crowd" },
         "crowd_frame_max_ms" => if l.crowd_frame_max_ms > 0.0 { `in a crowd, a player's view of others follows at least every ${short(l.crowd_frame_max_ms)} ms` } else { "in a crowd, a player's view of others follows at least every 100 ms" },

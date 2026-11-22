@@ -312,6 +312,8 @@ pub mod seen_character_copy_table;
 pub mod seen_character_copy_type;
 pub mod seen_character_type;
 pub mod seen_characters_table;
+pub mod seen_crowd_table;
+pub mod seen_crowd_type;
 pub mod seen_doing_cue_table;
 pub mod seen_doing_cue_type;
 pub mod seen_doing_far_table;
@@ -700,6 +702,8 @@ pub use seen_character_copy_table::*;
 pub use seen_character_copy_type::SeenCharacterCopy;
 pub use seen_character_type::SeenCharacter;
 pub use seen_characters_table::*;
+pub use seen_crowd_table::*;
+pub use seen_crowd_type::SeenCrowd;
 pub use seen_doing_cue_table::*;
 pub use seen_doing_cue_type::SeenDoingCue;
 pub use seen_doing_far_table::*;
@@ -1553,6 +1557,7 @@ pub struct DbUpdate {
     seen_body_cue: __sdk::TableUpdate<SeenBodyCue>,
     seen_character_copy: __sdk::TableUpdate<SeenCharacterCopy>,
     seen_characters: __sdk::TableUpdate<SeenCharacter>,
+    seen_crowd: __sdk::TableUpdate<SeenCrowd>,
     seen_doing: __sdk::TableUpdate<Doing>,
     seen_doing_cue: __sdk::TableUpdate<SeenDoingCue>,
     seen_doing_far: __sdk::TableUpdate<Doing>,
@@ -1985,6 +1990,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "seen_characters" => db_update
                     .seen_characters
                     .append(seen_characters_table::parse_table_update(table_update)?),
+                "seen_crowd" => db_update
+                    .seen_crowd
+                    .append(seen_crowd_table::parse_table_update(table_update)?),
                 "seen_doing" => db_update
                     .seen_doing
                     .append(seen_doing_table::parse_table_update(table_update)?),
@@ -2419,6 +2427,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_character_copy",
                 &self.seen_character_copy,
             )
+            .with_updates_by_pk(|row| &row.id);
+        diff.seen_crowd = cache
+            .apply_diff_to_table::<SeenCrowd>("seen_crowd", &self.seen_crowd)
             .with_updates_by_pk(|row| &row.id);
         diff.seen_doing_cue = self.seen_doing_cue.into_event_diff();
         diff.seen_fighter_copy = cache
@@ -2989,6 +3000,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_characters" => db_update
                     .seen_characters
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_crowd" => db_update
+                    .seen_crowd
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_doing" => db_update
                     .seen_doing
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -3494,6 +3508,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_characters" => db_update
                     .seen_characters
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_crowd" => db_update
+                    .seen_crowd
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "seen_doing" => db_update
                     .seen_doing
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3741,6 +3758,7 @@ pub struct AppliedDiff<'r> {
     seen_body_cue: __sdk::TableAppliedDiff<'r, SeenBodyCue>,
     seen_character_copy: __sdk::TableAppliedDiff<'r, SeenCharacterCopy>,
     seen_characters: __sdk::TableAppliedDiff<'r, SeenCharacter>,
+    seen_crowd: __sdk::TableAppliedDiff<'r, SeenCrowd>,
     seen_doing: __sdk::TableAppliedDiff<'r, Doing>,
     seen_doing_cue: __sdk::TableAppliedDiff<'r, SeenDoingCue>,
     seen_doing_far: __sdk::TableAppliedDiff<'r, Doing>,
@@ -4074,6 +4092,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.seen_characters,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<SeenCrowd>("seen_crowd", &self.seen_crowd, event);
         callbacks.invoke_table_row_callbacks::<Doing>("seen_doing", &self.seen_doing, event);
         callbacks.invoke_table_row_callbacks::<SeenDoingCue>(
             "seen_doing_cue",
@@ -4938,6 +4957,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         seen_body_cue_table::register_table(client_cache);
         seen_character_copy_table::register_table(client_cache);
         seen_characters_table::register_table(client_cache);
+        seen_crowd_table::register_table(client_cache);
         seen_doing_table::register_table(client_cache);
         seen_doing_cue_table::register_table(client_cache);
         seen_doing_far_table::register_table(client_cache);
@@ -5104,6 +5124,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "seen_body_cue",
         "seen_character_copy",
         "seen_characters",
+        "seen_crowd",
         "seen_doing",
         "seen_doing_cue",
         "seen_doing_far",

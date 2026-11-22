@@ -7,6 +7,7 @@ mod act;
 mod seen_structures;
 mod acts;
 mod attention;
+mod attend;
 mod brain;
 mod breath;
 mod codes;
