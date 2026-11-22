@@ -668,7 +668,8 @@ pub fn spawn_battle_sides(ctx: &ReducerContext, n: u32, sides: u32) -> Result<()
                 let mut terms = serde_json::Map::new();
                 terms.insert("label".into(), serde_json::json!("enemy"));
                 terms.insert("value".into(), serde_json::json!(-50.0));
-                crate::records::make(ctx, "stance", "open", 0, &parties, &terms, 0, now);
+                // Due never (`u64::MAX`): record housekeeping drops every record with `due_ms <= now`.
+                crate::records::make(ctx, "stance", "open", 0, &parties, &terms, u64::MAX, now);
             }
         }
     }

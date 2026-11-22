@@ -195,6 +195,11 @@ What would have to change, using the 16-viewer figures (marked **estimates**; at
 - **Per write** (crowd writes a tick across all viewers): about 15–23 µs a write, three to four times the 16-viewer figure.
 - **A hypothesis, not tested:** each write is evaluated against every subscriber's `viewer = :sender` filter, so a write's cost grows with the viewer count. If that holds, it applies equally to every copy table and to "outside the tick" in §4.
 - **The measurement that would settle it:** one crowd row written per tick at 16, 64 and 216 idle viewers, with no battle.
+- **Correction (2026-11-22, [VIEWER_FLOOR.md](VIEWER_FLOOR.md) §5): the hypothesis is wrong.**
+  - For an indexed `viewer` column, which `seen_crowd` has, SpacetimeDB 2.14.1 turns a `viewer = :sender` rule into a search argument.
+  - Each written row then evaluates only its own viewer's query, so a write costs nothing per subscriber who does not receive it. Both the pinned source and a probe at 1, 16, 64 and 216 subscribers show this: 1.5–7 µs of evaluation a row.
+  - The higher per-write figure above comes from per-tick arithmetic on a saturated host.
+  - On an unindexed column the guess would hold: there every subscriber with a match scans the transaction's changes.
 
 ## 4. The floor: what a viewer costs with nobody attended
 

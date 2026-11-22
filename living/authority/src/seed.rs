@@ -108,8 +108,38 @@ pub fn active_seed() -> Option<Seed> {
 
 pub fn set_active(json: &str) {
     ACTIVE.with(|a| *a.borrow_mut() = Some(std::rc::Rc::from(json)));
+    NEWCOMER.with(|n| *n.borrow_mut() = None);
 }
 pub const INSTINCTS: &str = include_str!("../../seeds/instincts.json");
+
+thread_local! {
+    /// `INSTINCTS`, parsed once per module instance: every spawn reads it (a rejoin, a birth, an
+    /// admin's refill). Module memory is not kept between calls by guarantee
+    /// (https://spacetimedb.com/docs/functions/reducers/, "Global and Static Variables Are Undefined
+    /// Behavior"): this is a cache of a compiled-in constant, never written by a reducer, so a lost
+    /// or fresh instance parses it again and a rolled-back call leaves nothing to undo
+    /// (docs/HUMAN_FIGHTER_COST.md §2.4).
+    static INSTINCTS_PARSED: std::rc::Rc<serde_json::Value> = std::rc::Rc::new(serde_json::from_str(INSTINCTS).expect("instincts json"));
+    /// The seed's `newcomer` section, parsed once per module instance (`None`: not yet, or a seed
+    /// that does not parse, which gives no kit). Each join read the whole seed for it. Cleared
+    /// whenever the active seed is set.
+    static NEWCOMER: std::cell::RefCell<Option<std::rc::Rc<Option<SeedNewcomer>>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The parsed instincts (`INSTINCTS`).
+fn instincts() -> std::rc::Rc<serde_json::Value> {
+    INSTINCTS_PARSED.with(|i| i.clone())
+}
+
+/// The seed's `newcomer` section (`None` when the seed does not parse, as before: no kit).
+fn newcomer() -> std::rc::Rc<Option<SeedNewcomer>> {
+    if let Some(n) = NEWCOMER.with(|n| n.borrow().clone()) {
+        return n;
+    }
+    let n = std::rc::Rc::new(serde_json::from_str::<Seed>(&active()).ok().map(|s| s.newcomer));
+    NEWCOMER.with(|c| *c.borrow_mut() = Some(n.clone()));
+    n
+}
 pub const REPERTOIRE: &str = include_str!("../../seeds/repertoire.json");
 
 thread_local! {
@@ -664,7 +694,7 @@ thread_local! {
     static WAYS: std::rc::Rc<WaysOf> = std::rc::Rc::new(serde_json::from_str::<WaysOf>(&active()).unwrap_or_default());
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Debug, PartialEq)]
 pub struct SeedNewcomer {
     #[serde(default)]
     pub items: std::collections::BTreeMap<String, u32>,
@@ -724,13 +754,14 @@ fn pack_far() -> f32 {
 
 /// A newcomer's starter kit (the seed's `newcomer`).
 pub fn newcomer_kit(ctx: &ReducerContext, id: u32, now: u64) {
-    let Ok(s) = serde_json::from_str::<Seed>(&active()) else { return };
-    for (item, qty) in &s.newcomer.items {
+    let kit = newcomer();
+    let Some(newcomer) = kit.as_ref() else { return };
+    for (item, qty) in &newcomer.items {
         if living_rules::catalog::item(item).is_some() && *qty > 0 {
             common::inv_add(ctx, id as u64, item, *qty);
         }
     }
-    for t in &s.newcomer.knows {
+    for t in &newcomer.knows {
         if living_rules::catalog::technique(t).is_some() {
             common::learn(ctx, id, t, "what newcomers know", now);
         }
@@ -837,7 +868,7 @@ fn packs(ctx: &ReducerContext, map: &living_rules::map::Map, packs: &[SeedPack],
                 }
             }
             if !p.instinct.is_empty() {
-                let all: serde_json::Value = serde_json::from_str(INSTINCTS).expect("instincts json");
+                let all = instincts();
                 match all.get(p.instinct.as_str()) {
                     Some(g) => {
                         if let Err(e) = crate::mind::set_graph(ctx, id, &as_installed(ctx, &p.instinct, g), "instinct", "seed", now) {
@@ -969,12 +1000,12 @@ thread_local! {
 }
 
 pub fn young_instinct(kind: &str) -> String {
-    let all: serde_json::Value = serde_json::from_str(INSTINCTS).expect("instincts json");
+    let all = instincts();
     all.get(format!("{kind}_young").as_str()).map(|v| v.to_string()).unwrap_or_else(|| instinct(kind))
 }
 
 pub fn instinct(kind: &str) -> String {
-    let all: serde_json::Value = serde_json::from_str(INSTINCTS).expect("instincts json");
+    let all = instincts();
     all.get(kind).or_else(|| all.get("person")).map(|v| v.to_string()).unwrap_or_default()
 }
 
@@ -1409,7 +1440,7 @@ pub fn spawn_sexed(ctx: &ReducerContext, name: &str, kind: &str, controller: Ide
     let graph = if c.stage == 0 {
         young_instinct(kind)
     } else {
-        let all: serde_json::Value = serde_json::from_str(INSTINCTS).expect("instincts json");
+        let all = instincts();
         match all.get(kind) {
             Some(g) => as_installed(ctx, kind, g),
             None => instinct(kind),
@@ -2422,6 +2453,25 @@ mod tests {
     use super::*;
 
     const AUTHORED: &str = include_str!("../../seeds/authored-test.json");
+
+    /// seed-once: the instincts and the newcomer's kit are parsed once per instance and give what
+    /// a fresh parse gives; setting the active seed drops the kit parsed from the one before.
+    #[test]
+    fn parsed_once_is_what_a_fresh_parse_gives() {
+        let fresh: serde_json::Value = serde_json::from_str(INSTINCTS).unwrap();
+        assert_eq!(*instincts(), fresh);
+        assert!(std::rc::Rc::ptr_eq(&instincts(), &instincts()));
+        set_active(AUTHORED);
+        let want = serde_json::from_str::<Seed>(AUTHORED).ok().map(|s| s.newcomer);
+        assert_eq!(*newcomer(), want);
+        assert!(std::rc::Rc::ptr_eq(&newcomer(), &newcomer()));
+        let mut other: serde_json::Value = serde_json::from_str(AUTHORED).unwrap();
+        other["newcomer"] = serde_json::json!({"items": {"berries": 7}, "knows": []});
+        set_active(&other.to_string());
+        assert_eq!(newcomer().as_ref().as_ref().map(|n| n.items.get("berries").copied()), Some(Some(7)));
+        set_active("not a seed");
+        assert_eq!(*newcomer(), None);
+    }
 
     /// The rule `common::day_phase` used before rhythms could rise after noon (lives-2): hours
     /// pivoted at noon.

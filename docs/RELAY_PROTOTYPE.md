@@ -2,6 +2,14 @@
 
 Status: **measurement**, 2026-11-22, dev-box. The prototype lives on branch `relay-proto` (from `viewer-floor`) and never goes to main. This note is the §2.6 measurement that [BATTLE_DELIVERY_PATHS.md](BATTLE_DELIVERY_PATHS.md) asked for before anyone commits to building a relay.
 
+> **Correction (2026-11-22, the 60 Hz budget): the viewer counts here are upper bounds for strict 60 Hz.**
+> - **Measured** ([BATTLE_CONTRACT_CASES.md](BATTLE_CONTRACT_CASES.md) §4, dev-box, `performance` governor). Strict 60 Hz means at least 59.9 ticks/s, with step p99 within one 16.7 ms slot. It held only up to about **390 ms/s** of database-thread work. Arms at 440–520 ms/s ran 59.0–59.9 ticks/s, with about 1% of steps late.
+> - **What sets the 390** (the tick's own work, commits, or the scheduler) is being measured in HUMAN_FIGHTER_COST.
+> - **Why the counts are upper bounds:** this note counts about 116 viewers with the relay against 96 without on a budget of 600 ms/s for the tick's work (the summary above).
+> - **This note's own runs show it:** its 64-viewer arms (474–512 ms/s) ran 59.3–59.4 ticks/s.
+> - **With 390 ms/s as the budget** (an estimate, on this note's warm figures): about 27 viewers with the relay (R 326.9, 2.30 each) and about 20 without (R 333.8, 2.78 each).
+> - **The recommendation stands:** don't build the relay alone for this gate.
+
 ## Measured, and the recommendation updated
 
 **The relay works, and it is safe, but it does not hold up as the way to 216 viewers.** The measurement is at the contract's density: the 26–32 m ring, about 49 in sight, heed with holds at 16, uninstrumented. Every arm ran on an equally warm host (§2.3).
@@ -23,7 +31,10 @@ Status: **measurement**, 2026-11-22, dev-box. The prototype lives on branch `rel
 
   Against the contract's 150 ms input-to-outcome budget, that is negligible.
 - **The relay's own cost:** 21, 34 and 48 ms/s of CPU and 22, 29 and 40 MB of memory at 16, 64 and 128 viewers; 58 ms/s and 53 MB at 216. That is about 13 ms/s plus 0.2 ms/s per viewer, and about 15 MB plus 0.17 MB per viewer: under 6% of one core at 216.
-- **Privacy:** no viewer received a row outside its authority-written set. That held for about 1.83 million rows checked across every relay run, including set changes in the same transaction. A deliberately broken relay was caught first: 137 violations in 18,925 rows.
+- **Privacy** (corrected 2026-11-22, §3.4): no viewer received a row outside its authority-written set. The claim was re-proved with a fixed probe (`26c71b96e`), because the original probe's transaction names collided once a second.
+  - **The known answer:** the deliberately broken relay was caught first, with 143 violations in 23,350 rows.
+  - **The re-proof:** 0 violations in 1,094,943 rows at 16, 64 and 128 viewers, with the relay alone, including set changes in the same transaction.
+  - **With off-thread perception** ([PERCEPTION_OFF_THREAD.md](PERCEPTION_OFF_THREAD.md)): another 1,368,310 rows at those counts, 0 violations.
 
 **Why the relay saves less than the estimate.** It removes 0.5–0.7 ms/s per viewer: copies, cues, the fight feed, hearing, and their subscription evaluation. The estimate of about 1.2 ms/s left on the authority did not survive measurement. Of the relay arm's 2.3 ms/s (L1 shares, §3):
 - **perception, 0.92:** sight, heed, the perceived set, projections and crowd rows;
@@ -71,7 +82,7 @@ Estimate with both: about 0.83 + 0.14 + 0.15 ≈ 1.1 ms/s per viewer, about 240 
 - **`clients`.** One WebSocket per viewer. It times each frame's hop from the relay's receipt and its age from the authority's tick, and logs every item.
 - **`checker`.** An independent owner connection with the same subscriptions. It logs each viewer's set changes and the players' characters, by transaction.
 
-Transactions are named (tick, index): the latest `clock` tick, and the number of messages since it. Two connections with the same subscriptions get the same transactions in the same order (one server message per transaction in 2.14.1), so the relay's and the checker's names agree. `.local/rp/privacy.py` replays the checker's set history and fails any received item outside its viewer's set at that transaction.
+Transactions are named (tick, index): the latest `clock` tick, and the number of messages since it. A transaction starts a new tick only when the `clock` row's tick number moves. Housekeeping (1 Hz) and a script install rewrite the row without moving it. The first probe counted any `clock` change, so once a second two transactions shared a name. That was fixed in `26c71b96e`, on branch `perc-offthread` (§3.4). Two connections with the same subscriptions get the same transactions in the same order (one server message per transaction in 2.14.1), so the relay's and the checker's names agree. `.local/rp/privacy.py` replays the checker's set history and fails any received item outside its viewer's set at that transaction.
 
 **Off is off.** Main `a6375a70e` (the branch's base) against `rp-cullet` with every switch off, in `det_compare`'s player mode (16 players, 200 fighters, 1,800 ticks, every table every tick): **identical** (113 tables, 46,272 rows), checked again after `fc1af9d77`. The negative control, `relay_on=true`, differs from tick 2 in the law tables, then from tick 3 in copies, cues and senses.
 
@@ -196,10 +207,29 @@ So VIEWER_FLOOR's per-viewer costs were about 18% low, and its viewer counts abo
 
 ### 3.4 Privacy
 
-| Run set | Rows checked | Outside the set |
-|---|---:|---:|
-| Broken relay (state before set removals), 16 viewers, 30 s | 18,925 | **137**, each at the transaction where the creature left the set |
-| Every real relay run (series smoke, m, m2, w; 16–216 viewers) | about 1.83 million | **0** |
+> **Correction (2026-11-22).** The figures first given here are superseded. They were measured with a probe whose transaction names collided once a second.
+>
+> - **The defect.** Housekeeping writes the `clock` row without moving its tick, and the relay and the checker counted that write as a new tick. Two transactions then shared a name, so the checker could misorder a set change against a row.
+> - **How it showed.** In [PERCEPTION_OFF_THREAD.md](PERCEPTION_OFF_THREAD.md) §1.4, 6 rows were flagged, and the labels, not the relay, were out of order.
+> - **The fix.** `26c71b96e` (branch `perc-offthread`): a new tick only when the tick number moves.
+> - **What it means for the old figures.** The old 0 stands as observed. But the collision could in principle also have hidden a real violation at those boundaries, so the claim was re-proved.
+>
+> The re-proof ran on the `performance` governor, in the same battle at contract density, with the checker riding along in every relay arm and in its 0-viewer reference. The known answer ran first.
+
+| Run set (fixed probe `26c71b96e`) | Viewers | Rows checked | Outside the set |
+|---|---:|---:|---:|
+| Broken relay (state before set removals), 30 s | 16 | 23,350 | **143**, each at the transaction where the creature left the set |
+| Real relay (30 s and 60 s) | 16 | 58,089 | **0** |
+| Real relay (4 runs: 15 Hz and 10 Hz fighters) | 64 | 680,526 | **0** |
+| Real relay | 128 | 356,328 | **0** |
+| **Relay alone, all** | 16–128 | **1,094,943** | **0** |
+| Relay plus off-thread perception ([PERCEPTION_OFF_THREAD.md](PERCEPTION_OFF_THREAD.md); 2 runs at each count) | 16, 64, 128 | 1,368,310 | **0** |
+
+**Superseded, first probe:**
+- the broken relay: 137 violations in 18,925 rows;
+- every real relay run (series smoke, m, m2, w; 16–216 viewers): 0 in about 1.83 million rows.
+
+The re-proof did not cover 216 viewers.
 
 ## 4. SpacetimeDB 2.14.1: what the relay rests on
 

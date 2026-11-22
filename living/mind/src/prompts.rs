@@ -1088,12 +1088,108 @@ pub fn is_night(hour: f32) -> bool {
 
 /// The fast lane's system prompt (docs/FAST_LANE.md): the person, the world's rules (physics) and
 /// the graph grammar, and the four answers it may give. No acts, no dealings, no tactics: what to
-/// do is the character's own.
+/// do is the character's own. In the frame the service runs under (`LIVING_FAST_FRAME`).
+#[cfg(test)]
 pub fn fast_system() -> String {
-    fast_system_in(frame())
+    fast_system_v(fast_frame())
+}
+
+/// Which frame the fast lane's prompt is written in (`LIVING_FAST_FRAME`, docs/FAST_LANE_FRAME.md):
+/// `balanced` (the default since battle-frame) shows the ways of answering a fight alike, keeps
+/// the fight one has beneath any line one adds, and tells the asker's own felt body; `first` is
+/// the frame every trial before battle-frame ran, byte for byte, kept for replays and comparisons.
+/// It changes no rule, no reply the mind accepts, and nothing outside the fast lane's own prompt;
+/// with the world's `fast_lane_on` off (the shipped law) no fast prompt is ever sent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FastFrame {
+    First,
+    Balanced,
+}
+
+impl FastFrame {
+    pub fn parse(v: Option<&str>) -> Result<FastFrame, String> {
+        match v.map(str::trim) {
+            None | Some("") | Some("balanced") => Ok(FastFrame::Balanced),
+            Some("first") => Ok(FastFrame::First),
+            Some(other) => Err(format!("LIVING_FAST_FRAME={other}: expected first or balanced")),
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            FastFrame::First => "first",
+            FastFrame::Balanced => "balanced",
+        }
+    }
+}
+
+static FAST_FRAME: std::sync::OnceLock<FastFrame> = std::sync::OnceLock::new();
+
+/// The fast frame this service runs under, read once from `LIVING_FAST_FRAME` (main checks it at start).
+pub fn fast_frame() -> FastFrame {
+    *FAST_FRAME.get_or_init(|| FastFrame::parse(std::env::var("LIVING_FAST_FRAME").ok().as_deref()).unwrap_or(FastFrame::Balanced))
+}
+
+/// The fast system prompt in frame `f`.
+pub fn fast_system_v(f: FastFrame) -> String {
+    match f {
+        FastFrame::First => fast_system_in(frame()),
+        FastFrame::Balanced => fast_balanced_frame(frame()) + "\n\n" + &*world_rules() + "\n\n" + grammar().as_str(),
+    }
+}
+
+/// The balanced frame's ways of answering a fight, side by side, each as short as the others:
+/// keeping, and one line put first in the `combat` branch for each of the other five. Each line
+/// is a legal graph node (test `the_balanced_frame_shows_six_ways_alike`); its numbers show the
+/// form only. These lines are the only fight-specific text the balanced frame adds.
+pub const FAST_WAYS: [(&str, &str); 6] = [
+    ("keep it as it is", "{\"keep\": true, \"thought\": \"...\"}"),
+    ("adjust your timing", "{\"if\": {\"doing\": {\"is\": \"hostile\", \"phase\": \"about to release\", \"at_me\": true}}, \"then\": {\"do\": \"block\"}}"),
+    ("change whom you fight", "{\"if\": {\"sees\": \"attacker\"}, \"then\": {\"do\": \"strike\", \"target\": \"attacker\"}}"),
+    ("press an opening", "{\"if\": {\"doing\": {\"phase\": \"recovering\", \"within\": 2.5}}, \"then\": {\"do\": \"strike\", \"target\": \"attacker\", \"run\": true}}"),
+    ("make room and re-enter", "{\"if\": {\"count\": {\"of\": \"person\", \"within\": 3, \"at_least\": 3}}, \"then\": {\"do\": \"back_off\", \"target\": \"attacker\", \"distance\": 4}}"),
+    ("break contact", "{\"if\": {\"health\": {\"below\": 20}}, \"then\": {\"do\": \"flee\", \"target\": \"attacker\"}}"),
+];
+
+/// The balanced fast frame's own text (`LIVING_FAST_FRAME=balanced`): the first frame's text with keeping
+/// listed first, the triggering event set apart from what else is perceived, the fight one has
+/// kept beneath an added line, and the six ways of [`FAST_WAYS`].
+fn fast_balanced_frame(frame: Frame) -> String {
+    let ways: Vec<String> = FAST_WAYS.iter().map(|(name, line)| format!("- {name}: {line}")).collect();
+    shared(format!(
+        "{} Stay in character: your personality, values, relationships and memories are yours. \
+Something has just happened to you (see Why now). Why now is that one event as you perceived it; What has just happened, and How you are now when it is given, are what else you perceive. \
+Your body goes on doing what your top level and your routines say while you think; \
+what you answer changes them from the next moment on, not the moment that is passing. \
+Your `combat` branch stays as it is unless you change it. \
+You may keep everything as it is, rewrite your `combat` branch, rewrite one of the routines listed under Your routines, or switch your `combat` branch to one of them. \
+A change can be one line put first in your `combat` branch, with the lines it has now (under Your top level) written out again beneath it: \
+{{\"first\": [the new line, then your branch's own lines]}}. \
+Six ways, side by side, each as short as the others; none is the right one, the numbers only show the form, and which fits is yours to judge from who you are and what you perceive:\n{}\n\
+Use only what you have perceived and what you know how to do. Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Reply with ONE JSON object, one of:\n\
+{{\"keep\": true, \"thought\": \"one sentence, in your words\"}}\n\
+{{\"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}}, \"thought\": \"...\"}}\n\
+{{\"routine\": {{\"name\": \"one of your routines\", \"graph\": {{...}}}}, \"thought\": \"...\"}}\n\
+{{\"switch\": \"one of your routines\", \"thought\": \"...\"}}",
+        opening(frame, THINK_OPENING),
+        ways.join("\n"),
+    ))
+}
+
+/// The fast lane's frame text alone, in fast frame `f`: the system prompt is this, then the
+/// world's rules and the graph grammar, the same bytes in either frame.
+pub fn fast_frame_text(f: FastFrame, frame: Frame) -> String {
+    match f {
+        FastFrame::First => fast_first_frame(frame),
+        FastFrame::Balanced => fast_balanced_frame(frame),
+    }
 }
 
 fn fast_system_in(frame: Frame) -> String {
+    fast_first_frame(frame) + "\n\n" + &*world_rules() + "\n\n" + grammar().as_str()
+}
+
+fn fast_first_frame(frame: Frame) -> String {
     shared(format!(
         "{} Stay in character: your personality, values, relationships and memories are yours. \
 Something has just happened to you (see Why now). Your body goes on doing what your top level and your routines say while you think; \
@@ -1105,7 +1201,7 @@ Use only what you have perceived and what you know how to do. Refer to people by
 {{\"switch\": \"one of your routines\", \"thought\": \"...\"}}\n\
 {{\"keep\": true, \"thought\": \"...\"}}",
         opening(frame, THINK_OPENING),
-    )) + "\n\n" + &*world_rules() + "\n\n" + grammar().as_str()
+    ))
 }
 
 /// The fast lane's user prompt: who the character is (with its own moves' timings), its top
@@ -1121,6 +1217,17 @@ pub fn fast_user(reason: &str, persona: &str, experiences: &[String], plan: &str
     out.push_str(&format!("\n# Why now\n{reason}\n\n# What has just happened (oldest first)\n"));
     for e in experiences {
         out.push_str(&format!("- {e}\n"));
+    }
+    out
+}
+
+/// The fast user prompt in frame `f`. The first frame's is [`fast_user`] exactly. The balanced
+/// frame's adds, last, how the asker's body feels now (`felt`, the words its think prompt has
+/// under "How your body feels"), when the mind knows it: its own body, nothing of anyone else.
+pub fn fast_user_v(f: FastFrame, reason: &str, persona: &str, experiences: &[String], plan: &str, outline: &str, repertoire: &str, felt: &str) -> String {
+    let mut out = fast_user(reason, persona, experiences, plan, outline, repertoire);
+    if f == FastFrame::Balanced && !felt.trim().is_empty() {
+        out.push_str(&format!("\n# How you are now\nHow your body feels: {}\n", felt.trim()));
     }
     out
 }
@@ -1428,7 +1535,7 @@ mod tests {
     /// memory and never spoken (fix-spoken-ids: r2e's minds said three lines with them).
     #[test]
     fn every_speaking_mind_is_told_ids_are_never_spoken() {
-        for (purpose, text) in [("think", think_system()), ("deliberate", deliberate_system()), ("fast", fast_system()), ("talk", talk_system())] {
+        for (purpose, text) in [("think", think_system()), ("deliberate", deliberate_system()), ("fast", fast_system()), ("fast first", fast_system_v(FastFrame::First)), ("talk", talk_system())] {
             assert_eq!(text.matches(IDS_NOT_SPOKEN).count(), 1, "{purpose}");
         }
         assert!(!IDS_NOT_SPOKEN.contains('#'), "one general sentence, no example");

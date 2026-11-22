@@ -2,6 +2,14 @@
 
 Status: **measurement and design**, 2026-11-22, dev-box. The prototype lives on branch `perc-offthread` (on `relay-proto`) and never goes to main. This note measures the premise of [BATTLE_DELIVERY_PATHS.md](BATTLE_DELIVERY_PATHS.md)'s stage 2, which [RELAY_PROTOTYPE.md](RELAY_PROTOTYPE.md) made the next question: with the relay doing delivery, what does the authority pay per viewer once sight and the attention choice are worked out off its thread?
 
+> **Correction (2026-11-22, the 60 Hz budget): the viewer counts here are upper bounds for strict 60 Hz.**
+> - **Measured** ([BATTLE_CONTRACT_CASES.md](BATTLE_CONTRACT_CASES.md) §4, dev-box, `performance` governor). Strict 60 Hz means at least 59.9 ticks/s, with step p99 within one 16.7 ms slot. It held only up to about **390 ms/s** of database-thread work. Arms at 440–520 ms/s ran 59.0–59.9 ticks/s, with about 1% of steps late.
+> - **What sets the 390** (the tick's own work, commits, or the scheduler) is being measured in HUMAN_FIGHTER_COST.
+> - **Why the counts are upper bounds:** the table under "The answer" counts N = B / f with B = 600 − R.
+> - **This note's own runs show it:** its 64- and 128-viewer arms (420 and 500 ms/s) ran 59.6 and 59.0 ticks/s.
+> - **With 390 ms/s as the budget** (an estimate): relay plus off-thread perception at 1.33–1.46 ms/s per viewer fits about **53–58 viewers** with 15 Hz fighters (R 312.8) and **71–78** with 10 Hz fighters (R 286.7). That is not 197–236.
+> - **The answer stands:** no.
+
 ## The answer
 
 **No. Relay plus off-thread perception measures 1.33–1.46 ms/s per viewer at 128 viewers, and 1.41–1.68 at 64.** That is above the about 1.2 target.
