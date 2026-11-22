@@ -175,7 +175,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     // What I heard.
     last.heard.retain(|_, e| Some(e.observer) == me);
     if let Some(id) = me {
-        last.heard.extend(conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "speech").map(|e| (e.id, e)));
+        last.heard.extend(crate::net::my_lines(&conn.db).into_iter().filter(|e| e.observer == id && e.kind == "speech").map(|e| (e.id, e)));
     }
     while last.heard.len() > 200 {
         last.heard.pop_first();
@@ -266,7 +266,7 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
     // pace and ends the bubble of the line it answers (reply-pace, `heard::paced`): my own
     // `said` rows are paced with what I heard, so a reply to me waits for my line too.
     let mut bubbles = Vec::new();
-    let said_rows: Vec<Experience> = me.map_or_else(Vec::new, |id| conn.db.my_experience().iter().filter(|e| e.observer == id && e.kind == "said").collect());
+    let said_rows: Vec<Experience> = me.map_or_else(Vec::new, |id| crate::net::my_lines(&conn.db).into_iter().filter(|e| e.observer == id && e.kind == "said").collect());
     let lines = crate::heard::pace_rows(heard.iter().chain(said_rows.iter()));
     let end_of = |s: &crate::heard::Spoken, p: &crate::heard::Paced| {
         let end = p.shown_ms + bubble_life(s.words) as f64 * 1000.0;

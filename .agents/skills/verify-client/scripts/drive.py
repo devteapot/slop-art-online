@@ -54,7 +54,7 @@ BASE_QUERIES = [
 ]
 # Private in every build: the authority's bookkeeping and developer audit truth
 # (docs/PERCEPTION.md). The observer and the mind service read them as the database owner.
-PRIVATE = ['attention', 'copy_state', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'last_look', 'deliberation', 'rearing',
+PRIVATE = ['attention', 'copy_state', 'lines_state', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'last_look', 'deliberation', 'rearing',
            'known_ground', 'remembered', 'ground_edit', 'seen_structures',
            'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry',
            'combat_seen', 'fight_seen', 'missile', 'skill_use', 'readiness', 'skill_code',
@@ -118,8 +118,8 @@ SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'plac
 # The per-sender views: what a player perceives and its own state.
 # The tables filtered per client by row-level security (`viewer = :sender`): the cue event tables
 # (frame-views), the public motion copies and the mirror of a player's projections (battle-views).
-# Each has its isolation case (`cues.py`, `motion_tables.py`, the copy tables, `combat_feed.py`) and is named in docs/TICK_RATE.md's pin list.
-RLS_TABLES = ['seen_body_cue', 'seen_fighter_cue', 'seen_doing_cue', 'seen_body_copy', 'seen_character_copy', 'seen_fighter_copy', 'combat_feed']
+# Each has its isolation case (`cues.py`, `motion_tables.py`, the copy tables, `combat_feed.py`, `lines_table.py`) and is named in docs/TICK_RATE.md's pin list.
+RLS_TABLES = ['seen_body_cue', 'seen_fighter_cue', 'seen_doing_cue', 'seen_body_copy', 'seen_character_copy', 'seen_fighter_copy', 'combat_feed', 'experience_copy']
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
          'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex',
@@ -468,7 +468,7 @@ class Run:
         # (copy-privacy), through the probe's `all_tables` request.
         on_purpose = {'.agents/skills/verify-client/scripts/drive.py', '.agents/skills/verify-client/scripts/cues.py',
                       '.agents/skills/verify-client/scripts/motion_tables.py', '.agents/skills/verify-client/scripts/probe/src/main.rs',
-                      '.agents/skills/verify-client/scripts/combat_feed.py',
+                      '.agents/skills/verify-client/scripts/combat_feed.py', '.agents/skills/verify-client/scripts/lines_table.py',
                       'living/tools/battle_viewers.py'}
         everything = [str(p.relative_to(ROOT)) for p in sources
                       if re.search(r'subscribe_to_all_tables\(|SELECT \* FROM \*', p.read_text(errors='replace'))
@@ -476,7 +476,7 @@ class Run:
         if everything:
             raise RuntimeError(f'a program subscribes every table (cue tables included, RLS bypassed for the owner): {everything}')
         owners = [str(p.relative_to(ROOT)) for d in ('living/mind', 'living/viewer') for p in (ROOT / d).rglob('*.rs')
-                  if '/target' not in str(p) and re.search(r'seen_(body|fighter|doing)_cue|seen_body_copy|seen_character_copy|seen_fighter_copy|combat_feed', p.read_text(errors='replace'))]
+                  if '/target' not in str(p) and re.search(r'seen_(body|fighter|doing)_cue|seen_body_copy|seen_character_copy|seen_fighter_copy|combat_feed|experience_copy', p.read_text(errors='replace'))]
         if owners:
             raise RuntimeError(f'an owner program names a row-level-security table: {owners}')
         # Every row-level-security rule, by table (docs/TICK_RATE.md, "Every RLS-filtered table",
