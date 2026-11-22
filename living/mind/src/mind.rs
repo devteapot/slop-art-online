@@ -33,7 +33,7 @@ pub mod rethink;
 mod sleep;
 mod talk;
 mod facts;
-mod fast;
+pub mod fast;
 
 /// How much of a remembered thing's salience and confidence is kept after a step failed at it.
 const MISSED_WEAKEN: f64 = 0.5;

@@ -4,8 +4,8 @@ spend guard, the town arms' sidecar sampler and the per-arm reports. Python stan
 docker; reads the mind's own journals (llm.rs: one entry per model call, with its model and its
 prompt, cached and completion tokens).
 
-  act_trial.py watch --arm NAME --group town|battle --ledger FILE --log FILE --pid PID
-                     --journal GLOB [--journal GLOB ...] --group-cap USD --total-cap USD
+  act_trial.py watch --arm NAME --group town|battle --ledger FILE --log FILE (--pid PID | --pid-file F)
+                     --journal DIR/*.jsonl [--journal ...] [--ready FILE] [--first-journal-s 600] --group-cap USD --total-cap USD
                      [--margin USD] [--price MODEL=IN,OUT,CACHED ...] [--interval 30]
                      [--url URL --container C --db DB --minds N] [--diag FILE --collapse-below TPS]
   act_trial.py town-side --instance DIR --url URL --container C [--bench-at MIN ...]
@@ -28,6 +28,12 @@ model every `--interval` seconds, and stops the arm's runner (SIGINT by PID, the
 - with `--container`: replacements (`act_replaced` markers in the newest replica's module log) above
   1 per mind-second over the last 60 s, twice in a row.
 At its end the arm's final spend goes into `--ledger` (one entry per arm), which later arms read.
+
+A guard never runs blind: it refuses to start (exit 2, the runner stopped) when a --journal is a
+directory or does not name .jsonl files; `--ready` tells the launcher when every journal folder
+exists, so paid calls start only under a watching guard (`--pid-file` lets the guard start first);
+and when no journal file has matched `--first-journal-s` after the runner is known, it stops the
+runner and exits 3. `act_trial_guard_selftest.py` checks all three.
 
 `town-side` follows one trials.py instance of the `act-town` trial: the thinkers' `activity` rows
 every second (activities.jsonl.gz, as act_town.py samples them), `routine_stat` at the start and
@@ -111,10 +117,12 @@ class Journals:
 
     def entries(self):
         """Every call once: a journal copied elsewhere (the battle's cleanup copies it into the run's
-        directory) is the same file by name; the longer copy counts."""
+        directory) is the same file by name and first call; the longer copy counts."""
         best = {}
         for path, rec in self.files.items():
-            name = os.path.basename(path)
+            # A copy starts with the same call; another run's journal of the same name does not
+            # (two arms' Walker1.jsonl are two journals, not one).
+            name = (os.path.basename(path), rec[0] if rec else None)
             if name not in best or len(rec) > len(best[name]):
                 best[name] = rec
         return [e for rec in best.values() for e in rec]
@@ -227,7 +235,71 @@ def recent_markers(container, replica, stage, seconds, tail_bytes=40_000_000):
 
 # ---- watch -----------------------------------------------------------------------------
 
+def journal_problems(patterns):
+    """Why these --journal patterns could not guard anything, if they could not: a pattern must
+    name journal files (`DIR/*.jsonl`, a glob or a file ending in .jsonl), never a directory; a
+    guard given a directory read nothing and guarded nothing (battle-frame, 2026-11-21)."""
+    out = []
+    for pat in patterns:
+        if os.path.isdir(pat):
+            out.append(f"--journal {pat!r} is a directory: give its journal files, e.g. {os.path.join(pat, '*.jsonl')!r}")
+        elif not pat.endswith(".jsonl"):
+            out.append(f"--journal {pat!r} does not name .jsonl journal files")
+        elif glob.has_magic(os.path.dirname(pat)):
+            out.append(f"--journal {pat!r}: only the file name may hold a wildcard")
+    return out
+
+
+def journal_dirs_missing(patterns):
+    return [os.path.dirname(pat) or "." for pat in patterns if not os.path.isdir(os.path.dirname(pat) or ".")]
+
+
+def loud(msg):
+    print(f"GUARD REFUSED: {msg}", file=sys.stderr, flush=True)
+    print(f"GUARD REFUSED: {msg}", flush=True)
+
+
 def cmd_watch(a):
+    """Refuses (exit 2, and stops the runner if it is known) when a --journal could not be read as
+    journal files. With `--ready FILE` it writes FILE once every pattern's folder exists, so a
+    launcher holds its paid calls until the guard is watching; with `--pid-file` it waits for the
+    runner's PID there (the launcher starts the runner after `--ready`). With no journal file
+    matched `--first-journal-s` seconds after the runner is known, it stops the runner and exits 3."""
+    if a.pid is None and not a.pid_file:
+        loud("give --pid or --pid-file")
+        return 2
+    bad = journal_problems(a.journal)
+    if bad:
+        for b in bad:
+            loud(b)
+        if a.pid:
+            stop(a.pid, "; ".join(bad), lambda rec: None, wait=False)
+        return 2
+    t0 = time.time()
+    while journal_dirs_missing(a.journal):
+        if time.time() - t0 > a.ready_wait_s:
+            loud(f"no journal folder after {a.ready_wait_s:.0f} s: {journal_dirs_missing(a.journal)}")
+            if a.pid:
+                stop(a.pid, "journal folder missing", lambda rec: None, wait=False)
+            return 2
+        time.sleep(0.5)
+    if a.ready:
+        Path(a.ready).write_text(json.dumps({"watching": a.journal, "t_ms": now_ms(), "guard_pid": os.getpid()}))
+        print(f"guard ready: watching {a.journal}", flush=True)
+    if a.pid is None:
+        while True:
+            txt = Path(a.pid_file).read_text().strip() if os.path.exists(a.pid_file) else ""
+            if txt.isdigit():
+                a.pid = int(txt)
+                break
+            if time.time() - t0 > a.ready_wait_s + 600:
+                loud(f"no runner PID in {a.pid_file}")
+                return 2
+            time.sleep(0.5)
+    return watch_loop(a)
+
+
+def watch_loop(a):
     prices = parse_prices(a.price)
     j = Journals(a.journal, prices)
     led = ledger_read(a.ledger)
@@ -259,9 +331,17 @@ def cmd_watch(a):
     seen_diag = 0
     reason = None
     stopped_at = None
+    runner_known = time.time()
     while True:
         t = now_ms()
         j.poll()
+        if not j.files and a.first_journal_s and time.time() - runner_known > a.first_journal_s and alive(a.pid):
+            reason = f"no journal file matched {a.journal} in {a.first_journal_s:.0f} s: this guard sees no spend"
+            loud(reason)
+            write({"t_ms": t, "stop": reason})
+            stop(a.pid, reason, write, wait=False)
+            ledger_write(a.ledger, a.arm, {"arm": a.arm, "group": a.group, "usd": 0.0, "status": "unguarded", "stop": reason})
+            return 3
         by, usd, unknown = j.spend()
         n2, f2 = j.window(120_000)
         rec = {"t_ms": t, "usd": usd, "by_model": by, "calls_2min": n2, "errors_2min": f2}
@@ -825,7 +905,11 @@ def main():
     s.add_argument("--group", required=True)
     s.add_argument("--ledger", required=True)
     s.add_argument("--log", required=True)
-    s.add_argument("--pid", type=int, required=True)
+    s.add_argument("--pid", type=int)
+    s.add_argument("--pid-file", help="wait for the runner's PID in this file (start the runner after --ready)")
+    s.add_argument("--ready", help="write this file once every --journal folder exists (the launcher holds paid calls until then)")
+    s.add_argument("--ready-wait-s", type=float, default=120)
+    s.add_argument("--first-journal-s", type=float, default=600, help="stop the runner if no journal file matched this long after it is known (0: never)")
     s.add_argument("--journal", action="append", required=True)
     s.add_argument("--group-cap", type=float, required=True)
     s.add_argument("--total-cap", type=float, required=True)
