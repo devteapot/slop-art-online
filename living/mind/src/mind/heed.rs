@@ -16,7 +16,11 @@
 //!
 //!     living-mind heed-replay --fields FIELDS.jsonl --out PICKS.jsonl
 //!         [--capacity formula|N] [--ceiling N] [--contact-s S] [--no-holds]
-//!         [--policies POLICIES.jsonl] [--script living/scripts/skills.rhai]
+//!         [--policies POLICIES.jsonl] [--chosen CHOSEN.jsonl] [--script living/scripts/skills.rhai]
+//!     living-mind heed-replay --ask mind|jev ...   (the model arms: `heed_ask.rs`)
+//!
+//! `--chosen`: Jev's picks (arm c, `--ask jev`'s output): each `{"state", "t", "picks": [{"id"}]}`
+//! makes those creatures `chosen` from `t` until the state's next refresh.
 //!
 //! `--policies`: one `{"state": .., "heed": ..}` per line, the policy that state's subject wrote
 //! (arm b). A state without a line, or whose policy is refused, keeps the instinct; the output
@@ -173,6 +177,9 @@ fn law_f32(s: &Scripts, name: &str) -> Option<f32> {
 
 /// The subcommand's entry (`main.rs`).
 pub async fn replay_main(root: &Path, args: Vec<String>) -> Result<()> {
+    if args.iter().any(|a| a == "--ask") {
+        return super::heed_ask::ask_main(root, args).await;
+    }
     let fields = arg(&args, "--fields").ok_or_else(|| anyhow!("--fields FILE"))?;
     let out = arg(&args, "--out").ok_or_else(|| anyhow!("--out FILE"))?;
     let script_path = arg(&args, "--script").map(std::path::PathBuf::from).unwrap_or_else(|| root.join("living/scripts/skills.rhai"));
@@ -197,6 +204,20 @@ pub async fn replay_main(root: &Path, args: Vec<String>) -> Result<()> {
             let v: serde_json::Value = serde_json::from_str(&line?)?;
             let s = v.get("state").and_then(|s| s.as_str()).ok_or_else(|| anyhow!("a policies line needs `state`"))?.to_string();
             policies.insert(s, v.get("heed").cloned().unwrap_or(serde_json::Value::Null));
+        }
+    }
+    // Jev's picks: per state, (from t, ids), in time order.
+    let mut chosen_at: HashMap<String, Vec<(f32, Vec<u32>)>> = HashMap::new();
+    if let Some(p) = arg(&args, "--chosen") {
+        for line in std::io::BufReader::new(std::fs::File::open(&p).with_context(|| p.clone())?).lines() {
+            let v: serde_json::Value = serde_json::from_str(&line?)?;
+            let s = v["state"].as_str().unwrap_or_default().to_string();
+            let t = v["t"].as_f64().unwrap_or(0.0) as f32;
+            let ids = v["picks"].as_array().map(|a| a.iter().filter_map(|x| x["id"].as_u64().map(|i| i as u32)).collect()).unwrap_or_default();
+            chosen_at.entry(s).or_default().push((t, ids));
+        }
+        for v in chosen_at.values_mut() {
+            v.sort_by(|a, b| a.0.total_cmp(&b.0));
         }
     }
     let mut w = std::io::BufWriter::new(std::fs::File::create(&out).with_context(|| out.clone())?);
@@ -250,11 +271,22 @@ pub async fn replay_main(root: &Path, args: Vec<String>) -> Result<()> {
         // it on merit (for its hold).
         let mut since: HashMap<u32, f32> = HashMap::new();
         let mut merit: HashMap<u32, f32> = HashMap::new();
+        let picks_of = chosen_at.get(&st.state).cloned().unwrap_or_default();
         for step in &st.steps {
+            // Jev's latest picks at or before this step make those creatures `chosen`.
+            let now_chosen: Vec<u32> = picks_of.iter().filter(|(t, _)| *t <= step.t + 1e-3).last().map(|(_, ids)| ids.clone()).unwrap_or_default();
+            let mark = |c: &CandIn| -> CandIn {
+                let mut c = c.clone();
+                if now_chosen.contains(&c.id) {
+                    c.chosen = Some(c.chosen.unwrap_or(1.0));
+                }
+                c
+            };
+            let step_cands: Vec<CandIn> = step.cands.iter().map(mark).collect();
             let mut events = Vec::new();
             for e in &step.events {
-                let all: Vec<Candidate> = step.cands.iter().map(|c| candidate(c, &heeded, &since, e.t)).collect();
-                let c = candidate(&e.cand, &heeded, &since, e.t);
+                let all: Vec<Candidate> = step_cands.iter().map(|c| candidate(c, &heeded, &since, e.t)).collect();
+                let c = candidate(&mark(&e.cand), &heeded, &since, e.t);
                 let already = heeded.iter().any(|p| p.id == c.id);
                 let verdict = heed::admit(&policy, &c, &me, &all, &heeded, &limits);
                 match verdict {
@@ -289,7 +321,7 @@ pub async fn replay_main(root: &Path, args: Vec<String>) -> Result<()> {
             }
             // The full pass, each rule's hold applied.
             let t = step.t;
-            let all: Vec<Candidate> = step.cands.iter().map(|c| candidate(c, &heeded, &since, t)).collect();
+            let all: Vec<Candidate> = step_cands.iter().map(|c| candidate(c, &heeded, &since, t)).collect();
             let held: Vec<Held> = heeded
                 .iter()
                 .filter_map(|p| p.place.rule().map(|r| Held { id: p.id, rule: r, lapsed_s: merit.get(&p.id).map_or(f32::MAX, |m| (t - m).max(0.0)) }))

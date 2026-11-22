@@ -23,6 +23,7 @@ use tokio::sync::{oneshot, Semaphore};
 
 mod animal;
 pub mod heed;
+pub mod heed_ask;
 mod dealings;
 mod judge;
 mod lived;

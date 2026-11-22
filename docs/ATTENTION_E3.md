@@ -1,6 +1,6 @@
 # E3: who to track, on recorded scenes
 
-Status: **E3(a) run (free); E3(b) and E3(c) not started.** 2026-11-22, branch `attention-exp` (Spark). It is the Spark's part of docs/ATTENTION_BUDGET.md §8 (v2 with the v2.1 amendments). No paid call has been made. Nothing merges to main until the owner decides on the law.
+Status: **E3(a) run (free); the free fake-model parts of (b) and (c) run; the guards dry-run; no paid call.** 2026-11-22, branch `attention-exp` (Spark). It is the Spark's part of docs/ATTENTION_BUDGET.md §8 (v2 with the v2.1 amendments). No paid call has been made. Nothing merges to main until the owner decides on the law.
 
 **The question.** Does a mind-written heed policy (b) or Jev's picks (c) keep track of what the mind later acts on better than the starting heed instinct (a), without missing more first blows and without more flicker?
 
@@ -26,7 +26,8 @@ Status: **E3(a) run (free); E3(b) and E3(c) not started.** 2026-11-22, branch `a
 | Frozen item | sha256 |
 |---|---|
 | The state list (canonical JSON) | `a2ed40db949aea2fb800b8ab3ecac8d53b1c56c3f3ec91f428facb99b018c032` |
-| `states.json` as written | see `.local/attention-e3/MANIFEST.sha256` |
+| `states.json` as written | `261347ae473432ce4c6e28a7a4440b602adb5928c89487b2310b8e277c2ef0d6` (all evidence files: `.local/attention-e3/MANIFEST.sha256`) |
+| `attention_e3.py` at the freeze | `c769809739935429259eb5d61426233dcff4f3293f0e1818e767164645835000` |
 | Battle `combat-samples.jsonl.gz` | off `17307c49…bdd`, on `f1394fdc…3b0` (full hashes in the manifest) |
 
 ## 2. Method
@@ -143,7 +144,49 @@ Town dense moments: 8 (formula), 19 (capacity 8), none at 16; flicker there is 0
 
 ## 7. The free fake-model parts and the guard
 
-*(Filled in below once the (b) and (c) callers are built: prompts only, the fake model through the call path, validation of fake replies, and the guard's dry run.)*
+**The callers** (`living/mind/src/mind/heed_ask.rs`, `living-mind heed-replay --ask mind|jev`):
+
+- **(b) mind.** For each state, the subject's own recorded think prompt, byte for byte from its journal (system prompt from `journal/system/`, user prompt as sent), plus one added section `# Whom you keep track of (answer this now)`.
+  - The section gives the capacity the formula gave that state, the heed grammar, and placeholder examples only. The unit test `the_heed_field_names_no_one` fails on a named person, a role, a duty or a tactic word.
+  - It is sent once per state on the subject's recorded compile route, through the mind's own `Llm`, as purpose `heed`, journaled.
+  - The reply's `heed` field is validated by the shared parser against the ids the subject's scene listed.
+- **(c) Jev.** For each state, at its moment and every 6 s (5 requests), one `systemone` request.
+  - Its state is what the subject perceives then: who the instinct heeds, up to 14 more it can make out, the rest as a throng count. Handles (`c1`, …), never ids (`a_jev_state_has_handles_not_ids`).
+  - Its questions are `choice` over the handles plus "no one": "Who here is about to matter to this character?", and, when the subject has family in sight, "Is anyone here acting on someone in `your_people`?".
+  - The shape follows TypeSafe's documented schema (read 2026-11-22: `criteria` maps option names to descriptions, at most 255; answers carry `choice`, `confidence` and `probabilities`; `usage.input_tokens` is billed; no rate limit is documented, and 429 and 529 call for backoff).
+  - Handles at probability 0.3 or more (at most 4) become `chosen` until the next request (`heed-replay --chosen`).
+
+**Prompts only** (no call; `prompts-b.jsonl`, `prompts-c.jsonl`):
+
+| Arm | Requests | Prompt size | Route |
+|---|---|---|---|
+| (b) | 239, every recorded think call found | estimated 6.5k tokens p50, 9.2k p90 (characters ÷ 3; the recorded think prompts were 4.7k tokens p50) | `glm-flash` (GLM Flash, low effort) for all |
+| (c) | 1,195 | estimated 290 tokens p50, 970 p90; median 5 handles, at most 28 | `jev-1.14.0` |
+
+(b) at GLM Flash's committed price is well under $1 for all 239. (c)'s volume was checked against its $5 cap with the local prices file, without printing the price: it fits.
+
+**The fake model through the call path** (verify-llm's `fake_llm.py` on a private port, every profile pointed at it, a script rule answering the heed section with a valid policy):
+- (b): 239 calls, 239 valid policies, 0 refused, 0 errors. A first try returned 238 "no `heed` field": the fake rule fired only once (`times` 1), a fixture fault fixed with `times: -1`.
+- (c): 1,195 requests, 0 errors, 1,130 with a pick.
+- Both fed back through the replay: the fake policies were installed in every state (`source: policy`), and the fake picks went through `chosen`. The fake numbers mean nothing beyond the pipeline working.
+
+**The guard, dry runs** (`living/tools/heed_e3_launch.py`; `act_trial.py watch --ready --pid-file`; the fake server only):
+1. **The launcher blocks until the guard is ready.** It starts the guard, waits for its ready file (0.2 s), then starts the runner and writes its PID for the guard. A guard that exits or is not ready in 180 s means no runner.
+2. **The guard reads the live journal.** Arms (b) and (c) above both ran under it. It counted every call (239; 1,195), priced them (dry-run prices, model names that cost nothing), and wrote each arm's final spend to the ledger.
+3. **It stops at the cap.** Priced at an absurd dry-run rate, arm (b) was stopped by SIGINT after 13 of 239 calls, at a simulated $4.42 against the arm's $3.75 limit (cap $4 less $0.25) with a 1 s poll. At the real price (about $0.0015 a call) a 30 s poll overshoots by cents, inside the margin.
+4. **No price, no Jev.** With no local prices file, arm (c)'s launcher refuses before starting anything.
+
+The launcher passes Jev's local price to the guard's `--price` and never prints it. The guard's own log head lists the prices it uses: that log stays local, and is scrubbed of the Jev price before any evidence is published (as `gate_quality.py` keeps Jev's under a `jev` key).
+
+**Ready for the paid part, on the coordinator's go.** The commands are as in the dry runs, without `--dry-run-price`, with the real models file and the TypeSafe key in the environment:
+
+```
+heed_e3_launch.py --arm b --out .local/attention-e3/paid/b --runner-bin <living-mind> -- \
+    --ask mind --states .local/attention-e3/states.json --src .local/attention-e3/src \
+    --picks .local/attention-e3/picks-a-formula.jsonl --concurrency 4
+heed_e3_launch.py --arm c --out .local/attention-e3/paid/c --runner-bin <living-mind> -- \
+    --ask jev --states ... --fields .local/attention-e3/fields.jsonl --picks ... --concurrency 4
+```
 
 ## Files
 
@@ -152,6 +195,7 @@ Town dense moments: 8 (formula), 19 (capacity 8), none at 16; flicker there is 0
   - `living/seeds/heed.json` (the instincts);
   - `living/scripts/skills.rhai` (`heed_capacity(a)`, `heed_knack()`, the laws `heed_on`, `heed_ceiling`, `heed_contact_s`);
   - `living/seeds/worlds/heed/laws.rhai` (the `watch` skill and the `keeping_watch` technique, as an overlay only);
-  - `living/mind/src/mind/heed.rs` (`living-mind heed-replay`);
+  - `living/mind/src/mind/heed.rs` (`living-mind heed-replay`), `heed_ask.rs` (the model arms);
+  - `living/tools/heed_e3_launch.py` (an arm under its guard);
   - `living/tools/attention_e3.py` (freeze, fields, score).
 - **Evidence (worktree `.local/attention-e3/`, untracked):** `states.json`, `fields.jsonl`, `picks-<arm>.jsonl`, `score-<arm>.json`, `MANIFEST.sha256`, the extracted copies under `src/`. To be archived to `~/slop-evidence/attention-e3-<date>.tar.zst` with its sha256 when the branch's work ends.
