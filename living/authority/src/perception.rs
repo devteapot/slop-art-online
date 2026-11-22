@@ -1259,6 +1259,47 @@ impl Shared {
 
 /// One player's sweep. `shared` is what the tick's sweeps share, when the sweep may keep what it
 /// worked out (`KEPT`, in the tick); `None` outside the tick.
+thread_local! {
+    /// SWEEP-UNCHANGED (branch sweep-unchanged only): each viewer's last sweep inputs (its eye,
+    /// facing and sight; each candidate's position, whether it was already seen, its light), and the
+    /// counts since the last log: candidates, exactly unchanged, loosely unchanged (both moved under
+    /// 5 cm, facing within 1 degree, the rest equal), sweeps, sweeps whose own eye and facing were unchanged.
+    static UNCHANGED_PREV: std::cell::RefCell<HashMap<u32, ((f32, f32), f32, f32, HashMap<u32, ((f32, f32), bool, f32)>)>> = std::cell::RefCell::new(HashMap::new());
+    static UNCHANGED_COUNTS: std::cell::Cell<[u64; 6]> = const { std::cell::Cell::new([0; 6]) };
+}
+
+fn unchanged_count(id: u32, here: (f32, f32), heading: f32, sight: f32, inputs: HashMap<u32, ((f32, f32), bool, f32)>) {
+    let mut c = UNCHANGED_COUNTS.with(|c| c.get());
+    UNCHANGED_PREV.with(|p| {
+        let mut p = p.borrow_mut();
+        if let Some((h0, f0, s0, prev)) = p.get(&id) {
+            let eye_same = *h0 == here && *f0 == heading && *s0 == sight;
+            let d = |a: (f32, f32), b: (f32, f32)| ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt();
+            let eye_near = d(*h0, here) < 0.05 && (*f0 - heading).abs() < 0.01745 && *s0 == sight;
+            c[3] += 1;
+            c[4] += eye_same as u64;
+            for (cid, (pos, kept, glow)) in &inputs {
+                c[0] += 1;
+                if let Some((p0, k0, g0)) = prev.get(cid) {
+                    if eye_same && p0 == pos && k0 == kept && g0 == glow {
+                        c[1] += 1;
+                    }
+                    if eye_near && d(*p0, *pos) < 0.05 && k0 == kept && g0 == glow {
+                        c[2] += 1;
+                    }
+                }
+            }
+        }
+        p.insert(id, (here, heading, sight, inputs));
+    });
+    c[5] += 1;
+    if c[5] >= 2000 {
+        log::info!("sweep unchanged: {} candidates, {} exactly unchanged, {} loosely unchanged; {} sweeps compared, {} with the eye unchanged", c[0], c[1], c[2], c[3], c[4]);
+        c = [0; 6];
+    }
+    UNCHANGED_COUNTS.with(|x| x.set(c));
+}
+
 fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &Map, now: u64, mut shared: Option<&mut Shared>) {
     let setup = common::detail_span("sweep.setup");
     let Some(b) = ctx.db.body().id().find(id) else { return };
@@ -1292,6 +1333,10 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let crowd = common::creatures_near_filed(ctx, here, reach, now);
     let sight_chunks = (gather < reach).then(|| living_rules::map::chunks_around(here.0, here.1, gather));
     drop(gathering);
+    // SWEEP-UNCHANGED (branch sweep-unchanged only, while profiling): how many sight tests had
+    // exactly the inputs of this viewer's last sweep (docs/HUMAN_FIGHTER_COST.md, cut 3 (b)).
+    let probe = common::profiling();
+    let mut now_inputs: HashMap<u32, ((f32, f32), bool, f32)> = HashMap::new();
     for (c, chunk) in &crowd {
         if c.id == id || c.dist > gather || sight_chunks.as_ref().is_some_and(|k| !k.contains(chunk)) {
             continue;
@@ -1299,10 +1344,16 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
         candidates += 1;
         let glow = if lit { common::glow_of(ctx, c.id, w, now) } else { 0.0 };
         let kept = had.contains(&c.id).then_some(keep);
+        if probe {
+            now_inputs.insert(c.id, (c.pos, kept.is_some(), glow));
+        }
         if living_rules::sight::sees(map, here, heading, c.pos, c.dist, &senses, glow, kept) {
             seen.insert(c.id);
             near.insert(c.id, c.dist);
         }
+    }
+    if probe {
+        unchanged_count(id, here, heading, sight, now_inputs);
     }
     drop(sight_span);
     // (a) battle law `far_cap` (docs/BATTLE_LAWS.md): at most this many seen, whoever is engaged
