@@ -372,6 +372,73 @@ The general coordinator kept mind-written heed policies in the design ("the mind
 - Under the frozen rule, that cost decides it.
 - Whether a policy with a fixed threat rule, or a live (b) (phase 3), would keep the gain without the cost is not established here.
 
+## 8. The unheeded first blows traced (free, 2026-11-22)
+
+**Finding: framing, not the minds' choice.**
+- **17 of §7.1's 18 unheeded first blows came from our grammar's word `attacker`.**
+  - In the grammar it meant "it hurt me within s seconds". That cannot match a blow still winding up, nor a blow that was blocked or dodged.
+  - The minds used it for "whoever goes for me": 266 of the 387 `attacker` rules give a `why` about swings ("Who swung at me, I don't lose in a crowd").
+  - The prompt gave the condition names with no meanings.
+- **The 18th blow (b490) was lost to my own §7 fix.** That mind wrote its threat rules without `if` (`{"doing": {"at_me": true, "is": "attack"}, "take": 2}`), and the parser left them out as rules "with neither `if` nor `score`".
+
+**The trace** (`.local/heed-e5/trace/trace.py` on §7.1's replay). Rules are numbered from 1; "forced" is acting-on or contact.
+
+| State | Attacker(s) | The threat rule(s): rank, form, take | Places held at the windup / capacity | Why the attacker was not heeded |
+|---|---|---|---|---|
+| b017 | #78 | 4th: `attacker` 15 s (a garbled rule) | 3 / 8 (r1, r3, r4 one each) | had not hurt the subject: no rule matched; places free |
+| b109 | #79 | 1st: `attacker` 5 s, take 2 | 6 / 10 (4 forced, r2 2) | no rule matched; places free |
+| b303 | #77 | 1st: `attacker` 20 s, take 3 | 10 / 10 (r1 2, r2 3, r5 5) | its contact was 46 s old: no rule matched; full |
+| b490 | #65 | 1st `doing at_me` and 2nd `attacker` 60 s, both written without `if` | 4 / 6 (2 forced, two id rules) | both threat rules left out by the parser; places free |
+| b549 | #117 | 1st: `attacker` 8 s, take 3 | 2 / 8 (1 forced, r1 1) | no rule matched; places free |
+| b586 | #87, #131 | 3rd: `attacker` 8 s + stranger, take 3 | 7–8 / 10 (r2 5) | no rule matched; places free |
+| b766 | #179 | 1st: `attacker` 4 s + stranger, take 6; 3rd: score with `attacker` 20 s weight 4 | 12 / 8 (4 forced, r2 1, r3 7) | r1 no match; the score rule was full: **squeezed by capacity** |
+| b1425 | #106, #114, #158 | 1st: `attacker` 6 s, take 3 | 4–5 / 8 (r2 3) | no rule matched; places free |
+| b1446 | #161 | 1st: `attacker` 5 s, take 2 | 8 / 8 (2 forced, r2 3, r3 2, r4 1) | hurt 11.5 s before: no rule matched; full |
+| b1560 | #113, #117 | 1st: `attacker` 6 s, take 4 | 10 / 10 (3 forced, r1 1, r2 6) | no rule matched; full |
+| b1595 | #77 | 1st: `attacker` 6 s, take 3 | 8 / 10 | its contact was 12 s old: no rule matched; places free |
+| b1715 | #150 | 1st: `attacker` 15 s, take 3 | 8 / 6 (2 forced, r1 3, r2 2, r3 1) | no rule matched; full |
+| b2017 | #4144, #4192 | 1st `attacker` 5 s; 3rd `doing` attack + stranger, take 3 | 13 / 10 (3 forced, r2 4, r3 6) | r1 no match; r3 matched, but its places were full (no displacement at its own rank): **squeezed** |
+
+What the table shows:
+- **15 of the 18 blows matched no rule at all**, and in 7 states places were free.
+- **Only 3 blows (b766, b2017) were squeezed out by capacity or `take`.**
+- **No threat rule was ranked low by choice:** in 11 of the 13 states it is the first rule.
+
+**The prompt and the grammar, checked:**
+- The instinct was never shown to the minds.
+- The three examples are placeholders, none about threats, and none listed first.
+- `"threatened": true` is easy to write, but neither it nor `attacker` was explained.
+- The refusal and repair texts are neutral: the repaired policies anticipate threats more often than first replies (78% against 73%). One kind refusal suggested `{"age": "child"}`; it now reads `{"age": ...}`.
+
+**The fix** (heed-e4; free):
+- **Grammar:**
+  - `attacker` now means "it went for me within s seconds": its attack winding up at me now, or a blow of its that reached me (landed, blocked or dodged).
+  - The old meaning stays as `hurt_me`. The instincts now write `hurt_me`, so (a) replays byte-identical.
+  - Condition words written at a rule's own level are read as its `if`, with a note.
+- **Prompt:** every condition has a short gloss. The opening says that anyone else is seen coming only while one keeps track of them.
+- **Not changed:** no example rules and no threat ordering are suggested. The minds' policies stay theirs.
+
+**Re-scored on the same 615 recorded replies** (no new calls; corrected fields; 581 replies parse under the fixed grammar):
+
+| Arm | M2″ beyond 8 (n=773) | First blows from the unheeded, per 100 (of 448) | Later blows unheeded | Flicker | Heeded mean |
+|---|---|---|---|---|---|
+| (a) instinct as shipped | 54.5% | 0.0 | 0 | 77.1 | 10.6 |
+| (a′) the instinct with `hurt_me` read as the new `attacker` | 63.8% | 0.0 | 0 | 72.8 | 10.6 |
+| (b) §7.1, `attacker` widened only | 64.9% | 0.22 (1) | 0 | 69.9 | 9.2 |
+| **(b) both fixes** | **65.1%** | **0.45** (2) | 0 | 70.5 | 9.1 |
+
+**Against (a) as shipped** (§3's rule): (b) is +10.6 points (182 events where only (b) heeds against 100 where only (a) does), p < 0.001. M1 is +0.45 per 100, within 1; flicker is 0.91×. **All three conditions hold.**
+
+**The control matters, though:**
+- The instinct reading the same widened `attacker` (a′) gains +9.3 points by itself.
+- Against (a′), (b) is +1.3 points (146 against 136), p = 0.59, with M1 +0.45.
+- **So nearly all of (b)'s gain over the shipped instinct comes from what `attacker` now means, not from the minds' own choices.**
+- With the instinct moved to the widened `attacker`, the simpler arm, (a′), stands.
+
+**The blows left** are 2, both in one state (b2038). That mind's policy has no threat rule at all: after the stand-down it keeps its own side's fighters, people it means to speak with, and wolves. **That is the minds' own choice, the emergent price.**
+
+**Limits.** These are re-reads of replies written under the old prompt, scored after changing what a word means. That the minds use the glossed prompt this way is not measured; it would take a new (b) run under the new prompt, which has not been approved.
+
 ## Sources
 
 - Prompt-length table: `.local/heed-e4/prompts*.json` on heed-e4 (copied with the session's evidence); tool `living/tools/heed_e5_prompts.py`.

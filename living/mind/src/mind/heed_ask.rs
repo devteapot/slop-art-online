@@ -38,7 +38,7 @@ pub fn heed_field(capacity: usize) -> String {
     format!(
         "{HEED_HEADING}\n\
 You can keep track of about {capacity} others at once as individuals; everyone else you see is a throng, counted but not told apart. \
-Whoever you are acting on, and whoever's blow has just reached you, you always see. The rest is yours to choose.\n\
+Whoever you are acting on, and whoever's blow has just reached you, you always see; anyone else you see coming only while you keep track of them. The rest is yours to choose.\n\
 Reply with only a JSON object {{\"heed\": [rules]}}, nothing else. Rules are read in order; each takes the creatures in sight its condition holds for, up to its \"take\", until your places are full.\n\
 Every rule is one of two shapes, with no other fields:\n\
 - {{\"if\": condition, \"order\": \"nearest|closing|newest|longest\", \"take\": a number or \"rest\", \"hold_s\": 0 to 60, \"why\": \"your own words\"}}\n\
@@ -46,9 +46,13 @@ Every rule is one of two shapes, with no other fields:\n\
 \"hold_s\" keeps what the rule took for that many seconds after its condition stops holding.\n\
 A condition is {{\"word\": value}}; when one condition has several words, each of them has to hold. The words, about the one considered:\n\
 \"who\": an id you see (a number), a kind, a relation, an age, or {{\"kind\": ..., \"relation\": ..., \"age\": ...}}. Kinds of creature: person, wolf, deer. Ages, as you see them: baby, child, adult, old. Relations: friend, enemy, stranger (anyone whose name you do not know), family, community, any.\n\
-\"threatened\": true; \"doing\": {{\"is\": a skill or a kind word, \"phase\": \"winding up|about to release|releasing|recovering|holding|under way\", \"at_me\": true}}; \
-\"attacker\": {{\"within_s\": s}}; \"addressing\": {{\"within_s\": s}}; \"near\": metres; \"cued\": true; \"chosen\": true; \"heeded_s\": {{\"above\": s}}; \
-\"closing\": {{\"above\": m/s}}; \"fighting\": true; \"fallen\": true; \"acting_on_heeded\": true; \"new\": s; \"loud\": true; \"lit\": true; \
+\"threatened\": true (its attack or throw is winding up at you now, before it lands); \
+\"attacker\": {{\"within_s\": s}} (it went for you within s seconds: winding up at you now, or a blow of its reached you, landed, blocked or dodged); \"hurt_me\": {{\"within_s\": s}} (a blow of its hurt you); \
+\"doing\": {{\"is\": a skill or a kind word, \"phase\": \"winding up|about to release|releasing|recovering|holding|under way\", \"at_me\": true}} (what it visibly does, at anyone or at you); \
+\"addressing\": {{\"within_s\": s}} (it spoke, waved or offered to you); \"near\": metres; \"closing\": {{\"above\": m/s}} (coming toward you); \
+\"fighting\": true (visibly in a fight move); \"fallen\": true (down); \"acting_on_heeded\": true (its act is aimed at someone you keep track of); \
+\"new\": s (in sight for under s seconds); \"loud\": true (calling, shouting or crying); \"lit\": true (carrying a light at night); \
+\"cued\": true (it matches something you said to look out for); \"chosen\": true; \"heeded_s\": {{\"above\": s}} (how long you have kept track of it); \
 \"self\": one of your own: health, energy, hunger, stamina (above/below), night, hurt_within; \"count\": {{\"of\": a kind, \"within\": metres, \"at_least\": n}}; \
 \"all\" or \"any\": [conditions]; \"not\": condition.\n\
 At most 12 rules. The form only, with placeholders: {{\"if\": {{\"who\": \"<a kind>\"}}, \"take\": 2, \"why\": \"<your words>\"}}, \

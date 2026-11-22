@@ -204,8 +204,12 @@ pub enum Cond {
     /// What it visibly does: `is` (a skill's name, its label or a kind word such as `hostile`),
     /// `phase`, whether `at_me`, and within how many metres.
     Doing { is: Option<String>, phase: Option<Phase>, at_me: Option<bool>, within: Option<f32> },
-    /// It hurt me within the last N seconds.
+    /// It went for me within the last N seconds: winding up at me now, or a blow of its reached me
+    /// (landed, blocked or dodged).
     Attacker { within_s: f32 },
+    /// A blow of its hurt me within the last N seconds (what `attacker` meant before E5 §8; the
+    /// instincts use it).
+    HurtMe { within_s: f32 },
     /// It spoke, waved or offered to me within the last N seconds.
     Addressing { within_s: f32 },
     /// It is the target of my own act now.
@@ -273,8 +277,8 @@ impl Known<'_> {
 }
 
 /// The condition words a policy may use, for prompts and refusals.
-pub const CONDITIONS: [&str; 22] = [
-    "who", "threatened", "doing", "attacker", "addressing", "acted_on", "near", "cued", "chosen", "heeded_s", "closing", "fighting", "fallen",
+pub const CONDITIONS: [&str; 23] = [
+    "who", "threatened", "doing", "attacker", "hurt_me", "addressing", "acted_on", "near", "cued", "chosen", "heeded_s", "closing", "fighting", "fallen",
     "acting_on_heeded", "new", "loud", "lit", "self", "all", "any", "not", "count",
 ];
 /// The orders an `if` rule may take.
@@ -317,6 +321,21 @@ pub fn parse_value_notes(v: &Value, known: &Known) -> Result<(Policy, Vec<String
     }
     let (mut rules, mut notes, mut errors) = (Vec::new(), Vec::new(), Vec::new());
     for (i, r) in list.iter().enumerate() {
+        // Condition words written at the rule's own level, without `if` (`{"doing": {...}, "take": 2}`),
+        // are that rule's condition, with a note.
+        let wrapped;
+        let mut was_wrapped = false;
+        let r = match r.as_object() {
+            Some(o) if !o.contains_key("if") && !o.contains_key("score") && o.keys().any(|k| is_condition_word(k)) => {
+                let (cond_part, rest): (Map<String, Value>, Map<String, Value>) = o.iter().map(|(k, v)| (k.clone(), v.clone())).partition(|(k, _)| is_condition_word(k));
+                let mut m = rest;
+                m.insert("if".into(), Value::Object(cond_part));
+                was_wrapped = true;
+                wrapped = Value::Object(m);
+                &wrapped
+            }
+            _ => r,
+        };
         // An entry with neither `if` nor `score` takes no one: it is left out, with a note.
         if !r.as_object().is_some_and(|o| o.contains_key("if") || o.contains_key("score")) {
             notes.push(format!(
@@ -327,7 +346,14 @@ pub fn parse_value_notes(v: &Value, known: &Known) -> Result<(Policy, Vec<String
         }
         let mut n = Vec::new();
         match rule(r, known, &mut n) {
-            Ok(x) => rules.push(x),
+            Ok(x) => {
+                if was_wrapped {
+                    notes.push(format!("rule {}: its condition words were read as its `if` (a rule is {{\"if\": condition, ...}})", i + 1));
+                }
+                rules.push(x)
+            }
+            // A rule written without `if` whose words do not read as a condition is left out.
+            Err(e) if was_wrapped => notes.push(format!("rule {}: left out: it has no `if`, and its words are not a condition ({e})", i + 1)),
             Err(e) => errors.push(format!("rule {}: {e}", i + 1)),
         }
         notes.extend(n.into_iter().map(|x| format!("rule {}: {x}", i + 1)));
@@ -339,6 +365,12 @@ pub fn parse_value_notes(v: &Value, known: &Known) -> Result<(Policy, Vec<String
         return Err("no rule has `if` or `score`, so the policy takes no one: a rule is {\"if\": condition, ...} or {\"score\": [...], ...}".into());
     }
     Ok((Policy { rules }, notes))
+}
+
+/// A condition word, or an alias the parser reads as one (`kind`, `relation`, `age`), any case.
+fn is_condition_word(k: &str) -> bool {
+    let k = k.to_lowercase();
+    CONDITIONS.contains(&k.as_str()) || ["kind", "relation", "age"].contains(&k.as_str())
 }
 
 /// Fields a rule may have; any other is left out with a note (a stray key does not refuse a rule).
@@ -473,7 +505,7 @@ fn kind(s: &str, known: &Known) -> Result<String, String> {
         Ok(s.to_string())
     } else {
         Err(format!(
-            "`{s}` is not a kind of creature: kinds are species such as \"person\"; for one creature write its id, for a relation or an age use {{\"relation\": ...}} or {{\"age\": \"child\"}}"
+            "`{s}` is not a kind of creature: kinds are species such as \"person\"; for one creature write its id, for a relation or an age use {{\"relation\": ...}} or {{\"age\": ...}}"
         ))
     }
 }
@@ -614,6 +646,7 @@ fn cond(v: &Value, known: &Known, depth: usize) -> Result<Cond, String> {
             Cond::Doing { is, phase, at_me, within }
         }
         "attacker" => Cond::Attacker { within_s: within_s(x, k)? },
+        "hurt_me" => Cond::HurtMe { within_s: within_s(x, k)? },
         "addressing" => Cond::Addressing { within_s: within_s(x, k)? },
         "acted_on" => Cond::ActedOn(flag(x, k)?),
         "near" => Cond::Near(number(x, k)?),
@@ -885,7 +918,13 @@ pub fn holds(cond: &Cond, c: &Candidate, me: &SelfState, all: &[Candidate]) -> b
                 && at_me.is_none_or(|m| d.at_me == m)
                 && within.is_none_or(|w| c.dist <= w)
         }),
-        Cond::Attacker { within_s } => c.hurt_me_ago_s.is_some_and(|a| a <= *within_s),
+        // It went for me within the window: its attack winding up at me now, or a blow of its that
+        // reached me (landed, blocked or dodged). Minds read "attacker" so (docs/ATTENTION_E5.md §8);
+        // it once meant only a blow that hurt.
+        Cond::Attacker { within_s } => {
+            holds(&Cond::Threatened(true), c, me, all) || c.hurt_me_ago_s.is_some_and(|a| a <= *within_s) || c.contact_ago_s.is_some_and(|a| a <= *within_s)
+        }
+        Cond::HurtMe { within_s } => c.hurt_me_ago_s.is_some_and(|a| a <= *within_s),
         Cond::Addressing { within_s } => c.addressed_me_ago_s.is_some_and(|a| a <= *within_s),
         Cond::ActedOn(b) => c.acted_on == *b,
         Cond::Near(m) => c.dist <= *m,
@@ -1217,6 +1256,10 @@ mod tests {
         let (p, notes) = ok(json!({"heed": [{"if": {"fighting": true}, ":woundcheck": true, "hold": 6, "take": 3}]}));
         assert_eq!(p.rules[0].hold_s(), 6.0);
         assert!(notes.iter().any(|n| n.contains("left out `:woundcheck`")), "{notes:?}");
+        // Condition words at the rule's own level are its `if`.
+        let (p, notes) = ok(json!({"heed": [{"doing": {"at_me": true, "is": "attack"}, "take": 2, "hold_s": 10, "why": "x"}]}));
+        assert!(matches!(&p.rules[0], Rule::If { cond: Cond::Doing { at_me: Some(true), .. }, take: Take::Up(2), .. }), "{:?}", p.rules[0]);
+        assert!(notes[0].contains("read as its `if`"), "{notes:?}");
         // An age: a person seen at that age, written as a kind, a `who` word or `age`.
         for v in [json!({"who": {"kind": "child"}}), json!({"who": "child"}), json!({"who": {"kind": "person", "age": "child"}}), json!({"age": "children"})] {
             let (p, _) = ok(json!({"heed": [{"if": v.clone()}]}));
@@ -1233,8 +1276,27 @@ mod tests {
         }
         // A word that is neither a kind nor an age is refused, saying what to write.
         let e = parse_value(&json!({"heed": [{"if": {"who": "dragon"}}]}), &k).unwrap_err();
-        assert!(e.contains("`dragon` is not a kind of creature") && e.contains("{\"age\": \"child\"}"), "{e}");
+        assert!(e.contains("`dragon` is not a kind of creature") && e.contains("{\"age\": ...}"), "{e}");
         assert!(parse_value(&json!({"heed": [{"if": {"who": {"age": "ancient"}}}]}), &k).unwrap_err().contains("unknown age `ancient`"));
+    }
+
+    /// `attacker` is whoever went for me: winding up at me now, or a blow that reached me (landed,
+    /// blocked or dodged) within the window; not someone who only fought someone else.
+    #[test]
+    fn attacker_is_whoever_went_for_me() {
+        let c = Cond::Attacker { within_s: 6.0 };
+        let me = SelfState::default();
+        let winding = Candidate { threatening: true, ..cand(1, "person", 2.0) };
+        let dodged = Candidate { contact_ago_s: Some(3.0), ..cand(2, "person", 2.0) };
+        let hurt = Candidate { hurt_me_ago_s: Some(5.0), contact_ago_s: Some(5.0), ..cand(3, "person", 2.0) };
+        let long_ago = Candidate { hurt_me_ago_s: Some(30.0), contact_ago_s: Some(30.0), ..cand(4, "person", 2.0) };
+        let elsewhere = Candidate {
+            doing: Some(Visible { is: vec!["strike".into(), "hostile".into()], phase: Some(Phase::WindingUp), at_me: false }),
+            ..cand(5, "person", 2.0)
+        };
+        for (x, want) in [(&winding, true), (&dodged, true), (&hurt, true), (&long_ago, false), (&elsewhere, false)] {
+            assert_eq!(holds(&c, x, &me, &[]), want, "#{}", x.id);
+        }
     }
 
     #[test]

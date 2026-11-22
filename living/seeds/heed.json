@@ -1,5 +1,5 @@
 {
- "_doc": "Starting heed policies (heed instincts) per species: seed content, docs/ATTENTION_BUDGET.md §2.4. A character without its own policy keeps track of others by its species' entry (heed_<kind>), else heed_default. A mind may rewrite all of it. Whom one is acting on, and whoever made contact with one within the world's heed_contact_s, are individuals whatever the policy (the engine's, not a rule here). hold_s is hysteresis as policy content: what a rule took stays for that long unless a better rule needs the place. Grammar: living/rules/src/heed.rs. heed_person is the instinct since E4's reweight (docs/ATTENTION_E4.md §5): whoever one is at enmity with (a hostile stance or relation) and whoever is visibly hostile toward someone one heeds rank above family and plain nearness. heed_person_v1 is the instinct before it, kept for comparison: the world law heed_instinct 1 selects the _v1 entries.",
+ "_doc": "Starting heed policies (heed instincts) per species: seed content, docs/ATTENTION_BUDGET.md §2.4. A character without its own policy keeps track of others by its species' entry (heed_<kind>), else heed_default. A mind may rewrite all of it. Whom one is acting on, and whoever made contact with one within the world's heed_contact_s, are individuals whatever the policy (the engine's, not a rule here). hold_s is hysteresis as policy content: what a rule took stays for that long unless a better rule needs the place. Grammar: living/rules/src/heed.rs. heed_person is the instinct since E4's reweight (docs/ATTENTION_E4.md §5): whoever one is at enmity with (a hostile stance or relation) and whoever is visibly hostile toward someone one heeds rank above family and plain nearness. heed_person_v1 is the instinct before it, kept for comparison: the world law heed_instinct 1 selects the _v1 entries. The instincts write hurt_me (a blow of its hurt me), what the grammar's attacker meant before E5 §8 widened attacker to whoever went for one.",
  "heed_person": {
   "heed": [
    {
@@ -15,7 +15,7 @@
        }
       },
       {
-       "attacker": {
+       "hurt_me": {
         "within_s": 10
        }
       }
@@ -170,7 +170,7 @@
        }
       },
       {
-       "attacker": {
+       "hurt_me": {
         "within_s": 10
        }
       }
@@ -297,7 +297,7 @@
        }
       },
       {
-       "attacker": {
+       "hurt_me": {
         "within_s": 10
        }
       }
@@ -382,7 +382,7 @@
        }
       },
       {
-       "attacker": {
+       "hurt_me": {
         "within_s": 10
        }
       }
@@ -445,7 +445,7 @@
        }
       },
       {
-       "attacker": {
+       "hurt_me": {
         "within_s": 10
        }
       }
