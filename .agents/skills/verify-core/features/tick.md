@@ -7,6 +7,7 @@
 - Pause stops tick counters, housekeeping writes and activity completion.
 - Resume completes overdue work.
 - `set_profile` emits real tick spans.
+- Due rows (motion events by `body.next_ms`, activity timers by `activity.ends_ms`) go in due-time order; rows due at the same millisecond in an order drawn from (id, tick) every tick (`tick::tie_order`), never the index's storage order. The combat cadence's classes (`id % every`) hold phases permuted every second (`tick::cadence_turn`). Cargo `tick::tie_tests`; the scope by `det_compare.py` against builds with `LIVING_DET_NOTIEBREAK` / `LIVING_DET_NOCADENCETURN` (docs/COMBAT.md, "Two blows due at the same millisecond, and the cadence's order").
 
 ## How to get to it (user POV)
 

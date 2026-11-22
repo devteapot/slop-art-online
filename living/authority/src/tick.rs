@@ -48,8 +48,9 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     // 1. Steering updates that are due (events and cadence of moving bodies).
     let phase = common::span("tick.motion");
     // By id, each read when its turn comes: an earlier body's update this tick (a push, a
-    // death) may have changed or removed it, and a stale copy would overwrite that.
-    let due: Vec<u32> = ctx.db.body().next_ms().filter(..=now).map(|b| b.id).collect();
+    // death) may have changed or removed it, and a stale copy would overwrite that. Earlier
+    // times first; an exact tie in a per-tick fair order (`tie_order`).
+    let due = tie_order(ctx.db.body().next_ms().filter(..=now).map(|b| (b.next_ms, b.id)).collect(), k_tick, TIE_MOTION);
     let mut motions = 0u64;
     for id in due {
         let Some(b) = ctx.db.body().id().find(id).filter(|b| b.next_ms <= now) else { continue };
@@ -65,8 +66,10 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     drop(phase);
     // 2. Activity timers.
     let phase = common::span("tick.activity");
-    // By id too: finishing one activity can end, replace or delete another.
-    let due: Vec<u32> = ctx.db.activity().ends_ms().filter(..=now).map(|a| a.id).collect();
+    // By id too: finishing one activity can end, replace or delete another. Earlier ends
+    // first; two ending at the same millisecond (two windups begun in one tick) in a per-tick
+    // fair order, so neither blow lands first by storage history (`tie_order`).
+    let due = tie_order(ctx.db.activity().ends_ms().filter(..=now).map(|a| (a.ends_ms, a.id)).collect(), k_tick, TIE_ACTIVITY);
     for id in due {
         if let Some(a) = ctx.db.activity().id().find(id).filter(|a| a.ends_ms <= now) {
             act::progress(ctx, a, now);
@@ -115,10 +118,12 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     }
     drop(phase);
     // Combat cadence: creatures in a fight are evaluated `combat_eval_hz` times a second (15,
-    // every 4th tick), staggered across ticks so a battle does not land in one tick.
+    // every 4th tick), staggered across ticks so a battle does not land in one tick. Which of the
+    // staggered classes goes first turns every second (`cadence_turn`).
     let phase = common::span("tick.combat");
     let every = common::laws(ctx).combat_every_ticks();
-    let fighting: Vec<u32> = ctx.db.mind_state().fast_until().filter(now..).map(|m| m.id).filter(|id| (*id as u64 + k_tick) % every == 0).collect();
+    let turn = cadence_turn(k_tick, every);
+    let fighting: Vec<u32> = ctx.db.mind_state().fast_until().filter(now..).map(|m| m.id).filter(|id| (turn[(*id as u64 % every) as usize] + k_tick) % every == 0).collect();
     common::diag(|| "eval:combat_due", fighting.len() as u64);
     for id in fighting {
         if done.insert(id) {
@@ -170,6 +175,59 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     }
     crate::latency::end_tick(ctx, k_tick, now);
     Ok(())
+}
+
+/// Salts of the draws (`tie_draw`): one per due list and one for the cadence's turn, so their
+/// coins are unrelated.
+const TIE_MOTION: u64 = 0x6d6f_7469_6f6e;
+const TIE_ACTIVITY: u64 = 0x6163_7469_7669;
+const TIE_CADENCE: u64 = 0x6361_6465_6e63;
+
+/// The order due rows are handled in this tick: by their due time (`ends_ms`, `next_ms`), and
+/// rows due at the same millisecond in an order drawn from (id, tick) alone. Two blows ending at
+/// once then resolve in a fair, deterministic coin that turns every tick (docs/COMBAT.md, "Two
+/// blows due at the same millisecond"), the same under `det_clock` replay and whatever the
+/// storage holds; an index returns equal keys in the order they were last written (SpacetimeDB
+/// 2.14.1, `same_key_entry`), and in no fixed order once more than 512 rows share one. Only this
+/// tick's due rows are sorted. A build compiled with `LIVING_DET_NOTIEBREAK` set keeps the
+/// index's order, the control for det_compare.
+fn tie_order(mut due: Vec<(u64, u32)>, tick: u64, salt: u64) -> Vec<u32> {
+    if option_env!("LIVING_DET_NOTIEBREAK").is_none() {
+        due.sort_unstable_by_key(|&(at, id)| (at, tie_draw(id, tick, salt)));
+    }
+    due.into_iter().map(|(_, id)| id).collect()
+}
+
+/// The combat cadence's phases for this second: a fighter of class `id % every` is evaluated in
+/// the ticks where `(turn[class] + tick) % every == 0`. The classes keep their share of the ticks
+/// (each class is one phase), but which phase each holds is a permutation drawn from the second
+/// (`tick / 60`) alone. With fixed phases (`id + tick`), two fighters ready in the same tick were
+/// evaluated in the same order every time: one id gap (1 mod 4) let the higher id wind up a tick
+/// ahead, another (3 mod 4) the lower, in most exchanges and every second (docs/COMBAT.md, "The
+/// combat cadence's order turns every second"). Within a second every fighter keeps its exact
+/// rhythm; a phase moves only at a second's turn (one interval of 1 to `2 * every - 1` ticks). A
+/// build compiled with `LIVING_DET_NOCADENCETURN` set keeps the fixed phases (`turn[c] = c`), the
+/// control for det_compare.
+fn cadence_turn(tick: u64, every: u64) -> Vec<u64> {
+    let mut turn: Vec<u64> = (0..every).collect();
+    if every < 2 || option_env!("LIVING_DET_NOCADENCETURN").is_some() {
+        return turn;
+    }
+    let second = tick / 60;
+    for i in (1..turn.len()).rev() {
+        let j = (tie_draw(i as u32, second, TIE_CADENCE) % (i as u64 + 1)) as usize;
+        turn.swap(i, j);
+    }
+    turn
+}
+
+/// splitmix64 of (id, tick, salt): a draw that orders two ids independently in every tick.
+fn tie_draw(id: u32, tick: u64, salt: u64) -> u64 {
+    let mut z = (tick << 32 | id as u64) ^ salt.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    z = z.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
 }
 
 const NAMES: &[&str] = &[
@@ -576,4 +634,94 @@ fn housekeeping_body(ctx: &ReducerContext) -> Result<(), String> {
         ctx.db.stats().insert(row);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tie_tests {
+    use super::*;
+
+    #[test]
+    fn earlier_due_times_go_first() {
+        for tick in 0..200 {
+            let order = tie_order(vec![(30, 1), (10, 2), (20, 3), (10, 4)], tick, TIE_ACTIVITY);
+            assert_eq!(&order[2..], &[3, 1], "tick {tick}: {order:?}");
+            assert!(order[..2].contains(&2) && order[..2].contains(&4));
+        }
+    }
+
+    #[test]
+    fn a_tie_ignores_the_order_rows_came_in() {
+        for tick in 0..200 {
+            let a = tie_order(vec![(5, 7), (5, 3), (5, 11)], tick, TIE_MOTION);
+            let b = tie_order(vec![(5, 11), (5, 7), (5, 3)], tick, TIE_MOTION);
+            assert_eq!(a, b, "tick {tick}");
+        }
+    }
+
+    #[test]
+    fn a_tie_is_a_fair_coin_for_any_pair() {
+        // Neighbouring ids, ids a cadence class apart and far apart: the lower id goes first
+        // in about half the ticks, and not in a fixed pattern (runs of the same winner are short).
+        for (lo, hi) in [(1u32, 2u32), (40, 44), (41, 43), (7, 90_001)] {
+            let n = 20_000u64;
+            let mut first = 0u64;
+            let mut flips = 0u64;
+            let mut last = None;
+            for tick in 0..n {
+                let w = tie_order(vec![(0, hi), (0, lo)], tick, TIE_ACTIVITY)[0] == lo;
+                first += w as u64;
+                flips += last.is_some_and(|l| l != w) as u64;
+                last = Some(w);
+            }
+            let share = first as f64 / n as f64;
+            assert!((share - 0.5).abs() < 0.02, "{lo} vs {hi}: lower first in {share}");
+            let flip = flips as f64 / (n - 1) as f64;
+            assert!((flip - 0.5).abs() < 0.03, "{lo} vs {hi}: winner changes in {flip} of ticks");
+        }
+    }
+
+    /// The ticks of one second in which a fighter of id `id` is evaluated on the cadence.
+    fn evaluated(id: u32, second: u64, every: u64) -> Vec<u64> {
+        (second * 60..second * 60 + 60).filter(|&t| (cadence_turn(t, every)[(id as u64 % every) as usize] + t) % every == 0).collect()
+    }
+
+    #[test]
+    fn the_cadence_keeps_each_fighters_rhythm_within_a_second() {
+        for every in [2u64, 3, 4, 6, 8] {
+            for second in 0..50 {
+                let turn = cadence_turn(second * 60, every);
+                let mut sorted = turn.clone();
+                sorted.sort_unstable();
+                assert_eq!(sorted, (0..every).collect::<Vec<_>>(), "a permutation of the phases");
+                for id in 0..every as u32 * 3 {
+                    let at = evaluated(id, second, every);
+                    assert!(at.windows(2).all(|w| w[1] - w[0] == every), "every {every}, second {second}, id {id}: {at:?}");
+                    assert!(at.len() as u64 >= 60 / every, "{at:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn no_id_gap_leads_the_cadence() {
+        // Two fighters ready in the same tick: who is evaluated first, over many seconds and
+        // every ready tick of the second, for each id gap. Fixed phases gave one side 3 of 4.
+        let every = 4u64;
+        for gap in 1..=3u32 {
+            let (lo, hi) = (40u32, 40 + gap);
+            let (mut lo_first, mut hi_first) = (0u64, 0u64);
+            for second in 0..4000u64 {
+                for ready in (second * 60..second * 60 + 56).step_by(7) {
+                    let next = |id: u32| (ready..).find(|&t| (cadence_turn(t, every)[(id as u64 % every) as usize] + t) % every == 0).unwrap();
+                    match next(lo).cmp(&next(hi)) {
+                        std::cmp::Ordering::Less => lo_first += 1,
+                        std::cmp::Ordering::Greater => hi_first += 1,
+                        std::cmp::Ordering::Equal => unreachable!("different classes"),
+                    }
+                }
+            }
+            let share = lo_first as f64 / (lo_first + hi_first) as f64;
+            assert!((share - 0.5).abs() < 0.02, "gap {gap}: the lower id first in {share}");
+        }
+    }
 }
