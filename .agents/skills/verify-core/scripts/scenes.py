@@ -7972,8 +7972,8 @@ SCENES["truthful_refusals"] = truthful_refusals
 def heed(s):
     """Heed for AI characters (docs/ATTENTION_E4.md; docs/ATTENTION_BUDGET.md v2.1), behind the
     value-only law `heed_on`, beside its control (the law off, as shipped). On an open line an
-    observer O stands with six people 1-3.5 m east of it, a striker S 6 m east and an onlooker W
-    8 m east (within a said line's reach): 8 others in O's sight. Each character's capacity is fixed per phase by an installed
+    observer O stands with six people 1-3.5 m east of it, a striker S 4 m east and an onlooker W
+    5 m east (within a said line's reach, and within sight by night): 8 others in O's sight. Each character's capacity is fixed per phase by an installed
     `heed_capacity` that returns a number for O, S and W (the shipped formula for everyone else).
 
     - **Off:** O's graph `sees` S and `count`s 8 people, as before.
@@ -8007,8 +8007,8 @@ def heed(s):
         s.call("place_at", o, *line[0])
         for k, c in enumerate(crowd):
             s.call("place_at", c, line[1 + k // 2][0] + 0.5 * (k % 2), line[1 + k // 2][1] + (1.0 if k % 2 else -1.0))
-        s.call("place_at", S, *line[6])
-        s.call("place_at", W, *line[8])
+        s.call("place_at", S, *line[4])
+        s.call("place_at", W, *line[5])
         for c in crowd:
             s.graph(c, {"wait": 300})
         s.graph(W, {"wait": 300})
