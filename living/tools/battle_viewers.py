@@ -617,7 +617,6 @@ def one(a, n, out):
             dur = t1 - t0
             diff = {k: m1.get(k, 0.0) - m0.get(k, 0.0) for k in sorted(set(m0) | set(m1))}
             (d / "metrics.json").write_text(json.dumps({"seconds": dur, "before": m0, "after": m1, "diff": {k: v for k, v in diff.items() if v}}, indent=1) + "\n")
-            import os
             hz = os.sysconf("SC_CLK_TCK")
             by = {}
             for tid, (name, cpu1) in th1.items():
