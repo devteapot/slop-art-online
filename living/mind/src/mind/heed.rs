@@ -51,6 +51,8 @@ struct VisIn {
 struct CandIn {
     id: u32,
     kind: String,
+    /// The age it is seen at (`infant`, `child`, `adult`, `elder`), when the fields know it.
+    stage: Option<String>,
     dist: f32,
     closing: f32,
     made_out: bool,
@@ -132,6 +134,7 @@ fn candidate(c: &CandIn, heeded: &[Pick], since: &HashMap<u32, f32>, t: f32) -> 
     Candidate {
         id: c.id,
         kind: c.kind.clone(),
+        stage: c.stage.as_deref().and_then(heed::age_word),
         dist: c.dist,
         closing: c.closing,
         made_out: c.made_out,

@@ -638,9 +638,17 @@ impl<'a> Field<'a> {
         });
         let fighting = v.as_ref().is_some_and(|v| v.combat);
         let acting_on_heeded = v.as_ref().is_some_and(|v| v.target != 0 && v.target != self.me.id && self.heeded.contains(&v.target));
+        // The age one sees (a scene's "a child", "an old stranger"), when made out.
+        let stage = ch.as_ref().filter(|_| made_out).map(|t| match t.stage {
+            0 => h::Stage::Infant,
+            1 => h::Stage::Child,
+            3 => h::Stage::Elder,
+            _ => h::Stage::Adult,
+        });
         Candidate {
             id,
             kind: c.kind.to_string(),
+            stage,
             dist: c.dist,
             closing,
             made_out,

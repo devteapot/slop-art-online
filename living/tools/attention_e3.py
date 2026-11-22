@@ -132,6 +132,13 @@ class Battle:
         self.times = [t for t, _ in self.samples]
         self.end = self.times[-1]
         self.people = {c["id"] for c in json.load(open(os.path.join(d, "chars.json")))}
+        # A two-sided melee (battle_diag --sides): each fighter's side; one's own side is one's
+        # community, known by name (the scene's `"community": "yours"`), the other side strangers.
+        sp = os.path.join(d, "sides.json")
+        self.side = {int(k): v for k, v in json.load(open(sp)).items()} if os.path.exists(sp) else {}
+        # The age each creature is seen at, from the minds' own scenes (`form`: boy, girl, baby,
+        # old woman, ...): what perception gave, not audit truth.
+        self.stage = scene_stages(d)
         # With `--all-bodies`, every creature's kind (people, animals) from the samples.
         self.kinds = {}
         for line in gzip.open(os.path.join(d, "combat-samples.jsonl.gz"), "rt"):
@@ -180,6 +187,31 @@ def contact(outcome):
     return bool(outcome) and outcome not in ("missed", "broken off")
 
 
+FORM_STAGE = {"boy": "child", "girl": "child", "baby": "infant", "baby girl": "infant", "baby boy": "infant",
+              "old woman": "elder", "old man": "elder", "man": "adult", "woman": "adult"}
+
+
+def scene_stages(d):
+    """id -> life stage as the run's think scenes showed it (`form`), when any scene did."""
+    out = {}
+    jd = os.path.join(d, "journal")
+    for f in (sorted(os.listdir(jd)) if os.path.isdir(jd) else []):
+        if not f.endswith(".jsonl"):
+            continue
+        for line in open(os.path.join(jd, f)):
+            if '"think"' not in line:
+                continue
+            e = json.loads(line)
+            if e.get("purpose") != "think":
+                continue
+            sc = scene_of(e)
+            for c in (sc or {}).get("creatures", []):
+                st = FORM_STAGE.get(str(c.get("form", "")).lower())
+                if st and isinstance(c.get("id"), int):
+                    out[c["id"]] = st
+    return out
+
+
 def battle_candidate(B, subject, t, me, other, pos, first_seen, prev_targets):
     x, y, vx, vy = pos[other]
     d = math.hypot(x - me[0], y - me[1])
@@ -190,7 +222,10 @@ def battle_candidate(B, subject, t, me, other, pos, first_seen, prev_targets):
     c = {"id": other, "kind": kind, "dist": round(d, 2), "closing": round(closing, 2), "made_out": True,
          "in_sight_s": round((t - first_seen) / 1000, 1)}
     if kind == "person":
-        c["relations"] = 8  # a stranger: these fighters know no one
+        # A stranger (these fighters know no one), but one's own side in a sides melee: community.
+        c["relations"] = 16 if B.side and B.side.get(other) is not None and B.side.get(other) == B.side.get(subject) else 8
+    if other in B.stage:
+        c["stage"] = B.stage[other]
     # What it visibly does: its latest use whose windup or recovery is under way.
     i = bisect_right(B.actor_times.get(other, []), t)
     if i:

@@ -67,6 +67,11 @@ def main():
     ap.add_argument("--interval", type=float, default=30)
     ap.add_argument("--dry-run-price", action="append", default=[])
     ap.add_argument("--prompts", help="c: the --prompts-only output (est_tokens per request), to fit the state list to the budget")
+    ap.add_argument("--max-calls-min", type=float, help="the runaway rule's calls a minute (phase 1: 1000; off for b and c unless given)")
+    ap.add_argument("--min-mem-gb", type=float, default=40, help="the guard's host floor: MemAvailable (rule 7)")
+    ap.add_argument("--min-disk-gb", type=float, default=45, help="the guard's host floor: free disk (rule 7)")
+    ap.add_argument("--frozen", action="append", default=[], help="an input frozen before any paid call (rule 8): hashed into <out>/frozen.json")
+    ap.add_argument("--frozen-manifest", help="rule 8: a frozen.json written before; any --frozen file whose hash differs refuses the run")
     ap.add_argument("runner", nargs=argparse.REMAINDER)
     a = ap.parse_args()
     runner_args = [x for x in a.runner if x != "--"]
@@ -85,6 +90,18 @@ def main():
         arm = f"e5{a.part}"
         cmd = [a.runner_bin, "heed-replay", *runner_args, "--out", str(out / "calls.jsonl")]
     out.mkdir(parents=True, exist_ok=True)
+    # Rule 8: the frozen inputs are hashed before any call; against a manifest, a change refuses.
+    if a.frozen:
+        import hashlib
+        now = {f: hashlib.sha256(Path(f).read_bytes()).hexdigest() for f in a.frozen}
+        if a.frozen_manifest:
+            was = json.loads(Path(a.frozen_manifest).read_text())
+            bad = [f for f in a.frozen if was.get(f) != now[f]]
+            if bad:
+                print(f"REFUSED: frozen input changed since {a.frozen_manifest} (rule 8): {', '.join(bad)}", flush=True)
+                return 2
+        (out / "frozen.json").write_text(json.dumps(now, indent=1))
+        print(f"frozen inputs hashed: {len(now)} files -> {out / 'frozen.json'}", flush=True)
     ready, pidf = out / "guard.ready", out / "runner.pid"
     for f in (ready, pidf):
         f.unlink(missing_ok=True)
@@ -129,10 +146,13 @@ def main():
     guard_cmd = [sys.executable, "-I", str(ROOT / "living/tools/act_trial.py"), "watch", "--arm", arm, "--group", f"e5{a.part}",
                  "--ledger", a.ledger, "--log", str(out / "guard.log"), "--pid-file", str(pidf), "--journal", str(journal / "*.jsonl"),
                  "--ready", str(ready), "--group-cap", str(CAPS[a.part]), "--total-cap", str(TOTAL), "--margin", str(MARGIN),
-                 "--interval", str(a.interval), "--fail-last", str(FAIL_LAST)]
+                 "--interval", str(a.interval), "--fail-last", str(FAIL_LAST), "--min-mem-gb", str(a.min_mem_gb), "--min-disk-gb", str(a.min_disk_gb)]
+    runaway = a.max_calls_min if a.max_calls_min is not None else (MAX_CALLS_MIN if a.part == "p1" else None)
+    if runaway:
+        guard_cmd += ["--max-calls-min", str(runaway)]
     if a.part == "p1":
         # Setup (publish, spawn, warm-up) comes before the mind's first call.
-        guard_cmd += ["--max-calls-min", str(MAX_CALLS_MIN), "--first-journal-s", "900", "--ready-wait-s", "1800"]
+        guard_cmd += ["--first-journal-s", "900", "--ready-wait-s", "1800"]
     for p in prices:
         guard_cmd += ["--price", p]
     gout = open(out / "guard.out", "a")

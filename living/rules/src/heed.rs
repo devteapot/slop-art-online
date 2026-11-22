@@ -40,6 +40,7 @@
 //! ([`Candidate::made_out`] false) matches no id and no relation.
 
 use crate::doing::Phase;
+pub use crate::life::Stage;
 use serde_json::{Map, Value};
 
 /// At most this many rules in a policy.
@@ -162,12 +163,23 @@ impl Relation {
     }
 }
 
-/// `who`: by id, by kind, or by kind and relation.
+/// `who`: by id, by kind, or by kind (any kind when none), relation and seen age.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Who {
     Id(u32),
     Kind(String),
-    Filter { kind: String, relation: Option<Relation> },
+    Filter { kind: Option<String>, relation: Option<Relation>, age: Option<Stage> },
+}
+
+/// An age word a mind may write (`"child"`, `{"age": "old"}`): the life stage it names.
+pub fn age_word(s: &str) -> Option<Stage> {
+    Some(match s.to_lowercase().as_str() {
+        "baby" | "babies" | "infant" | "infants" => Stage::Infant,
+        "child" | "children" | "kid" | "kids" => Stage::Child,
+        "adult" | "adults" | "grown" => Stage::Adult,
+        "old" | "elder" | "elders" | "elderly" | "old one" | "old ones" => Stage::Elder,
+        _ => return None,
+    })
 }
 
 /// A bound on a number: `{"above": a, "below": b}` (either may be absent).
@@ -280,6 +292,13 @@ pub fn parse(json: &str, known: &Known) -> Result<Policy, String> {
 
 /// [`parse`] from a parsed value (a reply's `heed` field).
 pub fn parse_value(v: &Value, known: &Known) -> Result<Policy, String> {
+    parse_value_notes(v, known).map(|(p, _)| p)
+}
+
+/// [`parse_value`], also returning the notes: what was accepted with a change (a hold over the
+/// maximum shortened, a field the grammar does not have left out), in words for the mind. A
+/// refusal names every rule that failed (`rule 2: ...; rule 5: ...`), each with what to write.
+pub fn parse_value_notes(v: &Value, known: &Known) -> Result<(Policy, Vec<String>), String> {
     let list = match v {
         Value::Array(a) => a,
         Value::Object(o) => {
@@ -296,12 +315,44 @@ pub fn parse_value(v: &Value, known: &Known) -> Result<Policy, String> {
     if list.len() > MAX_RULES {
         return Err(format!("{} rules; at most {MAX_RULES}", list.len()));
     }
-    let rules = list.iter().enumerate().map(|(i, r)| rule(r, known).map_err(|e| format!("rule {}: {e}", i + 1))).collect::<Result<Vec<_>, _>>()?;
-    Ok(Policy { rules })
+    let (mut rules, mut notes, mut errors) = (Vec::new(), Vec::new(), Vec::new());
+    for (i, r) in list.iter().enumerate() {
+        // An entry with neither `if` nor `score` takes no one: it is left out, with a note.
+        if !r.as_object().is_some_and(|o| o.contains_key("if") || o.contains_key("score")) {
+            notes.push(format!(
+                "rule {}: left out: it has neither `if` nor `score`, so it takes no one (start a rule with {{\"if\": condition}}; to keep someone longer, give `hold_s` to the rule that takes them)",
+                i + 1
+            ));
+            continue;
+        }
+        let mut n = Vec::new();
+        match rule(r, known, &mut n) {
+            Ok(x) => rules.push(x),
+            Err(e) => errors.push(format!("rule {}: {e}", i + 1)),
+        }
+        notes.extend(n.into_iter().map(|x| format!("rule {}: {x}", i + 1)));
+    }
+    if !errors.is_empty() {
+        return Err(errors.join("; "));
+    }
+    if rules.is_empty() && !list.is_empty() {
+        return Err("no rule has `if` or `score`, so the policy takes no one: a rule is {\"if\": condition, ...} or {\"score\": [...], ...}".into());
+    }
+    Ok((Policy { rules }, notes))
 }
 
-fn rule(v: &Value, known: &Known) -> Result<Rule, String> {
-    let o = v.as_object().ok_or("a rule is an object with `if` or `score`")?;
+/// Fields a rule may have; any other is left out with a note (a stray key does not refuse a rule).
+const IF_FIELDS: [&str; 5] = ["if", "order", "take", "hold_s", "why"];
+const SCORE_FIELDS: [&str; 5] = ["score", "order", "take", "hold_s", "why"];
+
+fn rule(v: &Value, known: &Known, notes: &mut Vec<String>) -> Result<Rule, String> {
+    let o = v.as_object().ok_or("a rule is an object: {\"if\": condition, ...} or {\"score\": [...], ...}")?;
+    // `{"if": {"score": [...]}}` is a score rule written inside `if`.
+    let nested_score = o.get("if").and_then(Value::as_object).filter(|c| c.len() == 1).and_then(|c| c.get("score")).filter(|x| x.is_array());
+    let (if_v, score_v) = match nested_score {
+        Some(sc) if !o.contains_key("score") => (None, Some(sc)),
+        _ => (o.get("if"), o.get("score")),
+    };
     let why = match o.get("why") {
         None => String::new(),
         Some(Value::String(s)) if s.chars().count() <= MAX_WHY => s.clone(),
@@ -318,19 +369,27 @@ fn rule(v: &Value, known: &Known) -> Result<Rule, String> {
         },
         Some(_) => return Err("`take` is a whole number or \"rest\"".into()),
     };
-    let hold_s = match o.get("hold_s") {
+    // `hold` as a number is `hold_s`.
+    let hold_v = o.get("hold_s").or_else(|| o.get("hold").filter(|h| h.is_number()));
+    let hold_s = match hold_v {
         None => 0.0,
         Some(v) => match v.as_f64() {
             Some(n) if (0.0..=MAX_HOLD_S as f64).contains(&n) => n as f32,
+            Some(n) if n > MAX_HOLD_S as f64 => {
+                notes.push(format!("`hold_s` {n} is longer than the most, {MAX_HOLD_S}: held {MAX_HOLD_S} s"));
+                MAX_HOLD_S
+            }
             _ => return Err(format!("`hold_s` is seconds, 0 to {MAX_HOLD_S}")),
         },
     };
-    match (o.get("if"), o.get("score")) {
-        (Some(_), Some(_)) => Err("a rule has `if` or `score`, not both".into()),
+    let fields: &[&str] = if score_v.is_some() && if_v.is_none() { &SCORE_FIELDS } else { &IF_FIELDS };
+    let stray: Vec<&str> = o.keys().map(String::as_str).filter(|k| !fields.contains(k) && *k != "hold" && !(*k == "if" && nested_score.is_some() && !o.contains_key("score"))).collect();
+    if !stray.is_empty() {
+        notes.push(format!("left out {} (a rule has {})", stray.iter().map(|k| format!("`{k}`")).collect::<Vec<_>>().join(", "), fields.join(", ")));
+    }
+    match (if_v, score_v) {
+        (Some(_), Some(_)) => Err("a rule has `if` or `score`, not both: put the weighed conditions in `score`, or write two rules".into()),
         (Some(c), None) => {
-            if let Some(k) = o.keys().find(|k| !["if", "order", "take", "hold_s", "why"].contains(&k.as_str())) {
-                return Err(format!("unknown field `{k}` (an `if` rule has if, order, take, hold_s, why)"));
-            }
             let order = match o.get("order") {
                 None => Order::Nearest,
                 Some(Value::String(s)) => match s.as_str() {
@@ -345,8 +404,8 @@ fn rule(v: &Value, known: &Known) -> Result<Rule, String> {
             Ok(Rule::If { cond: cond(c, known, 0)?, order, take, hold_s, why })
         }
         (None, Some(s)) => {
-            if let Some(k) = o.keys().find(|k| !["score", "take", "hold_s", "why"].contains(&k.as_str())) {
-                return Err(format!("unknown field `{k}` (a `score` rule has score, take, hold_s, why)"));
+            if o.contains_key("order") {
+                notes.push("a `score` rule ranks by its summed weights, nearer first on ties: its `order` is not used".into());
             }
             let list = s.as_array().ok_or("`score` is a list of {\"if\": condition, \"w\": weight}")?;
             if list.is_empty() {
@@ -355,10 +414,10 @@ fn rule(v: &Value, known: &Known) -> Result<Rule, String> {
             let mut weights = Vec::with_capacity(list.len());
             for w in list {
                 let m = w.as_object().ok_or("`score` is a list of {\"if\": condition, \"w\": weight}")?;
+                let c = m.get("if").ok_or("a weight is {\"if\": condition, \"w\": weight}: it needs `if`")?;
                 if let Some(k) = m.keys().find(|k| *k != "if" && *k != "w") {
-                    return Err(format!("unknown field `{k}` in a weight (a weight has if, w)"));
+                    notes.push(format!("left out `{k}` in a weight (a weight has if, w)"));
                 }
-                let c = m.get("if").ok_or("a weight needs `if`")?;
                 let x = m.get("w").and_then(Value::as_f64).ok_or("a weight needs a number `w`")? as f32;
                 if !x.is_finite() || x.abs() > MAX_WEIGHT {
                     return Err(format!("a weight lies within -{MAX_WEIGHT}..{MAX_WEIGHT}"));
@@ -367,7 +426,7 @@ fn rule(v: &Value, known: &Known) -> Result<Rule, String> {
             }
             Ok(Rule::Score { weights, take, hold_s, why })
         }
-        (None, None) => Err("a rule has `if` (a condition) or `score` (weighted conditions)".into()),
+        (None, None) => Err("this rule has neither `if` nor `score`, so it takes no one: start it with {\"if\": condition} (to keep someone longer, give `hold_s` to the rule that takes them)".into()),
     }
 }
 
@@ -413,7 +472,9 @@ fn kind(s: &str, known: &Known) -> Result<String, String> {
     if (known.kind)(s) {
         Ok(s.to_string())
     } else {
-        Err(format!("unknown kind of creature `{s}`"))
+        Err(format!(
+            "`{s}` is not a kind of creature: kinds are species such as \"person\"; for one creature write its id, for a relation or an age use {{\"relation\": ...}} or {{\"age\": \"child\"}}"
+        ))
     }
 }
 
@@ -426,13 +487,41 @@ fn who(v: &Value, known: &Known) -> Result<Who, String> {
             }
             Ok(Who::Id(id))
         }
-        Value::String(s) => Ok(Who::Kind(kind(s, known)?)),
-        Value::Object(o) => {
-            if let Some(k) = o.keys().find(|k| *k != "kind" && *k != "relation") {
-                return Err(format!("unknown field `{k}` in `who` (kind, relation)"));
+        Value::String(s) => {
+            // "#41" is an id; a relation word ("stranger", "community", "any") is that relation
+            // among every kind.
+            if let Some(id) = s.strip_prefix('#').and_then(|d| d.parse::<u64>().ok()) {
+                return who(&Value::from(id), known);
             }
-            let k = o.get("kind").and_then(Value::as_str).ok_or("`who` as an object needs a `kind`")?;
-            Ok(Who::Filter { kind: kind(k, known)?, relation: relation(o.get("relation"))? })
+            if let Some(r) = Relation::parse(s) {
+                return Ok(Who::Filter { kind: None, relation: Some(r), age: None });
+            }
+            // An age ("child", "old") is a person of that age.
+            if let Some(a) = age_word(s).filter(|_| !(known.kind)(s)) {
+                return Ok(Who::Filter { kind: Some(kind("person", known)?), relation: None, age: Some(a) });
+            }
+            Ok(Who::Kind(kind(s, known)?))
+        }
+        Value::Object(o) => {
+            if let Some(k) = o.keys().find(|k| !["kind", "relation", "age"].contains(&k.as_str())) {
+                return Err(format!("unknown field `{k}` in `who`: `who` is an id, a kind, a relation, an age, or {{\"kind\": ..., \"relation\": ..., \"age\": ...}}"));
+            }
+            let mut age = match o.get("age") {
+                None => None,
+                Some(Value::String(a)) => Some(age_word(a).ok_or_else(|| format!("unknown age `{a}` (ages are baby, child, adult, old)"))?),
+                Some(_) => return Err("`who.age` is a word: baby, child, adult or old".into()),
+            };
+            let k = match o.get("kind") {
+                None => None,
+                // {"kind": "child"}: a person of that age.
+                Some(Value::String(k)) if !(known.kind)(k) && age_word(k).is_some() && age.is_none() => {
+                    age = age_word(k);
+                    Some(kind("person", known)?)
+                }
+                Some(Value::String(k)) => Some(kind(k, known)?),
+                Some(_) => return Err("`who.kind` is a word, such as \"person\"".into()),
+            };
+            Ok(Who::Filter { kind: k, relation: relation(o.get("relation"))?, age })
         }
         _ => Err("`who` is an id, a kind, or {\"kind\": ..., \"relation\": ...}".into()),
     }
@@ -490,14 +579,22 @@ fn cond(v: &Value, known: &Known, depth: usize) -> Result<Cond, String> {
     if depth > MAX_DEPTH {
         return Err(format!("conditions nest more than {MAX_DEPTH} deep"));
     }
-    let o: &Map<String, Value> = v.as_object().filter(|o| o.len() == 1).ok_or("a condition is one word and its value, e.g. {\"near\": 8}")?;
+    let o: &Map<String, Value> = v.as_object().filter(|o| !o.is_empty()).ok_or("a condition is {\"word\": value}, e.g. {\"near\": 8}")?;
+    if o.len() > 1 {
+        // Several words in one condition must all hold.
+        let parts = o.iter().map(|(k, x)| cond(&Value::Object(Map::from_iter([(k.clone(), x.clone())])), known, depth + 1)).collect::<Result<Vec<_>, _>>()?;
+        return Ok(Cond::All(parts));
+    }
     let (k, x) = o.iter().next().expect("one entry");
+    let k = &k.to_lowercase();
     let list = |x: &Value| -> Result<Vec<Cond>, String> {
         let a = x.as_array().filter(|a| !a.is_empty()).ok_or_else(|| format!("`{k}` is a list of conditions"))?;
         a.iter().map(|c| cond(c, known, depth + 1)).collect()
     };
     Ok(match k.as_str() {
         "who" => Cond::Who(who(x, known)?),
+        // `{"kind": "person"}` is `{"who": "person"}`; `{"relation": "enemy"}` is that relation.
+        "kind" | "relation" | "age" => Cond::Who(who(&Value::Object(Map::from_iter([(k.clone(), x.clone())])), known)?),
         "threatened" => Cond::Threatened(flag(x, k)?),
         "doing" => {
             let m = x.as_object().ok_or("`doing` is {\"is\": ..., \"phase\": ..., \"at_me\": true, \"within\": metres}")?;
@@ -608,6 +705,8 @@ pub struct Visible {
 pub struct Candidate {
     pub id: u32,
     pub kind: String,
+    /// Its life stage as seen (none: not known, or not made out; `who`'s `age`).
+    pub stage: Option<Stage>,
     /// Metres.
     pub dist: f32,
     /// Metres a second toward me (negative: moving away).
@@ -736,7 +835,9 @@ fn who_holds(w: &Who, c: &Candidate) -> bool {
     match w {
         Who::Id(id) => c.made_out && c.id == *id,
         Who::Kind(k) => c.kind == *k,
-        Who::Filter { kind, relation } => c.kind == *kind && relation.is_none_or(|r| relation_holds(r, c)),
+        Who::Filter { kind, relation, age } => {
+            kind.as_ref().is_none_or(|k| c.kind == *k) && relation.is_none_or(|r| relation_holds(r, c)) && age.is_none_or(|a| c.made_out && c.stage == Some(a))
+        }
     }
 }
 
@@ -1058,27 +1159,82 @@ mod tests {
         assert!(refuse(json!({"attend": [{"if": {"near": 8}}]})).contains("unknown field `attend`"));
         assert!(refuse(json!({"heed": [{"if": {"gaze": 8}}]})).contains("unknown condition `gaze`"));
         assert!(refuse(json!({"heed": [{"if": {"who": 99}}]})).contains("#99 is no one you have met"));
-        assert!(refuse(json!({"heed": [{"if": {"who": "dragon"}}]})).contains("unknown kind of creature `dragon`"));
+        assert!(refuse(json!({"heed": [{"if": {"who": "dragon"}}]})).contains("`dragon` is not a kind of creature"));
         assert!(refuse(json!({"heed": [{"if": {"doing": {"phase": "dancing"}}}]})).contains("unknown phase `dancing`"));
         assert!(refuse(json!({"heed": [{"if": {"near": 8}, "order": "loudest"}]})).contains("unknown order `loudest`"));
         assert!(refuse(json!({"heed": [{"if": {"near": 8}, "take": 0}]})).contains("`take` 0"));
-        assert!(refuse(json!({"heed": [{"if": {"near": 8}, "hold_s": 61}]})).contains("`hold_s` is seconds"));
+        assert!(refuse(json!({"heed": [{"if": {"near": 8}, "hold_s": -1}]})).contains("`hold_s` is seconds"));
         assert!(refuse(json!({"heed": [{"if": {"near": 8}, "why": "x".repeat(161)}]})).contains("longer than 160"));
         assert!(refuse(json!({"heed": [{"score": []}]})).contains("no weights"));
         assert!(refuse(json!({"heed": [{"score": [{"if": {"near": 3}, "w": 11}]}]})).contains("-10..10"));
         assert!(refuse(json!({"heed": [{"if": {"near": 3}, "score": [{"if": {"near": 3}, "w": 1}]}]})).contains("not both"));
         assert!(refuse(json!({"heed": [{"if": {"who": {"kind": "person", "relation": "rival"}}}]})).contains("unknown relation `rival`"));
         assert!(refuse(json!({"heed": [{"if": {"self": {"sees": "wolf"}}}]})).contains("`self` reads"));
-        assert!(refuse(json!({"heed": [{"if": {"near": 3, "who": "wolf"}}]})).contains("one word and its value"));
+        assert!(refuse(json!({"heed": [{"if": {}}]})).contains("{\"word\": value}"));
+        assert!(refuse(json!({"heed": [{"hold_s": 5, "why": "x"}]})).contains("no rule has `if` or `score`"));
+        let (p, notes) = parse_value_notes(&json!({"heed": [{"if": {"near": 3}}, {"self": false}, "order"]}), &Known::any()).unwrap();
+        assert_eq!(p.rules.len(), 1);
+        assert!(notes.len() == 2 && notes[0].starts_with("rule 2: left out"), "{notes:?}");
         let deep = (0..8).fold(json!({"near": 1}), |c, _| json!({"not": c}));
         assert!(refuse(json!({"heed": [{"if": deep}]})).contains("nest more than"));
         let many: Vec<Value> = (0..13).map(|_| json!({"if": {"near": 3}})).collect();
         assert!(refuse(json!({"heed": many})).contains("13 rules; at most 12"));
         assert!(parse(&"x".repeat(MAX_BYTES + 1), &Known::any()).unwrap_err().contains("bytes"));
-        // A refusal names the rule.
+        // A refusal names the rule, and every rule that failed.
         assert!(refuse(json!({"heed": [{"if": {"near": 8}}, {"if": {"who": 99}}]})).starts_with("rule 2:"));
+        let both = refuse(json!({"heed": [{"if": {"who": 99}}, {"if": {"near": 8}}, {"if": {"gaze": 1}}]}));
+        assert!(both.starts_with("rule 1:") && both.contains("; rule 3:"), "{both}");
         // A policy with no threat rule is accepted: anticipating attacks is the mind's choice.
         assert!(parse_value(&json!({"heed": [{"if": {"who": "deer"}}]}), &Known::any()).is_ok());
+    }
+
+    /// The forms E5's (b) replies reached for (docs/ATTENTION_E5.md §6) are valid, with notes
+    /// where something was changed or left out; an age as a kind stays refused, with what to write.
+    #[test]
+    fn the_forms_minds_reach_for_parse() {
+        let k = Known { met: &|_| true, kind: &|k| ["person", "wolf", "deer"].contains(&k) };
+        let ok = |v: Value| parse_value_notes(&v, &k).unwrap_or_else(|e| panic!("{v}: {e}"));
+        // `who` with a relation and no kind: any kind.
+        let (p, _) = ok(json!({"heed": [{"if": {"who": {"relation": "community"}}, "take": 3}]}));
+        assert!(matches!(&p.rules[0], Rule::If { cond: Cond::Who(Who::Filter { kind: None, relation: Some(Relation::Community), .. }), .. }));
+        // A relation word as `who`, and "#41" as an id.
+        assert!(matches!(&ok(json!({"heed": [{"if": {"who": "stranger"}}]})).0.rules[0], Rule::If { cond: Cond::Who(Who::Filter { kind: None, relation: Some(Relation::Stranger), .. }), .. }));
+        assert!(matches!(&ok(json!({"heed": [{"if": {"who": "#41"}}]})).0.rules[0], Rule::If { cond: Cond::Who(Who::Id(41)), .. }));
+        // A hold over the most is held for the most, with a note.
+        let (p, notes) = ok(json!({"heed": [{"if": {"who": 101}, "take": 1, "hold_s": 120}]}));
+        assert_eq!(p.rules[0].hold_s(), MAX_HOLD_S);
+        assert!(notes[0].starts_with("rule 1:") && notes[0].contains("held 60"), "{notes:?}");
+        // Several words in one condition all hold; `kind` and `relation` as conditions; key case.
+        let (p, _) = ok(json!({"heed": [{"score": [{"if": {"who": {"kind": "person", "relation": "stranger"}, "near": 3}, "w": 2}]}]}));
+        assert!(matches!(&p.rules[0], Rule::Score { weights, .. } if matches!(&weights[0].0, Cond::All(v) if v.len() == 2)));
+        ok(json!({"heed": [{"if": {"kind": "person"}, "order": "closing", "take": 3}]}));
+        ok(json!({"heed": [{"if": {"Near": 2}, "take": 2}]}));
+        // A score rule written inside `if`, and a score rule's `order` (not used, noted).
+        assert!(matches!(&ok(json!({"heed": [{"if": {"score": [{"if": {"near": 5}, "w": 2}]}, "take": 2}]})).0.rules[0], Rule::Score { .. }));
+        let (_, notes) = ok(json!({"heed": [{"score": [{"if": {"near": 5}, "w": 2}], "order": "nearest", "take": "rest"}]}));
+        assert!(notes.iter().any(|n| n.contains("`order` is not used")), "{notes:?}");
+        // A stray field is left out, with a note; `hold` as a number is `hold_s`.
+        let (p, notes) = ok(json!({"heed": [{"if": {"fighting": true}, ":woundcheck": true, "hold": 6, "take": 3}]}));
+        assert_eq!(p.rules[0].hold_s(), 6.0);
+        assert!(notes.iter().any(|n| n.contains("left out `:woundcheck`")), "{notes:?}");
+        // An age: a person seen at that age, written as a kind, a `who` word or `age`.
+        for v in [json!({"who": {"kind": "child"}}), json!({"who": "child"}), json!({"who": {"kind": "person", "age": "child"}}), json!({"age": "children"})] {
+            let (p, _) = ok(json!({"heed": [{"if": v.clone()}]}));
+            assert!(
+                matches!(&p.rules[0], Rule::If { cond: Cond::Who(Who::Filter { kind, age: Some(Stage::Child), .. }), .. } if kind.as_deref().is_none_or(|k| k == "person")),
+                "{v}: {:?}",
+                p.rules[0]
+            );
+            let child = Candidate { stage: Some(Stage::Child), ..cand(1, "person", 3.0) };
+            let adult = Candidate { stage: Some(Stage::Adult), ..cand(2, "person", 2.0) };
+            let far = Candidate { stage: Some(Stage::Child), made_out: false, ..cand(3, "person", 30.0) };
+            let picked: Vec<u32> = select(&p, &SelfState::default(), &[child, adult, far], &Limits::new(4), &[]).iter().map(|x| x.id).collect();
+            assert_eq!(picked, vec![1], "{v}");
+        }
+        // A word that is neither a kind nor an age is refused, saying what to write.
+        let e = parse_value(&json!({"heed": [{"if": {"who": "dragon"}}]}), &k).unwrap_err();
+        assert!(e.contains("`dragon` is not a kind of creature") && e.contains("{\"age\": \"child\"}"), "{e}");
+        assert!(parse_value(&json!({"heed": [{"if": {"who": {"age": "ancient"}}}]}), &k).unwrap_err().contains("unknown age `ancient`"));
     }
 
     #[test]
