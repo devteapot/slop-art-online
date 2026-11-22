@@ -1,0 +1,97 @@
+{
+ "line": {
+  "ticks_per_s_min": 59.9,
+  "p99_ms_max": 17.5,
+  "over25_pct_max": 0.5
+ },
+ "runs": [
+  {
+   "run": "main-r1",
+   "intervals": 3524,
+   "ticks_per_s": 58.74,
+   "p50_ms": 16.727,
+   "p95_ms": 23.664,
+   "p99_ms": 29.514,
+   "max_ms": 38.499,
+   "over25_pct": 3.774,
+   "pass": false
+  },
+  {
+   "run": "main-r2",
+   "intervals": 3531,
+   "ticks_per_s": 58.84,
+   "p50_ms": 16.753,
+   "p95_ms": 23.298,
+   "p99_ms": 28.355,
+   "max_ms": 42.57,
+   "over25_pct": 2.86,
+   "pass": false
+  },
+  {
+   "run": "relay-r1",
+   "intervals": 3594,
+   "ticks_per_s": 59.93,
+   "p50_ms": 16.616,
+   "p95_ms": 20.859,
+   "p99_ms": 23.793,
+   "max_ms": 27.866,
+   "over25_pct": 0.39,
+   "pass": false
+  },
+  {
+   "run": "relay-r2",
+   "intervals": 3595,
+   "ticks_per_s": 59.91,
+   "p50_ms": 16.73,
+   "p95_ms": 21.426,
+   "p99_ms": 24.154,
+   "max_ms": 30.223,
+   "over25_pct": 0.529,
+   "pass": false
+  },
+  {
+   "run": "relaycut-r1",
+   "intervals": 3596,
+   "ticks_per_s": 59.96,
+   "p50_ms": 16.624,
+   "p95_ms": 20.994,
+   "p99_ms": 23.613,
+   "max_ms": 29.477,
+   "over25_pct": 0.389,
+   "pass": false
+  },
+  {
+   "run": "relaycut-r2",
+   "intervals": 3596,
+   "ticks_per_s": 59.93,
+   "p50_ms": 16.646,
+   "p95_ms": 21.053,
+   "p99_ms": 23.653,
+   "max_ms": 31.213,
+   "over25_pct": 0.278,
+   "pass": false
+  },
+  {
+   "run": "relayd40-r1",
+   "intervals": 3598,
+   "ticks_per_s": 59.96,
+   "p50_ms": 16.648,
+   "p95_ms": 20.808,
+   "p99_ms": 23.272,
+   "max_ms": 29.676,
+   "over25_pct": 0.334,
+   "pass": false
+  },
+  {
+   "run": "relayd40-r2",
+   "intervals": 3596,
+   "ticks_per_s": 59.96,
+   "p50_ms": 16.624,
+   "p95_ms": 21.162,
+   "p99_ms": 24.099,
+   "max_ms": 32.98,
+   "over25_pct": 0.473,
+   "pass": false
+  }
+ ]
+}
