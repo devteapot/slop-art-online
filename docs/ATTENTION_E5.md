@@ -316,6 +316,62 @@ The general coordinator kept mind-written heed policies in the design ("the mind
 - Both arms are compared on the full frozen set with §3's decision rule, unchanged.
 - **Parse rates are reported twice:** at the first reply, and after the repair turn.
 
+### 7.1 Results (2026-11-22, 21:59–22:57)
+
+**Verdict: (a) stands.**
+- (b) meets the M2″ condition: +5.9 points beyond the 8 nearest, p = 0.005.
+- (b) meets the flicker condition (0.93×).
+- **(b) fails M1:** 4.0 first blows per 100 came from someone it did not heed, against 0 for (a). The allowance is 1.
+- Under §3's rule, unchanged, the simpler arm stands.
+
+**The run** (commit f30b24947):
+- All 615 states. 777 calls: 615 first replies and 162 repair turns.
+- 0 errors. No stop rule tripped: rule 6 saw 43 of the first 53 replies valid.
+- **Spend $2.31** of the $2.90 cap; the guard's stop was at $2.40. Mean completion: 4.2k tokens a call.
+- E5's total is now **$13.11 of $27**.
+- **Switches:**
+  - The recording's laws as in §6 (`heed_on`, `heed_fixed_capacity` 32, `heed_ceiling` 32, `heed_instinct` 2, `sides_mixed_defence` ON, `sides_minded`, `sides_first` 0, the `people` mix).
+  - (b) on the subject's recorded route (GLM Flash, low effort) with `--repair 1`, concurrency 8, all eight stop rules on.
+  - The frozen inputs were checked against their manifest before the first call.
+
+**Parse rates.**
+
+| | Valid | Share |
+|---|---|---|
+| First reply | 454 of 615 | **73.8%** |
+| After the repair turn | 574 of 615 | **93.3%** |
+
+- **The repair turn carries 120 policies (19.5 points).**
+- **Why first replies failed:**
+  - Most of these failures are not the grammar but the reply's form: 43 were not JSON at all, and 27 had no `heed` field.
+  - The rest: 36 an unknown condition, 13 an unknown `who` field, 6 an unknown kind.
+- **The 41 still refused after repair:**
+  - mostly an unknown condition (11) or an unknown `who` field (9);
+  - an unknown order (5).
+- 74 valid policies carried notes (a hold shortened, a stray field left out).
+- In the replay, 572 states ran on their own policy. 2 were refused there because the replay's ids differ slightly from the scene's.
+
+**The comparison**, on all 615 frozen states and the corrected fields:
+- (a) re-scored on them gives the same M2″ as in §6. The instinct reads neither age nor community.
+
+| Arm | M2″ beyond 8 (n=773) | Beyond capacity | All named | First blows from the unheeded, per 100 (of 448) | Later blows unheeded | Flicker | Heeded mean |
+|---|---|---|---|---|---|---|---|
+| (a) instinct, base 10 | 54.5% | 52.8% | 60.9% | 0.0 | 0 | 77.1 | 10.6 |
+| (b) mind-written | **60.4%** | 58.5% | 65.1% | **4.0** (18) | 0 | 71.4 (0.93×) | 8.9 |
+
+- **Against (a):** +5.9 points.
+  - 153 events where only (b) heeds against 107 where only (a) does; the arms disagree on 33.6% of events.
+  - Exact sign test p = 0.005.
+  - M1 is worse by 4.0 per 100 (the rule allows 1).
+- **Where the unheeded first blows happened:** 13 states. Every one of those policies has a threat rule (`threatened`, `at_me` or `attacker`). Its places went to others first: rules ranked above it, or a smaller `take`. The cause was not traced further.
+- **Forced contact held:** no later blow came from an unheeded attacker.
+
+**What this means.**
+- Minds that write their own policies name more of the people they think about: about 6 points more beyond the 8 nearest.
+- The cost is that about 4 in 100 first blows come from someone they were not tracking.
+- Under the frozen rule, that cost decides it.
+- Whether a policy with a fixed threat rule, or a live (b) (phase 3), would keep the gain without the cost is not established here.
+
 ## Sources
 
 - Prompt-length table: `.local/heed-e4/prompts*.json` on heed-e4 (copied with the session's evidence); tool `living/tools/heed_e5_prompts.py`.
