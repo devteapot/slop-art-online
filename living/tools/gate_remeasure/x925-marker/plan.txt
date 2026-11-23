@@ -1,0 +1,6 @@
+idle idle-r1
+relay mk-r1 --law tick_marker_on=true --tick-marker
+relay mo-r1 --law tick_marker_on=true --tick-marker --law memory_off=1
+relay mk-r2 --law tick_marker_on=true --tick-marker
+relay mo-r2 --law tick_marker_on=true --tick-marker --law memory_off=1
+idle idle-r2

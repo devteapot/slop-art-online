@@ -1,0 +1,137 @@
+{
+ "line": {
+  "ticks_per_s_min": 59.9,
+  "p99_ms_max": 17.5,
+  "idle_margin_ms": 0.5,
+  "over25_pct_max": 0.5
+ },
+ "idle": {
+  "run": "idle-r1",
+  "intervals": 3599,
+  "ticks_counted": 3600,
+  "ticks_per_s": 60.01,
+  "p50_ms": 16.73,
+  "p95_ms": 17.644,
+  "p99_ms": 17.859,
+  "max_ms": 18.109,
+  "over25_pct": 0.0,
+  "idle_p99_ms": null,
+  "p99_bound_ms": 17.5,
+  "pass": false,
+  "marker_to_arrival_ms": {
+   "p50": 0.874,
+   "p99": 1.589
+  }
+ },
+ "p99_bound_ms": 18.359,
+ "runs": [
+  {
+   "run": "idle-r1",
+   "intervals": 3599,
+   "ticks_counted": 3600,
+   "ticks_per_s": 60.01,
+   "p50_ms": 16.73,
+   "p95_ms": 17.644,
+   "p99_ms": 17.859,
+   "max_ms": 18.109,
+   "over25_pct": 0.0,
+   "idle_p99_ms": 17.859,
+   "p99_bound_ms": 18.359,
+   "pass": true,
+   "marker_to_arrival_ms": {
+    "p50": 0.874,
+    "p99": 1.589
+   }
+  },
+  {
+   "run": "idle-r2",
+   "intervals": 3599,
+   "ticks_counted": 3600,
+   "ticks_per_s": 60.01,
+   "p50_ms": 16.694,
+   "p95_ms": 17.648,
+   "p99_ms": 17.889,
+   "max_ms": 18.372,
+   "over25_pct": 0.0,
+   "idle_p99_ms": 17.859,
+   "p99_bound_ms": 18.359,
+   "pass": true,
+   "marker_to_arrival_ms": {
+    "p50": 1.032,
+    "p99": 1.812
+   }
+  },
+  {
+   "run": "mk-r1",
+   "intervals": 3595,
+   "ticks_counted": 3596,
+   "ticks_per_s": 59.93,
+   "p50_ms": 16.72,
+   "p95_ms": 17.698,
+   "p99_ms": 18.011,
+   "max_ms": 33.277,
+   "over25_pct": 0.111,
+   "idle_p99_ms": 17.859,
+   "p99_bound_ms": 18.359,
+   "pass": true,
+   "marker_to_arrival_ms": {
+    "p50": 6.451,
+    "p99": 13.542
+   }
+  },
+  {
+   "run": "mk-r2",
+   "intervals": 3595,
+   "ticks_counted": 3596,
+   "ticks_per_s": 59.93,
+   "p50_ms": 16.72,
+   "p95_ms": 17.681,
+   "p99_ms": 17.977,
+   "max_ms": 33.182,
+   "over25_pct": 0.111,
+   "idle_p99_ms": 17.859,
+   "p99_bound_ms": 18.359,
+   "pass": true,
+   "marker_to_arrival_ms": {
+    "p50": 6.472,
+    "p99": 13.371
+   }
+  },
+  {
+   "run": "mo-r1",
+   "intervals": 3597,
+   "ticks_counted": 3598,
+   "ticks_per_s": 59.98,
+   "p50_ms": 16.716,
+   "p95_ms": 17.733,
+   "p99_ms": 18.008,
+   "max_ms": 34.031,
+   "over25_pct": 0.056,
+   "idle_p99_ms": 17.859,
+   "p99_bound_ms": 18.359,
+   "pass": true,
+   "marker_to_arrival_ms": {
+    "p50": 5.962,
+    "p99": 13.716
+   }
+  },
+  {
+   "run": "mo-r2",
+   "intervals": 3594,
+   "ticks_counted": 3595,
+   "ticks_per_s": 59.91,
+   "p50_ms": 16.728,
+   "p95_ms": 17.727,
+   "p99_ms": 18.105,
+   "max_ms": 33.589,
+   "over25_pct": 0.139,
+   "idle_p99_ms": 17.859,
+   "p99_bound_ms": 18.359,
+   "pass": true,
+   "marker_to_arrival_ms": {
+    "p50": 5.795,
+    "p99": 13.16
+   }
+  }
+ ]
+}
