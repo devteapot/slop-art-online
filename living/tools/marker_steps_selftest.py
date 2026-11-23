@@ -47,4 +47,13 @@ lines = [(1, 0), (1, 5), (2, 16_000), (3, 33_000), (5, 70_000), (6, 86_000), (7,
 iv, n = intervals(lines, 0, 100_000)
 check("duplicates, a gap, the window: intervals", iv, [16.0, 16.0, 17.0])
 check("duplicates, a gap, the window: ticks counted", n, 5)
+# The idle clause: the bound is max(17.5, idle p99 + 0.5).
+from marker_steps import p99_bound  # noqa: E402
+check("idle 18.08: bound", p99_bound(18.08), 18.58)
+check("idle 17.0: bound", p99_bound(17.0), 17.5)
+check("no idle run: bound", p99_bound(None), 17.5)
+iv, n = intervals(ticks([16_667] * 980 + [18_300] * 19), 0, 10**18)
+check("p99 18.3 ms: fails without the idle clause", summary(iv, 59.95, n)["pass"], False)
+check("p99 18.3 ms, idle 18.08: passes", summary(iv, 59.95, n, 18.08)["pass"], True)
+check("p99 18.3 ms, idle 17.0: fails", summary(iv, 59.95, n, 17.0)["pass"], False)
 sys.exit(0 if ok else 1)
