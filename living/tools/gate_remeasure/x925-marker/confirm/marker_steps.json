@@ -1,0 +1,245 @@
+{
+ "line": {
+  "ticks_per_s_min": 59.9,
+  "p99_ms_max": 17.5,
+  "idle_margin_ms": 0.5,
+  "over25_pct_max": 0.5
+ },
+ "idle": {
+  "run": "idle-c1",
+  "intervals": 3599,
+  "ticks_counted": 3600,
+  "ticks_per_s": 60.01,
+  "p50_ms": 16.718,
+  "p95_ms": 17.62,
+  "p99_ms": 17.883,
+  "max_ms": 18.114,
+  "over25_pct": 0.0,
+  "idle_p99_ms": null,
+  "p99_bound_ms": 17.5,
+  "pass": false,
+  "marker_to_arrival_ms": {
+   "p50": 0.927,
+   "p99": 1.643
+  }
+ },
+ "p99_bound_ms": 18.383,
+ "runs": [
+  {
+   "run": "idle-c1",
+   "intervals": 3599,
+   "ticks_counted": 3600,
+   "ticks_per_s": 60.01,
+   "p50_ms": 16.718,
+   "p95_ms": 17.62,
+   "p99_ms": 17.883,
+   "max_ms": 18.114,
+   "over25_pct": 0.0,
+   "idle_p99_ms": 17.883,
+   "p99_bound_ms": 18.383,
+   "pass": true,
+   "marker_to_arrival_ms": {
+    "p50": 0.927,
+    "p99": 1.643
+   }
+  },
+  {
+   "run": "idle-l0",
+   "intervals": 3599,
+   "ticks_counted": 3600,
+   "ticks_per_s": 60.0,
+   "p50_ms": 16.664,
+   "p95_ms": 17.569,
+   "p99_ms": 17.818,
+   "max_ms": 18.22,
+   "over25_pct": 0.0,
+   "idle_p99_ms": 17.883,
+   "p99_bound_ms": 18.383,
+   "pass": true,
+   "marker_to_arrival_ms": {
+    "p50": 1.071,
+    "p99": 1.829
+   }
+  },
+  {
+   "run": "idle-l1",
+   "intervals": 3599,
+   "ticks_counted": 3600,
+   "ticks_per_s": 59.99,
+   "p50_ms": 16.688,
+   "p95_ms": 17.71,
+   "p99_ms": 18.0,
+   "max_ms": 18.338,
+   "over25_pct": 0.0,
+   "idle_p99_ms": 17.883,
+   "p99_bound_ms": 18.383,
+   "pass": true,
+   "marker_to_arrival_ms": {
+    "p50": 1.006,
+    "p99": 1.738
+   }
+  },
+  {
+   "run": "mk-r3",
+   "intervals": 3595,
+   "ticks_counted": 3596,
+   "ticks_per_s": 59.93,
+   "p50_ms": 16.73,
+   "p95_ms": 17.682,
+   "p99_ms": 17.966,
+   "max_ms": 33.838,
+   "over25_pct": 0.111,
+   "idle_p99_ms": 17.883,
+   "p99_bound_ms": 18.383,
+   "pass": true,
+   "marker_to_arrival_ms": {
+    "p50": 6.715,
+    "p99": 14.069
+   }
+  },
+  {
+   "run": "mk-r4",
+   "intervals": 3589,
+   "ticks_counted": 3590,
+   "ticks_per_s": 59.83,
+   "p50_ms": 16.729,
+   "p95_ms": 17.736,
+   "p99_ms": 18.311,
+   "max_ms": 34.489,
+   "over25_pct": 0.279,
+   "idle_p99_ms": 17.883,
+   "p99_bound_ms": 18.383,
+   "pass": false,
+   "marker_to_arrival_ms": {
+    "p50": 6.949,
+    "p99": 14.539
+   }
+  },
+  {
+   "run": "mk-r4b",
+   "intervals": 3593,
+   "ticks_counted": 3594,
+   "ticks_per_s": 59.89,
+   "p50_ms": 16.717,
+   "p95_ms": 17.73,
+   "p99_ms": 18.024,
+   "max_ms": 33.081,
+   "over25_pct": 0.167,
+   "idle_p99_ms": 17.883,
+   "p99_bound_ms": 18.383,
+   "pass": false,
+   "marker_to_arrival_ms": {
+    "p50": 6.486,
+    "p99": 12.902
+   }
+  },
+  {
+   "run": "mk-r5",
+   "intervals": 3595,
+   "ticks_counted": 3596,
+   "ticks_per_s": 59.94,
+   "p50_ms": 16.704,
+   "p95_ms": 17.717,
+   "p99_ms": 17.976,
+   "max_ms": 34.303,
+   "over25_pct": 0.111,
+   "idle_p99_ms": 17.883,
+   "p99_bound_ms": 18.383,
+   "pass": true,
+   "marker_to_arrival_ms": {
+    "p50": 6.65,
+    "p99": 13.545
+   }
+  },
+  {
+   "run": "mk-r6",
+   "intervals": 3591,
+   "ticks_counted": 3592,
+   "ticks_per_s": 59.86,
+   "p50_ms": 16.734,
+   "p95_ms": 17.712,
+   "p99_ms": 18.042,
+   "max_ms": 36.091,
+   "over25_pct": 0.223,
+   "idle_p99_ms": 17.883,
+   "p99_bound_ms": 18.383,
+   "pass": false,
+   "marker_to_arrival_ms": {
+    "p50": 6.781,
+    "p99": 14.218
+   }
+  },
+  {
+   "run": "mo-r3",
+   "intervals": 3595,
+   "ticks_counted": 3596,
+   "ticks_per_s": 59.94,
+   "p50_ms": 16.718,
+   "p95_ms": 17.715,
+   "p99_ms": 18.008,
+   "max_ms": 33.688,
+   "over25_pct": 0.083,
+   "idle_p99_ms": 17.883,
+   "p99_bound_ms": 18.383,
+   "pass": true,
+   "marker_to_arrival_ms": {
+    "p50": 5.958,
+    "p99": 12.975
+   }
+  },
+  {
+   "run": "mo-r4",
+   "intervals": 3596,
+   "ticks_counted": 3597,
+   "ticks_per_s": 59.96,
+   "p50_ms": 16.725,
+   "p95_ms": 17.721,
+   "p99_ms": 17.985,
+   "max_ms": 34.933,
+   "over25_pct": 0.083,
+   "idle_p99_ms": 17.883,
+   "p99_bound_ms": 18.383,
+   "pass": true,
+   "marker_to_arrival_ms": {
+    "p50": 6.055,
+    "p99": 12.68
+   }
+  },
+  {
+   "run": "mo-r5",
+   "intervals": 3598,
+   "ticks_counted": 3599,
+   "ticks_per_s": 59.99,
+   "p50_ms": 16.724,
+   "p95_ms": 17.708,
+   "p99_ms": 18.023,
+   "max_ms": 33.057,
+   "over25_pct": 0.028,
+   "idle_p99_ms": 17.883,
+   "p99_bound_ms": 18.383,
+   "pass": true,
+   "marker_to_arrival_ms": {
+    "p50": 6.014,
+    "p99": 12.294
+   }
+  },
+  {
+   "run": "mo-r6",
+   "intervals": 3598,
+   "ticks_counted": 3599,
+   "ticks_per_s": 59.98,
+   "p50_ms": 16.727,
+   "p95_ms": 17.666,
+   "p99_ms": 17.954,
+   "max_ms": 32.451,
+   "over25_pct": 0.028,
+   "idle_p99_ms": 17.883,
+   "p99_bound_ms": 18.383,
+   "pass": true,
+   "marker_to_arrival_ms": {
+    "p50": 6.015,
+    "p99": 12.96
+   }
+  }
+ ]
+}

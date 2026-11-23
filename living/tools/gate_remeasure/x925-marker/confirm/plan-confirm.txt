@@ -1,0 +1,13 @@
+idle idle-c1
+relay mk-r3 --law tick_marker_on=true --tick-marker
+relay mo-r3 --law tick_marker_on=true --tick-marker --law memory_off=1
+relay mk-r4 --law tick_marker_on=true --tick-marker
+relay mo-r4 --law tick_marker_on=true --tick-marker --law memory_off=1
+relay mk-r5 --law tick_marker_on=true --tick-marker
+relay mo-r5 --law tick_marker_on=true --tick-marker --law memory_off=1
+relay mk-r6 --law tick_marker_on=true --tick-marker
+relay mo-r6 --law tick_marker_on=true --tick-marker --law memory_off=1
+idle idle-l0
+relay long-r1 --law tick_marker_on=true --tick-marker --seconds 1800
+idle idle-l1
+relay mk-r4b --law tick_marker_on=true --tick-marker
