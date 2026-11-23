@@ -1609,7 +1609,7 @@ thread_local! {
 }
 
 /// Which of a chunk's structures a hot path reads (`chunk_of_kind`).
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Few {
     /// Kinds that give light (`StructureTraits::light`, lamplight for `lit_at`).
     Lights,
@@ -1623,7 +1623,10 @@ thread_local! {
     /// `CHUNK_WARMING` is. A battle leaves remains where people fall (one structure per death,
     /// kept 48 game hours in Cullet), so a walk of the whole list grew with every death
     /// (growth-fix, 2026-11-23: the 216 gate's 30-minute run).
-    static CHUNK_FEW: RefCell<(u32, std::collections::HashMap<(Few, u32), (Rc<Vec<Structure>>, Rc<Vec<Structure>>)>)> = RefCell::new((u32::MAX, std::collections::HashMap::new()));
+    /// A `BTreeMap`, not a `HashMap`: std's `RandomState::new()` advances a per-thread key at each
+    /// call, so one more `HashMap` made in an instance changes the hash order of every later one
+    /// (det_compare found the module's `seen_stock` ids permuted by exactly that).
+    static CHUNK_FEW: RefCell<(u32, std::collections::BTreeMap<(Few, u32), (Rc<Vec<Structure>>, Rc<Vec<Structure>>)>)> = const { RefCell::new((u32::MAX, std::collections::BTreeMap::new())) };
 }
 
 /// The structures of `chunk` that `which` reads, in the chunk list's order.
