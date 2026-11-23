@@ -601,6 +601,7 @@ dependencies = [
  "living-bindings",
  "serde_json",
  "spacetimedb-sdk",
+ "tungstenite",
 ]
 
 [[package]]
