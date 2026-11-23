@@ -357,6 +357,7 @@ pub mod slow_timer_type;
 pub mod slumber_table;
 pub mod slumber_type;
 pub mod spawn_battle_reducer;
+pub mod spawn_battle_sides_layout_reducer;
 pub mod spawn_battle_sides_reducer;
 pub mod spawn_crowd_reducer;
 pub mod spawn_newcomer_reducer;
@@ -749,6 +750,7 @@ pub use slow_timer_type::SlowTimer;
 pub use slumber_table::*;
 pub use slumber_type::Slumber;
 pub use spawn_battle_reducer::spawn_battle;
+pub use spawn_battle_sides_layout_reducer::spawn_battle_sides_layout;
 pub use spawn_battle_sides_reducer::spawn_battle_sides;
 pub use spawn_crowd_reducer::spawn_crowd;
 pub use spawn_newcomer_reducer::spawn_newcomer;
@@ -993,6 +995,12 @@ pub enum Reducer {
         n: u32,
         sides: u32,
     },
+    SpawnBattleSidesLayout {
+        n: u32,
+        sides: u32,
+        layout_seed: u64,
+        deal: u32,
+    },
     SpawnCrowd {
         n: u32,
         minded: bool,
@@ -1074,6 +1082,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SetWorldLaw { .. } => "set_world_law",
             Reducer::SpawnBattle { .. } => "spawn_battle",
             Reducer::SpawnBattleSides { .. } => "spawn_battle_sides",
+            Reducer::SpawnBattleSidesLayout { .. } => "spawn_battle_sides_layout",
             Reducer::SpawnCrowd { .. } => "spawn_crowd",
             Reducer::SpawnNewcomer { .. } => "spawn_newcomer",
             Reducer::SpawnSkirmish { .. } => "spawn_skirmish",
@@ -1390,6 +1399,19 @@ impl __sdk::Reducer for Reducer {
                     sides: sides.clone(),
                 })
             }
+            Reducer::SpawnBattleSidesLayout {
+                n,
+                sides,
+                layout_seed,
+                deal,
+            } => __sats::bsatn::to_vec(
+                &spawn_battle_sides_layout_reducer::SpawnBattleSidesLayoutArgs {
+                    n: n.clone(),
+                    sides: sides.clone(),
+                    layout_seed: layout_seed.clone(),
+                    deal: deal.clone(),
+                },
+            ),
             Reducer::SpawnCrowd { n, minded } => {
                 __sats::bsatn::to_vec(&spawn_crowd_reducer::SpawnCrowdArgs {
                     n: n.clone(),

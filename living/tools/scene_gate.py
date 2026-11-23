@@ -8,8 +8,9 @@ that moves bodies can pass it and still break a scene (fix-place-free, e3f0527f:
 touches behaviour, these cases with the fake model only:
 
   verify-core    tick, sight, senses, refusal (one default-seed world), skirmish (an island world),
-                 mechanics (its own default-seed world), sides_battle (a Cullet world: the battle
-                 fixture spawn_battle_sides, only when a merge touches SIDES_BATTLE_PATHS),
+                 mechanics (its own default-seed world), sides_battle and sides_layout (a Cullet world: the battle
+                 fixtures spawn_battle_sides and spawn_battle_sides_layout, only when a merge touches
+                 SIDES_BATTLE_PATHS),
                  say, heard_first, audience (the speech group, a default-seed world of its own: only
                  when a merge touches SPEECH_PATHS, or names speech in a changed hunk of SPEECH_HUNKS),
                  flee_wall, pursue_last_seen (the steering group, its own world: STEERING_PATHS)
@@ -215,6 +216,9 @@ CASES = {
     # The battle fixture on Cullet's plaza (sides-battle-fix): 60 fighters in 2 sides fall within
     # 30 s, no use targets a resident or the fighter's own side, no resident dies in 60 s.
     "sides_battle": {"skill": "verify-core", "group": "battle", "paths": SIDES_BATTLE_PATHS},
+    # The fixed-layout fixture (sides-layout-seed), paused on the same world after sides_battle:
+    # deal 1 mirrors deal 0 place by place, one seed gives one layout.
+    "sides_layout": {"skill": "verify-core", "group": "battle", "paths": SIDES_BATTLE_PATHS},
     # Speech (gate-say-path): a graph's and a mind's lines to a person in every form, a line held
     # back when another spoke first, and who heard a line. Only for merges touching speech.
     "say":          {"skill": "verify-core", "group": "speech", "paths": SPEECH_PATHS, "hunks": (SPEECH_HUNKS, SPEECH_WORDS)},
@@ -1583,6 +1587,9 @@ def judge_on_main(a, runner, repo, base, cases, record):
         if "sides_battle" in todo and "sides_battle" not in (root / ".agents/skills/verify-core/scripts/scenes.py").read_text():
             verdict["sides_battle"] = ("unknown", "", f"main {base[:10]}'s verify-core scenes predate sides_battle")
             todo.remove("sides_battle")
+        if "sides_layout" in todo and "sides_layout" not in (root / ".agents/skills/verify-core/scripts/scenes.py").read_text():
+            verdict["sides_layout"] = ("unknown", "", f"main {base[:10]}'s verify-core scenes predate sides_layout")
+            todo.remove("sides_layout")
         for need in ("gate-", "--no-unit-tests"):
             if need not in (root / ".agents/skills/verify-minds/scripts/verify_minds.py").read_text():
                 for c in todo:

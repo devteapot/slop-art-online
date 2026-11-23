@@ -133,15 +133,25 @@ Not covered here: a scripted scene for `fighter_bystander_wakes` off, `combat_ev
 
 ## The sides battle fixture
 
-`spawn_battle_sides(n, sides)` (an admin fixture, no game rule; docs/BATTLE_LAWS.md §1) packs `n` spear fighters near the arrival point in 2-4 sides. Each side is a community (`Side A`, `Side B`, …; names `A12`, `B7`). An open `stance` record each way between every two sides says `enemy`, due never (`u64::MAX`). Each fighter's graph blocks or dodges when threatened, else `attack`s the nearest person of `relation: enemy`, which a person of no side (a resident) never is.
+`spawn_battle_sides(n, sides)` (an admin fixture, no game rule; docs/BATTLE_LAWS.md §1) packs `n` spear fighters near the arrival point in 2-4 sides. Each side is a community (`Side A`, `Side B`, …; names `A12`, `B7`). An open `stance` record each way between every two sides says `enemy`, due never (`u64::MAX`). Each fighter's graph blocks or dodges when threatened, else `attack`s the nearest person of `relation: enemy`, which a person of no side (a resident) never is. Block and dodge alternate by the fighter's index in its own side, so each side has both, within one (sides-mixed-defence, 2026-11-22). Before, the defence went by id parity while the side went by creation order: with consecutive ids one whole side blocked and the other dodged, and in the E4b melee the low-id, blocking side broke 14 of 19 (docs/BATTLE_LAWS.md §1). `spawn_battle` (no sides) still goes by id parity.
 
 Until sides-battle-fix (2026-11-22) the fixture wrote those records due at 0. Record housekeeping (1 Hz) drops every record with `due_ms <= now`, so the stances were gone within a second. The fighters then found no enemy in sight after their first blows and nobody fell.
 
 **`sides_battle`** (`--seed cullet`, a fresh world: the scene counts every living person not spawned by it as a resident; about 70 s after the launch):
 - 60 fighters in 2 sides on Cullet's arrival plaza, watched for 60 s of authority time from their `born_ms`.
 - `skill_use` (the last 24 uses of each actor, outcomes kept after death) and `character` are read over HTTP each second, so every use is seen. A full set of 24 unseen rows after earlier ones were seen would be a gap, which fails the check `every use was seen`.
-- Checks: the two stance records exist, open and never due, 3 s after the spawn; fighters fall within 30 s; fighters aim uses at someone; no use targets a resident, the fighter's own side or anyone outside the battle; no resident dies in the 60 s.
+- Checks: each side has both defences, block and dodge counts within one (read from each fighter's `brain` graph right after the spawn; the run folder's `sides_battle-defence.json` lists side and defence per fighter); the two stance records exist, open and never due, 3 s after the spawn; fighters fall within 30 s; fighters aim uses at someone; no use targets a resident, the fighter's own side or anyone outside the battle; no resident dies in the 60 s.
 - Evidence in the run folder: `sides_battle-summary.json` (fighters, sides, residents, uses, accepted, aimed, fallen by 30 s and 60 s, residents dead), `sides_battle-uses.json` (every use seen), `sides_battle-dead.json`, `sides_battle-spawned.json`.
 - On main before the fix it fails: the stances are gone at 3 s, 78 uses in all, 0 fallen in 60 s. With the fix: 2,276 and 2,432 uses, 4 and 6 fallen by 30 s (first at 5.7 s and 18.3 s), 14 and 16 by 60 s, no resident dead (validation record 2026-11-22, sides-battle-fix).
 - Stochastic: who falls when varies; it asserts at least one fallen by 30 s, never a count.
 - The scene gate runs it (`sides_battle`, a Cullet world) when a merge touches `SIDES_BATTLE_PATHS` in `living/tools/scene_gate.py`.
+
+### Fixed layouts
+
+`spawn_battle_sides_layout(n, sides, layout_seed, deal)` (sides-layout-seed, 2026-11-23; docs/BATTLE_LAWS.md §1) is the same fixture on a fixed layout. `n` must be a positive multiple of `sides` (2-4), else it is refused. The places come from a splitmix64 stream seeded `layout_seed` in the same 14 × 14 m box, skipping tiles that are not free, and are dealt in groups of `sides`: slot `k` of group `j` goes to side `(k + deal) % sides`. Within a group the sides are made in order, so the ids follow the side, and fighter `j` of each side has the defence of index `j` (dodge when even). With two sides, deal 1 is deal 0's mirror. `spawn_battle_sides` itself is unchanged: its layouts are random per world and not comparable with these.
+
+**`sides_layout`** (after `sides_battle` on its Cullet world; about 20 s; the world stays paused):
+- Spawns 60 fighters in 2 sides five times: seed 1001 deal 0, deal 1, deal 0 again, seed 1002 deal 0, and 61 fighters (refused).
+- Checks: each spawn makes 60 placed, armed fighters of the side their name says; deal 1 puts `A<j>` on deal 0's `B<j>` place and `B<j>` on `A<j>`'s, for every `j`; the same defence on each place in both deals; each side 15 block and 15 dodge; the same seed and deal give the same places; seed 1002 shares no place with 1001; the 60 places are distinct; the odd `n` is refused ("multiple"); the open, never-due `enemy` stance records each way.
+- Evidence in the run folder: `sides_layout-<seed>-<deal>.json` (each fighter's id, place, side and defence by name) and the printed `sides_layout:` line (pairs mirrored, and A1's and B1's places in both deals).
+- The scene gate runs it after `sides_battle` on the same world, on the same paths.
