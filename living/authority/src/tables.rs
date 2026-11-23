@@ -2613,3 +2613,18 @@ pub struct SlowTimer {
     pub scheduled_id: u64,
     pub scheduled_at: ScheduleAt,
 }
+
+/// The tick's own time in microseconds, for measuring its cadence (the `tick_marker_on` law, a
+/// measuring aid, off by default; docs/TICK_RATE.md "The step marker"). One row (id 0), written by
+/// each tick while the law holds: its count and its reducer timestamp (`ctx.timestamp`, the time
+/// the scheduler dispatched the call: SpacetimeDB 2.14.1 sets it in `call_reducer_params`, before
+/// any wait in the database's queue). Private: the owner's watcher subscribes it. `clock`'s readers
+/// are unaffected.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = tick_mark)]
+pub struct TickMark {
+    #[primary_key]
+    pub id: u8,
+    pub tick: u64,
+    pub start_us: i64,
+}
