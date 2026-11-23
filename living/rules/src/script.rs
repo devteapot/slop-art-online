@@ -809,6 +809,9 @@ pub struct Laws {
     /// witness lines outside the tick. 1: players are not judged onlookers of others' blows; 2: no
     /// one is, and a fight's first landed blow is still tested for the bystanders it wakes.
     pub memory_off: f32,
+    /// A measuring aid (off): each tick writes its count and its timestamp in µs to the private
+    /// `tick_mark` row, for a watcher to time the steps (docs/TICK_RATE.md "The step marker").
+    pub tick_marker_on: bool,
     /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
     /// and counted (`alarm:differed`).
     pub alarm_cells_check: bool,
@@ -1021,6 +1024,7 @@ impl Default for Laws {
             sweep_phase_even: false,
             npc_external_on: false,
             memory_off: 0.0,
+            tick_marker_on: false,
             alarm_cells_check: false,
             status_parts: true,
             status_parts_check: false,
@@ -3409,6 +3413,7 @@ impl Scripts {
             sweep_phase_even: flag("sweep_phase_even", l.sweep_phase_even),
             npc_external_on: flag("npc_external_on", l.npc_external_on),
             memory_off: g("memory_off", l.memory_off).clamp(0.0, 2.0),
+            tick_marker_on: flag("tick_marker_on", l.tick_marker_on),
             alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
             status_parts: flag("status_parts", l.status_parts),
             status_parts_check: flag("status_parts_check", l.status_parts_check),
@@ -3660,7 +3665,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 47] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 48] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3679,6 +3684,7 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 47] = [
     ("sweep_phase_even", ValueOnly::Delivery),
     ("npc_external_on", ValueOnly::Delivery),
     ("memory_off", ValueOnly::Delivery),
+    ("tick_marker_on", ValueOnly::Delivery),
     // The battle laws' prototypes (docs/BATTLE_LAWS.md), live-tunable: the sweeps read `far_cap`
     // and `crowd_sweep_n`, the frames `crowd_frame_max_ms` and `far_motion_tol_m`, the wakes
     // `fighter_bystander_wakes`, each at its next tick.

@@ -389,6 +389,8 @@ pub mod terrain_chunk_type;
 pub mod thought_in_type;
 pub mod thought_table;
 pub mod thought_type;
+pub mod tick_mark_table;
+pub mod tick_mark_type;
 pub mod tick_reducer;
 pub mod tick_timer_table;
 pub mod tick_timer_type;
@@ -792,6 +794,8 @@ pub use terrain_chunk_type::TerrainChunk;
 pub use thought_in_type::ThoughtIn;
 pub use thought_table::*;
 pub use thought_type::Thought;
+pub use tick_mark_table::*;
+pub use tick_mark_type::TickMark;
 pub use tick_reducer::tick;
 pub use tick_timer_table::*;
 pub use tick_timer_type::TickTimer;
@@ -1643,6 +1647,7 @@ pub struct DbUpdate {
     structure: __sdk::TableUpdate<Structure>,
     terrain_chunk: __sdk::TableUpdate<TerrainChunk>,
     thought: __sdk::TableUpdate<Thought>,
+    tick_mark: __sdk::TableUpdate<TickMark>,
     tick_timer: __sdk::TableUpdate<TickTimer>,
     trade_offer: __sdk::TableUpdate<TradeOffer>,
     vitals: __sdk::TableUpdate<Vitals>,
@@ -2142,6 +2147,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "thought" => db_update
                     .thought
                     .append(thought_table::parse_table_update(table_update)?),
+                "tick_mark" => db_update
+                    .tick_mark
+                    .append(tick_mark_table::parse_table_update(table_update)?),
                 "tick_timer" => db_update
                     .tick_timer
                     .append(tick_timer_table::parse_table_update(table_update)?),
@@ -2567,6 +2575,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.thought = cache
             .apply_diff_to_table::<Thought>("thought", &self.thought)
+            .with_updates_by_pk(|row| &row.id);
+        diff.tick_mark = cache
+            .apply_diff_to_table::<TickMark>("tick_mark", &self.tick_mark)
             .with_updates_by_pk(|row| &row.id);
         diff.tick_timer = cache
             .apply_diff_to_table::<TickTimer>("tick_timer", &self.tick_timer)
@@ -3174,6 +3185,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "thought" => db_update
                     .thought
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "tick_mark" => db_update
+                    .tick_mark
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "tick_timer" => db_update
                     .tick_timer
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -3694,6 +3708,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "thought" => db_update
                     .thought
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "tick_mark" => db_update
+                    .tick_mark
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "tick_timer" => db_update
                     .tick_timer
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3894,6 +3911,7 @@ pub struct AppliedDiff<'r> {
     structure: __sdk::TableAppliedDiff<'r, Structure>,
     terrain_chunk: __sdk::TableAppliedDiff<'r, TerrainChunk>,
     thought: __sdk::TableAppliedDiff<'r, Thought>,
+    tick_mark: __sdk::TableAppliedDiff<'r, TickMark>,
     tick_timer: __sdk::TableAppliedDiff<'r, TickTimer>,
     trade_offer: __sdk::TableAppliedDiff<'r, TradeOffer>,
     vitals: __sdk::TableAppliedDiff<'r, Vitals>,
@@ -4280,6 +4298,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Thought>("thought", &self.thought, event);
+        callbacks.invoke_table_row_callbacks::<TickMark>("tick_mark", &self.tick_mark, event);
         callbacks.invoke_table_row_callbacks::<TickTimer>("tick_timer", &self.tick_timer, event);
         callbacks.invoke_table_row_callbacks::<TradeOffer>("trade_offer", &self.trade_offer, event);
         callbacks.invoke_table_row_callbacks::<Vitals>("vitals", &self.vitals, event);
@@ -5109,6 +5128,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         structure_table::register_table(client_cache);
         terrain_chunk_table::register_table(client_cache);
         thought_table::register_table(client_cache);
+        tick_mark_table::register_table(client_cache);
         tick_timer_table::register_table(client_cache);
         trade_offer_table::register_table(client_cache);
         vitals_table::register_table(client_cache);
@@ -5280,6 +5300,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "structure",
         "terrain_chunk",
         "thought",
+        "tick_mark",
         "tick_timer",
         "trade_offer",
         "vitals",

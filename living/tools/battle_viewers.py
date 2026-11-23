@@ -590,7 +590,7 @@ def one(a, n, out):
             # BATTLE_CONTRACT_CASES (contract-cases): the tick watcher (gate-load `watch`, as GATE_216):
             # two owner connections subscribing `clock`, which every tick writes; the steps' intervals.
             watch = lc.Proc([a.load, "watch"], out / "watch.stderr")
-            watch.send(json.dumps({"uri": lc.URL, "db": db, "token": token, "out": str(out / "ticks-watch.csv")}))
+            watch.send(json.dumps({"uri": lc.URL, "db": db, "token": token, "out": str(out / "ticks-watch.csv"), "marker": a.tick_marker}))
             watch.expect("ready", 120)
         if a.paused_placement and total:
             # The Spark's procedure: paused while the viewers join and are placed, unpaused at `ready`.
@@ -1009,6 +1009,7 @@ def main():
     ap.add_argument("--humans", type=int, default=0, help="BATTLE_CONTRACT_CASES (contract-cases): this many of the --fighters are human clients (gate-load's battle role, GATE_216's decisions), placed in the fighters' 7 m; the AI fighters are the rest")
     ap.add_argument("--walkers", type=int, default=0, help="contract-cases: also this many walkers at lot doors round the settlements (GATE_216's walkers)")
     ap.add_argument("--fight-ms", type=int, default=250, help="contract-cases: a human fighter's decision period (GATE_216: 250 ms ±10%%)")
+    ap.add_argument("--tick-marker", action="store_true", help="the step marker (docs/TICK_RATE.md): the watcher also records tick_mark (set the tick_marker_on law)")
     ap.add_argument("--npc-share", type=int, default=None, help="NPC-MEASURE (npc-measure): run the stand-in NPC body service driving the fighters with id %% 4 < SHARE (0: record only); set npc_external_on")
     ap.add_argument("--npc-decide-ms", type=int, default=100, help="npc-measure: each driven NPC's decision period")
     ap.add_argument("--watch", action="store_true", help="contract-cases: run the tick watcher (gate-load watch) for the steps' intervals (result steps)")

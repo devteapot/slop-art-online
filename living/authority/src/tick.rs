@@ -168,6 +168,16 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
     // One clock write a tick: its stamp and the counts gathered since the last one (nothing
     // else reads the clock row during the tick).
     common::flush_counts(&mut k);
+    // The step marker (`tick_marker_on`, off): this tick's count and its timestamp in µs.
+    if common::laws(ctx).tick_marker_on {
+        let _part = common::span("tick.marker");
+        let mark = TickMark { id: 0, tick: k.tick, start_us: ctx.timestamp.to_micros_since_unix_epoch() };
+        if ctx.db.tick_mark().id().find(0u8).is_some() {
+            ctx.db.tick_mark().id().update(mark);
+        } else {
+            ctx.db.tick_mark().insert(mark);
+        }
+    }
     ctx.db.clock().id().update(k);
     if det {
         crate::det::trace(ctx, k_tick);

@@ -204,6 +204,9 @@ fn laws() {
         // npc-measure's measuring switch (0 off): witness lines left to be derived outside the
         // tick, for players (1) or everyone (2), a fight's first blow still waking bystanders.
         memory_off: 0.0,
+        // A measuring aid (off): each tick writes its own time in µs to a private row a watcher
+        // reads, to time the steps (docs/TICK_RATE.md "The step marker").
+        tick_marker_on: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
@@ -3304,6 +3307,7 @@ fn law_about(l, name) {
         "npc_external_on" => if l.npc_external_on { "some characters are driven from outside, through the same inputs as players (a measuring switch)" } else { "every creature not played follows its own ways" },
         "sweep_phase_even" => if l.sweep_phase_even { "players' glances are spread evenly in time (a measuring switch)" } else { "each player glances on a beat of its own" },
         "lines_table_check" => "a diagnostic: each player's lines as rows are checked against what it may look at",
+        "tick_marker_on" => "a measuring aid: each tick notes its own time in microseconds for a watcher",
         "combat_feed_on" => if l.combat_feed_on { "what each player sees of fights reaches it as rows meant for that player alone" } else { "what each player sees of fights reaches it through what it may look at" },
         "motion_tables_on" => if l.motion_tables_on { "how others move reaches each player as rows meant for that player alone" } else { "how others move reaches each player through what it may look at" },
         "cue_transport_on" => if l.cue_transport_on { "what is near a player, or fighting it, reaches the player's screen at once" } else { "what is near a player reaches the player's screen with the rest of what it sees" },
