@@ -46,6 +46,25 @@ fn has(sc: &living_rules::script::Scripts, skill: &str, t: impl Fn(&Shape) -> bo
 pub const YIELD_MARK: u16 = 0xD400;
 /// Mark spacing the story's record of an animal holding back from attacking a person.
 const BALK_MARK: u16 = 0xD401;
+/// Mark holding when a blow last landed on a character while it had yielded: the news of striking
+/// the yielded is told once a yield (and attacker), from this, not from the victim's last hurt.
+const YIELD_STRUCK_MARK: u16 = 0xD402;
+
+/// When a character's mark `node` was last set, if it has one.
+fn mark_at(ctx: &ReducerContext, id: u32, node: u16) -> Option<u64> {
+    ctx.db.mind_state().id().find(id)?.marks.iter().find(|m| m.node == node).map(|m| m.at_ms)
+}
+
+/// Whether a blow by `hurt_by` at a yielded victim follows one that already landed on it since
+/// its yield (`yield_at`), by the same attacker (`last_hurt_by`, the victim's last hurt): then it
+/// is not news again. `struck_at` is when a blow last landed on it while yielded. A blow that
+/// landed in the yield's own millisecond but before the yield (a tie in one tick, ordered by the
+/// tick's coin) is not on the yielded: it sets no mark, and the next blow is the news. Before
+/// (yield-news, 2026-11-23), the victim's last hurt was compared with the yield's time, so such a
+/// blow counted as struck since the yield and the news was never told.
+pub(crate) fn struck_since_yield(yield_at: Option<u64>, struck_at: Option<u64>, last_hurt_by: u32, hurt_by: u32) -> bool {
+    matches!((yield_at, struck_at), (Some(y), Some(s)) if s >= y) && last_hurt_by == hurt_by
+}
 
 /// How long ago a character yielded (ms), if it has.
 pub fn yielded_ago(ctx: &ReducerContext, id: u32, now: u64) -> Option<f32> {
@@ -2757,7 +2776,7 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     // Whoever hurt it, as the victim knows: a shooter it did not see is 0 (its `my_vitals`, the
     // `Attacker` target, a yield's addressee), like the told line and the combat feed.
     let hurt_by = if seen_shooter { attacker } else { 0 };
-    let struck_since_yield = yielded && yielded_ago(ctx, victim, now).is_some_and(|ago| v.hurt_ms >= now.saturating_sub(ago as u64) && v.hurt_by == hurt_by);
+    let struck_since_yield = yielded && struck_since_yield(mark_at(ctx, victim, YIELD_MARK), mark_at(ctx, victim, YIELD_STRUCK_MARK), v.hurt_by, hurt_by);
     let first_blow = now.saturating_sub(v.hurt_ms) > FIGHT_MS || v.hurt_by != hurt_by;
     common::settle(ctx, &mut v, now);
     v.hp = (v.hp - amount).max(0.0);
@@ -2766,6 +2785,9 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     v.rate_key = 0;
     let dead = v.hp <= 0.0;
     ctx.db.vitals().id().update(v);
+    if yielded {
+        set_mark(ctx, victim, YIELD_STRUCK_MARK, now);
+    }
     shown(if defense == Aim::Facing { living_rules::combat::seen::BLOCKED } else { living_rules::combat::seen::HIT }, amount);
     // What its onlookers saw (`fold`): every blow. A fight's first blow wakes them, as its own
     // line did before; a blow at one who yielded keeps its own line below.
@@ -3087,4 +3109,71 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
     forget_dead(ctx, id);
     retire(ctx, id);
     crate::combat::died(ctx, id, killer, at, now, unseen.is_some());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::struck_since_yield;
+
+    /// A victim's marks and last hurt, changed as `damage` and `give_in` change them.
+    #[derive(Default)]
+    struct Victim {
+        yield_at: Option<u64>,
+        struck_at: Option<u64>,
+        hurt_by: u32,
+        news: Vec<u64>,
+    }
+
+    impl Victim {
+        fn give_in(&mut self, now: u64) {
+            self.yield_at = Some(now);
+        }
+        fn blow(&mut self, by: u32, now: u64) {
+            let yielded = self.yield_at.is_some();
+            if yielded && !struck_since_yield(self.yield_at, self.struck_at, self.hurt_by, by) {
+                self.news.push(now);
+            }
+            self.hurt_by = by;
+            if yielded {
+                self.struck_at = Some(now);
+            }
+        }
+    }
+
+    /// yield-news (2026-11-23): a blow and the yield it provoked can complete in one tick, in
+    /// either order (the tick's coin). Either way the first blow on the yielded is told once.
+    #[test]
+    fn striking_the_yielded_is_news_once_whichever_comes_first_in_one_ms() {
+        // The blow first: an ordinary blow at the yield's millisecond; the next one is the news.
+        let mut v = Victim::default();
+        v.blow(7, 1000);
+        v.blow(7, 2000);
+        v.give_in(2000);
+        v.blow(7, 3000);
+        v.blow(7, 4000);
+        assert_eq!(v.news, vec![3000]);
+        // The yield first: the blow in its millisecond is the news, the later ones are not.
+        let mut v = Victim::default();
+        v.blow(7, 1000);
+        v.give_in(2000);
+        v.blow(7, 2000);
+        v.blow(7, 3000);
+        assert_eq!(v.news, vec![2000]);
+        // Another attacker's blow is news of its own; a new yield makes the next blow news again.
+        v.blow(8, 3500);
+        assert_eq!(v.news, vec![2000, 3500]);
+        v.give_in(30_000);
+        v.blow(8, 31_000);
+        assert_eq!(v.news, vec![2000, 3500, 31_000]);
+    }
+
+    /// The old rule's failure, kept as the case it missed: the victim's last hurt at the yield's
+    /// millisecond counted as struck since the yield, so no blow was ever news.
+    #[test]
+    fn a_blow_in_the_yields_millisecond_before_it_is_not_on_the_yielded() {
+        assert!(!struck_since_yield(Some(2000), None, 7, 7));
+        assert!(!struck_since_yield(Some(2000), Some(1500), 7, 7));
+        assert!(struck_since_yield(Some(2000), Some(2000), 7, 7));
+        assert!(!struck_since_yield(Some(2000), Some(2500), 8, 7));
+    }
 }
