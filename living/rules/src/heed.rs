@@ -1535,7 +1535,7 @@ mod capacity_tests {
     use crate::script::{ActorFacts, Scripts, SkillCtx};
 
     const SHIPPED: &str = include_str!("../../scripts/skills.rhai");
-    const OVERLAY: &str = include_str!("../../seeds/worlds/heed/laws.rhai");
+    const OVERLAY: &str = include_str!("../../seeds/overlays/heed/laws.rhai");
 
     fn person(stage: &str) -> SkillCtx {
         SkillCtx {
