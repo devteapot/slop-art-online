@@ -286,6 +286,30 @@ The render group needs the game client's git-ignored assets. The gate does not g
 - **Link** (`render_set.py link SET --repo <checkout>`): `lookdev`, `view`, `textures`, `characters/looks.json` and each `envs/<name>` as symlinks into `living/game/assets`, refusing to replace anything that is not a link. The ignore patterns match the links as they matched folders, so a gate's checkout stays clean; the links stay until the next link replaces them.
 - **What a set does not cover yet:** main's defaults only (no `SLOP_PORT` hair or ink pages until char-port-2's S8), so the KTX2 path is exercised through the bundle's other pictures, not a hair-mask page.
 
+### The nightly suite
+
+The scene gate runs only what a merge's paths select. [`nightly_suite.py`](../living/tools/nightly_suite.py) runs, once a night on the Spark, against the current `origin/main`, every verify-core scene and driver that no gate case reaches: 92 entries on today's main, each on a fresh world of its own seed on a private server (`slop-nightly-<date>`, port 3690, CPUs 0-4 and 10-14). They include:
+- the body and life (needs, alarms, sleeper, infant, lifecycle, family laws, sex);
+- wildlife (wildlife, grazing, remains, flee, pack reflex on and off);
+- laws and the clock (laws, decay, winter, law_override, look bands);
+- perception and battle scale (the sweep scenes on Cullet, doing, cues, first sight, the notice and witness scenes);
+- goods (goods, stock, making, workplace on the goods fixture);
+- speech (`speech.py` regress, ways, channels, crowd);
+- town (town.py, lives.py, rhythm.py), closed_gate, verify_steering and the rest.
+
+The entries are `plan_entries()`. `nightly_suite.py plan` lists tonight's, without the gate's own cases.
+
+- **Left out, with the reason in `EXCLUDED`:** the measurement drivers with no pass mark (`doing_cost`, `intents_cost`, `fights`, `chase`, `doing_deltas.py`); `arrival` (the wildlife rerun helper); `updates.py` (it needs chains of prebuilt modules); `cover.py` (its fixture is not in the skill); `speech.py diff` (it needs a baseline run).
+- **Coverage is checked.** A scene that is neither an entry, a gate case nor excluded fails `nightly_suite.py selftest` and is named in the night's record.
+- **Guards.** It takes `battle.lock` first, exclusively, holding nothing else, and keeps it for the night. It runs each entry's launch and drive under the trial-activity lock, shared, and builds through `build-slot`. It starts no entry while the merge queue is active (`queue.txt` holds a branch and `HOLD` is absent, or `drain.sh`, `merge2.sh` or `scene_gate.py` runs) or while the 1-minute load is over 8. It starts nothing after `--until` (10:00); an entry not started by then is recorded "not run". The longest entries start first; 3 run at once (`--lanes`).
+- **Its checkout.** A detached worktree of the repository at `origin/main` (`~/.local/state/slop-nightly/main`, made once), built in `~/.local/state/slop-nightly/target`.
+- **Results** go to `~/.local/state/slop-nightly/<date>/`:
+  - `record.json` and `record.md`: per entry its seed, run, exit codes, first failed checks, minutes and evidence;
+  - `reds.txt`: one line per red for the owning machine's queue the next morning (owners from `~/.config/slop-nightly/owners.json`, by entry or area, else "unassigned");
+  - `server.log`, the server's log; the server is stopped with SIGINT, and a forced stop is recorded as forced.
+- **Reds on the list.** A red entry goes onto the red-on-main list as `nightly:<entry>` (`scene_gate.py reds --add`), and a listed entry that is green again is dropped (`--no-reds` writes nothing).
+- **Installing.** `living/tools/nightly_suite_install.sh` installs the systemd user timer `slop-nightly.timer` at 04:40. That is after the trial reclaim's 04:00 window, which needs `battle.lock` free. `--print` shows the units and changes nothing; `--uninstall` removes them. Not installed: the Spark coordinator installs it after review.
+
 ### Seed freshness
 
 [`seed_fresh.py`](../living/tools/seed_fresh.py) compares every compiled seed with the sources it is compiled from, files only (no publish, no build, no model; about 0.5 s). Each `living/seeds/worlds/<world>/` compiles into `living/seeds/<into>.json` through `author_world.py <world> --compile-only` (`into` from `cast.json` or `world.json`, else the world's name). Cullet's land, plan, ways and town life come from `cullet_plan.py`. The compilers stamp nothing but the look data's own `generation`, so the check compares each block as its compiler copies it:
