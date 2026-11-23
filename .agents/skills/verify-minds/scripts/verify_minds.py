@@ -825,6 +825,52 @@ def dealings_case(run):
             'deliberations_with_dealings': len(shown), 'thoughts_before': accepted_before, 'asked_by_the_rules': asked}
 
 
+@case('battle-stance')
+def battle_stance_case(run):
+    """A side's war reaches its members' minds (docs/BATTLE_LAWS.md, sides-layout-seed): the battle
+    fixture's two `stance` records (`spawn_battle_sides_layout`, an `enemy` stance each way between
+    `Side A` and `Side B`) are worded by the script's `record_text`, naming both sides. Before, they
+    read "stance: open" (E5's prompts), so a minded fighter was never told whom its side fought.
+    On main the fixture's fighters have no mind (E5 minded them with heed-e4's `sides_minded` law),
+    so a minded adult founds `Side A` first and the fixture takes that community for its side. The
+    adult, held still, is asked by a think node; one of its requests shows both records among its
+    dealings, worded, and no bare "stance: open"."""
+    people = prepare(run)
+    me = people[0]['id']
+    run.admin('set_behavior', me, json.dumps({'wait': 120}))
+    if run.sql(f'SELECT * FROM membership WHERE member = {me}', 'membership-before'):
+        run.admin('mind_act', me, [json.dumps({'do': 'leave'})], 'verify-minds')
+        run.wait(lambda: not run.sql(f'SELECT * FROM membership WHERE member = {me}', 'membership-left'), 'the adult left its community', 30)
+    run.admin('mind_act', me, [json.dumps({'do': 'found', 'text': 'Side A'})], 'verify-minds')
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {me}', 'membership-founded'), 'the adult founded Side A', 30)
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'before-battle')}
+    run.admin('spawn_battle_sides_layout', 2, 2, 7, 0)
+    made = {c['name']: c['id'] for c in run.sql('SELECT id, name FROM character', 'fighters') if c['id'] not in before}
+    assert set(made) == {'A1', 'B1'}, made
+    for f in made.values():
+        run.admin('set_behavior', f, json.dumps({'wait': 120}))
+    communities = {c['id']: c['name'] for c in run.sql('SELECT * FROM community', 'communities')}
+    mine = run.sql(f'SELECT * FROM membership WHERE member = {me}', 'membership-mine')[0]
+    assert communities.get(mine['community']) == 'Side A', (mine, communities)
+    models = model(run, {'replies': {'think': {'thought': 'Side B is near.', 'intend': ['stand still'], 'say': None}, 'deliberate': basic_reply()}})
+    run.start(models, [me])
+    run.admin('set_behavior', me, json.dumps({'think': 'Where do my people stand? verify battle stance'}))
+    holds = 'your people, Side A, hold Side B as enemy'
+    held = 'Side B holds your people, Side A, as enemy'
+    requests = run.directory / 'fake-requests.jsonl'
+
+    def shown():
+        sent = shared.rows(requests) if requests.exists() else []
+        return [e for e in sent if "Your dealings and your people's standing" in json.dumps(e) and holds in json.dumps(e)]
+    got = run.wait(shown, 'a request with the worded stance among its dealings', 150)
+    text = json.dumps(got[0], ensure_ascii=False)
+    assert held in text, 'both records are worded (the one Side B holds toward A as well)'
+    assert 'stance: open' not in text, 'no bare "stance: open"'
+    start = text.find("Your dealings and your people's standing")
+    lines = [l.strip() for l in text[start:start + 800].split('\\n')[1:6] if l.strip().startswith('-')]
+    return {'status': 'pass', 'member': me, 'fighters': made, 'purpose': got[0].get('purpose'), 'dealings_lines': lines, 'requests_with_it': len(got)}
+
+
 @case('answers')
 def answers_case(run):
     """A mind answers by id (docs/WORLD_RULES.md, "Answering"): another character proposes terms

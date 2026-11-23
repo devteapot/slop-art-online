@@ -369,7 +369,7 @@ A record with a `holder` and a `toward` party whose terms carry a `label` (and a
 
   Stances are cached per module instance and rebuilt when `record_clock` moves (any change to a record with a `holder` party).
 - **Laws:** `a.records` includes the stance records of the actor's community. `regard_toward(a, community)` in the script returns their terms.
-- **Minds:** the character's own dealings section lists them ("your people hold Kettlebridge as rival town (the broken match...)").
+- **Minds:** the character's own dealings section lists them ("your people hold Kettlebridge as rival town (the broken match...)"). A stance of another kind (the battle fixture's `stance` records) is worded too, both sides named and the `why` only when its terms carry one: "your people, Side A, hold Side B as enemy" (sides-layout-seed; before, "stance: open").
 
 **Seeded records.** A seed's `records` list makes records at genesis, with parties by role naming a community or a person:
 

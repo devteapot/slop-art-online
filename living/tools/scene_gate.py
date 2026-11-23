@@ -8,8 +8,9 @@ that moves bodies can pass it and still break a scene (fix-place-free, e3f0527f:
 touches behaviour, these cases with the fake model only:
 
   verify-core    tick, sight, senses, refusal (one default-seed world), skirmish (an island world),
-                 mechanics (its own default-seed world), sides_battle (a Cullet world: the battle
-                 fixture spawn_battle_sides, only when a merge touches SIDES_BATTLE_PATHS)
+                 mechanics (its own default-seed world), sides_battle and sides_layout (a Cullet world: the battle
+                 fixtures spawn_battle_sides and spawn_battle_sides_layout, only when a merge touches
+                 SIDES_BATTLE_PATHS)
   verify-minds   roundtrip, acts, dealings, conversation (each its own world, the real living-mind)
   verify-player  combat (combat.py --scene all: the staged fights, an island world)
   verify-client  cues (cues.py: the cue event tables reach only their viewer under row-level
@@ -194,6 +195,9 @@ CASES = {
     # The battle fixture on Cullet's plaza (sides-battle-fix): 60 fighters in 2 sides fall within
     # 30 s, no use targets a resident or the fighter's own side, no resident dies in 60 s.
     "sides_battle": {"skill": "verify-core", "group": "battle", "paths": SIDES_BATTLE_PATHS},
+    # The fixed-layout fixture (sides-layout-seed), paused on the same world after sides_battle:
+    # deal 1 mirrors deal 0 place by place, one seed gives one layout.
+    "sides_layout": {"skill": "verify-core", "group": "battle", "paths": SIDES_BATTLE_PATHS},
     "roundtrip":    {"skill": "verify-minds", "group": "minds"},
     "acts":         {"skill": "verify-minds", "group": "minds"},
     "dealings":     {"skill": "verify-minds", "group": "minds",
@@ -1529,6 +1533,9 @@ def judge_on_main(a, runner, repo, base, cases, record):
         if "sides_battle" in todo and "sides_battle" not in (root / ".agents/skills/verify-core/scripts/scenes.py").read_text():
             verdict["sides_battle"] = ("unknown", "", f"main {base[:10]}'s verify-core scenes predate sides_battle")
             todo.remove("sides_battle")
+        if "sides_layout" in todo and "sides_layout" not in (root / ".agents/skills/verify-core/scripts/scenes.py").read_text():
+            verdict["sides_layout"] = ("unknown", "", f"main {base[:10]}'s verify-core scenes predate sides_layout")
+            todo.remove("sides_layout")
         for need in ("gate-", "--no-unit-tests"):
             if need not in (root / ".agents/skills/verify-minds/scripts/verify_minds.py").read_text():
                 for c in todo:

@@ -54,7 +54,7 @@ BASE_QUERIES = [
 ]
 # Private in every build: the authority's bookkeeping and developer audit truth
 # (docs/PERCEPTION.md). The observer and the mind service read them as the database owner.
-PRIVATE = ['attention', 'copy_state', 'lines_state', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'last_look', 'deliberation', 'rearing',
+PRIVATE = ['attention', 'copy_state', 'lines_state', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'tick_mark', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'last_look', 'deliberation', 'rearing',
            'known_ground', 'remembered', 'ground_edit', 'seen_structures',
            'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry',
            'combat_seen', 'fight_seen', 'missile', 'skill_use', 'readiness', 'skill_code',
@@ -159,7 +159,7 @@ ADMIN = {
     'place_structure': [0, 'shelter'], 'set_behavior': [0, '{"wait":30}'],
     # Scene setup: a resource node beside a character (2026-11-11, goods-1).
     'place_resource': [0, 'tree', 0.0, 0.0, 0.0, 0],
-    'place_near': [0, 0], 'seed_communities': [], 'spawn_battle': [0], 'spawn_battle_sides': [0, 2],
+    'place_near': [0, 0], 'seed_communities': [], 'spawn_battle': [0], 'spawn_battle_sides': [0, 2], 'spawn_battle_sides_layout': [0, 2, 1, 0],
     'place_at': [0, 0.0, 0.0], 'spawn_skirmish': [0, 0.0], 'set_weather': [False, 0],
     'spawn_newcomer': ['probe'],
     # A floor module's runtime seed (floor.rs, admin only).

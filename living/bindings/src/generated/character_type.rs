@@ -76,6 +76,7 @@ impl __sdk::__query_builder::HasCols for Character {
 ///
 /// Provides typed access to indexed columns for query building.
 pub struct CharacterIxCols {
+    pub alive: __sdk::__query_builder::IxCol<Character, bool>,
     pub controller: __sdk::__query_builder::IxCol<Character, __sdk::Identity>,
     pub id: __sdk::__query_builder::IxCol<Character, u32>,
     pub kind: __sdk::__query_builder::IxCol<Character, String>,
@@ -87,6 +88,7 @@ impl __sdk::__query_builder::HasIxCols for Character {
     type IxCols = CharacterIxCols;
     fn ix_cols(table_name: &'static str) -> Self::IxCols {
         CharacterIxCols {
+            alive: __sdk::__query_builder::IxCol::new(table_name, "alive"),
             controller: __sdk::__query_builder::IxCol::new(table_name, "controller"),
             id: __sdk::__query_builder::IxCol::new(table_name, "id"),
             kind: __sdk::__query_builder::IxCol::new(table_name, "kind"),

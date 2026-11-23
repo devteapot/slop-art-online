@@ -202,6 +202,9 @@ fn laws() {
         // can read (`experience_copy`, written as lines are released; experience-incremental) as
         // well as through `my_experience`; off: the kill switch. The client reads either the same.
         lines_table_on: true, lines_table_check: false,
+        // A measuring aid (off): each tick writes its own time in µs to a private row a watcher
+        // reads, to time the steps (docs/TICK_RATE.md "The step marker").
+        tick_marker_on: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
@@ -2309,6 +2312,14 @@ fn record_text(r) {
         if r.me == "holder" { return `your people hold {id:${r.parties.toward}} as ${r.terms.label} (${r.terms.why})`; }
         return `{id:${r.parties.holder}} holds your people as ${r.terms.label} (${r.terms.why})`;
     }
+    // Any other stance (a `holder` and a `toward` side, a `label` in its terms; the battle
+    // fixture's `stance` records): both sides named, and why only when the record says. Before,
+    // it fell through to "stance: open", and the fighters' minds never learned of the war.
+    if "holder" in r.parties && "toward" in r.parties && "label" in r.terms {
+        let why = if "why" in r.terms { ` (${r.terms.why})` } else { "" };
+        if r.me == "holder" { return `your people, {id:${r.parties.holder}}, hold {id:${r.parties.toward}} as ${r.terms.label}${why}`; }
+        return `{id:${r.parties.holder}} holds your people, {id:${r.parties.toward}}, as ${r.terms.label}${why}`;
+    }
     `${r.kind}: ${r.status}`
 }
 
@@ -3258,6 +3269,7 @@ fn law_about(l, name) {
         "fighter_tables_on" => if l.fighter_tables_on { "how the fighters a player sees move and fare reaches it as rows meant for that player alone" } else { "how the fighters a player sees move and fare reaches it through what it may look at" },
         "lines_table_on" => if l.lines_table_on { "what reaches each player's senses reaches it as rows meant for that player alone" } else { "what reaches each player's senses reaches it through what it may look at" },
         "lines_table_check" => "a diagnostic: each player's lines as rows are checked against what it may look at",
+        "tick_marker_on" => "a measuring aid: each tick notes its own time in microseconds for a watcher",
         "combat_feed_on" => if l.combat_feed_on { "what each player sees of fights reaches it as rows meant for that player alone" } else { "what each player sees of fights reaches it through what it may look at" },
         "motion_tables_on" => if l.motion_tables_on { "how others move reaches each player as rows meant for that player alone" } else { "how others move reaches each player through what it may look at" },
         "cue_transport_on" => if l.cue_transport_on { "what is near a player, or fighting it, reaches the player's screen at once" } else { "what is near a player reaches the player's screen with the rest of what it sees" },
