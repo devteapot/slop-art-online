@@ -2407,9 +2407,11 @@ pub fn player_character(ctx: &ReducerContext) -> Option<Character> {
 pub fn set_player(ctx: &ReducerContext, who: Identity, character: u32) {
     let row = Player { identity: who, character };
     if let Some(old) = ctx.db.player().identity().find(who) {
-        // The character played before: its outcome rows have no reader any more.
+        // The character played before: its outcome rows and its staged and shown lines have no
+        // reader any more (`my_experience` shows this person's new character from here on).
         if old.character != character {
             crate::outcomes::forget(ctx, old.character);
+            crate::frame::forget_lines(ctx, old.character);
         }
         ctx.db.player().identity().update(row);
     } else {
