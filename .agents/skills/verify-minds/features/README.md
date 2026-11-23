@@ -24,6 +24,7 @@
 | Attention cues (docs/ATTENTION.md, `cues_on`): a reply's `notice` kept on its stance in memory and projected through `mind_update`; a match's `noticed` line quoting the mind's `why` becomes the reason of its next think; `# What you watch for` | `cues_mind.py` (Neo4j); `prompts::` and `memory::` tests | [cues.md](cues.md) |
 | Cheaper animal minds: each deer's own call picks among built options (choose; the retired `pack` copies nothing), nothing new answers by instinct (salient); the scene stages its own herd | `animals` | [animals.md](animals.md) |
 | Dealings: a demand on a mind's character is told and asks its mind; the deliberation shows it under "Your dealings" (the script's `record_text`); the model's give pays it and the rules count it (`met`, the demander told) | `dealings` | [dealings.md](dealings.md) |
+| A battle fighter's side's war: `spawn_battle_sides_layout`'s two `stance` records reach the fighter's mind worded under "Your dealings" ("your people, Side A, hold Side B as enemy", and the record Side B holds), never "stance: open" | `battle-stance` | [dealings.md](dealings.md#a-fighters-war) |
 | Movement intents in a mind's plan (docs/COMBAT_MIND.md §3.3): the prompt documents keep_distance, close_in, circle, back_off and follow with speeds and the sight rule; a fake model's plan `keep_distance` 3–6 m installs as written, its steering holds the band by sight, and the character backs off from someone walking at it | `intents` | [deliberation.md](deliberation.md#movement-intents) |
 | No-store persona/cursor, patch-loss XFAIL | `consolidation` | [consolidation.md](consolidation.md) |
 | Paid-wrapper dry safety and paid smoke check | dry safety; paid authorization required | [real-models.md](real-models.md) |
@@ -62,7 +63,7 @@ Most cases ask a mind to deliberate through the shared `Run.request(actor, marke
 - It counts the ask by the marker in a newer `thought` row's `detail.reason`, or in a pending row the marker's line made (`arrived` against `requested_ms`). A fake reply answers within a second, between two polls.
 - When a reply replaces the test graph without the marker reaching a thought, it installs the graph again, up to three times. The think node asks only once the deliberation clock has settled 45 s, so each install waits up to 65 s.
 
-Cases with their own asks (`drop`, `death-names`, `watch-fight`, `reasons`, `rethink`, `takeover`, `dealings`, `answers`) do not use it.
+Cases with their own asks (`drop`, `death-names`, `watch-fight`, `reasons`, `rethink`, `takeover`, `dealings`, `answers`, `battle-stance`) do not use it.
 
 Each free case launches its own database through `verify.py` and passes doctor before driving the real mind binary. Admin calls arrange scenes only. Requests go through the production HTTP model boundary, and replies return through production mind reducers. Public snapshots use shared SQL; private deliberations use shared `sql --as-admin` with the token held in memory. Store-backed projections belong to `verify-knowledge`.
 

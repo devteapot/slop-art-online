@@ -177,6 +177,9 @@ B=$R-sides
 mkdir -p ".local/living/verify/$B"
 python3 "$V" launch --run "$B" --seed cullet > ".local/living/verify/$B/launch.txt" 2>&1
 python3 "$C/scenes.py" sides_battle --run "$B" > ".local/living/verify/$B/sides_battle.txt" 2>&1
+# Then, paused on the same world, the fixed-layout fixture `spawn_battle_sides_layout` (about
+# 20 s): deal 1 mirrors deal 0 place by place, the same seed gives the same places.
+python3 "$C/scenes.py" sides_layout --run "$B" > ".local/living/verify/$B/sides_layout.txt" 2>&1
 python3 "$V" cleanup --run "$B" > ".local/living/verify/$B/cleanup.txt" 2>&1
 
 # Drops between ground levels hide nothing and block the foot (features/sight.md, about 1 min)

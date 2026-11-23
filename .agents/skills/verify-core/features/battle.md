@@ -145,3 +145,13 @@ Until sides-battle-fix (2026-11-22) the fixture wrote those records due at 0. Re
 - On main before the fix it fails: the stances are gone at 3 s, 78 uses in all, 0 fallen in 60 s. With the fix: 2,276 and 2,432 uses, 4 and 6 fallen by 30 s (first at 5.7 s and 18.3 s), 14 and 16 by 60 s, no resident dead (validation record 2026-11-22, sides-battle-fix).
 - Stochastic: who falls when varies; it asserts at least one fallen by 30 s, never a count.
 - The scene gate runs it (`sides_battle`, a Cullet world) when a merge touches `SIDES_BATTLE_PATHS` in `living/tools/scene_gate.py`.
+
+### Fixed layouts
+
+`spawn_battle_sides_layout(n, sides, layout_seed, deal)` (sides-layout-seed, 2026-11-23; docs/BATTLE_LAWS.md §1) is the same fixture on a fixed layout. `n` must be a positive multiple of `sides` (2-4), else it is refused. The places come from a splitmix64 stream seeded `layout_seed` in the same 14 × 14 m box, skipping tiles that are not free, and are dealt in groups of `sides`: slot `k` of group `j` goes to side `(k + deal) % sides`. Within a group the sides are made in order, so the ids follow the side, and fighter `j` of each side has the defence of index `j` (dodge when even). With two sides, deal 1 is deal 0's mirror. `spawn_battle_sides` itself is unchanged: its layouts are random per world and not comparable with these.
+
+**`sides_layout`** (after `sides_battle` on its Cullet world; about 20 s; the world stays paused):
+- Spawns 60 fighters in 2 sides five times: seed 1001 deal 0, deal 1, deal 0 again, seed 1002 deal 0, and 61 fighters (refused).
+- Checks: each spawn makes 60 placed, armed fighters of the side their name says; deal 1 puts `A<j>` on deal 0's `B<j>` place and `B<j>` on `A<j>`'s, for every `j`; the same defence on each place in both deals; each side 15 block and 15 dodge; the same seed and deal give the same places; seed 1002 shares no place with 1001; the 60 places are distinct; the odd `n` is refused ("multiple"); the open, never-due `enemy` stance records each way.
+- Evidence in the run folder: `sides_layout-<seed>-<deal>.json` (each fighter's id, place, side and defence by name) and the printed `sides_layout:` line (pairs mirrored, and A1's and B1's places in both deals).
+- The scene gate runs it after `sides_battle` on the same world, on the same paths.
