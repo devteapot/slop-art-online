@@ -47,6 +47,8 @@ One row per character whose mind wrote a heed; deleted at death (`act::forget_de
 
 **Left on `heed-e4`** (experiments, not shipped): the E3/E5 tools and launchers, `living-mind heed-replay` and `heed-ask`, the trials, the `heed_instinct` law and the `_v1` instinct, the fixture laws `sides_first`, `sides_minded`, `sides_mixed_defence` (main gets mixed defence from `sides-mixed-defence`) and `heed_fixed_capacity`.
 
+**Verification after dev-box's views-side review** (2026-11-23, `heed` at `05b9e811b`, origin/main `35b0ea218` merged in): det_compare heed off against main, `--scripts`: the Cullet battle of 200 **identical** over 3,600 ticks (113 tables, 46,649 rows), the pack arena **identical** over 7,200 ticks (105,488 rows); `just living-check` ok; verify-core `heed` 18/18 (the feed's rule: no line for a throng-to-throng blow; a line naming the heeded party and the other as someone in the throng) and the touched scenes pass, `say` failing the same 8 `mind_install` forms on main's own build here; verify-minds `heed`, `roundtrip`, `acts`; verify-client 45/45.
+
 **Verification** (2026-11-23, branch `heed` at `bbd09bc6a`):
 - **Heed off is main.** det_compare with `--scripts` (each copy runs its own build's script) against origin/main (no `living/` change since `5b13f1ba7`): the Cullet battle of 200, **identical** over 3,600 ticks (113 tables, 46,152 rows); the pack arena, **identical** over 7,200 ticks (105,426 rows). The new `heed_policy` table is not among the compared tables (main has none); with heed off nothing writes it.
 - `just living-check` ok.
