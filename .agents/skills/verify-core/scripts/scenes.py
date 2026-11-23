@@ -3369,7 +3369,9 @@ def audience(s):
         s.call("install_script", shipped.replace("speech_audience: true,", "speech_audience: false,"))
         time.sleep(2.2)
         say("verify audience while the law is off")
-        s.expect("law off: a line writes no audience row", not s.rows("SELECT * FROM audience", "audience-off"))
+        # The speaker's rows only: lines said earlier on a shared world (the gate's speech group runs
+        # `say` and `heard_first` first) keep their rows until a later line comes 60 s on.
+        s.expect("law off: a line writes no audience row", not s.rows(f"SELECT * FROM audience WHERE speaker = {a}", "audience-off"))
         s.call("install_script", shipped)
         time.sleep(2.2)
         say("verify audience while the law is on")

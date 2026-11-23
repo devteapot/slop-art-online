@@ -579,6 +579,42 @@ def check_render_selection():
     expect("plan: --cases names them exactly", scene_gate.plan_cases(A, [], []) == (["tick", "render-smoke"], ["hair"]))
 
 
+def check_speech_selection():
+    """The speech group (say, heard_first, audience) and the steering group (flee_wall,
+    pursue_last_seen): selected by their paths, and the speech group also by speech words in the
+    changed hunks of brain.rs, perceive.rs and skills.rhai (gate-say-path: say-once changed
+    speech.rs and brain.rs, and no gate case ran `say` for ten days)."""
+    class A:
+        cases, force, render_only = None, False, False
+    speech, steering = ["say", "heard_first", "audience"], ["flee_wall", "pursue_last_seen"]
+    brain, rhai = "living/authority/src/brain.rs", "living/scripts/skills.rhai"
+    expect("speech: its cases run in their own groups on fresh default-seed worlds",
+           all(scene_gate.CASES[c]["group"] == "speech" for c in speech) and all(scene_gate.CASES[c]["group"] == "steering" for c in steering))
+
+    def plan(paths, hunks=None):
+        return scene_gate.plan_cases(A, paths, scene_gate.behavioural(paths), hunks)[0]
+    for path in ("living/authority/src/speech.rs", "living/authority/src/earshot.rs", "living/rules/src/normalize.rs",
+                 "living/rules/src/script/speech.rs"):
+        got = plan([path], {})
+        expect(f"speech: {path} selects the speech group", set(speech) <= set(got) and not set(steering) & set(got), str(got))
+    for path in ("living/authority/src/motion.rs", "living/rules/src/steer.rs", "living/rules/src/nav.rs"):
+        got = plan([path], {})
+        expect(f"steering: {path} selects the steering group", set(steering) <= set(got) and not set(speech) & set(got), str(got))
+    got = plan(["living/authority/src/act.rs"], {})
+    expect("speech: a behavioural diff outside both selects neither", "tick" in got and not set(speech + steering) & set(got), str(got))
+    say_once = "@@ -745,6 +745,12 @@\n+                if to != 0 && self.from_mind() && crate::speech::said_to_recently(self.ctx, self.me.id, to, &s.text, self.now) {"
+    got = plan([brain], {brain: say_once})
+    expect("speech: say-once's brain.rs hunk (said_to_recently) selects the speech group", set(speech) <= set(got), str(got))
+    got = plan([brain], {brain: "@@ -10,3 +10,3 @@\n-    let cap = 256;\n+    let cap = 2048;\n     prune_familiar(ctx);"})
+    expect("speech: a brain.rs hunk with no speech word does not", not set(speech) & set(got), str(got))
+    got = plan([rhai], {rhai: "@@ -21,1 +21,1 @@\n-        whisper_speech: 0.2,\n+        whisper_speech: 0.3,"})
+    expect("speech: a skills.rhai hunk naming a way of speaking selects it (identifiers by their parts)", set(speech) <= set(got), str(got))
+    got = plan([rhai], {rhai: "@@ -21,1 +21,1 @@\n-        slow_radius: 1.2,\n+        slow_radius: 1.0,"})
+    expect("speech: a skills.rhai hunk with no speech word does not", not set(speech) & set(got), str(got))
+    got = plan([brain])
+    expect("speech: without hunk text a touched hunk file selects it (the safe side)", set(speech) <= set(got), str(got))
+
+
 def check_render_logs():
     """The client log's verdicts: shader/pipeline, asset, set stale and panics; WARN never fails."""
     t = "2026-11-20T20:01:16.183575Z"
@@ -977,6 +1013,7 @@ def main():
     check_flake_scope()
     check_staged_genesis()
     check_render_selection()
+    check_speech_selection()
     check_render_load()
     check_recorded_verdicts()
     check_render_logs()

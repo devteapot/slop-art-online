@@ -9,7 +9,10 @@ touches behaviour, these cases with the fake model only:
 
   verify-core    tick, sight, senses, refusal (one default-seed world), skirmish (an island world),
                  mechanics (its own default-seed world), sides_battle (a Cullet world: the battle
-                 fixture spawn_battle_sides, only when a merge touches SIDES_BATTLE_PATHS)
+                 fixture spawn_battle_sides, only when a merge touches SIDES_BATTLE_PATHS),
+                 say, heard_first, audience (the speech group, a default-seed world of its own: only
+                 when a merge touches SPEECH_PATHS, or names speech in a changed hunk of SPEECH_HUNKS),
+                 flee_wall, pursue_last_seen (the steering group, its own world: STEERING_PATHS)
   verify-minds   roundtrip, acts, dealings, conversation (each its own world, the real living-mind)
   verify-player  combat (combat.py --scene all: the staged fights, an island world)
   verify-client  cues (cues.py: the cue event tables reach only their viewer under row-level
