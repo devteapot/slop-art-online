@@ -47,6 +47,13 @@ One row per character whose mind wrote a heed; deleted at death (`act::forget_de
 
 **Left on `heed-e4`** (experiments, not shipped): the E3/E5 tools and launchers, `living-mind heed-replay` and `heed-ask`, the trials, the `heed_instinct` law and the `_v1` instinct, the fixture laws `sides_first`, `sides_minded`, `sides_mixed_defence` (main gets mixed defence from `sides-mixed-defence`) and `heed_fixed_capacity`.
 
+**Verification** (2026-11-23, branch `heed` at `bbd09bc6a`):
+- **Heed off is main.** det_compare with `--scripts` (each copy runs its own build's script) against origin/main (no `living/` change since `5b13f1ba7`): the Cullet battle of 200, **identical** over 3,600 ticks (113 tables, 46,152 rows); the pack arena, **identical** over 7,200 ticks (105,426 rows). The new `heed_policy` table is not among the compared tables (main has none); with heed off nothing writes it.
+- `just living-check` ok.
+- verify-core: `heed` 17/17 (heed off and on: individuals, the counted anonymous throng, forced contact, lines naming no throng member) and the scenes of the readers heed touches (sight, senses, doing_seen, crowd_sight, cues, first_sight, witness_fold, dodge_told, fights, skirmish) pass. `say` fails the same 8 `mind_install … speaks` forms on main's own build on this host (pre-existing).
+- verify-minds: `heed` 10/10, `roundtrip`, `acts`.
+- verify-client: 45/45 (`heed_policy` refused to anonymous and players; `mind_heed` refused for another's character).
+
 ## Player-side interface (for dev-box)
 
 What the player side can rely on, and what it must call. Nothing here is built for players yet: `heed::applies` is false for a character a person plays.
