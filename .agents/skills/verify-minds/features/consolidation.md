@@ -31,3 +31,8 @@ Compare `persona-before.json` with `persona-after.json`. Inspect the actual cons
 - The first consolidation has no minimum-gap delay. Later consolidations wait the real 90-second species gap. The driver waits up to 110 seconds and never edits tracked seeds.
 - Persona changes normally wait eight minutes. Addressed speech supplies the momentous event that permits a change sooner.
 - Projections WITH a store belong to `verify-knowledge`, which already proves them. This case checks no-store consumption and records its known patch-loss defect. It makes no verdict about stored projections.
+
+## Whom one fights
+
+`fight-field` (relation-fight, 2026-11-23; docs/WORLD_RULES.md "Whom one fights"): the fake model's consolidation reply gives three relations with `fight`: `spare` for a resident, `"never"` for the player, `enemy` for id 999999. A player speaks to the mind's character to bring a consolidation. Passes when `relation_fight` holds exactly the resident's `spare` (by `mind`), the integration's thought notes say `fight: #<id> spare` and left out `"never"` and #999999, a consolidation or deliberation system prompt carries the gloss ("Whom your body counts as an enemy (relation: enemy)"), and a later prompt shows "fight: spare" beside the person. `mind.rs` `fights_of` and `fight`; the service subscribes `relation_fight` on its own (a module without it still starts). `mind_fight` refuses a character a person plays: verify-client's `PLAYED_REFUSED`.
+

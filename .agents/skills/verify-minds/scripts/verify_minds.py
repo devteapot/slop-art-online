@@ -3272,6 +3272,59 @@ def resident_case(run):
             'places_kept': sorted(places_before), 'places_after': sorted(places)}
 
 
+@case('fight-field')
+def fight_field_case(run):
+    """Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): a consolidation
+    reply's relation may carry `fight` ("enemy", "spare", or null to take it back). The service
+    validates it and sends it with `mind_fight` (with or without a memory store); a word other than
+    those, or an id that is no living person, is left out with a note in the thought. The table
+    keeps it as the mind's, and the mind's later prompts show it beside the person ("fight:
+    spare"). The consolidation and deliberation system prompts gloss what it does."""
+    people = prepare(run)
+    actor, other = [p['id'] for p in people]
+    run.harness('player', 'join', 'MindsFighter')
+    player = run.sql("SELECT id FROM character WHERE name = 'MindsFighter'", 'player')[0]['id']
+    run.admin('set_behavior', actor, json.dumps({'wait': 120}))
+    run.admin('place_near', player, actor)
+    relations = [{'id': other, 'trust': 5, 'affinity': 0, 'label': 'stranger', 'note': 'verify fight', 'fight': 'spare'},
+                 {'id': player, 'trust': 0, 'affinity': 0, 'label': 'stranger', 'note': 'verify fight', 'fight': 'never'},
+                 {'id': 999999, 'trust': 0, 'affinity': 0, 'label': 'stranger', 'fight': 'enemy'}]
+    script = {'replies': {'think': {'thought': 'I wait.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'I answer.', 'say': 'verify minds fight answer', 'end': False},
+                          'consolidate': {'summary': 'verify minds fight', 'remember': [], 'nodes': [], 'edges': [], 'retract': [], 'merge': [],
+                                          'identity': None, 'relations': relations, 'judgments': [], 'places': []}}}
+    models = model(run, script)
+    run.request(actor, 'fight-field')
+    run.start(models, [actor])
+    accepted(run, actor)
+    run.admin('set_behavior', actor, json.dumps({'wait': 120}))
+    run.admin('place_near', player, actor)
+    for line in ('verify minds: hello there, how are you?', 'verify minds: what is your work?', 'verify minds: where is the well?'):
+        time.sleep(2.2)
+        run.harness('player', 'say', line, '--to', str(actor))
+    said = run.wait(lambda: [f for f in run.private('SELECT * FROM relation_fight', 'relation-fight') if f['actor'] == actor], 'the reply\'s fight reaches the authority', 180)
+    assert [(f['other'], f['fight'], f['by']) for f in said] == [(other, 'spare', 'mind')], said
+    # The integration's thought (a persona's first identity is a `consolidate` thought too, without notes).
+    thought = run.wait(lambda: [t for t in run.thoughts(actor, 'thoughts-fight') if t['kind'] == 'consolidate' and '"notes"' in t['detail']],
+                       'the consolidation thought', 60)[0]
+    notes = json.loads(thought['detail'])['notes']
+    assert any(f'#{other} spare' in n for n in notes), notes
+    assert any('"never" is not enemy, spare or null' in n for n in notes), notes
+    assert any('#999999 is not a living person' in n for n in notes), notes
+    requests = lambda: list(shared.rows(run.directory / 'fake-requests.jsonl'))
+    text_of = lambda e: json.dumps(e, ensure_ascii=False).replace('\\"', '"')
+    systems = [text_of(e) for e in requests() if e['purpose'] in ('consolidate', 'deliberate')]
+    glossed = [s for s in systems if 'Whom your body counts as an enemy (relation: enemy)' in s]
+    assert glossed, 'the system prompts gloss whom the body counts as an enemy'
+    # A later request lists the person with what the mind said of fighting them.
+    run.admin('set_behavior', actor, json.dumps({'think': 'verify fight: how do I stand with people?'}))
+    shown = run.wait(lambda: [e for e in requests() if e['purpose'] in ('think', 'deliberate', 'consolidate', 'talk') and 'fight: spare' in text_of(e)],
+                     'a later prompt shows "fight: spare"', 120)
+    return {'status': 'pass', 'said': said, 'notes': [n for n in notes if 'fight' in n], 'glossed_prompts': len(glossed),
+            'shown_in': shown[0]['purpose']}
+
+
 @case('parked')
 def parked_case(run):
     """A line heard while the listener's deliberation runs waits for it to end and then gets its

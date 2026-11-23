@@ -362,6 +362,11 @@ def scene_strike(st):
     check(st, "the player perceives release and hit, with the amount", 1 in kinds and hits and hits[-1]["amount"] > 0, [(e["kind"], round(e["amount"], 1)) for e in ev[-4:]])
     fd = sql(st, f"SELECT band FROM fighter WHERE id = {d}")
     check(st, "the target's band is public, not its health", fd and 0 <= fd[0]["band"] <= 4, fd)
+    # relation-fight (docs/WORLD_RULES.md "Whom one fights"): the person's own blow says whom
+    # their character fights: the one struck is its enemy, written as the player's (owner SQL).
+    said = [r for r in sql(st, "SELECT * FROM relation_fight") if r["actor"] == cid and r["other"] == d]
+    check(st, "the player's strike makes the one struck its character's enemy (relation_fight: enemy, by player)",
+          said and said[0]["fight"] == "enemy" and said[0]["by"] == "player", said)
     lines, rows, everyone, outcomes = told(st, cid, "strike", int(t0 * 1000))
     check(st, "the player is told its strike's outcome as a mind is: 'You finished: strike → … hit for N', with its my_act_outcomes row",
           lines and "hit for" in lines[-1]["text"] and rows[-1] and rows[-1]["kind"] == "own" and rows[-1]["ok"] and rows[-1]["skill"] == "strike" and rows[-1]["code"] == "done",

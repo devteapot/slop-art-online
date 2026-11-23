@@ -1236,6 +1236,28 @@ pub struct Relation {
     pub updated_ms: u64,
 }
 
+/// Whether a character means to fight a person, when it has said so (relation-fight,
+/// docs/WORLD_RULES.md "Whom one fights"): `enemy` (a graph's `relation: enemy` counts them, whatever
+/// the community's stance or the relation's trust) or `spare` (not an enemy, even of an enemy
+/// people). No row: the relation's trust and label decide when they are clear, else the
+/// community's stance. Set by a mind's reply (`mind_fight`) for its own character, and for a
+/// person's character by that person's own acts (a blow at someone: `enemy`), never by a model.
+/// Private: the authority's and the owner's (the mind service shows a mind its own).
+#[spacetimedb::table(accessor = relation_fight,
+    index(accessor = by_pair, btree(columns = [actor, other])))]
+pub struct RelationFight {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub actor: u32,
+    pub other: u32,
+    /// `enemy` or `spare`.
+    pub fight: String,
+    /// Who said it: `mind` (its reply) or `player` (the person's own act).
+    pub by: String,
+    pub updated_ms: u64,
+}
+
 #[spacetimedb::table(accessor = belief)]
 pub struct Belief {
     #[primary_key]

@@ -925,6 +925,108 @@ def sides_battle(s):
     s.expect("no resident dies over 60 s", not res_dead, res_dead[:5], fatal=False)
 
 
+def relation_fight(s):
+    """Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): a graph's `nearest
+    relation: enemy` takes, in order, what the character said (`mind_fight`: enemy or spare),
+    then a personal relation that decides (trust -25 or less or a hostile label; 25 or more or a
+    friendly one), then its community's stance. A minded walker A founds `Side A`, and
+    `spawn_battle_sides` makes Side B's fighters its people's enemies (held still). A's graph
+    attacks the nearest enemy; each stage reads whom its attacks aim at (`skill_use`):
+    1. a neutral relation row ("stranger", trust 0, as E5's minds wrote) does not mask the war;
+    2. a truce (trust 40, "truce-keeper") on the nearer one holds: A goes past it to the farther;
+    3. `spare` said over a hostile row (trust -60, "enemy") holds the same way;
+    4. a person of no side is no enemy until A says `enemy`, then A attacks them.
+    Also: `mind_fight` refuses a word other than enemy, spare or "", and takes "" back."""
+    a, r = s.people(2)
+    if s.rows(f"SELECT * FROM membership WHERE member = {a}"):
+        s.act(a, {"do": "leave"})
+        s.wait(lambda: not s.rows(f"SELECT * FROM membership WHERE member = {a}"), 20)
+    s.act(a, {"do": "found", "text": "Side A"})
+    s.expect("A founds Side A", s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {a}"), 30), a)
+    s.expect("the resident R is of no community", not s.rows(f"SELECT * FROM membership WHERE member = {r}"), r)
+    home = s.rows(f"SELECT x, y FROM body WHERE id = {a}")[0]
+    ax, ay = home["x"], home["y"]
+    idle = {"wait": 120}
+    attack = {"first": [{"do": {"skill": "attack", "target": {"nearest": {"kind": "person", "relation": "enemy"}}}}, {"wait": 1}]}
+
+    def fighters(n):
+        before = {c["id"] for c in s.http_rows("SELECT id FROM character")}
+        s.call("spawn_battle_sides", n, 2)
+        names = {c["id"]: c["name"] for c in s.http_rows("SELECT id, name FROM character") if c["id"] not in before}
+        for f in names:
+            s.graph(f, idle)
+        return [f for f, n_ in sorted(names.items()) if n_.startswith("B")]
+
+    def feel(other, trust, label, note):
+        update = {"persona": {"none": []}, "relations": [{"other": other, "trust": float(trust), "affinity": 0.0, "label": label, "note": note}],
+                  "beliefs": {"none": []}, "judgments": [], "places": [], "thought": {"none": []}, "replace": False, "cues": {"none": []}}
+        s.call("mind_update", a, update)
+
+    def aimed(seconds, before):
+        """Whom A's attacks aimed at over `seconds` (every use seen, polled twice a second), not
+        counting the uses in `before` (the table keeps an actor's last 24)."""
+        seen = {}
+        end = time.time() + seconds
+        while time.time() < end:
+            for u in s.http_rows(f"SELECT * FROM skill_use WHERE actor = {a}"):
+                if u["skill"] == "attack" and u["target"] and u["id"] not in before:
+                    seen[u["id"]] = u["target"]
+            time.sleep(0.5)
+        return sorted(set(seen.values()))
+
+    def stage(name, near, far=None):
+        s.call("place_at", near, ax + 1.5, ay)
+        if far:
+            s.call("place_at", far, ax - 3.5, ay)
+        # The graph first, then the teleport: a new graph waits for the activity under way (A's
+        # 120 s wait) to end, and a placement ends it.
+        before = {u["id"] for u in s.http_rows(f"SELECT * FROM skill_use WHERE actor = {a}")}
+        s.graph(a, attack)
+        s.call("place_at", a, ax, ay)
+        got = aimed(10, before)
+        s.graph(a, idle)
+        s.call("place_at", a, ax, ay)
+        print(f"relation_fight {name}: A aimed at {got} (near {near}, far {far})", flush=True)
+        return got
+
+    # 1. A neutral row does not mask the war.
+    b1, = fighters(2)
+    feel(b1, 0, "stranger", "a man standing a tile west of me, no word yet")
+    got = stage("neutral row", b1)
+    s.expect("a neutral relation row (stranger, trust 0) leaves the community's war: A attacks B1", got == [b1], got, fatal=False)
+    s.call("kill", b1, "verify-core relation_fight")
+    # 2. A truce on the nearer one holds.
+    b2, b3 = fighters(4)
+    feel(b2, 40, "truce-keeper", "called truce and gave me their name")
+    got = stage("truce", b2, b3)
+    s.expect("a truce (trust 40, truce-keeper) holds: A goes past the nearer B2 to B3", got == [b3], got, fatal=False)
+    s.call("kill", b2, "verify-core relation_fight")
+    s.call("kill", b3, "verify-core relation_fight")
+    # 3. `spare` said over a hostile row holds.
+    b4, b5 = fighters(4)
+    feel(b4, -60, "enemy", "struck me twice")
+    refused = s.call("mind_fight", a, [{"other": b4, "fight": "never"}], check=False)
+    s.expect("mind_fight refuses a word other than enemy, spare or empty", refused.returncode != 0 and "enemy, spare or empty" in refused.stderr + refused.stdout,
+             (refused.stderr + refused.stdout)[-200:], fatal=False)
+    s.call("mind_fight", a, [{"other": b4, "fight": "spare"}])
+    said = [f for f in s.rows("SELECT * FROM relation_fight") if f["actor"] == a and f["other"] == b4]
+    s.expect("spare is written as the mind's", said and said[0]["fight"] == "spare" and said[0]["by"] == "mind", said, fatal=False)
+    got = stage("spare over a hostile row", b4, b5)
+    s.expect("spare said over a hostile row (trust -60, enemy) holds: A goes past the nearer B4 to B5", got == [b5], got, fatal=False)
+    s.call("kill", b4, "verify-core relation_fight")
+    s.call("kill", b5, "verify-core relation_fight")
+    # 4. A person of no side: no enemy until A says so.
+    got = stage("no side, nothing said", r)
+    s.expect("a person of no community, nothing said: not attacked", got == [], got, fatal=False)
+    s.call("mind_fight", a, [{"other": r, "fight": "enemy"}])
+    got = stage("no side, enemy said", r)
+    s.expect("an explicit enemy is attacked without any community stance", got == [r], got, fatal=False)
+    s.call("mind_fight", a, [{"other": r, "fight": ""}])
+    left = [f for f in s.rows("SELECT * FROM relation_fight") if f["actor"] == a and f["other"] == r]
+    s.expect("\"\" takes back what was said (no row left)", not left, left, fatal=False)
+    s.call("set_behavior", r, json.dumps(idle))
+
+
 def wall_geometry(s):
     """Tile centres on this world's own map: an `eye` tile, a `hidden` one at most 4 tiles away
     on one axis with only rock or wall between (within even night sight), and an `open` one
@@ -3434,26 +3536,11 @@ def say(s):
         "do-object": lambda t, to: {"do": {"skill": "say", "text": t, "to": to}},
     }
     targets = {"id": {"id": b}, "bare-id": b, "nearest": {"nearest": {"kind": "person"}}}
-    # Each line has words of its own. `mind_install` makes a mind's plan, whose say node does not
-    # say nearly the line (shared-word Jaccard 0.6 or more) its speaker said to the same person
-    # within 45 s (say-once, `speech::said_to_recently`); lines differing only in their number and
-    # form ("Morning, line 14 (canonical, bare-id, mind_install).") were held back as repeats of
-    # the last one spoken (8 of 12 on main 5655887af). Any two of these share under 0.3.
-    phrases = [
-        "Fresh bread waits beside ovens", "Cold rivers carry silver trout", "Winter wolves howl past midnight",
-        "Golden barley sways under wind", "Tired horses drink from troughs", "Bright lanterns glow along alleys",
-        "Old sailors mend torn nets", "Quiet monks copy ancient scrolls", "Heavy rain floods lower fields",
-        "Young goats climb steep cliffs", "Smiths hammer glowing iron bars", "Merchants weigh copper coins carefully",
-        "Pale moonlight touches distant hills", "Children chase painted kites", "Weavers spin blue wool slowly",
-        "Hunters track deer through ferns", "Bees gather nectar among clover", "Potters shape wet clay bowls",
-        "Owls watch mice beneath barns", "Farmers plough dark muddy soil", "Sparrows nest inside thatched roofs",
-        "Fishermen haul crabs ashore early", "Shepherds count woolly lambs twice", "Candles flicker behind chapel windows",
-    ]
     for path in ("set_behavior", "mind_install"):
         for form, make in forms.items():
             for tname, to in targets.items():
                 n[0] += 1
-                text = f"{phrases[n[0] - 1]} (line {n[0]}, {form}, {tname}, {path})."
+                text = f"Morning, line {n[0]} ({form}, {tname}, {path})."
                 t0 = now()
                 install(path, {"seq": [make(text, to), hold]})
                 got = heard(text, t0)
@@ -5627,6 +5714,7 @@ def alert_after_hit(s):
 
 SCENES["alert_after_hit"] = alert_after_hit
 SCENES["sides_battle"] = sides_battle
+SCENES["relation_fight"] = relation_fight
 
 
 

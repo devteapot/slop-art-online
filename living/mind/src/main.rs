@@ -168,6 +168,12 @@ async fn main() -> Result<()> {
             c.subscription_builder()
                 .on_error(|_, e| log::warn!("no `cue` subscription ({e:?}): this world keeps no attention cues"))
                 .subscribe(["SELECT * FROM cue".to_string()]);
+            // Whom each character said it fights (private; relation-fight, docs/WORLD_RULES.md
+            // "Whom one fights"): shown to its own mind beside how it feels about them. Its own
+            // subscription, so that a world whose module has no such table still starts.
+            c.subscription_builder()
+                .on_error(|_, e| log::warn!("no `relation_fight` subscription ({e:?}): this world keeps no word on whom one fights"))
+                .subscribe(["SELECT * FROM relation_fight".to_string()]);
             // The fast lane's requests (docs/FAST_LANE.md; private, one row per character while
             // a trigger waits or is served). A world whose module has no such table still starts.
             c.subscription_builder()

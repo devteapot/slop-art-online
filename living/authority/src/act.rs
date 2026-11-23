@@ -2661,6 +2661,9 @@ pub fn retire(ctx: &ReducerContext, id: u32) {
     ctx.db.rhythm().id().delete(id);
     ctx.db.rearing().id().delete(id);
     ctx.db.relation().actor().delete(id);
+    for f in ctx.db.relation_fight().by_pair().filter(id).map(|f| f.id).collect::<Vec<_>>() {
+        ctx.db.relation_fight().id().delete(f);
+    }
     ctx.db.belief().actor().delete(id);
     if ctx.db.character().id().find(id).is_some_and(|c| c.kind != "person") {
         common::invalidate_traits(ctx, id);
@@ -2687,6 +2690,13 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     }
     engage(ctx, attacker, now);
     engage(ctx, victim, now);
+    // A person's own blow says whom their character fights (relation-fight): one they attack
+    // (the blow reaching them, landed, blocked or dodged) is its enemy from then on. A mind's
+    // blows say nothing of it; its reply does (`mind_fight`). Only the person's own acts: not
+    // while a mind holds their character.
+    if attacker != victim && vc.kind == "person" && crate::presence::played(ctx, attacker) && ctx.db.character().id().find(attacker).is_some_and(|c| !c.ai) {
+        crate::mind::set_fight(ctx, attacker, victim, "enemy", "player", now);
+    }
     // Defense in progress: a dodge makes the blow miss, a raised guard facing the blow takes
     // most of it (from behind, a guard does not help).
     let guard = ctx.db.activity().id().find(victim);

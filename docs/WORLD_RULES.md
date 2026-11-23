@@ -360,10 +360,12 @@ A record with a `holder` and a `toward` party whose terms carry a `label` (and a
 
 **Where stances are read:**
 
-- **Graph relation filters.** When `me` has no personal relation to `other`, `relation_ok` (`brain.rs`) checks whether my community's stance toward theirs fits the filter word:
+- **Graph relation filters.** `relation_ok` (`brain.rs`) checks whether my community's stance toward theirs fits the filter word:
   - `enemy`: value ≤ -25, or a label with rival, enemy, threat or foe;
   - `friend`: value ≥ 25, or a label with friend, ally or kin;
   - any other word: a word of the label (`"relation": "rival town"`).
+
+  For `enemy` and `friend` it does so when nothing before it decides (below, "Whom one fights"); for any other word, when `me` has no personal relation to `other`.
 
   Stances are cached per module instance and rebuilt when `record_clock` moves (any change to a record with a `holder` party).
 - **Laws:** `a.records` includes the stance records of the actor's community. `regard_toward(a, community)` in the script returns their terms.
@@ -390,6 +392,26 @@ Not built:
 
 - **Perception's `perceived_of` does not read stances yet.** A projection label such as "a Kettlebridge carter (rival town)" needs to know whether the observer can tell the target's community. That is the perception work's (`scale-1`).
 - **A regard writable by an act.** Rule gap 1 proposed that a community's head could change it. The world has no heads (no roles); a `declare` skill whose check is the script's own condition would be content on the same ops.
+
+### Whom one fights
+
+A graph's `relation: enemy` (and `friend`) is decided in this order (relation-fight, 2026-11-23; `brain.rs` `relation_ok`, `fight_fits`, `personal`):
+
+1. **What the character said** (`relation_fight`, a private table keyed by the pair): `enemy` makes them an enemy whatever the community holds or the relation says; `spare` makes them no enemy, even of an enemy people. `spare` says nothing of friendship; `enemy` rules friendship out.
+2. **A personal relation that decides**, by its trust and label:
+   - clearly hostile: trust -25 or less, or a label with enemy, rival, threat, thief or foe: an enemy, not a friend;
+   - clearly peaceful: trust 25 or more, or a label with friend, family, partner, ally or kin: a friend, not an enemy;
+   - neither (a neutral row, or one with signs both ways): it does not decide.
+3. **The community's stance** (above).
+
+Before, any personal relation row decided alone, and a row with trust above -25 and no enemy word hid the community's war: in E5's real-mind melee 129 such rows about living foes switched fighters' targets off, 61 of them neutral first impressions ("stranger, trust 0"), wary notes or hostile rows without the word, against 68 truces (docs/SIDE_ASYMMETRY.md on `side-asymmetry`; the re-score is in the validation record `2026-11-23-0500-relation-fight.md`).
+
+**Who says it:**
+- **A mind**, for its own character, with an optional `fight` on a relation in its consolidation reply (`"enemy"`, `"spare"`, or null to take it back). The service validates it and calls `mind_fight` (with or without a memory store); a word other than those, or an id that is not a living person other than itself, is left out with a note in the thought. Its later prompts show it beside the person ("fight: spare"). The graph grammar and the consolidation prompt gloss the order (`prompts.rs` `FIGHT_WORDS`), with no tactics suggested.
+- **A person**, for the character they play, only by their own acts: a blow of theirs that reaches someone (landed, blocked or dodged; `act::damage`) makes that person its enemy (`by: "player"`). No act says `spare` yet; a future control would. `mind_fight` refuses any character a person plays ("a person plays this character"), so no model, not even the player-memory service, sets it for them. While a mind holds a person's character after a takeover, what the person's acts said still stands.
+- The rows of a character are removed when it dies.
+
+**Behaviour change on seeded worlds:** a neutral relation row no longer hides a community's stance. On the island, a resident with a neutral row toward someone of a town its people hold as "rival town" (-35, -40) or "outlaws" (-60) now counts them as `enemy` in its graphs, where before the row made them neither.
 
 ### Experiences from rules
 

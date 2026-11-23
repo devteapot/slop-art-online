@@ -29,6 +29,14 @@ pub struct PersonaIn {
     pub calling: String,
 }
 
+/// A mind's word on whether its character fights a person (`mind_fight`): `enemy`, `spare`, or
+/// "" to take back what it said (the relation and the community's stance decide again).
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct FightIn {
+    pub other: u32,
+    pub fight: String,
+}
+
 #[derive(SpacetimeType, Clone, Debug)]
 pub struct RelationIn {
     pub other: u32,
@@ -813,6 +821,58 @@ pub fn mind_consolidated(ctx: &ReducerContext, actor: u32, upto: u64) -> Result<
         }
     }
     Ok(())
+}
+
+/// Whether a mind's character means to fight people (relation-fight, docs/WORLD_RULES.md "Whom one
+/// fights"), from its reply's `fight` on a relation: `enemy`, `spare`, or "" to take it back. Only the
+/// character's own mind (its controller) says it, and never for a character a person plays: there
+/// only the person's own acts do (a blow at someone, `act::damage`). At most 32 at a time, each of
+/// a living person other than itself; a word other than those is refused with the reason, and
+/// nothing is written.
+#[spacetimedb::reducer]
+pub fn mind_fight(ctx: &ReducerContext, actor: u32, fights: Vec<FightIn>) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
+    authorize(ctx, actor)?;
+    if crate::presence::played(ctx, actor) {
+        return Err("a person plays this character: only their own acts say whom it fights".into());
+    }
+    if fights.len() > 32 {
+        return Err(format!("at most 32 at a time, not {}", fights.len()));
+    }
+    for f in &fights {
+        if !matches!(f.fight.as_str(), "enemy" | "spare" | "") {
+            return Err(format!("fight is enemy, spare or empty, not {:?}", f.fight));
+        }
+        if f.other == actor {
+            return Err("not toward oneself".into());
+        }
+        if !ctx.db.character().id().find(f.other).is_some_and(|c| c.kind == "person") {
+            return Err(format!("{} is not a person", f.other));
+        }
+    }
+    let now = common::now_ms(ctx);
+    for f in fights {
+        set_fight(ctx, actor, f.other, &f.fight, "mind", now);
+    }
+    Ok(())
+}
+
+/// Write (or with "" remove) whether `actor` means to fight `other`; no write when it says so already.
+pub fn set_fight(ctx: &ReducerContext, actor: u32, other: u32, fight: &str, by: &str, now: u64) {
+    let old = ctx.db.relation_fight().by_pair().filter((actor, other)).next();
+    match (old, fight) {
+        (None, "") => {}
+        (Some(o), "") => {
+            ctx.db.relation_fight().id().delete(o.id);
+        }
+        (Some(o), f) if o.fight == f && o.by == by => {}
+        (Some(o), f) => {
+            ctx.db.relation_fight().id().update(RelationFight { fight: f.into(), by: by.into(), updated_ms: now, ..o });
+        }
+        (None, f) => {
+            ctx.db.relation_fight().insert(RelationFight { id: 0, actor, other, fight: f.into(), by: by.into(), updated_ms: now });
+        }
+    }
 }
 
 /// Project consolidated mind state: persona, relations, beliefs, judgments, places.
