@@ -1,0 +1,308 @@
+{
+ "near8": {
+  "arms": {
+   "port": {
+    "runs": 3,
+    "frame_ms": 3.69,
+    "frame_ms_all": [
+     3.69,
+     3.62,
+     3.69
+    ],
+    "interval_p50": 3.75,
+    "interval_p95": 4.56,
+    "people_pairs": 34,
+    "people_materials": 27,
+    "main_materials": 28,
+    "toon_materials": 63,
+    "main_meshes": 56,
+    "people_ktris": 61,
+    "composed": 8,
+    "governor": [
+     "performance"
+    ],
+    "load_before": [
+     1.91,
+     4.84,
+     4.68
+    ],
+    "gpu_texture_mib": 532.4
+   },
+   "main": {
+    "runs": 3,
+    "frame_ms": 3.62,
+    "frame_ms_all": [
+     3.62,
+     3.79,
+     3.62
+    ],
+    "interval_p50": 3.72,
+    "interval_p95": 4.61,
+    "people_pairs": 33,
+    "people_materials": 25,
+    "main_materials": 26,
+    "toon_materials": 59,
+    "main_meshes": 55,
+    "people_ktris": 59,
+    "composed": 8,
+    "governor": [
+     "performance"
+    ],
+    "load_before": [
+     1.83,
+     2.89,
+     4.36
+    ],
+    "gpu_texture_mib": 202.7
+   },
+   "port-sb": {
+    "runs": 3,
+    "frame_ms": 3.67,
+    "frame_ms_all": [
+     3.64,
+     3.67,
+     3.7
+    ],
+    "interval_p50": 3.72,
+    "interval_p95": 4.62,
+    "people_pairs": 34,
+    "people_materials": 27,
+    "main_materials": 28,
+    "toon_materials": 64,
+    "main_meshes": 56,
+    "people_ktris": 61,
+    "composed": 8,
+    "governor": [
+     "performance"
+    ],
+    "load_before": [
+     2.4,
+     2.81,
+     5.31
+    ],
+    "gpu_texture_mib": 596.4
+   }
+  },
+  "limit_ms": 0.3,
+  "port_minus_main": {
+   "frame_ms": 0.07,
+   "interval_p50": 0.03,
+   "people_pairs": 1,
+   "people_materials": 2
+  },
+  "sb_minus_port": {
+   "frame_ms": -0.02,
+   "interval_p50": -0.03,
+   "people_pairs": 0,
+   "people_materials": 0
+  },
+  "sb_minus_main": {
+   "frame_ms": 0.05,
+   "interval_p50": 0.0
+  }
+ },
+ "close8": {
+  "arms": {
+   "port": {
+    "runs": 3,
+    "frame_ms": 7.26,
+    "frame_ms_all": [
+     7.21,
+     7.26,
+     7.28
+    ],
+    "interval_p50": 7.15,
+    "interval_p95": 8.76,
+    "people_pairs": 124,
+    "people_materials": 52,
+    "main_materials": 53,
+    "toon_materials": 63,
+    "main_meshes": 457,
+    "people_ktris": 265,
+    "composed": 8,
+    "governor": [
+     "performance"
+    ],
+    "load_before": [
+     5.67,
+     5.16,
+     4.08
+    ],
+    "gpu_texture_mib": 558.5
+   },
+   "main": {
+    "runs": 3,
+    "frame_ms": 7.14,
+    "frame_ms_all": [
+     7.14,
+     7.1,
+     7.26
+    ],
+    "interval_p50": 6.98,
+    "interval_p95": 8.67,
+    "people_pairs": 117,
+    "people_materials": 48,
+    "main_materials": 49,
+    "toon_materials": 59,
+    "main_meshes": 450,
+    "people_ktris": 254,
+    "composed": 8,
+    "governor": [
+     "performance"
+    ],
+    "load_before": [
+     3.49,
+     2.36,
+     4.52
+    ],
+    "gpu_texture_mib": 228.8
+   },
+   "port-sb": {
+    "runs": 3,
+    "frame_ms": 7.22,
+    "frame_ms_all": [
+     7.21,
+     7.22,
+     7.29
+    ],
+    "interval_p50": 7.17,
+    "interval_p95": 8.86,
+    "people_pairs": 124,
+    "people_materials": 53,
+    "main_materials": 54,
+    "toon_materials": 64,
+    "main_meshes": 457,
+    "people_ktris": 267,
+    "composed": 8,
+    "governor": [
+     "performance"
+    ],
+    "load_before": [
+     2.47,
+     3.98,
+     4.61
+    ],
+    "gpu_texture_mib": 622.6
+   }
+  },
+  "limit_ms": 0.3,
+  "port_minus_main": {
+   "frame_ms": 0.12,
+   "interval_p50": 0.17,
+   "people_pairs": 7,
+   "people_materials": 4
+  },
+  "sb_minus_port": {
+   "frame_ms": -0.04,
+   "interval_p50": 0.02,
+   "people_pairs": 0,
+   "people_materials": 1
+  },
+  "sb_minus_main": {
+   "frame_ms": 0.08,
+   "interval_p50": 0.19
+  }
+ },
+ "crowd64": {
+  "arms": {
+   "port": {
+    "runs": 3,
+    "frame_ms": 5.48,
+    "frame_ms_all": [
+     5.48,
+     5.48,
+     5.54
+    ],
+    "interval_p50": 5.42,
+    "interval_p95": 6.57,
+    "people_pairs": 103,
+    "people_materials": 26,
+    "main_materials": 27,
+    "toon_materials": 100,
+    "main_meshes": 958,
+    "people_ktris": 432,
+    "composed": 64,
+    "governor": [
+     "performance"
+    ],
+    "load_before": [
+     5.74,
+     6.92,
+     7.63
+    ],
+    "gpu_texture_mib": 629.4
+   },
+   "main": {
+    "runs": 3,
+    "frame_ms": 5.41,
+    "frame_ms_all": [
+     5.71,
+     5.39,
+     5.41
+    ],
+    "interval_p50": 5.34,
+    "interval_p95": 6.45,
+    "people_pairs": 103,
+    "people_materials": 24,
+    "main_materials": 25,
+    "toon_materials": 96,
+    "main_meshes": 958,
+    "people_ktris": 433,
+    "composed": 64,
+    "governor": [
+     "performance"
+    ],
+    "load_before": [
+     4.31,
+     5.15,
+     6.39
+    ],
+    "gpu_texture_mib": 223.0
+   },
+   "port-sb": {
+    "runs": 3,
+    "frame_ms": 5.56,
+    "frame_ms_all": [
+     5.39,
+     5.56,
+     5.63
+    ],
+    "interval_p50": 5.47,
+    "interval_p95": 6.62,
+    "people_pairs": 104,
+    "people_materials": 27,
+    "main_materials": 28,
+    "toon_materials": 101,
+    "main_meshes": 958,
+    "people_ktris": 434,
+    "composed": 64,
+    "governor": [
+     "performance"
+    ],
+    "load_before": [
+     4.8,
+     5.43,
+     8.76
+    ],
+    "gpu_texture_mib": 693.4
+   }
+  },
+  "limit_ms": 1.0,
+  "port_minus_main": {
+   "frame_ms": 0.07,
+   "interval_p50": 0.08,
+   "people_pairs": 0,
+   "people_materials": 2
+  },
+  "sb_minus_port": {
+   "frame_ms": 0.08,
+   "interval_p50": 0.05,
+   "people_pairs": 1,
+   "people_materials": 1
+  },
+  "sb_minus_main": {
+   "frame_ms": 0.15,
+   "interval_p50": 0.13
+  }
+ }
+}
