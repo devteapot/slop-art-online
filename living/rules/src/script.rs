@@ -580,6 +580,11 @@ pub struct Laws {
     /// relation row (or one labelled "stranger"); on, someone whose name one does not know
     /// (`perception::knows_name`, the rule scenes and percepts name people by).
     pub stranger_by_name: bool,
+    /// Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): on, a graph's
+    /// `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a clear
+    /// personal relation, then the community's stance, and minds are told so; off, any personal
+    /// relation row decides alone (as before 2026-11-23). An ordinary law: the minds read it.
+    pub relation_fight_on: bool,
     /// Attention cues (docs/ATTENTION.md): what a mind wrote it should be brought to think
     /// about, matched against what its character perceives. Off: nothing is matched.
     pub cues_on: bool,
@@ -906,6 +911,7 @@ impl Default for Laws {
             alert_while_attacker_near: true,
             renew_in_place: true,
             stranger_by_name: false,
+            relation_fight_on: false,
             cues_on: false,
             cue_cooldown_s: 600.0,
             cue_gap_s: 60.0,
@@ -3276,6 +3282,7 @@ impl Scripts {
             alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
             renew_in_place: flag("renew_in_place", l.renew_in_place),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
+            relation_fight_on: flag("relation_fight_on", l.relation_fight_on),
             cues_on: flag("cues_on", l.cues_on),
             cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),
             cue_gap_s: g("cue_gap_s", l.cue_gap_s).clamp(0.0, 3_600.0),
