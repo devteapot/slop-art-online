@@ -528,18 +528,16 @@ fn housekeeping_body(ctx: &ReducerContext) -> Result<(), String> {
     crate::combat::housekeeping(ctx, now);
     crate::fast::pump(ctx, now);
 
-    // One pass over the characters: population counts for the stats row, and the living.
+    // One pass over the living: population counts for the stats row. The dead keep their rows
+    // and grow with every death, so they are counted as they die (`census`), not walked here.
+    // The living in id order: the `alive` index gives no fixed order among equal keys.
     let mut alive_people = 0u32;
     let mut deer = 0u32;
     let mut wolves = 0u32;
-    let mut dead_people = 0u32;
-    let mut alive: Vec<Character> = Vec::new();
+    let mut alive: Vec<Character> = ctx.db.character().alive().filter(true).collect();
+    alive.sort_unstable_by_key(|c| c.id);
     let mut kinds: Vec<(String, u32)> = Vec::new();
-    for c in ctx.db.character().iter() {
-        if !c.alive {
-            dead_people += (c.kind == "person") as u32;
-            continue;
-        }
+    for c in &alive {
         match c.kind.as_str() {
             "person" => alive_people += 1,
             "deer" => deer += 1,
@@ -550,7 +548,6 @@ fn housekeeping_body(ctx: &ReducerContext) -> Result<(), String> {
             Some((_, n)) => *n += 1,
             None => kinds.push((c.kind.clone(), 1)),
         }
-        alive.push(c);
     }
     // Animals breed, age and die like everyone else; only a species down to its floor gets
     // newcomers from beyond the map (the living are counted before this second's deaths).
@@ -561,7 +558,6 @@ fn housekeeping_body(ctx: &ReducerContext) -> Result<(), String> {
         let age = common::age_days(&c, &w, now);
         if life.fraction(age, common::pace(&w)) >= life.deathline(c.id) {
             crate::act::die(ctx, c.id, "old age", now, 0, living_rules::outcome::death::OLD_AGE);
-            dead_people += (c.kind == "person") as u32;
             continue;
         }
         let stage = common::stage_code(life.stage(age, common::pace(&w)));
@@ -616,7 +612,8 @@ fn housekeeping_body(ctx: &ReducerContext) -> Result<(), String> {
 
     common::flush_counts(&mut k);
     let prev = ctx.db.stats().id().find(0);
-    let deaths = dead_people;
+    // Every dead person, those of old age above included (counted by `act::die_unseen`).
+    let deaths = common::dead_people(ctx);
     let row = Stats {
         id: 0,
         at_ms: now,
