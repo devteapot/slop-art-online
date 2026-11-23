@@ -936,7 +936,9 @@ def relation_fight(s):
     2. a truce (trust 40, "truce-keeper") on the nearer one holds: A goes past it to the farther;
     3. `spare` said over a hostile row (trust -60, "enemy") holds the same way;
     4. a person of no side is no enemy until A says `enemy`, then A attacks them.
-    Also: `mind_fight` refuses a word other than enemy, spare or "", and takes "" back."""
+    Also: `mind_fight` refuses a word other than enemy, spare or "", and takes "" back. All under
+    the `relation_fight_on` law (default off), switched on here; first, with it off, the neutral
+    row still hides the war (main's rule). The law is switched off again at the end."""
     a, r = s.people(2)
     if s.rows(f"SELECT * FROM membership WHERE member = {a}"):
         s.act(a, {"do": "leave"})
@@ -989,6 +991,22 @@ def relation_fight(s):
         print(f"relation_fight {name}: A aimed at {got} (near {near}, far {far})", flush=True)
         return got
 
+    # 0. Law off (main's rule): a neutral row hides the war.
+    b0, = fighters(2)
+    feel(b0, 0, "stranger", "a man standing a tile west of me, no word yet")
+    got = stage("law off, neutral row", b0)
+    s.expect("law off: a neutral relation row still hides the community's war (A does not attack B0)", got == [], got, fatal=False)
+    s.call("kill", b0, "verify-core relation_fight")
+    set_law(s, "relation_fight_on", True)
+    try:
+        relation_fight_on(s, a, r, fighters, feel, stage)
+    finally:
+        set_law(s, "relation_fight_on", False, check=False)
+    s.call("set_behavior", r, json.dumps(idle))
+
+
+def relation_fight_on(s, a, r, fighters, feel, stage):
+    """`relation_fight`'s stages under the law (see there)."""
     # 1. A neutral row does not mask the war.
     b1, = fighters(2)
     feel(b1, 0, "stranger", "a man standing a tile west of me, no word yet")
@@ -1024,7 +1042,6 @@ def relation_fight(s):
     s.call("mind_fight", a, [{"other": r, "fight": ""}])
     left = [f for f in s.rows("SELECT * FROM relation_fight") if f["actor"] == a and f["other"] == r]
     s.expect("\"\" takes back what was said (no row left)", not left, left, fatal=False)
-    s.call("set_behavior", r, json.dumps(idle))
 
 
 def wall_geometry(s):

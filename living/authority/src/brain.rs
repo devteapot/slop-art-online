@@ -2716,14 +2716,18 @@ fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
     }
     let r = ctx.db.relation().by_pair().filter((me, other)).next();
     let label = r.as_ref().map(|r| r.label.to_lowercase()).unwrap_or_default();
-    // Enemy and friend (relation-fight, docs/WORLD_RULES.md "Whom one fights"): what one said of
-    // fighting them first, then a personal relation that decides, then the community's stance.
-    if matches!(want, "enemy" | "friend") {
+    // Enemy and friend under the `relation_fight_on` law (relation-fight, docs/WORLD_RULES.md "Whom
+    // one fights"): what one said of fighting them first, then a personal relation that decides,
+    // then the community's stance. Off: the rule below, where any personal row decides alone.
+    if matches!(want, "enemy" | "friend") && common::laws(ctx).relation_fight_on {
         let said = ctx.db.relation_fight().by_pair().filter((me, other)).next().map(|f| f.fight);
         let felt = r.as_ref().map_or(Personal::Neutral, |r| personal(r.trust, &r.label));
         return fight_fits(want, said.as_deref(), felt, || stance_fits(ctx, me, other, want));
     }
+    let trust = r.as_ref().map(|r| r.trust).unwrap_or(0.0);
     let fits = match want {
+        "friend" => r.is_some() && (trust >= 25.0 || ["friend", "family", "partner", "ally", "kin"].iter().any(|l| label.contains(l))),
+        "enemy" => r.is_some() && (trust <= -25.0 || ["enemy", "rival", "threat", "thief"].iter().any(|l| label.contains(l))),
         "family" => ["family", "partner", "kin", "child", "parent", "sibling"].iter().any(|l| label.contains(l)),
         "stranger" => r.is_none() || label.contains("stranger"),
         // Not of my community (everyone, when I belong to none).

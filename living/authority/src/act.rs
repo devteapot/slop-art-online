@@ -2690,11 +2690,11 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     }
     engage(ctx, attacker, now);
     engage(ctx, victim, now);
-    // A person's own blow says whom their character fights (relation-fight): one they attack
-    // (the blow reaching them, landed, blocked or dodged) is its enemy from then on. A mind's
-    // blows say nothing of it; its reply does (`mind_fight`). Only the person's own acts: not
-    // while a mind holds their character.
-    if attacker != victim && vc.kind == "person" && crate::presence::played(ctx, attacker) && ctx.db.character().id().find(attacker).is_some_and(|c| !c.ai) {
+    // A person's own blow says whom their character fights (relation-fight, under the
+    // `relation_fight_on` law): one they attack (the blow reaching them, landed, blocked or
+    // dodged) is its enemy from then on. A mind's blows say nothing of it; its reply does
+    // (`mind_fight`). Only the person's own acts: not while a mind holds their character.
+    if attacker != victim && vc.kind == "person" && common::laws(ctx).relation_fight_on && crate::presence::played(ctx, attacker) && ctx.db.character().id().find(attacker).is_some_and(|c| !c.ai) {
         crate::mind::set_fight(ctx, attacker, victim, "enemy", "player", now);
     }
     // Defense in progress: a dodge makes the blow miss, a raised guard facing the blow takes

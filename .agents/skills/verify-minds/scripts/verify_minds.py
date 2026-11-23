@@ -3295,6 +3295,9 @@ def fight_field_case(run):
                           'consolidate': {'summary': 'verify minds fight', 'remember': [], 'nodes': [], 'edges': [], 'retract': [], 'merge': [],
                                           'identity': None, 'relations': relations, 'judgments': [], 'places': []}}}
     models = model(run, script)
+    # Under the `relation_fight_on` law (default off): set before the service starts, so its
+    # compiled rules and prompts have it.
+    run.admin('set_world_law', 'relation_fight_on', 'true')
     run.request(actor, 'fight-field')
     run.start(models, [actor])
     accepted(run, actor)

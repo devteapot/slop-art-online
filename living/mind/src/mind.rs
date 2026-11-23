@@ -2158,7 +2158,7 @@ impl Minds {
         rs.sort_by(|a, b| (b.trust.abs() + b.affinity.abs()).total_cmp(&(a.trust.abs() + a.affinity.abs())));
         // Whom it said it fights (relation-fight): beside the feeling, or alone when it has no
         // relation row for them.
-        let fights: Vec<RelationFight> = self.conn.db.relation_fight().iter().filter(|f| f.actor == actor).collect();
+        let fights: Vec<RelationFight> = if prompts::relation_fight_on() { self.conn.db.relation_fight().iter().filter(|f| f.actor == actor).collect() } else { Vec::new() };
         let fight_of = |other: u32| fights.iter().find(|f| f.other == other).map_or(String::new(), |f| format!("; fight: {}", f.fight));
         let mut out: Vec<String> = rs
             .iter()
@@ -2783,7 +2783,7 @@ impl Minds {
         let (mut patch, mut notes) = memory::patch_from(&v, &known, &lookup);
         // Whom it fights (relation-fight): to the authority straight from the reply, with or
         // without a memory store; a refusal is kept in the thought's notes.
-        let fights = if animal { Vec::new() } else { self.fights_of(actor, &v, &mut notes) };
+        let fights = if animal || !prompts::relation_fight_on() { Vec::new() } else { self.fights_of(actor, &v, &mut notes) };
         if !fights.is_empty() {
             let said: Vec<String> = fights.iter().map(|f| format!("#{} {}", f.other, if f.fight.is_empty() { "(taken back)" } else { f.fight.as_str() })).collect();
             match self.fight(actor, fights).await {

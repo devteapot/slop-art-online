@@ -39,3 +39,25 @@ SpacetimeDB documentation consulted: [tables](https://spacetimedb.com/docs/table
 Not covered: a real-mind battle with the new field (paid); a player's `spare` (no act maps to it yet); `friend` filters in a scene (the unit test only); the island's residents' behaviour over time after the change; maintain-verification-skill's full pass (the maps of verify-core, verify-minds, verify-player and verify-client were updated by hand in this change).
 
 Evidence: `.local/living/verify/` (the runs above), `.local/relation-fight/` (`det/`, `check.log`, `suite.log`, `rescore.py`) and `.local/relation-mask/` (E5's rows, classification and tools) in the Spark worktree of `relation-fight`.
+
+## Behind a world law, default off (second pass, 2026-11-23)
+
+The general coordinator decided to ship the order behind a world law, **`relation_fight_on`, off by default**, and to measure its island effect before switching it on.
+
+- **An ordinary law, not value-only.** The minds read it to choose their prompt text, and the mind service compiles the world's `script` row without `law_override` (docs/LAW_OVERRIDE.md). A value-only law would leave the minds on the old value until the next install. The mind test `the_laws_minds_read_change_by_an_install` lists it with `stranger_by_name` and the others.
+- **Off (shipped): main's behaviour, byte for byte.**
+  - `relation_ok` takes main's code path: any personal row decides alone, and the stance is read only without one. `relation_fight` is not read.
+  - A player's blow writes nothing.
+  - The prompts are main's text: the grammar's `relation` gloss, the consolidation's paragraph and its `"fight"` field are empty strings. Mind test `whom_one_fights_is_told_only_under_its_law`.
+  - The mind ignores a reply's `fight` and shows no "fight: …" line.
+  - The table and `mind_fight` stay. A row written while the law is off would act only once it is on, but nothing writes one: the minds are not asked for `fight`, and the players' blows do not set it.
+- **On:** everything in the record above.
+
+| Proof (law off unless said) | Run | Result |
+| --- | --- | --- |
+| det_compare main `5655887af` against the branch, each with its own script, on the two-sided melee (`spawn_battle_sides(60, 2)`, default seed) | `.local/relation-fight/det-law/melee` | identical: 3,600 ticks, 113 tables, 30,864 rows |
+| det_compare main against the branch on an island world (the island seed's laws composed over each script, no battle, the residents' routines reading `relation: enemy`/`friend` and the seed's regard stances) | `.local/relation-fight/det-law/island` | identical: 7,200 ticks, 113 tables, 104,497 rows |
+| verify-core `relation_fight`: first, with the law off, a neutral row still hides the war; then the law on for the stages above | `core-rflaw-075541` | PASS 12/12 |
+| verify-minds `fight-field`, the law set on before the service starts | `minds-rflaw-075740-fight-field` | pass |
+| verify-player `combat.py --scene all` (scene `strike` sets the law on and off again) | `player-rflaw-080001` | 59/59 |
+| rules tests, mind tests, authority tests | | 362, 144 and 51 passed |

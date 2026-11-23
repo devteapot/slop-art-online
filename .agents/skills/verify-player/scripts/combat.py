@@ -342,6 +342,15 @@ def told(st, cid, skill, t0_ms, secs=4.0):
 
 
 def scene_strike(st):
+    # relation-fight's check below runs under the `relation_fight_on` law (default off).
+    call(st, "set_world_law", ["relation_fight_on", "true"], "admin")
+    try:
+        return strike_scene(st)
+    finally:
+        call(st, "set_world_law", ["relation_fight_on", "false"], "admin")
+
+
+def strike_scene(st):
     cid = me(st)
     p = body(st, cid)
     d = dummy(st, p, 1.2, 0.0)
@@ -365,7 +374,7 @@ def scene_strike(st):
     # relation-fight (docs/WORLD_RULES.md "Whom one fights"): the person's own blow says whom
     # their character fights: the one struck is its enemy, written as the player's (owner SQL).
     said = [r for r in sql(st, "SELECT * FROM relation_fight") if r["actor"] == cid and r["other"] == d]
-    check(st, "the player's strike makes the one struck its character's enemy (relation_fight: enemy, by player)",
+    check(st, "the player's strike makes the one struck its character's enemy (relation_fight: enemy, by player; the law on)",
           said and said[0]["fight"] == "enemy" and said[0]["by"] == "player", said)
     lines, rows, everyone, outcomes = told(st, cid, "strike", int(t0 * 1000))
     check(st, "the player is told its strike's outcome as a mind is: 'You finished: strike → … hit for N', with its my_act_outcomes row",
