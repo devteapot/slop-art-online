@@ -16,7 +16,8 @@
 //! - `soak`: a handful of players who play an evening (`soak.rs`).
 //! - `watch`: two owner connections subscribing the private `clock` row, which every tick
 //!   writes: one with confirmed reads (the default, what clients get) and one without, so every
-//!   tick's delivery is timed with and without the commitlog's fsync.
+//!   tick's delivery is timed with and without the commitlog's fsync. With `"marker": true` the
+//!   unconfirmed one also records the step marker (`tick_mark`, the `tick_marker_on` law).
 //! - `observe`: the lab observer's subscriptions (living/viewer/src/net.rs) as the owner, with
 //!   one character inspected.
 //! - `mind`: the mind service's subscriptions (living/mind/src/main.rs, the default switches:
@@ -1257,6 +1258,9 @@ fn watch_mode() {
     let req: Value = serde_json::from_str(&lines.recv().expect("request line")).expect("request JSON");
     let (uri, db, token) = (req["uri"].as_str().unwrap(), req["db"].as_str().unwrap(), req["token"].as_str().unwrap());
     let out = Arc::new(Mutex::new(std::io::BufWriter::with_capacity(1 << 20, std::fs::File::create(req["out"].as_str().unwrap()).expect("watch out"))));
+    // With `marker` (the `tick_marker_on` law; docs/TICK_RATE.md "The step marker"), the unconfirmed
+    // connection also subscribes the private `tick_mark` row and writes `m,tick,start_us,arrival_us`.
+    let marker = req["marker"].as_bool().unwrap_or(false);
     let mut conns = Vec::new();
     for confirmed in [true, false] {
         let (conn, _) = connect(uri, db, token, Some(confirmed));
@@ -1266,9 +1270,21 @@ fn watch_mode() {
             let t = unix_us();
             let _ = writeln!(o.lock().unwrap(), "{flag},{},{},{t}", k.tick, k.last_ms);
         });
+        let mut queries = vec!["SELECT * FROM clock".to_string()];
+        if marker && !confirmed {
+            let o = out.clone();
+            let mark = move |m: &TickMark| {
+                let t = unix_us();
+                let _ = writeln!(o.lock().unwrap(), "m,{},{},{t}", m.tick, m.start_us);
+            };
+            let m2 = mark.clone();
+            conn.db.tick_mark().on_insert(move |_, m| mark(m));
+            conn.db.tick_mark().on_update(move |_, _, m| m2(m));
+            queries.push("SELECT * FROM tick_mark".to_string());
+        }
         let applied = Arc::new(AtomicBool::new(false));
         let a2 = applied.clone();
-        conn.subscription_builder().on_applied(move |_| a2.store(true, Ordering::SeqCst)).on_error(|_, e| panic!("watch: {e}")).subscribe(vec!["SELECT * FROM clock".to_string()]);
+        conn.subscription_builder().on_applied(move |_| a2.store(true, Ordering::SeqCst)).on_error(|_, e| panic!("watch: {e}")).subscribe(queries);
         let t = Instant::now();
         while !applied.load(Ordering::SeqCst) {
             assert!(t.elapsed() < Duration::from_secs(30), "clock subscription");

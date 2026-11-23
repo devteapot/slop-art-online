@@ -47,7 +47,7 @@ macro_rules! primary_tables {
             mind_cursor, know_how, artifact, trade_offer, background, gate, experience,
             routine, routine_stat, cue, script, community, membership, join_request, genome,
             practice, land, settlement, lot, fighter, skill_card, act_card, speech_card, doing, weather, law_override,
-            seen_bodies, seen_characters, seen_fighters, seen_doing, seen_bodies_near, seen_bodies_far, seen_fighters_near, seen_fighters_far, seen_doing_near, seen_doing_far, seen_character_copy, seen_fighter_copy, my_body, my_fighter, my_doing, my_characters, my_vitals,
+            seen_bodies, seen_characters, seen_fighters, seen_doing, seen_bodies_near, seen_bodies_far, seen_fighters_near, seen_fighters_far, seen_doing_near, seen_doing_far, seen_character_copy, seen_fighter_copy, experience_copy, my_body, my_fighter, my_doing, my_characters, my_vitals,
             my_experience, my_places, my_inventory, my_know_how, my_offers, my_heard, my_senses, my_senses_v_2, my_earshot, my_act_outcomes, my_known_names, my_sex);
     };
 }

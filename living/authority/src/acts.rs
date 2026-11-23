@@ -204,11 +204,10 @@ fn next_reporting(ctx: &ReducerContext, actor: u32, now: u64, replacing: Option<
         }
         let target = match &a.target {
             Some(t) => match brain::resolve_for(ctx, actor, t, now) {
-                Some(r) => r,
-                None => {
-                    let why = format!("no {} in sight", graph::describe_target(t));
-                    crate::latency::acts(ctx, actor, "act_refused", p.id, format_args!("{} unseen", a.skill));
-                    let told = Told { kind: kind::ACT, ok: false, skill: &a.skill, code: code::UNSEEN, what: &what, why: &why, other: 0 };
+                Ok(r) => r,
+                Err((refusal, why)) => {
+                    crate::latency::acts(ctx, actor, "act_refused", p.id, format_args!("{} {refusal}", a.skill));
+                    let told = Told { kind: kind::ACT, ok: false, skill: &a.skill, code: refusal, what: &what, why: &why, other: 0 };
                     feedback(ctx, actor, now, format!("What you had decided did not work out: {what}: {why}."), 0.5, !report_refusal(p.id, &why), told);
                     continue;
                 }

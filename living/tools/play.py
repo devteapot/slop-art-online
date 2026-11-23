@@ -22,7 +22,9 @@ taken when the client starts), so build-slot starts no new heavy job; before tha
 to a scratch path: only the owner's sessions may hold the real lock.
 
 When the client exits, whether the player quit or it crashed, the launcher:
-  1. pauses the world (the offline takeover does not fire while it is paused);
+  1. pauses the world (the offline takeover does not fire while it is paused), then reads
+     clock.tick and clock.last_ms twice, 2 s apart: unchanged is "frozen", a change is logged as
+     STILL ADVANCING with status 1 in teardown.json (stats is a lagging snapshot, reports only);
   2. stops the mind service by its recorded PID, after checking that PID is still that process;
   3. stops the memory store (Neo4j) by its exact container name (its volume is kept);
   4. prints what the session cost, from the run's journal, at living/tools/trials.py's prices;
@@ -399,8 +401,23 @@ class World:
         return bool(rows and rows[0][0]) if code == 200 else None
 
     def ticks(self, db):
+        """`stats.ticks`: a periodic snapshot for reports only; it lags the live clock, so it never
+        decides whether a world is paused or frozen (use clock() and frozen_check())."""
         code, rows = self.sql(db, "SELECT ticks FROM stats")
         return rows[0][0] if code == 200 and rows else None
+
+    def clock(self, db):
+        """The live tick bookkeeping: {"tick", "last_ms"} from the private `clock` table (the admin
+        token reads it). A module without `clock.last_ms` gives {"tick", "last_ms": None,
+        "note": ...}; None when neither query answers."""
+        code, rows = self.sql(db, "SELECT tick, last_ms FROM clock")
+        if code == 200 and rows:
+            return {"tick": rows[0][0], "last_ms": rows[0][1]}
+        code2, rows = self.sql(db, "SELECT tick FROM clock")
+        if code2 == 200 and rows:
+            return {"tick": rows[0][0], "last_ms": None,
+                    "note": f"clock.last_ms unreadable (HTTP {code}); judged on clock.tick only"}
+        return None
 
     def set_paused(self, db, value):
         self.cli("call", "-s", "local", db, "set_paused", "true" if value else "false", timeout=30)
@@ -469,6 +486,38 @@ class World:
         code, _ = self.http("POST", f"/v1/database/{db}/sql", b"SELECT 1 FROM world")
         if not deleted or code != 404:
             raise Refuse(f"{db}: {why} (HTTP {code})")
+
+
+def frozen_check(w, db, wait_s=2.0):
+    """Whether a (just paused) world has stopped: `clock.tick` and `clock.last_ms` read twice,
+    `wait_s` apart; frozen only if both are unchanged. `stats` is a periodic snapshot and can lag
+    the clock by a second or more, so it is not used here. Returns {"first", "second", "wait_s",
+    "frozen", "status", "line"}: status 0 when frozen, 1 when still advancing, 2 when the clock
+    could not be read; `line` is the log text, starting "STILL ADVANCING" when it moved."""
+    def fmt(c):
+        if c is None:
+            return "unreadable"
+        if c.get("last_ms") is None:
+            return f"tick {c['tick']}"
+        stamp = datetime.datetime.fromtimestamp(c["last_ms"] / 1000, datetime.timezone.utc)
+        return f"tick {c['tick']} last_ms {c['last_ms']} ({stamp.strftime('%H:%M:%S.%f')[:-3]}Z)"
+
+    first = w.clock(db)
+    time.sleep(wait_s)
+    second = w.clock(db)
+    out = {"first": first, "second": second, "wait_s": wait_s}
+    readings = f"clock {fmt(first)} → {fmt(second)} over {wait_s:g} s"
+    if first is None or second is None:
+        out.update(frozen=None, status=2, line=f"CLOCK UNREADABLE, cannot tell whether {db} is frozen ({readings})")
+        return out
+    notes = sorted({c["note"] for c in (first, second) if c.get("note")})
+    if notes:
+        out["note"] = notes[0]
+        readings += f"; {notes[0]}"
+    frozen = first["tick"] == second["tick"] and first.get("last_ms") == second.get("last_ms")
+    out.update(frozen=frozen, status=0 if frozen else 1,
+               line=f"frozen ({readings})" if frozen else f"STILL ADVANCING ({readings})")
+    return out
 
 
 # ---------------------------------------------------------------- Neo4j
@@ -675,14 +724,22 @@ def age_of(since, now=None):
 
 
 def held_slots():
-    """Heavy jobs running now: build-slot's slot-N directories whose pid lives."""
+    """Heavy jobs running now: build-slot's slot-N directories whose pid lives and, when the slot
+    records its holder's start time (slot-N/start, `ps -o lstart=` in UTC), is still that process."""
     out = []
     for d in sorted(BUILD_SLOTS.glob("slot-*")):
         try:
             pid = int((d / "pid").read_text().split()[0])
         except (OSError, ValueError, IndexError):
             continue
-        if alive(pid):
+        ident = proc_identity(pid)
+        try:
+            recorded = (d / "start").read_text().strip()
+        except OSError:
+            recorded = ""
+        if ident and recorded and not recorded.startswith("jiffies:") and " ".join(ident[0].split()) != recorded:
+            continue                                   # the pid was reused: build-slot frees this slot
+        if ident:
             label = (d / "label").read_text().strip() if (d / "label").is_file() else "?"
             since = (d / "since").read_text().strip() if (d / "since").is_file() else "?"
             out.append(f"{d.name}: {label} ({age_of(since)}, pid {pid}, since {since})")
@@ -1273,11 +1330,16 @@ def teardown(scene, info, why, client=None, mind=None, report=True, ended_ms=Non
     try:
         if w.exists(db):
             w.set_paused(db, True)
-            t1 = w.ticks(db)
-            time.sleep(2)
-            t2 = w.ticks(db)
-            done["world"] = {"db": db, "paused": w.paused(db), "ticks": [t1, t2], "frozen": t1 == t2}
-            step(f"world {db}: paused (ticks {t1} → {t2} over 2 s{', frozen' if t1 == t2 else ', STILL ADVANCING'})")
+            fc = frozen_check(w, db)
+            done["world"] = {"db": db, "paused": w.paused(db), "clock": [fc["first"], fc["second"]],
+                             "frozen": fc["frozen"], "status": fc["status"]}
+            if fc.get("note"):
+                done["world"]["note"] = fc["note"]
+            if fc["status"]:
+                done["status"] = fc["status"]       # the record says the world did not stop
+                step(f"world {db}: ERROR after set_paused (the paused flag reads {done['world']['paused']}): {fc['line']}")
+            else:
+                step(f"world {db}: paused, {fc['line']}")
         else:
             done["world"] = {"db": db, "exists": False}
             step(f"world {db}: no longer exists")
@@ -1467,7 +1529,10 @@ def stop_session(scene):
         cur = read_json(scene.current_file)
         if cur and World(scene).exists(cur["db"]) and World(scene).paused(cur["db"]) is False:
             World(scene).set_paused(cur["db"], True)
-            say(f"paused {cur['db']}")
+            fc = frozen_check(World(scene), cur["db"])
+            say(f"paused {cur['db']}, {fc['line']}" if not fc["status"]
+                else f"ERROR: paused {cur['db']} but {fc['line']}")
+            return fc["status"]
         return 0
     if teardown(scene, info, why="play.py --stop") is None:
         say("another process is closing that session; check again with --status")
@@ -1483,7 +1548,16 @@ def status(scene):
     db, run = cur["db"], cur["run"]
     ex = w.exists(db)
     p = w.paused(db) if ex else None
-    state = "GONE" if not ex else "paused" if p else f"RUNNING, ticks {w.ticks(db)}" if p is False else "unknown (SQL failed)"
+    if not ex:
+        state = "GONE"
+    elif p:      # the flag alone is not the claim: the clock must have stopped too
+        fc = frozen_check(w, db)
+        state = f"paused, {fc['line']}" if not fc["status"] else f"paused flag set but {fc['line']}"
+    elif p is False:
+        clk = w.clock(db)
+        state = f"RUNNING, clock tick {clk['tick']}" if clk else "RUNNING (clock unreadable)"
+    else:
+        state = "unknown (SQL failed)"
     say(f"{scene.name}: world {db} (run {run}, created {cur.get('created_utc')}): {state}")
     info = read_json(scene.session_file)
     if info and info.get("status") != "closed":

@@ -401,6 +401,9 @@ pub struct Character {
     pub controller: Identity,
     /// Driven by an LLM mind (deliberations and percepts are produced).
     pub ai: bool,
+    /// Indexed: the living are read without walking the dead, whose rows stay (death is
+    /// permanent and its records are kept), and grow by every death (`combat::human`).
+    #[index(btree)]
     pub alive: bool,
     pub born_ms: u64,
     pub died_ms: u64,
@@ -2390,6 +2393,36 @@ pub struct SeenFighterCopy {
     pub fighter: Fighter,
 }
 
+/// A copy of a line of a player's `my_experience` (public, row-level security
+/// `viewer = :sender`; experience-incremental, the `lines_table_on` law): `id` the line's
+/// (`experience` and `line_seen`), `row` exactly what `my_experience` returns for it. Written as the
+/// lines are released and trimmed (`frame::release_lines`), and whole again when the character the
+/// view shows changes (`frame::lines_resync`: a join, a takeover, a return, a played character's
+/// death while the minds held it), so a client reads its lines as rows rather than a view re-run
+/// whole for every new line (docs/HUMAN_FIGHTER_COST.md §2.5).
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = experience_copy, public)]
+pub struct ExperienceCopy {
+    #[primary_key]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub row: Experience,
+}
+
+/// Whose lines a viewer's `experience_copy` rows hold (private; the `lines_table_on` law): one row
+/// per viewer whose copies are whole, with the character `my_experience` shows it (0: none, a
+/// character the minds hold). Written in the same transaction as the copies, so a step that
+/// rolls back takes it back with them.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = lines_state)]
+pub struct LinesState {
+    #[primary_key]
+    pub viewer: Identity,
+    #[index(btree)]
+    pub character: u32,
+}
+
 /// A mirror of a viewer's `projected` row (public, row-level security `viewer = :sender`;
 /// battle-views addendum 2, the `characters_table_on` law): `id` the projected row's, `row`
 /// exactly what `seen_characters` returns for it. Written by `perception::proj_*`, the only
@@ -2582,4 +2615,19 @@ pub struct SlowTimer {
     #[auto_inc]
     pub scheduled_id: u64,
     pub scheduled_at: ScheduleAt,
+}
+
+/// The tick's own time in microseconds, for measuring its cadence (the `tick_marker_on` law, a
+/// measuring aid, off by default; docs/TICK_RATE.md "The step marker"). One row (id 0), written by
+/// each tick while the law holds: its count and its reducer timestamp (`ctx.timestamp`, the time
+/// the scheduler dispatched the call: SpacetimeDB 2.14.1 sets it in `call_reducer_params`, before
+/// any wait in the database's queue). Private: the owner's watcher subscribes it. `clock`'s readers
+/// are unaffected.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = tick_mark)]
+pub struct TickMark {
+    #[primary_key]
+    pub id: u8,
+    pub tick: u64,
+    pub start_us: i64,
 }

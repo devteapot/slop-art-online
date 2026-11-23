@@ -23,6 +23,16 @@ MERGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "merge.py")
 failures = []
 
 
+# A tree's own check.py as the disk charge reads it (`--plan --json`): a known charge in GiB.
+STAND_IN_CHECK = """import json, sys
+out = sys.argv[sys.argv.index("--json") + 1]
+gib = GIB_
+run = [] if gib == 0 else ["stand-in-step"]
+json.dump({"plan": [], "charge": {"bytes": gib * 1024 ** 3, "why": "no step to run (stand-in)" if gib == 0 else f"stand-in-step would run: {gib} GiB",
+           "run": run, "unsure": None}}, open(out, "w"))
+"""
+
+
 def sh(cmd, cwd, env=None, check=True):
     r = subprocess.run(cmd, cwd=cwd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
     if check and r.returncode:
@@ -96,19 +106,34 @@ echo "$FAKE_SCENE_DEVICE 104857600 0 66060288 0% /home/spacetime"
         # Stop after reaching the check so every case starts from the same clean HEAD.
         return merge(coord, ["feature"], check_cmd="echo reached-check; exit 1", env_extra=env)
 
+    # This tree has no check.py: no plan, so the full charge (a doubt), checked after the merge.
     code, o = probe(FAKE_DF_WORKTREE_GB="62")
-    expect("disk below default threshold refuses before fetch or check (exit 12)",
-           code == 12 and "62.00 GB free; need 63 GB (45 GB floor + 18 GB check)" in o
-           and "minus 0.00 GB already in Cargo target" in o and "$ git fetch" not in o and "reached-check" not in o and sh("git rev-parse HEAD", coord) == head, o)
+    expect("disk below the floor plus the full charge (no plan: a doubt) refuses after the merge, before the check (exit 12)",
+           code == 12 and "62.00 GB free; need 63 GB (45 GB floor + 18 GB check)" in o and "the check's plan failed" in o
+           and "minus 0.00 GiB already in the target" in o and "reached-check" not in o and sh("git rev-parse HEAD", coord) == head, o)
+    code, o = probe(FAKE_DF_WORKTREE_GB="44")
+    expect("disk below the floor alone refuses before fetch (exit 12)",
+           code == 12 and "need 45 GB (45 GB floor + 0 GB check)" in o and "$ git fetch" not in o, o)
+    code, o = merge(coord, ["stamped"], check_cmd="echo reached-check; exit 1", env_extra={"FAKE_DF_WORKTREE_GB": "46", "FAKE_DF_TARGET_GB": "46"})
+    expect("a merge whose plan has every step stamped needs the floor alone: 46 GB reaches the check",
+           code == 5 and "reached-check" in o and "disk charge: check 0 GB (no step to run (stand-in))" in o, o)
+    code, o = merge(coord, ["half"], check_cmd="echo reached-check; exit 1", env_extra={"FAKE_DF_WORKTREE_GB": "47", "FAKE_DF_TARGET_GB": "47"})
+    expect("a merge whose plan runs some steps is charged their cost (3 GB): 47 GB refuses",
+           code == 12 and "need 48 GB (45 GB floor + 3 GB check)" in o and "reached-check" not in o
+           and sh("git rev-parse HEAD", coord) == head, o)
     for free in ("63", "64"):
         code, o = probe(FAKE_DF_WORKTREE_GB=free, FAKE_DF_TARGET_GB=free)
         expect(f"disk with {free} GB reaches the check", code == 5 and "reached-check" in o, o)
     code, o = probe(FAKE_DF_TARGET_GB="62")
     expect("disk checks the target volume even when the target does not exist",
            code == 12 and "Cargo target" in o and "62.00 GB free" in o, o)
-    code, o = probe(LIVING_MERGE_SCENES="1", FAKE_SCENE_DEVICE="target", FAKE_DF_TARGET_GB="63")
-    expect("scenes add a reserve on the filesystem shared with the trial volume",
+    code, o = merge(coord, ["behave"], check_cmd="echo reached-check; exit 1",
+                    env_extra={"LIVING_MERGE_SCENES": "1", "FAKE_SCENE_DEVICE": "target", "FAKE_DF_TARGET_GB": "63"})
+    expect("scenes selected (living/authority touched) add a reserve on the filesystem shared with the trial volume",
            code == 12 and "Cargo target" in o and "need 64 GB (45 GB floor + 18 GB check + 1 GB scenes)" in o, o)
+    code, o = probe(LIVING_MERGE_SCENES="1", FAKE_SCENE_DEVICE="target", FAKE_DF_TARGET_GB="63")
+    expect("no scenes selected (no behavioural or drawing path), no scene reserve: 63 GB reaches the check",
+           code == 5 and "reached-check" in o and "scenes 0 GB (no scenes selected" in o, o)
     code, o = probe(LIVING_MERGE_SCENES="1", FAKE_SCENE_DEVICE="separate", FAKE_DF_TARGET_GB="63")
     expect("a separate trial volume leaves the host threshold unchanged", code == 5 and "reached-check" in o, o)
     # The gate's server first: with the probe on, a container that reads as running but whose every
@@ -132,14 +157,14 @@ echo "$FAKE_SCENE_DEVICE 104857600 0 66060288 0% /home/spacetime"
     code, o = probe(FAKE_DF_TARGET_GB="52")
     expect("warm target reduces the check allowance to 8 GB",
            code == 12 and "need 53 GB (45 GB floor + 8 GB check)" in o
-           and "18 GB minus 10.00 GB already in Cargo target" in o, o)
+           and "18 GiB minus 10.00 GiB already in the target" in o, o)
     code, o = probe(FAKE_DF_WORKTREE_GB="53", FAKE_DF_TARGET_GB="53")
     expect("warm target reaches the check at the reduced threshold", code == 5 and "reached-check" in o, o)
     size.write_text(str(18 * 1024 ** 2))
     code, o = probe(FAKE_DF_TARGET_GB="46")
     expect("fully built target still needs the 2 GB minimum allowance",
            code == 12 and "need 47 GB (45 GB floor + 2 GB check)" in o
-           and "18 GB minus 18.00 GB already in Cargo target" in o, o)
+           and "18 GiB minus 18.00 GiB already in the target" in o, o)
     size.unlink()
     target.rmdir()
     target.parent.rmdir()
@@ -184,6 +209,15 @@ def main():
         sh("git switch -q main && git switch -qc clash", seed)
         commit(seed, "a.txt", "clash\n", "clash work")
         sh("git push -q origin clash", seed)
+        sh("git switch -q main && git switch -qc behave", seed)
+        os.makedirs(os.path.join(seed, "living/authority"), exist_ok=True)
+        commit(seed, "living/authority/note.txt", "behaviour\n", "behave: a behavioural path")
+        sh("git push -q origin behave", seed)
+        for name, gib in (("stamped", 0), ("half", 3)):
+            sh(f"git switch -q main && git switch -qc {name}", seed)
+            os.makedirs(os.path.join(seed, "living/tools"), exist_ok=True)
+            commit(seed, "living/tools/check.py", STAND_IN_CHECK.replace("GIB_", str(gib)), f"{name}: a stand-in check.py")
+            sh(f"git push -q origin {name}", seed)
         sh("git switch -q main", seed)
         commit(seed, "a.txt", "main moved\n", "main edits a")
         sh("git push -q origin HEAD:main", seed)

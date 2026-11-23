@@ -340,6 +340,12 @@ def main():
                     help="set the diagnostic law latency_acts and keep each deliberate act's course from the replica's module log in act-trace.jsonl (act_trace.py)")
     ap.add_argument("--law", action="append", default=[], metavar="NAME=VALUE",
                     help="set a world law after launch (JSON value), e.g. witness_fold_ms=0 or profile_detail=true")
+    ap.add_argument("--fast-frame", choices=["first", "balanced"], default="balanced",
+                    help="LIVING_FAST_FRAME for the mind service: the fast lane's prompt frame (docs/FAST_LANE_FRAME.md); balanced is the mind's default")
+    ap.add_argument("--guard-ready", metavar="FILE",
+                    help="with real calls: start the mind only once this file exists (act_trial.py watch --ready, on this run's journal folder)")
+    ap.add_argument("--guard-wait-s", type=float, default=300)
+    ap.add_argument("--unguarded", action="store_true", help="with real calls and no --guard-ready: run without a spend guard (say so in the record)")
     ap.add_argument("--input-latency", action="store_true",
                     help="record authority and mind timing plus database metrics for a fake-model fast-lane run")
     ap.add_argument("--real-minds", action="store_true",
@@ -348,6 +354,10 @@ def main():
     ap.add_argument("--fake-provider", action="store_true",
                     help="with --real-minds: the same models config (profiles, mixes, routing) with every profile sent to the local fake server (model `fake-<model>`, no key): the switch's free test")
     ap.add_argument("--concurrency", type=int, default=64, help="LIVING_CONCURRENCY for the mind service (the mind's own default is 192)")
+    ap.add_argument("--fake-script", metavar="JSON",
+                    help="with --fake-provider: this fake-server script (fake-llm.md) instead of the fixture's fixed delays, e.g. recorded calls (`samples`) and provider rate-limit headers (docs/POOL_STUDY.md)")
+    ap.add_argument("--fake-real-profiles", action="store_true",
+                    help="with --fake-provider: keep each profile's own token limits and pacing settings (max_tokens, purpose_max_tokens, no fixed requests_per_minute), which the mind's rate and token pacing read; only the endpoint, model name and key change")
     ap.add_argument("--save-self", action="store_true",
                     help="before cleanup, keep the fighters' `self` experiences (\"You keep turning back and forth\" lines) in self-lines.json")
     ap.add_argument("--fixed-site", nargs=2, type=float, metavar=("X", "Y"),
@@ -357,8 +367,12 @@ def main():
         ap.error("--input-latency requires --fast-lane with the fake model")
     if a.input_latency and not os.environ.get("CARGO_TARGET_DIR"):
         ap.error("--input-latency requires a private CARGO_TARGET_DIR")
+    if (a.fake_script or a.fake_real_profiles) and not a.fake_provider:
+        ap.error("--fake-script and --fake-real-profiles need --real-minds --fake-provider")
     if a.real_minds and (not (a.allow_live or a.fake_provider) or a.no_mind or a.fast_real or a.fake_acts or a.fake_fast_patch or a.input_latency):
         ap.error("--real-minds needs --allow-live and excludes --no-mind, --fast-real, --fake-acts, --fake-fast-patch and --input-latency")
+    if (a.fast_real or a.real_minds) and not a.fake_provider and not (a.guard_ready or a.unguarded):
+        ap.error("real model calls need --guard-ready FILE (act_trial.py watch --ready on this run's journal folder), or --unguarded said explicitly")
     fixed = a.fixed_site is not None
     if fixed and (not a.keep_plans or a.fast_real or a.no_mind or a.real_minds):
         ap.error("--fixed-site needs --keep-plans and a fake mind")
@@ -560,9 +574,15 @@ def main():
                 models["default"] = "people"
                 keys = {p["key_env"] for p in models["profiles"].values()}
                 if a.fake_provider:
-                    fake = vm.model(run, script)["profiles"]["local"]
+                    fake = vm.model(run, json.loads(Path(a.fake_script).read_text()) if a.fake_script else script)["profiles"]["local"]
                     for name, p in models["profiles"].items():
-                        models["profiles"][name] = dict(fake, model=f"fake-{p['model']}", **{k: p[k] for k in ("overflow", "capacity_overflow") if p.get(k)})
+                        if a.fake_real_profiles:
+                            # The real profile, sent to the fake: its effort map names the purpose
+                            # (the fake tells purposes apart by it), its token limits stay.
+                            models["profiles"][name] = dict(p, base_url=fake["base_url"], key_env=fake["key_env"], model=f"fake-{p['model']}",
+                                                            reasoning_effort={k: k for k in p.get("reasoning_effort", {})})
+                        else:
+                            models["profiles"][name] = dict(fake, model=f"fake-{p['model']}", **{k: p[k] for k in ("overflow", "capacity_overflow") if p.get(k)})
                     for k in keys:
                         env[k] = ""
                     keys = set()
@@ -578,6 +598,7 @@ def main():
                 ids = [i for i in ids if i not in set(made[a.battle:])]
             else:
                 models = vm.model(run, script)
+            env["LIVING_FAST_FRAME"] = a.fast_frame
             if a.input_latency:
                 env["LIVING_INPUT_LATENCY"] = "1"
             if fixed:
@@ -593,6 +614,18 @@ def main():
                 models["profiles"]["deepseek-flash"] = real
                 env[real["key_env"]] = key
             (run.directory / "thinkers.json").write_text(json.dumps(ids))
+            if (a.fast_real or a.real_minds) and not a.fake_provider and a.guard_ready:
+                # Paid calls start only under a watching guard (act_trial.py watch --ready): its
+                # journal folder exists first, and the mind starts once the guard says it watches.
+                journal = ROOT / ".local/living/journal" / f"verify-{a.run}"
+                journal.mkdir(parents=True, exist_ok=True)
+                ready = Path(a.guard_ready)
+                deadline = time.time() + a.guard_wait_s
+                print(f"waiting for the spend guard ({ready}) on {journal}", flush=True)
+                while not ready.exists():
+                    if time.time() > deadline:
+                        raise RuntimeError(f"no spend guard ready at {ready} within {a.guard_wait_s:.0f} s: no paid call made")
+                    time.sleep(0.5)
             run.start(models, ids, seed="island", extra_env=env)
 
         def keep_battle():
@@ -650,7 +683,7 @@ def main():
                 time.sleep(min(0.5, a.refill_gap))
 
         keeper = threading.Thread(target=keep_battle, daemon=True)
-        head = {"arm": a.arm, "fast_real": a.fast_real, "real_minds": a.real_minds, "fake_provider": a.fake_provider, "concurrency": a.concurrency, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane, "fake_acts": a.fake_acts, "act_trace": a.act_trace,
+        head = {"arm": a.arm, "fast_real": a.fast_real, "real_minds": a.real_minds, "fake_provider": a.fake_provider, "fake_script": a.fake_script, "fake_real_profiles": a.fake_real_profiles, "concurrency": a.concurrency, "keep_plans": a.keep_plans, "fake_fast_patch": a.fake_fast_patch, "battle": a.battle, "walkers": a.walkers, "refill": not a.no_refill, "refill_from": a.refill_from, "refill_gap": a.refill_gap, "laws": a.law, "site": site, "ambient_at_publish": len(before), "mind": not a.no_mind, "fast_lane": a.fast_lane, "fast_frame": a.fast_frame, "guard_ready": a.guard_ready, "unguarded": a.unguarded, "fake_acts": a.fake_acts, "act_trace": a.act_trace,
                 "nproc": os.cpu_count(), "db_identity": ident, "world_seed": seed["seed"],
                 "layout": [{"id": id, "at": bodies[id]} for id in fighters],
                 "walker_layout": [{"id": id, "at": bodies[id]} for id in made[a.battle:]],

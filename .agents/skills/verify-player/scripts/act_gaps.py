@@ -12,8 +12,8 @@ through a mind's `mind_act`.
    all 40 go through.
 3. `act_turned_back`: seven walks each given up within 3 s for one the other way; the sixth is
    told in `my_experience`, "You keep turning back and forth"; off, nothing is told.
-4. `act_same_continues` (off as shipped): the same walk again while it runs goes on; off, it
-   starts over.
+4. `act_same_continues` (on as shipped since 2026-11-22): the same walk again while it runs goes
+   on; off, it starts over.
 
     act_gaps.py --run RUN
 
@@ -37,7 +37,7 @@ V = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(V)
 
 ACT = 65534  # act::ACT
-LAWS = (("act_replace_checks", True), ("act_input_cost", True), ("act_turned_back", True), ("act_same_continues", False))
+LAWS = (("act_replace_checks", True), ("act_input_cost", True), ("act_turned_back", True), ("act_same_continues", True))
 
 
 def main():
@@ -190,7 +190,7 @@ def main():
             if same:
                 check("same continues on: the same walk again goes on (its start unchanged)", first and now and now["started_ms"] == first["started_ms"], {"first": first, "now": now})
             else:
-                check("same continues off (as shipped): the same walk again starts over", first and now and now["started_ms"] != first["started_ms"] and now["skill"] == "goto", {"first": first, "now": now})
+                check("same continues off (control): the same walk again starts over", first and now and now["started_ms"] != first["started_ms"] and now["skill"] == "goto", {"first": first, "now": now})
     finally:
         for name, value in LAWS:
             call("set_world_law", [name, json.dumps(value)], admin)

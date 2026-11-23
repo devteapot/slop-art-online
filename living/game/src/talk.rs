@@ -334,7 +334,7 @@ fn told(
             t.once(crate::ui::tips::TALK, now);
         }
     }
-    let mut rows: Vec<Experience> = conn.db.my_experience().iter().filter(|e| e.observer == me && matches!(e.kind.as_str(), "silence" | "speech" | "said")).collect();
+    let mut rows: Vec<Experience> = crate::net::my_lines(&conn.db).into_iter().filter(|e| e.observer == me && matches!(e.kind.as_str(), "silence" | "speech" | "said")).collect();
     rows.sort_by_key(|e| e.id);
     for e in rows {
         if !talk.seen.insert(e.id) {
@@ -382,7 +382,7 @@ fn told(
         }
     }
     if talk.seen.len() > 1024 {
-        let live: HashSet<u64> = conn.db.my_experience().iter().map(|e| e.id).collect();
+        let live: HashSet<u64> = crate::net::my_lines(&conn.db).into_iter().map(|e| e.id).collect();
         talk.seen.retain(|id| live.contains(id));
     }
 }

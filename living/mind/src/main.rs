@@ -60,6 +60,14 @@ async fn main() -> Result<()> {
     if frame != prompts::Frame::Character {
         log::info!("prompt frame: {} (LIVING_FRAME)", frame.name());
     }
+    // The fast lane's frame (prompts.rs `FastFrame`): checked here for the same reason.
+    let fast_frame = prompts::FastFrame::parse(std::env::var("LIVING_FAST_FRAME").ok().as_deref()).map_err(anyhow::Error::msg)?;
+    if fast_frame != prompts::FastFrame::Balanced {
+        log::info!("fast frame: {} (LIVING_FAST_FRAME)", fast_frame.name());
+    }
+    if std::env::args().nth(1).as_deref() == Some("fast-replay") {
+        return mind::fast::replay_main(&root, std::env::args().skip(2).collect()).await;
+    }
     if std::env::args().nth(1).as_deref() == Some("rethink-replay") {
         return mind::rethink::replay_main(&root, std::env::args().skip(2).collect()).await;
     }

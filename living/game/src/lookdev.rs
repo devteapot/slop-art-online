@@ -224,6 +224,16 @@ fn focal_pixels(viewport_height: f32, vertical_fov: f32) -> f32 {
     viewport_height / (2.0 * (vertical_fov * 0.5).tan())
 }
 
+/// Pixels per metre through an orthographic camera `rows` pixels high: from its scaling mode when
+/// that fixes the height (its `area` is only brought up to date in `PostUpdate`), else its area.
+fn ortho_px_per_m(o: &OrthographicProjection, rows: f32) -> f32 {
+    let metres = match o.scaling_mode {
+        bevy::camera::ScalingMode::FixedVertical { viewport_height } => viewport_height * o.scale,
+        _ => o.area.height(),
+    };
+    rows / metres.max(1e-6)
+}
+
 fn projected_head(height: f32, scale: f32, depth: f32, focal_px: f32) -> f32 {
     if depth <= 0.0 {
         return 0.0;
@@ -268,9 +278,15 @@ pub fn far_models(
     meshes: Query<(), With<Mesh3d>>,
     mut vis: Query<&mut Visibility>,
 ) {
+    // Pixels per metre: the focal length over the depth through a perspective camera, the same at
+    // every depth through an orthographic one (the asset view's measuring view, `view::ortho`).
     let projection = cams.single().ok().and_then(|(cam, eye, projection)| {
-        let Projection::Perspective(p) = projection else { return None };
-        let focal = focal_pixels(cam.physical_viewport_size()?.y as f32, p.fov);
+        let rows = cam.physical_viewport_size()?.y as f32;
+        let focal = match projection {
+            Projection::Perspective(p) => Ok(focal_pixels(rows, p.fov)),
+            Projection::Orthographic(o) => Err(ortho_px_per_m(o, rows)),
+            _ => return None,
+        };
         Some((cam, eye, eye.translation(), *eye.forward(), focal, cam.logical_viewport_rect()?))
     });
     let player = net.as_ref().and_then(|n| n.my_id).zip(live.as_ref())
@@ -280,7 +296,11 @@ pub fn far_models(
         let height = model.height.max(0.3);
         let head = g.translation() + Vec3::Y * height;
         let depth = (head - origin).dot(forward);
-        let pixels = projected_head(height, character.recipe.proportions.head, depth, focal);
+        let pixels = match focal {
+            Ok(focal) => projected_head(height, character.recipe.proportions.head, depth, focal),
+            Err(per_m) if depth > 0.0 => projected_head(height, character.recipe.proportions.head, 1.0, per_m),
+            Err(_) => 0.0,
+        };
         let in_view = depth > 0.0 && camera.world_to_viewport(eye, head).is_ok_and(|point| {
             let margin = Vec2::splat(pixels * 4.0);
             point.cmpge(rect.min - margin).all() && point.cmple(rect.max + margin).all()
@@ -1302,6 +1322,11 @@ mod tests {
         assert!(!f.far(pixels(1.75, 18.0, 900.0, 44.0), Some(true)));
         assert!(!f.far(pixels(1.75, 10.4, 900.0, 42.0), Some(true)));
         assert_eq!(pixels(1.75, 18.0, 1800.0, 44.0), pixels(3.5, 18.0, 900.0, 44.0));
+        // The measuring view: a 0.6 m frame on 900 rows is 1500 px/m, so a 1.75 m person's head
+        // stands 350 px tall at any depth and keeps the full model.
+        let o = OrthographicProjection { scaling_mode: bevy::camera::ScalingMode::FixedVertical { viewport_height: 0.6 }, ..OrthographicProjection::default_3d() };
+        assert!((ortho_px_per_m(&o, 900.0) - 1500.0).abs() < 1e-3);
+        assert!(!f.far(projected_head(1.75, 1.0, 1.0, ortho_px_per_m(&o, 900.0)), None));
 
     }
 

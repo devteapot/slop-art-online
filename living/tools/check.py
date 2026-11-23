@@ -45,6 +45,7 @@ the compile cache.
 import fcntl
 import glob
 import hashlib
+import io
 import json
 import re
 import urllib.parse
@@ -74,10 +75,12 @@ PINNED_SCCACHE = os.path.join(HOME, ".local/share/slop-tools/bin/sccache")
 # writes. A step may also have `cmd` as a list of cargo commands run in turn; `workspace`, the
 # cargo workspace its relative dep-info paths start from (default living); `target`, a target
 # sub-directory used as its CARGO_TARGET_DIR; `inputs`, files beyond its packages and the
-# shared ones; and `gate`, a script run after its builds, which must pass too.
+# shared ones; `gate`, a script run after its builds, which must pass too; and `scan`, modules
+# (under its target) that must hold no host path (living/tools/host_paths.py).
 STEPS = [
     {"name": "authority", "lane": "release", "packages": ["living-authority"], "dirs": ["wasm32-unknown-unknown/release", "release"],
-     "cmd": ["cargo", "build", "--manifest-path", "living/Cargo.toml", "-p", "living-authority", "--target", "wasm32-unknown-unknown", "--release"]},
+     "cmd": ["cargo", "build", "--manifest-path", "living/Cargo.toml", "-p", "living-authority", "--target", "wasm32-unknown-unknown", "--release"],
+     "inputs": ["living/tools/host_paths.py"], "scan": ["wasm32-unknown-unknown/release/living_authority.wasm"]},
     {"name": "mind+viewer", "lane": "debug", "packages": ["living-mind", "living-viewer"], "dirs": ["debug"],
      "cmd": ["cargo", "build", "--manifest-path", "living/Cargo.toml", "-p", "living-mind", "-p", "living-viewer"]},
     # The game in release only: the build that is run, without a second ~10 GB debug tree.
@@ -263,7 +266,50 @@ def remaining_check_cost(target, cold_cost):
     return max(2 * GIB, cold_cost - size), size
 
 
-def disk_threshold(target, env):
+# The disk a step's build takes when it runs alone on an empty target folder, rounded up to the
+# next 0.5 GiB (dev-box, main 9401135c1, 2026-11-21: `check.py --full --steps NAME` into an empty
+# CARGO_TARGET_DIR, allocated size afterwards, MiB: authority 389, authority-tests 359, game 2,685,
+# game-tests 2,560, rules-tests 2,868, mind+viewer 8,381, viewer-wasm 2,123, script-gate 914;
+# docs/TOOLING.md, "Disk"). Steps share build directories and dependencies, so the whole check
+# takes less than the sum (about 19.8 GiB): a charge never exceeds the full one
+# (SLOP_CHECK_COST_GB, less what the target already holds).
+STEP_COST_GB = {"authority": 0.5, "authority-tests": 0.5, "game": 3.0, "game-tests": 3.0, "rules-tests": 3.0,
+                "mind+viewer": 8.5, "viewer-wasm": 2.5, "script-gate": 1.0}
+
+
+def store_readable():
+    """The stamp store answers: its stamps directory exists and can be listed (a missing or
+    unreadable store would turn every step into a run, which the full charge covers)."""
+    try:
+        os.listdir(os.path.join(STORE, "stamps"))
+        return True
+    except OSError:
+        return False
+
+
+def charge(run, target, cold_cost, unsure=None):
+    """(bytes, why): the disk the steps in `run` (names) take, the one prediction living-check's
+    disk wait, living-merge and gate-merge share (docs/TOOLING.md, "Disk"). `unsure` names any
+    doubt (a step that cannot be keyed, an unreadable store): then the full charge, the greater
+    of 2 GiB and cold_cost less what the target folder already holds. No step to run: nothing."""
+    full, size = remaining_check_cost(target, cold_cost)
+    full_why = f"max of 2 GiB and {cold_cost / GIB:g} GiB minus {size / GIB:.2f} GiB already in the target"
+    if unsure:
+        return full, f"full charge ({unsure}): {full_why}"
+    if not run:
+        return 0, "no step to run (every step stamped)"
+    unknown = [n for n in run if n not in STEP_COST_GB]
+    if unknown:
+        return full, f"full charge (no cost known for {', '.join(unknown)}): {full_why}"
+    part = sum(STEP_COST_GB[n] for n in run) * GIB
+    if part >= full:
+        return full, f"full charge ({', '.join(run)} would run; {part / GIB:g} GiB alone): {full_why}"
+    return part, f"{', '.join(run)} would run: {' + '.join(f'{STEP_COST_GB[n]:g}' for n in run)} GiB"
+
+
+def disk_threshold(target, env, run=None, unsure=None):
+    """(bytes, why) free space needed before building: the floor plus charge() for `run` (the
+    names of the steps that will run; None: every step, the full charge)."""
     def gb(name, default):
         value = int(env.get(name) or default)
         if value < 0:
@@ -276,16 +322,15 @@ def disk_threshold(target, env):
 
     floor = gb("SLOP_DISK_FLOOR_GB", 45)
     cold_cost = gb("SLOP_CHECK_COST_GB", 18)
-    cost, size = remaining_check_cost(target, cold_cost * GIB)
-    return floor * GIB + cost, (
-        f"{floor} GiB floor + {cost / GIB:.2f} GiB cost "
-        f"(max of 2 GiB and {cold_cost} GiB minus {size / GIB:.2f} GiB already in target)"
-    )
+    if run is None:
+        unsure = unsure or "every step"
+    cost, why = charge(run or [], target, cold_cost * GIB, unsure)
+    return floor * GIB + cost, f"{floor} GiB floor + {cost / GIB:.2f} GiB cost ({why})"
 
 
-def wait_for_disk(target, env):
+def wait_for_disk(target, env, run=None, unsure=None):
     target = os.path.realpath(target)
-    required, reason = disk_threshold(target, env)
+    required, reason = disk_threshold(target, env, run, unsure)
     if not required:
         return
     # The target may not exist yet. Check the filesystem that will hold it.
@@ -485,7 +530,8 @@ def build_env(extra_names):
 def digest(step, inputs, files, tc, env):
     h = hashlib.sha256()
     blob = json.dumps({"v": TOOL_VERSION, "step": step["name"], "cmd": step["cmd"], "inputs": inputs, "files": files,
-                       "toolchain": tc, "env": env, "os": platform.system(), "arch": platform.machine()}, sort_keys=True)
+                       "toolchain": tc, "env": env, "os": platform.system(), "arch": platform.machine(),
+                       **({"scan": step["scan"]} if step.get("scan") else {})}, sort_keys=True)
     h.update(blob.encode())
     return h.hexdigest()
 
@@ -841,12 +887,28 @@ def wrapper_kind(w):
     return "sccache" if os.path.basename(rp).split(".")[0] == "sccache" else "foreign"
 
 
+def same_file_bytes(a, b):
+    """Whether two files (a wrapper named bare is looked up on PATH) hold the same bytes."""
+    a = a if os.sep in a else (shutil.which(a) or a)
+    try:
+        with open(a, "rb") as fa, open(b, "rb") as fb:
+            return fa.read() == fb.read()
+    except OSError:
+        return False
+
+
 def sccache_env(root):
     """(environment to add, the sccache to ask for stats or None, what was decided)."""
     preset = os.environ.get("RUSTC_WRAPPER")
     if os.environ.get("LIVING_SCCACHE", "1") == "0":
         return {}, None, "off (LIVING_SCCACHE=0)" + (f"; RUSTC_WRAPPER={preset} still applies" if preset else "")
     kind = wrapper_kind(preset) if preset else None
+    stale = None
+    if kind == "ours" and not same_file_bytes(preset, OUR_WRAPPER):
+        # A copy of an older (or other) sccache-rustc, such as one a build-slot pre-sets: an older
+        # one loses wasm compiles' path remapping (docs/TOOLING.md, "Byte-identical wasm"), so this
+        # checkout's runs in its place, with the caller's cache settings.
+        stale, preset = preset, OUR_WRAPPER
     if kind == "foreign":
         return {}, None, (f"RUSTC_WRAPPER={preset} is set and is not living/tools/sccache-rustc: cargo uses it as it is, "
                           "without this check's cache settings or stats, and it enters every step's digest")
@@ -876,6 +938,9 @@ def sccache_env(root):
             if preset:
                 return {}, None, f"sccache did not start ({r.stdout.strip()[:200]}); the pre-set RUSTC_WRAPPER={preset} stays, no stats"
             return {}, None, f"sccache did not start ({r.stdout.strip()[:200]}); compiling without it"
+    if stale:
+        return env, exe, (f"living/tools/sccache-rustc in place of the pre-set RUSTC_WRAPPER={stale}, a copy that differs from it "
+                          "(refresh the copy)")
     return env, exe, (f"the pre-set RUSTC_WRAPPER={preset}" if preset else "living/tools/sccache-rustc")
 
 
@@ -993,15 +1058,23 @@ def main(argv):
             say(f"{s['name']}: run{' (--full)' if full else ''} [{d[:12]}]")
         for line in xfail_banner(s):
             say(line)
+    run_names = [s["name"] for s, d, inputs, files, st in plan if not st]
+    unkeyed = [s["name"] for s, d, inputs, files, st in plan if d is None]
+    unsure = (f"{', '.join(unkeyed)} cannot be keyed" if unkeyed else
+              None if full or store_readable() else f"the stamp store {STORE} cannot be read")
     if plan_only:
         if json_out:
+            cold = int(os.environ.get("SLOP_CHECK_COST_GB") or 18)
+            cost, why = charge(run_names, target, cold * GIB, unsure)
             write_json(json_out, {"plan": [{"name": s["name"], "digest": d, "skip": bool(st), "inputs": inputs, "why": None if d else files}
-                                           for s, d, inputs, files, st in plan]})
+                                           for s, d, inputs, files, st in plan],
+                                  "charge": {"bytes": cost, "why": why, "run": run_names, "unsure": unsure, "target": target,
+                                             "full": full, "steps": [s["name"] for s in steps]}})
         return 0
 
     todo = [x for x in plan if not x[4]]
     if todo:
-        wait_for_disk(target, os.environ)
+        wait_for_disk(target, os.environ, run_names, unsure)
 
     env_extra, exe, how = sccache_env(root) if use_sccache else ({}, None, "off (--no-sccache)")
     env = {**os.environ, **env_extra}
@@ -1045,6 +1118,16 @@ def main(argv):
                     say(f"{s['name']}: KNOWN RED {name} {what}" if ok else f"{s['name']}: expected failure {name} {what}")
                 if not ok:
                     code = 1
+        if code == 0 and s.get("scan"):
+            import host_paths
+            report = io.StringIO()
+            if not host_paths.check([os.path.join(step_target, m) for m in s["scan"]], out=report):
+                code = 1
+                with lock:
+                    for line in report.getvalue().splitlines():
+                        say(f"{s['name']}: {line}")
+                if log:
+                    log.write(report.getvalue())
         verdict = None
         if code == 0 and s.get("gate"):
             code, verdict = run_gate(s["gate"], root, env, step_target, log)

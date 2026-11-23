@@ -31,6 +31,7 @@ __pycache__/
 # link), which a pattern ending in / would not match.
 /living/game/assets/lookdev
 /living/game/assets/view
+/living/game/assets/measure
 /living/game/assets/envs/*
 !/living/game/assets/envs/*.json
 # Painted textures (living/tools/textures/paint.py; `just living-game-textures`)

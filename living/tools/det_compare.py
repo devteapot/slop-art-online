@@ -3,7 +3,8 @@
 "Step 3 results"). Python standard library and docker.
 
     det_compare.py prepare --container A --url http://127.0.0.1:PA --volume VOL_A --wasm-dir DIR \
-                   --base BASE.wasm --template TEMPLATE_VOLUME [--fighters 200] [--ticks 3600]
+                   --base BASE.wasm --template TEMPLATE_VOLUME [--fighters 200] [--ticks 3600] \
+                   [--sides 2 [--layout-seed S [--deal 1]]]
     det_compare.py delete --container A --db verify-det-<stamp>
     det_compare.py run --template TEMPLATE_VOLUME --wasm-dir DIR --base BASE.wasm \
                    --candidate CAND.wasm --ports PX,PY --out DIR
@@ -24,7 +25,12 @@ Then it stops server A cleanly (SIGINT), copies its whole volume into the templa
 server A again and writes `<template>.json` beside nothing but the volume's name (printed).
 
 `run --candidate-law NAME=VALUE` sets a law on the candidate copy alone before both unpause (a
-negative control; the law must be one the template's installed script has). Acts sent from
+negative control; the law must be one the template's installed script has). `run --scripts
+BASE.rhai,CAND.rhai [--seed NAME]` installs each build's own shipped script (with the seed's laws
+composed over it, as `install_script.py --seed` does) on its copy before both unpause, as `just
+living-publish` does after an update: the template keeps the script of the build that made it, so
+without this a candidate whose change is in the script's defaults runs the template's. The
+`script` row and the clock's script revision are not hashed or compared. Acts sent from
 outside cannot be compared this way: a reducer called from outside the tick takes the wall clock
 as its time (`common::now_ms`), which differs between the copies.
 
@@ -38,6 +44,7 @@ replicas' whole module logs, and every table's rows read through SQL at the stop
 copies' containers and volumes are removed at the end (by their exact names).
 """
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -301,7 +308,14 @@ def prepare(a):
                 raise
             time.sleep(5)
     A.call(db, "set_paused", [True])
-    A.call(db, "spawn_battle", [a.fighters])
+    # The battle staged by the base build: `spawn_battle`, or `--sides N` the sides fixture
+    # (`spawn_battle_sides`, or with `--layout-seed` the fixed-layout one, sides-layout-seed).
+    if a.sides and a.layout_seed is not None:
+        A.call(db, "spawn_battle_sides_layout", [a.fighters, a.sides, a.layout_seed, a.deal])
+    elif a.sides:
+        A.call(db, "spawn_battle_sides", [a.fighters, a.sides])
+    else:
+        A.call(db, "spawn_battle", [a.fighters])
     if a.players:
         # Players watching (exact items): `a.players` fresh identities joined over HTTP (no
         # connection: their characters are human by controller, so the sweeps and frames run for
@@ -327,7 +341,8 @@ def prepare(a):
     t0 = A.sql(db, "SELECT tick FROM clock")[0]["tick"]
     A.call(db, "set_world_law", ["det_clock", "true"])
     A.call(db, "set_world_law", ["det_stop", str(float(t0 + a.ticks))])
-    meta = {"db": db, "start_tick": t0, "stop_tick": t0 + a.ticks, "fighters": a.fighters, "players": a.players, "ring": a.ring, "ticks": a.ticks, "replica": A.newest_replica(), "made_with": a.base}
+    meta = {"db": db, "start_tick": t0, "stop_tick": t0 + a.ticks, "fighters": a.fighters, "sides": a.sides,
+            "layout": {"seed": a.layout_seed, "deal": a.deal} if a.sides and a.layout_seed is not None else None, "players": a.players, "ring": a.ring, "ticks": a.ticks, "replica": A.newest_replica(), "made_with": a.base}
     print(f"det_compare: {db} paused at tick {t0}, battle of {a.fighters}, stop at {t0 + a.ticks}", flush=True)
     subprocess.run(["docker", "kill", "-s", "INT", a.container], check=True, capture_output=True)
     subprocess.run(["docker", "wait", a.container], check=True, capture_output=True, timeout=300)
@@ -372,6 +387,21 @@ def run(a):
             res["stop_tick"], res["ticks"] = a.stop, ticks
             for s in servers:
                 s.call(db, "set_world_law", ["det_stop", str(float(a.stop))])
+        if a.scripts:
+            # Each build's own shipped script on its copy (the `just living-publish` path).
+            import install_script
+            srcs = a.scripts.split(",")
+            assert len(srcs) == 2, "--scripts BASE.rhai,CAND.rhai"
+            res["scripts"], res["scripts_seed"] = srcs, a.seed
+            for s, src in zip(servers, srcs):
+                source, _ = install_script.seed_script(a.seed, Path(src).read_text())
+                code, body = s.http(f"/v1/database/{db}/call/install_script", [source])
+                if code != 200:
+                    raise RuntimeError(f"install_script on {s.c}: {code} {body[-500:]}")
+                made = s.sql(db, "SELECT source FROM script WHERE name = 'skills'")[0]["source"]
+                assert install_script.same_script(made, source), f"{s.c}: the installed script is not the one sent"
+                res.setdefault("scripts_sha256", []).append(hashlib.sha256(install_script.without_world_laws(made).encode()).hexdigest())
+                print(f"det_compare: {s.c} runs {src} ({len(source)} bytes{', seed ' + a.seed + ' laws composed' if a.seed else ''})", flush=True)
         for law in a.candidate_law:
             # A negative control: a law set on the candidate copy alone.
             name, value = law.split("=", 1)
@@ -458,6 +488,9 @@ def main():
     ap.add_argument("--candidate")
     ap.add_argument("--fighters", type=int, default=200)
     ap.add_argument("--ticks", type=int, default=3600)
+    ap.add_argument("--sides", type=int, default=0, help="prepare: the fighters in this many sides (spawn_battle_sides) instead of spawn_battle")
+    ap.add_argument("--layout-seed", type=int, default=None, help="prepare: with --sides, the fixed layout (spawn_battle_sides_layout)")
+    ap.add_argument("--deal", type=int, default=0, help="prepare: with --layout-seed, the place deal (1: the sides swapped)")
     ap.add_argument("--players", type=int, default=0, help="prepare: players joined (no connection) and placed on --ring round the battle (exact items)")
     ap.add_argument("--ring", default="10,10", help="prepare: the players' ring LO,HI m from the battle's centre")
     ap.add_argument("--ports", default=None, help="run: the two copies' ports, PX,PY")
@@ -466,6 +499,8 @@ def main():
     ap.add_argument("--tag", default="", help="run: a suffix for the copies' names (two runs at once)")
     ap.add_argument("--stop", type=int, default=0, help="run: pause both copies at this tick instead of the template's det_stop")
     ap.add_argument("--candidate-law", action="append", default=[], metavar="NAME=VALUE", help="run: a world law set on the candidate copy alone before unpausing (a negative control)")
+    ap.add_argument("--scripts", help="run: BASE.rhai,CAND.rhai, each build's shipped script, installed on its copy before unpausing")
+    ap.add_argument("--seed", default=None, help="run: with --scripts, the seed whose laws are composed over each script (e.g. cullet)")
     ap.add_argument("--cpus", default="0-4,10-14", help="run: the copies' cores (default the Spark's A725 cores, away from pinned measurements)")
     a = ap.parse_args()
     sys.path.insert(0, str(Path(__file__).resolve().parent))

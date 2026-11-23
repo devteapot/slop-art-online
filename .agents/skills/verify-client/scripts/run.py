@@ -72,6 +72,12 @@ def main():
         # A player's combat feed as event rows reaches only its viewer and equals my_combat, its
         # death screen included (views step 2; combat_feed.py).
         command('combat-feed', [str(SKILL / 'scripts/combat_feed.py'), '--run', args.run])
+        # My lines as rows: only mine, the same rows as my_experience through a death, a rejoin, a
+        # takeover and return, and the law off and on (experience-incremental; lines_table.py).
+        command('lines-table', [str(SKILL / 'scripts/lines_table.py'), '--run', args.run])
+        # The step marker (tick_marker_on, off by default): no row while off, one per tick while on,
+        # stopping off again; private (tick-marker; tick_marker.py).
+        command('tick-marker', [str(SKILL / 'scripts/tick_marker.py'), '--run', args.run])
         exit_code = 0
     except (RuntimeError, subprocess.SubprocessError, OSError) as error:
         print(str(error), file=sys.stderr)

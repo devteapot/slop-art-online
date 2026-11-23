@@ -76,6 +76,21 @@ Since `move-intents` (2026-11-12, docs/COMBAT_MIND.md §3.3) a graph leaf or a o
 
 People walk at their own pace (genes): a body cannot keep away from, or keep up with, a faster one at a walk, as a player cannot; at night (6 m sight) a band past 6 m loses its target. The scene picks the faster person and bands within night sight for that reason.
 
+## A goto to a kind of ground
+
+Since `goto-arrival` (2026-11-23) a `goto` whose target is a kind of ground (`{"nearest": "forest"}`, `{"nearest": "grass"}`: `living_rules::catalog::TERRAINS`; `brain` resolves it to the centre of the nearest tile of it in sight, a `Resolved` of class 4, id 0, its kind the terrain's name) steers without `motion::FLAG_EARLY` (`act::begin_with`, `on_ground_kind`). Its arrival is reported only on that tile's centre (`dg <= 0.06`), or where a blocked final approach stops. That holds for every controller: a graph, a mind's plan, a player's `human_act`. A goto to a place, a point, a creature, and `wander` and `follow`, keep the early arrival.
+
+Before, such a goto reported arrival as its final approach began, up to `slow_radius` (1.2 m) from the tile's centre, which is the ground beside. The step chained after it then ran there. `clear` was refused "there is no forest to clear where you stand", `plant` "nothing grows here", and the same held for a deer's `graze` after `goto {nearest: grass}`. A graph retried and recovered. A player, whose client sends the next act on the goto's done outcome, was refused every time.
+
+`scenes.py ground_goto` (default seed, about 3 min; 32 spawned people and the run's player):
+- **Edges.** It finds 20 forest tiles at the edge of a forest (the tile behind is forest, and 10 grass tiles and those either side lie straight out), and 20 such grass tiles at the edge of grass with forest out.
+- **Starts.** Each actor is placed (`place_at`: a tile's centre) on the other ground 1 m out (the edge: the final approach begins at once), 1.4 m (diagonal), 2, 2.2, 3, 4.1, 5 and 6 m.
+- **Graphs and plans.** Each gets `{"seq": [goto {nearest: forest}, clear, wait]}` or `[goto {nearest: grass}, plant, wait]`. Half get it through `set_behavior`, half as a mind's plan through `mind_install`, all at once.
+- **The player.** It gets four of each through `human_act`, sending the work once the goto's `act_outcome` says done.
+- **Checks.** Per controller and task: every first attempt succeeds (no refusal in the rules' words since the install, and the effect: 2 wood, a `plant` chronicle row); each attempt seen under way stands on the kind; and, for the player, the goto is done only standing on the kind.
+- **Starts beyond 6 m** can be out of sight at dusk, and the goto then sits "stuck: goto: no nearest forest in sight" (status only, no line).
+- **Evidence.** `ground_goto-trials.json` (per trial: start, distance, the ground under the body when the work was seen, refusals, effect).
+
 ## Gotchas
 
 - Scenes that `place_at` two bodies on one point (`sight`, `drop`, speech `ways`) now get two neighbouring tiles; all passed on 2026-11-11 (`core-place-20261111-205914*`).

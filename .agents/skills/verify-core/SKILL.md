@@ -54,6 +54,8 @@ python3 "$C/scenes.py" committed --run "$R" > "$E/committed.txt" 2>&1
 python3 "$C/scenes.py" act_replace --run "$R" > "$E/act_replace.txt" 2>&1
 # A replacing act checked first, its input cost, turning back on the replace path, the same act continuing; each law off as a control (features/acts.md#act-replacement-gaps, about 1 min).
 python3 "$C/scenes.py" act_gaps --run "$R" > "$E/act_gaps.txt" 2>&1
+# Truthful refusals: why a target did not resolve, not-acts named, each beside a control (features/acts.md#truthful-refusals, about 1.5 min).
+python3 "$C/scenes.py" truthful_refusals --run "$R" > "$E/truthful_refusals.txt" 2>&1
 # A dodge over before the blow came, and a cooldown's refusals told once (features/combat.md, about 20 s).
 # The fast lane's triggers: the repeat at the law's N, never told; unseen moves not counted (features/fast.md, about 2 min).
 python3 "$C/scenes.py" seen_again --run "$R" > "$E/seen_again.txt" 2>&1
@@ -136,6 +138,9 @@ python3 "$C/scenes.py" health_seen --run "$R" > "$E/health_seen.txt" 2>&1
 # Sight that depends on facing, switched by set_world_law (features/fov.md, about 3 min).
 python3 "$C/scenes.py" fov --run "$R" > "$E/fov.txt" 2>&1
 python3 "$C/scenes.py" say --run "$R" > "$E/say.txt" 2>&1
+# A goto to a kind of ground arrives standing on it: goto then clear or plant, graph, mind plan and
+# player (features/steering.md#a-goto-to-a-kind-of-ground, about 3 min; spawns 32 people).
+python3 "$C/scenes.py" ground_goto --run "$R" > "$E/ground_goto.txt" 2>&1
 # Admin placement on free walkable tiles (features/steering.md#admin-placement); last: its bodies stay.
 python3 "$C/scenes.py" placement --run "$R" > "$E/placement.txt" 2>&1
 # The doing condition's cost in a 100-fighter battle (features/doing.md; a measurement, about
@@ -165,6 +170,20 @@ python3 "$C/scenes.py" outcomes --run "$K" > ".local/living/verify/$K/outcomes.t
 # The drop scene over low tiles (9: a cart, an open stall, a well, a building's overhang: open at eye height) on the same island world.
 python3 "$C/scenes.py" low --run "$K" > ".local/living/verify/$K/low.txt" 2>&1
 python3 "$V" cleanup --run "$K" > ".local/living/verify/$K/cleanup.txt" 2>&1
+
+# The battle fixture `spawn_battle_sides` on Cullet's plaza (features/battle.md, "The sides
+# battle fixture"; about 70 s after the launch): 60 fighters in 2 sides, each side mixing block
+# and dodge (within one), fall within 30 s, no use at a resident or the fighter's own side, no
+# resident dies in 60 s. The scene gate runs it
+# when a merge touches SIDES_BATTLE_PATHS.
+B=$R-sides
+mkdir -p ".local/living/verify/$B"
+python3 "$V" launch --run "$B" --seed cullet > ".local/living/verify/$B/launch.txt" 2>&1
+python3 "$C/scenes.py" sides_battle --run "$B" > ".local/living/verify/$B/sides_battle.txt" 2>&1
+# Then, paused on the same world, the fixed-layout fixture `spawn_battle_sides_layout` (about
+# 20 s): deal 1 mirrors deal 0 place by place, the same seed gives the same places.
+python3 "$C/scenes.py" sides_layout --run "$B" > ".local/living/verify/$B/sides_layout.txt" 2>&1
+python3 "$V" cleanup --run "$B" > ".local/living/verify/$B/cleanup.txt" 2>&1
 
 # Drops between ground levels hide nothing and block the foot (features/sight.md, about 1 min)
 # on a planned settlement's land.

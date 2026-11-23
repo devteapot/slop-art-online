@@ -69,6 +69,21 @@ def me(st):
     return alive[0]["id"] if alive else None
 
 
+def living(st, why):
+    """The player's living character, joining again (as a player would at the death screen) when an
+    earlier scene left none, and logged. A scene must not depend on the player surviving the one
+    before it (wolves-aftermath, 2026-11-23: the pack killed a player worn down by the earlier
+    scenes, and `onlooker` and `death` found no character)."""
+    cid = me(st)
+    if cid is None:
+        V.log(st, f"no living character before {why}: joining again")
+        call(st, "join", ["Tester"])
+        t = time.time() + 5
+        while time.time() < t and (cid := me(st)) is None:
+            time.sleep(0.25)
+    return cid
+
+
 def body(st, cid):
     r = sql(st, f"SELECT x, y FROM body WHERE id = {cid}")
     return (r[0]["x"], r[0]["y"]) if r else None
@@ -406,7 +421,14 @@ def scene_kill(st):
     # killing row keeps real names.
     knew = sql(st, f"SELECT * FROM acquaintance WHERE observer = {d} AND known = {cid}")
     as_known = mine if knew else "a stranger"
-    hits = [e for e in seen(st) if e["kind"] == 2 and e["actor"] == cid and e["target"] == d]
+    # The killing blow's my_combat row can land a tick after the use reads "killed"; under load
+    # the first read missed it once (gate 2026-11-22, sides-mixed-defence). Poll briefly for it.
+    t_hits = time.time() + 5.0
+    while True:
+        hits = [e for e in seen(st) if e["kind"] == 2 and e["actor"] == cid and e["target"] == d]
+        if hits or final is None or time.time() > t_hits:
+            break
+        time.sleep(0.2)
     killing = sql(st, f"SELECT kind, a, b, text FROM chronicle WHERE kind = 'killing' AND a = {cid} AND b = {d}")
     mh = sql(st, f"SELECT max_hp FROM vitals WHERE id = {d}")
     mh = mh[0]["max_hp"] if mh else 100.0
@@ -1100,20 +1122,80 @@ def scene_heal(st):
     check(st, "heal mends yourself (HEALED, health up)", u and "healed" in u["outcome"] and ev and h1 is not None and h0 is not None, f"{u and u['outcome']} hp {h0:.1f}->{h1:.1f}")
 
 
+def body_now(st, cid):
+    """Where a body is now: its row is a segment (`x`, `y` at `t_ms`, moving at `vx`, `vy` until
+    `next_ms`), so a walking body is up to a segment's length past its `x`, `y` (`common::pos`,
+    turns aside)."""
+    r = sql(st, f"SELECT x, y, t_ms, vx, vy, next_ms FROM body WHERE id = {cid}")
+    if not r:
+        return None
+    b = r[0]
+    t = max(0, min(int(time.time() * 1000), b["next_ms"]) - b["t_ms"]) / 1000.0
+    return (b["x"] + b["vx"] * t, b["y"] + b["vy"] * t)
+
+
+RING_5M = ((5.0, 0.0), (-5.0, 0.0), (0.0, 5.0), (0.0, -5.0), (3.5, 3.5), (-3.5, 3.5), (3.5, -3.5), (-3.5, -3.5))
+RING_1M = ((1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0), (0.7, 0.7), (-0.7, 0.7), (0.7, -0.7), (-0.7, -0.7))
+
+
+def beside_wolf(st, cid, w, ring):
+    """Puts the player at the first offset of `ring` from wolf `w`'s position now (`body_now`)
+    where the player's own `seen_characters` holds the wolf within 1.5 s, and returns that offset
+    (None if no spot was seen; the player is left at the last). Sight is the same both ways
+    (`Map::sight_clear`), so the wolf sees the player there (wolves-scene, 2026-11-22)."""
+    for dx, dy in ring:
+        wp = body_now(st, w)
+        call(st, "place_at", [cid, wp[0] + dx, wp[1] + dy], "admin")
+        t = time.time() + 1.5
+        while time.time() < t:
+            if any(r["id"] == w for r in sql(st, "SELECT id FROM seen_characters", "player")):
+                return (dx, dy)
+            time.sleep(0.25)
+    return None
+
+
 def scene_wolves(st):
     cid = me(st)
     ws = wolves(st)
     check(st, "the seed placed a bold pack", len(ws) >= 3, ws)
     if not ws:
         return
-    wp = body(st, ws[0])
-    call(st, "place_at", [cid, wp[0] + 5.0, wp[1]], "admin")
+    w = ws[0]
+    # A healthy adult, as the check says: the earlier scenes' blows (fast_lane's four) leave the
+    # player worn down, and the pack's first blows could kill it (wolves-aftermath, 2026-11-23).
+    mx = sql(st, f"SELECT max_hp FROM vitals WHERE id = {cid}")
+    if mx:
+        call(st, "admin_set_vitals", [cid, mx[0]["max_hp"]], "admin")
+
+    # The player goes where the wolf can see it, and again while the wolf has walked off before
+    # turning on it (wolves-scene, 2026-11-22; features/combat.md, Gotchas):
+    # - A wolf attacks only a person it sees within 10 m (`nearest` resolves by sight), and brush
+    #   and rock block sight even at 5 m by day: a spot 5 m east of the wolf was hidden from it in
+    #   2 of 15 placements. Sight is the same both ways (`Map::sight_clear`), so the player's own
+    #   `seen_characters` holding the wolf says the wolf sees the player. Each spot round the wolf
+    #   is tried in turn until one is seen.
+    # - A wandering wolf keeps walking until its graph looks again; placed beside where it was, the
+    #   player was soon more than 10 m behind it (1 in 15). So while no blow has come, a wolf more
+    #   than 7 m off has the player placed beside it again.
+    spots = []
     t = time.time() + 20
     hit = []
     while time.time() < t and not hit:
+        wp, pp = body_now(st, w), body_now(st, cid)
+        if not spots or (wp and pp and math.dist(wp, pp) > 7.0):
+            spots.append(beside_wolf(st, cid, w, RING_5M))
         hit = [e for e in seen(st) if e["target"] == cid and e["actor"] in ws and e["kind"] in (2, 4)]
         time.sleep(0.3)
+    check(st, "the player stands where the first bold wolf sees it", any(spots), f"offsets {spots} from wolf {w}")
     check(st, "bold wolves attack a healthy adult player", hit, [(e["actor"], e["kind"], round(e["amount"], 1)) for e in hit][:3])
+    # Then away from the pack, at once, so the scenes after this one start with the player alive
+    # (wolves-aftermath): the arrival point, far from the wolves' ground.
+    land = sql(st, "SELECT arrive_x, arrive_y FROM land")
+    if land and me(st) == cid:
+        call(st, "place_at", [cid, land[0]["arrive_x"], land[0]["arrive_y"]], "admin")
+    time.sleep(1.0)
+    left = sql(st, f"SELECT alive FROM character WHERE id = {cid}")
+    check(st, "the player leaves the pack alive", left and left[0]["alive"] and me(st) == cid, left)
 
 
 def scene_death(st):
@@ -1122,13 +1204,19 @@ def scene_death(st):
         check(st, "a living character to die", False, "none")
         return
     ws = wolves(st)
-    wp = body(st, ws[0]) if ws else body(st, cid)
-    call(st, "place_at", [cid, wp[0] + 1.0, wp[1]], "admin")
+    # Beside the first bold wolf where it sees the player, from where it is now, and again while
+    # it has walked more than 7 m off before killing it (death-placement, 2026-11-22: the wolves
+    # scene's two staging races, features/combat.md, Gotchas). With no pack, the player stays.
+    spots = []
     t = time.time() + 60
     while time.time() < t and me(st) == cid:
+        if ws:
+            wp, pp = body_now(st, ws[0]), body_now(st, cid)
+            if not spots or (wp and pp and math.dist(wp, pp) > 7.0):
+                spots.append(beside_wolf(st, cid, ws[0], RING_1M))
         time.sleep(0.5)
     rows = sql(st, f"SELECT alive, cause FROM character WHERE id = {cid}")
-    check(st, "the player's character dies through the vitals and death rules", rows and not rows[0]["alive"] and rows[0]["cause"].startswith("killed by"), rows)
+    check(st, "the player's character dies through the vitals and death rules", rows and not rows[0]["alive"] and rows[0]["cause"].startswith("killed by"), {"rows": rows, "offsets": spots})
     ev = seen(st)
     deaths = [e for e in ev if e["kind"] == 7 and e["actor"] == cid]
     wit = [e["actor"] for e in ev if e["kind"] == 8 and e["target"] == cid]
@@ -1236,8 +1324,9 @@ def main():
     global SCENE
     for n in names:
         SCENE = n
-        if n not in ("wolves", "death") and home:
-            call(st, "place_at", [me(st), home[0], home[1]], "admin")
+        cid = living(st, n)
+        if n not in ("wolves", "death") and home and cid is not None:
+            call(st, "place_at", [cid, home[0], home[1]], "admin")
             time.sleep(0.3)
         try:
             SCENES[n](st)

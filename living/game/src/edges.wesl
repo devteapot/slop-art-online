@@ -18,7 +18,8 @@ import bevy_core_pipeline::fullscreen_vertex_shader::FullscreenVertexOutput;
 struct Edges {
     // rgb: line colour (multiplies the scene), a: line strength.
     line: vec4<f32>,
-    // x: depth threshold (relative), y: normal threshold (1 - cos), z: width (px), w: camera near.
+    // x: depth threshold (relative), y: normal threshold (1 - cos), z: width (px), w: camera near
+    // (−far for an orthographic camera, `dist`).
     params: vec4<f32>,
     // x: fade start (m), y: fade end (m), z: rim width (px), w: rim strength.
     fade: vec4<f32>,
@@ -206,10 +207,15 @@ fn remembered(xz: vec2<f32>) -> f32 {
 }
 
 // Distance from the camera (m) at a pixel; reverse-Z infinite perspective: depth = near / z.
+// An orthographic camera (the asset view's measuring view, near 0) sends −far: its reverse-Z
+// depth is linear, 1 at the camera and 0 at far.
 fn dist(px: vec2<i32>) -> f32 {
     let size = vec2<i32>(edges.screen.xy);
     let p = clamp(px, vec2(0), size - vec2(1));
     let d = textureLoad(depth_texture, p, 0);
+    if (edges.params.w < 0.0) {
+        return -edges.params.w * (1.0 - d);
+    }
     return edges.params.w / max(d, 1e-7);
 }
 

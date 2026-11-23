@@ -10,7 +10,7 @@
 
 ## How to get to it (user POV)
 
-When a speech line is missing from the UI, check whether the authority recorded it (the `chronicle` row, private developer truth: read it as the owner) and whether the player received it (its `my_experience` row). Use a `client-*` scratch run launched and checked with the shared harness. Build the standalone probe as described in [SKILL.md](../SKILL.md).
+When a speech line is missing from the UI, check whether the authority recorded it (the `chronicle` row, private developer truth: read it as the owner) and whether the player received it (its `my_experience` row; the game client reads the same row from `experience_copy` while `lines_table_on` is on, [perception.md](perception.md#lines-as-rows-experience-incremental)). Use a `client-*` scratch run launched and checked with the shared harness. Build the standalone probe as described in [SKILL.md](../SKILL.md).
 
 ## Driving it with drive.py
 
@@ -40,7 +40,7 @@ After joining, check what the player received, with the player's identity and a 
   --as-player --seconds 0 --save speech-player
 ```
 
-The initial identity must equal the harness player's identity in `state.json`. What the player's character said or heard is in `initial.tables.my_experience`: its own line as kind `said` (`You said: …`), another's as kind `speech`. A line reaches `my_experience` at the character's next frame (within 100 ms), so query with `--seconds 1` or more right after speaking. The same query on `chronicle` with `--as-player` is refused: the chronicle is private.
+The initial identity must equal the harness player's identity in `state.json`. What the player's character said or heard is in `initial.tables.my_experience`: its own line as kind `said` (`You said: …`), another's as kind `speech`. A line reaches `my_experience` at the character's next frame (within 100 ms), so query with `--seconds 1` or more right after speaking. `--query "SELECT * FROM experience_copy"` gives the same lines as rows (`row` the line), as the game client reads them while the law is on. The same query on `chronicle` with `--as-player` is refused: the chronicle is private.
 
 To observe update callbacks on a small table:
 

@@ -677,7 +677,8 @@ pub struct Laws {
     /// progress as a player's command does (`human_act`): what was waiting is dropped and the act
     /// under way is broken off, unless it is a committed move (docs/INPUT_LATENCY.md, "Mind acts
     /// replace"). Only a batch with at least one act for the body replaces (a gaze change alone
-    /// does not). Off: a mind's acts wait for the act in progress to end, as before.
+    /// does not). On by default since 2026-11-22 (the owner's decision). Off: a mind's acts wait
+    /// for the act in progress to end, as before.
     pub mind_act_replaces: bool,
     /// A replacing act (a player's `human_act`; a mind's under `mind_act_replaces`) is checked
     /// before the act in progress is broken off: `act::begin` meets the act under way as it meets
@@ -693,7 +694,8 @@ pub struct Laws {
     /// thought). Needs `act_replace_checks`. Off: a replacing act's walks are not counted.
     pub act_turned_back: bool,
     /// The same act again (skill, target, item, amount, words) while it runs continues it instead
-    /// of starting it over (a held movement's time is renewed). Needs `act_replace_checks`.
+    /// of starting it over (a held movement's time is renewed). Needs `act_replace_checks`. On by
+    /// default since 2026-11-22 (the owner's decision).
     pub act_same_continues: bool,
     /// A move's check before it starts is given a context of the fields the check reads alone
     /// (its plan; docs/BATTLE_SCALE.md, battle-cheap path 1): the same answer, without gathering
@@ -743,6 +745,18 @@ pub struct Laws {
     /// the client reads it), none is written. Delivery only: the `my_combat` view shows the same
     /// either way.
     pub combat_feed_on: bool,
+    /// Whether a player's `my_experience` lines also reach its client as rows of the public
+    /// `experience_copy` table, filtered per client by row-level security (experience-incremental,
+    /// docs/HUMAN_FIGHTER_COST.md §2.5): copies written as lines are released and trimmed, so a new
+    /// line is one row, not the view re-run whole. Off (the kill switch), every copy goes in one
+    /// tick. Delivery only: the view shows the same either way.
+    pub lines_table_on: bool,
+    /// A diagnostic (off in play): every tick, each player's `experience_copy` rows are compared
+    /// with what `my_experience` returns it (`lines_table:differed` must stay 0).
+    pub lines_table_check: bool,
+    /// A measuring aid (off): each tick writes its count and its timestamp in µs to the private
+    /// `tick_mark` row, for a watcher to time the steps (docs/TICK_RATE.md "The step marker").
+    pub tick_marker_on: bool,
     /// Diagnostic: every alarm answer from a cell is also asked afresh, and a difference logged
     /// and counted (`alarm:differed`).
     pub alarm_cells_check: bool,
@@ -920,11 +934,11 @@ impl Default for Laws {
             latency_nav_from: 0,
             latency_fast: false,
             latency_acts: false,
-            mind_act_replaces: false,
+            mind_act_replaces: true,
             act_replace_checks: true,
             act_input_cost: true,
             act_turned_back: true,
-            act_same_continues: false,
+            act_same_continues: true,
             check_ctx_plan: true,
             check_ctx_check: false,
             alarm_cells: true,
@@ -934,6 +948,9 @@ impl Default for Laws {
             characters_table_on: true,
             fighter_tables_on: true,
             combat_feed_on: true,
+            lines_table_on: true,
+            lines_table_check: false,
+            tick_marker_on: false,
             alarm_cells_check: false,
             status_parts: true,
             status_parts_check: false,
@@ -3301,6 +3318,9 @@ impl Scripts {
             characters_table_on: flag("characters_table_on", l.characters_table_on),
             fighter_tables_on: flag("fighter_tables_on", l.fighter_tables_on),
             combat_feed_on: flag("combat_feed_on", l.combat_feed_on),
+            lines_table_on: flag("lines_table_on", l.lines_table_on),
+            lines_table_check: flag("lines_table_check", l.lines_table_check),
+            tick_marker_on: flag("tick_marker_on", l.tick_marker_on),
             alarm_cells_check: flag("alarm_cells_check", l.alarm_cells_check),
             status_parts: flag("status_parts", l.status_parts),
             status_parts_check: flag("status_parts_check", l.status_parts_check),
@@ -3552,7 +3572,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 26] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 29] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3563,6 +3583,10 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 26] = [
     ("fighter_tables_on", ValueOnly::Delivery),
     // views step 2: a player's combat feed as event rows (`combat.rs`, `combat_feed`).
     ("combat_feed_on", ValueOnly::Delivery),
+    // experience-incremental: a player's lines as rows (`frame.rs`, `experience_copy`), and its check.
+    ("lines_table_on", ValueOnly::Delivery),
+    ("lines_table_check", ValueOnly::Delivery),
+    ("tick_marker_on", ValueOnly::Delivery),
     // The battle laws' prototypes (docs/BATTLE_LAWS.md), live-tunable: the sweeps read `far_cap`
     // and `crowd_sweep_n`, the frames `crowd_frame_max_ms` and `far_motion_tol_m`, the wakes
     // `fighter_bystander_wakes`, each at its next tick.
@@ -4412,8 +4436,10 @@ mod tests {
         assert_eq!(l.witness_wake_ms, 500.0, "a bystander is woken at most twice a second (docs/BATTLE_SCALE.md)");
         assert!(!l.sweep_keep_memory && !l.sweep_keep_check, "sweeps read heard rows and health afresh by default");
         assert!(l.fighter_bystander_wakes, "a fighter is woken as any bystander by default (docs/COMBAT_PHASE.md)");
-        assert!(!l.mind_act_replaces && !l.latency_acts, "a mind's acts wait for the act in progress, unlogged, by default (docs/INPUT_LATENCY.md)");
-        assert!(l.act_replace_checks && l.act_input_cost && l.act_turned_back && !l.act_same_continues, "a replacing act is checked first, costs an input and is counted for turning back; the same act again restarts (docs/INPUT_LATENCY.md)");
+        assert!(l.mind_act_replaces && !l.latency_acts, "a mind's acts replace the act in progress, unlogged, by default since 2026-11-22 (docs/INPUT_LATENCY.md)");
+        assert!(l.act_replace_checks && l.act_input_cost && l.act_turned_back && l.act_same_continues, "a replacing act is checked first, costs an input and is counted for turning back; the same act again goes on (docs/INPUT_LATENCY.md)");
+        let d = Laws::default();
+        assert_eq!((d.mind_act_replaces, d.act_same_continues), (l.mind_act_replaces, l.act_same_continues), "Laws::default and the shipped script agree");
         assert_eq!((l.combat_eval_hz, l.combat_every_ticks()), (15.0, 4), "fighters evaluated every 4th tick by default");
         assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
         assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");
@@ -5607,6 +5633,15 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         // How a party reads its records.
         let regard = RecordFacts { kind: "regard".into(), parties: vec![("holder".into(), crate::records::COMMUNITY | 2), ("toward".into(), crate::records::COMMUNITY | 3)], me: "holder".into(), terms: serde_json::json!({"label": "rival town", "value": -35, "why": "the broken match"}).as_object().unwrap().clone(), ..Default::default() };
         assert_eq!(s.record_text(&regard).unwrap(), format!("your people hold {{id:{}}} as rival town (the broken match)", crate::records::COMMUNITY | 3));
+        // The battle fixture's stance (kind `stance`, no `why`): both sides named, from either side.
+        // Before, it read "stance: open", with neither the other side nor the label.
+        let stance = |me: &str| RecordFacts { kind: "stance".into(), status: "open".into(), open: true, parties: vec![("holder".into(), crate::records::COMMUNITY | 2), ("toward".into(), crate::records::COMMUNITY | 3)], me: me.into(), terms: serde_json::json!({"label": "enemy", "value": -50.0}).as_object().unwrap().clone(), ..Default::default() };
+        let (a, b) = (crate::records::COMMUNITY | 2, crate::records::COMMUNITY | 3);
+        assert_eq!(s.record_text(&stance("holder")).unwrap(), format!("your people, {{id:{a}}}, hold {{id:{b}}} as enemy"));
+        assert_eq!(s.record_text(&stance("toward")).unwrap(), format!("{{id:{a}}} holds your people, {{id:{b}}}, as enemy"));
+        let mut why = stance("holder");
+        why.terms.insert("why".into(), serde_json::json!("the raid on the ford"));
+        assert_eq!(s.record_text(&why).unwrap(), format!("your people, {{id:{a}}}, hold {{id:{b}}} as enemy (the raid on the ford)"));
     }
 
     /// An answer (accept, decline) takes exactly what it names, a trade offer or a proposal, or

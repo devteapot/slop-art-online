@@ -498,9 +498,9 @@ Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}
   {{\"can\": {{\"do\": \"eat\", \"item\": \"food\"}}}} whether a skill could go ahead now by the world's rules (what it takes is at hand; its target in sight), e.g. {{\"can\": {{\"do\": \"cook\", \"target\": {{\"nearest\": \"campfire\"}}, \"item\": \"fish\"}}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
 Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"sound\" (toward what you hear and cannot see, when sight depends on facing) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|family, stranger {stranger}, or any label you gave a relationship, e.g. partner)
-  {{\"nearest\": {{\"kind\": \"storage\", \"mine\": true}}}} {{\"nearest\": {{\"kind\": \"remains\", \"holds\": \"meat\"}}}} {{\"id\": 6}} {{\"named\": \"Oren\"}} {{\"place\": \"name of a place you remember\"}} {{\"at\": [x, y]}}
+  {{\"nearest\": {{\"kind\": \"storage\", \"mine\": true}}}} {{\"nearest\": {{\"kind\": \"remains\", \"holds\": \"meat\"}}}} {{\"id\": 6}} {{\"named\": \"Oren\"}} {{\"place\": \"a quoted name under Places you remember\"}} {{\"at\": [x, y]}}
   Kinds: berry_bush tree boulder reeds fishing_spot clay_bank | campfire shelter house storage sign gate remains | person deer wolf | grass forest (the nearest tile of that ground in sight).
-  People/creature/resource targets resolve only when currently in sight; places and coordinates always resolve. A do-node whose target is missing fails, so \"first\" moves on.
+  People/creature/resource targets resolve only when currently in sight. A place resolves only by a quoted name under Places you remember (\"home\" is your own home); coordinates always resolve: reach a resource listed under Resources you have seen, or any spot, with {{\"at\": [x, y]}}. A do-node whose target is missing fails, so \"first\" moves on.
 Skills:
 {}
 - {{\"routine\": \"name\"}} runs one of your routines (named graphs you keep and can rewrite; see below).
@@ -957,7 +957,10 @@ pub struct Ctx<'a> {
     pub mind: Vec<String>,
     pub memories: Vec<String>,
     pub judgments: Vec<String>,
+    /// One's named places (`place` rows), the names a `{"place": name}` target takes.
     pub places: Vec<String>,
+    /// The resources one remembers seeing (`seen_stock`), with where: not places (truthful-refusals).
+    pub seen: Vec<String>,
     pub experiences: Vec<String>,
     /// Agreements, demands and one's people's standing, as the world keeps them (its records).
     pub dealings: Vec<String>,
@@ -1022,6 +1025,12 @@ fn common(c: &Ctx, out: &mut Segments) {
     for p in &c.places {
         out.push(Stability::Character, format!("- {p}\n"));
     }
+    if !c.seen.is_empty() {
+        out.push(Stability::Dynamic, "\n# Resources you have seen (not places: reach one with {\"at\": [x, y]})\n");
+        for p in &c.seen {
+            out.push(Stability::Dynamic, format!("- {p}\n"));
+        }
+    }
 }
 
 /// A body's needs and health at one moment, with how they are changing (per minute).
@@ -1079,12 +1088,108 @@ pub fn is_night(hour: f32) -> bool {
 
 /// The fast lane's system prompt (docs/FAST_LANE.md): the person, the world's rules (physics) and
 /// the graph grammar, and the four answers it may give. No acts, no dealings, no tactics: what to
-/// do is the character's own.
+/// do is the character's own. In the frame the service runs under (`LIVING_FAST_FRAME`).
+#[cfg(test)]
 pub fn fast_system() -> String {
-    fast_system_in(frame())
+    fast_system_v(fast_frame())
+}
+
+/// Which frame the fast lane's prompt is written in (`LIVING_FAST_FRAME`, docs/FAST_LANE_FRAME.md):
+/// `balanced` (the default since battle-frame) shows the ways of answering a fight alike, keeps
+/// the fight one has beneath any line one adds, and tells the asker's own felt body; `first` is
+/// the frame every trial before battle-frame ran, byte for byte, kept for replays and comparisons.
+/// It changes no rule, no reply the mind accepts, and nothing outside the fast lane's own prompt;
+/// with the world's `fast_lane_on` off (the shipped law) no fast prompt is ever sent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FastFrame {
+    First,
+    Balanced,
+}
+
+impl FastFrame {
+    pub fn parse(v: Option<&str>) -> Result<FastFrame, String> {
+        match v.map(str::trim) {
+            None | Some("") | Some("balanced") => Ok(FastFrame::Balanced),
+            Some("first") => Ok(FastFrame::First),
+            Some(other) => Err(format!("LIVING_FAST_FRAME={other}: expected first or balanced")),
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            FastFrame::First => "first",
+            FastFrame::Balanced => "balanced",
+        }
+    }
+}
+
+static FAST_FRAME: std::sync::OnceLock<FastFrame> = std::sync::OnceLock::new();
+
+/// The fast frame this service runs under, read once from `LIVING_FAST_FRAME` (main checks it at start).
+pub fn fast_frame() -> FastFrame {
+    *FAST_FRAME.get_or_init(|| FastFrame::parse(std::env::var("LIVING_FAST_FRAME").ok().as_deref()).unwrap_or(FastFrame::Balanced))
+}
+
+/// The fast system prompt in frame `f`.
+pub fn fast_system_v(f: FastFrame) -> String {
+    match f {
+        FastFrame::First => fast_system_in(frame()),
+        FastFrame::Balanced => fast_balanced_frame(frame()) + "\n\n" + &*world_rules() + "\n\n" + grammar().as_str(),
+    }
+}
+
+/// The balanced frame's ways of answering a fight, side by side, each as short as the others:
+/// keeping, and one line put first in the `combat` branch for each of the other five. Each line
+/// is a legal graph node (test `the_balanced_frame_shows_six_ways_alike`); its numbers show the
+/// form only. These lines are the only fight-specific text the balanced frame adds.
+pub const FAST_WAYS: [(&str, &str); 6] = [
+    ("keep it as it is", "{\"keep\": true, \"thought\": \"...\"}"),
+    ("adjust your timing", "{\"if\": {\"doing\": {\"is\": \"hostile\", \"phase\": \"about to release\", \"at_me\": true}}, \"then\": {\"do\": \"block\"}}"),
+    ("change whom you fight", "{\"if\": {\"sees\": \"attacker\"}, \"then\": {\"do\": \"strike\", \"target\": \"attacker\"}}"),
+    ("press an opening", "{\"if\": {\"doing\": {\"phase\": \"recovering\", \"within\": 2.5}}, \"then\": {\"do\": \"strike\", \"target\": \"attacker\", \"run\": true}}"),
+    ("make room and re-enter", "{\"if\": {\"count\": {\"of\": \"person\", \"within\": 3, \"at_least\": 3}}, \"then\": {\"do\": \"back_off\", \"target\": \"attacker\", \"distance\": 4}}"),
+    ("break contact", "{\"if\": {\"health\": {\"below\": 20}}, \"then\": {\"do\": \"flee\", \"target\": \"attacker\"}}"),
+];
+
+/// The balanced fast frame's own text (`LIVING_FAST_FRAME=balanced`): the first frame's text with keeping
+/// listed first, the triggering event set apart from what else is perceived, the fight one has
+/// kept beneath an added line, and the six ways of [`FAST_WAYS`].
+fn fast_balanced_frame(frame: Frame) -> String {
+    let ways: Vec<String> = FAST_WAYS.iter().map(|(name, line)| format!("- {name}: {line}")).collect();
+    shared(format!(
+        "{} Stay in character: your personality, values, relationships and memories are yours. \
+Something has just happened to you (see Why now). Why now is that one event as you perceived it; What has just happened, and How you are now when it is given, are what else you perceive. \
+Your body goes on doing what your top level and your routines say while you think; \
+what you answer changes them from the next moment on, not the moment that is passing. \
+Your `combat` branch stays as it is unless you change it. \
+You may keep everything as it is, rewrite your `combat` branch, rewrite one of the routines listed under Your routines, or switch your `combat` branch to one of them. \
+A change can be one line put first in your `combat` branch, with the lines it has now (under Your top level) written out again beneath it: \
+{{\"first\": [the new line, then your branch's own lines]}}. \
+Six ways, side by side, each as short as the others; none is the right one, the numbers only show the form, and which fits is yours to judge from who you are and what you perceive:\n{}\n\
+Use only what you have perceived and what you know how to do. Refer to people by the ids you see in your acts and your memory; the ids are handles, never words: when you speak, name people by their name or as you would describe them. Reply with ONE JSON object, one of:\n\
+{{\"keep\": true, \"thought\": \"one sentence, in your words\"}}\n\
+{{\"patch\": {{\"label\": \"combat\", \"graph\": {{...}}}}, \"thought\": \"...\"}}\n\
+{{\"routine\": {{\"name\": \"one of your routines\", \"graph\": {{...}}}}, \"thought\": \"...\"}}\n\
+{{\"switch\": \"one of your routines\", \"thought\": \"...\"}}",
+        opening(frame, THINK_OPENING),
+        ways.join("\n"),
+    ))
+}
+
+/// The fast lane's frame text alone, in fast frame `f`: the system prompt is this, then the
+/// world's rules and the graph grammar, the same bytes in either frame.
+pub fn fast_frame_text(f: FastFrame, frame: Frame) -> String {
+    match f {
+        FastFrame::First => fast_first_frame(frame),
+        FastFrame::Balanced => fast_balanced_frame(frame),
+    }
 }
 
 fn fast_system_in(frame: Frame) -> String {
+    fast_first_frame(frame) + "\n\n" + &*world_rules() + "\n\n" + grammar().as_str()
+}
+
+fn fast_first_frame(frame: Frame) -> String {
     shared(format!(
         "{} Stay in character: your personality, values, relationships and memories are yours. \
 Something has just happened to you (see Why now). Your body goes on doing what your top level and your routines say while you think; \
@@ -1096,7 +1201,7 @@ Use only what you have perceived and what you know how to do. Refer to people by
 {{\"switch\": \"one of your routines\", \"thought\": \"...\"}}\n\
 {{\"keep\": true, \"thought\": \"...\"}}",
         opening(frame, THINK_OPENING),
-    )) + "\n\n" + &*world_rules() + "\n\n" + grammar().as_str()
+    ))
 }
 
 /// The fast lane's user prompt: who the character is (with its own moves' timings), its top
@@ -1112,6 +1217,17 @@ pub fn fast_user(reason: &str, persona: &str, experiences: &[String], plan: &str
     out.push_str(&format!("\n# Why now\n{reason}\n\n# What has just happened (oldest first)\n"));
     for e in experiences {
         out.push_str(&format!("- {e}\n"));
+    }
+    out
+}
+
+/// The fast user prompt in frame `f`. The first frame's is [`fast_user`] exactly. The balanced
+/// frame's adds, last, how the asker's body feels now (`felt`, the words its think prompt has
+/// under "How your body feels"), when the mind knows it: its own body, nothing of anyone else.
+pub fn fast_user_v(f: FastFrame, reason: &str, persona: &str, experiences: &[String], plan: &str, outline: &str, repertoire: &str, felt: &str) -> String {
+    let mut out = fast_user(reason, persona, experiences, plan, outline, repertoire);
+    if f == FastFrame::Balanced && !felt.trim().is_empty() {
+        out.push_str(&format!("\n# How you are now\nHow your body feels: {}\n", felt.trim()));
     }
     out
 }
@@ -1327,6 +1443,8 @@ pub struct TalkUser<'a> {
     /// The places one knows and the resources one remembers (`Minds::places`), with the way
     /// from where one stands when that is known (`placed`); empty: no section (talk-places).
     pub places: &'a [String],
+    /// The resources one remembers seeing, likewise with the way (not places; truthful-refusals).
+    pub seen: &'a [String],
     pub placed: bool,
     /// What came of one's own last words when the other could not have heard them (the
     /// authority's `silence`, verbatim; reply-timing): told in place of a line to answer.
@@ -1367,6 +1485,12 @@ pub fn talk_user(t: &TalkUser) -> String {
     if !t.places.is_empty() {
         out.push(Stability::Dynamic, if t.placed { "\n# Places you know, from where you stand\n" } else { "\n# Places you know\n" });
         for p in t.places {
+            out.push(Stability::Dynamic, format!("- {p}\n"));
+        }
+    }
+    if !t.seen.is_empty() {
+        out.push(Stability::Dynamic, if t.placed { "\n# Resources you have seen, from where you stand\n" } else { "\n# Resources you have seen\n" });
+        for p in t.seen {
             out.push(Stability::Dynamic, format!("- {p}\n"));
         }
     }
@@ -1411,7 +1535,7 @@ mod tests {
     /// memory and never spoken (fix-spoken-ids: r2e's minds said three lines with them).
     #[test]
     fn every_speaking_mind_is_told_ids_are_never_spoken() {
-        for (purpose, text) in [("think", think_system()), ("deliberate", deliberate_system()), ("fast", fast_system()), ("talk", talk_system())] {
+        for (purpose, text) in [("think", think_system()), ("deliberate", deliberate_system()), ("fast", fast_system()), ("fast first", fast_system_v(FastFrame::First)), ("talk", talk_system())] {
             assert_eq!(text.matches(IDS_NOT_SPOKEN).count(), 1, "{purpose}");
         }
         assert!(!IDS_NOT_SPOKEN.contains('#'), "one general sentence, no example");
@@ -1428,7 +1552,7 @@ mod tests {
         let t = |missed| {
             talk_user(&TalkUser {
                 name: "Agnes", identity: "", pacing: "", other: "Fern", other_id: 7, other_body: "", feeling: "", mind: &[], memories: &[], lately: &[], earlier: None,
-                scene: "Now.", body: "", conversation: &["You: “Morning!”".into()], heard: "Hello Agnes", how: "", between: &[], places: &[], placed: false, missed,
+                scene: "Now.", body: "", conversation: &["You: “Morning!”".into()], heard: "Hello Agnes", how: "", between: &[], places: &[], seen: &[], placed: false, missed,
             })
         };
         let missed = t(Some(silence));
@@ -1519,6 +1643,7 @@ mod tests {
             memories: vec![format!("dynamic-memory-{name}")],
             judgments: vec![format!("dynamic-stance-{name}")],
             places: vec![format!("place-{name}")],
+            seen: vec![format!("dynamic-seen-{name}")],
             experiences: vec![format!("dynamic-experience-{name}")],
             dealings: vec![format!("dynamic-dealing-{name}")],
             cues: None,
@@ -1596,6 +1721,7 @@ mod tests {
                     between: &["dynamic-offer".into()],
                     // Dynamic: the way to each place depends on where one stands now.
                     places: &["dynamic-place".into()],
+                    seen: &["dynamic-seen".into()],
                     placed: true,
                     missed: None,
                 }),
@@ -1849,6 +1975,26 @@ mod tests {
         }
         for needed in ["AI playing", "other players, human and AI", "body, needs and death are real", "world's rules hold", "your own choice", "says or writes", "out of character"] {
             assert!(PLAYER_FRAME.contains(needed), "the frame lacks {needed:?}");
+        }
+    }
+
+    /// Named places and remembered resources are listed apart, and the grammar says which
+    /// target reaches each (truthful-refusals): a place only by its quoted name, a resource by
+    /// its position.
+    #[test]
+    fn places_and_seen_resources_are_apart() {
+        for purpose in ["think", "deliberate", "consolidate"] {
+            let (system, user) = fixture(purpose, "Aria", "person");
+            let places = user.split("# Places you remember\n").nth(1).unwrap().split("\n#").next().unwrap();
+            assert!(places.contains("- place-Aria") && !places.contains("seen"), "{purpose}: {places}");
+            let seen = user.split("# Resources you have seen (not places: reach one with {\"at\": [x, y]})\n").nth(1).unwrap_or_else(|| panic!("{purpose}: {user}"));
+            assert!(seen.starts_with("- dynamic-seen-Aria\n"), "{purpose}: {seen}");
+            // The graph grammar is the compile's (and the fast lane's) to read.
+            if purpose == "deliberate" {
+                assert!(system.contains("A place resolves only by a quoted name under Places you remember"), "{purpose}");
+                assert!(system.contains("reach a resource listed under Resources you have seen, or any spot, with {\"at\": [x, y]}"), "{purpose}");
+                assert!(!system.contains("places and coordinates always resolve"), "{purpose}");
+            }
         }
     }
 

@@ -825,6 +825,52 @@ def dealings_case(run):
             'deliberations_with_dealings': len(shown), 'thoughts_before': accepted_before, 'asked_by_the_rules': asked}
 
 
+@case('battle-stance')
+def battle_stance_case(run):
+    """A side's war reaches its members' minds (docs/BATTLE_LAWS.md, sides-layout-seed): the battle
+    fixture's two `stance` records (`spawn_battle_sides_layout`, an `enemy` stance each way between
+    `Side A` and `Side B`) are worded by the script's `record_text`, naming both sides. Before, they
+    read "stance: open" (E5's prompts), so a minded fighter was never told whom its side fought.
+    On main the fixture's fighters have no mind (E5 minded them with heed-e4's `sides_minded` law),
+    so a minded adult founds `Side A` first and the fixture takes that community for its side. The
+    adult, held still, is asked by a think node; one of its requests shows both records among its
+    dealings, worded, and no bare "stance: open"."""
+    people = prepare(run)
+    me = people[0]['id']
+    run.admin('set_behavior', me, json.dumps({'wait': 120}))
+    if run.sql(f'SELECT * FROM membership WHERE member = {me}', 'membership-before'):
+        run.admin('mind_act', me, [json.dumps({'do': 'leave'})], 'verify-minds')
+        run.wait(lambda: not run.sql(f'SELECT * FROM membership WHERE member = {me}', 'membership-left'), 'the adult left its community', 30)
+    run.admin('mind_act', me, [json.dumps({'do': 'found', 'text': 'Side A'})], 'verify-minds')
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {me}', 'membership-founded'), 'the adult founded Side A', 30)
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'before-battle')}
+    run.admin('spawn_battle_sides_layout', 2, 2, 7, 0)
+    made = {c['name']: c['id'] for c in run.sql('SELECT id, name FROM character', 'fighters') if c['id'] not in before}
+    assert set(made) == {'A1', 'B1'}, made
+    for f in made.values():
+        run.admin('set_behavior', f, json.dumps({'wait': 120}))
+    communities = {c['id']: c['name'] for c in run.sql('SELECT * FROM community', 'communities')}
+    mine = run.sql(f'SELECT * FROM membership WHERE member = {me}', 'membership-mine')[0]
+    assert communities.get(mine['community']) == 'Side A', (mine, communities)
+    models = model(run, {'replies': {'think': {'thought': 'Side B is near.', 'intend': ['stand still'], 'say': None}, 'deliberate': basic_reply()}})
+    run.start(models, [me])
+    run.admin('set_behavior', me, json.dumps({'think': 'Where do my people stand? verify battle stance'}))
+    holds = 'your people, Side A, hold Side B as enemy'
+    held = 'Side B holds your people, Side A, as enemy'
+    requests = run.directory / 'fake-requests.jsonl'
+
+    def shown():
+        sent = shared.rows(requests) if requests.exists() else []
+        return [e for e in sent if "Your dealings and your people's standing" in json.dumps(e) and holds in json.dumps(e)]
+    got = run.wait(shown, 'a request with the worded stance among its dealings', 150)
+    text = json.dumps(got[0], ensure_ascii=False)
+    assert held in text, 'both records are worded (the one Side B holds toward A as well)'
+    assert 'stance: open' not in text, 'no bare "stance: open"'
+    start = text.find("Your dealings and your people's standing")
+    lines = [l.strip() for l in text[start:start + 800].split('\\n')[1:6] if l.strip().startswith('-')]
+    return {'status': 'pass', 'member': me, 'fighters': made, 'purpose': got[0].get('purpose'), 'dealings_lines': lines, 'requests_with_it': len(got)}
+
+
 @case('answers')
 def answers_case(run):
     """A mind answers by id (docs/WORLD_RULES.md, "Answering"): another character proposes terms
@@ -1287,6 +1333,18 @@ def fast_lane_case(run):
     assert blows and any(b in why for b in blows), {'why': why, 'blows': blows}
     assert not COUNT_WORDS.search(why) and not COUNT_WORDS.search(text.split('# What has just happened')[1]), 'a count or "again" in the fast prompt'
     assert any('combat branch rewritten' in t['summary'] for t in fast_thoughts()), fast_thoughts()
+    # The default frame is the balanced one (LIVING_FAST_FRAME unset, docs/FAST_LANE_FRAME.md):
+    # Why now set apart, the six ways side by side, keep first among the replies, and How you
+    # are now last: the eye's own felt body, one line, no number and no count.
+    system = '\n'.join(str(m.get('content', '')) for m in first['body'].get('messages', []) if m.get('role') == 'system')
+    assert 'Something has just happened to you (see Why now). Why now is that one event as you perceived it' in system, system[:800]
+    assert 'Six ways, side by side' in system and system.index('- keep it as it is') < system.index('- break contact'), system[:2000]
+    assert system.split('Reply with ONE JSON object, one of:\n')[1].startswith('{"keep": true'), 'keep first among the replies'
+    assert text.index('# What has just happened') < text.index('# How you are now'), text[-800:]
+    felt = text.split('# How you are now\n')[1]
+    assert felt.startswith('How your body feels: ') and felt.strip().count('\n') == 0, felt
+    for word in ('health:', 'stamina', 'people', 'enemies'):
+        assert word not in felt.lower(), f'{word!r} in How you are now: no number or count is told'
     time.sleep(5.5)
     in_gap = [x for x in requests() if x['at_ms'] < first['at_ms'] + 5500]
     assert len(in_gap) == 1, f'{len(in_gap)} fast requests inside the 6 s gap'
@@ -1308,6 +1366,43 @@ def fast_lane_case(run):
     run.admin('set_behavior', other, json.dumps({'wait': 300}))
     (run.directory / 'fast-prompt.txt').write_text(text)
     return {'status': 'pass', 'fast_requests': len(requests()), 'refused': [t['summary'] for t in refused][:2], 'why': why.strip()[:200]}
+
+
+@case('fast-frame')
+def fast_frame_case(run):
+    """The first fast frame on request (`LIVING_FAST_FRAME=first`, docs/FAST_LANE_FRAME.md), as
+    every trial before battle-frame ran it: one blow taken issues one fast request whose system
+    prompt lists no ways (rewrite, routine, switch, keep: patch first among the replies) and whose
+    user prompt has no How you are now; the reply's `combat` branch is installed through
+    `mind_patch` as any patch is. The balanced default is checked by `fast-lane`."""
+    people = prepare(run)
+    eye, other = [p['id'] for p in people]
+    e = wall_spots(run)['open']
+    for who in (eye, other):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    run.admin('place_at', eye, *e)
+    run.admin('place_at', other, e[0] + 1.2, e[1])
+    run.admin('grant_items', other, 'spear', 1)
+    run.admin('set_world_law', 'fast_lane_on', 'true')
+    script = {'replies': {'think': {'thought': 'Someone is hitting me.', 'intend': ['stand my ground'], 'say': None}, 'deliberate': basic_reply()},
+              'rules': [{'purpose': 'fast', 'reply': FAST_PATCH, 'times': -1}]}
+    run.start(model(run, script), [eye], extra_env={'LIVING_RETHINK_CONFIG': fast_config(run), 'LIVING_FAST_FRAME': 'first'})
+    requests = lambda: [x for x in shared.rows(run.directory / 'fake-requests.jsonl') if x['purpose'] == 'fast']
+    part = lambda x, role: '\n'.join(str(m.get('content', '')) for m in x['body'].get('messages', []) if m.get('role') == role)
+    time.sleep(3.0)
+    run.admin('set_behavior', other, json.dumps({'first': [{'do': {'skill': 'attack', 'target': {'id': eye}}}, {'wait': 0.3}]}))
+    first = run.wait(lambda: requests() or None, 'a fast request after a blow', 30)[0]
+    run.wait(lambda: [b for b in run.sql(f'SELECT * FROM brain WHERE id = {eye}', 'brain-patched') if b['source'] == 'fast' and '"wait":0.7' in b['graph'].replace(' ', '')] or None, 'the first-frame reply installed', 20)
+    system, user = part(first, 'system'), part(first, 'user')
+    assert 'You may rewrite your `combat` branch, rewrite one of the routines listed under Your routines, switch your `combat` branch to one of them, or keep everything as it is.' in system, system[:800]
+    assert 'Six ways, side by side' not in system and 'Why now is that one event' not in system, system[:1500]
+    assert system.split('Reply with ONE JSON object, one of:\n')[1].startswith('{"patch"'), 'the first frame lists the patch first'
+    assert user.startswith('# Who you are') and '# How you are now' not in user, user[-600:]
+    fast = [t for t in run.private(f'SELECT * FROM thought WHERE actor = {eye}', 'thoughts') if t['kind'] == 'fast']
+    assert any('combat branch rewritten' in t['summary'] for t in fast), fast
+    run.admin('set_behavior', other, json.dumps({'wait': 300}))
+    (run.directory / 'fast-prompt.txt').write_text(system[:6000] + '\n----\n' + user)
+    return {'status': 'pass', 'fast_requests': len(requests())}
 
 
 @case('fast-takeover')
@@ -2411,11 +2506,13 @@ def talk_places_case(run):
     knows a place "verify well" at tile 20 (admin `mind_update`, as its mind would write it).
 
     1. A asks H "Where can I find berries around here?" (admin `mind_say`). H's talk prompt has
-       "# Places you know, from where you stand" with `"verify well" at [x, y], 16 m east` and
+       "# Places you know, from where you stand" with `"verify well" at [x, y], 16 m east` and,
+       apart since truthful-refusals, "# Resources you have seen, from where you stand" with
        `3 berry bush around [x, y], <N> m <dir>: seen day …` (H's `seen_stock` row), from where H
        stands (`mind_reach`, reply-timing; before, the `standing` row `mind_where` wrote), and
        its "# Now" says H stands still and where A is.
-    2. H's think prompt's "# Places you remember" has the well's coordinates without a way, and
+    2. H's think prompt's "# Places you remember" has the well's coordinates without a way and no
+       bush (named places only), "# Resources you have seen (not places: …)" has the bushes, and
        its scene's `places` has the well with the way (`dir`, `dist`, known-ground's remembered
        places): the way is given once, by the scene.
     3. H steps off again; A gathers the three (admin `mind_act`); H comes back. Its row is gone,
@@ -2471,13 +2568,16 @@ def talk_places_case(run):
     body = next(b for b in run.private('SELECT id, x, y FROM body', 'bodies-h') if b['id'] == h)
     here = (body['x'], body['y'])
     way = lambda to: way_words(here, to)
-    section = talk1.split('# Places you know, from where you stand\n', 1)[1].split('\n#', 1)[0] if '# Places you know, from where you stand' in talk1 else ''
+    part = lambda text, head: text.split(head + '\n', 1)[1].split('\n#', 1)[0] if head + '\n' in text else ''
+    section = part(talk1, '# Places you know, from where you stand')
+    seen1 = part(talk1, '# Resources you have seen, from where you stand')
     well_line = f'"verify well" at [{well[0]:.0f}, {well[1]:.0f}], {way(well)}'
     bush_head = f'3 berry bush around [{first["x"]:.0f}, {first["y"]:.0f}], {way((first["x"], first["y"]))}: seen day '
     run.admin('set_behavior', h, json.dumps({'think': 'I finished my plan. verify talk-places think'}))
     think = run.wait(lambda: [sent_text(e) for e in requests('think') if 'verify talk-places think' in sent_text(e)], 'H think prompt', 60)[0]
     (run.directory / 'prompt-think.txt').write_text(think)
-    remember = think.split('# Places you remember\n', 1)[1].split('\n#', 1)[0] if '# Places you remember' in think else ''
+    remember = part(think, '# Places you remember')
+    seen_think = part(think, '# Resources you have seen (not places: reach one with {"at": [x, y]})')
     # The scene's own entry for the well (one JSON object in the prompt's scene).
     scene_well = None
     for m in re.finditer(r'\{[^{}]*"verify well"[^{}]*\}', think):
@@ -2500,15 +2600,16 @@ def talk_places_case(run):
     time.sleep(1.0)
     talk2 = talk_prompt('verify places two')
     (run.directory / 'prompt-talk-2.txt').write_text(talk2)
-    section2 = talk2.split('# Places you know, from where you stand\n', 1)[1].split('\n#', 1)[0] if '# Places you know, from where you stand' in talk2 else ''
+    section2 = part(talk2, '# Resources you have seen, from where you stand')
     checks = {
         'three_bushes_placed': len(ours) == 3,
         'h_remembers_the_three': first['count'] == 3 and first['gone_ms'] == 0,
         'talk_prompt_lists_places_from_where_h_stands': bool(section),
         'now_says_h_stands_still_and_where_a_is': re.search(r'You are standing still[ .]', talk1) is not None and re.search(r'\n.+ is \d+ m \w+ of you\.|\n.+ is right beside you\.', talk1) is not None,
         'the_well_with_its_way': any(l.startswith('- ' + well_line) for l in section.splitlines()),
-        'the_bushes_with_their_way_and_when_seen': any(l.startswith('- ' + bush_head) for l in section.splitlines()),
+        'the_bushes_with_their_way_and_when_seen_apart': any(l.startswith('- ' + bush_head) for l in seen1.splitlines()) and 'berry bush' not in section,
         'think_prompt_places_without_the_way': any(l == f'- "verify well" at [{well[0]:.0f}, {well[1]:.0f}]' for l in remember.splitlines()),
+        'think_prompt_bushes_apart_from_places': 'berry bush around [' in seen_think and 'berry bush' not in remember,
         'think_scene_gives_the_way_once': scene_well is not None and f'{scene_well.get("dist", -1):.0f} m {scene_well.get("dir")}' == way(well)
                                           and not any(way(well) in l for l in remember.splitlines()),
         'unchanged_while_away': away is not None and away['gone_ms'] == 0 and away['count'] == 3,
@@ -2516,7 +2617,7 @@ def talk_places_case(run):
         'talk_prompt_says_gone_when_last_here': any('berry bush around [' in l and ': gone when you were last here, day ' in l and '(3 seen day ' in l for l in section2.splitlines()),
     }
     result = {'h': h, 'a': a, 'ours': ours, 'well': well, 'here': here, 'first': first, 'away': away, 'gone': gone,
-              'section': section, 'remember': remember, 'scene_well': scene_well, 'section2': section2, 'checks': checks}
+              'section': section, 'seen': seen1, 'remember': remember, 'seen_think': seen_think, 'scene_well': scene_well, 'section2': section2, 'checks': checks}
     (run.directory / 'talk-places.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))
     assert all(checks.values()), checks
     return {'status': 'pass', **result}
@@ -4550,7 +4651,7 @@ def act_repair_case(run, case):
     assert len(repair_calls) == len(spoken) == len(speech) == 1, (repair_calls, spoken, speech)
     assert [json.loads(a) for a in original_attempt['acts']] == [original, gift], original_attempt
     refusal = original_attempt['refused'][0]['refusal']
-    assert 'unknown skill `go`' in refusal and 'goto' in refusal.partition('Valid one-off act names: ')[2].split(', '), refusal
+    assert '`go` is not a skill' in refusal and 'goto' in refusal.partition('Valid one-off act names: ')[2].split(', '), refusal
     messages = repair_calls[0]['request']['messages']
     assert json.loads(messages[-1]['content'])['rejected'] == original_attempt['refused']
     assert [json.loads(a) for a in retry['acts']] == [replacement], retry

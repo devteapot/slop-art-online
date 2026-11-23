@@ -74,9 +74,12 @@ def build_stepping(seed):
     env = dict(os.environ, LIVING_SEED=seed, LIVING_GENESIS_STEPPING="1", CARGO_TARGET_DIR=str(target))
     for name in ("RUSTC_WRAPPER", "LIVING_NO_TICK"):
         env.pop(name, None)
-    r = subprocess.run(["cargo", "build", "--manifest-path", str(ROOT / "living/Cargo.toml"), "-p", "living-authority",
+    # Through gate_pause.sh: a build started beside a scene gate waits and pauses while the gate
+    # holds gate.lock; one the gate starts itself (scene_gate.py's genesis check) is never paused
+    # (docs/TOOLING.md, "Heavy work during a gate").
+    r = subprocess.run(["bash", str(ROOT / "living/tools/gate_pause.sh"), "--", "cargo", "build", "--manifest-path", str(ROOT / "living/Cargo.toml"), "-p", "living-authority",
                         "--target", "wasm32-unknown-unknown", "--release"], cwd=ROOT, env=env, capture_output=True, text=True,
-                       timeout=3600)  # cwd: cargo reads the checkout's .cargo/config.toml (path remapping) from it
+                        timeout=3600 + 5400)  # the build, plus gate_pause.sh's longest pause; cwd: cargo reads the checkout's .cargo/config.toml (path remapping) from it
     if r.returncode:
         raise SystemExit(f"genesis_fuel: the stepping build of {seed} failed:\n{r.stderr[-2000:]}")
     return target / "wasm32-unknown-unknown/release/living_authority.wasm"

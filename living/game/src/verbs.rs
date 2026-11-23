@@ -1744,7 +1744,7 @@ fn outcomes(net: NonSend<Net>, scene: NonSend<Scene>, time: Res<Time>, mut v: Re
     }
     v.errors_seen = errs.len();
     let oldest = v.pending.iter().map(|p| p.sent_ms).fold(f64::MAX, f64::min);
-    let mut fresh: Vec<Experience> = conn.db.my_experience().iter().filter(|e| e.observer == me && e.kind == "act" && !v.seen.contains(&e.id)).collect();
+    let mut fresh: Vec<Experience> = crate::net::my_lines(&conn.db).into_iter().filter(|e| e.observer == me && e.kind == "act" && !v.seen.contains(&e.id)).collect();
     fresh.sort_by_key(|e| e.at_ms);
     for e in fresh {
         v.seen.insert(e.id);
@@ -1768,7 +1768,7 @@ fn outcomes(net: NonSend<Net>, scene: NonSend<Scene>, time: Res<Time>, mut v: Re
     }
     // What the world's rules tell me of my dealings (an agreement kept or broken, a demand paid),
     // from now on: rows already there when the client connected are history.
-    let told: Vec<Experience> = conn.db.my_experience().iter().filter(|e| e.observer == me && e.kind == "record" && !v.seen.contains(&e.id)).collect();
+    let told: Vec<Experience> = crate::net::my_lines(&conn.db).into_iter().filter(|e| e.observer == me && e.kind == "record" && !v.seen.contains(&e.id)).collect();
     for e in told {
         v.seen.insert(e.id);
         if (e.at_ms as f64) + 5_000.0 >= now_ms {
@@ -1780,7 +1780,7 @@ fn outcomes(net: NonSend<Net>, scene: NonSend<Scene>, time: Res<Time>, mut v: Re
         v.toasts.drain(..n - 3);
     }
     if v.seen.len() > 1024 {
-        let live: HashSet<u64> = conn.db.my_experience().iter().map(|e| e.id).collect();
+        let live: HashSet<u64> = crate::net::my_lines(&conn.db).into_iter().map(|e| e.id).collect();
         v.seen.retain(|id| live.contains(id));
     }
 }
