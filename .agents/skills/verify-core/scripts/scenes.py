@@ -295,7 +295,10 @@ def seize(s):
     s.rows(f"SELECT kind, text FROM experience WHERE observer = {witness}", "witness-feedback")
     s.story("seize", a, "chronicle")
     previous = max(r["at_ms"] for r in s.story("yield", b))
-    s.graph(b, {"seq": [{"do": "yield", "target": {"id": a}}, {"wait": 120}]})
+    # b keeps yielding (again every 5 s): a yield holds 20 s (`yield_ms`), and under load the blows
+    # to death took longer than that once (gate-1123072442-8633b3: the kill 21.7 s after the attack
+    # began, "Walker1 killed Walker2" with no "who had yielded").
+    s.graph(b, {"first": [{"seq": [{"do": "yield", "target": {"id": a}}, {"wait": 5}]}]})
     s.wait(lambda: max(r["at_ms"] for r in s.story("yield", b)) > previous, seconds=30)
     s.call("grant_items", a, "spear", 1)
     # No mode: an attack's blows go on to death, a yield does not hold them back, and striking
@@ -2113,7 +2116,7 @@ def flee_wall(s):
             # The threat walks after the fleer (held by sight: out of sight, to where it saw it).
             s.graph(t, {"seq": [{"do": {"skill": "goto", "target": {"id": f}}}, {"wait": 300}]})
         t0 = time.monotonic()
-        track, seen, goal = [], False, None
+        track, seen, goal, steps = [], False, None, []
         # Distances while the flight is under way (a chaser closes in again once it stops).
         while time.monotonic() - t0 < 15:
             gap = apart(s, f, t)
@@ -2124,6 +2127,7 @@ def flee_wall(s):
             if seen and not fleeing:
                 break
             track.append(gap)
+            steps.append((body_at(s, f), body_at(s, t)))
             time.sleep(0.3)
         track = track or [apart(s, f, t)]
         # A plan step's failure is told at the graph's next evaluation.
@@ -2134,8 +2138,14 @@ def flee_wall(s):
         # Where the flight took it, from where the threat stood when it began (the samples are
         # sparse on a loaded server, and a chaser closes in again once the flight stops).
         got = round(math.dist(body_at(s, f), began), 2)
-        falls = [(a, b) for a, b in zip(track, track[1:]) if b < a - 1.0]
-        results.append({"mode": mode, "spot": [px, py], "way": round(d, 3), "fleer": f, "threat": t, "start": start, "end": max(track), "got": got, "cornered": cornered, "seen_at_end": seen_at_end, "falls": falls, "goal": goal, "told": told[-4:], "track": track})
+        # The fleer's own move between two samples, held against where the threat stood at the first:
+        # a chaser walking after it closes the gap by its own walk (about a metre at an inside
+        # corner, where the flight must go sideways), which sparse samples on a loaded server read as
+        # one fall (gate-1123054454-95edfc: 5.5 -> 4.47 m in one of 17 samples, against 23-26 elsewhere).
+        falls = [(round(math.dist(f0, th), 2), round(math.dist(f1, th), 2)) for (f0, th), (f1, _) in zip(steps, steps[1:])
+                 if math.dist(f1, th) < math.dist(f0, th) - 1.0]
+        results.append({"mode": mode, "spot": [px, py], "way": round(d, 3), "fleer": f, "threat": t, "start": start, "end": max(track), "got": got, "cornered": cornered, "seen_at_end": seen_at_end, "falls": falls, "goal": goal, "told": told[-4:], "track": track,
+                        "steps": [[[round(v, 2) for v in a], [round(v, 2) for v in b]] for a, b in steps]})
         s.graph(f, {"wait": 300})
         s.graph(t, {"wait": 300})
     (s.out / f"{s.name}-flights.json").write_text(json.dumps(results, indent=2) + "\n")
@@ -8155,7 +8165,13 @@ def truthful_refusals(s):
         s.expect("graph leaf: stuck, 'goto: you know no place called \"verify nowhere\"'", st[0]["status"] == 'stuck: goto: you know no place called "verify nowhere"', st)
         t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
         s.graph(a, {"say": {"text": "Verify hello", "to": "speaker"}})
-        own = s.wait(lambda: [r for r in s.http_rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}") if r["kind"] == "own" and r["at_ms"] >= t0 and "nobody has spoken to you" in r["text"]], 8)
+        try:
+            own = s.wait(lambda: [r for r in s.http_rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}") if r["kind"] == "own" and r["at_ms"] >= t0 and "nobody has spoken to you" in r["text"]], 8)
+        except TimeoutError:
+            # Its named check fails, not the scene (once on the gate's acting world the leaf's status
+            # said why and no line was told: gate-1123072442-8633b3, cause not established).
+            own = []
+            evidence["say leaf status"] = s.http_rows(f"SELECT status, fails FROM mind_state WHERE id = {a}")
         evidence["say leaf"] = own
         s.expect("say leaf: told 'nobody has spoken to you in the last minute'", own, own)
         s.graph(a, {"wait": 120})

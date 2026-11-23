@@ -13,7 +13,12 @@ touches behaviour, these cases with the fake model only:
                  SIDES_BATTLE_PATHS),
                  say, heard_first, audience (the speech group, a default-seed world of its own: only
                  when a merge touches SPEECH_PATHS, or names speech in a changed hunk of SPEECH_HUNKS),
-                 flee_wall, pursue_last_seen (the steering group, its own world: STEERING_PATHS)
+                 and verify-player speak, told on the same world,
+                 flee_wall, pursue_last_seen (the steering group, its own world: STEERING_PATHS),
+                 act_gaps, act_replace, truthful_refusals (the acting group: ACTS_PATHS),
+                 committed, dodge_told, health_seen, seize (the fight group) and outcomes after
+                 skirmish on the island world (COMBAT_PATHS); at most LIVING_GATE_GROUPS (10)
+                 world groups at once
   verify-minds   roundtrip, acts, dealings, conversation (each its own world, the real living-mind)
   verify-player  combat (combat.py --scene all: the staged fights, an island world)
   verify-client  cues (cues.py: the cue event tables reach only their viewer under row-level
@@ -245,7 +250,12 @@ CASES = {
     # Acts (step 1): a replacing act's gaps, a mind's act replacing the one under way, truthful refusals.
     "act_gaps":     {"skill": "verify-core", "group": "acting", "paths": ACTS_PATHS},
     "act_replace":  {"skill": "verify-core", "group": "acting", "paths": ACTS_PATHS},
-    "truthful_refusals": {"skill": "verify-core", "group": "acting", "paths": ACTS_PATHS},
+    "truthful_refusals": {"skill": "verify-core", "group": "acting", "paths": ACTS_PATHS,
+                          "flaky": {"why": "once in 13 first runs (gate-say-path step 1 shake-out, gate-1123072442-8633b3): the say leaf to "
+                                           "'speaker' was stuck with the truthful status but its 'You failed to say' line was never written "
+                                           "(the world's commit log holds the status and no line); passed alone on retry; cause not "
+                                           "established (act::refused news/tell): verify-core validation 2026-11-23 gate-say-path step 1",
+                                    "parts": ["say leaf: told 'nobody has spoken to you in the last minute'"]}},
     # Fights (step 1): committed moves, a dodge's told outcome, health as seen, seizing the yielded,
     # and (on the island world, after skirmish) a blow's or missile's outcome told to its maker.
     "committed":    {"skill": "verify-core", "group": "fight", "paths": COMBAT_PATHS},
@@ -1528,9 +1538,11 @@ def run_part(name):
     return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]", "-", name.lower())).strip("-") or "case"
 
 
-# At most this many scene groups (or, on a retry, cases) run at once (LIVING_GATE_GROUPS; 0 or
-# unset: all at once, as before gate-say-path). Each group is its own world on the server.
-GROUP_CAP = int(os.environ.get("LIVING_GATE_GROUPS") or 0)
+# At most this many scene groups (or, on a retry, cases) run at once (LIVING_GATE_GROUPS, default
+# 10: the groups a gate ran before gate-say-path; 0: all at once). Each group is its own world on
+# the server, and they start together: on the Spark, all 14 at once peaked at load 65-70 against
+# the 10's 31, and the cap at 10 at 42-45 for about 100 s more (gate-say-path step 1 series).
+GROUP_CAP = int(os.environ.get("LIVING_GATE_GROUPS") or 10)
 
 
 def workers(n):

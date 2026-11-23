@@ -629,12 +629,14 @@ def check_speech_selection():
         expect(f"step 1: {path} selects the fight group and outcomes", set(fight) <= set(got) and not set(acting) & set(got), str(got))
     got = plan(["living/authority/src/act.rs"], {})
     expect("step 1: act.rs alone (too broad) selects neither", not set(acting + fight) & set(got), str(got))
+    expect("cap: 10 groups at once by default (LIVING_GATE_GROUPS unset)",
+           os.environ.get("LIVING_GATE_GROUPS") is not None or scene_gate.GROUP_CAP == 10, str(scene_gate.GROUP_CAP))
     cap = scene_gate.GROUP_CAP
     try:
         scene_gate.GROUP_CAP = 0
         uncapped = scene_gate.workers(9)
         scene_gate.GROUP_CAP = 4
-        expect("cap: LIVING_GATE_GROUPS bounds the groups at once; unset runs all", uncapped == 9 and scene_gate.workers(9) == 4 and scene_gate.workers(2) == 2)
+        expect("cap: LIVING_GATE_GROUPS bounds the groups at once; 0 runs all", uncapped == 9 and scene_gate.workers(9) == 4 and scene_gate.workers(2) == 2)
     finally:
         scene_gate.GROUP_CAP = cap
 
