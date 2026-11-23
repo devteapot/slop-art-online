@@ -6,7 +6,7 @@ the island's 12-minute day). Outcome counts only, not timing.
 Per world: published fresh from `--wasm` (an island module) on LIVING_STDB_CONTAINER, the law set on
 for the `on` arm before anything is read, then polled every `--every` seconds as the owner over
 HTTP SQL: `skill_use` (every attacking use by id: attack, strike, shoot, throw, fire_bolt and
-threaten), `activity` (each flight: a `flee` begun), `vitals` (each wound: a new `hurt_ms` with a
+threaten; since the second pass every targeted use, by skill, at a hostile or friendly people), `activity` (each flight: a `flee` begun), `vitals` (each wound: a new `hurt_ms` with a
 lower health), `character` (deaths). At the start: memberships, communities and the regard records
 (holder, toward, label, value), so each attack's target is classed as of a people the attacker's
 people hold as an enemy (value <= -25 or rival/enemy/threat/foe in the label: "rival town",
@@ -83,10 +83,24 @@ def world(arm, n, a, tok, out):
                 hold[(roles["holder"] - COMMUNITY, roles["toward"] - COMMUNITY)] = (t["label"], t.get("value", 0))
     chars = sql(db, tok, "SELECT id, name, kind, alive, stage FROM character")
     residents = {c["id"] for c in chars if c["kind"] == "person" and c["alive"]}
-    start = {"db": db, "arm": arm, "laws": laws, "communities": comm, "members": len(member), "residents": len(residents),
-             "regard": [[comm.get(a_), comm.get(b_), l, v] for (a_, b_), (l, v) in hold.items()]}
-    (d / "start.json").write_text(json.dumps(start, indent=1) + "\n")
     hostile = lambda a_, b_: (lambda s: s is not None and (s[1] <= -25 or any(w in str(s[0]).lower() for w in HOSTILE)))(hold.get((member.get(a_), member.get(b_))))
+    friendly = lambda a_, b_: (lambda s: s is not None and (s[1] >= 25 or any(w in str(s[0]).lower() for w in ("friend", "ally", "kin"))))(hold.get((member.get(a_), member.get(b_))))
+    # Exposure: the relation rows held about people of a people one's own holds as an enemy, by
+    # how they decide under the law (brain.rs `personal`): hostile, peaceful or neutral.
+    def band(t, l):
+        l = l.lower()
+        h = t <= -25 or any(w in l for w in ("enemy", "rival", "threat", "thief", "foe"))
+        p = t >= 25 or any(w in l for w in ("friend", "family", "partner", "ally", "kin"))
+        return "hostile" if h and not p else "peaceful" if p and not h else "neutral"
+    exposure = {}
+    for r in sql(db, tok, "SELECT actor, other, trust, label FROM relation"):
+        if hostile(r["actor"], r["other"]):
+            k = band(r["trust"], r["label"])
+            exposure[k] = exposure.get(k, 0) + 1
+    start = {"db": db, "arm": arm, "laws": laws, "communities": comm, "members": len(member), "residents": len(residents),
+             "regard": [[comm.get(a_), comm.get(b_), l, v] for (a_, b_), (l, v) in hold.items()],
+             "rows_about_hostile_people_by_band": exposure}
+    (d / "start.json").write_text(json.dumps(start, indent=1) + "\n")
     seen_use, seen_flee, seen_hurt, hp = set(), set(), set(), {}
     deaths = {}
     t_end = time.time() + a.minutes * 60
@@ -95,10 +109,11 @@ def world(arm, n, a, tok, out):
             t0 = time.time()
             try:
                 for u in sql(db, tok, "SELECT id, actor, target, skill, accepted_ms, outcome FROM skill_use"):
-                    if u["skill"] in ATTACKS and u["id"] not in seen_use and u["target"]:
+                    if u["id"] not in seen_use and u["target"]:
                         seen_use.add(u["id"])
                         ev.write(json.dumps({"e": "use", "skill": u["skill"], "a": u["actor"], "b": u["target"], "ms": u["accepted_ms"],
-                                             "hostile_people": hostile(u["actor"], u["target"]), "resident_target": u["target"] in residents}) + "\n")
+                                             "hostile_people": hostile(u["actor"], u["target"]), "friendly_people": friendly(u["actor"], u["target"]),
+                                             "resident_target": u["target"] in residents}) + "\n")
                 for x in sql(db, tok, "SELECT id, skill, started_ms FROM activity WHERE skill = 'flee'"):
                     k = (x["id"], x["started_ms"])
                     if k not in seen_flee:
@@ -133,8 +148,15 @@ def summarize(out):
     for d in sorted(p for p in out.iterdir() if p.is_dir() and (p / "events.jsonl").exists()):
         ev = [json.loads(l) for l in open(d / "events.jsonl")]
         start = json.loads((d / "start.json").read_text())
-        uses = [e for e in ev if e["e"] == "use"]
+        every = [e for e in ev if e["e"] == "use"]
+        uses = [e for e in every if e["skill"] in ATTACKS]
         att = [e for e in uses if e["skill"] != "threaten"]
+        by_skill = {}
+        for e in every:
+            b = by_skill.setdefault(e["skill"], {"all": 0, "at_hostile_people": 0, "at_friendly_people": 0})
+            b["all"] += 1
+            b["at_hostile_people"] += bool(e["hostile_people"])
+            b["at_friendly_people"] += bool(e.get("friendly_people"))
         deaths = [e for e in ev if e["e"] == "death"]
         res_deaths = [e for e in deaths if e["resident"]]
         kills = {}
@@ -151,7 +173,8 @@ def summarize(out):
                      "deaths": len(deaths), "resident_deaths": len(res_deaths), "resident_deaths_by_cause": sorted({e["cause"] for e in res_deaths}),
                      "killed": sum(e["cause"].startswith("killed by") for e in deaths),
                      "most_attacks_by_one": max([sum(1 for e in att if e["a"] == x) for x in {e["a"] for e in att}] or [0]),
-                     "poll_errors": sum(e["e"] == "poll_error" for e in ev)})
+                     "poll_errors": sum(e["e"] == "poll_error" for e in ev),
+                     "targeted_uses_by_skill": by_skill, "exposure": start.get("rows_about_hostile_people_by_band")})
     (out / "summary.json").write_text(json.dumps(rows, indent=1) + "\n")
     return rows
 
