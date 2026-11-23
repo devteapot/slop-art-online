@@ -57,7 +57,11 @@ pub fn human(ctx: &ReducerContext, id: u32) -> Option<Identity> {
         let (_, map) = h.get_or_insert_with(|| {
             let db = ctx.database_identity();
             let admin = common::world(ctx).admin;
-            (now, ctx.db.character().iter().filter(|c| c.alive && !c.ai && c.controller != db && c.controller != admin).map(|c| (c.id, c.controller)).collect())
+            // The living only, through the `alive` index: the dead keep their rows and grow with
+            // every death, so a walk over the whole table grew with the run (the 216 gate's
+            // 30-minute decline, 2026-11-23). The same characters, the same map.
+            let _span = common::detail_span("combat.humans");
+            (now, ctx.db.character().alive().filter(true).filter(|c| !c.ai && c.controller != db && c.controller != admin).map(|c| (c.id, c.controller)).collect())
         });
         map.get(&id).copied()
     })
