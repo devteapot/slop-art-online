@@ -519,10 +519,15 @@ pub fn contact(ctx: &ReducerContext, attacker: u32, victim: u32, outcome: &str, 
         v.push((attacker, now));
     });
     if crate::combat::human(ctx, victim).is_some() {
+        // A played victim: no heed set of its own yet. The player side, when it lands, inserts the
+        // attacker into the victim's committed `perceived` set here, in this same transaction, so
+        // `masked` and `perceived` never disagree on who receives what (docs/ATTENTION_BUDGET.md,
+        // "Player-side interface").
         return;
     }
     if applies(ctx, victim) {
-        // The attacker is an individual from now on (forced): its place in the set changes too.
+        // The attacker is an individual from now on (forced), in this transaction: its place in the
+        // set changes too, so every line this blow writes already names it.
         HEED.with(|m| {
             if let Some(s) = m.borrow_mut().get_mut(&victim) {
                 s.picks.retain(|p| p.id != attacker);

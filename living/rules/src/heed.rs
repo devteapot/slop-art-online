@@ -252,7 +252,7 @@ pub enum SelfCond {
     Stamina(Bound),
     Night(bool),
     HurtWithin(f32),
-    /// How many creatures of a kind (and relation) are in sight, individuals and crowd alike,
+    /// How many creatures of a kind (and relation) are in sight, individuals and throng alike,
     /// within a distance (none: all in sight).
     Count { kind: String, relation: Option<Relation>, within: Option<f32>, at_least: Option<u32>, at_most: Option<u32> },
 }
@@ -1296,7 +1296,7 @@ mod tests {
             assert!(serde_json::to_string(&instinct_json(kind)).unwrap().len() <= MAX_BYTES);
         }
         let p = instinct("person");
-        // A crowd round a person: an archer winding up at it from 20 m, a speaker, a family
+        // A throng round a person: an archer winding up at it from 20 m, a speaker, a family
         // member at 15 m, ten others close, and a wolf at 30 m.
         let mut all = vec![];
         let mut archer = cand(1, "person", 20.0);
@@ -1318,7 +1318,7 @@ mod tests {
         assert_eq!(picks.len(), 10);
         // Six nearest within 8 m, then the score rule's pick (the wolf: kind weight 2).
         assert_eq!(&ids(&picks)[3..9], &[10, 11, 12, 13, 14, 15]);
-        assert_eq!(picks[9].id, 50, "the wolf stands out over the rest of the crowd: {picks:?}");
+        assert_eq!(picks[9].id, 50, "the wolf stands out over the rest of the throng: {picks:?}");
         assert_eq!(ids(&select(&p, &me(), &all, &lim(2), &[])), vec![1, 2]);
         assert!(select(&p, &me(), &all, &lim(0), &[]).is_empty());
     }
@@ -1428,11 +1428,11 @@ mod tests {
     #[test]
     fn the_event_pass_admits_by_rank_and_forces_contact() {
         let p = instinct("person");
-        let crowd: Vec<Candidate> = (0..4).map(|i| cand(10 + i, "person", 2.0 + i as f32)).collect();
-        let heeded = select(&p, &me(), &crowd, &lim(4), &[]);
+        let near: Vec<Candidate> = (0..4).map(|i| cand(10 + i, "person", 2.0 + i as f32)).collect();
+        let heeded = select(&p, &me(), &near, &lim(4), &[]);
         let mut archer = cand(1, "person", 20.0);
         archer.threatening = true;
-        let mut all = crowd.clone();
+        let mut all = near.clone();
         all.push(archer.clone());
         // Full: the windup at me displaces the one ranked last.
         assert_eq!(admit(&p, &archer, &me(), &all, &heeded, &lim(4)), Admit::Replace { rule: 0, drop: heeded.last().unwrap().id });
@@ -1445,14 +1445,14 @@ mod tests {
         struck.contact_ago_s = Some(0.0);
         assert_eq!(admit(&blind, &struck, &me(), &all, &heeded, &lim(4)), Admit::Forced(Place::Contact));
         // One already heeded by a rule becomes forced on contact; one already forced: no change.
-        let mut close = crowd[0].clone();
+        let mut close = near[0].clone();
         close.contact_ago_s = Some(0.0);
         assert_eq!(admit(&p, &close, &me(), &all, &heeded, &lim(4)), Admit::Forced(Place::Contact));
         let forced_set = [Pick::new(close.id, Place::Contact)];
         assert_eq!(admit(&p, &close, &me(), &all, &forced_set, &lim(4)), Admit::No);
         let walker = cand(30, "person", 7.0);
         assert_eq!(admit(&p, &walker, &me(), &all, &heeded, &lim(4)), Admit::No);
-        assert_eq!(admit(&p, &crowd[0], &me(), &all, &heeded, &lim(4)), Admit::No);
+        assert_eq!(admit(&p, &near[0], &me(), &all, &heeded, &lim(4)), Admit::No);
     }
 
     #[test]

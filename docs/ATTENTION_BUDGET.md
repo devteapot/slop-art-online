@@ -1,6 +1,6 @@
 # Attention budget: who a character keeps track of (heed)
 
-Status: **current, built (authority and mind side), off by default**, 2026-11-23, branch `heed` from `origin/main` `5b13f1ba7`. The law `heed_on` stays off until the owner has seen heed in a play-test. The player side (`sweep_one`, `human_heed`, `seen_throng`, the client) is dev-box's and the laptop's, later: see "Player-side interface" below. Everything from "Why v2" on is the design history (v1, v2, v2.1) and the experiments; where it and "Built" differ, "Built" holds.
+Status: **current, built (authority and mind side), off by default**, 2026-11-23, branch `heed` from `origin/main` `5b13f1ba7`. The law `heed_on` stays off until the owner has seen heed in a play-test. The player side (`sweep_one`, `human_heed`, `seen_throng`, the client) is dev-box's and the laptop's, later: see "Player-side interface" below. Everything from "Why v2" on is the design history (v1, v2, v2.1) and the experiments; where it and "Built" differ, "Built" holds. The history says "crowd" for what is now the **throng** (v2.1's name table); no built name uses "crowd" for it.
 
 ## Built (2026-11-23)
 
@@ -8,7 +8,7 @@ Status: **current, built (authority and mind side), off by default**, 2026-11-23
 - the default instinct is E5's (a′): the person instinct reading the widened `attacker` (docs/ATTENTION_E5.md §8);
 - minds may rewrite it;
 - a person's base capacity is 14; `heed_ceiling` is 16;
-- crowd figures for players in 6 m cells (the player side, later);
+- throng figures for players in 6 m cells (the player side, later);
 - no Jev;
 - `heed_on` off by default until the owner's play-test.
 
@@ -74,6 +74,13 @@ What the player side can rely on, and what it must call. Nothing here is built f
 - `heed::throng_lines` / `throng_label`: how a mind is told its throng (the player side has its own 6 m cells).
 - `heed::applies(ctx, id)` is `heed_on && not played by a person`. The player side extends it (for example a law `heed_players`, off until its own play-test).
 
+**The rules the player side must hold** (dev-box's views-side review, accepted by the general coordinator, 2026-11-23):
+- **The individuals are `perceived`; the throng is `seen_throng`.** A player's committed `perceived` set is its individuals, and nothing else decides who receives what (point 3).
+- **Heed replaces `far_cap`'s trim; it does not stack on it.** Where heed applies to a player, `sweep_one` takes `split`'s individuals as the seen set and skips the `far_cap` cut (point 4). The AI and mind paths have no second trim: `far_cap` lives only in the player sweep, and a mind's scene drops the hidden 14-cap under heed.
+- **Cues and projections are the individuals' only** (point 4): `frame::cues`' engaged path and the projections (`projected`, the copies) take `perceived` members only, so no cue or projection row names a throng member before contact.
+- **The combat feed, the same rule on every path** (point 1): an onlooker's feed row goes only to a viewer whose individual set holds the actor or the target. The two parties are always told, at once. A blow between throng members reaches a viewer only as `seen_throng` counts. Built for both paths: `combat::show` asks `heed::individual` (always true while heed does not apply to the viewer), and a mind's fight and death lines and folded fight lines are dropped when neither party is an individual to it (`perceive.rs`, `fold.rs`).
+- **Contact updates `perceived` in the same transaction** (point 8): `heed::contact` is called from the blow's own transaction (`act::damage`, a dodge by evasion). For a played victim it returns where the player side inserts the attacker into the victim's `perceived` set, so `heed::masked` and `perceived` never disagree. For minds, the same call puts the attacker in the heeded set at once.
+
 **The player's input** (v2.1 point 6; not built):
 
 ```rust
@@ -84,10 +91,15 @@ pub fn human_heed(ctx: &ReducerContext, input: HeedInput) -> Result<(), String>
 ```
 
 - The caller's character from `ctx.sender()`; one call per change, at most one every 250 ms, each spending an input token (`input_hz` / `input_burst`).
-- Store it in a **new** private table (never a new column), e.g. `heed_pick { id: u64 pk auto_inc, actor: u32 btree, target: u32, source: String ("pin" | "focus"), weight: f32, until_ms: u64 }`, read by `actor` at the sweep to fill `Candidate.chosen`.
+- **A pin or a focus on an id the character does not perceive now is refused with the same words whether or not the id exists** (point 6), so the reducer reveals nothing of who is where.
+- **Stored in `heed_choice`** (point 5; new, private, never a new column): `actor: u32` primary key, `pins: Vec<u32>`, `focus: Option<u32>`, `at_ms: u64`. One row per player, replaced on each call and read by primary key at the sweep to fill `Candidate.chosen`. If minds ever need picks with an expiry, they get a table of their own with a btree on `until_ms`.
 - A player's own policy, if it ever gets one, goes in the same `heed_policy` table (`actor` pk), written by its own reducer; `mind_heed` is for minds only (its controller check).
-- Crowd figures for a player: `seen_throng` (new, public, RLS `viewer = :sender`), one row per 6 m cell (the owner's decision), from `split`'s throng.
 
+**`seen_throng`** (point 2; new, public, RLS `viewer = :sender`): a player's throng in 6 m cells (the owner's decision), from `split`'s throng.
+- Columns: `id: u64` primary key, auto-increment; `viewer` with a single-column btree; `cell` and `size` (merged cells keyed by their top-left cell); quantized fields (count, spread, heading, what they visibly do, kinds).
+- **Written on change only, never rewritten at 1 Hz**: a cell whose quantized fields did not change writes nothing.
+- **Turning the law off deletes each viewer's rows in one tick.**
+- Naming (point 7): the word is **throng** everywhere (`seen_throng`, the scene's `throngs`); no table, field or law says "crowd" for it. docs/PERCEPTION.md notes the name.
 
 **Why v2.** The owner answered v1 on 2026-11-22:
 - on "always in": "can we make this selective? the mind decides who to track, not hardcoded";
@@ -116,7 +128,7 @@ dev-box answered §12 from main's code (`docs/ATTENTION_BUDGET_DEVBOX_ANSWERS.md
 | attention instinct (`attend_person`, …) | heed instinct, `heed_person`, … in `living/seeds/heed.json` |
 | `attention_capacity(a)`, its knack | `heed_capacity(a)`, `heed_knack()` (`watch`) |
 | `attend_on`, `attend_ceiling` | `heed_on`, `heed_ceiling`; and `heed_contact_s`, `heed_closing_s` (new, below) |
-| `attend_policy`, `attend_pick`, `attend_effect` | `heed_policy`, `heed_pick`, `heed_effect` |
+| `attend_policy`, `attend_pick`, `attend_effect` | `heed_policy`, `heed_choice` (a player's pins and focus; was `heed_pick` before dev-box's review), `heed_effect` |
 | conditions `attended_s`, `acting_on_attended` | `heeded_s`, `acting_on_heeded` |
 | the crowd, `seen_crowd`, the scene's `crowds` | the **throng**, `seen_throng`, the scene's `throngs` |
 | `human_attend`, `mind_attend` | `human_heed`, `mind_heed` |

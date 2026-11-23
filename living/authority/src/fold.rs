@@ -113,7 +113,27 @@ pub fn flush(ctx: &ReducerContext, prev: u64, now: u64) {
         if !c.alive {
             continue;
         }
-        let seen_rows = &due[&id];
+        // The combat feed's rule, the same on every path (docs/ATTENTION_BUDGET.md "Built"): under
+        // heed, a blow neither of whose parties is an individual to the onlooker (an unseen shooter is
+        // not) reaches it only as its throng lines, never as a line. Nothing changes with heed off.
+        let kept: Vec<(usize, bool)>;
+        let seen_rows = if crate::heed::applies(ctx, c.id) {
+            kept = due[&id]
+                .iter()
+                .copied()
+                .filter(|&(i, unseen)| {
+                    let r = &rows[i];
+                    let a_masked = unseen || r.attacker == 0 || crate::heed::masked(ctx, &c, r.attacker, now);
+                    !(a_masked && crate::heed::masked(ctx, &c, r.victim, now))
+                })
+                .collect();
+            &kept
+        } else {
+            &due[&id]
+        };
+        if seen_rows.is_empty() {
+            continue;
+        }
         let blows: Vec<living_rules::fold::Blow> = seen_rows
             .iter()
             .map(|&(i, unseen)| {

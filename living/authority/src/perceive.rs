@@ -178,6 +178,11 @@ fn witnessed_as(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str, subj
         // Under heed, someone in the onlooker's throng is no one in particular: told as such,
         // and not named by id on the line (nothing when the law is off).
         let (mask_a, mask_b) = (crate::heed::masked(ctx, &c, subject, now), object != 0 && crate::heed::masked(ctx, &c, object, now));
+        // The combat feed's rule, the same on every path (docs/ATTENTION_BUDGET.md "Built"): a fight
+        // or a death between members of the onlooker's throng reaches it only as its throng lines.
+        if matches!(kind, "fight" | "death") && mask_a && (object == 0 || mask_b) {
+            continue;
+        }
         let a = if mask_a { crate::heed::throng_label(ctx, c.id, subject, now) } else { a };
         let b = if mask_b && owned.is_none() { crate::heed::throng_label(ctx, c.id, object, now) } else { b };
         let (subject, object) = (if mask_a { 0 } else { subject }, if mask_b && owned.is_none() { 0 } else { object });
@@ -229,6 +234,11 @@ pub fn witnessed_shot(ctx: &ReducerContext, now: u64, at: (f32, f32), kind: &str
         let (a, b) = if sees_shooter { (named.next().unwrap_or_default(), named.next().unwrap_or_default()) } else { (String::new(), named.next().unwrap_or_default()) };
         // Under heed, someone in the onlooker's throng is no one in particular (nothing when off).
         let (mask_a, mask_b) = (sees_shooter && crate::heed::masked(ctx, &c, subject, now), crate::heed::masked(ctx, &c, object, now));
+        // The combat feed's rule: a shot whose shooter (unseen, or seen in the throng) and target are
+        // both no one in particular to the onlooker reaches it only as its throng lines.
+        if kind == "fight" && mask_b && (!sees_shooter || mask_a) {
+            continue;
+        }
         let a = if mask_a { crate::heed::throng_label(ctx, c.id, subject, now) } else { a };
         let b = if mask_b { crate::heed::throng_label(ctx, c.id, object, now) } else { b };
         let (subject, object) = (if mask_a { 0 } else { subject }, if mask_b { 0 } else { object });

@@ -265,6 +265,10 @@ Second change. Every path by which a mind, or a behaviour graph, learns about an
 | Speech, signals, smell | hearing and scent radii | unchanged: they are not sight |
 | Resources, structures and terrain in a scene | within sight | unchanged: static world data, which a player's client also draws by chunk window ([Open](#open)) |
 
+### Heed: individuals and the throng (names, 2026-11-23)
+
+Heed (docs/ATTENTION_BUDGET.md, built for AI characters and minds, off by default) splits what a character sees into **individuals** and the **throng**. For a player (not built yet) the individuals are its committed `perceived` set and the throng is `seen_throng`, a public table of 6 m cells under row-level security; for a mind the individuals are its scene's `creatures` and the throng its `throngs` lines. The word is "throng" on every path: "crowd" stays the name of the battle laws `crowd_sweep_n` and `crowd_frame_max_ms` and of nothing heed adds.
+
 ### A body's sex in a scene (sex-1, 2026-11-13)
 
 - **A person's scene entry** (`perceive::scene_json`) carries `"form"`: the rules' word for their body by sex and life stage (`sex_words()`: "woman", "old man", "girl"…). A mind's own `you` gets its own.
