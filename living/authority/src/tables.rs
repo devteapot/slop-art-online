@@ -401,6 +401,9 @@ pub struct Character {
     pub controller: Identity,
     /// Driven by an LLM mind (deliberations and percepts are produced).
     pub ai: bool,
+    /// Indexed: the living are read without walking the dead, whose rows stay (death is
+    /// permanent and its records are kept), and grow by every death (`combat::human`).
+    #[index(btree)]
     pub alive: bool,
     pub born_ms: u64,
     pub died_ms: u64,
