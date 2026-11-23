@@ -1,0 +1,1 @@
+relay long-relayfix2 --law tick_marker_on=true --tick-marker --law profile_detail=true --seconds 1800

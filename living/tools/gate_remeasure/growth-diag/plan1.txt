@@ -1,0 +1,2 @@
+relay long-relay --law tick_marker_on=true --tick-marker --law profile_detail=true --seconds 1800
+main long-main --law tick_marker_on=true --tick-marker --law profile_detail=true --seconds 1800

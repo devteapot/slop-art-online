@@ -1,0 +1,40 @@
+2026-11-23 09:02:10 container slop-growth-diag created on 3641, cpuset 5-9,15-19
+2026-11-23 09:02:10 poller 2116894
+2026-11-23 09:02:11 server stopped by SIGINT (before-smoke-main): exit 0, forced no, last line: 2026-11-23T08:02:10.881157Z  INFO crates/standalone/src/subcommands/start.rs:293: Shutting down server...
+2026-11-23 09:02:12 server up: No databases found for c200dc40805ccf393d41a1aa6850ab1da8da134f9a23375536724ff1fe323aa8.; cpuset 5-9,15-19
+2026-11-23 09:02:12 run main smoke-main (--law tick_marker_on=true --tick-marker --law profile_detail=true --seconds 130) (load 3.46)
+2026-11-23 09:05:18 module logs copied: 143431680 bytes
+2026-11-23 09:05:18 done smoke-main: result 1, window load max/end/rise 4.52 3.92 0.94
+2026-11-23 09:05:19 server stopped by SIGINT (end): exit 0, forced no, last line: 2026-11-23T08:05:18.813394Z  INFO crates/standalone/src/subcommands/start.rs:293: Shutting down server...
+2026-11-23 09:05:19 series end
+2026-11-23 09:05:41 poller 2121514
+2026-11-23 09:05:43 server up: No databases found for c200dc40805ccf393d41a1aa6850ab1da8da134f9a23375536724ff1fe323aa8.; cpuset 5-9,15-19
+2026-11-23 09:05:43 run relay long-relay (--law tick_marker_on=true --tick-marker --law profile_detail=true --seconds 1800) (load 3.88)
+2026-11-23 09:36:46 module logs copied: 2019973120 bytes
+2026-11-23 09:36:46 done long-relay: result 1, window load max/end/rise 33.11 4.77 29.26
+2026-11-23 09:37:01 server stopped by SIGINT (before-long-main): exit 0, forced no, last line: 2026-11-23T08:36:46.664413Z  INFO crates/standalone/src/subcommands/start.rs:293: Shutting down server...
+2026-11-23 09:37:08 server up: No databases found for c200dc40805ccf393d41a1aa6850ab1da8da134f9a23375536724ff1fe323aa8.; cpuset 5-9,15-19
+2026-11-23 09:37:08 run main long-main (--law tick_marker_on=true --tick-marker --law profile_detail=true --seconds 1800) (load 5.50)
+2026-11-23 10:09:02 module logs copied: 1479034880 bytes
+2026-11-23 10:09:02 done long-main: result 1, window load max/end/rise 41.94 6.43 39.39
+2026-11-23 10:09:04 server stopped by SIGINT (end): exit 0, forced no, last line: 2026-11-23T09:09:02.722112Z  INFO crates/standalone/src/subcommands/start.rs:293: Shutting down server...
+2026-11-23 10:09:04 series end
+2026-11-23 10:11:40 poller 2535984
+2026-11-23 10:11:54 server up: No databases found for c200dc40805ccf393d41a1aa6850ab1da8da134f9a23375536724ff1fe323aa8.; cpuset 5-9,15-19
+2026-11-23 10:11:54 run relay long-relayfix (--law tick_marker_on=true --tick-marker --law profile_detail=true --seconds 1800) (load 5.22)
+2026-11-23 10:43:39 module logs copied: 1951723520 bytes
+2026-11-23 10:43:39 done long-relayfix: result 1, window load max/end/rise 34.72 31.90 32.31
+2026-11-23 10:43:58 server stopped by SIGINT (end): exit 0, forced no, last line: 2026-11-23T09:43:39.240783Z  INFO crates/standalone/src/subcommands/start.rs:293: Shutting down server...
+2026-11-23 10:43:58 series end
+2026-11-23 11:40:22 poller 3220106
+2026-11-23 11:40:23 server stopped by SIGINT (before-long-relayfix2): exit 0, forced no, last line: 2026-11-23T10:40:23.013281Z  INFO crates/standalone/src/subcommands/start.rs:293: Shutting down server...
+2026-11-23 11:40:24 server up:  verify-det-1123-110229 | c200579445144d215a1015c530b30b61a83647fc4bda6f838274fd97ae5e734a ; cpuset 5-9,15-19
+2026-11-23 11:40:24 ABORT: databases listed
+2026-11-23 11:40:52 poller 3233967
+2026-11-23 11:40:53 server stopped by SIGINT (before-long-relayfix2): exit 0, forced no, last line: 2026-11-23T10:40:52.796673Z  INFO crates/standalone/src/subcommands/start.rs:293: Shutting down server...
+2026-11-23 11:40:54 server up: No databases found for c200dc40805ccf393d41a1aa6850ab1da8da134f9a23375536724ff1fe323aa8.; cpuset 5-9,15-19
+2026-11-23 11:40:54 run relay long-relayfix2 (--law tick_marker_on=true --tick-marker --law profile_detail=true --seconds 1800) (load 3.30)
+2026-11-23 12:11:54 module logs copied: 2360053760 bytes
+2026-11-23 12:11:54 done long-relayfix2: result 1, window load max/end/rise 35.27 7.36 32.13
+2026-11-23 12:11:56 server stopped by SIGINT (end): exit 0, forced no, last line: 2026-11-23T11:11:54.949590Z  INFO crates/standalone/src/subcommands/start.rs:293: Shutting down server...
+2026-11-23 12:11:56 series end

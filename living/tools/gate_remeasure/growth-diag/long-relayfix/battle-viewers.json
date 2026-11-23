@@ -1,0 +1,1087 @@
+{
+ "label": "gr-long-relayfix",
+ "wasm": "relayfix_cullet.wasm",
+ "laws": [
+  "attend_on=true",
+  "attend_ceiling=16",
+  "attend_policy=3",
+  "attend_crowd_on=true",
+  "sweep_keep_memory=true",
+  "vf_lines_ms=1000",
+  "relay_on=true",
+  "tick_marker_on=true",
+  "profile_detail=true"
+ ],
+ "rows": [
+  {
+   "viewers": 0,
+   "fighters": 100,
+   "humans": 100,
+   "walkers": 116,
+   "db": "verify-lookcost-gr-long-relayfix-v0-20261123-101234",
+   "replica": 8000001,
+   "site": [
+    540.5,
+    746.5
+   ],
+   "arrival": [
+    540.5,
+    766.5
+   ],
+   "held_at_ready": [
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    },
+    {
+     "bodies": 0,
+     "characters": 0
+    }
+   ],
+   "relay_viewers": 116,
+   "steps": {
+    "steps": 85079,
+    "span_ms": 1800003,
+    "steps_per_s": 47.27,
+    "interval_ms": {
+     "p50": 17,
+     "p95": 35,
+     "p99": 52,
+     "max": 687
+    },
+    "over_25ms_pct": 21.65,
+    "over_50ms": 1242,
+    "grid_skipped": 22920
+   },
+   "humans_window": {
+    "inputs_per_s": {
+     "join": 1.99,
+     "move": 217.59,
+     "release": 13.73,
+     "skill:block": 14.76,
+     "skill:dodge": 2.81,
+     "skill:strike": 46.37
+    },
+    "inputs_total_per_s": 297.2,
+    "deaths": 3593,
+    "deaths_per_s": 1.996,
+    "rejoined": 3587,
+    "outcomes": {
+     "strike": {
+      "hit for 5": 30603,
+      "broken off": 3966,
+      "hit for 4": 2662,
+      "hit for 6": 24912,
+      "blocked": 6611,
+      "missed": 79,
+      "hit for 9": 185,
+      "hit for 7": 3190,
+      "dodged": 870,
+      "killed a stranger": 3569,
+      "failed": 744,
+      "hit for 3": 506,
+      "hit for 2": 329,
+      "hit for 8": 474,
+      "hit for 10": 71,
+      "killed a child": 3,
+      "hit for 11": 18
+     },
+     "block": {
+      "done": 20249,
+      "failed": 2848,
+      "broken off": 30
+     },
+     "dodge": {
+      "made way": 4823
+     }
+    },
+    "refused": {
+     "dodge": {
+      "refused": 217
+     },
+     "block": {
+      "refused": 1475,
+      "broken off": 1778
+     },
+     "strike": {
+      "refused": 3885
+     }
+    }
+   },
+   "relay_process": {
+    "cpu_ms_per_s": 143.6,
+    "rss_kb": 61332,
+    "hwm_kb": 61332,
+    "clients_cpu_ms_per_s": 23.9
+   },
+   "relay_summary": {
+    "accepted": 216,
+    "bodies": 252,
+    "broken": false,
+    "bytes": 463401628,
+    "changes": 2738700,
+    "clients": 209,
+    "frames": 6290566,
+    "process_us": 33536634,
+    "seconds": 1830.491091997,
+    "sets": 1902,
+    "txs": 369382,
+    "unsent_frames": 1974,
+    "viewers_with_sets": 216
+   },
+   "clients_summary": {
+    "body_age_us": {
+     "p50": 31000,
+     "p95": 15116000,
+     "p99": 187751000
+    },
+    "frames": 1705388,
+    "hop_us": {
+     "max": 495139,
+     "p50": 507,
+     "p95": 7792,
+     "p99": 31900
+    },
+    "items": {
+     "body": 1673934,
+     "doing": 19433,
+     "event": 162746,
+     "fighter": 275808,
+     "gone": 460959,
+     "hear": 278836
+    },
+    "seconds": 1805.316031248,
+    "tick_age_us": {
+     "p50": 21762,
+     "p95": 86918,
+     "p99": 930243
+    },
+    "viewers": 116
+   },
+   "ticks_per_s": 47.26,
+   "alive_characters": 252,
+   "window": {
+    "t0": 1795425197.884752,
+    "t1": 1795426997.9062428
+   },
+   "held_at_ready_mean": {
+    "seen_characters_mean": 0.0
+   },
+   "viewer_rows_by_table": {
+    "combat_feed": [
+     430583,
+     0,
+     0
+    ],
+    "experience_copy": [
+     554825,
+     0,
+     547688
+    ],
+    "my_characters": [
+     3598,
+     3608,
+     3598
+    ],
+    "my_readiness": [
+     196189,
+     0,
+     196100
+    ],
+    "my_skill_uses": [
+     227073,
+     0,
+     225542
+    ],
+    "my_vitals": [
+     3598,
+     537503,
+     3608
+    ],
+    "relay_frames": [
+     4558343,
+     11071110,
+     0
+    ],
+    "seen_character_copy": [
+     961165,
+     434641,
+     959282
+    ]
+   },
+   "fresh": {
+    "near": {},
+    "all": {},
+    "players": 0,
+    "p50_p90_p95": {
+     "near": [
+      null,
+      null,
+      null
+     ],
+     "all": [
+      null,
+      null,
+      null
+     ]
+    }
+   }
+  }
+ ]
+}
