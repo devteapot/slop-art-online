@@ -138,6 +138,9 @@ python3 "$C/scenes.py" health_seen --run "$R" > "$E/health_seen.txt" 2>&1
 # Sight that depends on facing, switched by set_world_law (features/fov.md, about 3 min).
 python3 "$C/scenes.py" fov --run "$R" > "$E/fov.txt" 2>&1
 python3 "$C/scenes.py" say --run "$R" > "$E/say.txt" 2>&1
+# A goto to a kind of ground arrives standing on it: goto then clear or plant, graph, mind plan and
+# player (features/steering.md#a-goto-to-a-kind-of-ground, about 3 min; spawns 32 people).
+python3 "$C/scenes.py" ground_goto --run "$R" > "$E/ground_goto.txt" 2>&1
 # Admin placement on free walkable tiles (features/steering.md#admin-placement); last: its bodies stay.
 python3 "$C/scenes.py" placement --run "$R" > "$E/placement.txt" 2>&1
 # The doing condition's cost in a 100-fighter battle (features/doing.md; a measurement, about
