@@ -5627,6 +5627,15 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         // How a party reads its records.
         let regard = RecordFacts { kind: "regard".into(), parties: vec![("holder".into(), crate::records::COMMUNITY | 2), ("toward".into(), crate::records::COMMUNITY | 3)], me: "holder".into(), terms: serde_json::json!({"label": "rival town", "value": -35, "why": "the broken match"}).as_object().unwrap().clone(), ..Default::default() };
         assert_eq!(s.record_text(&regard).unwrap(), format!("your people hold {{id:{}}} as rival town (the broken match)", crate::records::COMMUNITY | 3));
+        // The battle fixture's stance (kind `stance`, no `why`): both sides named, from either side.
+        // Before, it read "stance: open", with neither the other side nor the label.
+        let stance = |me: &str| RecordFacts { kind: "stance".into(), status: "open".into(), open: true, parties: vec![("holder".into(), crate::records::COMMUNITY | 2), ("toward".into(), crate::records::COMMUNITY | 3)], me: me.into(), terms: serde_json::json!({"label": "enemy", "value": -50.0}).as_object().unwrap().clone(), ..Default::default() };
+        let (a, b) = (crate::records::COMMUNITY | 2, crate::records::COMMUNITY | 3);
+        assert_eq!(s.record_text(&stance("holder")).unwrap(), format!("your people, {{id:{a}}}, hold {{id:{b}}} as enemy"));
+        assert_eq!(s.record_text(&stance("toward")).unwrap(), format!("{{id:{a}}} holds your people, {{id:{b}}}, as enemy"));
+        let mut why = stance("holder");
+        why.terms.insert("why".into(), serde_json::json!("the raid on the ford"));
+        assert_eq!(s.record_text(&why).unwrap(), format!("your people, {{id:{a}}}, hold {{id:{b}}} as enemy (the raid on the ford)"));
     }
 
     /// An answer (accept, decline) takes exactly what it names, a trade offer or a proposal, or

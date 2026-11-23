@@ -429,8 +429,13 @@ def clog_zstd(replica):
 
 def spawn(db, token, a):
     """The battle: `spawn_battle`, or with `--sides N` the fixture `spawn_battle_sides` (fighters in
-    N sides that fight each other and leave bystanders be; docs/BATTLE_LAWS.md)."""
-    if a.sides:
+    N sides that fight each other and leave bystanders be; docs/BATTLE_LAWS.md). With
+    `--layout-seed S` the sides stand on a fixed layout (`spawn_battle_sides_layout`), dealt as
+    `--deal D` says (`--swap`: deal 1, each side on the other's places); random-layout runs are not
+    comparable with these (docs/SIDE_ASYMMETRY.md)."""
+    if a.sides and a.layout_seed is not None:
+        lc.call(db, "spawn_battle_sides_layout", [a.fighters, a.sides, a.layout_seed, a.deal], token)
+    elif a.sides:
         lc.call(db, "spawn_battle_sides", [a.fighters, a.sides], token)
     else:
         lc.call(db, "spawn_battle", [a.fighters], token)
@@ -440,6 +445,9 @@ def one(a, n, out):
     stamp = time.strftime("%Y%m%d-%H%M%S")
     db = f"verify-lookcost-{a.label}-v{n}-{stamp}"
     res = {"viewers": n, "fighters": a.fighters, "db": db}
+    if a.sides:
+        res["sides"] = a.sides
+        res["layout"] = {"seed": a.layout_seed, "deal": a.deal} if a.layout_seed is not None else "random"
     load = None
     priv = None
     try:
@@ -755,11 +763,26 @@ def main():
     ap.add_argument("--keep-world", action="store_true", help="leave the world paused at the end instead of deleting it (read back as paused)")
     ap.add_argument("--clog", action="store_true", help="record the replica's commitlog growth on disk over the window, and its compressed size after the world is deleted, zstd -3 and -6 (result clog)")
     ap.add_argument("--sides", type=int, default=0, help="the fighters in this many sides (2-4) that fight each other, not bystanders (spawn_battle_sides)")
+    ap.add_argument("--layout-seed", type=int, default=None, help="with --sides: the places from this fixed layout seed (spawn_battle_sides_layout), not a random draw per world; run each seed in both orientations")
+    ap.add_argument("--deal", type=int, default=0, help="with --layout-seed: which side gets which slot of each group of places (slot k goes to side (k + deal) %% sides)")
+    ap.add_argument("--swap", action="store_true", help="with --layout-seed: deal 1, each side on the other's places (two sides: the mirror of deal 0)")
     ap.add_argument("--privacy", action="store_true", help="copy-privacy: prove each viewer receives only its own copy rows (needs --motion-tables --character-tables and both laws on); <out>/privacy-v<count>.json, exit 1 on a failed check")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     if a.privacy and (a.flip_off or not (a.motion_tables and a.character_tables) or not {"motion_tables_on=true", "characters_table_on=true"} <= set(a.law)):
         ap.error("--privacy needs --motion-tables --character-tables --law motion_tables_on=true --law characters_table_on=true, and not --flip-off")
+    if (a.layout_seed is not None or a.swap or a.deal) and not a.sides:
+        ap.error("--layout-seed, --deal and --swap need --sides")
+    if (a.swap or a.deal) and a.layout_seed is None:
+        ap.error("--deal and --swap need --layout-seed")
+    if a.swap and a.deal:
+        ap.error("--swap is --deal 1: give one of them")
+    if a.swap:
+        a.deal = 1
+    if a.layout_seed is not None and (a.layout_seed < 0 or a.layout_seed >= 2**64):
+        ap.error("--layout-seed is an unsigned 64-bit number")
+    if a.sides and a.layout_seed is not None and a.fighters % a.sides:
+        ap.error(f"--fighters ({a.fighters}) must be a multiple of --sides ({a.sides}) with --layout-seed")
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     rows = []

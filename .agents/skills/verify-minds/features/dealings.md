@@ -30,3 +30,7 @@ The fake rule matches a deliberate request containing "demanded 1 stone of you",
 
 - `record` and `record_party` are subscribed whole by the mind service (as the owner, like `trade_offer`); a character is shown only the records it or its community is a party to.
 - Regard shows in the same section on an island world (its seeded stances); the default world has none.
+
+## A fighter's war
+
+`battle-stance` (sides-layout-seed, 2026-11-23): on main the battle fixture's fighters have no mind (E5 minded them with heed-e4's `sides_minded` law), so a minded adult, held still, founds a community named `Side A` (leaving its own first), and `spawn_battle_sides_layout(2, 2, 7, 0)` takes that community for its side A. The mind thinks for the adult alone, asked by a `think` node. Passes when one of its requests carries, under "Your dealings and your people's standing", both of the fixture's `stance` records worded by the script's `record_text` ("your people, Side A, hold Side B as enemy" and "Side B holds your people, Side A, as enemy") and no bare "stance: open". `result.json` keeps the request's purpose and the dealings lines as the mind read them. Before the change, E5's fighters read "- stance: open" twice (`heed-e5-20261122.tar.zst`, any `minds-e5p1r*` consolidation request), so they were never told whom their side fought.

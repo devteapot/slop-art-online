@@ -2302,6 +2302,14 @@ fn record_text(r) {
         if r.me == "holder" { return `your people hold {id:${r.parties.toward}} as ${r.terms.label} (${r.terms.why})`; }
         return `{id:${r.parties.holder}} holds your people as ${r.terms.label} (${r.terms.why})`;
     }
+    // Any other stance (a `holder` and a `toward` side, a `label` in its terms; the battle
+    // fixture's `stance` records): both sides named, and why only when the record says. Before,
+    // it fell through to "stance: open", and the fighters' minds never learned of the war.
+    if "holder" in r.parties && "toward" in r.parties && "label" in r.terms {
+        let why = if "why" in r.terms { ` (${r.terms.why})` } else { "" };
+        if r.me == "holder" { return `your people, {id:${r.parties.holder}}, hold {id:${r.parties.toward}} as ${r.terms.label}${why}`; }
+        return `{id:${r.parties.holder}} holds your people, {id:${r.parties.toward}}, as ${r.terms.label}${why}`;
+    }
     `${r.kind}: ${r.status}`
 }
 
