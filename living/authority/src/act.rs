@@ -98,6 +98,12 @@ pub struct Resolved {
     pub name: String,
 }
 
+/// Whether a resolved target is a kind of ground (a tile of grass or forest), not a place, a
+/// point or a thing.
+fn on_ground_kind(t: &Resolved) -> bool {
+    t.class == 4 && t.id == 0 && living_rules::catalog::TERRAINS.contains(&t.kind.as_str())
+}
+
 impl Resolved {
     pub fn point(at: (f32, f32)) -> Self {
         Self { class: 4, id: 0, at, kind: "place".into(), name: String::new() }
@@ -1174,6 +1180,12 @@ pub fn begin_with(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill
             "back_off" if creature => Goal::held(motion::GOAL_FLEE, target.id as u32, target.at, spacing.distance.unwrap_or(BACK_OFF_M), 0.0, sp, 0),
             "back_off" => Goal { kind: motion::GOAL_FLEE, target: 0, at: target.at, keep: spacing.distance.unwrap_or(BACK_OFF_M), speed: sp, flags: 0, pace: sp, far: 0.0, apart: 0.0 },
             "goto" if creature => Goal::creature(target.id as u32, target.at, r, sp, motion::FLAG_EARLY),
+            // A walk to a kind of ground (`{"nearest": "forest"}`: `brain` resolves it to the
+            // centre of the nearest tile of it) is there only once the walker stands on it, for
+            // every controller: the work that follows is done where one stands (clear, plant,
+            // graze). Its arrival is reported on the tile's centre, not as the final approach
+            // begins (`FLAG_EARLY`), up to `slow_radius` short of it on the ground beside.
+            "goto" if on_ground_kind(&target) => Goal::point(target.at, sp, 0),
             "goto" | "wander" | "follow" => Goal::point(target.at, sp, motion::FLAG_EARLY),
             _ if aside => Goal::point(target.at, sp * common::moves_of(ctx, id, now).aside, 0),
             // Closing in on a creature: every look checks whether it is within reach.

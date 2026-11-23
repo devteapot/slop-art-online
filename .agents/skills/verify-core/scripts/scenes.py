@@ -8055,5 +8055,202 @@ def truthful_refusals(s):
 
 SCENES["truthful_refusals"] = truthful_refusals
 
+
+GROUND_THOUGHT = {"kind": "deliberate", "summary": "verify-core ground_goto", "detail": "", "latency_ms": 0, "tokens": 0, "model": "fake", "reference": ""}
+GRASS_TILE, FOREST_TILE = 0, 1
+
+
+def ground_edges(at, W, H, kind, other, need, run=10, sep=30.0):
+    """Tiles of `kind` at the edge of a body of it (the tile behind is `kind` too), each with a
+    direction in which `run` tiles of `other`, and the tiles either side of them, lie straight
+    out: from a start on that run the nearest tile of `kind` is this one. At least `sep` m apart;
+    the first `need` found, scanning every third tile."""
+    found = []
+    for y in range(run + 2, H - run - 2, 3):
+        for x in range(run + 2, W - run - 2, 3):
+            if at(x, y) != kind:
+                continue
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                if at(x - dx, y - dy) != kind:
+                    continue
+                px, py = -dy, dx
+                if not all(at(x + dx * k + px * j, y + dy * k + py * j) == other for k in range(1, run + 1) for j in (-1, 0, 1)):
+                    continue
+                if all((x - fx) ** 2 + (y - fy) ** 2 >= sep * sep for fx, fy, _, _ in found):
+                    found.append((x, y, dx, dy))
+                    break
+            if len(found) >= need:
+                return found
+    return found
+
+
+def ground_goto(s):
+    """A `goto` to a kind of ground (`{"nearest": "forest"}`, `{"nearest": "grass"}`) ends with the
+    walker standing on that ground, so work chained after it that is done where one stands
+    succeeds at its first attempt: goto forest then clear, goto grass then plant. Each start is
+    on the other ground at the edge of the kind, on a tile straight out from the nearest tile of
+    it or one beside that line (`place_at` stands a body on a tile's centre): 1 m from that
+    tile's centre (the edge of the forest: the final approach, `slow_radius` 1.2 m, begins at
+    once), 1.4 m (diagonal), and 2 to 6 m (8 m can be beyond sight at dusk: "stuck: goto:
+    no nearest forest in sight"). Three controllers: a graph the admin installs
+    (`set_behavior`), a mind's plan (`mind_install`) and a player (`human_act` goto, then clear
+    or plant once the goto's outcome says it is done, as a client does). A first attempt passes
+    when no refusal in the rules' words ("there is no forest to clear where you stand",
+    "nothing grows here") was told and the work took effect (2 wood; a `plant` chronicle row).
+    Before goto-arrival a goto reported its arrival as its final approach began (`FLAG_EARLY`),
+    so the work could start on the ground beside."""
+    W, H, at, _walk = world_tiles(s)
+    starts = [(1, 0), (1, 1), (2, 0), (2, 1), (3, 0), (4, 1), (5, 0), (6, 0)]
+    player_starts = [(1, 0), (1, 1), (2, 0), (4, 0)]
+    tasks = {
+        # task: (kind walked to, its tile, the tile started on, the refusal's words)
+        "clear": ("forest", FOREST_TILE, GRASS_TILE, "no forest to clear where you stand"),
+        "plant": ("grass", GRASS_TILE, FOREST_TILE, "nothing grows here"),
+    }
+    names = {GRASS_TILE: "grass", FOREST_TILE: "forest"}
+    jobs = [(task, path, k) for task in tasks for path in ("set_behavior", "mind_install") for k in starts]
+    edges = {}
+    for task, (_, kind, other, _) in tasks.items():
+        need = sum(1 for j in jobs if j[0] == task) + len(player_starts)
+        edges[task] = ground_edges(at, W, H, kind, other, need)
+        s.expect(f"{task}: {need} edges of {names[kind]} found", len(edges[task]) >= need, len(edges[task]))
+    used = {t: 0 for t in tasks}
+
+    def trial(who, task, path, k):
+        x, y, dx, dy = edges[task][used[task]]
+        used[task] += 1
+        along, side = k
+        start = (x + 0.5 + dx * along - dy * side, y + 0.5 + dy * along + dx * side)
+        return {"actor": who, "task": task, "path": path, "start_tiles": list(k), "tile": [x, y], "start": start}
+
+    def under(who):
+        """Where `who` is now (its body row is a segment from `x`, `y` at `t_ms`) and the tile
+        code under it."""
+        b = s.http_rows(f"SELECT x, y, t_ms, vx, vy, next_ms FROM body WHERE id = {who}")[0]
+        now_ms = s.http_rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        t = max(0, min(now_ms, b["next_ms"]) - b["t_ms"]) / 1000.0
+        p = (b["x"] + b["vx"] * t, b["y"] + b["vy"] * t)
+        return p, at(math.floor(p[0]), math.floor(p[1]))
+
+    def wood(who):
+        return sum(r["qty"] for r in s.http_rows(f"SELECT item, qty FROM inventory WHERE owner = {who}") if r["item"] == "wood")
+
+    def placed(p):
+        pos, code = under(p["actor"])
+        p["placed"], p["placed_on"] = [round(v, 2) for v in pos], names.get(code, code)
+        p["d"] = round(math.dist(pos, (p["tile"][0] + 0.5, p["tile"][1] + 0.5)), 2)
+        p["wood_before"] = wood(p["actor"])
+        p["t0"] = s.http_rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    def watch(group, seconds):
+        """Each actor's first attempt at its task as it is seen: the moment its activity is seen
+        under way (with the ground under it then), or a refusal in the rules' words, first."""
+        ids = {p["actor"] for p in group}
+        end = time.monotonic() + seconds
+        while time.monotonic() < end and any("first" not in p for p in group):
+            t_min = min(p["t0"] for p in group)
+            acts = {r["id"]: r for r in s.http_rows("SELECT id, skill FROM activity") if r["id"] in ids}
+            told = s.http_rows(f"SELECT observer, text, at_ms FROM experience WHERE at_ms >= {t_min} AND (" + " OR ".join(f"observer = {i}" for i in sorted(ids)) + ")")
+            for p in group:
+                if "first" in p:
+                    continue
+                refused = [r for r in told if r["observer"] == p["actor"] and r["at_ms"] >= p["t0"] and tasks[p["task"]][3] in r["text"]]
+                a = acts.get(p["actor"])
+                if refused or (a and a["skill"] == p["task"]):
+                    p["first"] = "refused" if refused else "under way"
+                    if refused:
+                        p["refusal"] = refused[0]["text"]
+                    pos, code = under(p["actor"])
+                    p["seen_at"], p["seen_on"] = [round(v, 2) for v in pos], names.get(code, code)
+            time.sleep(0.2)
+        for p in group:
+            p.setdefault("first", "not seen")
+
+    def settle(group):
+        """After the work's time (12 s clearing, 5 s planting): its effect, and every refusal
+        in the rules' words told since the install."""
+        plants = s.http_rows("SELECT a, at_ms FROM chronicle WHERE kind = 'plant'")
+        for p in group:
+            if p["task"] == "clear":
+                p["effect"] = wood(p["actor"]) >= p["wood_before"] + 2
+            else:
+                p["effect"] = any(r["a"] == p["actor"] and r["at_ms"] >= p["t0"] for r in plants)
+            p["refusals"] = len([r for r in s.http_rows(f"SELECT text, at_ms FROM experience WHERE observer = {p['actor']}") if r["at_ms"] >= p["t0"] and tasks[p["task"]][3] in r["text"]])
+
+    # Graphs: every actor at once, each at its own edge (30 m apart and more).
+    actors = s.people(len(jobs))
+    plan = [trial(who, *job) for who, job in zip(actors, jobs)]
+    for p in plan:
+        if p["task"] == "plant":
+            s.call("grant_know_how", p["actor"], "planting")
+            s.call("grant_items", p["actor"], "berries", 4)
+        s.call("place_at", p["actor"], *p["start"])
+    time.sleep(2)
+    for p in plan:
+        placed(p)
+        graph = {"seq": [{"do": {"skill": "goto", "target": {"nearest": tasks[p["task"]][0]}}}, {"do": p["task"]}, {"wait": 120}]}
+        if p["path"] == "set_behavior":
+            s.call("set_behavior", p["actor"], json.dumps(graph))
+        else:
+            s.call("mind_install", p["actor"], json.dumps(graph), "verify ground_goto", "", 0, 0, GROUND_THOUGHT)
+    watch(plan, 45)
+    time.sleep(14)
+    settle(plan)
+    for p in plan:
+        s.graph(p["actor"], {"wait": 300})
+
+    # A player: the goto, then the work once the goto's outcome says it is done.
+    st = json.loads((s.out / "state.json").read_text())
+    verify = [str(ROOT / ".agents/skills/verify/scripts/verify.py")]
+    me, _viewer, present = _sweep_player(s, "Groundling")
+    s.call("grant_know_how", me, "planting")
+    played = []
+    for task in tasks:
+        for k in player_starts:
+            p = trial(me, task, "human_act", k)
+            if task == "plant":
+                s.call("grant_items", me, "berries", 4)
+            s.call("place_at", me, *p["start"])
+            present()
+            time.sleep(1.5)
+            placed(p)
+            subprocess.run(["python3", *verify, "player", "--run", st["run"], "act", json.dumps({"do": "goto", "target": {"nearest": tasks[task][0]}})], check=False, capture_output=True)
+            try:
+                p["goto_outcome"] = s.wait(lambda: [r for r in s.http_rows(f"SELECT * FROM act_outcome WHERE observer = {me}") if r["at_ms"] >= p["t0"] and r["skill"] == "goto"], 30, 0.1)[0]
+            except TimeoutError:
+                p["goto_outcome"] = None
+            if p["goto_outcome"] and p["goto_outcome"]["ok"]:
+                pos, code = under(me)
+                p["at_goto_done"], p["on_goto_done"] = [round(v, 2) for v in pos], names.get(code, code)
+                subprocess.run(["python3", *verify, "player", "--run", st["run"], "act", json.dumps({"do": task})], check=False, capture_output=True)
+                watch([p], 10)
+                time.sleep(13 if task == "clear" else 6)
+                settle([p])
+            else:
+                p["first"], p["effect"], p["refusals"] = "goto not done", False, 0
+            played.append(p)
+
+    (s.out / f"{s.name}-trials.json").write_text(json.dumps(plan + played, indent=1, default=str) + "\n")
+    for p in plan + played:
+        extra = f"; the goto done on {p['on_goto_done']}" if p.get("on_goto_done") else ""
+        print(f"  {p['path']:12} {p['task']} from {p['d']:.2f} m on {p['placed_on']}{extra}: first seen {p['first']}"
+              f"{' on ' + str(p.get('seen_on')) if p.get('seen_on') else ''}; refusals {p['refusals']}; effect {p['effect']}", flush=True)
+    for task, (kind, *_rest) in tasks.items():
+        for path in ("set_behavior", "mind_install", "human_act"):
+            group = [p for p in plan + played if p["task"] == task and p["path"] == path]
+            first = [p for p in group if p["refusals"] == 0 and p["effect"]]
+            s.expect(f"{path}: goto {kind} then {task} succeeds at the first attempt ({len(first)}/{len(group)})",
+                     len(first) == len(group), [(p["d"], p["refusals"], p["effect"]) for p in group], fatal=False)
+            seen = [p for p in group if p["first"] == "under way"]
+            s.expect(f"{path}: each {task} seen under way stands on {kind} ({sum(p['seen_on'] == kind for p in seen)}/{len(seen)})",
+                     all(p["seen_on"] == kind for p in seen), [(p["d"], p.get("seen_on")) for p in seen], fatal=False)
+            if path == "human_act":
+                done = [p for p in group if p.get("on_goto_done")]
+                s.expect(f"human_act: the goto to {kind} is done only standing on {kind} ({sum(p['on_goto_done'] == kind for p in done)}/{len(group)})",
+                         len(done) == len(group) and all(p["on_goto_done"] == kind for p in done), [(p["d"], p.get("on_goto_done")) for p in group], fatal=False)
+
+
+SCENES["ground_goto"] = ground_goto
+
 if __name__ == "__main__":
     raise SystemExit(main())
