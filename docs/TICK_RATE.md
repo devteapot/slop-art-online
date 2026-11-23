@@ -630,3 +630,15 @@ Added 2026-11-23 (branch `tick-marker`). It is a measuring aid like the profilin
 - ≤ 0.5% of intervals over 25 ms.
 
 The intervals are the marker's own (server time), between consecutive ticks in the run's window. Arrival at the watcher is reported beside them, never judged: client experience belongs with the contract's latency lines, measured with the watcher on a separate machine.
+
+**Its cost.**
+- **In a calm world** (64 residents, profiling on), the write is 0.27 ms/s by its own span (`tick.marker`), about 4.5 µs a tick.
+- **In the 216 gate case on the relay arm**, the database thread was the same with it on and off: 509 ms/s (502–515) on, 507 (504–511) off. That is two runs each, on branch `npc-measure` (`b18402236`).
+- **What it sends:** one updated row a tick, to the owner's watcher alone.
+
+**What it showed first (dev-box, 2026-11-23).** The dispatch times of an idle world's ticks scatter about ±1.5 ms around the 60 Hz grid, and no slot is skipped.
+- With profiling: p50 16.69, p99 17.80, max 18.05 ms.
+- Without (L0): p99 18.04–18.08, max 18.5 ms.
+- In both, the scatter is spread evenly over the millisecond, so it is not a 1 ms timer step.
+
+So a p99 interval within 17.5 ms is not reached even with no load. Slots skipped (an interval near 33 ms) and the share over 25 ms are where load shows.
