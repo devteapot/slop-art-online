@@ -36,6 +36,7 @@ mod det;
 mod far;
 mod earshot;
 mod fold;
+mod heed;
 mod fast;
 mod known;
 mod latency;

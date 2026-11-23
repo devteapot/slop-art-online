@@ -2,6 +2,7 @@
 //! Rhai skill runtime. Used by the authority module, the mind service and the viewer.
 
 pub mod acts;
+pub mod heed;
 pub mod bearing;
 mod bin;
 pub mod catalog;

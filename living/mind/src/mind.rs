@@ -1437,6 +1437,14 @@ impl Minds {
         rx.await?.map_err(|e| anyhow!("mind_update: {e}"))
     }
 
+    async fn heed(&self, actor: u32, policy: &Value) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        self.conn.reducers.mind_heed_then(actor, policy.to_string(), move |_, r| {
+            let _ = tx.send(flatten(r));
+        })?;
+        rx.await?.map_err(|e| anyhow!("mind_heed: {e}"))
+    }
+
     /// Whom a mind's character fights (`mind_fight`, relation-fight).
     async fn fight(&self, actor: u32, fights: Vec<FightIn>) -> Result<()> {
         let (tx, rx) = oneshot::channel();
@@ -1895,7 +1903,11 @@ impl Minds {
         if self.actors.lock().unwrap().get(&actor).and_then(|m| m.onstage_until).is_some_and(|t| t > now) {
             return true;
         }
-        let seen = scene.and_then(|s| serde_json::from_str::<Value>(s).ok()).and_then(|v| v["creatures"].as_array().map(|cs| cs.iter().filter_map(|c| c["id"].as_u64()).any(|id| self.is_player(id as u32)))).unwrap_or(false);
+        // A player listed by id, or (heed, docs/ATTENTION_BUDGET.md v2.1 point 4) one in the
+        // character's throng, which the authority counts in `_stage` and no prompt shows.
+        let seen = scene.and_then(|s| serde_json::from_str::<Value>(s).ok()).is_some_and(|v| {
+            v["creatures"].as_array().is_some_and(|cs| cs.iter().filter_map(|c| c["id"].as_u64()).any(|id| self.is_player(id as u32))) || v["_stage"]["throng_players"].as_u64().is_some_and(|n| n > 0)
+        });
         if !seen {
             return false;
         }
@@ -2391,6 +2403,13 @@ impl Minds {
         // Lines waiting on this deliberation that its words are not for get their turn now
         // (`LIVING_PARK=concurrent`).
         self.deliberation_decided(actor, &decision);
+        // Whom the person keeps track of (docs/ATTENTION_BUDGET.md §8): a `heed` the decision wrote
+        // goes to the authority, which validates it; a refusal comes back in its next think prompt.
+        if prompts::heed_on() && !decision["heed"].is_null() {
+            if let Err(e) = self.heed(actor, &decision["heed"]).await {
+                log::warn!("heed for {}: {e:#}", c.name);
+            }
+        }
         let intend: Vec<String> = decision["intend"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
         // Which open project the decision says it serves (recorded on the thought row; served
         // projects are reinforced once the decision is carried out).

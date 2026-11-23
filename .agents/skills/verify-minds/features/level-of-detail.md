@@ -32,3 +32,8 @@ After another 46 seconds, a fresh off-stage request must remain held for three s
 - This scene proves a short hold and release, not expiry of the full 600-second gap, off-stage talk pacing, consolidation pacing or thousands of characters.
 - Mind unit tests run automatically with every suite. If the live scene fails, report the blocker and unit results separately.
 - The [Rust callback documentation](https://spacetimedb.com/docs/clients/rust/#callback-on_update) and [pinned SDK 2.10.1 source](https://docs.rs/spacetimedb-sdk/2.10.1/src/spacetimedb_sdk/table.rs.html#153-178) require a known primary key for `on_update`. The generated `my_deliberations` view has none, so replacements use insert/delete callbacks. The SDK dispatches inserts before deletes. The authority can strip obsolete plan reasons without changing `updated_ms`; the old timestamp-only delete check therefore removed the replacement. Deletes now match the complete old row. Merges and player contact notify the waiting worker to re-evaluate its current row immediately.
+
+
+## A player in a heed throng (the `heed_on` law)
+
+With the authority's `heed_on` law on, a player a mind's character sees but does not heed is in its scene's `throngs`, not `creatures`. The authority counts such players in the scene's `_stage.throng_players`, and `watched` (mind.rs) treats a count above 0 as a player in the scene, so the level of detail keeps the mind on stage. `prompts::model_scene` strips `_stage` from every think, compile and animal prompt (unit test `a_scenes_stage_mark_never_reaches_a_model`). Not driven by a scene yet: no player-side heed exists to put a player in a throng.

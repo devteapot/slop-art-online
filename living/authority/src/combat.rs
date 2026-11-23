@@ -176,6 +176,12 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
         if !crate::perception::in_sight(ctx, &map, c.id, c.pos, c.facing, ev.actor, ev.at, c.dist, &w, now, false) {
             continue;
         }
+        // The feed's rule on every path (docs/ATTENTION_BUDGET.md "Built"): an onlooker's row goes
+        // only to a viewer whose individual set holds the actor or the target; throng blows reach it
+        // as `seen_throng` counts (the player side). Always true while heed does not apply to it.
+        if !crate::heed::individual(ctx, c.id, ev.actor, now) && !(ev.target != 0 && crate::heed::individual(ctx, c.id, ev.target, now)) {
+            continue;
+        }
         told.push(c.id);
         let amount = if ev.kind == seen::LAUNCH { ev.amount } else { 0.0 };
         let ev = masked(c.id);

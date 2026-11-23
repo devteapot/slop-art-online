@@ -550,6 +550,21 @@ pub struct Laws {
     pub cover_brush_on: bool,
     pub cover_eye_height_m: f32,
     pub gaze_on: bool,
+    /// Heed (docs/ATTENTION_BUDGET.md v2.1; `living_rules::heed`): off, everyone in sight is an
+    /// individual, as before. On, an AI character perceives as individuals only those it heeds
+    /// (its capacity, `heed_capacity(a)` clamped to `heed_ceiling`, filled by its heed policy)
+    /// plus whoever it acts on and whoever made contact with it within `heed_contact_s`; the rest
+    /// of what it sees is a throng. Players keep today's perception either way (the player side is
+    /// separate work). Off by default until the owner has seen it in a play-test (2026-11-23).
+    pub heed_on: bool,
+    pub heed_ceiling: f32,
+    pub heed_contact_s: f32,
+    /// The window closing speed is measured over (seconds; `heed::ClosingTracker`): 0 gives the
+    /// raw two-pass speed.
+    pub heed_closing_s: f32,
+    /// A diagnostic, off in play: each heed pass, windup and blow of a character with a mind is
+    /// logged (`heed pass`, `heed windup`, `heed blow`; the verify-core heed scene reads them).
+    pub heed_trace: bool,
     pub cover_sight_on: bool,
     /// How far a character sees ground by day (metres): the cells of `known_ground` it marks
     /// (docs/MOVEMENT_MIND.md, step 3). At night, its own sight.
@@ -901,6 +916,11 @@ impl Default for Laws {
             cover_brush_on: true,
             cover_eye_height_m: 1.6,
             gaze_on: false,
+            heed_on: false,
+            heed_ceiling: 16.0,
+            heed_contact_s: crate::heed::DEFAULT_CONTACT_S,
+            heed_closing_s: crate::heed::DEFAULT_CLOSING_S,
+            heed_trace: false,
             cover_sight_on: false,
             ground_sight_m: 24.0,
             known_cells_pass: 0.0,
@@ -3272,6 +3292,11 @@ impl Scripts {
             cover_brush_on: flag("cover_brush_on", l.cover_brush_on),
             cover_eye_height_m: g("cover_eye_height_m", l.cover_eye_height_m),
             gaze_on: flag("gaze_on", l.gaze_on),
+            heed_on: flag("heed_on", l.heed_on),
+            heed_ceiling: g("heed_ceiling", l.heed_ceiling).clamp(0.0, 256.0),
+            heed_contact_s: g("heed_contact_s", l.heed_contact_s).clamp(0.0, 60.0),
+            heed_closing_s: g("heed_closing_s", l.heed_closing_s).clamp(0.0, 60.0),
+            heed_trace: flag("heed_trace", l.heed_trace),
             cover_sight_on: flag("cover_sight_on", l.cover_sight_on),
             ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
             known_cells_pass: g("known_cells_pass", l.known_cells_pass).clamp(0.0, 100_000.0),
@@ -3462,6 +3487,32 @@ impl Scripts {
         (!s.takes.is_empty() || !s.gives.is_empty()).then(|| (s.takes.clone(), s.gives.clone()))
     }
 
+    /// How many others the character heeds (keeps track of as individuals) now: the world's
+    /// `heed_capacity(a)` law (docs/ATTENTION_BUDGET.md §3), with `a.actor.factor` the knack ×
+    /// practice of the skill `heed_knack()` names (`watch` when the script names none), clamped
+    /// to `[0, ceiling]` ([`crate::heed::clamp_capacity`]; the ceiling is the world's
+    /// `heed_ceiling`, which the caller reads). An `Err` when the script has no such law or it
+    /// fails; the caller decides what that means.
+    pub fn heed_capacity(&self, ctx: &SkillCtx, ceiling: f32) -> Result<usize, String> {
+        if !self.has("heed_capacity") {
+            return Err("the script has no heed_capacity law".into());
+        }
+        let knack = if self.has("heed_knack") {
+            self.engine
+                .call_fn::<Dynamic>(&mut Scope::new(), &self.ast, "heed_knack", ())
+                .map_err(|e| format!("heed_knack: {e}"))?
+                .into_string()
+                .map_err(|t| format!("heed_knack must name a skill, not {t}"))?
+        } else {
+            crate::heed::DEFAULT_KNACK.to_string()
+        };
+        let mut c = ctx.clone();
+        c.skill = knack;
+        let d = self.call("heed_capacity", &c)?;
+        let n = number(&d).ok_or("heed_capacity must return a number")?;
+        Ok(crate::heed::clamp_capacity(n, ceiling))
+    }
+
     /// Generic numeric query, e.g. `attack_cooldown`.
     pub fn number(&self, f: &str, ctx: &SkillCtx, default: f64) -> f64 {
         if !self.has(f) {
@@ -3579,7 +3630,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 29] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 33] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3623,6 +3674,14 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 29] = [
     ("cover_brush_min_fill", ValueOnly::Cover),
     ("cover_cliff_step_m", ValueOnly::Cover),
     ("gaze_on", ValueOnly::Gaze),
+    // heed (docs/ATTENTION_BUDGET.md): the performance ceiling on every capacity, the contact and
+    // closing windows and the diagnostic, read by the authority's heed (authority/src/heed.rs) at its
+    // next pass. Its switch `heed_on` is an ordinary law: the mind service reads it (the think reply's
+    // `heed` field) from the script row alone, so its change installs the script again.
+    ("heed_ceiling", ValueOnly::Delivery),
+    ("heed_contact_s", ValueOnly::Delivery),
+    ("heed_closing_s", ValueOnly::Delivery),
+    ("heed_trace", ValueOnly::Delivery),
 ];
 
 /// The functions a value-only law may be named in: the constants (`laws`, an overlay's
