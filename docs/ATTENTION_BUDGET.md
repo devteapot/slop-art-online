@@ -78,7 +78,7 @@ What the player side can rely on, and what it must call. Nothing here is built f
 
 ```rust
 #[derive(SpacetimeType)]
-pub struct HeedInput { pub pins: Vec<u32>, pub focus: u32 /* 0: none */ }
+pub struct HeedInput { pub pins: Vec<u32> /* at most 4; more is refused with a reason */, pub focus: Option<u32> }
 #[spacetimedb::reducer]
 pub fn human_heed(ctx: &ReducerContext, input: HeedInput) -> Result<(), String>
 ```
@@ -162,7 +162,7 @@ On the Cullet battle recording (docs/ATTENTION_E3.md §8) without holds, smoothi
 
 ```rust
 #[derive(SpacetimeType)]
-pub struct HeedInput { pub pins: Vec<u32>, pub focus: u32 /* 0: none */ }
+pub struct HeedInput { pub pins: Vec<u32> /* at most 4; more is refused with a reason */, pub focus: Option<u32> }
 #[spacetimedb::reducer]
 pub fn human_heed(ctx: &ReducerContext, input: HeedInput) -> Result<(), String>
 ```
