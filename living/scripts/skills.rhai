@@ -321,7 +321,7 @@ fn senses(a) {
     s
 }
 
-// ---- heed (docs/ATTENTION_BUDGET.md; read by the authority when `heed_on`) ----------------
+// ---- heed (docs/ATTENTION_BUDGET.md; read by the authority while its switch law is on) -----
 // How many others a creature heeds: keeps track of as individuals; everyone else in sight is a
 // throng. Seed content: a world may change every number. The engine clamps the answer to the
 // world's heed ceiling (a law). `a.actor.factor` is the inborn knack times practice at the skill

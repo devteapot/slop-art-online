@@ -1620,7 +1620,7 @@ mod tests {
     /// the minds on its old value until the next install.
     #[test]
     fn the_laws_minds_read_change_by_an_install() {
-        let read = ["cues_on", "cue_cooldown_s", "cue_gap_s", "speech_truth", "stranger_by_name", "think_framing", "fast_lane_inflight"];
+        let read = ["cues_on", "cue_cooldown_s", "cue_gap_s", "speech_truth", "stranger_by_name", "think_framing", "fast_lane_inflight", "heed_on"];
         for l in read {
             assert!(living_rules::script::VALUE_ONLY.iter().all(|(n, _)| *n != l), "{l} is value-only: the mind service must lay `law_override` over its script first");
         }

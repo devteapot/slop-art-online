@@ -2,7 +2,7 @@
 
 docs/ATTENTION_BUDGET.md ("Built"). Off by default until the owner's play-test.
 
-**What it is.** Under the value-only law `heed_on`, the think system prompt (cached) gains the
+**What it is.** Under the law `heed_on` (an ordinary law: the service compiles the script row alone, so switching it installs the script again), the think system prompt (cached) gains the
 reply's optional `"heed"` field and its grammar (`prompts::HEED_GRAMMAR`), and the user prompt a
 "# Whom you keep track of" section rendered from the scene's `_heed` (capacity, by its own policy
 or its instinct, each rule's `why`, the parser's notes, the last refusal); `_heed` itself never

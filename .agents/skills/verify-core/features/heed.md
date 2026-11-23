@@ -4,7 +4,7 @@ Built for AI characters and minds, off by default until the owner's play-test (d
 "Built"; the experiments in docs/ATTENTION_E4.md and docs/ATTENTION_E5.md stay on `heed-e4`). A mind's
 own policy (`mind_heed`, the `heed_policy` table) is driven by verify-minds' `heed` case.
 
-**What it is.** With the value-only law `heed_on` (off as shipped), a character the authority runs
+**What it is.** With the law `heed_on` (off as shipped; an ordinary law, since the mind service reads it), a character the authority runs
 (no person plays it) perceives as individuals only those it heeds: at most its capacity
 (`heed_capacity(a)` clamped by `heed_ceiling`), filled by its own policy if its mind wrote one, else its species' heed instinct
 (`living/seeds/heed.json`, the shared selector `living_rules::heed`), plus whoever it acts on and

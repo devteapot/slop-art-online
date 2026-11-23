@@ -3618,7 +3618,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 33] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 32] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3661,9 +3661,10 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 33] = [
     ("cover_brush_min_fill", ValueOnly::Cover),
     ("cover_cliff_step_m", ValueOnly::Cover),
     ("gaze_on", ValueOnly::Gaze),
-    // heed (docs/ATTENTION_BUDGET.md v2): the switch, the performance ceiling on every capacity
-    // and the contact window: read by the authority's heed (authority/src/heed.rs) at its next pass.
-    ("heed_on", ValueOnly::Delivery),
+    // heed (docs/ATTENTION_BUDGET.md): the performance ceiling on every capacity, the contact and
+    // closing windows and the diagnostic, read by the authority's heed (authority/src/heed.rs) at its
+    // next pass. Its switch `heed_on` is an ordinary law: the mind service reads it (the think reply's
+    // `heed` field) from the script row alone, so its change installs the script again.
     ("heed_ceiling", ValueOnly::Delivery),
     ("heed_contact_s", ValueOnly::Delivery),
     ("heed_closing_s", ValueOnly::Delivery),
