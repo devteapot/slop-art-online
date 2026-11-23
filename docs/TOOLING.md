@@ -458,6 +458,12 @@ On Linux the timer runs without a login when lingering is on (`loginctl enable-l
 
 [`disk_report.sh`](../living/tools/disk_report.sh) still reports free space and big folders across the machines; it deletes nothing.
 
+### The old reference server's dead replicas (dev-box)
+
+The stopped labs server `sao-living_spacetimedb_1` (SpacetimeDB 2.10.1, volume `sao-living_living-stdb`, 62 GB) is protected: it holds the paused reference worlds. SpacetimeDB keeps a deleted database's replica directory, so 247 of its 259 replica directories (10.6 GB) belong to databases it no longer lists. Listed on 2026-11-23 without touching the volume or the container: a networkless scratch 2.10.1 server on a copy of `control-db` listed the owner identity's 12 databases (every `aske-coast` world, `stage3-village`, `stage4-two`, `stage4-makers`, two `verify-core-20261102-*` worlds; 49.8 GB), and `spacetime logs` on each named its replica ("failed to init replica N").
+
+**Ready for the owner if the disk ever gets tight:** `bash ~/.local/state/sao-living-cleanup-20261123/delete-unlisted.sh` deletes exactly the 247 unlisted directories (refusing if the server runs, a list is missing, or an id is on both lists) and prints free space before and after; 12 directories should remain. The owner approved the clean-up, but it is left unrun: agents' removal safety check refuses an `rm` inside `podman unshare`, and 10.6 GB was not worth the owner's time (general coordinator, 2026-11-23). After a run, re-list read-only the same way and confirm the same 12 databases map to their replicas. The two `verify-core-20261102-*` worlds (4.5 GB) are listed, so removing them would need the protected server started: candidates only if space is short.
+
 ### Removing a worktree
 
 `git worktree remove --force` deletes a worktree's untracked and git-ignored files with it, and in this project those are evidence: `.local/` verification runs, stills, measurement series, uncommitted edits. Evidence was lost this way more than once (the dev-box's eight `mechanics-flake` proof runs on 2026-11-20 among them). Remove worktrees with `living/tools/wt_remove.py PATH` (installed on each machine as `~/.local/share/slop-tools/wt-remove`), never with `git worktree remove --force` directly. It:
