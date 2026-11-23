@@ -164,6 +164,24 @@ SIDES_BATTLE_PATHS = ("living/authority/src/lib.rs", "living/authority/src/recor
                       "living/authority/src/combat.rs", "living/rules/src/records.rs",
                       "living/tools/battle_viewers.py", ".agents/skills/verify-core/scripts/scenes.py")
 
+# The speech group (gate-say-path, 2026-11-23): verify-core `say`, `heard_first` and `audience` on a
+# fresh default-seed world, for merges that change how lines are said, held back or heard.
+# say-once (7f21e425e, 2026-11-13: speech.rs and brain.rs) broke `say` and no gate case ran it for
+# ten days. A path in SPEECH_PATHS selects the group; so does a changed hunk (its lines and two of
+# context) of a file in SPEECH_HUNKS that names speech (SPEECH_WORDS): brain.rs, perceive.rs and
+# skills.rhai change in about a third of behavioural merges each, mostly not speech.
+SPEECH_PATHS = ("living/authority/src/speech.rs", "living/authority/src/earshot.rs", "living/authority/src/mind.rs",
+                "living/rules/src/normalize.rs", "living/rules/src/saying.rs", "living/rules/src/ways.rs",
+                "living/rules/src/graph.rs", "living/rules/src/script/speech.rs")
+SPEECH_HUNKS = ("living/authority/src/brain.rs", "living/authority/src/perceive.rs", "living/scripts/skills.rhai")
+SPEECH_WORDS = re.compile(r"\b(say|says|said|unsaid|saying|speak\w*|speech\w*|spoken\w*|earshot\w*|whisper\w*|"
+                          r"hear|hears|heard|hearing|audience|overtaken)\b", re.I)
+
+# The steering group (gate-say-path): verify-core `flee_wall` and `pursue_last_seen` on a fresh
+# default-seed world, for merges that change how bodies steer (motion.rs, the rules' steer and nav).
+STEERING_PATHS = ("living/authority/src/motion.rs", "living/rules/src/steer.rs", "living/rules/src/steer_drive.rs",
+                  "living/rules/src/nav.rs")
+
 # The render group (gate-render, 2026-11-20): verify-ui's drawing cases, for merges that change how
 # the client draws people, the camera or sight. Each glob's `*` stays within a folder, `**` crosses
 # folders. The group is split in two halves by path (render-autosplit, 2026-11-21; the whole group
@@ -194,6 +212,14 @@ CASES = {
     # The battle fixture on Cullet's plaza (sides-battle-fix): 60 fighters in 2 sides fall within
     # 30 s, no use targets a resident or the fighter's own side, no resident dies in 60 s.
     "sides_battle": {"skill": "verify-core", "group": "battle", "paths": SIDES_BATTLE_PATHS},
+    # Speech (gate-say-path): a graph's and a mind's lines to a person in every form, a line held
+    # back when another spoke first, and who heard a line. Only for merges touching speech.
+    "say":          {"skill": "verify-core", "group": "speech", "paths": SPEECH_PATHS, "hunks": (SPEECH_HUNKS, SPEECH_WORDS)},
+    "heard_first":  {"skill": "verify-core", "group": "speech", "paths": SPEECH_PATHS, "hunks": (SPEECH_HUNKS, SPEECH_WORDS)},
+    "audience":     {"skill": "verify-core", "group": "speech", "paths": SPEECH_PATHS, "hunks": (SPEECH_HUNKS, SPEECH_WORDS)},
+    # Steering (gate-say-path): a flight out of a corner, a pursuit to the last-seen place.
+    "flee_wall":    {"skill": "verify-core", "group": "steering", "paths": STEERING_PATHS},
+    "pursue_last_seen": {"skill": "verify-core", "group": "steering", "paths": STEERING_PATHS},
     "roundtrip":    {"skill": "verify-minds", "group": "minds"},
     "acts":         {"skill": "verify-minds", "group": "minds"},
     "dealings":     {"skill": "verify-minds", "group": "minds",
@@ -433,6 +459,31 @@ def now():
 
 def changed(base, head, cwd=None):
     return [p for p in git("diff", "--name-only", base, head, cwd=cwd).splitlines() if p]
+
+
+def changed_hunks(base, head, files, cwd=None):
+    """{path: the changed hunks' text (their lines and two of context)} for each of `files` that
+    base..head changes."""
+    out = {}
+    for f in files:
+        text = git("diff", "-U2", base, head, "--", f, cwd=cwd, check=False)
+        if text:
+            out[f] = "\n".join(l for l in text.splitlines() if l[:1] in "+- @" and not l.startswith(("+++", "---")))
+    return out
+
+
+def selected(case, paths, hunks=None):
+    """Whether a case with `paths` (and `hunks`: files and the words that select it in their changed
+    hunks) is needed. Without hunk text (None) a touched hunk file selects it."""
+    c = CASES[case]
+    if not c.get("paths") or any(p.startswith(c["paths"]) for p in paths):
+        return True
+    if not c.get("hunks"):
+        return False
+    files, words = c["hunks"]
+    hit = [p for p in paths if p in files]
+    # identifiers count by their parts: `said_to_recently` names `said`
+    return bool(hit) and (hunks is None or any(words.search(hunks.get(p, "").replace("_", " ")) for p in hit))
 
 
 def behavioural(paths):
@@ -1203,7 +1254,7 @@ class Runner:
         ev = Path(root) / ".local/living/verify" / run
         ev.mkdir(parents=True, exist_ok=True)
         log = ev / "gate.log"
-        seed = "world" if group in {"core", "mechanics", "client"} else "cullet" if group == "battle" else "island"
+        seed = "world" if group in {"core", "mechanics", "client", "speech", "steering"} else "cullet" if group == "battle" else "island"
         # Mechanics uses the raw CLI, so the gate process supervises its world instead of an inactivity lease.
         launch_args = ("--driver-pid", str(os.getpid())) if group == "mechanics" else ()
         try:
@@ -1574,15 +1625,16 @@ def judge_on_main(a, runner, repo, base, cases, record):
 
 # ---------------------------------------------------------------- commands
 
-def plan_cases(a, paths, touched):
+def plan_cases(a, paths, touched, hunks=None):
     """(scene cases, render cases) a run needs. --cases names them exactly; otherwise the scene
-    cases when behaviour is touched (all with --force; a `paths` case only for its paths) and the
-    render cases of the halves the drawing paths select (all six with --render-only --force)."""
+    cases when behaviour is touched (all with --force; a `paths` case only for its paths, or for
+    its words in the changed hunks of its `hunks` files) and the render cases of the halves the
+    drawing paths select (all six with --render-only --force)."""
     if a.cases:
         cases = a.cases.split(",")
         return [c for c in cases if c not in RENDER_CASES], [c for c in cases if c in RENDER_CASES]
     scenes = [c for c in ORDER if CASES[c]["group"] not in RENDER_GROUPS]
-    unneeded = [c for c in scenes if CASES[c].get("paths") and not any(p.startswith(CASES[c]["paths"]) for p in paths)]
+    unneeded = [c for c in scenes if not selected(c, paths, hunks)]
     if unneeded:
         say(f"not needed (none of their paths touched): {', '.join(unneeded)}")
     scenes = [c for c in scenes if c not in unneeded]
@@ -1617,7 +1669,8 @@ def cmd_run(a):
     bad = [c for c in (a.cases.split(",") if a.cases else []) if c not in CASES]
     if bad:
         raise SystemExit(f"scene-gate: unknown case {bad}; cases: {ORDER}")
-    cases, render = plan_cases(a, paths, touched)
+    hunk_files = sorted({f for c in CASES.values() if c.get("hunks") for f in c["hunks"][0]})
+    cases, render = plan_cases(a, paths, touched, changed_hunks(base, head, [p for p in paths if p in hunk_files]))
     dirty = git("status", "--porcelain", "--untracked-files=no")
     if dirty:
         say(f"note: the tree has uncommitted changes; they are what is tested:\n{dirty}")
