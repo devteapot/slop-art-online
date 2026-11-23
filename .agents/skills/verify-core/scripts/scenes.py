@@ -4687,6 +4687,27 @@ def doing_cost(s):
         s.call("set_behavior", fid, json.dumps({"wait": 300}), check=False)
 
 
+def open_ground(s, actor, west, east, south, north, used):
+    """Stand `actor` on open ground for a scene laid out round it: every tile from `west` m west to
+    `east` m east and `south` to `north` m in y of the spot walkable with no body on it, the spot
+    30 m and more from those in `used` (appended). Scenes that placed others at fixed offsets from
+    where `spawn_crowd` dropped the actor put them on rock or water at times, and `place_at` then
+    moved them up to 6 m (outcomes' far target behind rock on the island, gate-1123043533-a3bfe2);
+    returns the actor's position."""
+    W, H, at, walk = world_tiles(s)
+    taken = {(math.floor(b["x"]), math.floor(b["y"])) for b in s.rows("SELECT x, y FROM body")}
+    for y in range(south + 8, H - north - 8, 3):
+        for x in range(west + 8, W - east - 8, 2):
+            if any(math.dist((x + .5, y + .5), q) < 30 for q in used):
+                continue
+            if all(walk(x + i, y + d) and (x + i, y + d) not in taken for d in range(-south, north + 1) for i in range(-west, east + 1)):
+                used.append((x + .5, y + .5))
+                s.call("place_at", actor, x + .5, y + .5)
+                time.sleep(0.5)
+                return body_at(s, actor)
+    raise RuntimeError("no open ground for the scene on this map")
+
+
 def outcomes(s):
     """Whoever strikes or shoots is told how it came out (the `force_outcomes` law,
     docs/COMBAT_MIND.md §3.1). Before 2026-11-11 a mind-held archer was never told how its
@@ -4698,7 +4719,8 @@ def outcomes(s):
     a, b, c = s.people(3)
     # Earlier scenes on the same world (a duel's strikes in `fov`) leave outcome lines of their own.
     t_scene = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
-    here = body_at(s, a)
+    used = []
+    here = open_ground(s, a, 21, 6, 1, 2, used)
     # 4.5 m: within sight by night too (6 m), so the archer sees its target at any hour.
     s.call("place_at", b, here[0] + 4.5, here[1])
     s.call("place_at", c, here[0] + 4.5, here[1] + 1.2)
@@ -4748,11 +4770,11 @@ def outcomes(s):
     set_law(s, "force_outcomes", True)
     s.expect("with force_outcomes off, a hit is not told", after == before, {"before": before, "after": after})
 
-    names_told(s)
-    missiles_told(s)
+    names_told(s, used)
+    missiles_told(s, used)
 
 
-def missiles_told(s):
+def missiles_told(s, used=None):
     """A hit by a missile is told as a shot, never as an attack (fix-missile-told): to the one
     struck, by the shooter as it perceives them when it sees them ("A stranger shot you with an
     arrow: hit for 7"), else by the missile alone ("An arrow struck you from somewhere you could
@@ -4762,7 +4784,7 @@ def missiles_told(s):
     sight, within the bow's 22 m) shot at by a point aim. No line any of them is told about the
     arrows says "attacked", and the unseen shot names no one."""
     a, b, w, f = s.people(4)
-    here = body_at(s, a)
+    here = open_ground(s, a, 1, 20, 7, 2, [] if used is None else used)
     # 4.5 m: within sight by night too (6 m); the far target stays past day sight (11 m), and
     # the line to it passes 1.4 m clear of the near target and the witness.
     s.call("place_at", b, here[0] + 4.5, here[1])
@@ -4800,7 +4822,7 @@ def missiles_told(s):
              [r["text"] for r in told])
 
 
-def names_told(s):
+def names_told(s, used=None):
     """Every told line names others as the teller perceives them (fix-kill-name): a name it was
     told, else "a stranger" (or "a baby", the far label), never a real name it does not know.
     Four strangers (`spawn_crowd`) act on each other through the ordinary acts: a gift, an offer
@@ -4810,7 +4832,7 @@ def names_told(s):
     introduced to (`acquaintance`). Before fix-kill-name a melee kill read "killed Agnes Fenner",
     and an arrow's record "struck Wren"."""
     p, q, r, w = s.people(4)
-    here = body_at(s, p)
+    here = open_ground(s, p, 1, 3, 1, 3, [] if used is None else used)
     for who, (dx, dy) in ((q, (1.2, 0.0)), (r, (0.0, 1.2)), (w, (2.5, 2.5))):
         s.call("place_at", who, here[0] + dx, here[1] + dy)
     s.call("grant_items", p, "stone", 3)

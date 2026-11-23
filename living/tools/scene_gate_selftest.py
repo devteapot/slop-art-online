@@ -614,6 +614,29 @@ def check_speech_selection():
     expect("speech: a skills.rhai hunk with no speech word does not", not set(speech) & set(got), str(got))
     got = plan([brain])
     expect("speech: without hunk text a touched hunk file selects it (the safe side)", set(speech) <= set(got), str(got))
+    acting, fight = ["act_gaps", "act_replace", "truthful_refusals"], ["committed", "dodge_told", "health_seen", "seize", "outcomes"]
+    expect("speech: speak and told run in the speech group as verify-player scripts",
+           all(scene_gate.CASES[c]["group"] == "speech" and scene_gate.CASES[c]["skill"] == "verify-player" for c in ("speak", "told")))
+    expect("step 1: the acting and fight groups, outcomes after skirmish on the island world",
+           all(scene_gate.CASES[c]["group"] == "acting" for c in acting)
+           and all(scene_gate.CASES[c]["group"] == "fight" for c in fight[:4]) and scene_gate.CASES["outcomes"]["group"] == "island"
+           and scene_gate.ORDER.index("skirmish") < scene_gate.ORDER.index("outcomes"))
+    for path in ("living/authority/src/acts.rs", "living/rules/src/acts.rs", "living/authority/src/outcomes.rs", "living/rules/src/outcome.rs"):
+        got = plan([path], {})
+        expect(f"step 1: {path} selects the acting group", set(acting) <= set(got) and not set(fight) & set(got), str(got))
+    for path in ("living/authority/src/combat.rs", "living/authority/src/codes.rs", "living/rules/src/combat.rs"):
+        got = plan([path], {})
+        expect(f"step 1: {path} selects the fight group and outcomes", set(fight) <= set(got) and not set(acting) & set(got), str(got))
+    got = plan(["living/authority/src/act.rs"], {})
+    expect("step 1: act.rs alone (too broad) selects neither", not set(acting + fight) & set(got), str(got))
+    cap = scene_gate.GROUP_CAP
+    try:
+        scene_gate.GROUP_CAP = 0
+        uncapped = scene_gate.workers(9)
+        scene_gate.GROUP_CAP = 4
+        expect("cap: LIVING_GATE_GROUPS bounds the groups at once; unset runs all", uncapped == 9 and scene_gate.workers(9) == 4 and scene_gate.workers(2) == 2)
+    finally:
+        scene_gate.GROUP_CAP = cap
 
 
 def check_render_logs():
