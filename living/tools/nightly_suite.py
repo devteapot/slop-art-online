@@ -16,9 +16,10 @@ Guards, in order (as the trial reclaim, docs/TOOLING.md):
      holding nothing else while it waits;
   2. each entry's launch and drive under the trial-activity lock, shared
      (flock -s ~/slop-mq/trial-activity.lock), as every verify.py launch on the Spark;
-  3. no entry starts while the merge queue is active (queue.txt holds a branch and HOLD is
-     absent, or drain.sh, merge2.sh or scene_gate.py runs) or the 1-minute load is over
-     --max-load (8): it waits, and what has not started by --until is recorded "not run".
+  3. no entry starts while the merge queue is at work (drain.lock or lock held, or drain.sh,
+     merge2.sh or scene_gate.py running) or the 1-minute load is over --max-load (8): it waits,
+     and what has not started by --until is recorded "not run". SIGINT/SIGTERM: nothing more
+     starts, running entries are interrupted (SIGINT to their group), the server stops.
 Builds go through ~/slop-mq/build-slot. Its checkout is a detached worktree of the repository
 at origin/main (STATE/main, made once), built in STATE/target.
 
@@ -37,9 +38,11 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -82,7 +85,7 @@ def plan_entries():
                "witness_fold", "cheap_check_ctx", "cheap_alarms", "cheap_warmth", "status_parts", "scene_lazy",
                "chronicle_recent", "notice_inplace", "notice_delta", "seen_remains", "regard_check", "moves",
                "known_ground", "nav_belief", "stamina", "death-names", "intents", "fov", "placement", "answers",
-               "admin_vitals", "alert_after_hit", "apart", "howl_reach", "fast_diag", "ground_goto",
+               "admin_vitals", "alert_after_hit", "apart", "howl_reach", "fast_diag", "ground_goto", "relation_fight",
                # the gate's step-1 cases, for a main from before them (dropped when the gate reaches them)
                "say", "heard_first", "audience", "flee_wall", "pursue_last_seen", "act_gaps", "act_replace",
                "truthful_refusals", "committed", "dodge_told", "health_seen", "seize"]
@@ -177,14 +180,32 @@ def plan(root):
 
 # ---------------------------------------------------------------- guards
 
-def merge_queue_active(mq=MQ, proc=Path("/proc")):
-    """Why the merge queue counts as active now, or None."""
-    queue = mq / "queue.txt"
+# Set by SIGINT or SIGTERM (systemd stops the service with SIGINT): no entry starts, the running
+# ones are interrupted (SIGINT to their process group, so their cleanup runs), the server stops.
+STOP = threading.Event()
+
+
+def lock_held(path):
+    """Whether another process holds `path` (an flock): taken and let go at once when free."""
     try:
-        if queue.read_text().strip() and not (mq / "HOLD").exists():
-            return "merge queue is nonempty and HOLD is absent"
-    except FileNotFoundError:
-        pass
+        with open(path, "a") as f:
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return False
+            except BlockingIOError:
+                return True
+    except OSError:
+        return False
+
+
+def merge_queue_active(mq=MQ, proc=Path("/proc")):
+    """Why the merge queue is at work now, or None: its drain (drain.lock) or a merge (lock) is
+    held, or drain.sh, merge2.sh or scene_gate.py runs. Branches waiting in queue.txt with nothing
+    draining them do not count (the drain that starts later is seen at the next entry): on
+    2026-11-23 queue.txt kept a branch merged hours before, which would have held a night."""
+    for name in ("drain.lock", "lock"):
+        if lock_held(mq / name):
+            return f"{name} is held (the merge queue is at work)"
     for p in proc.iterdir():
         if not p.name.isdecimal() or p.name == str(os.getpid()):
             continue
@@ -199,11 +220,21 @@ def merge_queue_active(mq=MQ, proc=Path("/proc")):
     return None
 
 
-def wait_turn(until, max_load, say, mq=MQ, sleep=time.sleep, now=datetime.datetime.now):
-    """Wait until the merge queue is idle and the load is under max_load; False once `until` passes."""
+def queue_note(mq=MQ):
+    """What queue.txt holds, for the record (it does not hold an entry back)."""
+    try:
+        return [l.split("\t")[0] for l in (mq / "queue.txt").read_text().splitlines() if l.strip()]
+    except OSError:
+        return []
+
+
+def wait_turn(until, max_load, say, mq=MQ, sleep=None, now=datetime.datetime.now):
+    """Wait until the merge queue is idle and the load is under max_load; False once `until`
+    passes or a stop was asked."""
+    sleep = sleep or (lambda s: STOP.wait(s))
     said = None
     while True:
-        if now() >= until:
+        if now() >= until or STOP.is_set():
             return False
         why = merge_queue_active(mq) or (f"1-minute load {os.getloadavg()[0]:.1f} over {max_load:g}"
                                          if os.getloadavg()[0] > max_load else None)
@@ -239,15 +270,29 @@ def battle_lock(until, say, mq=MQ, sleep=time.sleep, now=datetime.datetime.now):
 # ---------------------------------------------------------------- the run
 
 def sh(cmd, cwd, log, env, timeout):
+    """Run `cmd` in a process group of its own; on a stop or the timeout, SIGINT the group (the
+    drivers' cleanup runs) and SIGKILL it after 120 s more."""
     with open(log, "a") as out:
         out.write(f"$ {' '.join(map(str, cmd))}\n")
         out.flush()
-        try:
-            return subprocess.run([str(c) for c in cmd], cwd=cwd, stdout=out, stderr=subprocess.STDOUT, env=env,
-                                  timeout=timeout, stdin=subprocess.DEVNULL).returncode
-        except subprocess.TimeoutExpired:
-            out.write(f"timed out after {timeout} s\n")
-            return 124
+        p = subprocess.Popen([str(c) for c in cmd], cwd=cwd, stdout=out, stderr=subprocess.STDOUT, env=env,
+                             stdin=subprocess.DEVNULL, start_new_session=True)
+        end = time.monotonic() + timeout
+        while p.poll() is None:
+            if STOP.is_set() or time.monotonic() > end:
+                out.write("stopped (a stop was asked)\n" if STOP.is_set() else f"timed out after {timeout} s\n")
+                out.flush()
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(p.pid, signal.SIGINT)
+                try:
+                    p.wait(120)
+                except subprocess.TimeoutExpired:
+                    with contextlib.suppress(ProcessLookupError):
+                        os.killpg(p.pid, signal.SIGKILL)
+                    p.wait()
+                return 130 if STOP.is_set() else 124
+            time.sleep(1)
+        return p.returncode
 
 
 def checkout(repo):
@@ -319,7 +364,9 @@ def run_entry(entry, root, stamp, env, until, max_load, say):
     t0 = time.time()
     result = {"id": entry["id"], "seed": fmt(entry["seed"]), "area": entry["area"], "run": run, "evidence": str(ev)}
     if not wait_turn(until, max_load, say):
-        return dict(result, status="not run", why="the window ended first")
+        return dict(result, status="not run", why="stopped" if STOP.is_set() else "the window ended first")
+    result["waited_min"] = round((time.time() - t0) / 60, 1)
+    t0 = time.time()  # minutes count the entry's own run, not its wait for the queue and the load
     lock = ["flock", "-s", str(MQ / "trial-activity.lock")]
     slot = [str(MQ / "build-slot")] if (MQ / "build-slot").exists() else []
     codes = []
@@ -342,12 +389,19 @@ def run_entry(entry, root, stamp, env, until, max_load, say):
             denv = dict(env, CORE_VERIFY_RUN=run, LIVING_STDB=str(Path(root) / C / "record_stdb.py"))
             env = denv
         for cmd in entry["cmds"]:
+            if STOP.is_set():
+                break
             codes.append(sh(lock + [fmt(c) for c in cmd], root, log, env, 4 * 3600))
+        if STOP.is_set():
+            return dict(result, status="not run", why="stopped", codes=codes, minutes=round((time.time() - t0) / 60, 1))
         ok = not any(codes)
         return dict(result, status="green" if ok else "red", codes=codes, minutes=round((time.time() - t0) / 60, 1),
                     failed=[] if ok else first_failures(ev, entry))
     finally:
-        sh(["python3", V, "cleanup", "--run", run], root, log, env, 600)
+        # the cleanup runs even after a stop (outside sh's stop check)
+        with open(log, "a") as out:
+            subprocess.run(["python3", V, "cleanup", "--run", run], cwd=root, stdout=out, stderr=subprocess.STDOUT,
+                           env=env, stdin=subprocess.DEVNULL, timeout=600)
 
 
 def owner_of(entry_id, area):
@@ -421,6 +475,8 @@ def cmd_run(a):
         print(line, flush=True)
         with say_log.open("a") as f:
             f.write(line + "\n")
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, lambda *_: (say("stop asked: no entry starts; running ones are interrupted"), STOP.set()))
     h, m = map(int, a.until.split(":"))
     until = datetime.datetime.now().replace(hour=h, minute=m, second=0, microsecond=0)
     if until <= datetime.datetime.now():
@@ -441,7 +497,8 @@ def cmd_run(a):
         server(name, wasm, say)
         env = dict(os.environ, LIVING_STDB_CONTAINER=name, LIVING_STDB_URL=f"http://127.0.0.1:{PORT}",
                    CARGO_TARGET_DIR=str(STATE / "target"))
-        record = {"date": date, "main": sha, "until": a.until, "unplanned": unplanned, "entries": [], "server": name}
+        record = {"date": date, "main": sha, "until": a.until, "unplanned": unplanned, "entries": [], "server": name,
+                  "queue_at_start": queue_note()}
         try:
             if unplanned:
                 say("UNPLANNED scenes (no entry, gate case or exclusion): " + ", ".join(unplanned))
@@ -495,15 +552,29 @@ def cmd_selftest(_a):
         mq = Path(t)
         (mq / "queue.txt").write_text("")
         expect("an empty queue is idle", merge_queue_active(mq, proc=mq) is None)
-        (mq / "queue.txt").write_text("some-branch\n")
-        expect("a queued branch without HOLD is active", merge_queue_active(mq, proc=mq) == "merge queue is nonempty and HOLD is absent")
-        (mq / "HOLD").write_text("")
-        expect("HOLD makes a nonempty queue idle", merge_queue_active(mq, proc=mq) is None)
+        (mq / "queue.txt").write_text("some-branch\tMerge it\n")
+        expect("a queued branch nobody drains does not hold an entry back (it is noted)",
+               merge_queue_active(mq, proc=mq) is None and queue_note(mq) == ["some-branch"])
+        held = (mq / "drain.lock").open("a")
+        fcntl.flock(held, fcntl.LOCK_EX)
+        expect("a held drain.lock is the queue at work", "drain.lock is held" in (merge_queue_active(mq, proc=mq) or ""))
+        held.close()
         fake = mq / "123"
         fake.mkdir()
         (fake / "cmdline").write_bytes(b"bash\0/home/x/slop-mq/merge2.sh\0")
         expect("a running merge2.sh is active", "merge2.sh" in (merge_queue_active(mq, proc=mq) or ""))
         clock = [datetime.datetime(2026, 1, 1, 1, 0)]
+        STOP.set()
+        expect("a stop ends the wait", wait_turn(datetime.datetime(2099, 1, 1), 99, lambda m: None, mq=mq, sleep=lambda s: None) is False)
+        STOP.clear()
+        log = mq / "sh.log"
+        t = threading.Timer(1.0, STOP.set)
+        t.start()
+        t1 = time.monotonic()
+        code = sh(["sh", "-c", "trap 'echo cleaned; exit 3' INT; sleep 30 & wait"], mq, log, dict(os.environ), 60)
+        STOP.clear()
+        expect("a stop interrupts a running command with SIGINT, and its cleanup runs",
+               code == 130 and time.monotonic() - t1 < 20 and "cleaned" in log.read_text(), log.read_text()[-200:])
         expect("waiting past --until gives up", wait_turn(datetime.datetime(2026, 1, 1, 1, 0), 99, lambda m: None, mq=mq,
                                                             sleep=lambda s: None, now=lambda: clock[0]) is False)
         (mq / "battle.lock").write_text("")
