@@ -97,6 +97,7 @@ pub mod far_handle_table;
 pub mod far_handle_type;
 pub mod fast_ask_table;
 pub mod fast_ask_type;
+pub mod fight_in_type;
 pub mod fight_seen_table;
 pub mod fight_seen_type;
 pub mod fighter_near_table;
@@ -200,6 +201,7 @@ pub mod mind_consolidated_reducer;
 pub mod mind_cursor_table;
 pub mod mind_cursor_type;
 pub mod mind_fast_done_reducer;
+pub mod mind_fight_reducer;
 pub mod mind_heed_reducer;
 pub mod mind_install_reducer;
 pub mod mind_install_way_reducer;
@@ -284,6 +286,8 @@ pub mod record_party_table;
 pub mod record_party_type;
 pub mod record_table;
 pub mod record_type;
+pub mod relation_fight_table;
+pub mod relation_fight_type;
 pub mod relation_in_type;
 pub mod relation_table;
 pub mod relation_type;
@@ -360,6 +364,7 @@ pub mod slow_timer_type;
 pub mod slumber_table;
 pub mod slumber_type;
 pub mod spawn_battle_reducer;
+pub mod spawn_battle_sides_layout_reducer;
 pub mod spawn_battle_sides_reducer;
 pub mod spawn_crowd_reducer;
 pub mod spawn_newcomer_reducer;
@@ -381,6 +386,8 @@ pub mod terrain_chunk_type;
 pub mod thought_in_type;
 pub mod thought_table;
 pub mod thought_type;
+pub mod tick_mark_table;
+pub mod tick_mark_type;
 pub mod tick_reducer;
 pub mod tick_timer_table;
 pub mod tick_timer_type;
@@ -492,6 +499,7 @@ pub use far_handle_table::*;
 pub use far_handle_type::FarHandle;
 pub use fast_ask_table::*;
 pub use fast_ask_type::FastAsk;
+pub use fight_in_type::FightIn;
 pub use fight_seen_table::*;
 pub use fight_seen_type::FightSeen;
 pub use fighter_near_table::*;
@@ -595,6 +603,7 @@ pub use mind_consolidated_reducer::mind_consolidated;
 pub use mind_cursor_table::*;
 pub use mind_cursor_type::MindCursor;
 pub use mind_fast_done_reducer::mind_fast_done;
+pub use mind_fight_reducer::mind_fight;
 pub use mind_heed_reducer::mind_heed;
 pub use mind_install_reducer::mind_install;
 pub use mind_install_way_reducer::mind_install_way;
@@ -679,6 +688,8 @@ pub use record_party_table::*;
 pub use record_party_type::RecordParty;
 pub use record_table::*;
 pub use record_type::Record;
+pub use relation_fight_table::*;
+pub use relation_fight_type::RelationFight;
 pub use relation_in_type::RelationIn;
 pub use relation_table::*;
 pub use relation_type::Relation;
@@ -755,6 +766,7 @@ pub use slow_timer_type::SlowTimer;
 pub use slumber_table::*;
 pub use slumber_type::Slumber;
 pub use spawn_battle_reducer::spawn_battle;
+pub use spawn_battle_sides_layout_reducer::spawn_battle_sides_layout;
 pub use spawn_battle_sides_reducer::spawn_battle_sides;
 pub use spawn_crowd_reducer::spawn_crowd;
 pub use spawn_newcomer_reducer::spawn_newcomer;
@@ -776,6 +788,8 @@ pub use terrain_chunk_type::TerrainChunk;
 pub use thought_in_type::ThoughtIn;
 pub use thought_table::*;
 pub use thought_type::Thought;
+pub use tick_mark_table::*;
+pub use tick_mark_type::TickMark;
 pub use tick_reducer::tick;
 pub use tick_timer_table::*;
 pub use tick_timer_type::TickTimer;
@@ -884,6 +898,10 @@ pub enum Reducer {
         actor: u32,
         asked_ms: u64,
         thought: ThoughtIn,
+    },
+    MindFight {
+        actor: u32,
+        fights: Vec<FightIn>,
     },
     MindHeed {
         actor: u32,
@@ -1003,6 +1021,12 @@ pub enum Reducer {
         n: u32,
         sides: u32,
     },
+    SpawnBattleSidesLayout {
+        n: u32,
+        sides: u32,
+        layout_seed: u64,
+        deal: u32,
+    },
     SpawnCrowd {
         n: u32,
         minded: bool,
@@ -1057,6 +1081,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindAct { .. } => "mind_act",
             Reducer::MindConsolidated { .. } => "mind_consolidated",
             Reducer::MindFastDone { .. } => "mind_fast_done",
+            Reducer::MindFight { .. } => "mind_fight",
             Reducer::MindHeed { .. } => "mind_heed",
             Reducer::MindInstall { .. } => "mind_install",
             Reducer::MindInstallWay { .. } => "mind_install_way",
@@ -1085,6 +1110,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SetWorldLaw { .. } => "set_world_law",
             Reducer::SpawnBattle { .. } => "spawn_battle",
             Reducer::SpawnBattleSides { .. } => "spawn_battle_sides",
+            Reducer::SpawnBattleSidesLayout { .. } => "spawn_battle_sides_layout",
             Reducer::SpawnCrowd { .. } => "spawn_crowd",
             Reducer::SpawnNewcomer { .. } => "spawn_newcomer",
             Reducer::SpawnSkirmish { .. } => "spawn_skirmish",
@@ -1214,6 +1240,12 @@ impl __sdk::Reducer for Reducer {
                 asked_ms: asked_ms.clone(),
                 thought: thought.clone(),
             }),
+            Reducer::MindFight { actor, fights } => {
+                __sats::bsatn::to_vec(&mind_fight_reducer::MindFightArgs {
+                    actor: actor.clone(),
+                    fights: fights.clone(),
+                })
+            }
             Reducer::MindHeed { actor, policy } => {
                 __sats::bsatn::to_vec(&mind_heed_reducer::MindHeedArgs {
                     actor: actor.clone(),
@@ -1407,6 +1439,19 @@ impl __sdk::Reducer for Reducer {
                     sides: sides.clone(),
                 })
             }
+            Reducer::SpawnBattleSidesLayout {
+                n,
+                sides,
+                layout_seed,
+                deal,
+            } => __sats::bsatn::to_vec(
+                &spawn_battle_sides_layout_reducer::SpawnBattleSidesLayoutArgs {
+                    n: n.clone(),
+                    sides: sides.clone(),
+                    layout_seed: layout_seed.clone(),
+                    deal: deal.clone(),
+                },
+            ),
             Reducer::SpawnCrowd { n, minded } => {
                 __sats::bsatn::to_vec(&spawn_crowd_reducer::SpawnCrowdArgs {
                     n: n.clone(),
@@ -1566,6 +1611,7 @@ pub struct DbUpdate {
     record_clock: __sdk::TableUpdate<RecordClock>,
     record_party: __sdk::TableUpdate<RecordParty>,
     relation: __sdk::TableUpdate<Relation>,
+    relation_fight: __sdk::TableUpdate<RelationFight>,
     remembered: __sdk::TableUpdate<Remembered>,
     resource_node: __sdk::TableUpdate<ResourceNode>,
     reveal: __sdk::TableUpdate<Reveal>,
@@ -1607,6 +1653,7 @@ pub struct DbUpdate {
     structure: __sdk::TableUpdate<Structure>,
     terrain_chunk: __sdk::TableUpdate<TerrainChunk>,
     thought: __sdk::TableUpdate<Thought>,
+    tick_mark: __sdk::TableUpdate<TickMark>,
     tick_timer: __sdk::TableUpdate<TickTimer>,
     trade_offer: __sdk::TableUpdate<TradeOffer>,
     vitals: __sdk::TableUpdate<Vitals>,
@@ -1977,6 +2024,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(relation_table::parse_table_update(table_update)?),
+                "relation_fight" => db_update
+                    .relation_fight
+                    .append(relation_fight_table::parse_table_update(table_update)?),
                 "remembered" => db_update
                     .remembered
                     .append(remembered_table::parse_table_update(table_update)?),
@@ -2100,6 +2150,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "thought" => db_update
                     .thought
                     .append(thought_table::parse_table_update(table_update)?),
+                "tick_mark" => db_update
+                    .tick_mark
+                    .append(tick_mark_table::parse_table_update(table_update)?),
                 "tick_timer" => db_update
                     .tick_timer
                     .append(tick_timer_table::parse_table_update(table_update)?),
@@ -2433,6 +2486,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.relation = cache
             .apply_diff_to_table::<Relation>("relation", &self.relation)
             .with_updates_by_pk(|row| &row.id);
+        diff.relation_fight = cache
+            .apply_diff_to_table::<RelationFight>("relation_fight", &self.relation_fight)
+            .with_updates_by_pk(|row| &row.id);
         diff.remembered = cache
             .apply_diff_to_table::<Remembered>("remembered", &self.remembered)
             .with_updates_by_pk(|row| &row.id);
@@ -2521,6 +2577,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.thought = cache
             .apply_diff_to_table::<Thought>("thought", &self.thought)
+            .with_updates_by_pk(|row| &row.id);
+        diff.tick_mark = cache
+            .apply_diff_to_table::<TickMark>("tick_mark", &self.tick_mark)
             .with_updates_by_pk(|row| &row.id);
         diff.tick_timer = cache
             .apply_diff_to_table::<TickTimer>("tick_timer", &self.tick_timer)
@@ -2999,6 +3058,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "relation_fight" => db_update
+                    .relation_fight
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "remembered" => db_update
                     .remembered
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -3121,6 +3183,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "thought" => db_update
                     .thought
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "tick_mark" => db_update
+                    .tick_mark
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "tick_timer" => db_update
                     .tick_timer
@@ -3513,6 +3578,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "relation_fight" => db_update
+                    .relation_fight
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "remembered" => db_update
                     .remembered
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3635,6 +3703,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "thought" => db_update
                     .thought
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "tick_mark" => db_update
+                    .tick_mark
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "tick_timer" => db_update
                     .tick_timer
@@ -3793,6 +3864,7 @@ pub struct AppliedDiff<'r> {
     record_clock: __sdk::TableAppliedDiff<'r, RecordClock>,
     record_party: __sdk::TableAppliedDiff<'r, RecordParty>,
     relation: __sdk::TableAppliedDiff<'r, Relation>,
+    relation_fight: __sdk::TableAppliedDiff<'r, RelationFight>,
     remembered: __sdk::TableAppliedDiff<'r, Remembered>,
     resource_node: __sdk::TableAppliedDiff<'r, ResourceNode>,
     reveal: __sdk::TableAppliedDiff<'r, Reveal>,
@@ -3834,6 +3906,7 @@ pub struct AppliedDiff<'r> {
     structure: __sdk::TableAppliedDiff<'r, Structure>,
     terrain_chunk: __sdk::TableAppliedDiff<'r, TerrainChunk>,
     thought: __sdk::TableAppliedDiff<'r, Thought>,
+    tick_mark: __sdk::TableAppliedDiff<'r, TickMark>,
     tick_timer: __sdk::TableAppliedDiff<'r, TickTimer>,
     trade_offer: __sdk::TableAppliedDiff<'r, TradeOffer>,
     vitals: __sdk::TableAppliedDiff<'r, Vitals>,
@@ -4101,6 +4174,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Relation>("relation", &self.relation, event);
+        callbacks.invoke_table_row_callbacks::<RelationFight>(
+            "relation_fight",
+            &self.relation_fight,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Remembered>("remembered", &self.remembered, event);
         callbacks.invoke_table_row_callbacks::<ResourceNode>(
             "resource_node",
@@ -4214,6 +4292,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Thought>("thought", &self.thought, event);
+        callbacks.invoke_table_row_callbacks::<TickMark>("tick_mark", &self.tick_mark, event);
         callbacks.invoke_table_row_callbacks::<TickTimer>("tick_timer", &self.tick_timer, event);
         callbacks.invoke_table_row_callbacks::<TradeOffer>("trade_offer", &self.trade_offer, event);
         callbacks.invoke_table_row_callbacks::<Vitals>("vitals", &self.vitals, event);
@@ -5000,6 +5079,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         record_clock_table::register_table(client_cache);
         record_party_table::register_table(client_cache);
         relation_table::register_table(client_cache);
+        relation_fight_table::register_table(client_cache);
         remembered_table::register_table(client_cache);
         resource_node_table::register_table(client_cache);
         reveal_table::register_table(client_cache);
@@ -5041,6 +5121,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         structure_table::register_table(client_cache);
         terrain_chunk_table::register_table(client_cache);
         thought_table::register_table(client_cache);
+        tick_mark_table::register_table(client_cache);
         tick_timer_table::register_table(client_cache);
         trade_offer_table::register_table(client_cache);
         vitals_table::register_table(client_cache);
@@ -5169,6 +5250,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "record_clock",
         "record_party",
         "relation",
+        "relation_fight",
         "remembered",
         "resource_node",
         "reveal",
@@ -5210,6 +5292,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "structure",
         "terrain_chunk",
         "thought",
+        "tick_mark",
         "tick_timer",
         "trade_offer",
         "vitals",

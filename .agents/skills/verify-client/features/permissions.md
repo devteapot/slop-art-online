@@ -55,4 +55,6 @@ Own-character `mind_routines`, `mind_install`, `mind_install_way` (since `mind-s
 - `mind_act` acceptance does not prove a queued signal physically succeeded. Use `verify-core` or `verify-player` for that outcome.
 - Admin argument fixtures use zero spawn counts and zero grants. These calls still must be refused; an unexpected acceptance fails the matrix.
 
+`mind_fight` (relation-fight): the controller rule ("not your character" for another's character, and for anonymous callers), and refused for any character a person plays, the player's own included ("a person plays this character"): only the person's own acts say whom their character fights (`drive.py` `PLAYED_REFUSED`). `relation_fight` is private.
+
 The fast lane's reducers (docs/FAST_LANE.md, since `fast-lane`, 2026-11-12): `mind_patch` and `mind_fast_done` need the caller to be the character's controller and an open fast request (`fast_ask`) issued at the given time. Anonymous callers and players are refused for another character ("not your character"), and a player for its own ("no fast re-plan was asked of this character"): a body its person controls never has a request (`drive.py` `FAST`).

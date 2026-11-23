@@ -563,6 +563,7 @@ def check_render_selection():
     expect("plan: a behavioural diff runs the scenes, no render case and no smoke",
            render == [] and "tick" in scenes and not set(scenes) & {"render-smoke", *scene_gate.RENDER_CASES}, str(scenes))
     expect("plan: a battle-fixture diff runs sides_battle", "sides_battle" in scenes, str(scenes))
+    expect("plan: a battle-fixture diff runs sides_layout after sides_battle", "sides_layout" in scenes and scenes.index("sides_layout") > scenes.index("sides_battle"), str(scenes))
     scenes, render = scene_gate.plan_cases(A, ["living/authority/src/act.rs"], ["living/authority/src/act.rs"])
     expect("plan: a behavioural diff outside its paths skips sides_battle", "tick" in scenes and "sides_battle" not in scenes, str(scenes))
     scenes, render = scene_gate.plan_cases(A, ["living/authority/src/lib.rs", g + "sightedge.rs"], ["living/authority/src/lib.rs"])

@@ -4,6 +4,11 @@ Status: **measurement**, 2026-11-22, dev-box. The measuring code is on branch `c
 
 [BATTLE_CONTRACT_CASES.md](BATTLE_CONTRACT_CASES.md) found that a human fighter adds **3.1–3.7 ms/s** of the database thread on top of an AI fighter's 1.4, though it runs no behaviour graph. Before the conclusion "the architecture can't meet the gate" goes to the owner, this note asks whether that cost is inherent or fixable, part by part. It also asks what sets the strict 60 Hz threshold of about 390 ms/s.
 
+> **Update (2026-11-23, the gate case on the server's own step marker, §9).** The line is judged on the server marker: at least 59.9 ticks/s, at most 0.5% over 25 ms, and a p99 within 17.5 ms or within the host's idle p99 + 0.5 ms where that is higher. The idle clause came after the dev-box's idle result and before any X925 arm.
+> - **The dev-box's idle world already reads p99 18.04–18.08 ms**, so its bound is 18.58.
+> - **On the relay arm, with players' (M) out of the tick, the gate case passes the p99 and the share over 25 ms and misses only ticks/s:** 59.74–59.88 against 59.9, from 7–15 slots skipped a minute.
+> - **The relay arm alone fails** on ticks/s, and one run on its p99 too.
+
 > **Update (2026-11-22, the gate case re-read at microsecond resolution, §8).** The line was fixed and committed by the Spark before any result was read (`us_reread.py`, `gate216-x925` **`5956bc2da`**): at least 59.9 ticks/s, the p99 of step intervals from `arrival_us` within 17.5 ms, and at most 0.5% over 25 ms.
 > - **On the dev-box every arm fails every part of the line:** main as shipped, direct, the relay and every lever arm.
 > - **The best is (c):** 59.68 ticks/s, a p99 of 25.2 ms and 1.03% over 25 ms.
@@ -437,6 +442,59 @@ So on the dev-box, a client sees the tick's spread plus about 4–7 ms more at t
 - `us_reread-devbox.json` (the script's output) and a copy of the script, in `.local/us/`;
 - archived to `~/archive/worktree-evidence-20261122/us-reread.tar.zst` (sha256 beside it);
 - the runs themselves are §6.1's (`gate-remeasure.tar.zst`) and §7's (`levers.tar.zst`).
+
+## 9. The gate case on the server's own step marker (2026-11-23)
+
+**The line.** The coordinator ruled that the cadence criterion is judged on server-side step timestamps at microsecond resolution. Arrival at a watching client is client experience: it is reported, but it belongs with the contract's latency lines, measured with the watcher on a separate machine. The line is the same for every host:
+- at least **59.9 ticks/s**;
+- at most **0.5% of step intervals over 25 ms**;
+- **p99 step interval within 17.5 ms**, or, where the host's idle world (64 residents, no battle, the same build, the same session) already reads above 17.5 ms, **within the idle p99 + 0.5 ms**;
+- every gate result reports its host's idle p99 beside it.
+
+**When it was fixed.** The idle clause is a clarification made after the dev-box's idle result below and before any X925 gate arm. The rest of the line was fixed before any result.
+
+**The method.** `living/tools/marker_steps.py`, with a known-answer self-test (17 checks).
+- The method and the first line were committed in **`e817baac9`** before any result.
+- The idle clause is in **`e16a43e5e`** (`--idle RUN_DIR`, bound `max(17.5, idle p99 + 0.5)`; idle 18.08 gives 18.58, idle 17.0 gives 17.5).
+
+**The marker.** `tick_marker_on`, value-only and off by default; the coordinator approved it for main (`tick-marker`, batch 66).
+- **What it writes:** one private row, each tick's count and its reducer timestamp in µs. That is the scheduler's dispatch time: 2.14.1 gives a reducer no wall clock of its own ([TICK_RATE.md](TICK_RATE.md) "The step marker").
+- **Its cost:** 0.27 ms/s by its own span with profiling on. In the gate case it was not measurable: 509 ms/s with it, 507 without.
+
+**The build.** Branch `npc-measure` `b18402236` (module `77a77d2e5532`): the relay prototype, `memory_off` and the marker. Warm, `performance`, two runs per arm, on a private server.
+
+### 9.1 The idle world
+
+| Run (64 residents, no battle) | Ticks/s | Marker p50 / p95 / p99 / max (ms) | Over 25 ms | Slots skipped |
+|---|---:|---|---:|---:|
+| L0, run 1 | 60.0 | 16.70 / 17.71 / **18.04** / 18.55 | 0 | 0 |
+| L0, run 2 | 59.99 | 16.70 / 17.74 / **18.08** / 18.48 | 0 | 0 |
+| L1 (profiling on) | 60.0 | 16.69 / 17.58 / 17.80 / 18.05 | 0 | 0 |
+
+- **The scheduler's dispatch times scatter about ±1.5 ms around the 60 Hz grid with no load at all.** Lateness against the grid is p99 about 3 ms. The scatter is spread evenly over each millisecond, so it is not a 1 ms timer step.
+- **So on the dev-box a 17.5 ms interval p99 is not reached even idle.** Its idle bound is about 18.08 + 0.5 = **18.58 ms**.
+- **Load shows instead as slots skipped and the share over 25 ms:** 7–26 slots skipped a minute in the gate arms below, none idle.
+
+### 9.2 The gate case, relay arm (100 human fighters, 116 walkers, `experience_copy`)
+
+| Arm | DB thread, ms/s | Ticks/s | Marker p50 / p95 / p99 (ms) | Over 25 ms | Slots skipped | Idle p99 | Under the line |
+|---|---:|---:|---|---:|---:|---:|---|
+| Relay | 502.4, 515.0 | **59.73, 59.56** | 16.66 / 17.66–17.70 / 18.00, **20.77** | 0.45%, **0.73%** | 16, 26 | 18.08 | **fail** |
+| Relay, (M) out (`memory_off=1`) | 462.5, 460.3 | **59.88, 59.74** | 16.69 / 17.66–17.70 / 17.99, 18.04 | 0.19%, 0.42% | 7, 15 | 18.08 | **fails only ticks/s** |
+
+**The coordinator's reading under the line** (dev-box idle bound 18.58 ms):
+- **Relay fails.** Both runs miss on ticks/s (59.56–59.73). The second also misses on its p99 (20.77 ms) and its share over 25 ms (0.73%).
+- **Relay with (M) out passes the p99 (17.99–18.04 ms) and the share over 25 ms (0.19–0.42%), and misses only ticks/s** (59.74–59.88 against 59.9).
+
+The base arm without the marker (503.5 and 510.8 ms/s, 59.74 and 59.41 ticks/s) is the cost comparison. A base run over the runner-listener mark was redone.
+
+**Slots and ticks/s.** The ticks/s shortfall is the skipped slots: each skipped slot is one tick fewer in the minute. With (M) out, 7–15 slots were skipped in 60 s, where 59.9 ticks/s allows 6. So the remaining gap is the long ticks that make the scheduler skip a slot, not the steady cadence.
+
+**On X925:** the Spark is repeating both arms and an idle run with the same build and script.
+
+**Evidence:**
+- dev-box `.local/npc/runs-tm/` (`series.log`, `tables.json`, `runners.log`, `flagged.txt`);
+- archived to `~/archive/worktree-evidence-20261123/tick-marker.tar.zst` (sha256 beside it).
 
 ## Evidence
 

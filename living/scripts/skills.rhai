@@ -114,6 +114,13 @@ fn laws() {
         // labelled "stranger". On: anyone whose name one does not know, the rule that names
         // people in scenes, percepts and memory (`perception::knows_name`).
         stranger_by_name: false,
+        // Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): a graph's
+        // `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a
+        // personal relation only when it is clear (trust -25 or less or a hostile word; 25 or more
+        // or a friendly word), then the community's stance; minds are told the order and may say
+        // `fight` (enemy or spare); a person's own blow says enemy. Off: any personal relation
+        // row decides alone and hides the community's stance, as before; nothing is said or told.
+        relation_fight_on: false,
         // Attention cues (docs/ATTENTION.md): a mind may write what in what it perceives should
         // bring it to think about one of its stances, goals or projects. Off: none is matched.
         // A cue fires once per thing it matched within `cue_cooldown_s`, and a character is
@@ -195,6 +202,9 @@ fn laws() {
         // can read (`experience_copy`, written as lines are released; experience-incremental) as
         // well as through `my_experience`; off: the kill switch. The client reads either the same.
         lines_table_on: true, lines_table_check: false,
+        // A measuring aid (off): each tick writes its own time in µs to a private row a watcher
+        // reads, to time the steps (docs/TICK_RATE.md "The step marker").
+        tick_marker_on: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
@@ -2338,6 +2348,14 @@ fn record_text(r) {
         if r.me == "holder" { return `your people hold {id:${r.parties.toward}} as ${r.terms.label} (${r.terms.why})`; }
         return `{id:${r.parties.holder}} holds your people as ${r.terms.label} (${r.terms.why})`;
     }
+    // Any other stance (a `holder` and a `toward` side, a `label` in its terms; the battle
+    // fixture's `stance` records): both sides named, and why only when the record says. Before,
+    // it fell through to "stance: open", and the fighters' minds never learned of the war.
+    if "holder" in r.parties && "toward" in r.parties && "label" in r.terms {
+        let why = if "why" in r.terms { ` (${r.terms.why})` } else { "" };
+        if r.me == "holder" { return `your people, {id:${r.parties.holder}}, hold {id:${r.parties.toward}} as ${r.terms.label}${why}`; }
+        return `{id:${r.parties.holder}} holds your people, {id:${r.parties.toward}}, as ${r.terms.label}${why}`;
+    }
     `${r.kind}: ${r.status}`
 }
 
@@ -3251,6 +3269,7 @@ fn law_about(l, name) {
         "speech_truth" => if l.speech_truth { "a speaker learns when the one they spoke to could not have heard them, and a planned line is not said to someone out of earshot or after the talk has moved on" } else { "a speaker whose words did not reach the one they spoke to, unseen, gets no answer, and a planned line is said when it comes due" },
         "longing_after_min" => `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
         "longing_food" => if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
+        "relation_fight_on" => if l.relation_fight_on { "whom one fights: what one said (enemy or spare) first, then a clear feeling about them, then how one's people stand with theirs" } else { "whom one fights: how one feels about someone, if one has any feeling about them, else how one's people stand with theirs" },
         "stranger_by_name" => if l.stranger_by_name { "in a routine, a stranger is someone whose name one does not know" } else { "in a routine, a stranger is someone one has no feelings about yet" },
         "cues_on" => if l.cues_on { "what one wrote one would watch for brings one to think when one perceives it" } else { "one thinks when something happens to one, not because one watches for it" },
         "cue_cooldown_s" => `the same thing seen again brings no new thought from what one watches for within ${short(l.cue_cooldown_s)} s`,
@@ -3291,6 +3310,7 @@ fn law_about(l, name) {
         "fighter_tables_on" => if l.fighter_tables_on { "how the fighters a player sees move and fare reaches it as rows meant for that player alone" } else { "how the fighters a player sees move and fare reaches it through what it may look at" },
         "lines_table_on" => if l.lines_table_on { "what reaches each player's senses reaches it as rows meant for that player alone" } else { "what reaches each player's senses reaches it through what it may look at" },
         "lines_table_check" => "a diagnostic: each player's lines as rows are checked against what it may look at",
+        "tick_marker_on" => "a measuring aid: each tick notes its own time in microseconds for a watcher",
         "combat_feed_on" => if l.combat_feed_on { "what each player sees of fights reaches it as rows meant for that player alone" } else { "what each player sees of fights reaches it through what it may look at" },
         "motion_tables_on" => if l.motion_tables_on { "how others move reaches each player as rows meant for that player alone" } else { "how others move reaches each player through what it may look at" },
         "cue_transport_on" => if l.cue_transport_on { "what is near a player, or fighting it, reaches the player's screen at once" } else { "what is near a player reaches the player's screen with the rest of what it sees" },

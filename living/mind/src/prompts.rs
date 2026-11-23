@@ -507,6 +507,13 @@ pub fn world_rules() -> Arc<str> {
 
 /// What a graph's `relation: "stranger"` matches under the world's rules in force (the
 /// `stranger_by_name` law, docs/STRANGERS.md), in the words the graph grammar gives it.
+/// Whether the world's `relation_fight_on` law holds (relation-fight, docs/WORLD_RULES.md "Whom
+/// one fights"): the minds are told the order and the `fight` field, and their replies' `fight`
+/// is sent, only while it does; off, their prompts are as before.
+pub fn relation_fight_on() -> bool {
+    compiled().is_some_and(|s| s.laws().relation_fight_on)
+}
+
 fn stranger_words() -> &'static str {
     stranger_words_for(compiled().is_some_and(|s| s.laws().stranger_by_name))
 }
@@ -544,6 +551,7 @@ Deliberate one-off interactions (starting a family, trading, giving, teaching, w
     // Only people's graphs read judgments for now (the first one is a person's fight).
     let judged = if speaks { judged_line() } else { String::new() };
     let stranger = stranger_words();
+    let fight = if relation_fight_on() { format!("; {FIGHT_WORDS}") } else { String::new() };
     // The world's `speech_truth`: what becomes of a planned line to someone.
     let say_note = if speaks && speech_truth() {
         " A line to someone is not said if, when it comes due, they are beyond what it carries (you are told instead) or the talk with them has moved on since you planned it (they spoke to you, or you answered them)."
@@ -569,7 +577,7 @@ Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}
   {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"bedtime\": true}} (your own hours for sleep) {{\"evening\": true}} (your own evening) {{\"work_hours\": true}} (your own working hours) {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
   {{\"can\": {{\"do\": \"eat\", \"item\": \"food\"}}}} whether a skill could go ahead now by the world's rules (what it takes is at hand; its target in sight), e.g. {{\"can\": {{\"do\": \"cook\", \"target\": {{\"nearest\": \"campfire\"}}, \"item\": \"fish\"}}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
-Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"sound\" (toward what you hear and cannot see, when sight depends on facing) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|family, stranger {stranger}, or any label you gave a relationship, e.g. partner)
+Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"sound\" (toward what you hear and cannot see, when sight depends on facing) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|family, stranger {stranger}, or any label you gave a relationship, e.g. partner{fight})
   {{\"nearest\": {{\"kind\": \"storage\", \"mine\": true}}}} {{\"nearest\": {{\"kind\": \"remains\", \"holds\": \"meat\"}}}} {{\"id\": 6}} {{\"named\": \"Oren\"}} {{\"place\": \"a quoted name under Places you remember\"}} {{\"at\": [x, y]}}
   Kinds: berry_bush tree boulder reeds fishing_spot clay_bank | campfire shelter house storage sign gate remains | person deer wolf | grass forest (the nearest tile of that ground in sight).
   People/creature/resource targets resolve only when currently in sight. A place resolves only by a quoted name under Places you remember (\"home\" is your own home); coordinates always resolve: reach a resource listed under Resources you have seen, or any spot, with {{\"at\": [x, y]}}. A do-node whose target is missing fails, so \"first\" moves on.
@@ -597,6 +605,13 @@ Every branch must lead to action: a guard whose then-branch can only wait blocks
         g.lines().filter(|l| !l.contains("\"say\"")).collect::<Vec<_>>().join("\n")
     }
 }
+
+/// Whom the body counts as an enemy or a friend (relation-fight; the authority's `relation_ok`,
+/// docs/WORLD_RULES.md "Whom one fights"), in the words the graph grammar and consolidation give.
+pub const FIGHT_WORDS: &str = "Whom your body counts as an enemy (relation: enemy), in this order: whom you said you fight (a relation's \"fight\": \"enemy\") \
+or said you spare (\"spare\": never an enemy); else how you feel about them, when it is clear (trust -25 or less, or a label with enemy, rival, threat, thief or foe: \
+an enemy; trust 25 or more, or a label with friend, family, partner, ally or kin: not one); else how your people stand with theirs (your dealings). \
+A friend (relation: friend) is the same the other way, except that \"spare\" says nothing of friendship.";
 
 pub const ACT_REPAIR: &str = "Repair only the refused one-off actions listed by the authority. Keep their original intentions and use the valid act names and known targets. Return one JSON object with \"replacements\": an array in the same order and of the same length as \"rejected\", each entry either one corrected action object or null if you cannot repair it. A walk to a known place is {\"do\":\"goto\",\"target\":{\"place\":\"home\"}}. Do not add speech, repeat any other act, change a plan, or invent targets.";
 
@@ -919,6 +934,12 @@ pub fn consolidate_system() -> String {
 
 /// The consolidation system prompt under a frame, with or without projects (`LIVING_PROJECTS`).
 fn consolidate_system_in(frame: Frame, projects: bool) -> String {
+    // Whom one fights, only under the `relation_fight_on` law: the order and the `fight` field.
+    let (fight, fight_field) = if relation_fight_on() {
+        (format!(" A relation may also say whether the person fights them: \"fight\": \"enemy\" or \"spare\" (null takes back what was said; leaving it out says nothing). {FIGHT_WORDS}"), " \"fight\": \"enemy|spare|null (optional)\",")
+    } else {
+        (String::new(), "")
+    };
     shared(format!(
         "{} \
 You keep the person's mind as a graph that you shape freely: concepts (people, places, things, ideas, plans, fears, customs, promises...) \
@@ -940,7 +961,7 @@ Any other key is yours to invent (\"idea:shared_storage\", \"plan:river_camp\").
 The body acts on three parts of the mind without thinking: how the person feels about people (self -FEELS {{trust, affinity -100..100, label, note}}-> person:<id>), \
 stances the behavior graph can test (self -JUDGES {{value 0..1, why}}-> stance:<key>, e.g. stance:wolves_hunt_near_camp; stances relax toward 0.5 unless reinforced) \
 and places with coordinates (place:<name> with props x, y). You can write those edges directly, or use the shorthand arrays below \
-(relations, judgments, places), which become exactly those edges. Keep stance keys stable.\n\n\
+(relations, judgments, places), which become exactly those edges. Keep stance keys stable.{fight}\n\n\
 Reply with ONE JSON object:\n\
 Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not every event).\n\
 {{\"summary\": \"what this meant to the person (1-2 sentences)\",\n\
@@ -949,7 +970,7 @@ Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not e
  \"edges\": [{{\"from\": \"person:4\", \"rel\": \"TOOK_FOOD_FROM\", \"to\": \"place:our_storage\", \"confidence\": 0.0-1.0, \"because\": [experience ids], \"props\": {{...}}}}],\n\
  \"retract\": [{{\"from\": \"self\", \"rel\": \"TRUSTS\", \"to\": \"person:4\"}}],\n\
  \"merge\": [{{\"from\": \"idea:kael_seems_kind\", \"into\": \"idea:kael_is_friendly\"}}],\n\
- \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"friend|family|partner|ally|rival|enemy|stranger|...\", \"note\": \"short\", \"because\": [experience ids]}}],\n\
+ \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"friend|family|partner|ally|rival|enemy|stranger|...\", \"note\": \"short\",{fight_field} \"because\": [experience ids]}}],\n\
  \"judgments\": [{{\"key\": \"...\", \"value\": 0.0-1.0, \"why\": \"...\", \"because\": [experience ids]}}],\n\
  \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
  \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"pastimes\": [...], \"calling\": \"...\", \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}{}}}",
@@ -1620,7 +1641,7 @@ mod tests {
     /// the minds on its old value until the next install.
     #[test]
     fn the_laws_minds_read_change_by_an_install() {
-        let read = ["cues_on", "cue_cooldown_s", "cue_gap_s", "speech_truth", "stranger_by_name", "think_framing", "fast_lane_inflight", "heed_on"];
+        let read = ["cues_on", "cue_cooldown_s", "cue_gap_s", "speech_truth", "stranger_by_name", "relation_fight_on", "think_framing", "fast_lane_inflight", "heed_on"];
         for l in read {
             assert!(living_rules::script::VALUE_ONLY.iter().all(|(n, _)| *n != l), "{l} is value-only: the mind service must lay `law_override` over its script first");
         }
@@ -2155,6 +2176,20 @@ mod tests {
         assert!(!system.contains(stranger_words_for(true)));
         let on = living_rules::script::with_world_laws(include_str!("../../scripts/skills.rhai"), &[("stranger_by_name".into(), serde_json::json!(true))]);
         assert!(living_rules::script::Scripts::new(&on).unwrap().laws().stranger_by_name);
+    }
+
+    /// relation-fight: with the `relation_fight_on` law off (shipped), no prompt tells the order or
+    /// asks for `fight`, so the minds' prompts are as before; the law parses on. The text with the
+    /// law on is checked live (verify-minds `fight-field`).
+    #[test]
+    fn whom_one_fights_is_told_only_under_its_law() {
+        for purpose in ["deliberate", "consolidate"] {
+            let (system, _) = fixture(purpose, "Aria", "person");
+            assert!(!system.contains(FIGHT_WORDS) && !system.contains("\"fight\""), "{purpose}: {system}");
+        }
+        let on = living_rules::script::with_world_laws(include_str!("../../scripts/skills.rhai"), &[("relation_fight_on".into(), serde_json::json!(true))]);
+        assert!(living_rules::script::Scripts::new(&on).unwrap().laws().relation_fight_on);
+        assert!(!living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")).unwrap().laws().relation_fight_on);
     }
 
     #[test]

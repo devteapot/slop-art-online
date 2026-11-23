@@ -2764,6 +2764,14 @@ pub(crate) fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str)
     }
     let r = ctx.db.relation().by_pair().filter((me, other)).next();
     let label = r.as_ref().map(|r| r.label.to_lowercase()).unwrap_or_default();
+    // Enemy and friend under the `relation_fight_on` law (relation-fight, docs/WORLD_RULES.md "Whom
+    // one fights"): what one said of fighting them first, then a personal relation that decides,
+    // then the community's stance. Off: the rule below, where any personal row decides alone.
+    if matches!(want, "enemy" | "friend") && common::laws(ctx).relation_fight_on {
+        let said = ctx.db.relation_fight().by_pair().filter((me, other)).next().map(|f| f.fight);
+        let felt = r.as_ref().map_or(Personal::Neutral, |r| personal(r.trust, &r.label));
+        return fight_fits(want, said.as_deref(), felt, || stance_fits(ctx, me, other, want));
+    }
     let trust = r.as_ref().map(|r| r.trust).unwrap_or(0.0);
     let fits = match want {
         "friend" => r.is_some() && (trust >= 25.0 || ["friend", "family", "partner", "ally", "kin"].iter().any(|l| label.contains(l))),
@@ -2779,6 +2787,44 @@ pub(crate) fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str)
         other => label.contains(&other.to_lowercase()),
     };
     fits || (r.is_none() && stance_fits(ctx, me, other, want))
+}
+
+/// How a personal relation decides a fight by its trust and label (relation-fight): clearly
+/// hostile (trust -25 or less, or a label with enemy, rival, threat, thief or foe), clearly
+/// peaceful (trust 25 or more, or a label with friend, family, partner, ally or kin), or neither:
+/// a neutral row, or one with signs both ways, which leaves it to the community's stance.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Personal {
+    Hostile,
+    Peaceful,
+    Neutral,
+}
+
+pub(crate) fn personal(trust: f32, label: &str) -> Personal {
+    let label = label.to_lowercase();
+    let hostile = trust <= -25.0 || ["enemy", "rival", "threat", "thief", "foe"].iter().any(|l| label.contains(l));
+    let peaceful = trust >= 25.0 || ["friend", "family", "partner", "ally", "kin"].iter().any(|l| label.contains(l));
+    match (hostile, peaceful) {
+        (true, false) => Personal::Hostile,
+        (false, true) => Personal::Peaceful,
+        _ => Personal::Neutral,
+    }
+}
+
+/// Whether someone fits `enemy` or `friend`, in order: what one said of fighting them (`enemy`
+/// or `spare`, `relation_fight`), then a personal relation that decides, then the community's
+/// stance (`stance`, asked only when nothing before decided). `spare` says only "not an enemy".
+pub(crate) fn fight_fits(want: &str, said: Option<&str>, felt: Personal, stance: impl FnOnce() -> bool) -> bool {
+    match (want, said) {
+        ("enemy", Some("enemy")) => return true,
+        ("enemy", Some("spare")) | ("friend", Some("enemy")) => return false,
+        _ => {}
+    }
+    match (want, felt) {
+        ("enemy", Personal::Hostile) | ("friend", Personal::Peaceful) => true,
+        ("enemy", Personal::Peaceful) | ("friend", Personal::Hostile) => false,
+        _ => stance(),
+    }
 }
 
 /// Without a personal relation: how my community regards theirs, when a stance record says
@@ -2815,6 +2861,39 @@ fn joined_tiles(all: &[(u64, String, u32, (f32, f32), f32)], same: &[usize], sta
 
 #[cfg(test)]
 mod tests {
+    use super::{fight_fits, personal, Personal};
+
+    /// relation-fight: what one said decides, then a relation that is clear, then the stance.
+    #[test]
+    fn whom_one_fights_said_then_felt_then_the_community() {
+        let war = || true;
+        let peace = || false;
+        // A neutral row (E5's "stranger, trust 0") leaves the community's war standing.
+        assert_eq!(personal(0.0, "stranger"), Personal::Neutral);
+        assert!(fight_fits("enemy", None, personal(0.0, "stranger"), war));
+        assert!(fight_fits("enemy", None, personal(-20.0, "stranger"), war));
+        // A clear relation decides either way, whatever the community holds.
+        assert!(!fight_fits("enemy", None, personal(40.0, "truce-keeper"), war));
+        assert!(fight_fits("enemy", None, personal(5.0, "foe"), peace));
+        assert!(fight_fits("enemy", None, personal(-30.0, "acquaintance"), peace));
+        // Signs both ways decide nothing.
+        assert_eq!(personal(40.0, "rival"), Personal::Neutral);
+        assert!(fight_fits("enemy", None, personal(40.0, "rival"), war));
+        // What one said comes first.
+        assert!(!fight_fits("enemy", Some("spare"), personal(-60.0, "enemy"), war));
+        assert!(fight_fits("enemy", Some("enemy"), personal(60.0, "friend"), peace));
+        assert!(fight_fits("enemy", Some("enemy"), Personal::Neutral, peace));
+        // Friend: `enemy` said rules it out, `spare` says nothing of friendship.
+        assert!(!fight_fits("friend", Some("enemy"), personal(60.0, "friend"), war));
+        assert!(fight_fits("friend", Some("spare"), personal(60.0, "friend"), peace));
+        assert!(!fight_fits("friend", Some("spare"), Personal::Neutral, peace));
+        // No row and nothing said: the community's stance, as before.
+        assert!(fight_fits("enemy", None, Personal::Neutral, war));
+        assert!(!fight_fits("enemy", None, Personal::Neutral, peace));
+        // The stance is not asked when something before it decided.
+        assert!(fight_fits("enemy", Some("enemy"), Personal::Neutral, || panic!("asked the stance")));
+    }
+
     #[test]
     fn first_sights_of_one_look_share_one_line() {
         let p = |v: &[&str]| super::first_sight_text(&v.iter().map(|s| s.to_string()).collect::<Vec<_>>());

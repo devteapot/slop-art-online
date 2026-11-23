@@ -401,6 +401,9 @@ pub struct Character {
     pub controller: Identity,
     /// Driven by an LLM mind (deliberations and percepts are produced).
     pub ai: bool,
+    /// Indexed: the living are read without walking the dead, whose rows stay (death is
+    /// permanent and its records are kept), and grow by every death (`combat::human`).
+    #[index(btree)]
     pub alive: bool,
     pub born_ms: u64,
     pub died_ms: u64,
@@ -1233,6 +1236,28 @@ pub struct Relation {
     pub affinity: f32,
     pub label: String,
     pub note: String,
+    pub updated_ms: u64,
+}
+
+/// Whether a character means to fight a person, when it has said so (relation-fight,
+/// docs/WORLD_RULES.md "Whom one fights"): `enemy` (a graph's `relation: enemy` counts them, whatever
+/// the community's stance or the relation's trust) or `spare` (not an enemy, even of an enemy
+/// people). No row: the relation's trust and label decide when they are clear, else the
+/// community's stance. Set by a mind's reply (`mind_fight`) for its own character, and for a
+/// person's character by that person's own acts (a blow at someone: `enemy`), never by a model.
+/// Private: the authority's and the owner's (the mind service shows a mind its own).
+#[spacetimedb::table(accessor = relation_fight,
+    index(accessor = by_pair, btree(columns = [actor, other])))]
+pub struct RelationFight {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub actor: u32,
+    pub other: u32,
+    /// `enemy` or `spare`.
+    pub fight: String,
+    /// Who said it: `mind` (its reply) or `player` (the person's own act).
+    pub by: String,
     pub updated_ms: u64,
 }
 
@@ -2633,4 +2658,19 @@ pub struct HeedPolicy {
     /// The last refusal's reason; empty when the last policy sent was accepted.
     pub refusal: String,
     pub refused_ms: u64,
+}
+
+/// The tick's own time in microseconds, for measuring its cadence (the `tick_marker_on` law, a
+/// measuring aid, off by default; docs/TICK_RATE.md "The step marker"). One row (id 0), written by
+/// each tick while the law holds: its count and its reducer timestamp (`ctx.timestamp`, the time
+/// the scheduler dispatched the call: SpacetimeDB 2.14.1 sets it in `call_reducer_params`, before
+/// any wait in the database's queue). Private: the owner's watcher subscribes it. `clock`'s readers
+/// are unaffected.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = tick_mark)]
+pub struct TickMark {
+    #[primary_key]
+    pub id: u8,
+    pub tick: u64,
+    pub start_us: i64,
 }

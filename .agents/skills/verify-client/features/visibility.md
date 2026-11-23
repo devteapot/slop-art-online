@@ -10,6 +10,13 @@
 - A world's own law values (`world_law`: its seed's `rules`, kept when the world is made; since `laws-2`, docs/WORLD_RULES.md) are private in every build; minds and players are told the laws in words, not the table.
 - Speech (docs/COMMUNICATION.md, since `speech-1`): `line_heard` (who heard each line: `line`, `speaker`, `way`, `hearers`, `at_ms`) is private in every build, and a speaker's person reads its own rows through the per-sender `my_heard` view (a point lookup on `line_heard.speaker`). The driver checks each player identity's `my_heard` holds only its own lines (`speaker` among its characters) and is not empty after it spoke, and that an anonymous client gets none. `speech_card`, the ways of speaking from the script, is public like `skill_card` (`speech-card-public.json`).
 - The fast lane's requests (`fast_ask`, docs/FAST_LANE.md, since `fast-lane`) are private in every build; so are `far_handle` (far-handle) and `slumber` (a sleeper's waiting reasons), now listed in `drive.py` `PRIVATE`, which main had left off.
+- **The step marker** (`tick_mark`, since `tick-marker`, 2026-11-23; docs/TICK_RATE.md "The step marker") is private in every build and listed in `PRIVATE`. It is a measuring aid behind the `tick_marker_on` law, off by default. `scripts/tick_marker.py --run R` checks what the law does, as the owner:
+  - off, no tick writes it;
+  - on, each tick writes its count (between two reads of `clock`'s around it, moving with it) and its µs time (14–20 ms a tick on average);
+  - anonymous SQL is refused;
+  - off again, the row stops.
+
+  It puts the law back as the world had it (`tick_marker.json`), and `run.py` runs it last.
 - The world's records (`record`, `record_party`, `record_clock`, since `rules-2`, docs/WORLD_RULES.md) are private in every build: a player reads its own characters' records through the `my_records` view, and verify-player `deal.py` proves the view's rows; this driver proves the tables are refused.
 - Attention cues (`cue`, since `attention-cues`, docs/ATTENTION.md): what each mind wrote it watches for, private in every build and refused to anonymous and player identities; only reducers and the owner (the mind service, the observer) read it. The probe's owner snapshot carries it (`cues`).
 - Knowledge epochs (`knowledge_epoch`, since `cullet-sweep`, docs/PERCEPTION.md "Module memory and rollback"): one row per character whose name knowledge or know-how changed (row 0: anyone's community), read by the perception sweep by primary key; private in every build and refused to anonymous and player identities, listed in `drive.py` `PRIVATE`.

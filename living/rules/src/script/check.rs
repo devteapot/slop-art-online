@@ -579,6 +579,8 @@ pub fn records() -> Vec<crate::records::RecordFacts> {
         RecordFacts { id: 5, kind: "demand".into(), status: "open".into(), open: true, terms: t(serde_json::json!({"item": "berries", "qty": 2, "done": 0, "words": "the gate-due"})), parties: vec![("by".into(), 9), ("of".into(), 1)], me: "of".into(), by: 9, age_s: 20.0, due_s: Some(40.0) },
         RecordFacts { id: 6, kind: "demand".into(), status: "open".into(), open: true, terms: t(serde_json::json!({"item": "wood", "qty": 1, "done": 0, "words": ""})), parties: vec![("by".into(), 1), ("of".into(), 9)], me: "by".into(), by: 1, age_s: 20.0, due_s: Some(0.0) },
         RecordFacts { id: 7, kind: "regard".into(), status: "held".into(), open: true, terms: t(serde_json::json!({"label": "rival town", "value": -40, "why": "the broken match"})), parties: vec![("holder".into(), COMMUNITY | 2), ("toward".into(), COMMUNITY | 3)], me: "holder".into(), by: 0, age_s: 9_000.0, due_s: None },
+        // The battle fixture's stance (`spawn_battle_sides`): no `why`, read by the side it is held toward.
+        RecordFacts { id: 8, kind: "stance".into(), status: "open".into(), open: true, terms: t(serde_json::json!({"label": "enemy", "value": -50.0})), parties: vec![("holder".into(), COMMUNITY | 3), ("toward".into(), COMMUNITY | 2)], me: "toward".into(), by: 0, age_s: 60.0, due_s: None },
     ]
 }
 
