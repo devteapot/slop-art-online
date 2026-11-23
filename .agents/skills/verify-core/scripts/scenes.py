@@ -3434,11 +3434,26 @@ def say(s):
         "do-object": lambda t, to: {"do": {"skill": "say", "text": t, "to": to}},
     }
     targets = {"id": {"id": b}, "bare-id": b, "nearest": {"nearest": {"kind": "person"}}}
+    # Each line has words of its own. `mind_install` makes a mind's plan, whose say node does not
+    # say nearly the line (shared-word Jaccard 0.6 or more) its speaker said to the same person
+    # within 45 s (say-once, `speech::said_to_recently`); lines differing only in their number and
+    # form ("Morning, line 14 (canonical, bare-id, mind_install).") were held back as repeats of
+    # the last one spoken (8 of 12 on main 5655887af). Any two of these share under 0.3.
+    phrases = [
+        "Fresh bread waits beside ovens", "Cold rivers carry silver trout", "Winter wolves howl past midnight",
+        "Golden barley sways under wind", "Tired horses drink from troughs", "Bright lanterns glow along alleys",
+        "Old sailors mend torn nets", "Quiet monks copy ancient scrolls", "Heavy rain floods lower fields",
+        "Young goats climb steep cliffs", "Smiths hammer glowing iron bars", "Merchants weigh copper coins carefully",
+        "Pale moonlight touches distant hills", "Children chase painted kites", "Weavers spin blue wool slowly",
+        "Hunters track deer through ferns", "Bees gather nectar among clover", "Potters shape wet clay bowls",
+        "Owls watch mice beneath barns", "Farmers plough dark muddy soil", "Sparrows nest inside thatched roofs",
+        "Fishermen haul crabs ashore early", "Shepherds count woolly lambs twice", "Candles flicker behind chapel windows",
+    ]
     for path in ("set_behavior", "mind_install"):
         for form, make in forms.items():
             for tname, to in targets.items():
                 n[0] += 1
-                text = f"Morning, line {n[0]} ({form}, {tname}, {path})."
+                text = f"{phrases[n[0] - 1]} (line {n[0]}, {form}, {tname}, {path})."
                 t0 = now()
                 install(path, {"seq": [make(text, to), hold]})
                 got = heard(text, t0)
