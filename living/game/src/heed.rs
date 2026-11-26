@@ -529,7 +529,7 @@ mod tests {
     #[test]
     fn a_throng_figure_pins_only_an_individual_near_it() {
         use crate::throng::{Row, STILL};
-        let row = Row::of(&living_bindings::SeenThrong { id: 1, viewer: spacetimedb_sdk::Identity::ZERO, cell: (10 << 16) | 10, size: 1, count: 5, spread: 4, heading: STILL, moving: 0, fighting: 0, kinds: 1 });
+        let row = Row::of(&living_bindings::SeenThrong { id: 1, viewer: spacetimedb_sdk::Identity::ZERO, cell: (10 << 16) | 10, size: 1, count: 5, spread: 4, heading: STILL, moving: 0, fighting: 0, kinds: 1, colour_a: 255, colour_a_count: 0, colour_b: 255, colour_b_count: 0, colour_c: 255, colour_c_count: 0, people: 0, wolves: 0, deer: 0, others: 0, centre_x: 0, centre_y: 0 });
         let tp = ThrongPick { row, at: Vec2::new(63.0, 63.0) };
         // In the square, the nearest to the figure; ties by id.
         assert_eq!(in_throng(&tp, &[(7, Vec2::new(61.0, 61.0)), (4, Vec2::new(64.0, 63.5)), (9, Vec2::new(90.0, 90.0))]), Some(4));
