@@ -143,7 +143,7 @@ PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block'],
           # The player's look (fov-1): any living character may send it.
           'human_face': [1.0, 0.0], 'human_gaze': [1],
           # Heed for players: no pins and no focus (clears the choice), for any living character.
-          'human_heed': [{'pins': [], 'focus': {'none': []}}]}
+          'human_heed': [{'pins': [], 'focus': {'none': []}, 'pin_at': {'none': []}}]}
 MIND = ['mind_routines', 'mind_install', 'mind_install_way', 'mind_say', 'mind_act', 'mind_skip',
         'mind_consolidated', 'mind_update', 'mind_judged', 'mind_where', 'mind_heed']
 # Procedures (their answer goes to the caller alone), under the same controller rule: a talk turn's

@@ -18,6 +18,7 @@
 
 use crate::common::{self, NearCreature};
 use crate::tables::*;
+use living_rules::look::{cloth_index, CLOTH, NO_CLOTH};
 use spacetimedb::{Identity, ReducerContext, Table};
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
@@ -51,12 +52,18 @@ pub fn about(n: usize) -> u16 {
     n.min(u16::MAX as usize) as u16
 }
 
-fn cell_of(p: (f32, f32)) -> (u32, u32) {
+/// The 6 m cell a point falls in (map metres).
+pub fn cell_of(p: (f32, f32)) -> (u32, u32) {
     ((p.0 / CELL_M).floor().max(0.0) as u32, (p.1 / CELL_M).floor().max(0.0) as u32)
 }
 
 fn key(cx: u32, cy: u32) -> u32 {
     (cx.min(0xFFFF) << 16) | cy.min(0xFFFF)
+}
+
+/// The square a row covers, in metres: its top-left corner and its side.
+pub fn square(cell: u32, size: u8) -> ((f32, f32), f32) {
+    (((cell >> 16) as f32 * CELL_M, (cell & 0xFFFF) as f32 * CELL_M), size.max(1) as f32 * CELL_M)
 }
 
 /// One row's fields (without its id and viewer).
@@ -70,12 +77,49 @@ pub struct Cell6 {
     pub moving: u16,
     pub fighting: u16,
     pub kinds: u8,
+    /// The three colours most worn ([`living_rules::look::CLOTH`] indices, most first, ties by
+    /// index) with their counts quantized as `count` is; `(NO_CLOTH, 0)` for a place none fills.
+    pub colours: [Colour; 3],
+    /// How many of each kind (people, wolves, deer, others: `kinds`' bits in order), each
+    /// quantized as `count` is.
+    pub by_kind: [u16; 4],
+    /// Where the members stand within the square: their mean position's whole metres east and
+    /// south of its top-left corner (0 to side - 1; a client draws it at + 0.5 m).
+    pub centre: [u8; 2],
+}
+
+/// One of a cell's colours: a cloth index and its quantized count.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Colour {
+    pub index: u8,
+    pub count: u16,
+}
+
+const NO_COLOUR: Colour = Colour { index: NO_CLOTH, count: 0 };
+
+/// The three colours most worn among `cloths` (one [`CLOTH`] index per member; [`NO_CLOTH`] wears
+/// none and is not counted).
+fn top_colours(cloths: impl Iterator<Item = u8>) -> [Colour; 3] {
+    let mut n = [0usize; CLOTH.len()];
+    for c in cloths {
+        if let Some(k) = n.get_mut(c as usize) {
+            *k += 1;
+        }
+    }
+    let mut order: Vec<(usize, usize)> = n.iter().enumerate().filter(|(_, k)| **k > 0).map(|(i, k)| (i, *k)).collect();
+    order.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    let mut out = [NO_COLOUR; 3];
+    for (slot, (i, k)) in out.iter_mut().zip(order) {
+        *slot = Colour { index: i as u8, count: about(k) };
+    }
+    out
 }
 
 /// The cells of `throng` seen from `here`: one per occupied 6 m square, the farthest merged 2 x 2
 /// until at most [`MAX_ROWS`] remain (and, should even that not do, the farthest left out).
-/// `moving(id)` gives a member's velocity when it moves; `fighting(id)` whether it visibly fights.
-pub fn cells(here: (f32, f32), throng: &[NearCreature], moving: impl Fn(u32) -> Option<(f32, f32)>, fighting: impl Fn(u32) -> bool) -> Vec<Cell6> {
+/// `moving(id)` gives a member's velocity when it moves; `fighting(id)` whether it visibly fights;
+/// `cloth(id)` the [`CLOTH`] index of what it wears ([`NO_CLOTH`] for none).
+pub fn cells(here: (f32, f32), throng: &[NearCreature], moving: impl Fn(u32) -> Option<(f32, f32)>, fighting: impl Fn(u32) -> bool, cloth: impl Fn(u32) -> u8) -> Vec<Cell6> {
     if throng.is_empty() {
         return Vec::new();
     }
@@ -117,6 +161,7 @@ pub fn cells(here: (f32, f32), throng: &[NearCreature], moving: impl Fn(u32) -> 
             let (cx, cy) = (cs.iter().map(|c| c.pos.0).sum::<f32>() / n as f32, cs.iter().map(|c| c.pos.1).sum::<f32>() / n as f32);
             let spread = cs.iter().map(|c| (c.pos.0 - cx).hypot(c.pos.1 - cy)).fold(0.0f32, f32::max) * 2.0;
             let (mut vx, mut vy, mut movers, mut fighters, mut kinds) = (0.0f32, 0.0f32, 0usize, 0usize, 0u8);
+            let mut of_kind = [0usize; 4];
             for c in &cs {
                 if let Some((a, b)) = moving(c.id) {
                     movers += 1;
@@ -126,19 +171,26 @@ pub fn cells(here: (f32, f32), throng: &[NearCreature], moving: impl Fn(u32) -> 
                 if fighting(c.id) {
                     fighters += 1;
                 }
-                kinds |= match &*c.kind {
-                    "person" => PEOPLE,
-                    "wolf" => WOLVES,
-                    "deer" => DEER,
-                    _ => OTHERS,
+                let (bit, slot) = match &*c.kind {
+                    "person" => (PEOPLE, 0),
+                    "wolf" => (WOLVES, 1),
+                    "deer" => (DEER, 2),
+                    _ => (OTHERS, 3),
                 };
+                kinds |= bit;
+                of_kind[slot] += 1;
             }
             let heading = if movers * 2 >= n && movers > 0 && (vx / movers as f32).hypot(vy / movers as f32) >= HEADING_MIN_MPS {
                 ((vy.atan2(vx).to_degrees() / 45.0).round().rem_euclid(8.0)) as u8
             } else {
                 STILL
             };
-            let row = Cell6 { cell: key(x, y), size: s as u8, count: about(n), spread: ((spread / 2.0).round() * 2.0).min(254.0) as u8, heading, moving: about(movers), fighting: about(fighters), kinds };
+            let colours = top_colours(cs.iter().map(|c| cloth(c.id)));
+            let side = s as f32 * CELL_M;
+            let at = |v: f32, corner: f32| ((v - corner).floor().clamp(0.0, side - 1.0)) as u8;
+            let centre = [at(cx, x as f32 * CELL_M), at(cy, y as f32 * CELL_M)];
+            let by_kind = of_kind.map(about);
+            let row = Cell6 { cell: key(x, y), size: s as u8, count: about(n), spread: ((spread / 2.0).round() * 2.0).min(254.0) as u8, heading, moving: about(movers), fighting: about(fighters), kinds, colours, by_kind, centre };
             (common::dist(here, (cx, cy)), row)
         })
         .collect();
@@ -165,7 +217,10 @@ pub fn show(ctx: &ReducerContext, id: u32, viewer: Identity, here: (f32, f32), t
     let sc = common::scripts(ctx);
     let moving = |c: u32| ctx.db.body().id().find(c).filter(|b| now < b.next_ms && (b.vx != 0.0 || b.vy != 0.0)).map(|b| (b.vx, b.vy));
     let fighting = |c: u32| crate::perception::visibly(ctx, &sc, c, now).is_some_and(|v| v.combat);
-    let new = cells(here, throng, moving, fighting);
+    // What one sees them wear: the cloth word of their look's top (a point lookup; none for animals
+    // and lookless people).
+    let cloth = |c: u32| ctx.db.look().id().find(c).map_or(NO_CLOTH, |l| cloth_index(&l.words.top));
+    let new = cells(here, throng, moving, fighting, cloth);
     write(ctx, viewer, &new);
 }
 
@@ -181,7 +236,31 @@ fn write(ctx: &ReducerContext, viewer: Identity, new: &[Cell6]) {
     }
     let (mut ins, mut upd) = (0u64, 0u64);
     for c in new {
-        let fields = |id: u64| SeenThrong { id, viewer, cell: c.cell, size: c.size, count: c.count, spread: c.spread, heading: c.heading, moving: c.moving, fighting: c.fighting, kinds: c.kinds };
+        let [a, b, k] = c.colours;
+        let fields = |id: u64| SeenThrong {
+            id,
+            viewer,
+            cell: c.cell,
+            size: c.size,
+            count: c.count,
+            spread: c.spread,
+            heading: c.heading,
+            moving: c.moving,
+            fighting: c.fighting,
+            kinds: c.kinds,
+            colour_a: a.index,
+            colour_a_count: a.count,
+            colour_b: b.index,
+            colour_b_count: b.count,
+            colour_c: k.index,
+            colour_c_count: k.count,
+            people: c.by_kind[0],
+            wolves: c.by_kind[1],
+            deer: c.by_kind[2],
+            others: c.by_kind[3],
+            centre_x: c.centre[0],
+            centre_y: c.centre[1],
+        };
         match kept.remove(&(c.cell, c.size)) {
             Some(r) => {
                 let want = fields(r.id);
@@ -263,7 +342,7 @@ mod tests {
     #[test]
     fn one_row_per_square_keyed_by_its_top_left() {
         let t = [c(1, 1.0, 1.0), c(2, 5.9, 5.9), c(3, 6.1, 1.0)];
-        let rows = cells((0.0, 0.0), &t, |_| None, |_| false);
+        let rows = cells((0.0, 0.0), &t, |_| None, |_| false, |_| NO_CLOTH);
         assert_eq!(rows.len(), 2);
         assert_eq!((rows[0].cell, rows[0].size, rows[0].count), (key(0, 0), 1, 2));
         assert_eq!((rows[1].cell, rows[1].size, rows[1].count), (key(1, 0), 1, 1));
@@ -273,22 +352,56 @@ mod tests {
     #[test]
     fn heading_in_eight_sectors_clockwise_from_east() {
         let t = [c(1, 1.0, 1.0), c(2, 2.0, 2.0)];
-        let south = cells((0.0, 0.0), &t, |_| Some((0.0, 1.5)), |_| false);
+        let south = cells((0.0, 0.0), &t, |_| Some((0.0, 1.5)), |_| false, |_| NO_CLOTH);
         assert_eq!((south[0].heading, south[0].moving), (2, 2));
-        let north = cells((0.0, 0.0), &t, |_| Some((0.0, -1.5)), |_| true);
+        let north = cells((0.0, 0.0), &t, |_| Some((0.0, -1.5)), |_| true, |_| NO_CLOTH);
         assert_eq!((north[0].heading, north[0].fighting), (6, 2));
         // One of two moving, the other standing: half move, so a heading; none: still.
-        let half = cells((0.0, 0.0), &t, |id| (id == 1).then_some((1.0, 0.0)), |_| false);
+        let half = cells((0.0, 0.0), &t, |id| (id == 1).then_some((1.0, 0.0)), |_| false, |_| NO_CLOTH);
         assert_eq!(half[0].heading, 0);
-        let slow = cells((0.0, 0.0), &t, |_| Some((0.1, 0.0)), |_| false);
+        let slow = cells((0.0, 0.0), &t, |_| Some((0.1, 0.0)), |_| false, |_| NO_CLOTH);
         assert_eq!(slow[0].heading, STILL);
+    }
+
+    #[test]
+    fn colours_most_worn_first_quantized_as_count() {
+        // 7 in green (2), 2 in navy (7), 2 in black (1), 1 in red (5), 1 with no look.
+        let t: Vec<NearCreature> = (0..13).map(|i| c(i, 1.0 + (i % 5) as f32, 1.0)).collect();
+        let cloth = |id: u32| match id { 0..=6 => 2, 7 | 8 => 7, 9 | 10 => 1, 11 => 5, _ => NO_CLOTH };
+        let rows = cells((0.0, 0.0), &t, |_| None, |_| false, cloth);
+        assert_eq!(rows.len(), 1);
+        // Green's 7 reads as about 5; black and navy tie at 2 (black first, the lower index); red
+        // is fourth and left out; the member with no look counts in `count` but wears no colour.
+        assert_eq!(rows[0].colours, [Colour { index: 2, count: 5 }, Colour { index: 1, count: 2 }, Colour { index: 7, count: 2 }]);
+        assert_eq!(rows[0].count, about(13));
+        // No looks at all: no colours.
+        let none = cells((0.0, 0.0), &t[..3], |_| None, |_| false, |_| NO_CLOTH);
+        assert_eq!(none[0].colours, [NO_COLOUR; 3]);
+    }
+
+    #[test]
+    fn kinds_counted_and_the_centre_to_the_metre() {
+        // Seven people and two wolves in the square (6, 0)-(12, 6): the people at x 7.0..10.0, y 2.5.
+        let mut t: Vec<NearCreature> = (0..7).map(|i| c(i, 7.0 + 0.5 * i as f32, 2.5)).collect();
+        for i in 7..9 {
+            t.push(NearCreature { id: i, kind: Rc::from("wolf"), pos: (11.5, 5.9), dist: 0.0, facing: 0.0 });
+        }
+        let rows = cells((0.0, 0.0), &t, |_| None, |_| false, |_| NO_CLOTH);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].by_kind, [5, 2, 0, 0], "7 people read as about 5");
+        assert_eq!(rows[0].kinds, PEOPLE | WOLVES);
+        // The mean: x (7*8.5 + 2*11.5) / 9 = 9.17, y (7*2.5 + 2*5.9) / 9 = 3.26: 3 m and 3 m in.
+        assert_eq!(rows[0].centre, [3, 3]);
+        // A lone member's centre is its own position to the metre, within the square.
+        let one = cells((0.0, 0.0), &[c(1, 17.99, 0.2)], |_| None, |_| false, |_| NO_CLOTH);
+        assert_eq!((one[0].cell, one[0].centre), (key(2, 0), [5, 0]));
     }
 
     #[test]
     fn the_farthest_merge_until_the_rows_fit() {
         // 60 single squares in a row eastward: the far ones merge 2 x 2.
         let t: Vec<NearCreature> = (0..60).map(|i| c(i, i as f32 * CELL_M + 1.0, 1.0)).collect();
-        let rows = cells((0.0, 0.0), &t, |_| None, |_| false);
+        let rows = cells((0.0, 0.0), &t, |_| None, |_| false, |_| NO_CLOTH);
         assert!(rows.len() <= MAX_ROWS, "{}", rows.len());
         let total: u16 = rows.iter().map(|r| r.count).sum();
         assert_eq!(total, 60, "nobody is lost by merging");
