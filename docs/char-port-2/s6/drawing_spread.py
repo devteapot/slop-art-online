@@ -34,8 +34,17 @@ ink lines are inside the hair's width either way).
   centres give the eye line and the eye spacing.
 - **The head's height:** the eye spacing over 0.30, stage-1's front ratio (eye spacing over head
   height).
-- **The cheek row:** 0.030 m under the eye line, the generator's (`eye_z - 0.030`), in head
-  heights of the generator's standard head (0.030 / 0.2322, Cora's head height in metres).
+- **The cheek row** (by landmarks since S7's ortho re-measure, the GC's 2026-11-21: the same on the drawing and a
+  render, never by millimetres): `ROW_FRACTION` of the way from the eye line to the chin. The fraction is the
+  row the drawing's 1.751 was measured at (review.jpg: row 206, eye line 169.7, chin 292: 0.2967). That row was
+  first set as 0.030 m under the eye line in head heights of Cora's standard head (0.030 / 0.2322), the head's
+  height taken from the eye spacing by stage-1's ratio (0.30); on a generated head, whose spacing is 0.38 of its
+  height, that rule put the row 41-44 mm under the eyes instead of 30 (`rule="spacing"` keeps it, for S6b's
+  numbers).
+- **The chin on a render** (`chin_px`): a render has no ink at the chin's midline, so its chin is the lowest
+  pixel of the face's front on the eyes' middle column, from a frame drawn with the chin-ID copy
+  (docs/char-port-2/s7/chin_id.py: the skin in front of the irises in pure yellow). It is the tip of the chin, as
+  the drawing's ink point is.
 - **The cheek width:** the run of skin on that row that holds the face's centre column: the face
   across the cheekbones (the generator's, in front of the pinna): the face's outline on that row.
   On the drawing no hair covers the cheeks there; on a render it is taken from the same frame drawn
@@ -115,9 +124,39 @@ def measure(path, box):
     return finish(im, hair, skin, eye_y, spacing, cx, w)
 
 
-def cheek_at(skin, eye_y, spacing, cx, w):
+ROW_FRACTION = 0.2967  # the drawing's row, from its eye line to its chin (the module's docstring)
+CHIN_ID = "the chin-ID copy's yellow (docs/char-port-2/s7/chin_id.py): red and green each over blue by 80 (the client draws it (227, 217, 113))"
+
+
+def chin_of(a):
+    """The pixels of a frame drawn with the chin-ID copy that are the face's front (CHIN_ID)."""
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    return (r > b + 80) & (g > b + 80)
+
+
+def chin_px(a, cx, below):
+    """The chin's row on a chin-ID frame (an array, cropped as the frame it goes with): the lowest front pixel within
+    2 px of the column cx, under the row `below` (the eye line). None if the column has no front."""
+    m = chin_of(a)[:, max(0, cx - 2):cx + 3].any(axis=1)
+    m[:int(below) + 1] = False
+    ys = np.nonzero(m)[0]
+    return int(ys.max()) if len(ys) else None
+
+
+def chin_from(chin_frame, box, cx, eye_y):
+    """A render's chin from its chin-ID frame; it stops, rather than fall back to the drawing's search, when the frame
+    shows no chin (a chin found by the drawing's search on a render lies in the neck)."""
+    c = chin_px(np.asarray(Image.open(chin_frame).convert("RGB").crop(box)).astype(float), cx, eye_y)
+    if c is None:
+        raise SystemExit(f"drawing_spread: no chin-ID front ({CHIN_ID}) under the eye line in {chin_frame}")
+    return c
+
+
+def cheek_at(skin, eye_y, spacing, cx, w, chin=None, rule="landmark"):
     """The chin row, the cheek row, and the run of skin on the cheek row that holds the face's centre column (the
-    module's docstring): (chin, cheek_row, (x0, x1), head_px)."""
+    module's docstring): (chin, cheek_row, (x0, x1), head_px). `chin`: a render's chin (chin_px); without it, the
+    drawing's (the centre run's narrowest row, its ink point). `rule`: "landmark" (ROW_FRACTION of eye line to chin,
+    the acceptance's) or "spacing" (S6b's: CHEEK_DROP_H head heights, the head from the eye spacing)."""
     head_px = spacing / EYE_SPACING_H
     h = skin.shape[0]
 
@@ -131,16 +170,20 @@ def cheek_at(skin, eye_y, spacing, cx, w):
             x1 += 1
         return x0, x1
 
-    rows = range(int(eye_y + 0.33 * head_px), min(h, int(eye_y + 0.62 * head_px)))
-    width = [(0 if run(r) is None else run(r)[1] - run(r)[0]) for r in rows]
-    chin = list(rows)[int(np.argmin(width))]
-    cheek_row = int(round(eye_y + CHEEK_DROP_H * head_px))
+    if chin is None:
+        rows = range(int(eye_y + 0.33 * head_px), min(h, int(eye_y + 0.62 * head_px)))
+        width = [(0 if run(r) is None else run(r)[1] - run(r)[0]) for r in rows]
+        chin = list(rows)[int(np.argmin(width))]
+    if rule == "landmark":
+        cheek_row = int(round(eye_y + ROW_FRACTION * (chin - eye_y)))
+    else:
+        cheek_row = int(round(eye_y + CHEEK_DROP_H * head_px))
     return chin, cheek_row, run(cheek_row), head_px
 
 
-def finish(im, hair, skin, eye_y, spacing, cx, w):
+def finish(im, hair, skin, eye_y, spacing, cx, w, chin=None, rule="landmark"):
     """The chin, the cheek row and width, and the hair's two spreads (the module's docstring)."""
-    chin, cheek_row, cheek_px, head_px = cheek_at(skin, eye_y, spacing, cx, w)
+    chin, cheek_row, cheek_px, head_px = cheek_at(skin, eye_y, spacing, cx, w, chin, rule)
     cheek = cheek_px
     # The face's own outline on that row: the drawing's, where no hair covers the cheeks at that
     # height; a render's from its copy with no hair (part_id.py --none), so no lock can cut it short.
@@ -163,10 +206,11 @@ def finish(im, hair, skin, eye_y, spacing, cx, w):
     d.line((bx.max(), chin, bx.max(), 0), fill=(255, 150, 0))
     return dict(body_over_eyes=round(float((bx.max() - bx.min()) / spacing), 3), whole_over_eyes=round(float((hx[1] - hx[0]) / spacing), 3),
                 body_width_px=int(bx.max() - bx.min()), body=round(float((bx.max() - bx.min()) / cw), 3), opening_px=n, eye_line_px=round(float(eye_y), 1), eye_spacing_px=round(float(spacing), 1), head_px=round(float(head_px), 1), chin_row=chin,
-                cheek_row=cheek_row, cheek_px=cheek, cheek_width_px=cw, face_over_eyes=round(float(cw / spacing), 3), hair_px=hx, hair_width_px=hx[1] - hx[0], spread_face=round(float(spread), 3)), pic
+                cheek_row=cheek_row, cheek_px=cheek, cheek_width_px=cw, face_over_eyes=round(float(cw / spacing), 3), hair_px=hx, hair_width_px=hx[1] - hx[0], spread_face=round(float(spread), 3),
+                row_rule=rule, row_fraction=round(float((cheek_row - eye_y) / (chin - eye_y)), 4)), pic
 
 
-def render(look, idp, box=(600, 160, 1000, 620), face=None):
+def render(look, idp, box=(600, 160, 1000, 620), face=None, chin_frame=None, rule=None):
     """A game front portrait, measured as the drawing is (the module's docstring). `face`: the
     same frame with no hair drawn (part_id.py --none), whose skin and eyes give the face, so no lock
     over a cheek or an eye can move it (image_spread.py)."""
@@ -180,7 +224,10 @@ def render(look, idp, box=(600, 160, 1000, 620), face=None):
     # slivers), parted into the two eyes at the widest gap across between the pieces; the
     # ground's green is far larger and is left out.
     (ya, xa), (yb, xb) = two_eyes((g > r + 8) & (g > b) & (True if face else ~hair))
-    return finish(im, hair, skin, (ya + yb) / 2, abs(xa - xb), int(round((xa + xb) / 2)), a.shape[1])
+    eye_y, cx = (ya + yb) / 2, int(round((xa + xb) / 2))
+    # The landmark row needs the render's chin (a chin-ID frame); without one, S6b's spacing rule.
+    chin = chin_from(chin_frame, box, cx, eye_y) if chin_frame else None
+    return finish(im, hair, skin, eye_y, abs(xa - xb), cx, a.shape[1], chin, rule or ("landmark" if chin_frame else "spacing"))
 
 
 EAR_ID = "the ear-ID copy's magenta (ear_id.py): red and blue each over green by 40"
@@ -192,7 +239,7 @@ def ears_of(a):
     return (r > g + 40) & (b > g + 40)
 
 
-def face_render(frame, box=(600, 160, 1000, 620)):
+def face_render(frame, box=(600, 160, 1000, 620), chin_frame=None, rule=None):
     """S6b's acceptance (the GC's): the face's width at the cheek row over the eye spacing, measured as the drawing's
     is, on a front frame with no hair whose type file is the ear-ID copy (docs/char-port-2/s6b/ear_id.py,
     face2d.py). The skin is the hairless frame's (render()'s rule) less the ears, so the run on the cheek row stops at
@@ -204,14 +251,18 @@ def face_render(frame, box=(600, 160, 1000, 620)):
     skin = (r > g + 12) & (r > b + 25) & ~ear
     (ya, xa), (yb, xb) = two_eyes((g > r + 8) & (g > b))
     eye_y, spacing, cx = (ya + yb) / 2, abs(xa - xb), int(round((xa + xb) / 2))
-    chin, cheek_row, run, head_px = cheek_at(skin, eye_y, spacing, cx, a.shape[1])
+    # The landmark row needs the render's chin (a chin-ID frame of the same view); without one, S6b's spacing rule.
+    chin = chin_from(chin_frame, box, cx, eye_y) if chin_frame else None
+    rule = rule or ("landmark" if chin_frame else "spacing")
+    chin, cheek_row, run, head_px = cheek_at(skin, eye_y, spacing, cx, a.shape[1], chin, rule)
     cw = run[1] - run[0]
     pic = im.copy()
     d = ImageDraw.Draw(pic)
     d.line((run[0], cheek_row, run[1], cheek_row), fill=(0, 90, 255), width=2)
     row_ear = np.nonzero(ear[cheek_row])[0]
     return dict(face_over_eyes=round(float(cw / spacing), 3), cheek_width_px=int(cw), eye_spacing_px=round(float(spacing), 1), cheek_row=cheek_row, cheek_px=[int(run[0]), int(run[1])],
-                eye_line_px=round(float(eye_y), 1), ear_on_cheek_row=bool(len(row_ear)), ear_px=int(ear.sum())), pic
+                eye_line_px=round(float(eye_y), 1), ear_on_cheek_row=bool(len(row_ear)), ear_px=int(ear.sum()), chin_row=int(chin), row_rule=rule,
+                row_fraction=round(float((cheek_row - eye_y) / (chin - eye_y)), 4)), pic
 
 
 def main(out_json, out_png, look=None, idp=None):

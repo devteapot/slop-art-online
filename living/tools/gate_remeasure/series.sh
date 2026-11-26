@@ -28,9 +28,11 @@ out=$OUT/$NAME; rm -rf $out; mkdir -p $out
 gov="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null)/$(cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference 2>/dev/null)"
 echo "{\"governor\": \"$gov\", \"arm\": \"$ARM\", \"args\": \"$*\"}" > $out/host.json
 ps -eo pid,comm,%cpu,rss --sort=-%cpu | head -12 > $out/procs-start.txt
-timeout 3600 python3 $BV --label "gr-${NAME,,}" --load $LOAD --wasm $WASM --seconds 60 --warmup 20 \
+python3 $BV --label "gr-${NAME,,}" --load $LOAD --wasm $WASM --seconds 60 --warmup 20 \
   --tiers --cues --motion-tables --character-tables --fighter-tables --combat-feed \
   --keep-alive 0.5 --keep-fighters 1 --paused-placement --battle-after-placing --ring 26,32 --watch --detail \
   --viewers 0 --fighters 100 --humans 100 --walkers 116 --lines-table --no-profile $LAWS "$@" --out $out > $out.log 2>&1
-echo "exit $?"
+rc=$?; echo "exit $rc"
 ps -eo pid,comm,%cpu,rss --sort=-%cpu | head -12 > $out/procs-end.txt
+
+exit "$rc"

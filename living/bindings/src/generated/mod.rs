@@ -36,6 +36,8 @@ pub mod bond_offer_table;
 pub mod bond_offer_type;
 pub mod brain_table;
 pub mod brain_type;
+pub mod census_table;
+pub mod census_type;
 pub mod character_earshot_table;
 pub mod character_earshot_type;
 pub mod character_senses_table;
@@ -97,6 +99,7 @@ pub mod far_handle_table;
 pub mod far_handle_type;
 pub mod fast_ask_table;
 pub mod fast_ask_type;
+pub mod fight_in_type;
 pub mod fight_seen_table;
 pub mod fight_seen_type;
 pub mod fighter_near_table;
@@ -132,6 +135,8 @@ pub mod heard_sounds_table;
 pub mod heard_table;
 pub mod heard_type;
 pub mod hearer_type;
+pub mod heed_policy_table;
+pub mod heed_policy_type;
 pub mod housekeeping_reducer;
 pub mod human_act_reducer;
 pub mod human_face_reducer;
@@ -198,6 +203,8 @@ pub mod mind_consolidated_reducer;
 pub mod mind_cursor_table;
 pub mod mind_cursor_type;
 pub mod mind_fast_done_reducer;
+pub mod mind_fight_reducer;
+pub mod mind_heed_reducer;
 pub mod mind_install_reducer;
 pub mod mind_install_way_reducer;
 pub mod mind_judged_reducer;
@@ -288,6 +295,8 @@ pub mod record_party_table;
 pub mod record_party_type;
 pub mod record_table;
 pub mod record_type;
+pub mod relation_fight_table;
+pub mod relation_fight_type;
 pub mod relation_in_type;
 pub mod relation_table;
 pub mod relation_type;
@@ -368,6 +377,7 @@ pub mod slow_timer_type;
 pub mod slumber_table;
 pub mod slumber_type;
 pub mod spawn_battle_reducer;
+pub mod spawn_battle_sides_layout_reducer;
 pub mod spawn_battle_sides_reducer;
 pub mod spawn_crowd_reducer;
 pub mod spawn_newcomer_reducer;
@@ -441,6 +451,8 @@ pub use bond_offer_table::*;
 pub use bond_offer_type::BondOffer;
 pub use brain_table::*;
 pub use brain_type::Brain;
+pub use census_table::*;
+pub use census_type::Census;
 pub use character_earshot_table::*;
 pub use character_earshot_type::CharacterEarshot;
 pub use character_senses_table::*;
@@ -502,6 +514,7 @@ pub use far_handle_table::*;
 pub use far_handle_type::FarHandle;
 pub use fast_ask_table::*;
 pub use fast_ask_type::FastAsk;
+pub use fight_in_type::FightIn;
 pub use fight_seen_table::*;
 pub use fight_seen_type::FightSeen;
 pub use fighter_near_table::*;
@@ -537,6 +550,8 @@ pub use heard_sounds_table::*;
 pub use heard_table::*;
 pub use heard_type::Heard;
 pub use hearer_type::Hearer;
+pub use heed_policy_table::*;
+pub use heed_policy_type::HeedPolicy;
 pub use housekeeping_reducer::housekeeping;
 pub use human_act_reducer::human_act;
 pub use human_face_reducer::human_face;
@@ -603,6 +618,8 @@ pub use mind_consolidated_reducer::mind_consolidated;
 pub use mind_cursor_table::*;
 pub use mind_cursor_type::MindCursor;
 pub use mind_fast_done_reducer::mind_fast_done;
+pub use mind_fight_reducer::mind_fight;
+pub use mind_heed_reducer::mind_heed;
 pub use mind_install_reducer::mind_install;
 pub use mind_install_way_reducer::mind_install_way;
 pub use mind_judged_reducer::mind_judged;
@@ -693,6 +710,8 @@ pub use record_party_table::*;
 pub use record_party_type::RecordParty;
 pub use record_table::*;
 pub use record_type::Record;
+pub use relation_fight_table::*;
+pub use relation_fight_type::RelationFight;
 pub use relation_in_type::RelationIn;
 pub use relation_table::*;
 pub use relation_type::Relation;
@@ -773,6 +792,7 @@ pub use slow_timer_type::SlowTimer;
 pub use slumber_table::*;
 pub use slumber_type::Slumber;
 pub use spawn_battle_reducer::spawn_battle;
+pub use spawn_battle_sides_layout_reducer::spawn_battle_sides_layout;
 pub use spawn_battle_sides_reducer::spawn_battle_sides;
 pub use spawn_crowd_reducer::spawn_crowd;
 pub use spawn_newcomer_reducer::spawn_newcomer;
@@ -905,6 +925,14 @@ pub enum Reducer {
         asked_ms: u64,
         thought: ThoughtIn,
     },
+    MindFight {
+        actor: u32,
+        fights: Vec<FightIn>,
+    },
+    MindHeed {
+        actor: u32,
+        policy: String,
+    },
     MindInstall {
         actor: u32,
         graph: String,
@@ -1029,6 +1057,12 @@ pub enum Reducer {
         n: u32,
         sides: u32,
     },
+    SpawnBattleSidesLayout {
+        n: u32,
+        sides: u32,
+        layout_seed: u64,
+        deal: u32,
+    },
     SpawnCrowd {
         n: u32,
         minded: bool,
@@ -1083,6 +1117,8 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindAct { .. } => "mind_act",
             Reducer::MindConsolidated { .. } => "mind_consolidated",
             Reducer::MindFastDone { .. } => "mind_fast_done",
+            Reducer::MindFight { .. } => "mind_fight",
+            Reducer::MindHeed { .. } => "mind_heed",
             Reducer::MindInstall { .. } => "mind_install",
             Reducer::MindInstallWay { .. } => "mind_install_way",
             Reducer::MindJudged { .. } => "mind_judged",
@@ -1113,6 +1149,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::SetWorldLaw { .. } => "set_world_law",
             Reducer::SpawnBattle { .. } => "spawn_battle",
             Reducer::SpawnBattleSides { .. } => "spawn_battle_sides",
+            Reducer::SpawnBattleSidesLayout { .. } => "spawn_battle_sides_layout",
             Reducer::SpawnCrowd { .. } => "spawn_crowd",
             Reducer::SpawnNewcomer { .. } => "spawn_newcomer",
             Reducer::SpawnSkirmish { .. } => "spawn_skirmish",
@@ -1242,6 +1279,18 @@ impl __sdk::Reducer for Reducer {
                 asked_ms: asked_ms.clone(),
                 thought: thought.clone(),
             }),
+            Reducer::MindFight { actor, fights } => {
+                __sats::bsatn::to_vec(&mind_fight_reducer::MindFightArgs {
+                    actor: actor.clone(),
+                    fights: fights.clone(),
+                })
+            }
+            Reducer::MindHeed { actor, policy } => {
+                __sats::bsatn::to_vec(&mind_heed_reducer::MindHeedArgs {
+                    actor: actor.clone(),
+                    policy: policy.clone(),
+                })
+            }
             Reducer::MindInstall {
                 actor,
                 graph,
@@ -1445,6 +1494,19 @@ impl __sdk::Reducer for Reducer {
                     sides: sides.clone(),
                 })
             }
+            Reducer::SpawnBattleSidesLayout {
+                n,
+                sides,
+                layout_seed,
+                deal,
+            } => __sats::bsatn::to_vec(
+                &spawn_battle_sides_layout_reducer::SpawnBattleSidesLayoutArgs {
+                    n: n.clone(),
+                    sides: sides.clone(),
+                    layout_seed: layout_seed.clone(),
+                    deal: deal.clone(),
+                },
+            ),
             Reducer::SpawnCrowd { n, minded } => {
                 __sats::bsatn::to_vec(&spawn_crowd_reducer::SpawnCrowdArgs {
                     n: n.clone(),
@@ -1500,6 +1562,7 @@ pub struct DbUpdate {
     body: __sdk::TableUpdate<Body>,
     bond_offer: __sdk::TableUpdate<BondOffer>,
     brain: __sdk::TableUpdate<Brain>,
+    census: __sdk::TableUpdate<Census>,
     character: __sdk::TableUpdate<Character>,
     character_earshot: __sdk::TableUpdate<CharacterEarshot>,
     character_senses: __sdk::TableUpdate<CharacterSenses>,
@@ -1541,6 +1604,7 @@ pub struct DbUpdate {
     heard: __sdk::TableUpdate<Heard>,
     heard_asleep: __sdk::TableUpdate<HeardAsleep>,
     heard_sounds: __sdk::TableUpdate<HeardSound>,
+    heed_policy: __sdk::TableUpdate<HeedPolicy>,
     infant_cry: __sdk::TableUpdate<InfantCry>,
     inventory: __sdk::TableUpdate<Inventory>,
     join_request: __sdk::TableUpdate<JoinRequest>,
@@ -1604,6 +1668,7 @@ pub struct DbUpdate {
     record_clock: __sdk::TableUpdate<RecordClock>,
     record_party: __sdk::TableUpdate<RecordParty>,
     relation: __sdk::TableUpdate<Relation>,
+    relation_fight: __sdk::TableUpdate<RelationFight>,
     relay_event: __sdk::TableUpdate<RelayEvent>,
     remembered: __sdk::TableUpdate<Remembered>,
     resource_node: __sdk::TableUpdate<ResourceNode>,
@@ -1706,6 +1771,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "brain" => db_update
                     .brain
                     .append(brain_table::parse_table_update(table_update)?),
+                "census" => db_update
+                    .census
+                    .append(census_table::parse_table_update(table_update)?),
                 "character" => db_update
                     .character
                     .append(character_table::parse_table_update(table_update)?),
@@ -1829,6 +1897,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "heard_sounds" => db_update
                     .heard_sounds
                     .append(heard_sounds_table::parse_table_update(table_update)?),
+                "heed_policy" => db_update
+                    .heed_policy
+                    .append(heed_policy_table::parse_table_update(table_update)?),
                 "infant_cry" => db_update
                     .infant_cry
                     .append(infant_cry_table::parse_table_update(table_update)?),
@@ -2018,6 +2089,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(relation_table::parse_table_update(table_update)?),
+                "relation_fight" => db_update
+                    .relation_fight
+                    .append(relation_fight_table::parse_table_update(table_update)?),
                 "relay_event" => db_update
                     .relay_event
                     .append(relay_event_table::parse_table_update(table_update)?),
@@ -2242,6 +2316,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.brain = cache
             .apply_diff_to_table::<Brain>("brain", &self.brain)
             .with_updates_by_pk(|row| &row.id);
+        diff.census = cache
+            .apply_diff_to_table::<Census>("census", &self.census)
+            .with_updates_by_pk(|row| &row.id);
         diff.character = cache
             .apply_diff_to_table::<Character>("character", &self.character)
             .with_updates_by_pk(|row| &row.id);
@@ -2360,6 +2437,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.heard_asleep = cache
             .apply_diff_to_table::<HeardAsleep>("heard_asleep", &self.heard_asleep)
             .with_updates_by_pk(|row| &row.id);
+        diff.heed_policy = cache
+            .apply_diff_to_table::<HeedPolicy>("heed_policy", &self.heed_policy)
+            .with_updates_by_pk(|row| &row.actor);
         diff.infant_cry = cache
             .apply_diff_to_table::<InfantCry>("infant_cry", &self.infant_cry)
             .with_updates_by_pk(|row| &row.infant);
@@ -2482,6 +2562,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.relation = cache
             .apply_diff_to_table::<Relation>("relation", &self.relation)
+            .with_updates_by_pk(|row| &row.id);
+        diff.relation_fight = cache
+            .apply_diff_to_table::<RelationFight>("relation_fight", &self.relation_fight)
             .with_updates_by_pk(|row| &row.id);
         diff.relay_event = self.relay_event.into_event_diff();
         diff.remembered = cache
@@ -2744,6 +2827,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "brain" => db_update
                     .brain
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "census" => db_update
+                    .census
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "character" => db_update
                     .character
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -2866,6 +2952,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "heard_sounds" => db_update
                     .heard_sounds
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "heed_policy" => db_update
+                    .heed_policy
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "infant_cry" => db_update
                     .infant_cry
@@ -3055,6 +3144,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "relation" => db_update
                     .relation
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "relation_fight" => db_update
+                    .relation_fight
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "relay_event" => db_update
                     .relay_event
@@ -3267,6 +3359,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "brain" => db_update
                     .brain
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "census" => db_update
+                    .census
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "character" => db_update
                     .character
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3389,6 +3484,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "heard_sounds" => db_update
                     .heard_sounds
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "heed_policy" => db_update
+                    .heed_policy
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "infant_cry" => db_update
                     .infant_cry
@@ -3579,6 +3677,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "relation_fight" => db_update
+                    .relation_fight
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "relay_event" => db_update
                     .relay_event
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3764,6 +3865,7 @@ pub struct AppliedDiff<'r> {
     body: __sdk::TableAppliedDiff<'r, Body>,
     bond_offer: __sdk::TableAppliedDiff<'r, BondOffer>,
     brain: __sdk::TableAppliedDiff<'r, Brain>,
+    census: __sdk::TableAppliedDiff<'r, Census>,
     character: __sdk::TableAppliedDiff<'r, Character>,
     character_earshot: __sdk::TableAppliedDiff<'r, CharacterEarshot>,
     character_senses: __sdk::TableAppliedDiff<'r, CharacterSenses>,
@@ -3805,6 +3907,7 @@ pub struct AppliedDiff<'r> {
     heard: __sdk::TableAppliedDiff<'r, Heard>,
     heard_asleep: __sdk::TableAppliedDiff<'r, HeardAsleep>,
     heard_sounds: __sdk::TableAppliedDiff<'r, HeardSound>,
+    heed_policy: __sdk::TableAppliedDiff<'r, HeedPolicy>,
     infant_cry: __sdk::TableAppliedDiff<'r, InfantCry>,
     inventory: __sdk::TableAppliedDiff<'r, Inventory>,
     join_request: __sdk::TableAppliedDiff<'r, JoinRequest>,
@@ -3868,6 +3971,7 @@ pub struct AppliedDiff<'r> {
     record_clock: __sdk::TableAppliedDiff<'r, RecordClock>,
     record_party: __sdk::TableAppliedDiff<'r, RecordParty>,
     relation: __sdk::TableAppliedDiff<'r, Relation>,
+    relation_fight: __sdk::TableAppliedDiff<'r, RelationFight>,
     relay_event: __sdk::TableAppliedDiff<'r, RelayEvent>,
     remembered: __sdk::TableAppliedDiff<'r, Remembered>,
     resource_node: __sdk::TableAppliedDiff<'r, ResourceNode>,
@@ -3955,6 +4059,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Body>("body", &self.body, event);
         callbacks.invoke_table_row_callbacks::<BondOffer>("bond_offer", &self.bond_offer, event);
         callbacks.invoke_table_row_callbacks::<Brain>("brain", &self.brain, event);
+        callbacks.invoke_table_row_callbacks::<Census>("census", &self.census, event);
         callbacks.invoke_table_row_callbacks::<Character>("character", &self.character, event);
         callbacks.invoke_table_row_callbacks::<CharacterEarshot>(
             "character_earshot",
@@ -4044,6 +4149,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.heard_sounds,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<HeedPolicy>("heed_policy", &self.heed_policy, event);
         callbacks.invoke_table_row_callbacks::<InfantCry>("infant_cry", &self.infant_cry, event);
         callbacks.invoke_table_row_callbacks::<Inventory>("inventory", &self.inventory, event);
         callbacks.invoke_table_row_callbacks::<JoinRequest>(
@@ -4183,6 +4289,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Relation>("relation", &self.relation, event);
+        callbacks.invoke_table_row_callbacks::<RelationFight>(
+            "relation_fight",
+            &self.relation_fight,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<RelayEvent>("relay_event", &self.relay_event, event);
         callbacks.invoke_table_row_callbacks::<Remembered>("remembered", &self.remembered, event);
         callbacks.invoke_table_row_callbacks::<ResourceNode>(
@@ -4981,6 +5092,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         body_table::register_table(client_cache);
         bond_offer_table::register_table(client_cache);
         brain_table::register_table(client_cache);
+        census_table::register_table(client_cache);
         character_table::register_table(client_cache);
         character_earshot_table::register_table(client_cache);
         character_senses_table::register_table(client_cache);
@@ -5022,6 +5134,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         heard_table::register_table(client_cache);
         heard_asleep_table::register_table(client_cache);
         heard_sounds_table::register_table(client_cache);
+        heed_policy_table::register_table(client_cache);
         infant_cry_table::register_table(client_cache);
         inventory_table::register_table(client_cache);
         join_request_table::register_table(client_cache);
@@ -5085,6 +5198,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         record_clock_table::register_table(client_cache);
         record_party_table::register_table(client_cache);
         relation_table::register_table(client_cache);
+        relation_fight_table::register_table(client_cache);
         relay_event_table::register_table(client_cache);
         remembered_table::register_table(client_cache);
         resource_node_table::register_table(client_cache);
@@ -5153,6 +5267,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "body",
         "bond_offer",
         "brain",
+        "census",
         "character",
         "character_earshot",
         "character_senses",
@@ -5194,6 +5309,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "heard",
         "heard_asleep",
         "heard_sounds",
+        "heed_policy",
         "infant_cry",
         "inventory",
         "join_request",
@@ -5257,6 +5373,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "record_clock",
         "record_party",
         "relation",
+        "relation_fight",
         "relay_event",
         "remembered",
         "resource_node",

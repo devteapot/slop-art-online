@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """The tick's cadence from the server's own step marker (the `tick_marker_on` law; docs/TICK_RATE.md
-"The step marker"). The coordinator's line, fixed before any result was computed and the same on
-every host:
+"The step marker"). The coordinator's line, the same on every host:
   - ticks/s >= 59.9 (the run's own `ticks_per_s`, the server's tick count over the window);
-  - p99 of step intervals from the marker <= 17.5 ms;
+  - p99 of step intervals from the marker <= 17.5 ms, or, where the host's idle world (64 residents,
+    no battle, the same build, the same session) already reads above 17.5 ms, <= its idle p99 +
+    0.5 ms: the bound is max(17.5, idle p99 + 0.5);
   - <= 0.5% of step intervals over 25 ms.
+Every gate result reports its host's idle p99 beside it (`--idle RUN_DIR`, or `--idle-p99 MS`).
+The idle clause was added on 2026-11-23, after the dev-box's idle result (p99 18.04-18.08 ms at
+L0) and before any X925 gate arm; the rest of the line was fixed before any result.
 
 Method (the same on every host):
   - input: a run's `ticks-watch.csv`, the lines `m,tick,start_us,arrival_us` gate-load `watch` writes
@@ -16,13 +20,18 @@ Method (the same on every host):
     `battle_viewers.steps_from`); over-25 share = intervals > 25.0 ms / all intervals.
 Unlike `us_reread.py`, nothing here depends on delivery: arrival times are only reported.
 
-    marker_steps.py RUN_DIR...
+    marker_steps.py [--idle IDLE_RUN_DIR | --idle-p99 MS] RUN_DIR...
 """
 import json
 import sys
 from pathlib import Path
 
-LINE = {"ticks_per_s_min": 59.9, "p99_ms_max": 17.5, "over25_pct_max": 0.5}
+LINE = {"ticks_per_s_min": 59.9, "p99_ms_max": 17.5, "idle_margin_ms": 0.5, "over25_pct_max": 0.5}
+
+
+def p99_bound(idle_p99=None):
+    """The p99 bound: 17.5 ms, or the host's idle p99 + 0.5 ms where that is higher."""
+    return LINE["p99_ms_max"] if idle_p99 is None else max(LINE["p99_ms_max"], round(idle_p99 + LINE["idle_margin_ms"], 3))
 
 
 def intervals(lines, t0_us, t1_us):
@@ -35,18 +44,19 @@ def intervals(lines, t0_us, t1_us):
     return sorted((first[b] - first[a]) / 1000.0 for a, b in zip(ks, ks[1:]) if b == a + 1), len(ks)
 
 
-def summary(iv, ticks_per_s, counted):
+def summary(iv, ticks_per_s, counted, idle_p99=None):
     n = len(iv)
     p = lambda q: iv[min(n - 1, int(q * n))]
     out = {"intervals": n, "ticks_counted": counted, "ticks_per_s": ticks_per_s,
            "p50_ms": round(p(0.5), 3), "p95_ms": round(p(0.95), 3), "p99_ms": round(p(0.99), 3),
            "max_ms": round(iv[-1], 3), "over25_pct": round(100 * sum(x > 25.0 for x in iv) / n, 3)}
-    out["pass"] = (ticks_per_s is not None and ticks_per_s >= LINE["ticks_per_s_min"] and out["p99_ms"] <= LINE["p99_ms_max"]
+    out["idle_p99_ms"], out["p99_bound_ms"] = idle_p99, p99_bound(idle_p99)
+    out["pass"] = (ticks_per_s is not None and ticks_per_s >= LINE["ticks_per_s_min"] and out["p99_ms"] <= out["p99_bound_ms"]
                    and out["over25_pct"] <= LINE["over25_pct_max"])
     return out
 
 
-def read(run):
+def read(run, idle_p99=None):
     run = Path(run)
     res = json.loads((run / "v0" / "result.json").read_text())
     t0, t1 = res["window"]["t0"] * 1e6, res["window"]["t1"] * 1e6
@@ -58,7 +68,7 @@ def read(run):
             arrival.append(int(f[3]) - int(f[2]))
     iv, counted = intervals(lines, t0, t1)
     tps = res.get("ticks_per_s")
-    out = {"run": run.name, **summary(iv, tps if isinstance(tps, (int, float)) else None, counted)}
+    out = {"run": run.name, **summary(iv, tps if isinstance(tps, (int, float)) else None, counted, idle_p99)}
     if arrival:
         arrival.sort()
         out["marker_to_arrival_ms"] = {"p50": round(arrival[len(arrival) // 2] / 1000, 3), "p99": round(arrival[min(len(arrival) - 1, int(0.99 * len(arrival)))] / 1000, 3)}
@@ -66,4 +76,16 @@ def read(run):
 
 
 if __name__ == "__main__":
-    print(json.dumps({"line": LINE, "runs": [read(r) for r in sys.argv[1:]]}, indent=1))
+    args = sys.argv[1:]
+    idle_p99, idle_run = None, None
+    if "--idle" in args:
+        i = args.index("--idle")
+        idle_run = read(args[i + 1])
+        idle_p99 = idle_run["p99_ms"]
+        del args[i:i + 2]
+    if "--idle-p99" in args:
+        i = args.index("--idle-p99")
+        idle_p99 = float(args[i + 1])
+        del args[i:i + 2]
+    print(json.dumps({"line": LINE, "idle": idle_run or ({"p99_ms": idle_p99} if idle_p99 is not None else None),
+                      "p99_bound_ms": p99_bound(idle_p99), "runs": [read(r, idle_p99) for r in args]}, indent=1))

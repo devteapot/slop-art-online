@@ -114,6 +114,13 @@ fn laws() {
         // labelled "stranger". On: anyone whose name one does not know, the rule that names
         // people in scenes, percepts and memory (`perception::knows_name`).
         stranger_by_name: false,
+        // Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): a graph's
+        // `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a
+        // personal relation only when it is clear (trust -25 or less or a hostile word; 25 or more
+        // or a friendly word), then the community's stance; minds are told the order and may say
+        // `fight` (enemy or spare); a person's own blow says enemy. Off: any personal relation
+        // row decides alone and hides the community's stance, as before; nothing is said or told.
+        relation_fight_on: false,
         // Attention cues (docs/ATTENTION.md): a mind may write what in what it perceives should
         // bring it to think about one of its stances, goals or projects. Off: none is matched.
         // A cue fires once per thing it matched within `cue_cooldown_s`, and a character is
@@ -147,77 +154,33 @@ fn laws() {
         act_same_continues: true,
         // How a fighter's work is done (docs/BATTLE_SCALE.md, battle-cheap), none of it changing what
         // anyone perceives or does: a move's check before it starts given only the fields it reads;
-        // the body's alarms answered from the last answer while no field crosses one of their
-        // levels. The `_check` laws (diagnostics) also work each out the whole way and count any
-        // difference; `warmth_check` likewise for warmth.
+        // Indexed skill context and alarm checks (docs/BATTLE_SCALE.md).
         check_ctx_plan: true, check_ctx_check: false, alarm_cells: true, alarm_cells_check: false, warmth_check: false,
-        // The body's statuses by their parts; the check asks the whole law too (a diagnostic).
+        // Read body status by its parts (docs/STATUS_PARTS.md).
         status_parts: true, status_parts_check: false,
-        // A body's scene worked out as far as each reader asks; `scene_lazy_check` (a diagnostic)
-        // also works each answer out from the whole scene and counts any difference.
         scene_lazy: true, scene_lazy_check: false,
-        // The chronicle's repeat check reads its newest rows first; noticing reads the structures
-        // in sight in place. Their `_check` laws (diagnostics) also do each the whole way and
-        // count any difference.
+        // Limit repeat and structure checks to recent or in-sight rows.
         chronicle_recent: true, chronicle_recent_check: false, notice_inplace: true, notice_inplace_check: false,
-        // A look checks only the structures new since the last look, or outside its sight then;
-        // `notice_delta_check` (a diagnostic) checks that every one skipped was already familiar.
         notice_delta: true, notice_delta_check: false,
         seen_ranges: true, seen_ranges_check: false,
-        // How what is near a player, or fighting it, reaches the player's client: as cues at once,
-        // behind near copies that follow every 500 ms (on, since frame-views' acceptance), or at the
-        // player's frames (off). Delivery only: the client ends on the same rows either way
-        // (docs/PERCEPTION.md).
+        // Deliver nearby changes immediately with cues (docs/PERCEPTION.md).
         cue_transport_on: true,
-        // Whether what a player sees is split into what is near it and the rest, each delivered
-        // apart (on), or delivered together (off; with cue_transport_on off too, as before).
         near_tier_on: true,
-        // Whether a player's motion copies reach its client as rows of a table only that player
-        // can read (row-level security; on, since bv-defaults-on after the copy-privacy proofs) or
-        // only through the motion views (off: the kill switch). The views show the same either
-        // way (docs/BATTLE_VIEWERS.md).
+        // Deliver owner-scoped motion copies (docs/BATTLE_VIEWERS.md).
         motion_tables_on: true,
-        // The same for what a player perceives of the creatures it sees (its `seen_characters`
-        // rows mirrored into a table only that player can read; on since bv-defaults-on).
         characters_table_on: true,
-        // Whether a player's copies of the fighters it sees (their moves and health bands) reach its
-        // client as rows of a table only that player can read (`seen_fighter_copy`, row-level
-        // security; on, since combat-defaults: the client reads it, combat-switches) or only
-        // through the fighter views (off: the kill switch). The views show the same either way
-        // (docs/BATTLE_VIEWERS.md).
         fighter_tables_on: true,
-        // What a player's character perceived of fights reaching its client as event rows only
-        // that player can read (`combat_feed`, row-level security; on) or only through the
-        // `my_combat` view (off: the kill switch). On since combat-defaults, after the client
-        // reads it (combat-switches) and the commitlog measurement (docs/BATTLE_VIEWERS.md).
+        // Deliver scoped combat events (docs/BATTLE_VIEWERS.md).
         combat_feed_on: true,
-        // Whether a player's experience lines reach its client as rows of a table only that player
-        // can read (`experience_copy`, written as lines are released; experience-incremental) as
-        // well as through `my_experience`; off: the kill switch. The client reads either the same.
         lines_table_on: true, lines_table_check: false,
-        // gate-remeasure's measuring switches (off): onlookers judged by the last sweep's sight;
-        // the sweep phases spread evenly.
         onlookers_from_sets: false, sweep_phase_even: false,
-        // npc-measure's measuring switch (off): characters listed as driven by an NPC body
-        // service are not evaluated by their graphs.
         npc_external_on: false,
-        // npc-measure's measuring switch (0 off): witness lines left to be derived outside the
-        // tick, for players (1) or everyone (2), a fight's first blow still waking bystanders.
         memory_off: 0.0,
-        // A measuring aid (off): each tick writes its own time in µs to a private row a watcher
-        // reads, to time the steps (docs/TICK_RATE.md "The step marker").
+        // Write the private scheduler timestamp (docs/TICK_RATE.md).
         tick_marker_on: false,
-        // A bystander (one who sees an event it is not party to) is woken by what it sees at most
-        // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
-        // in full. 0: woken by each sight, as before.
         witness_wake_ms: 500.0,
-        // Battle laws (docs/BATTLE_LAWS.md, prototypes; 0 or the value here is off in play):
-        // at most this many creatures a player sees at once (the nearest, engaged first)...
         far_cap: 0.0,
-        // E2 prototype (branch attention-e2 only; false / 0 is off): a player attends at most
-        // its capacity (attend_ceiling, or attend_burst_cap when lower) of others, by a policy
-        // (0 nearest, 1 reordered every attend_reorder_ms, 2 the person instinct's order), a
-        // dropped one kept attend_grace_ms, the rest as crowd rows.
+        // Prototype attention capacity and crowd rows (docs/ATTENTION_E2_COST.md).
         attend_on: false,
         attend_ceiling: 16.0,
         attend_burst_cap: 0.0,
@@ -227,18 +190,12 @@ fn laws() {
         attend_crowd_on: false,
         attend_vis_on: false,
         attend_throng_sight_ms: 0.0,
-        // VIEWER_FLOOR prototype (branch viewer-floor only; measuring switches, today's behaviour
-        // here): lines released every vf_lines_ms (0: 100), heard rows every vf_hear_every sweeps
-        // (0: never), an empty scene's frames every vf_frame_idle_ms (0: as now), no fight shown.
         vf_lines_ms: 0.0,
         vf_hear_every: 1.0,
         vf_frame_idle_ms: 0.0,
         vf_feed_off: false,
-        // RELAY_PROTOTYPE (branch relay-proto only; false is today): players' copies, cues, fight
-        // feed and hearing left to a delivery relay.
+        // Deliver scoped player updates through the prototype relay (docs/RELAY_PROTOTYPE.md).
         relay_on: false,
-        // PERCEPTION_OFF_THREAD prototype (branch perc-offthread only; false is today): players'
-        // perceived sets applied from outside the tick.
         perc_external: false,
         // ...a player's sweep less often above this many in sight (at most 3x the period)...
         crowd_sweep_n: 0.0,
@@ -250,36 +207,19 @@ fn laws() {
         far_motion_tol_m: 0.0,
         // ...and how often one in a fight weighs what to do (docs/BATTLE_LAWS.md (d)): 15, as before.
         combat_eval_hz: 15.0,
-        // A test switch (docs/PERCEPTION.md, "Module memory and rollback"), 0 in play: a step the
-        // world fails on purpose, to prove nothing kept in module memory outlives a failed one.
+        // Heed capacity and contact window (docs/ATTENTION_BUDGET.md).
+        heed_on: false, heed_ceiling: 16.0, heed_contact_s: 4.0,
+        heed_closing_s: 1.0,
+        heed_trace: false,
         memory_test: 0.0,
-        // A diagnostic, off in play (docs/COMBAT_PHASE.md): the clock, the random draws and
-        // housekeeping follow the tick count alone, and each tick logs a hash of every table, so
-        // two builds started from one copy of a world can be compared tick by tick; `det_stop`
-        // pauses the world at that tick (0: never).
         det_clock: false, det_stop: 0.0,
-        // What an onlooker sees of fights it is not party to is told as one line per
-        // `witness_fold_ms` (docs/BATTLE_SCALE.md, fix 4): every blow it could see, by who struck
-        // whom, with counts and outcomes, and who fell. A blow at it or by it is told at once.
-        // 0: each fight's first blow told at once on its own line, as before.
+        // Fold onlookers’ combat lines (docs/BATTLE_SCALE.md).
         witness_fold_ms: 2000.0,
-        // The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
-        // on a blow taken or when the same creature is seen to start the same move at it
-        // `seen_again_n` times in a fight (counted for the trigger only, never told). Across the
-        // world at most `fast_lane_rate` are issued a second and `fast_lane_inflight` at once;
-        // a character's start `fast_lane_gap_s` apart; a trigger waiting `fast_lane_stale_s` is dropped.
+        // Replan between blows (docs/FAST_LANE.md).
         fast_lane_on: false, seen_again_n: 3.0, fast_lane_rate: 2.0, fast_lane_inflight: 4.0, fast_lane_gap_s: 6.0, fast_lane_stale_s: 8.0,
-        // First sights (docs/FIRST_SIGHT.md): seeing someone one cannot place (whose name one
-        // does not know, and who is near enough to make out) for the first time asks one's mind
-        // for a thought, at most once within `first_sight_gap_s`. Off: it is only noticed.
+        // Ask for a thought on first sight (docs/FIRST_SIGHT.md).
         first_sight_thinks: false, first_sight_gap_s: 300.0,
-        // A line one's mind decided to say to someone, coming due after one heard another
-        // address them since one decided, is not said yet: one is told and thinks again with
-        // that line in front of one (docs/FIRST_SIGHT.md, "Crowds"). Off: it is said.
         heard_first_rethinks: false,
-        // The think prompt's framing (docs/FRAMING.md): off, a mind starts from why it is
-        // thinking now; on, what just happened is shown beside what it perceives, and it thinks
-        // about whatever matters to it now (the neutral framing, replayed as N2).
         think_framing: false,
         // Earshot (docs/COMMUNICATION.md §17): a person's scene says whom a line said now would
         // reach, at each way, among the people they perceive, and a player's `my_earshot` the
@@ -347,6 +287,32 @@ fn senses(a) {
     let s = #{ sight: sight_in(light_of(a)), hearing: hearing_of_people() };
     if law("fov_on") { s.field = sight_field(a); }
     s
+}
+
+// ---- heed (docs/ATTENTION_BUDGET.md; read by the authority while its switch law is on) -----
+// How many others a creature heeds: keeps track of as individuals; everyone else in sight is a
+// throng. Seed content: a world may change every number. The engine clamps the answer to the
+// world's heed ceiling (a law). `a.actor.factor` is the inborn knack times practice at the skill
+// `heed_knack()` names (1.0 untrained, up to 1.6 with long practice); a world without that skill
+// (the shipped ones: `watch` and the `keeping_watch` technique are an overlay's) reads 1.0.
+// A person's base is 14 (the owner's decision, 2026-11-23, after docs/ATTENTION_E4.md).
+fn heed_knack() { "watch" }
+fn heed_capacity(a) {
+    let c = switch a.actor.kind { "person" => 14.0, "wolf" => 8.0, "deer" => 6.0, _ => 6.0 };
+    c *= switch a.actor.stage { "infant" => 0.3, "child" => 0.7, "elder" => 0.9, _ => 1.0 };
+    c *= a.actor.factor;
+    // A technique one can learn or be taught (a world that has it: keeping_watch).
+    if knows(a, "keeping_watch") { c += 4.0; }
+    // Tiredness and pain narrow attention; so does being out of breath.
+    if a.actor.energy < 15.0 { c *= 0.6; } else if a.actor.energy < 35.0 { c *= 0.8; }
+    let health = a.actor.hp / (max_hp(a.actor.kind) * a.actor.vitality);
+    if health < 0.25 { c *= 0.6; } else if health < 0.5 { c *= 0.8; }
+    if a.actor.stamina < 10.0 { c *= 0.85; }
+    if c < 1.0 { 1.0 } else { c.floor() }
+}
+fn heed_capacity_law() {
+    #{ cadence: "event",
+       about: "How many others one keeps track of at once as individuals; everyone else in sight is seen as a throng. Tiredness, wounds and lost breath narrow it." }
 }
 
 // Band numbers are stable protocol values: Middle 0, Far 1, Near 2.
@@ -2340,6 +2306,14 @@ fn record_text(r) {
         if r.me == "holder" { return `your people hold {id:${r.parties.toward}} as ${r.terms.label} (${r.terms.why})`; }
         return `{id:${r.parties.holder}} holds your people as ${r.terms.label} (${r.terms.why})`;
     }
+    // Any other stance (a `holder` and a `toward` side, a `label` in its terms; the battle
+    // fixture's `stance` records): both sides named, and why only when the record says. Before,
+    // it fell through to "stance: open", and the fighters' minds never learned of the war.
+    if "holder" in r.parties && "toward" in r.parties && "label" in r.terms {
+        let why = if "why" in r.terms { ` (${r.terms.why})` } else { "" };
+        if r.me == "holder" { return `your people, {id:${r.parties.holder}}, hold {id:${r.parties.toward}} as ${r.terms.label}${why}`; }
+        return `{id:${r.parties.holder}} holds your people, {id:${r.parties.toward}}, as ${r.terms.label}${why}`;
+    }
     `${r.kind}: ${r.status}`
 }
 
@@ -3253,6 +3227,7 @@ fn law_about(l, name) {
         "speech_truth" => if l.speech_truth { "a speaker learns when the one they spoke to could not have heard them, and a planned line is not said to someone out of earshot or after the talk has moved on" } else { "a speaker whose words did not reach the one they spoke to, unseen, gets no answer, and a planned line is said when it comes due" },
         "longing_after_min" => `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
         "longing_food" => if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
+        "relation_fight_on" => if l.relation_fight_on { "whom one fights: what one said (enemy or spare) first, then a clear feeling about them, then how one's people stand with theirs" } else { "whom one fights: how one feels about someone, if one has any feeling about them, else how one's people stand with theirs" },
         "stranger_by_name" => if l.stranger_by_name { "in a routine, a stranger is someone whose name one does not know" } else { "in a routine, a stranger is someone one has no feelings about yet" },
         "cues_on" => if l.cues_on { "what one wrote one would watch for brings one to think when one perceives it" } else { "one thinks when something happens to one, not because one watches for it" },
         "cue_cooldown_s" => `the same thing seen again brings no new thought from what one watches for within ${short(l.cue_cooldown_s)} s`,
@@ -3282,6 +3257,11 @@ fn law_about(l, name) {
         "relay_on" => if l.relay_on { "what players see of others is sent by a delivery relay (a measuring switch)" } else { "what players see of others is sent by the world itself" },
         "vf_feed_off" => if l.vf_feed_off { "no player is shown fights (a measuring switch)" } else { "players are shown the fights they see" },
         "attend_crowd_on" => if l.attend_crowd_on { "a player sees the unattended in sight as a crowd" } else { "a player is told nothing of the unattended" },
+        "heed_on" => if l.heed_on { "one keeps track of only so many others as individuals; everyone else in sight is a throng" } else { "everyone in sight is perceived as an individual" },
+        "heed_ceiling" => `no one keeps track of more than ${short(l.heed_ceiling)} others as individuals at once`,
+        "heed_closing_s" => `whether someone is coming toward one is judged over ${short(l.heed_closing_s)} s, not a glance`,
+        "heed_contact_s" => `someone whose blow reached one stays an individual to one for ${short(l.heed_contact_s)} s, whatever one heeds`,
+        "heed_trace" => "A test switch that logs how each mind's character keeps track of others in a fight; it is off in play.",
         "far_cap" => if l.far_cap > 0.0 { `a player sees at most ${short(l.far_cap)} others at once, the nearest` } else { "a player sees everyone in sight" },
         "crowd_sweep_n" => if l.crowd_sweep_n > 0.0 { `what a player sees is looked at again less often in a crowd of more than ${short(l.crowd_sweep_n)}` } else { "what a player sees is looked at again at the same pace in any crowd" },
         "crowd_frame_max_ms" => if l.crowd_frame_max_ms > 0.0 { `in a crowd, a player's view of others follows at least every ${short(l.crowd_frame_max_ms)} ms` } else { "in a crowd, a player's view of others follows at least every 100 ms" },

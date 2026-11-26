@@ -825,6 +825,52 @@ def dealings_case(run):
             'deliberations_with_dealings': len(shown), 'thoughts_before': accepted_before, 'asked_by_the_rules': asked}
 
 
+@case('battle-stance')
+def battle_stance_case(run):
+    """A side's war reaches its members' minds (docs/BATTLE_LAWS.md, sides-layout-seed): the battle
+    fixture's two `stance` records (`spawn_battle_sides_layout`, an `enemy` stance each way between
+    `Side A` and `Side B`) are worded by the script's `record_text`, naming both sides. Before, they
+    read "stance: open" (E5's prompts), so a minded fighter was never told whom its side fought.
+    On main the fixture's fighters have no mind (E5 minded them with heed-e4's `sides_minded` law),
+    so a minded adult founds `Side A` first and the fixture takes that community for its side. The
+    adult, held still, is asked by a think node; one of its requests shows both records among its
+    dealings, worded, and no bare "stance: open"."""
+    people = prepare(run)
+    me = people[0]['id']
+    run.admin('set_behavior', me, json.dumps({'wait': 120}))
+    if run.sql(f'SELECT * FROM membership WHERE member = {me}', 'membership-before'):
+        run.admin('mind_act', me, [json.dumps({'do': 'leave'})], 'verify-minds')
+        run.wait(lambda: not run.sql(f'SELECT * FROM membership WHERE member = {me}', 'membership-left'), 'the adult left its community', 30)
+    run.admin('mind_act', me, [json.dumps({'do': 'found', 'text': 'Side A'})], 'verify-minds')
+    run.wait(lambda: run.sql(f'SELECT * FROM membership WHERE member = {me}', 'membership-founded'), 'the adult founded Side A', 30)
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'before-battle')}
+    run.admin('spawn_battle_sides_layout', 2, 2, 7, 0)
+    made = {c['name']: c['id'] for c in run.sql('SELECT id, name FROM character', 'fighters') if c['id'] not in before}
+    assert set(made) == {'A1', 'B1'}, made
+    for f in made.values():
+        run.admin('set_behavior', f, json.dumps({'wait': 120}))
+    communities = {c['id']: c['name'] for c in run.sql('SELECT * FROM community', 'communities')}
+    mine = run.sql(f'SELECT * FROM membership WHERE member = {me}', 'membership-mine')[0]
+    assert communities.get(mine['community']) == 'Side A', (mine, communities)
+    models = model(run, {'replies': {'think': {'thought': 'Side B is near.', 'intend': ['stand still'], 'say': None}, 'deliberate': basic_reply()}})
+    run.start(models, [me])
+    run.admin('set_behavior', me, json.dumps({'think': 'Where do my people stand? verify battle stance'}))
+    holds = 'your people, Side A, hold Side B as enemy'
+    held = 'Side B holds your people, Side A, as enemy'
+    requests = run.directory / 'fake-requests.jsonl'
+
+    def shown():
+        sent = shared.rows(requests) if requests.exists() else []
+        return [e for e in sent if "Your dealings and your people's standing" in json.dumps(e) and holds in json.dumps(e)]
+    got = run.wait(shown, 'a request with the worded stance among its dealings', 150)
+    text = json.dumps(got[0], ensure_ascii=False)
+    assert held in text, 'both records are worded (the one Side B holds toward A as well)'
+    assert 'stance: open' not in text, 'no bare "stance: open"'
+    start = text.find("Your dealings and your people's standing")
+    lines = [l.strip() for l in text[start:start + 800].split('\\n')[1:6] if l.strip().startswith('-')]
+    return {'status': 'pass', 'member': me, 'fighters': made, 'purpose': got[0].get('purpose'), 'dealings_lines': lines, 'requests_with_it': len(got)}
+
+
 @case('answers')
 def answers_case(run):
     """A mind answers by id (docs/WORLD_RULES.md, "Answering"): another character proposes terms
@@ -2169,6 +2215,87 @@ def think_framing_case(run):
     return {'status': 'pass', **result}
 
 
+@case('heed')
+def heed_case(run):
+    """A mind writes whom its character keeps track of (docs/ATTENTION_BUDGET.md §8), through the
+    think reply's `heed` field, the `mind_heed` reducer and the private `heed_policy` row, with the
+    authority's refusal coming back in the next think prompt.
+
+    - **Off (as shipped):** the think system prompt has no heed field and the user prompt no
+      "# Whom you keep track of"; a `heed` in a reply is ignored (no row).
+    - **On** (`set_world_law heed_on true`): the system prompt has the field and its grammar; the
+      user prompt has the section, "by your instinct".
+    - **A valid policy** in a think reply: a `heed_policy` row holds it; the next think prompt says
+      "by your own policy" with the policy's own `why`.
+    - **A refused policy** (an unknown kind): the row keeps the policy before and records the
+      refusal, which the next think prompt shows.
+    - **"instinct"**: the row is gone and the prompt says "by your instinct" again.
+
+    The law is restored at the end."""
+    run.harness('launch')
+    run.harness('doctor')
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'ids-before')}
+    run.admin('spawn_crowd', 1, True)
+    m = next(c['id'] for c in run.sql('SELECT id FROM character', 'ids-after') if c['id'] not in before)
+    run.admin('set_behavior', m, json.dumps({'wait': 300}))
+    why = 'verifyheedwhy'
+    own = [{'if': {'who': 'person'}, 'order': 'nearest', 'take': 2, 'hold_s': 5, 'why': why}]
+    think = lambda heed: {'thought': 'I look around.', 'intend': ['wait'], 'say': None, 'heed': heed}
+    script = {'replies': {'think': {'thought': 'I look around.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()},
+              'rules': [{'purpose': 'think', 'contains': f'verify {k}', 'times': -1, 'reply': think(v)}
+                        for k, v in (('heed-ignored', own), ('heed-own', own), ('heed-bad', [{'if': {'who': 'dragon'}}]), ('heed-back', 'instinct'))]}
+    run.start(model(run, script), [m])
+    requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'think']
+    msgs = lambda e: {x.get('role'): str(x.get('content', '')) for x in e['body'].get('messages', [])}
+    asked = lambda marker: [msgs(e) for e in requests() if f'verify {marker}' in msgs(e).get('user', '')]
+    row = lambda label: run.private(f'SELECT * FROM heed_policy WHERE actor = {m}', label)
+    prompts, rows = {}, {}
+
+    def think_on(marker, label):
+        run.request(m, marker)
+        prompts[marker] = run.wait(lambda: asked(marker), f'the think request: {label}', 90)[0]
+        return prompts[marker]
+
+    try:
+        run.admin('set_world_law', 'heed_on', 'false')
+        think_on('heed-ignored', 'heed off, a reply with a heed')
+        time.sleep(3.0)
+        rows['off'] = row('row-off')
+        run.admin('set_world_law', 'heed_on', 'true')
+        assert own_laws(lambda q: run.sql(q, 'world-law')).get('heed_on') == 'true'
+        time.sleep(3.0)
+        think_on('heed-own', 'heed on, a valid policy')
+        rows['own'] = run.wait(lambda: [r for r in row('row-own') if why in r['policy']], 'the policy row', 30)
+        think_on('heed-check-own', 'the prompt after the policy')
+        think_on('heed-bad', 'a refused policy')
+        rows['bad'] = run.wait(lambda: [r for r in row('row-bad') if r['refusal']], 'the refusal on the row', 30)
+        think_on('heed-check-bad', 'the prompt after the refusal')
+        think_on('heed-back', 'back to the instinct')
+        run.wait(lambda: not row('row-back'), 'the row gone', 30)
+        think_on('heed-check-back', 'the prompt after going back')
+    finally:
+        run.admin('set_world_law', 'heed_on', 'false')
+    (run.directory / 'heed-prompts.json').write_text(json.dumps(prompts, indent=1))
+    (run.directory / 'heed-rows.json').write_text(json.dumps(rows, indent=1))
+    off, on1, own_p, bad_p, back_p = (prompts[k] for k in ('heed-ignored', 'heed-own', 'heed-check-own', 'heed-check-bad', 'heed-check-back'))
+    checks = {
+        'off_no_field_no_section': '"heed"' not in off['system'] and '# Whom you keep track of' not in off['user'],
+        'off_reply_heed_ignored': rows['off'] == [],
+        'on_system_has_field_and_grammar': '"heed": [rules]' in on1['system'] and 'Whom you keep track of (the heed field)' in on1['system'],
+        'on_user_section_by_instinct': '# Whom you keep track of' in on1['user'] and 'by your instinct' in on1['user'],
+        'own_policy_row_written': bool(rows['own']) and not rows['own'][0]['refusal'],
+        'prompt_by_own_policy_with_its_why': f'by your own policy: {why}' in own_p['user'],
+        'refused_row_keeps_policy_and_says_why': why in rows['bad'][0]['policy'] and '`dragon` is not a kind of creature' in rows['bad'][0]['refusal'],
+        'prompt_shows_the_refusal': 'Your last heed was refused' in bad_p['user'] and '`dragon`' in bad_p['user'],
+        'back_to_instinct': 'by your instinct' in back_p['user'] and 'refused' not in back_p['user'],
+        'no_heed_note_in_the_scene': all('"_heed"' not in p['user'] for p in prompts.values()),
+    }
+    result = {'m': m, 'checks': checks}
+    (run.directory / 'heed.json').write_text(json.dumps(result, indent=2))
+    assert all(checks.values()), checks
+    return {'status': 'pass', **result}
+
+
 @case('sissly-scene')
 def sissly_scene_case(run):
     """Play-test 6's scene, replayed on the island seed with the fake model (talk-turns,
@@ -3270,6 +3397,62 @@ def resident_case(run):
     talks = [e for e in run.exchanges() if e['purpose'] == 'talk']
     return {'status': 'pass', 'resident': rid, 'lesson': lesson, 'talk_turns': len(talks),
             'places_kept': sorted(places_before), 'places_after': sorted(places)}
+
+
+@case('fight-field')
+def fight_field_case(run):
+    """Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): a consolidation
+    reply's relation may carry `fight` ("enemy", "spare", or null to take it back). The service
+    validates it and sends it with `mind_fight` (with or without a memory store); a word other than
+    those, or an id that is no living person, is left out with a note in the thought. The table
+    keeps it as the mind's, and the mind's later prompts show it beside the person ("fight:
+    spare"). The consolidation and deliberation system prompts gloss what it does."""
+    people = prepare(run)
+    actor, other = [p['id'] for p in people]
+    run.harness('player', 'join', 'MindsFighter')
+    player = run.sql("SELECT id FROM character WHERE name = 'MindsFighter'", 'player')[0]['id']
+    run.admin('set_behavior', actor, json.dumps({'wait': 120}))
+    run.admin('place_near', player, actor)
+    relations = [{'id': other, 'trust': 5, 'affinity': 0, 'label': 'stranger', 'note': 'verify fight', 'fight': 'spare'},
+                 {'id': player, 'trust': 0, 'affinity': 0, 'label': 'stranger', 'note': 'verify fight', 'fight': 'never'},
+                 {'id': 999999, 'trust': 0, 'affinity': 0, 'label': 'stranger', 'fight': 'enemy'}]
+    script = {'replies': {'think': {'thought': 'I wait.', 'intend': ['wait'], 'say': None},
+                          'deliberate': basic_reply(),
+                          'talk': {'thought': 'I answer.', 'say': 'verify minds fight answer', 'end': False},
+                          'consolidate': {'summary': 'verify minds fight', 'remember': [], 'nodes': [], 'edges': [], 'retract': [], 'merge': [],
+                                          'identity': None, 'relations': relations, 'judgments': [], 'places': []}}}
+    models = model(run, script)
+    # Under the `relation_fight_on` law (default off): set before the service starts, so its
+    # compiled rules and prompts have it.
+    run.admin('set_world_law', 'relation_fight_on', 'true')
+    run.request(actor, 'fight-field')
+    run.start(models, [actor])
+    accepted(run, actor)
+    run.admin('set_behavior', actor, json.dumps({'wait': 120}))
+    run.admin('place_near', player, actor)
+    for line in ('verify minds: hello there, how are you?', 'verify minds: what is your work?', 'verify minds: where is the well?'):
+        time.sleep(2.2)
+        run.harness('player', 'say', line, '--to', str(actor))
+    said = run.wait(lambda: [f for f in run.private('SELECT * FROM relation_fight', 'relation-fight') if f['actor'] == actor], 'the reply\'s fight reaches the authority', 180)
+    assert [(f['other'], f['fight'], f['by']) for f in said] == [(other, 'spare', 'mind')], said
+    # The integration's thought (a persona's first identity is a `consolidate` thought too, without notes).
+    thought = run.wait(lambda: [t for t in run.thoughts(actor, 'thoughts-fight') if t['kind'] == 'consolidate' and '"notes"' in t['detail']],
+                       'the consolidation thought', 60)[0]
+    notes = json.loads(thought['detail'])['notes']
+    assert any(f'#{other} spare' in n for n in notes), notes
+    assert any('"never" is not enemy, spare or null' in n for n in notes), notes
+    assert any('#999999 is not a living person' in n for n in notes), notes
+    requests = lambda: list(shared.rows(run.directory / 'fake-requests.jsonl'))
+    text_of = lambda e: json.dumps(e, ensure_ascii=False).replace('\\"', '"')
+    systems = [text_of(e) for e in requests() if e['purpose'] in ('consolidate', 'deliberate')]
+    glossed = [s for s in systems if 'Whom your body counts as an enemy (relation: enemy)' in s]
+    assert glossed, 'the system prompts gloss whom the body counts as an enemy'
+    # A later request lists the person with what the mind said of fighting them.
+    run.admin('set_behavior', actor, json.dumps({'think': 'verify fight: how do I stand with people?'}))
+    shown = run.wait(lambda: [e for e in requests() if e['purpose'] in ('think', 'deliberate', 'consolidate', 'talk') and 'fight: spare' in text_of(e)],
+                     'a later prompt shows "fight: spare"', 120)
+    return {'status': 'pass', 'said': said, 'notes': [n for n in notes if 'fight' in n], 'glossed_prompts': len(glossed),
+            'shown_in': shown[0]['purpose']}
 
 
 @case('parked')

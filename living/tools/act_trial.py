@@ -20,6 +20,9 @@ model every `--interval` seconds, and stops the arm's runner (SIGINT by PID, the
 - this arm's spend past min(group cap - the group's earlier arms, total cap - every earlier arm)
   minus `--margin` (calls already in flight when the stop lands);
 - more than 10% of calls failing over the last 2 minutes (at least 20 calls);
+- with `--fail-last`: more than `--fail-share` of the last N journaled calls failed;
+- with `--max-calls-per-min`: the rolling two-minute rate exceeds the limit;
+- with `--frozen`: the SHA-256 manifest or an input it names changed or became unreadable;
 - the host under 40 GB MemAvailable or 45 GB of free disk (`--min-mem-gb`, `--min-disk-gb`);
 - with `--diag` (battle_diag.py's samples): two windows in a row under `--collapse-below` ticks/s;
 - with `--db` and `--minds-ids`: the thinkers' pending `deliberation` rows rising for 3 minutes (7
@@ -49,6 +52,7 @@ the case `act_same_continues` would absorb.
 import argparse
 import glob
 import gzip
+import hashlib
 import json
 import math
 import os
@@ -259,6 +263,33 @@ def loud(msg):
     print(f"GUARD REFUSED: {msg}", flush=True)
 
 
+def frozen_problem(manifest, snapshot=None, verified=None):
+    """Check a JSON object mapping input paths to SHA-256 digests."""
+    path = Path(manifest)
+    try:
+        contents = path.read_bytes()
+        if snapshot is not None and contents != snapshot:
+            return f"frozen manifest changed: {path}"
+        expected = json.loads(contents)
+        if not isinstance(expected, dict) or not expected:
+            return f"empty or invalid frozen manifest: {path}"
+        for name, digest in expected.items():
+            source = path.parent / name
+            with source.open("rb") as stream:
+                stat = os.fstat(stream.fileno())
+                stamp = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+                if verified is not None and verified.get(source) == stamp:
+                    continue
+                actual = hashlib.file_digest(stream, "sha256").hexdigest()
+            if actual != digest:
+                return f"frozen input changed: {source}"
+            if verified is not None:
+                verified[source] = stamp
+    except (OSError, ValueError) as exc:
+        return f"cannot verify frozen inputs: {exc}"
+    return None
+
+
 def cmd_watch(a):
     """Refuses (exit 2, and stops the runner if it is known) when a --journal could not be read as
     journal files. With `--ready FILE` it writes FILE once every pattern's folder exists, so a
@@ -269,6 +300,16 @@ def cmd_watch(a):
         loud("give --pid or --pid-file")
         return 2
     bad = journal_problems(a.journal)
+    snapshot = None
+    verified = {}
+    if a.frozen:
+        try:
+            snapshot = Path(a.frozen).read_bytes()
+        except OSError as exc:
+            bad.append(f"cannot read frozen manifest: {exc}")
+        else:
+            if problem := frozen_problem(a.frozen, snapshot, verified):
+                bad.append(problem)
     if bad:
         for b in bad:
             loud(b)
@@ -296,10 +337,10 @@ def cmd_watch(a):
                 loud(f"no runner PID in {a.pid_file}")
                 return 2
             time.sleep(0.5)
-    return watch_loop(a)
+    return watch_loop(a, snapshot, verified)
 
 
-def watch_loop(a):
+def watch_loop(a, snapshot, verified):
     prices = parse_prices(a.price)
     j = Journals(a.journal, prices)
     led = ledger_read(a.ledger)
@@ -309,7 +350,10 @@ def watch_loop(a):
     limit = min(a.group_cap - prior_group, a.total_cap - prior_total) - a.margin
     head = {"arm": a.arm, "group": a.group, "pid": a.pid, "started_ms": now_ms(), "prior_total_usd": round(prior_total, 4),
             "prior_group_usd": round(prior_group, 4), "group_cap": a.group_cap, "total_cap": a.total_cap, "margin": a.margin,
-            "stop_at_usd": round(limit, 4), "prices": {m: list(v) for m, v in prices.items()}}
+            "stop_at_usd": round(limit, 4), "prices": {m: list(v) for m, v in prices.items()},
+            "interval_s": a.interval, "fail_last": a.fail_last, "fail_share": a.fail_share,
+            "recent_failure_min_calls": a.recent_failure_min_calls, "max_calls_per_min": a.max_calls_per_min,
+            "min_mem_gb": a.min_mem_gb, "min_disk_gb": a.min_disk_gb, "frozen": a.frozen}
     log = open(a.log, "a")
 
     def write(rec):
@@ -348,6 +392,16 @@ def watch_loop(a):
         if unknown:
             rec["unknown_models_priced_dearest"] = unknown
         checks = []
+        if a.frozen and (problem := frozen_problem(a.frozen, snapshot, verified)):
+            checks.append(problem)
+        if a.fail_last:
+            last = sorted(j.entries(), key=lambda entry: entry[0])[-a.fail_last:]
+            failed = sum(entry[6] for entry in last)
+            rec.update(calls_last=len(last), errors_last=failed)
+            if len(last) == a.fail_last and failed / len(last) > a.fail_share:
+                checks.append(f"call failures {failed}/{len(last)} over the last {a.fail_last} calls")
+        if a.max_calls_per_min is not None and n2 / 2 > a.max_calls_per_min:
+            checks.append(f"runaway call rate: {n2 / 2:g}/min over 2 min")
         if a.db and a.url and a.container and a.minds_ids and os.path.exists(a.minds_ids):
             # Only the thinkers' requests: a character without a mind (the island's other
             # residents, the battle's walkers) keeps its request pending for good.
@@ -392,7 +446,7 @@ def watch_loop(a):
             checks.append(f"host floor: MemAvailable {mem_gb:.0f} GB, disk {disk_gb:.0f} GB free")
         if usd > limit:
             checks.append(f"spend ${usd:.2f} past this arm's limit ${limit:.2f}")
-        if n2 >= 20 and f2 / n2 > 0.10:
+        if n2 >= a.recent_failure_min_calls and f2 / n2 > 0.10:
             checks.append(f"call failures {f2}/{n2} over 2 min")
         if checks and reason is None and alive(a.pid):
             reason = "; ".join(checks)
@@ -916,6 +970,11 @@ def main():
     s.add_argument("--margin", type=float, default=0.5)
     s.add_argument("--price", action="append", default=[])
     s.add_argument("--interval", type=float, default=30)
+    s.add_argument("--fail-last", type=int, default=0)
+    s.add_argument("--fail-share", type=float, default=0.10)
+    s.add_argument("--recent-failure-min-calls", type=int, default=20)
+    s.add_argument("--max-calls-per-min", type=float)
+    s.add_argument("--frozen", help="JSON object mapping input paths to SHA-256 digests")
     s.add_argument("--url")
     s.add_argument("--container")
     s.add_argument("--db")
@@ -942,6 +1001,9 @@ def main():
     s = sub.add_parser("ledger")
     s.add_argument("--ledger", required=True)
     a = ap.parse_args()
+    if a.cmd == "watch" and (a.fail_last < 0 or a.recent_failure_min_calls < 1 or not 0 <= a.fail_share <= 1
+                             or (a.max_calls_per_min is not None and not a.max_calls_per_min > 0)):
+        s.error("invalid failure window, share, or maximum call rate")
     return {"watch": cmd_watch, "town-side": cmd_town_side, "report-town": cmd_report_town,
             "report-battle": cmd_report_battle, "ledger": cmd_ledger}[a.cmd](a)
 

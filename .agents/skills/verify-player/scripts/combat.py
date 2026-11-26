@@ -69,6 +69,21 @@ def me(st):
     return alive[0]["id"] if alive else None
 
 
+def living(st, why):
+    """The player's living character, joining again (as a player would at the death screen) when an
+    earlier scene left none, and logged. A scene must not depend on the player surviving the one
+    before it (wolves-aftermath, 2026-11-23: the pack killed a player worn down by the earlier
+    scenes, and `onlooker` and `death` found no character)."""
+    cid = me(st)
+    if cid is None:
+        V.log(st, f"no living character before {why}: joining again")
+        call(st, "join", ["Tester"])
+        t = time.time() + 5
+        while time.time() < t and (cid := me(st)) is None:
+            time.sleep(0.25)
+    return cid
+
+
 def body(st, cid):
     r = sql(st, f"SELECT x, y FROM body WHERE id = {cid}")
     return (r[0]["x"], r[0]["y"]) if r else None
@@ -342,6 +357,15 @@ def told(st, cid, skill, t0_ms, secs=4.0):
 
 
 def scene_strike(st):
+    # relation-fight's check below runs under the `relation_fight_on` law (default off).
+    call(st, "set_world_law", ["relation_fight_on", "true"], "admin")
+    try:
+        return strike_scene(st)
+    finally:
+        call(st, "set_world_law", ["relation_fight_on", "false"], "admin")
+
+
+def strike_scene(st):
     cid = me(st)
     p = body(st, cid)
     d = dummy(st, p, 1.2, 0.0)
@@ -362,6 +386,11 @@ def scene_strike(st):
     check(st, "the player perceives release and hit, with the amount", 1 in kinds and hits and hits[-1]["amount"] > 0, [(e["kind"], round(e["amount"], 1)) for e in ev[-4:]])
     fd = sql(st, f"SELECT band FROM fighter WHERE id = {d}")
     check(st, "the target's band is public, not its health", fd and 0 <= fd[0]["band"] <= 4, fd)
+    # relation-fight (docs/WORLD_RULES.md "Whom one fights"): the person's own blow says whom
+    # their character fights: the one struck is its enemy, written as the player's (owner SQL).
+    said = [r for r in sql(st, "SELECT * FROM relation_fight") if r["actor"] == cid and r["other"] == d]
+    check(st, "the player's strike makes the one struck its character's enemy (relation_fight: enemy, by player; the law on)",
+          said and said[0]["fight"] == "enemy" and said[0]["by"] == "player", said)
     lines, rows, everyone, outcomes = told(st, cid, "strike", int(t0 * 1000))
     check(st, "the player is told its strike's outcome as a mind is: 'You finished: strike → … hit for N', with its my_act_outcomes row",
           lines and "hit for" in lines[-1]["text"] and rows[-1] and rows[-1]["kind"] == "own" and rows[-1]["ok"] and rows[-1]["skill"] == "strike" and rows[-1]["code"] == "done",
@@ -889,54 +918,82 @@ def scene_committed(st):
     check(st, "a guard pressed mid-dodge is refused and the dodge runs its course",
           d and d["outcome"] == "made way" and moved and moved > 2.2 and b and b["outcome"].startswith("refused: in the middle of a dodge"),
           {"dodge": d and d["outcome"], "block": b and b["outcome"], "moved": moved and round(moved, 2)})
-    call(st, "place_at", [cid, p[0], p[1]], "admin")
-    time.sleep(0.3)
-    p = body(st, cid)
-    t = dummy(st, p, 1.2, 0.0)
-    time.sleep(0.4)
-    ready(st, "strike")
-    ready(st, "dodge")
-    full_breath(st)
-    call(st, "use_skill", ["strike", t, p[0] + 1.2, p[1]])
-    call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
-    time.sleep(1.0)
-    s_, d = last_use(st, "strike"), last_use(st, "dodge")
+    # The strike's HTTP reply can come back after its 350 ms windup. Re-stage only when
+    # authority timestamps prove the strike already released before the dodge was tried.
+    for attempt in range(1, 5):
+        call(st, "place_at", [cid, p[0], p[1]], "admin")
+        time.sleep(0.3)
+        p = body(st, cid)
+        t = dummy(st, p, 1.2, 0.0)
+        time.sleep(0.4)
+        ready(st, "strike")
+        ready(st, "dodge")
+        full_breath(st)
+        prior = uses(st)
+        prior_id = prior[-1]["id"] if prior else 0
+        call(st, "use_skill", ["strike", t, p[0] + 1.2, p[1]])
+        call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
+        time.sleep(1.0)
+        recent = [u for u in uses(st) if u["id"] > prior_id]
+        strike = next((u for u in recent if u["skill"] == "strike"), None)
+        dodge = next((u for u in recent if u["skill"] == "dodge"), None)
+        late = strike and dodge and dodge["outcome"] == "made way" and 0 < strike["released_ms"] < dodge["at_ms"]
+        if not late or attempt == 4:
+            break
+        V.log(st, f"strike/dodge attempt {attempt}: dodge arrived {dodge['at_ms'] - strike['released_ms']} ms after release, re-staging")
     check(st, "a dodge still cuts in on a committed windup (the strike is broken off)",
-          s_ and s_["accepted_ms"] > 0 and s_["released_ms"] == 0 and s_["outcome"].startswith("broken off") and d and d["outcome"] == "made way",
-          {"strike": s_ and s_["outcome"], "dodge": d and d["outcome"]})
+          strike and strike["accepted_ms"] > 0 and strike["released_ms"] == 0
+          and strike["outcome"].startswith("broken off") and dodge and dodge["outcome"] == "made way",
+          {"attempt": attempt, "strike": strike, "dodge": dodge})
     # A throw (through `human_act`: it is not on the bar) is committed too: the movement keys
     # pressed during its 800 ms windup wait for it, and the spear flies (before committed-moves
     # the keys broke it off: "you moved").
-    call(st, "set_behavior", [t, '{"wait":60}'], "admin")
-    call(st, "place_at", [cid, p[0], p[1]], "admin")
-    time.sleep(0.3)
-    p = body(st, cid)
-    t = dummy(st, p, 3.0, 0.0)
-    call(st, "grant_items", [cid, "spear", 1], "admin")
-    time.sleep(0.4)
-    ready(st, "throw")
-    full_breath(st)
-    before = last_use(st, "throw")
-    call(st, "human_act", [json.dumps({"do": "throw", "target": {"id": t}})])
     code = code_of(st, "throw")
-    wound = False
-    for _ in range(40):
-        f = sql(st, f"SELECT act, release_ms FROM fighter WHERE id = {cid}")
-        if f and f[0]["act"] == code and f[0]["release_ms"] > time.time() * 1000:
-            wound = True
+    for attempt in range(1, 5):
+        call(st, "set_behavior", [t, '{"wait":60}'], "admin")
+        call(st, "place_at", [cid, p[0], p[1]], "admin")
+        time.sleep(0.3)
+        p = body(st, cid)
+        t = dummy(st, p, 3.0, 0.0)
+        call(st, "grant_items", [cid, "spear", 1], "admin")
+        time.sleep(0.4)
+        ready(st, "throw")
+        full_breath(st)
+        before = last_use(st, "throw")
+        before_id = before["id"] if before else 0
+        call(st, "human_act", [json.dumps({"do": "throw", "target": {"id": t}})])
+        wound = False
+        for _ in range(40):
+            f = sql(st, f"SELECT act, release_ms FROM fighter WHERE id = {cid}")
+            if f and f[0]["act"] == code and f[0]["release_ms"] > time.time() * 1000:
+                wound = True
+                break
+            observed = last_use(st, "throw")
+            if observed and observed["id"] > before_id and observed["released_ms"] > 0:
+                break
+            time.sleep(0.03)
+        at0 = body(st, cid)
+        move_status, _ = call(st, "human_move", [0.0, 1.0, False])
+        time.sleep(0.25)
+        mid = body(st, cid)
+        time.sleep(1.5)
+        # Read the direction input before releasing the keys. Deferred movement resumes in
+        # the same transaction as the throw's release, so its input_ms equals released_ms.
+        steer = sql(st, f"SELECT input_ms FROM steer WHERE id = {cid} AND goal = 3 AND gx = 0 AND gy = 1")
+        move_ms = steer[0]["input_ms"] if steer else 0
+        call(st, "human_move", [0.0, 0.0, False])
+        u = last_use(st, "throw")
+        end = body(st, cid)
+        fresh = u and u["id"] > before_id
+        late = move_status == 200 and fresh and 0 < u["released_ms"] < move_ms
+        if not late or attempt == 4:
             break
-        time.sleep(0.03)
-    at0 = body(st, cid)
-    call(st, "human_move", [0.0, 1.0, False])
-    time.sleep(0.25)
-    mid = body(st, cid)
-    time.sleep(1.5)
-    call(st, "human_move", [0.0, 0.0, False])
-    u = last_use(st, "throw")
-    end = body(st, cid)
+        V.log(st, f"throw/move attempt {attempt}: movement arrived {move_ms - u['released_ms']} ms after release, re-staging")
     check(st, "movement keys during a throw's windup wait for it: the spear flies, then the body walks",
-          wound and u and u != before and u["released_ms"] > 0 and not u["outcome"].startswith("broken off") and mid and math.dist(at0, mid) < 0.2 and end and math.dist(at0, end) > 0.5,
-          {"windup seen": wound, "throw": u and u["outcome"], "moved during windup": mid and round(math.dist(at0, mid), 2), "moved after": end and round(math.dist(at0, end), 2)})
+          not late and wound and fresh and u["released_ms"] > 0 and not u["outcome"].startswith("broken off") and mid and math.dist(at0, mid) < 0.2 and end and math.dist(at0, end) > 0.5,
+          {"attempt": attempt, "windup seen": wound, "throw": u and u["outcome"],
+           "released_ms": u and u["released_ms"], "move_ms": move_ms,
+           "moved during windup": mid and round(math.dist(at0, mid), 2), "moved after": end and round(math.dist(at0, end), 2)})
     call(st, "set_behavior", [t, '{"wait":60}'], "admin")
     # The world's own laws may make a skill uncommitted (an overlay through `floors::compose`,
     # `install_script.py`'s `compose_laws`): with the dodge uncommitted, a guard pressed mid-dodge
@@ -1119,6 +1176,26 @@ def body_now(st, cid):
     return (b["x"] + b["vx"] * t, b["y"] + b["vy"] * t)
 
 
+RING_5M = ((5.0, 0.0), (-5.0, 0.0), (0.0, 5.0), (0.0, -5.0), (3.5, 3.5), (-3.5, 3.5), (3.5, -3.5), (-3.5, -3.5))
+RING_1M = ((1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0), (0.7, 0.7), (-0.7, 0.7), (0.7, -0.7), (-0.7, -0.7))
+
+
+def beside_wolf(st, cid, w, ring):
+    """Puts the player at the first offset of `ring` from wolf `w`'s position now (`body_now`)
+    where the player's own `seen_characters` holds the wolf within 1.5 s, and returns that offset
+    (None if no spot was seen; the player is left at the last). Sight is the same both ways
+    (`Map::sight_clear`), so the wolf sees the player there (wolves-scene, 2026-11-22)."""
+    for dx, dy in ring:
+        wp = body_now(st, w)
+        call(st, "place_at", [cid, wp[0] + dx, wp[1] + dy], "admin")
+        t = time.time() + 1.5
+        while time.time() < t:
+            if any(r["id"] == w for r in sql(st, "SELECT id FROM seen_characters", "player")):
+                return (dx, dy)
+            time.sleep(0.25)
+    return None
+
+
 def scene_wolves(st):
     cid = me(st)
     ws = wolves(st)
@@ -1126,6 +1203,11 @@ def scene_wolves(st):
     if not ws:
         return
     w = ws[0]
+    # A healthy adult, as the check says: the earlier scenes' blows (fast_lane's four) leave the
+    # player worn down, and the pack's first blows could kill it (wolves-aftermath, 2026-11-23).
+    mx = sql(st, f"SELECT max_hp FROM vitals WHERE id = {cid}")
+    if mx:
+        call(st, "admin_set_vitals", [cid, mx[0]["max_hp"]], "admin")
 
     # The player goes where the wolf can see it, and again while the wolf has walked off before
     # turning on it (wolves-scene, 2026-11-22; features/combat.md, Gotchas):
@@ -1137,28 +1219,25 @@ def scene_wolves(st):
     # - A wandering wolf keeps walking until its graph looks again; placed beside where it was, the
     #   player was soon more than 10 m behind it (1 in 15). So while no blow has come, a wolf more
     #   than 7 m off has the player placed beside it again.
-    def place():
-        for dx, dy in ((5.0, 0.0), (-5.0, 0.0), (0.0, 5.0), (0.0, -5.0), (3.5, 3.5), (-3.5, 3.5), (3.5, -3.5), (-3.5, -3.5)):
-            wp = body_now(st, w)
-            call(st, "place_at", [cid, wp[0] + dx, wp[1] + dy], "admin")
-            t = time.time() + 1.5
-            while time.time() < t:
-                if any(r["id"] == w for r in sql(st, "SELECT id FROM seen_characters", "player")):
-                    return (dx, dy)
-                time.sleep(0.25)
-        return None
-
     spots = []
     t = time.time() + 20
     hit = []
     while time.time() < t and not hit:
         wp, pp = body_now(st, w), body_now(st, cid)
         if not spots or (wp and pp and math.dist(wp, pp) > 7.0):
-            spots.append(place())
+            spots.append(beside_wolf(st, cid, w, RING_5M))
         hit = [e for e in seen(st) if e["target"] == cid and e["actor"] in ws and e["kind"] in (2, 4)]
         time.sleep(0.3)
     check(st, "the player stands where the first bold wolf sees it", any(spots), f"offsets {spots} from wolf {w}")
     check(st, "bold wolves attack a healthy adult player", hit, [(e["actor"], e["kind"], round(e["amount"], 1)) for e in hit][:3])
+    # Then away from the pack, at once, so the scenes after this one start with the player alive
+    # (wolves-aftermath): the arrival point, far from the wolves' ground.
+    land = sql(st, "SELECT arrive_x, arrive_y FROM land")
+    if land and me(st) == cid:
+        call(st, "place_at", [cid, land[0]["arrive_x"], land[0]["arrive_y"]], "admin")
+    time.sleep(1.0)
+    left = sql(st, f"SELECT alive FROM character WHERE id = {cid}")
+    check(st, "the player leaves the pack alive", left and left[0]["alive"] and me(st) == cid, left)
 
 
 def scene_death(st):
@@ -1167,13 +1246,19 @@ def scene_death(st):
         check(st, "a living character to die", False, "none")
         return
     ws = wolves(st)
-    wp = body(st, ws[0]) if ws else body(st, cid)
-    call(st, "place_at", [cid, wp[0] + 1.0, wp[1]], "admin")
+    # Beside the first bold wolf where it sees the player, from where it is now, and again while
+    # it has walked more than 7 m off before killing it (death-placement, 2026-11-22: the wolves
+    # scene's two staging races, features/combat.md, Gotchas). With no pack, the player stays.
+    spots = []
     t = time.time() + 60
     while time.time() < t and me(st) == cid:
+        if ws:
+            wp, pp = body_now(st, ws[0]), body_now(st, cid)
+            if not spots or (wp and pp and math.dist(wp, pp) > 7.0):
+                spots.append(beside_wolf(st, cid, ws[0], RING_1M))
         time.sleep(0.5)
     rows = sql(st, f"SELECT alive, cause FROM character WHERE id = {cid}")
-    check(st, "the player's character dies through the vitals and death rules", rows and not rows[0]["alive"] and rows[0]["cause"].startswith("killed by"), rows)
+    check(st, "the player's character dies through the vitals and death rules", rows and not rows[0]["alive"] and rows[0]["cause"].startswith("killed by"), {"rows": rows, "offsets": spots})
     ev = seen(st)
     deaths = [e for e in ev if e["kind"] == 7 and e["actor"] == cid]
     wit = [e["actor"] for e in ev if e["kind"] == 8 and e["target"] == cid]
@@ -1281,8 +1366,9 @@ def main():
     global SCENE
     for n in names:
         SCENE = n
-        if n not in ("wolves", "death") and home:
-            call(st, "place_at", [me(st), home[0], home[1]], "admin")
+        cid = living(st, n)
+        if n not in ("wolves", "death") and home and cid is not None:
+            call(st, "place_at", [cid, home[0], home[1]], "admin")
             time.sleep(0.3)
         try:
             SCENES[n](st)

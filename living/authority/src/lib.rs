@@ -38,6 +38,7 @@ mod det;
 mod far;
 mod earshot;
 mod fold;
+mod heed;
 mod fast;
 mod known;
 mod latency;
@@ -642,7 +643,8 @@ pub fn spawn_battle(ctx: &ReducerContext, n: u32) -> Result<(), String> {
 /// Each side is a community (`Side A`, `Side B`, …); an open stance record each way between every
 /// two sides says `enemy`, so a fighter's target, the nearest person of `relation: enemy`, is
 /// someone of another side (residents of no side are not enemies). The side is the fighter's
-/// membership, and its name's prefix (`A12`), for a client that tints by side.
+/// membership, and its name's prefix (`A12`), for a client that tints by side. Half of each
+/// side dodges incoming windups and half blocks (alternating within the side; not by id parity).
 #[spacetimedb::reducer]
 pub fn spawn_battle_sides(ctx: &ReducerContext, n: u32, sides: u32) -> Result<(), String> {
     use spacetimedb::rand::Rng;
@@ -687,12 +689,107 @@ pub fn spawn_battle_sides(ctx: &ReducerContext, n: u32, sides: u32) -> Result<()
         let id = seed::spawn_creature(ctx, &format!("{}{}", letters[side], made / sides as u32 + 1), "person", ctx.database_identity(), false, p, now);
         common::inv_add(ctx, id as u64, "spear", 1);
         ctx.db.membership().insert(Membership { id: 0, community: ids[side], member: id, since_ms: now });
-        let defend = if id % 2 == 0 { "dodge" } else { "block" };
+        // Block and dodge alternate within each side by the fighter's index in its side, so every
+        // side gets an even mix (within one). By id parity, as `spawn_battle` does, consecutive
+        // ids put one whole side on block and the other on dodge (docs/BATTLE_LAWS.md).
+        let defend = if (made / sides as u32) % 2 == 0 { "dodge" } else { "block" };
         let graph = format!(
             r#"{{"first":{{"label":"combat","children":[{{"if":{{"cond":{{"threatened":true}},"then":{{"do":{{"skill":"{defend}"}}}}}}}},{{"do":{{"skill":"attack","target":{{"nearest":{{"kind":"person","relation":"enemy"}}}}}}}}]}}}}"#
         );
         mind::set_graph(ctx, id, &graph, "fight", "battle", now)?;
         made += 1;
+    }
+    crate::perception::knowledge_changed(ctx, None);
+    Ok(())
+}
+
+/// Benchmark support (a fixture, no game rule; docs/BATTLE_LAWS.md, docs/SIDE_ASYMMETRY.md):
+/// `spawn_battle_sides`' melee on a fixed layout, so a side comparison can run each layout in
+/// both orientations and cancel what the layout alone does. `n` (a multiple of `sides`) places
+/// are drawn in the same 14 × 14 m box from a splitmix64 stream seeded `layout_seed` (never the
+/// reducer's random draws, which are seeded by its timestamp), skipping tiles that are not free,
+/// so one seed gives the same places on the same world. They are dealt in groups of `sides`, one
+/// group per fighter index `j`: slot `k` of group `j` goes to side `(k + deal) % sides`. Within a
+/// group the sides are made in order (A first), so the ids follow the side, not the deal. Two
+/// sides with `deal` 0 and 1 are therefore mirrors: the same places, each side on the other's,
+/// with the same defence on each place (block and dodge alternate by `j`, as in
+/// `spawn_battle_sides`). Everything else is `spawn_battle_sides`' fixture: the `Side A`…
+/// communities, the open `enemy` stance records each way, spears and the combat graph. That
+/// reducer is left as it was: its random layouts are not comparable with these.
+#[spacetimedb::reducer]
+pub fn spawn_battle_sides_layout(ctx: &ReducerContext, n: u32, sides: u32, layout_seed: u64, deal: u32) -> Result<(), String> {
+    require_admin(ctx)?;
+    if !(2..=4).contains(&sides) {
+        return Err(format!("sides must be 2 to 4, not {sides}"));
+    }
+    if n == 0 || n % sides != 0 {
+        return Err(format!("n ({n}) must be a positive multiple of sides ({sides})"));
+    }
+    let sides = sides as usize;
+    let groups = n as usize / sides;
+    let now = common::now_ms(ctx);
+    let map = common::map(ctx);
+    let spot = if ctx.db.land().id().find(0).is_some() { let a = island::arrival(ctx); (a.0, a.1 - 20.0) } else { (55.0, 60.0) };
+    let center = map.nearest_walkable(spot.0, spot.1).ok_or("no room")?;
+    // The places first, so a world without room for them is refused before anything is made.
+    let mut state = layout_seed;
+    let mut draw = |lo: f32, hi: f32| -> f32 {
+        state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^= z >> 31;
+        lo + (hi - lo) * ((z >> 40) as f32 / (1u64 << 24) as f32)
+    };
+    let mut places = Vec::with_capacity(n as usize);
+    for _ in 0..n * 30 {
+        if places.len() >= n as usize {
+            break;
+        }
+        let p = (center.0 + draw(-7.0, 7.0), center.1 + draw(-7.0, 7.0));
+        if map.free(p.0, p.1) {
+            places.push(p);
+        }
+    }
+    if places.len() < n as usize {
+        return Err(format!("only {} free places of {n} in the battle box", places.len()));
+    }
+    let letters = ["A", "B", "C", "D"];
+    let ids: Vec<u32> = (0..sides)
+        .map(|i| {
+            let name = format!("Side {}", letters[i]);
+            match ctx.db.community().iter().find(|c| c.name == name) {
+                Some(c) => c.id,
+                None => ctx.db.community().insert(Community { id: 0, name, founder: 0, founded_ms: now, home_x: center.0, home_y: center.1 }).id,
+            }
+        })
+        .collect();
+    for (i, a) in ids.iter().enumerate() {
+        for (j, b) in ids.iter().enumerate() {
+            if i != j {
+                let parties = [(living_rules::records::HOLDER.to_string(), living_rules::records::COMMUNITY | *a as u64), (living_rules::records::TOWARD.to_string(), living_rules::records::COMMUNITY | *b as u64)];
+                let mut terms = serde_json::Map::new();
+                terms.insert("label".into(), serde_json::json!("enemy"));
+                terms.insert("value".into(), serde_json::json!(-50.0));
+                // Due never (`u64::MAX`): record housekeeping drops every record with `due_ms <= now`.
+                crate::records::make(ctx, "stance", "open", 0, &parties, &terms, u64::MAX, now);
+            }
+        }
+    }
+    for j in 0..groups {
+        for side in 0..sides {
+            // The slot whose side is `(slot + deal) % sides`.
+            let slot = (side + sides - deal as usize % sides) % sides;
+            let p = places[j * sides + slot];
+            let id = seed::spawn_creature(ctx, &format!("{}{}", letters[side], j + 1), "person", ctx.database_identity(), false, p, now);
+            common::inv_add(ctx, id as u64, "spear", 1);
+            ctx.db.membership().insert(Membership { id: 0, community: ids[side], member: id, since_ms: now });
+            let defend = if j % 2 == 0 { "dodge" } else { "block" };
+            let graph = format!(
+                r#"{{"first":{{"label":"combat","children":[{{"if":{{"cond":{{"threatened":true}},"then":{{"do":{{"skill":"{defend}"}}}}}}}},{{"do":{{"skill":"attack","target":{{"nearest":{{"kind":"person","relation":"enemy"}}}}}}}}]}}}}"#
+            );
+            mind::set_graph(ctx, id, &graph, "fight", "battle", now)?;
+        }
     }
     crate::perception::knowledge_changed(ctx, None);
     Ok(())

@@ -134,7 +134,27 @@ pub fn flush(ctx: &ReducerContext, prev: u64, now: u64) {
         if !c.alive {
             continue;
         }
-        let seen_rows = &due[&id];
+        // The combat feed's rule, the same on every path (docs/ATTENTION_BUDGET.md "Built"): under
+        // heed, a blow neither of whose parties is an individual to the onlooker (an unseen shooter is
+        // not) reaches it only as its throng lines, never as a line. Nothing changes with heed off.
+        let kept: Vec<(usize, bool)>;
+        let seen_rows = if crate::heed::applies(ctx, c.id) {
+            kept = due[&id]
+                .iter()
+                .copied()
+                .filter(|&(i, unseen)| {
+                    let r = &rows[i];
+                    let a_masked = unseen || r.attacker == 0 || crate::heed::masked(ctx, &c, r.attacker, now);
+                    !(a_masked && crate::heed::masked(ctx, &c, r.victim, now))
+                })
+                .collect();
+            &kept
+        } else {
+            &due[&id]
+        };
+        if seen_rows.is_empty() {
+            continue;
+        }
         let blows: Vec<living_rules::fold::Blow> = seen_rows
             .iter()
             .map(|&(i, unseen)| {
@@ -158,6 +178,8 @@ pub fn flush(ctx: &ReducerContext, prev: u64, now: u64) {
             .copied()
             .zip(crate::perception::labels(ctx, &c, &who, now))
             .map(|(x, label)| match ctx.db.character().id().find(x) {
+                // Under heed, someone in the onlooker's throng is no one in particular.
+                Some(_) if crate::heed::masked(ctx, &c, x, now) => (x, crate::heed::throng_label(ctx, c.id, x, now)),
                 Some(t) if !player && label != t.name => (x, format!("{label} (#{})", crate::far::id_for(ctx, &c, &t, now))),
                 _ => (x, label),
             })
@@ -168,6 +190,7 @@ pub fn flush(ctx: &ReducerContext, prev: u64, now: u64) {
         let salient = blows.iter().any(|b| b.start || b.fell);
         let first = &rows[seen_rows[0].0];
         let (a, v) = (if seen_rows[0].1 { 0 } else { first.attacker }, first.victim);
+        let (a, v) = (if crate::heed::masked(ctx, &c, a, now) { 0 } else { a }, if crate::heed::masked(ctx, &c, v, now) { 0 } else { v });
         // Its first blow woke it when it landed; the line itself wakes no one.
         crate::perceive::percept_quiet(ctx, &c, now, "fight", a, v, (first.x, first.y), text, if salient { 0.7 } else { 0.5 });
         common::diag(|| "fold:line", 1);

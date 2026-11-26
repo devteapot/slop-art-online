@@ -332,6 +332,16 @@
    "act_same_continues": false
   }
  },
+ "relation-fight-off": {
+  "models": {},
+  "env": {"LIVING_REORGANIZE": "night"},
+  "world_laws": {"relation_fight_on": false}
+ },
+ "relation-fight-on": {
+  "models": {},
+  "env": {"LIVING_REORGANIZE": "night"},
+  "world_laws": {"relation_fight_on": true}
+ },
  "act-replace-on": {
   "about": "The real-model trial's treatment: act-replace-off with mind_act_replaces on (a mind's act replaces the act in progress as a player's does).",
   "models": {},

@@ -1,0 +1,1 @@
+shade_mean: 72 files, 64 meshes and pictures checked, 0 off their class's mean

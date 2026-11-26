@@ -1182,6 +1182,15 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Swept {
     if due.is_empty() {
         return Swept { ids: Vec::new(), health: HashMap::new() };
     }
+    // The order the due players are swept in, which decides whose writes come first within the
+    // tick (row ids, shared memos): by id, starting at `tick` mod how many are due, so no one is
+    // always first (growth-fix-2; the bystander wakes' rule). `humans()` comes from a std
+    // `HashMap`, whose order on wasm32 follows memory addresses and so differed between runs
+    // and builds.
+    let mut due = due;
+    due.sort_unstable_by_key(|(id, _)| *id);
+    let start = common::tick_rotation(tick, due.len());
+    due.rotate_left(start);
     let w = common::world(ctx);
     let map = common::map(ctx);
     // The memos pay only when two or more viewers sweep in the tick (a lone sweep would fill them
@@ -2407,9 +2416,11 @@ pub fn player_character(ctx: &ReducerContext) -> Option<Character> {
 pub fn set_player(ctx: &ReducerContext, who: Identity, character: u32) {
     let row = Player { identity: who, character };
     if let Some(old) = ctx.db.player().identity().find(who) {
-        // The character played before: its outcome rows have no reader any more.
+        // The character played before: its outcome rows and its staged and shown lines have no
+        // reader any more (`my_experience` shows this person's new character from here on).
         if old.character != character {
             crate::outcomes::forget(ctx, old.character);
+            crate::frame::forget_lines(ctx, old.character);
         }
         ctx.db.player().identity().update(row);
     } else {

@@ -1704,6 +1704,19 @@ fn release_lines(ctx: &ReducerContext, id: u32) {
     }
 }
 
+/// The lines staged and shown for character `id`, gone when its person plays another
+/// (`perception::set_player`, beside `outcomes::forget`). Its `experience` rows went at its death
+/// (`act::forget_dead`), and these copies were kept only for `my_experience` while no other
+/// character of that person lives (the death screen). So `line_seen` holds at most
+/// [`LINES_SHOWN`] rows per person, not per character ever played (growth-fix, 2026-11-23).
+pub fn forget_lines(ctx: &ReducerContext, id: u32) {
+    for shown in [false, true] {
+        for l in ctx.db.line_seen().by_observer_shown().filter((id, shown)).map(|l| l.id).collect::<Vec<_>>() {
+            ctx.db.line_seen().id().delete(l);
+        }
+    }
+}
+
 /// A copy of a shown line for viewer `who` (a row already there, module memory that missed a
 /// rollback, is replaced, not a duplicate key).
 fn line_copy_put(ctx: &ReducerContext, who: Identity, line: &Experience) {

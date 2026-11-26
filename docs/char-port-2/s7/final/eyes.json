@@ -1,0 +1,2002 @@
+{
+ "cp7p-woman": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 3030,
+    "rows": [
+     308,
+     352
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-woman-eyeopen/stills/own-cp7p-woman-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 2289,
+    "rows": [
+     309,
+     354
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-woman-eyeopen/stills/own-cp7p-woman-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-woman-eyeclose/stills/own-cp7p-woman-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-woman-eyeclose/stills/own-cp7p-woman-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1496,
+    "rows": [
+     308,
+     352
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-woman-eyeclose_l/stills/own-cp7p-woman-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1855,
+    "rows": [
+     309,
+     354
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-woman-eyeclose_l/stills/own-cp7p-woman-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1533,
+    "rows": [
+     308,
+     351
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-woman-eyeclose_r/stills/own-cp7p-woman-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 434,
+    "rows": [
+     310,
+     347
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-woman-eyeclose_r/stills/own-cp7p-woman-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-woman-eyejoy/stills/own-cp7p-woman-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-woman-eyejoy/stills/own-cp7p-woman-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "cp7p-man": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1592,
+    "rows": [
+     303,
+     331
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-man-eyeopen/stills/own-cp7p-man-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1187,
+    "rows": [
+     302,
+     333
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-man-eyeopen/stills/own-cp7p-man-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-man-eyeclose/stills/own-cp7p-man-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-man-eyeclose/stills/own-cp7p-man-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 802,
+    "rows": [
+     303,
+     331
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-man-eyeclose_l/stills/own-cp7p-man-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 888,
+    "rows": [
+     304,
+     333
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-man-eyeclose_l/stills/own-cp7p-man-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 790,
+    "rows": [
+     303,
+     330
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-man-eyeclose_r/stills/own-cp7p-man-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 299,
+    "rows": [
+     302,
+     327
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-man-eyeclose_r/stills/own-cp7p-man-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-man-eyejoy/stills/own-cp7p-man-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-man-eyejoy/stills/own-cp7p-man-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "cp7p-elder": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1309,
+    "rows": [
+     293,
+     316
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-elder-eyeopen/stills/own-cp7p-elder-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 961,
+    "rows": [
+     292,
+     318
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-elder-eyeopen/stills/own-cp7p-elder-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-elder-eyeclose/stills/own-cp7p-elder-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-elder-eyeclose/stills/own-cp7p-elder-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 658,
+    "rows": [
+     293,
+     316
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-elder-eyeclose_l/stills/own-cp7p-elder-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 717,
+    "rows": [
+     294,
+     318
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-elder-eyeclose_l/stills/own-cp7p-elder-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 651,
+    "rows": [
+     293,
+     316
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-elder-eyeclose_r/stills/own-cp7p-elder-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 244,
+    "rows": [
+     292,
+     313
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-elder-eyeclose_r/stills/own-cp7p-elder-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-elder-eyejoy/stills/own-cp7p-elder-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-elder-eyejoy/stills/own-cp7p-elder-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "cp7p-girl": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 3818,
+    "rows": [
+     322,
+     374
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-girl-eyeopen/stills/own-cp7p-girl-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 2907,
+    "rows": [
+     323,
+     377
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-girl-eyeopen/stills/own-cp7p-girl-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-girl-eyeclose/stills/own-cp7p-girl-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-girl-eyeclose/stills/own-cp7p-girl-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1911,
+    "rows": [
+     323,
+     374
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-girl-eyeclose_l/stills/own-cp7p-girl-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 2314,
+    "rows": [
+     324,
+     377
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-girl-eyeclose_l/stills/own-cp7p-girl-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1907,
+    "rows": [
+     322,
+     374
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-girl-eyeclose_r/stills/own-cp7p-girl-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 593,
+    "rows": [
+     323,
+     369
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-girl-eyeclose_r/stills/own-cp7p-girl-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-girl-eyejoy/stills/own-cp7p-girl-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/cp7p-girl-eyejoy/stills/own-cp7p-girl-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-child-u-a": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 2791,
+    "rows": [
+     315,
+     360
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-a-eyeopen/stills/own-ey3-child-u-a-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 2155,
+    "rows": [
+     315,
+     362
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-a-eyeopen/stills/own-ey3-child-u-a-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-a-eyeclose/stills/own-ey3-child-u-a-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-a-eyeclose/stills/own-ey3-child-u-a-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1398,
+    "rows": [
+     315,
+     360
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-a-eyeclose_l/stills/own-ey3-child-u-a-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1743,
+    "rows": [
+     317,
+     362
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-a-eyeclose_l/stills/own-ey3-child-u-a-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1393,
+    "rows": [
+     315,
+     359
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-a-eyeclose_r/stills/own-ey3-child-u-a-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 410,
+    "rows": [
+     315,
+     354
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-a-eyeclose_r/stills/own-ey3-child-u-a-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-a-eyejoy/stills/own-ey3-child-u-a-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-a-eyejoy/stills/own-ey3-child-u-a-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-child-u-b": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 2311,
+    "rows": [
+     315,
+     354
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-b-eyeopen/stills/own-ey3-child-u-b-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1777,
+    "rows": [
+     316,
+     356
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-b-eyeopen/stills/own-ey3-child-u-b-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-b-eyeclose/stills/own-ey3-child-u-b-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-b-eyeclose/stills/own-ey3-child-u-b-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1154,
+    "rows": [
+     315,
+     354
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-b-eyeclose_l/stills/own-ey3-child-u-b-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1452,
+    "rows": [
+     316,
+     356
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-b-eyeclose_l/stills/own-ey3-child-u-b-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1157,
+    "rows": [
+     315,
+     353
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-b-eyeclose_r/stills/own-ey3-child-u-b-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 325,
+    "rows": [
+     316,
+     349
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-b-eyeclose_r/stills/own-ey3-child-u-b-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-b-eyejoy/stills/own-ey3-child-u-b-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-b-eyejoy/stills/own-ey3-child-u-b-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-child-u-c": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1989,
+    "rows": [
+     308,
+     341
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-c-eyeopen/stills/own-ey3-child-u-c-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1542,
+    "rows": [
+     309,
+     344
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-c-eyeopen/stills/own-ey3-child-u-c-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-c-eyeclose/stills/own-ey3-child-u-c-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-c-eyeclose/stills/own-ey3-child-u-c-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 993,
+    "rows": [
+     308,
+     341
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-c-eyeclose_l/stills/own-ey3-child-u-c-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1241,
+    "rows": [
+     309,
+     344
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-c-eyeclose_l/stills/own-ey3-child-u-c-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 996,
+    "rows": [
+     308,
+     341
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-c-eyeclose_r/stills/own-ey3-child-u-c-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 301,
+    "rows": [
+     309,
+     338
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-c-eyeclose_r/stills/own-ey3-child-u-c-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-c-eyejoy/stills/own-ey3-child-u-c-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-child-u-c-eyejoy/stills/own-ey3-child-u-c-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-youth-f-a": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 2702,
+    "rows": [
+     308,
+     352
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-a-eyeopen/stills/own-ey3-youth-f-a-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 2042,
+    "rows": [
+     309,
+     354
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-a-eyeopen/stills/own-ey3-youth-f-a-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-a-eyeclose/stills/own-ey3-youth-f-a-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-a-eyeclose/stills/own-ey3-youth-f-a-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1349,
+    "rows": [
+     309,
+     352
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-a-eyeclose_l/stills/own-ey3-youth-f-a-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1703,
+    "rows": [
+     309,
+     354
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-a-eyeclose_l/stills/own-ey3-youth-f-a-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1353,
+    "rows": [
+     308,
+     352
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-a-eyeclose_r/stills/own-ey3-youth-f-a-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 339,
+    "rows": [
+     310,
+     347
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-a-eyeclose_r/stills/own-ey3-youth-f-a-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-a-eyejoy/stills/own-ey3-youth-f-a-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-a-eyejoy/stills/own-ey3-youth-f-a-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-youth-f-b": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 2187,
+    "rows": [
+     308,
+     346
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-b-eyeopen/stills/own-ey3-youth-f-b-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1654,
+    "rows": [
+     309,
+     348
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-b-eyeopen/stills/own-ey3-youth-f-b-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-b-eyeclose/stills/own-ey3-youth-f-b-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-b-eyeclose/stills/own-ey3-youth-f-b-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1079,
+    "rows": [
+     309,
+     346
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-b-eyeclose_l/stills/own-ey3-youth-f-b-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1362,
+    "rows": [
+     309,
+     348
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-b-eyeclose_l/stills/own-ey3-youth-f-b-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1107,
+    "rows": [
+     308,
+     346
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-b-eyeclose_r/stills/own-ey3-youth-f-b-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 292,
+    "rows": [
+     310,
+     341
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-b-eyeclose_r/stills/own-ey3-youth-f-b-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-b-eyejoy/stills/own-ey3-youth-f-b-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-b-eyejoy/stills/own-ey3-youth-f-b-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-youth-f-c": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1901,
+    "rows": [
+     301,
+     334
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-c-eyeopen/stills/own-ey3-youth-f-c-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1435,
+    "rows": [
+     301,
+     336
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-c-eyeopen/stills/own-ey3-youth-f-c-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-c-eyeclose/stills/own-ey3-youth-f-c-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-c-eyeclose/stills/own-ey3-youth-f-c-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 937,
+    "rows": [
+     301,
+     334
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-c-eyeclose_l/stills/own-ey3-youth-f-c-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1155,
+    "rows": [
+     301,
+     336
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-c-eyeclose_l/stills/own-ey3-youth-f-c-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 964,
+    "rows": [
+     301,
+     334
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-c-eyeclose_r/stills/own-ey3-youth-f-c-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 280,
+    "rows": [
+     301,
+     330
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-c-eyeclose_r/stills/own-ey3-youth-f-c-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-c-eyejoy/stills/own-ey3-youth-f-c-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-f-c-eyejoy/stills/own-ey3-youth-f-c-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-youth-m-a": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1626,
+    "rows": [
+     294,
+     326
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-a-eyeopen/stills/own-ey3-youth-m-a-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1242,
+    "rows": [
+     294,
+     328
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-a-eyeopen/stills/own-ey3-youth-m-a-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-a-eyeclose/stills/own-ey3-youth-m-a-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-a-eyeclose/stills/own-ey3-youth-m-a-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 805,
+    "rows": [
+     294,
+     326
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-a-eyeclose_l/stills/own-ey3-youth-m-a-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 951,
+    "rows": [
+     296,
+     328
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-a-eyeclose_l/stills/own-ey3-youth-m-a-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 821,
+    "rows": [
+     294,
+     326
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-a-eyeclose_r/stills/own-ey3-youth-m-a-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 291,
+    "rows": [
+     294,
+     323
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-a-eyeclose_r/stills/own-ey3-youth-m-a-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-a-eyejoy/stills/own-ey3-youth-m-a-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-a-eyejoy/stills/own-ey3-youth-m-a-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-youth-m-b": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1267,
+    "rows": [
+     294,
+     319
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-b-eyeopen/stills/own-ey3-youth-m-b-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 953,
+    "rows": [
+     294,
+     322
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-b-eyeopen/stills/own-ey3-youth-m-b-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-b-eyeclose/stills/own-ey3-youth-m-b-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-b-eyeclose/stills/own-ey3-youth-m-b-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 627,
+    "rows": [
+     294,
+     319
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-b-eyeclose_l/stills/own-ey3-youth-m-b-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 721,
+    "rows": [
+     295,
+     322
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-b-eyeclose_l/stills/own-ey3-youth-m-b-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 640,
+    "rows": [
+     294,
+     319
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-b-eyeclose_r/stills/own-ey3-youth-m-b-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 232,
+    "rows": [
+     294,
+     317
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-b-eyeclose_r/stills/own-ey3-youth-m-b-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-b-eyejoy/stills/own-ey3-youth-m-b-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-b-eyejoy/stills/own-ey3-youth-m-b-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-youth-m-c": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1112,
+    "rows": [
+     286,
+     308
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-c-eyeopen/stills/own-ey3-youth-m-c-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 833,
+    "rows": [
+     286,
+     310
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-c-eyeopen/stills/own-ey3-youth-m-c-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-c-eyeclose/stills/own-ey3-youth-m-c-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-c-eyeclose/stills/own-ey3-youth-m-c-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 554,
+    "rows": [
+     286,
+     308
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-c-eyeclose_l/stills/own-ey3-youth-m-c-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 625,
+    "rows": [
+     287,
+     310
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-c-eyeclose_l/stills/own-ey3-youth-m-c-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 558,
+    "rows": [
+     286,
+     308
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-c-eyeclose_r/stills/own-ey3-youth-m-c-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 208,
+    "rows": [
+     286,
+     306
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-c-eyeclose_r/stills/own-ey3-youth-m-c-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-c-eyejoy/stills/own-ey3-youth-m-c-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-youth-m-c-eyejoy/stills/own-ey3-youth-m-c-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-adult-f-a": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 2658,
+    "rows": [
+     308,
+     350
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-a-eyeopen/stills/own-ey3-adult-f-a-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 2068,
+    "rows": [
+     309,
+     354
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-a-eyeopen/stills/own-ey3-adult-f-a-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-a-eyeclose/stills/own-ey3-adult-f-a-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-a-eyeclose/stills/own-ey3-adult-f-a-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1328,
+    "rows": [
+     308,
+     350
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-a-eyeclose_l/stills/own-ey3-adult-f-a-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1714,
+    "rows": [
+     309,
+     354
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-a-eyeclose_l/stills/own-ey3-adult-f-a-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1330,
+    "rows": [
+     308,
+     350
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-a-eyeclose_r/stills/own-ey3-adult-f-a-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 354,
+    "rows": [
+     310,
+     346
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-a-eyeclose_r/stills/own-ey3-adult-f-a-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-a-eyejoy/stills/own-ey3-adult-f-a-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-a-eyejoy/stills/own-ey3-adult-f-a-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-adult-f-b": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 2179,
+    "rows": [
+     308,
+     344
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-b-eyeopen/stills/own-ey3-adult-f-b-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1654,
+    "rows": [
+     309,
+     347
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-b-eyeopen/stills/own-ey3-adult-f-b-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-b-eyeclose/stills/own-ey3-adult-f-b-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-b-eyeclose/stills/own-ey3-adult-f-b-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1075,
+    "rows": [
+     308,
+     344
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-b-eyeclose_l/stills/own-ey3-adult-f-b-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1363,
+    "rows": [
+     309,
+     347
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-b-eyeclose_l/stills/own-ey3-adult-f-b-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1104,
+    "rows": [
+     308,
+     344
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-b-eyeclose_r/stills/own-ey3-adult-f-b-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 291,
+    "rows": [
+     310,
+     341
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-b-eyeclose_r/stills/own-ey3-adult-f-b-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-b-eyejoy/stills/own-ey3-adult-f-b-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-b-eyejoy/stills/own-ey3-adult-f-b-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-adult-f-c": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1914,
+    "rows": [
+     300,
+     333
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-c-eyeopen/stills/own-ey3-adult-f-c-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1449,
+    "rows": [
+     301,
+     335
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-c-eyeopen/stills/own-ey3-adult-f-c-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-c-eyeclose/stills/own-ey3-adult-f-c-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-c-eyeclose/stills/own-ey3-adult-f-c-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 943,
+    "rows": [
+     300,
+     333
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-c-eyeclose_l/stills/own-ey3-adult-f-c-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1167,
+    "rows": [
+     301,
+     335
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-c-eyeclose_l/stills/own-ey3-adult-f-c-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 971,
+    "rows": [
+     300,
+     333
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-c-eyeclose_r/stills/own-ey3-adult-f-c-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 282,
+    "rows": [
+     301,
+     329
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-c-eyeclose_r/stills/own-ey3-adult-f-c-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-c-eyejoy/stills/own-ey3-adult-f-c-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-f-c-eyejoy/stills/own-ey3-adult-f-c-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-adult-m-a": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1494,
+    "rows": [
+     291,
+     320
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-a-eyeopen/stills/own-ey3-adult-m-a-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1134,
+    "rows": [
+     291,
+     323
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-a-eyeopen/stills/own-ey3-adult-m-a-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-a-eyeclose/stills/own-ey3-adult-m-a-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-a-eyeclose/stills/own-ey3-adult-m-a-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 744,
+    "rows": [
+     291,
+     320
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-a-eyeclose_l/stills/own-ey3-adult-m-a-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 868,
+    "rows": [
+     292,
+     323
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-a-eyeclose_l/stills/own-ey3-adult-m-a-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 750,
+    "rows": [
+     291,
+     320
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-a-eyeclose_r/stills/own-ey3-adult-m-a-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 266,
+    "rows": [
+     291,
+     318
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-a-eyeclose_r/stills/own-ey3-adult-m-a-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-a-eyejoy/stills/own-ey3-adult-m-a-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-a-eyejoy/stills/own-ey3-adult-m-a-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-adult-m-b": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1147,
+    "rows": [
+     291,
+     314
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-b-eyeopen/stills/own-ey3-adult-m-b-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 861,
+    "rows": [
+     291,
+     315
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-b-eyeopen/stills/own-ey3-adult-m-b-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-b-eyeclose/stills/own-ey3-adult-m-b-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-b-eyeclose/stills/own-ey3-adult-m-b-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 572,
+    "rows": [
+     291,
+     314
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-b-eyeclose_l/stills/own-ey3-adult-m-b-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 645,
+    "rows": [
+     292,
+     315
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-b-eyeclose_l/stills/own-ey3-adult-m-b-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 575,
+    "rows": [
+     291,
+     314
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-b-eyeclose_r/stills/own-ey3-adult-m-b-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 216,
+    "rows": [
+     291,
+     312
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-b-eyeclose_r/stills/own-ey3-adult-m-b-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-b-eyejoy/stills/own-ey3-adult-m-b-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-b-eyejoy/stills/own-ey3-adult-m-b-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-adult-m-c": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1006,
+    "rows": [
+     283,
+     304
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-c-eyeopen/stills/own-ey3-adult-m-c-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 753,
+    "rows": [
+     283,
+     305
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-c-eyeopen/stills/own-ey3-adult-m-c-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-c-eyeclose/stills/own-ey3-adult-m-c-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-c-eyeclose/stills/own-ey3-adult-m-c-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 498,
+    "rows": [
+     283,
+     304
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-c-eyeclose_l/stills/own-ey3-adult-m-c-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 564,
+    "rows": [
+     283,
+     305
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-c-eyeclose_l/stills/own-ey3-adult-m-c-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 508,
+    "rows": [
+     283,
+     304
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-c-eyeclose_r/stills/own-ey3-adult-m-c-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 189,
+    "rows": [
+     283,
+     301
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-c-eyeclose_r/stills/own-ey3-adult-m-c-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-c-eyejoy/stills/own-ey3-adult-m-c-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-adult-m-c-eyejoy/stills/own-ey3-adult-m-c-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-elder-f-a": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 2161,
+    "rows": [
+     314,
+     350
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-a-eyeopen/stills/own-ey3-elder-f-a-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1634,
+    "rows": [
+     316,
+     354
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-a-eyeopen/stills/own-ey3-elder-f-a-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-a-eyeclose/stills/own-ey3-elder-f-a-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-a-eyeclose/stills/own-ey3-elder-f-a-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1073,
+    "rows": [
+     314,
+     350
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-a-eyeclose_l/stills/own-ey3-elder-f-a-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1406,
+    "rows": [
+     316,
+     354
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-a-eyeclose_l/stills/own-ey3-elder-f-a-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1088,
+    "rows": [
+     314,
+     350
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-a-eyeclose_r/stills/own-ey3-elder-f-a-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 228,
+    "rows": [
+     316,
+     346
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-a-eyeclose_r/stills/own-ey3-elder-f-a-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-a-eyejoy/stills/own-ey3-elder-f-a-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-a-eyejoy/stills/own-ey3-elder-f-a-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-elder-f-b": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1707,
+    "rows": [
+     314,
+     344
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-b-eyeopen/stills/own-ey3-elder-f-b-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1297,
+    "rows": [
+     316,
+     347
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-b-eyeopen/stills/own-ey3-elder-f-b-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-b-eyeclose/stills/own-ey3-elder-f-b-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-b-eyeclose/stills/own-ey3-elder-f-b-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 845,
+    "rows": [
+     315,
+     344
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-b-eyeclose_l/stills/own-ey3-elder-f-b-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1092,
+    "rows": [
+     316,
+     347
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-b-eyeclose_l/stills/own-ey3-elder-f-b-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 861,
+    "rows": [
+     314,
+     344
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-b-eyeclose_r/stills/own-ey3-elder-f-b-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 205,
+    "rows": [
+     316,
+     341
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-b-eyeclose_r/stills/own-ey3-elder-f-b-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-b-eyejoy/stills/own-ey3-elder-f-b-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-b-eyejoy/stills/own-ey3-elder-f-b-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-elder-f-c": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1504,
+    "rows": [
+     307,
+     334
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-c-eyeopen/stills/own-ey3-elder-f-c-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 1142,
+    "rows": [
+     308,
+     337
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-c-eyeopen/stills/own-ey3-elder-f-c-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-c-eyeclose/stills/own-ey3-elder-f-c-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-c-eyeclose/stills/own-ey3-elder-f-c-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 742,
+    "rows": [
+     308,
+     334
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-c-eyeclose_l/stills/own-ey3-elder-f-c-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 926,
+    "rows": [
+     308,
+     337
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-c-eyeclose_l/stills/own-ey3-elder-f-c-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 762,
+    "rows": [
+     307,
+     334
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-c-eyeclose_r/stills/own-ey3-elder-f-c-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 216,
+    "rows": [
+     308,
+     331
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-c-eyeclose_r/stills/own-ey3-elder-f-c-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-c-eyejoy/stills/own-ey3-elder-f-c-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-f-c-eyejoy/stills/own-ey3-elder-f-c-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-elder-m-a": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 1226,
+    "rows": [
+     277,
+     303
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-a-eyeopen/stills/own-ey3-elder-m-a-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 930,
+    "rows": [
+     277,
+     304
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-a-eyeopen/stills/own-ey3-elder-m-a-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-a-eyeclose/stills/own-ey3-elder-m-a-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-a-eyeclose/stills/own-ey3-elder-m-a-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 607,
+    "rows": [
+     277,
+     303
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-a-eyeclose_l/stills/own-ey3-elder-m-a-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 702,
+    "rows": [
+     278,
+     304
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-a-eyeclose_l/stills/own-ey3-elder-m-a-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 619,
+    "rows": [
+     277,
+     302
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-a-eyeclose_r/stills/own-ey3-elder-m-a-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 228,
+    "rows": [
+     277,
+     300
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-a-eyeclose_r/stills/own-ey3-elder-m-a-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-a-eyejoy/stills/own-ey3-elder-m-a-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-a-eyejoy/stills/own-ey3-elder-m-a-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-elder-m-b": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 928,
+    "rows": [
+     277,
+     297
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-b-eyeopen/stills/own-ey3-elder-m-b-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 703,
+    "rows": [
+     277,
+     298
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-b-eyeopen/stills/own-ey3-elder-m-b-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-b-eyeclose/stills/own-ey3-elder-m-b-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-b-eyeclose/stills/own-ey3-elder-m-b-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 466,
+    "rows": [
+     277,
+     297
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-b-eyeclose_l/stills/own-ey3-elder-m-b-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 529,
+    "rows": [
+     277,
+     298
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-b-eyeclose_l/stills/own-ey3-elder-m-b-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 462,
+    "rows": [
+     277,
+     296
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-b-eyeclose_r/stills/own-ey3-elder-m-b-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 174,
+    "rows": [
+     277,
+     294
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-b-eyeclose_r/stills/own-ey3-elder-m-b-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-b-eyejoy/stills/own-ey3-elder-m-b-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-b-eyejoy/stills/own-ey3-elder-m-b-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ },
+ "ey3-elder-m-c": {
+  "open": {
+   "0:8:0.18:0.86": {
+    "eye_px": 818,
+    "rows": [
+     268,
+     286
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-c-eyeopen/stills/own-ey3-elder-m-c-eyeopen/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 609,
+    "rows": [
+     268,
+     287
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-c-eyeopen/stills/own-ey3-elder-m-c-eyeopen/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-c-eyeclose/stills/own-ey3-elder-m-c-eyeclose/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-c-eyeclose/stills/own-ey3-elder-m-c-eyeclose/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_L": {
+   "0:8:0.18:0.86": {
+    "eye_px": 410,
+    "rows": [
+     268,
+     286
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-c-eyeclose_l/stills/own-ey3-elder-m-c-eyeclose_l/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 450,
+    "rows": [
+     268,
+     287
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-c-eyeclose_l/stills/own-ey3-elder-m-c-eyeclose_l/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Close_R": {
+   "0:8:0.18:0.86": {
+    "eye_px": 408,
+    "rows": [
+     268,
+     285
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-c-eyeclose_r/stills/own-ey3-elder-m-c-eyeclose_r/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 159,
+    "rows": [
+     268,
+     284
+    ],
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-c-eyeclose_r/stills/own-ey3-elder-m-c-eyeclose_r/04--35_8_0.18_0.86.png"
+   }
+  },
+  "Fcl_EYE_Joy": {
+   "0:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-c-eyejoy/stills/own-ey3-elder-m-c-eyejoy/03-0_8_0.18_0.86.png"
+   },
+   "-35:8:0.18:0.86": {
+    "eye_px": 0,
+    "rows": null,
+    "still": "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/final2/checks/eyes/ey3-elder-m-c-eyejoy/stills/own-ey3-elder-m-c-eyejoy/04--35_8_0.18_0.86.png"
+   }
+  }
+ }
+}

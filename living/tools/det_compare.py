@@ -3,7 +3,8 @@
 "Step 3 results"). Python standard library and docker.
 
     det_compare.py prepare --container A --url http://127.0.0.1:PA --volume VOL_A --wasm-dir DIR \
-                   --base BASE.wasm --template TEMPLATE_VOLUME [--fighters 200] [--ticks 3600]
+                   --base BASE.wasm --template TEMPLATE_VOLUME [--fighters 200] [--ticks 3600] \
+                   [--sides 2 [--layout-seed S [--deal 1]]]
     det_compare.py delete --container A --db verify-det-<stamp>
     det_compare.py run --template TEMPLATE_VOLUME --wasm-dir DIR --base BASE.wasm \
                    --candidate CAND.wasm --ports PX,PY --out DIR
@@ -307,7 +308,24 @@ def prepare(a):
                 raise
             time.sleep(5)
     A.call(db, "set_paused", [True])
-    A.call(db, "spawn_battle", [a.fighters])
+    if a.remains:
+        # A field of remains under the battle (growth-fix-2: what is noticed with many bodies in
+        # sight): `--remains N` fighters spawned where the battle will be and killed at once,
+        # each leaving remains with a dead owner, before the battle itself is staged.
+        before = {r["id"] for r in A.sql(db, "SELECT id FROM character")}
+        A.call(db, "spawn_battle", [a.remains])
+        doomed = sorted(r["id"] for r in A.sql(db, "SELECT id FROM character") if r["id"] not in before)
+        for cid in doomed:
+            A.call(db, "kill", [cid, "fixture"])
+        print(f"det_compare: {len(doomed)} remains staged under the battle", flush=True)
+    # The battle staged by the base build: `spawn_battle`, or `--sides N` the sides fixture
+    # (`spawn_battle_sides`, or with `--layout-seed` the fixed-layout one, sides-layout-seed).
+    if a.sides and a.layout_seed is not None:
+        A.call(db, "spawn_battle_sides_layout", [a.fighters, a.sides, a.layout_seed, a.deal])
+    elif a.sides:
+        A.call(db, "spawn_battle_sides", [a.fighters, a.sides])
+    else:
+        A.call(db, "spawn_battle", [a.fighters])
     if a.players:
         # Players watching (exact items): `a.players` fresh identities joined over HTTP (no
         # connection: their characters are human by controller, so the sweeps and frames run for
@@ -333,7 +351,8 @@ def prepare(a):
     t0 = A.sql(db, "SELECT tick FROM clock")[0]["tick"]
     A.call(db, "set_world_law", ["det_clock", "true"])
     A.call(db, "set_world_law", ["det_stop", str(float(t0 + a.ticks))])
-    meta = {"db": db, "start_tick": t0, "stop_tick": t0 + a.ticks, "fighters": a.fighters, "players": a.players, "ring": a.ring, "ticks": a.ticks, "replica": A.newest_replica(), "made_with": a.base}
+    meta = {"db": db, "start_tick": t0, "stop_tick": t0 + a.ticks, "fighters": a.fighters, "sides": a.sides,
+            "layout": {"seed": a.layout_seed, "deal": a.deal} if a.sides and a.layout_seed is not None else None, "players": a.players, "remains": a.remains, "ring": a.ring, "ticks": a.ticks, "replica": A.newest_replica(), "made_with": a.base}
     print(f"det_compare: {db} paused at tick {t0}, battle of {a.fighters}, stop at {t0 + a.ticks}", flush=True)
     subprocess.run(["docker", "kill", "-s", "INT", a.container], check=True, capture_output=True)
     subprocess.run(["docker", "wait", a.container], check=True, capture_output=True, timeout=300)
@@ -479,6 +498,10 @@ def main():
     ap.add_argument("--candidate")
     ap.add_argument("--fighters", type=int, default=200)
     ap.add_argument("--ticks", type=int, default=3600)
+    ap.add_argument("--sides", type=int, default=0, help="prepare: the fighters in this many sides (spawn_battle_sides) instead of spawn_battle")
+    ap.add_argument("--layout-seed", type=int, default=None, help="prepare: with --sides, the fixed layout (spawn_battle_sides_layout)")
+    ap.add_argument("--deal", type=int, default=0, help="prepare: with --layout-seed, the place deal (1: the sides swapped)")
+    ap.add_argument("--remains", type=int, default=0, help="prepare: this many fighters spawned and killed first, a field of remains under the battle")
     ap.add_argument("--players", type=int, default=0, help="prepare: players joined (no connection) and placed on --ring round the battle (exact items)")
     ap.add_argument("--ring", default="10,10", help="prepare: the players' ring LO,HI m from the battle's centre")
     ap.add_argument("--ports", default=None, help="run: the two copies' ports, PX,PY")

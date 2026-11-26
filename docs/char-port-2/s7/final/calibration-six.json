@@ -1,0 +1,3516 @@
+{
+ "pose": "idle",
+ "targets": {
+  "auburn": {
+   "shade": [
+    88,
+    42,
+    27
+   ],
+   "mid": [
+    152,
+    72,
+    43
+   ],
+   "light": [
+    171,
+    88,
+    56
+   ],
+   "highlight": [
+    187,
+    99,
+    63
+   ]
+  },
+  "dark": {
+   "shade": [
+    61,
+    56,
+    45
+   ],
+   "mid": [
+    51,
+    47,
+    47
+   ],
+   "light": [
+    59,
+    56,
+    56
+   ],
+   "highlight": [
+    85,
+    82,
+    82
+   ]
+  },
+  "brown": {
+   "shade": [
+    62,
+    56,
+    45
+   ],
+   "mid": [
+    87,
+    63,
+    47
+   ],
+   "light": [
+    99,
+    74,
+    56
+   ],
+   "highlight": [
+    112,
+    84,
+    66
+   ]
+  },
+  "light": {
+   "shade": [
+    135,
+    109,
+    67
+   ],
+   "mid": [
+    198,
+    157,
+    91
+   ],
+   "light": [
+    214,
+    181,
+    128
+   ],
+   "highlight": [
+    229,
+    194,
+    138
+   ]
+  },
+  "grey": {
+   "shade": [
+    113,
+    113,
+    113
+   ],
+   "mid": [
+    164,
+    164,
+    164
+   ],
+   "light": [
+    186,
+    186,
+    186
+   ],
+   "highlight": [
+    199,
+    199,
+    199
+   ]
+  },
+  "white": {
+   "shade": [
+    114,
+    114,
+    111
+   ],
+   "mid": [
+    164,
+    164,
+    164
+   ],
+   "light": [
+    186,
+    186,
+    186
+   ],
+   "highlight": [
+    199,
+    199,
+    199
+   ]
+  }
+ },
+ "styles": [
+  "bob",
+  "long",
+  "braid",
+  "swept",
+  "short",
+  "swept_braid"
+ ],
+ "rounds": [
+  {
+   "profile": {
+    "shade": [
+     41,
+     1,
+     0
+    ],
+    "mid": [
+     101,
+     34,
+     5
+    ],
+    "light": [
+     118,
+     43,
+     4
+    ],
+    "highlight": [
+     138,
+     53,
+     3
+    ]
+   },
+   "anchors": [
+    {
+     "ref": [
+      19,
+      17,
+      17
+     ],
+     "shade": [
+      0,
+      0,
+      0
+     ],
+     "mid": [
+      6,
+      5,
+      5
+     ],
+     "light": [
+      21,
+      19,
+      18
+     ],
+     "highlight": [
+      50,
+      46,
+      46
+     ]
+    },
+    {
+     "ref": [
+      51,
+      34,
+      23
+     ],
+     "shade": [
+      7,
+      2,
+      1
+     ],
+     "mid": [
+      44,
+      28,
+      15
+     ],
+     "light": [
+      56,
+      37,
+      26
+     ],
+     "highlight": [
+      66,
+      48,
+      36
+     ]
+    },
+    {
+     "ref": [
+      158,
+      125,
+      71
+     ],
+     "shade": [
+      88,
+      64,
+      32
+     ],
+     "mid": [
+      161,
+      123,
+      51
+     ],
+     "light": [
+      190,
+      159,
+      102
+     ],
+     "highlight": [
+      237,
+      197,
+      122
+     ]
+    },
+    {
+     "ref": [
+      133,
+      133,
+      133
+     ],
+     "shade": [
+      68,
+      68,
+      68
+     ],
+     "mid": [
+      126,
+      126,
+      126
+     ],
+     "light": [
+      159,
+      159,
+      159
+     ],
+     "highlight": [
+      193,
+      193,
+      193
+     ]
+    }
+   ],
+   "measured": {
+    "auburn": {
+     "shade": {
+      "n": 21464,
+      "rgb": [
+       88,
+       52,
+       40
+      ]
+     },
+     "mid": {
+      "n": 14126,
+      "rgb": [
+       152,
+       73,
+       45
+      ]
+     },
+     "light": {
+      "n": 32511,
+      "rgb": [
+       171,
+       88,
+       59
+      ]
+     },
+     "highlight": {
+      "n": 17649,
+      "rgb": [
+       187,
+       99,
+       66
+      ]
+     }
+    },
+    "dark": {
+     "shade": {
+      "n": 21461,
+      "rgb": [
+       56,
+       52,
+       41
+      ]
+     },
+     "mid": {
+      "n": 14128,
+      "rgb": [
+       52,
+       48,
+       39
+      ]
+     },
+     "light": {
+      "n": 32511,
+      "rgb": [
+       60,
+       56,
+       50
+      ]
+     },
+     "highlight": {
+      "n": 17672,
+      "rgb": [
+       90,
+       81,
+       73
+      ]
+     }
+    },
+    "brown": {
+     "shade": {
+      "n": 21458,
+      "rgb": [
+       61,
+       53,
+       41
+      ]
+     },
+     "mid": {
+      "n": 14122,
+      "rgb": [
+       85,
+       63,
+       44
+      ]
+     },
+     "light": {
+      "n": 32511,
+      "rgb": [
+       99,
+       73,
+       56
+      ]
+     },
+     "highlight": {
+      "n": 17636,
+      "rgb": [
+       110,
+       84,
+       64
+      ]
+     }
+    },
+    "light": {
+     "shade": {
+      "n": 21454,
+      "rgb": [
+       139,
+       106,
+       66
+      ]
+     },
+     "mid": {
+      "n": 14120,
+      "rgb": [
+       197,
+       155,
+       89
+      ]
+     },
+     "light": {
+      "n": 32510,
+      "rgb": [
+       211,
+       180,
+       126
+      ]
+     },
+     "highlight": {
+      "n": 17640,
+      "rgb": [
+       227,
+       195,
+       138
+      ]
+     }
+    },
+    "grey": {
+     "shade": {
+      "n": 21452,
+      "rgb": [
+       117,
+       111,
+       100
+      ]
+     },
+     "mid": {
+      "n": 14124,
+      "rgb": [
+       168,
+       162,
+       150
+      ]
+     },
+     "light": {
+      "n": 32511,
+      "rgb": [
+       190,
+       184,
+       172
+      ]
+     },
+     "highlight": {
+      "n": 17670,
+      "rgb": [
+       205,
+       199,
+       187
+      ]
+     }
+    },
+    "white": {
+     "shade": {
+      "n": 21452,
+      "rgb": [
+       143,
+       136,
+       122
+      ]
+     },
+     "mid": {
+      "n": 14116,
+      "rgb": [
+       203,
+       196,
+       182
+      ]
+     },
+     "light": {
+      "n": 32498,
+      "rgb": [
+       221,
+       216,
+       204
+      ]
+     },
+     "highlight": {
+      "n": 17659,
+      "rgb": [
+       225,
+       221,
+       210
+      ]
+     }
+    }
+   },
+   "delta": {
+    "auburn": {
+     "shade": [
+      0,
+      10,
+      13
+     ],
+     "mid": [
+      0,
+      1,
+      2
+     ],
+     "light": [
+      0,
+      0,
+      3
+     ],
+     "highlight": [
+      0,
+      0,
+      3
+     ]
+    },
+    "dark": {
+     "shade": [
+      -5,
+      -4,
+      -4
+     ],
+     "mid": [
+      1,
+      1,
+      -8
+     ],
+     "light": [
+      1,
+      0,
+      -6
+     ],
+     "highlight": [
+      5,
+      -1,
+      -9
+     ]
+    },
+    "brown": {
+     "shade": [
+      -1,
+      -3,
+      -4
+     ],
+     "mid": [
+      -2,
+      0,
+      -3
+     ],
+     "light": [
+      0,
+      -1,
+      0
+     ],
+     "highlight": [
+      -2,
+      0,
+      -2
+     ]
+    },
+    "light": {
+     "shade": [
+      4,
+      -3,
+      -1
+     ],
+     "mid": [
+      -1,
+      -2,
+      -2
+     ],
+     "light": [
+      -3,
+      -1,
+      -2
+     ],
+     "highlight": [
+      -2,
+      1,
+      0
+     ]
+    },
+    "grey": {
+     "shade": [
+      4,
+      -2,
+      -13
+     ],
+     "mid": [
+      4,
+      -2,
+      -14
+     ],
+     "light": [
+      4,
+      -2,
+      -14
+     ],
+     "highlight": [
+      6,
+      0,
+      -12
+     ]
+    },
+    "white": {
+     "shade": [
+      29,
+      22,
+      11
+     ],
+     "mid": [
+      39,
+      32,
+      18
+     ],
+     "light": [
+      35,
+      30,
+      18
+     ],
+     "highlight": [
+      26,
+      22,
+      11
+     ]
+    }
+   },
+   "checks": {
+    "auburn": {
+     "shade": {
+      "passed": true,
+      "rule": "per channel \u00b112",
+      "delta": [
+       0,
+       -4,
+       -5
+      ],
+      "luma_delta": -3.2
+     },
+     "mid": {
+      "passed": true,
+      "rule": "per channel \u00b15",
+      "delta": [
+       0,
+       1,
+       2
+      ],
+      "luma_delta": 0.9
+     },
+     "light": {
+      "passed": true,
+      "rule": "per channel \u00b15",
+      "delta": [
+       0,
+       0,
+       3
+      ],
+      "luma_delta": 0.2
+     },
+     "highlight": {
+      "passed": true,
+      "rule": "per channel \u00b15",
+      "delta": [
+       0,
+       0,
+       3
+      ],
+      "luma_delta": 0.2
+     }
+    },
+    "dark": {
+     "shade": {
+      "passed": true,
+      "rule": "neutral: luma \u00b112 and a neutral swatch",
+      "delta": [
+       -5,
+       -4,
+       -4
+      ],
+      "luma_delta": -4.2
+     },
+     "mid": {
+      "passed": true,
+      "rule": "neutral: luma \u00b15 and a neutral swatch",
+      "delta": [
+       1,
+       1,
+       -8
+      ],
+      "luma_delta": 0.4
+     },
+     "light": {
+      "passed": true,
+      "rule": "neutral: luma \u00b15 and a neutral swatch",
+      "delta": [
+       1,
+       0,
+       -6
+      ],
+      "luma_delta": -0.2
+     },
+     "highlight": {
+      "passed": true,
+      "rule": "neutral: luma \u00b15 and a neutral swatch",
+      "delta": [
+       5,
+       -1,
+       -9
+      ],
+      "luma_delta": -0.3
+     }
+    },
+    "brown": {
+     "shade": {
+      "passed": true,
+      "rule": "neutral: luma \u00b112 and a neutral swatch",
+      "delta": [
+       -1,
+       -3,
+       -4
+      ],
+      "luma_delta": -2.6
+     },
+     "mid": {
+      "passed": true,
+      "rule": "per channel \u00b15",
+      "delta": [
+       -2,
+       0,
+       -3
+      ],
+      "luma_delta": -0.6
+     },
+     "light": {
+      "passed": true,
+      "rule": "per channel \u00b15",
+      "delta": [
+       0,
+       -1,
+       0
+      ],
+      "luma_delta": -0.7
+     },
+     "highlight": {
+      "passed": true,
+      "rule": "per channel \u00b15",
+      "delta": [
+       -2,
+       0,
+       -2
+      ],
+      "luma_delta": -0.6
+     }
+    },
+    "light": {
+     "shade": {
+      "passed": true,
+      "rule": "per channel \u00b112",
+      "delta": [
+       4,
+       -3,
+       -1
+      ],
+      "luma_delta": -1.4
+     },
+     "mid": {
+      "passed": true,
+      "rule": "per channel \u00b15",
+      "delta": [
+       -1,
+       -2,
+       -2
+      ],
+      "luma_delta": -1.8
+     },
+     "light": {
+      "passed": true,
+      "rule": "per channel \u00b15",
+      "delta": [
+       -3,
+       -1,
+       -2
+      ],
+      "luma_delta": -1.5
+     },
+     "highlight": {
+      "passed": true,
+      "rule": "per channel \u00b15",
+      "delta": [
+       -2,
+       1,
+       0
+      ],
+      "luma_delta": 0.3
+     }
+    },
+    "grey": {
+     "shade": {
+      "passed": true,
+      "rule": "neutral: luma \u00b112 and a neutral swatch",
+      "delta": [
+       4,
+       -2,
+       -13
+      ],
+      "luma_delta": -1.5
+     },
+     "mid": {
+      "passed": true,
+      "rule": "neutral: luma \u00b15 and a neutral swatch",
+      "delta": [
+       4,
+       -2,
+       -14
+      ],
+      "luma_delta": -1.6
+     },
+     "light": {
+      "passed": true,
+      "rule": "neutral: luma \u00b15 and a neutral swatch",
+      "delta": [
+       4,
+       -2,
+       -14
+      ],
+      "luma_delta": -1.6
+     },
+     "highlight": {
+      "passed": true,
+      "rule": "neutral: luma \u00b15 and a neutral swatch",
+      "delta": [
+       6,
+       0,
+       -12
+      ],
+      "luma_delta": 0.4
+     }
+    },
+    "white": {
+     "shade": {
+      "passed": true,
+      "rule": "neutral swatch, luma 5+ above grey",
+      "luma_above": 25.0
+     },
+     "mid": {
+      "passed": true,
+      "rule": "neutral swatch, luma 5+ above grey",
+      "luma_above": 34.1
+     },
+     "light": {
+      "passed": true,
+      "rule": "neutral swatch, luma 5+ above grey",
+      "luma_above": 31.8
+     },
+     "highlight": {
+      "passed": true,
+      "rule": "neutral swatch, luma 5+ above grey",
+      "luma_above": 21.6
+     }
+    }
+   },
+   "passed": true,
+   "styles": {
+    "bob": {
+     "measured": {
+      "auburn": {
+       "shade": {
+        "n": 1298,
+        "rgb": [
+         92,
+         57,
+         44
+        ]
+       },
+       "mid": {
+        "n": 2922,
+        "rgb": [
+         153,
+         73,
+         45
+        ]
+       },
+       "light": {
+        "n": 7164,
+        "rgb": [
+         172,
+         88,
+         58
+        ]
+       },
+       "highlight": {
+        "n": 3909,
+        "rgb": [
+         187,
+         99,
+         66
+        ]
+       }
+      },
+      "dark": {
+       "shade": {
+        "n": 1296,
+        "rgb": [
+         62,
+         57,
+         45
+        ]
+       },
+       "mid": {
+        "n": 2922,
+        "rgb": [
+         54,
+         48,
+         39
+        ]
+       },
+       "light": {
+        "n": 7164,
+        "rgb": [
+         60,
+         56,
+         49
+        ]
+       },
+       "highlight": {
+        "n": 3913,
+        "rgb": [
+         89,
+         81,
+         73
+        ]
+       }
+      },
+      "brown": {
+       "shade": {
+        "n": 1295,
+        "rgb": [
+         66,
+         58,
+         45
+        ]
+       },
+       "mid": {
+        "n": 2922,
+        "rgb": [
+         86,
+         63,
+         43
+        ]
+       },
+       "light": {
+        "n": 7164,
+        "rgb": [
+         100,
+         73,
+         55
+        ]
+       },
+       "highlight": {
+        "n": 3912,
+        "rgb": [
+         109,
+         84,
+         64
+        ]
+       }
+      },
+      "light": {
+       "shade": {
+        "n": 1297,
+        "rgb": [
+         141,
+         109,
+         70
+        ]
+       },
+       "mid": {
+        "n": 2922,
+        "rgb": [
+         198,
+         156,
+         88
+        ]
+       },
+       "light": {
+        "n": 7164,
+        "rgb": [
+         211,
+         180,
+         126
+        ]
+       },
+       "highlight": {
+        "n": 3908,
+        "rgb": [
+         227,
+         196,
+         138
+        ]
+       }
+      },
+      "grey": {
+       "shade": {
+        "n": 1295,
+        "rgb": [
+         120,
+         114,
+         102
+        ]
+       },
+       "mid": {
+        "n": 2922,
+        "rgb": [
+         169,
+         162,
+         150
+        ]
+       },
+       "light": {
+        "n": 7164,
+        "rgb": [
+         190,
+         184,
+         172
+        ]
+       },
+       "highlight": {
+        "n": 3912,
+        "rgb": [
+         205,
+         199,
+         187
+        ]
+       }
+      },
+      "white": {
+       "shade": {
+        "n": 1295,
+        "rgb": [
+         145,
+         138,
+         124
+        ]
+       },
+       "mid": {
+        "n": 2922,
+        "rgb": [
+         203,
+         197,
+         182
+        ]
+       },
+       "light": {
+        "n": 7164,
+        "rgb": [
+         221,
+         216,
+         204
+        ]
+       },
+       "highlight": {
+        "n": 3913,
+        "rgb": [
+         225,
+         221,
+         210
+        ]
+       }
+      }
+     },
+     "checks": {
+      "auburn": {
+       "shade": {
+        "passed": true,
+        "rule": "per channel \u00b112",
+        "delta": [
+         4,
+         1,
+         -1
+        ],
+        "luma_delta": 1.5
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         1,
+         1,
+         2
+        ],
+        "luma_delta": 1.1
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         1,
+         0,
+         2
+        ],
+        "luma_delta": 0.4
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         0,
+         3
+        ],
+        "luma_delta": 0.2
+       }
+      },
+      "dark": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         1,
+         1,
+         0
+        ],
+        "luma_delta": 0.9
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         3,
+         1,
+         -8
+        ],
+        "luma_delta": 0.8
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         1,
+         0,
+         -7
+        ],
+        "luma_delta": -0.3
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         4,
+         -1,
+         -9
+        ],
+        "luma_delta": -0.5
+       }
+      },
+      "brown": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         4,
+         2,
+         0
+        ],
+        "luma_delta": 2.3
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -1,
+         0,
+         -4
+        ],
+        "luma_delta": -0.5
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         1,
+         -1,
+         -1
+        ],
+        "luma_delta": -0.6
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -3,
+         0,
+         -2
+        ],
+        "luma_delta": -0.8
+       }
+      },
+      "light": {
+       "shade": {
+        "passed": true,
+        "rule": "per channel \u00b112",
+        "delta": [
+         6,
+         0,
+         3
+        ],
+        "luma_delta": 1.5
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         -1,
+         -3
+        ],
+        "luma_delta": -0.9
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -3,
+         -1,
+         -2
+        ],
+        "luma_delta": -1.5
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -2,
+         2,
+         0
+        ],
+        "luma_delta": 1.0
+       }
+      },
+      "grey": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         7,
+         1,
+         -11
+        ],
+        "luma_delta": 1.4
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         5,
+         -2,
+         -14
+        ],
+        "luma_delta": -1.4
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         4,
+         -2,
+         -14
+        ],
+        "luma_delta": -1.6
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         6,
+         0,
+         -12
+        ],
+        "luma_delta": 0.4
+       }
+      },
+      "white": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 24.1
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 34.6
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 31.8
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 21.6
+       }
+      }
+     },
+     "passed": true
+    },
+    "long": {
+     "measured": {
+      "auburn": {
+       "shade": {
+        "n": 8754,
+        "rgb": [
+         87,
+         46,
+         36
+        ]
+       },
+       "mid": {
+        "n": 4598,
+        "rgb": [
+         152,
+         71,
+         43
+        ]
+       },
+       "light": {
+        "n": 5919,
+        "rgb": [
+         171,
+         87,
+         58
+        ]
+       },
+       "highlight": {
+        "n": 3767,
+        "rgb": [
+         187,
+         99,
+         66
+        ]
+       }
+      },
+      "dark": {
+       "shade": {
+        "n": 8753,
+        "rgb": [
+         51,
+         47,
+         37
+        ]
+       },
+       "mid": {
+        "n": 4600,
+        "rgb": [
+         51,
+         45,
+         37
+        ]
+       },
+       "light": {
+        "n": 5919,
+        "rgb": [
+         61,
+         56,
+         50
+        ]
+       },
+       "highlight": {
+        "n": 3786,
+        "rgb": [
+         90,
+         81,
+         73
+        ]
+       }
+      },
+      "brown": {
+       "shade": {
+        "n": 8752,
+        "rgb": [
+         57,
+         48,
+         38
+        ]
+       },
+       "mid": {
+        "n": 4598,
+        "rgb": [
+         84,
+         62,
+         42
+        ]
+       },
+       "light": {
+        "n": 5919,
+        "rgb": [
+         99,
+         73,
+         55
+        ]
+       },
+       "highlight": {
+        "n": 3785,
+        "rgb": [
+         110,
+         85,
+         64
+        ]
+       }
+      },
+      "light": {
+       "shade": {
+        "n": 8752,
+        "rgb": [
+         141,
+         107,
+         65
+        ]
+       },
+       "mid": {
+        "n": 4600,
+        "rgb": [
+         198,
+         156,
+         87
+        ]
+       },
+       "light": {
+        "n": 5918,
+        "rgb": [
+         210,
+         179,
+         125
+        ]
+       },
+       "highlight": {
+        "n": 3786,
+        "rgb": [
+         227,
+         196,
+         138
+        ]
+       }
+      },
+      "grey": {
+       "shade": {
+        "n": 8752,
+        "rgb": [
+         118,
+         112,
+         101
+        ]
+       },
+       "mid": {
+        "n": 4600,
+        "rgb": [
+         168,
+         162,
+         150
+        ]
+       },
+       "light": {
+        "n": 5919,
+        "rgb": [
+         190,
+         183,
+         171
+        ]
+       },
+       "highlight": {
+        "n": 3786,
+        "rgb": [
+         205,
+         199,
+         187
+        ]
+       }
+      },
+      "white": {
+       "shade": {
+        "n": 8753,
+        "rgb": [
+         144,
+         137,
+         124
+        ]
+       },
+       "mid": {
+        "n": 4601,
+        "rgb": [
+         203,
+         197,
+         182
+        ]
+       },
+       "light": {
+        "n": 5906,
+        "rgb": [
+         221,
+         215,
+         204
+        ]
+       },
+       "highlight": {
+        "n": 3786,
+        "rgb": [
+         225,
+         221,
+         210
+        ]
+       }
+      }
+     },
+     "checks": {
+      "auburn": {
+       "shade": {
+        "passed": true,
+        "rule": "per channel \u00b112",
+        "delta": [
+         -1,
+         -10,
+         -9
+        ],
+        "luma_delta": -8.0
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         -1,
+         0
+        ],
+        "luma_delta": -0.7
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         -1,
+         2
+        ],
+        "luma_delta": -0.6
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         0,
+         3
+        ],
+        "luma_delta": 0.2
+       }
+      },
+      "dark": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         -10,
+         -9,
+         -8
+        ],
+        "luma_delta": -9.1
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         0,
+         -2,
+         -10
+        ],
+        "luma_delta": -2.2
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         2,
+         0,
+         -6
+        ],
+        "luma_delta": -0.0
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         5,
+         -1,
+         -9
+        ],
+        "luma_delta": -0.3
+       }
+      },
+      "brown": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         -5,
+         -8,
+         -7
+        ],
+        "luma_delta": -7.3
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -3,
+         -1,
+         -5
+        ],
+        "luma_delta": -1.7
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         -1,
+         -1
+        ],
+        "luma_delta": -0.8
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -2,
+         1,
+         -2
+        ],
+        "luma_delta": 0.1
+       }
+      },
+      "light": {
+       "shade": {
+        "passed": true,
+        "rule": "per channel \u00b112",
+        "delta": [
+         6,
+         -2,
+         -2
+        ],
+        "luma_delta": -0.3
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         -1,
+         -4
+        ],
+        "luma_delta": -1.0
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -4,
+         -2,
+         -3
+        ],
+        "luma_delta": -2.5
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -2,
+         2,
+         0
+        ],
+        "luma_delta": 1.0
+       }
+      },
+      "grey": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         5,
+         -1,
+         -12
+        ],
+        "luma_delta": -0.5
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         4,
+         -2,
+         -14
+        ],
+        "luma_delta": -1.6
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         4,
+         -3,
+         -15
+        ],
+        "luma_delta": -2.4
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         6,
+         0,
+         -12
+        ],
+        "luma_delta": 0.4
+       }
+      },
+      "white": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 25.1
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 34.8
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 31.9
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 21.6
+       }
+      }
+     },
+     "passed": true
+    },
+    "braid": {
+     "measured": {
+      "auburn": {
+       "shade": {
+        "n": 2184,
+        "rgb": [
+         85,
+         51,
+         40
+        ]
+       },
+       "mid": {
+        "n": 1320,
+        "rgb": [
+         154,
+         75,
+         48
+        ]
+       },
+       "light": {
+        "n": 4779,
+        "rgb": [
+         171,
+         89,
+         60
+        ]
+       },
+       "highlight": {
+        "n": 2972,
+        "rgb": [
+         187,
+         100,
+         68
+        ]
+       }
+      },
+      "dark": {
+       "shade": {
+        "n": 2184,
+        "rgb": [
+         55,
+         52,
+         41
+        ]
+       },
+       "mid": {
+        "n": 1320,
+        "rgb": [
+         53,
+         49,
+         41
+        ]
+       },
+       "light": {
+        "n": 4779,
+        "rgb": [
+         61,
+         57,
+         51
+        ]
+       },
+       "highlight": {
+        "n": 2972,
+        "rgb": [
+         91,
+         82,
+         74
+        ]
+       }
+      },
+      "brown": {
+       "shade": {
+        "n": 2184,
+        "rgb": [
+         59,
+         53,
+         41
+        ]
+       },
+       "mid": {
+        "n": 1320,
+        "rgb": [
+         86,
+         65,
+         45
+        ]
+       },
+       "light": {
+        "n": 4779,
+        "rgb": [
+         101,
+         75,
+         57
+        ]
+       },
+       "highlight": {
+        "n": 2972,
+        "rgb": [
+         111,
+         85,
+         65
+        ]
+       }
+      },
+      "light": {
+       "shade": {
+        "n": 2184,
+        "rgb": [
+         136,
+         104,
+         64
+        ]
+       },
+       "mid": {
+        "n": 1313,
+        "rgb": [
+         198,
+         156,
+         91
+        ]
+       },
+       "light": {
+        "n": 4779,
+        "rgb": [
+         211,
+         180,
+         126
+        ]
+       },
+       "highlight": {
+        "n": 2945,
+        "rgb": [
+         227,
+         196,
+         138
+        ]
+       }
+      },
+      "grey": {
+       "shade": {
+        "n": 2184,
+        "rgb": [
+         114,
+         109,
+         98
+        ]
+       },
+       "mid": {
+        "n": 1317,
+        "rgb": [
+         169,
+         163,
+         151
+        ]
+       },
+       "light": {
+        "n": 4779,
+        "rgb": [
+         190,
+         184,
+         172
+        ]
+       },
+       "highlight": {
+        "n": 2971,
+        "rgb": [
+         205,
+         199,
+         187
+        ]
+       }
+      },
+      "white": {
+       "shade": {
+        "n": 2184,
+        "rgb": [
+         139,
+         134,
+         120
+        ]
+       },
+       "mid": {
+        "n": 1316,
+        "rgb": [
+         203,
+         197,
+         182
+        ]
+       },
+       "light": {
+        "n": 4779,
+        "rgb": [
+         221,
+         216,
+         204
+        ]
+       },
+       "highlight": {
+        "n": 2971,
+        "rgb": [
+         226,
+         221,
+         210
+        ]
+       }
+      }
+     },
+     "checks": {
+      "auburn": {
+       "shade": {
+        "passed": true,
+        "rule": "per channel \u00b112",
+        "delta": [
+         -3,
+         -5,
+         -5
+        ],
+        "luma_delta": -4.6
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         2,
+         3,
+         5
+        ],
+        "luma_delta": 2.9
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         1,
+         4
+        ],
+        "luma_delta": 1.0
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         1,
+         5
+        ],
+        "luma_delta": 1.1
+       }
+      },
+      "dark": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         -6,
+         -4,
+         -4
+        ],
+        "luma_delta": -4.4
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         2,
+         2,
+         -6
+        ],
+        "luma_delta": 1.4
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         2,
+         1,
+         -5
+        ],
+        "luma_delta": 0.8
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         6,
+         0,
+         -8
+        ],
+        "luma_delta": 0.7
+       }
+      },
+      "brown": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         -3,
+         -3,
+         -4
+        ],
+        "luma_delta": -3.1
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -1,
+         2,
+         -2
+        ],
+        "luma_delta": 1.1
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         2,
+         1,
+         1
+        ],
+        "luma_delta": 1.2
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -1,
+         1,
+         -1
+        ],
+        "luma_delta": 0.4
+       }
+      },
+      "light": {
+       "shade": {
+        "passed": true,
+        "rule": "per channel \u00b112",
+        "delta": [
+         1,
+         -5,
+         -3
+        ],
+        "luma_delta": -3.6
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         -1,
+         0
+        ],
+        "luma_delta": -0.7
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -3,
+         -1,
+         -2
+        ],
+        "luma_delta": -1.5
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -2,
+         2,
+         0
+        ],
+        "luma_delta": 1.0
+       }
+      },
+      "grey": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         1,
+         -4,
+         -15
+        ],
+        "luma_delta": -3.7
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         5,
+         -1,
+         -13
+        ],
+        "luma_delta": -0.6
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         4,
+         -2,
+         -14
+        ],
+        "luma_delta": -1.6
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         6,
+         0,
+         -12
+        ],
+        "luma_delta": 0.4
+       }
+      },
+      "white": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 24.8
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 33.8
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 31.8
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 21.9
+       }
+      }
+     },
+     "passed": true
+    },
+    "swept": {
+     "measured": {
+      "auburn": {
+       "shade": {
+        "n": 843,
+        "rgb": [
+         92,
+         57,
+         44
+        ]
+       },
+       "mid": {
+        "n": 1162,
+        "rgb": [
+         154,
+         75,
+         48
+        ]
+       },
+       "light": {
+        "n": 4475,
+        "rgb": [
+         172,
+         89,
+         61
+        ]
+       },
+       "highlight": {
+        "n": 684,
+        "rgb": [
+         187,
+         100,
+         67
+        ]
+       }
+      },
+      "dark": {
+       "shade": {
+        "n": 843,
+        "rgb": [
+         62,
+         57,
+         45
+        ]
+       },
+       "mid": {
+        "n": 1162,
+        "rgb": [
+         57,
+         50,
+         41
+        ]
+       },
+       "light": {
+        "n": 4475,
+        "rgb": [
+         62,
+         58,
+         51
+        ]
+       },
+       "highlight": {
+        "n": 684,
+        "rgb": [
+         93,
+         84,
+         75
+        ]
+       }
+      },
+      "brown": {
+       "shade": {
+        "n": 843,
+        "rgb": [
+         66,
+         58,
+         45
+        ]
+       },
+       "mid": {
+        "n": 1162,
+        "rgb": [
+         88,
+         65,
+         45
+        ]
+       },
+       "light": {
+        "n": 4475,
+        "rgb": [
+         100,
+         74,
+         57
+        ]
+       },
+       "highlight": {
+        "n": 684,
+        "rgb": [
+         112,
+         87,
+         66
+        ]
+       }
+      },
+      "light": {
+       "shade": {
+        "n": 836,
+        "rgb": [
+         142,
+         109,
+         70
+        ]
+       },
+       "mid": {
+        "n": 1162,
+        "rgb": [
+         198,
+         156,
+         90
+        ]
+       },
+       "light": {
+        "n": 4475,
+        "rgb": [
+         211,
+         180,
+         127
+        ]
+       },
+       "highlight": {
+        "n": 684,
+        "rgb": [
+         227,
+         195,
+         138
+        ]
+       }
+      },
+      "grey": {
+       "shade": {
+        "n": 836,
+        "rgb": [
+         121,
+         114,
+         103
+        ]
+       },
+       "mid": {
+        "n": 1161,
+        "rgb": [
+         170,
+         163,
+         151
+        ]
+       },
+       "light": {
+        "n": 4475,
+        "rgb": [
+         190,
+         184,
+         172
+        ]
+       },
+       "highlight": {
+        "n": 684,
+        "rgb": [
+         205,
+         199,
+         187
+        ]
+       }
+      },
+      "white": {
+       "shade": {
+        "n": 836,
+        "rgb": [
+         146,
+         139,
+         125
+        ]
+       },
+       "mid": {
+        "n": 1161,
+        "rgb": [
+         204,
+         197,
+         183
+        ]
+       },
+       "light": {
+        "n": 4475,
+        "rgb": [
+         221,
+         216,
+         204
+        ]
+       },
+       "highlight": {
+        "n": 685,
+        "rgb": [
+         225,
+         220,
+         210
+        ]
+       }
+      }
+     },
+     "checks": {
+      "auburn": {
+       "shade": {
+        "passed": true,
+        "rule": "per channel \u00b112",
+        "delta": [
+         4,
+         1,
+         -1
+        ],
+        "luma_delta": 1.5
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         2,
+         3,
+         5
+        ],
+        "luma_delta": 2.9
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         1,
+         1,
+         5
+        ],
+        "luma_delta": 1.3
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         1,
+         4
+        ],
+        "luma_delta": 1.0
+       }
+      },
+      "dark": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         1,
+         1,
+         0
+        ],
+        "luma_delta": 0.9
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         6,
+         3,
+         -6
+        ],
+        "luma_delta": 3.0
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         3,
+         2,
+         -5
+        ],
+        "luma_delta": 1.7
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         8,
+         2,
+         -7
+        ],
+        "luma_delta": 2.6
+       }
+      },
+      "brown": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         4,
+         2,
+         0
+        ],
+        "luma_delta": 2.3
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         1,
+         2,
+         -2
+        ],
+        "luma_delta": 1.5
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         1,
+         0,
+         1
+        ],
+        "luma_delta": 0.3
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         3,
+         0
+        ],
+        "luma_delta": 2.1
+       }
+      },
+      "light": {
+       "shade": {
+        "passed": true,
+        "rule": "per channel \u00b112",
+        "delta": [
+         7,
+         0,
+         3
+        ],
+        "luma_delta": 1.7
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         -1,
+         -1
+        ],
+        "luma_delta": -0.8
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -3,
+         -1,
+         -1
+        ],
+        "luma_delta": -1.4
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -2,
+         1,
+         0
+        ],
+        "luma_delta": 0.3
+       }
+      },
+      "grey": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         8,
+         1,
+         -10
+        ],
+        "luma_delta": 1.7
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         6,
+         -1,
+         -13
+        ],
+        "luma_delta": -0.4
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         4,
+         -2,
+         -14
+        ],
+        "luma_delta": -1.6
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         6,
+         0,
+         -12
+        ],
+        "luma_delta": 0.4
+       }
+      },
+      "white": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 24.8
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 33.9
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 31.8
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 20.9
+       }
+      }
+     },
+     "passed": true
+    },
+    "short": {
+     "measured": {
+      "auburn": {
+       "shade": {
+        "n": 1141,
+        "rgb": [
+         87,
+         52,
+         40
+        ]
+       },
+       "mid": {
+        "n": 259,
+        "rgb": [
+         149,
+         71,
+         44
+        ]
+       },
+       "light": {
+        "n": 4867,
+        "rgb": [
+         171,
+         88,
+         59
+        ]
+       },
+       "highlight": {
+        "n": 2874,
+        "rgb": [
+         187,
+         99,
+         66
+        ]
+       }
+      },
+      "dark": {
+       "shade": {
+        "n": 1141,
+        "rgb": [
+         57,
+         52,
+         41
+        ]
+       },
+       "mid": {
+        "n": 259,
+        "rgb": [
+         50,
+         47,
+         39
+        ]
+       },
+       "light": {
+        "n": 4867,
+        "rgb": [
+         60,
+         56,
+         49
+        ]
+       },
+       "highlight": {
+        "n": 2874,
+        "rgb": [
+         90,
+         81,
+         73
+        ]
+       }
+      },
+      "brown": {
+       "shade": {
+        "n": 1141,
+        "rgb": [
+         62,
+         53,
+         41
+        ]
+       },
+       "mid": {
+        "n": 256,
+        "rgb": [
+         82,
+         62,
+         43
+        ]
+       },
+       "light": {
+        "n": 4867,
+        "rgb": [
+         98,
+         73,
+         55
+        ]
+       },
+       "highlight": {
+        "n": 2840,
+        "rgb": [
+         110,
+         84,
+         64
+        ]
+       }
+      },
+      "light": {
+       "shade": {
+        "n": 1141,
+        "rgb": [
+         138,
+         107,
+         67
+        ]
+       },
+       "mid": {
+        "n": 259,
+        "rgb": [
+         194,
+         153,
+         89
+        ]
+       },
+       "light": {
+        "n": 4867,
+        "rgb": [
+         211,
+         180,
+         126
+        ]
+       },
+       "highlight": {
+        "n": 2874,
+        "rgb": [
+         227,
+         195,
+         138
+        ]
+       }
+      },
+      "grey": {
+       "shade": {
+        "n": 1141,
+        "rgb": [
+         118,
+         111,
+         100
+        ]
+       },
+       "mid": {
+        "n": 259,
+        "rgb": [
+         166,
+         160,
+         147
+        ]
+       },
+       "light": {
+        "n": 4867,
+        "rgb": [
+         190,
+         184,
+         172
+        ]
+       },
+       "highlight": {
+        "n": 2874,
+        "rgb": [
+         205,
+         199,
+         187
+        ]
+       }
+      },
+      "white": {
+       "shade": {
+        "n": 1141,
+        "rgb": [
+         143,
+         137,
+         123
+        ]
+       },
+       "mid": {
+        "n": 255,
+        "rgb": [
+         200,
+         193,
+         179
+        ]
+       },
+       "light": {
+        "n": 4867,
+        "rgb": [
+         221,
+         216,
+         204
+        ]
+       },
+       "highlight": {
+        "n": 2864,
+        "rgb": [
+         225,
+         221,
+         210
+        ]
+       }
+      }
+     },
+     "checks": {
+      "auburn": {
+       "shade": {
+        "passed": true,
+        "rule": "per channel \u00b112",
+        "delta": [
+         -1,
+         -4,
+         -5
+        ],
+        "luma_delta": -3.4
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -3,
+         -1,
+         1
+        ],
+        "luma_delta": -1.3
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         0,
+         3
+        ],
+        "luma_delta": 0.2
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         0,
+         3
+        ],
+        "luma_delta": 0.2
+       }
+      },
+      "dark": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         -4,
+         -4,
+         -4
+        ],
+        "luma_delta": -4.0
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         -1,
+         0,
+         -8
+        ],
+        "luma_delta": -0.8
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         1,
+         0,
+         -7
+        ],
+        "luma_delta": -0.3
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         5,
+         -1,
+         -9
+        ],
+        "luma_delta": -0.3
+       }
+      },
+      "brown": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         0,
+         -3,
+         -4
+        ],
+        "luma_delta": -2.4
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -5,
+         -1,
+         -4
+        ],
+        "luma_delta": -2.1
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -1,
+         -1,
+         -1
+        ],
+        "luma_delta": -1.0
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -2,
+         0,
+         -2
+        ],
+        "luma_delta": -0.6
+       }
+      },
+      "light": {
+       "shade": {
+        "passed": true,
+        "rule": "per channel \u00b112",
+        "delta": [
+         3,
+         -2,
+         0
+        ],
+        "luma_delta": -0.8
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -4,
+         -4,
+         -2
+        ],
+        "luma_delta": -3.9
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -3,
+         -1,
+         -2
+        ],
+        "luma_delta": -1.5
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -2,
+         1,
+         0
+        ],
+        "luma_delta": 0.3
+       }
+      },
+      "grey": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         5,
+         -2,
+         -13
+        ],
+        "luma_delta": -1.3
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         2,
+         -4,
+         -17
+        ],
+        "luma_delta": -3.7
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         4,
+         -2,
+         -14
+        ],
+        "luma_delta": -1.6
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         6,
+         0,
+         -12
+        ],
+        "luma_delta": 0.4
+       }
+      },
+      "white": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 25.6
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 33.1
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 31.8
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 21.6
+       }
+      }
+     },
+     "passed": true
+    },
+    "swept_braid": {
+     "measured": {
+      "auburn": {
+       "shade": {
+        "n": 7244,
+        "rgb": [
+         84,
+         46,
+         36
+        ]
+       },
+       "mid": {
+        "n": 3865,
+        "rgb": [
+         152,
+         72,
+         44
+        ]
+       },
+       "light": {
+        "n": 5307,
+        "rgb": [
+         171,
+         87,
+         59
+        ]
+       },
+       "highlight": {
+        "n": 3443,
+        "rgb": [
+         186,
+         97,
+         63
+        ]
+       }
+      },
+      "dark": {
+       "shade": {
+        "n": 7244,
+        "rgb": [
+         50,
+         46,
+         37
+        ]
+       },
+       "mid": {
+        "n": 3865,
+        "rgb": [
+         50,
+         46,
+         39
+        ]
+       },
+       "light": {
+        "n": 5307,
+        "rgb": [
+         58,
+         54,
+         48
+        ]
+       },
+       "highlight": {
+        "n": 3443,
+        "rgb": [
+         87,
+         79,
+         71
+        ]
+       }
+      },
+      "brown": {
+       "shade": {
+        "n": 7243,
+        "rgb": [
+         54,
+         47,
+         38
+        ]
+       },
+       "mid": {
+        "n": 3864,
+        "rgb": [
+         84,
+         62,
+         43
+        ]
+       },
+       "light": {
+        "n": 5307,
+        "rgb": [
+         98,
+         72,
+         55
+        ]
+       },
+       "highlight": {
+        "n": 3443,
+        "rgb": [
+         107,
+         82,
+         62
+        ]
+       }
+      },
+      "light": {
+       "shade": {
+        "n": 7244,
+        "rgb": [
+         135,
+         103,
+         63
+        ]
+       },
+       "mid": {
+        "n": 3864,
+        "rgb": [
+         197,
+         155,
+         87
+        ]
+       },
+       "light": {
+        "n": 5307,
+        "rgb": [
+         211,
+         180,
+         126
+        ]
+       },
+       "highlight": {
+        "n": 3443,
+        "rgb": [
+         226,
+         194,
+         136
+        ]
+       }
+      },
+      "grey": {
+       "shade": {
+        "n": 7244,
+        "rgb": [
+         113,
+         108,
+         97
+        ]
+       },
+       "mid": {
+        "n": 3865,
+        "rgb": [
+         168,
+         162,
+         150
+        ]
+       },
+       "light": {
+        "n": 5307,
+        "rgb": [
+         190,
+         184,
+         172
+        ]
+       },
+       "highlight": {
+        "n": 3443,
+        "rgb": [
+         204,
+         198,
+         186
+        ]
+       }
+      },
+      "white": {
+       "shade": {
+        "n": 7243,
+        "rgb": [
+         139,
+         133,
+         119
+        ]
+       },
+       "mid": {
+        "n": 3861,
+        "rgb": [
+         203,
+         197,
+         182
+        ]
+       },
+       "light": {
+        "n": 5307,
+        "rgb": [
+         221,
+         216,
+         204
+        ]
+       },
+       "highlight": {
+        "n": 3440,
+        "rgb": [
+         225,
+         220,
+         210
+        ]
+       }
+      }
+     },
+     "checks": {
+      "auburn": {
+       "shade": {
+        "passed": true,
+        "rule": "per channel \u00b112",
+        "delta": [
+         -4,
+         -10,
+         -9
+        ],
+        "luma_delta": -8.7
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         0,
+         1
+        ],
+        "luma_delta": 0.1
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         0,
+         -1,
+         3
+        ],
+        "luma_delta": -0.5
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -1,
+         -2,
+         0
+        ],
+        "luma_delta": -1.6
+       }
+      },
+      "dark": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         -11,
+         -10,
+         -8
+        ],
+        "luma_delta": -10.1
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         -1,
+         -1,
+         -8
+        ],
+        "luma_delta": -1.5
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         -1,
+         -2,
+         -8
+        ],
+        "luma_delta": -2.2
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         2,
+         -3,
+         -11
+        ],
+        "luma_delta": -2.5
+       }
+      },
+      "brown": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         -8,
+         -9,
+         -7
+        ],
+        "luma_delta": -8.6
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -3,
+         -1,
+         -4
+        ],
+        "luma_delta": -1.6
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -1,
+         -2,
+         -1
+        ],
+        "luma_delta": -1.7
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -5,
+         -2,
+         -4
+        ],
+        "luma_delta": -2.8
+       }
+      },
+      "light": {
+       "shade": {
+        "passed": true,
+        "rule": "per channel \u00b112",
+        "delta": [
+         0,
+         -6,
+         -4
+        ],
+        "luma_delta": -4.6
+       },
+       "mid": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -1,
+         -2,
+         -4
+        ],
+        "luma_delta": -1.9
+       },
+       "light": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -3,
+         -1,
+         -2
+        ],
+        "luma_delta": -1.5
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "per channel \u00b15",
+        "delta": [
+         -3,
+         0,
+         -2
+        ],
+        "luma_delta": -0.8
+       }
+      },
+      "grey": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral: luma \u00b112 and a neutral swatch",
+        "delta": [
+         0,
+         -5,
+         -16
+        ],
+        "luma_delta": -4.7
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         4,
+         -2,
+         -14
+        ],
+        "luma_delta": -1.6
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         4,
+         -2,
+         -14
+        ],
+        "luma_delta": -1.6
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral: luma \u00b15 and a neutral swatch",
+        "delta": [
+         5,
+         -1,
+         -13
+        ],
+        "luma_delta": -0.6
+       }
+      },
+      "white": {
+       "shade": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 25.0
+       },
+       "mid": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 34.8
+       },
+       "light": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 31.8
+       },
+       "highlight": {
+        "passed": true,
+        "rule": "neutral swatch, luma 5+ above grey",
+        "luma_above": 21.9
+       }
+      }
+     },
+     "passed": true
+    }
+   }
+  }
+ ]
+}

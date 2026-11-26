@@ -15,11 +15,13 @@ Free, local, no server: the "runner" is a `sleep`, the journals are files this t
   its journal folder empty).
 """
 import argparse
+import hashlib
 import json
 import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -35,7 +37,9 @@ def check(ok, what):
 
 
 def runner():
-    return subprocess.Popen(["sleep", "60"])
+    process = subprocess.Popen(["sleep", "60"])
+    threading.Thread(target=process.wait, daemon=True).start()
+    return process
 
 
 def watch(tmp, name, journals, *extra, pid=None, timeout=30):
@@ -118,6 +122,63 @@ def main():
     calls = sum(m.get("calls", 0) for m in (paired.get("by_model") or {}).values())
     check(g.returncode == 0 and paired.get("status") == "ended", f"the guarded runner ends normally (exit {g.returncode}, {paired.get('status')})")
     check(calls == 2, f"two runs' journals of one file name both count ({calls} calls)")
+
+    recent = tmp / "recent"
+    recent.mkdir()
+    now = int(time.time() * 1000)
+    records = [json.loads(entry(now - 180_000 + i)) for i in range(50)]
+    for record in records[-6:]:
+        record["error"] = "fixture failure"
+    (recent / "calls.jsonl").write_text("".join(json.dumps(record) + "\n" for record in records))
+    r = runner()
+    result = watch(tmp, "last50", [recent / "*.jsonl"], "--fail-last", "50", pid=r.pid)
+    r.wait(timeout=10)
+    check(result.returncode == 0 and "6/50 over the last 50 calls" in result.stdout,
+          "six failures in the last 50 calls trip outside the two-minute window")
+
+    (recent / "calls.jsonl").write_text(entry(now) + entry(now + 1) + entry(now + 2))
+    r = runner()
+    result = watch(tmp, "callrate", [recent / "*.jsonl"], "--max-calls-per-min", "1", pid=r.pid)
+    r.wait(timeout=10)
+    check(result.returncode == 0 and "runaway call rate: 1.5/min" in result.stdout,
+          "three current calls trip a one-call-per-minute limit")
+
+    source = tmp / "input.txt"
+    source.write_text("original")
+    manifest = tmp / "frozen.json"
+    manifest.write_text(json.dumps({source.name: hashlib.sha256(source.read_bytes()).hexdigest()}))
+    source.write_text("changed")
+    r = runner()
+    result = watch(tmp, "frozen", [recent / "*.jsonl"], "--frozen", str(manifest),
+                   "--ready", str(tmp / "frozen.ready"), pid=r.pid)
+    r.wait(timeout=10)
+    check(result.returncode == 2 and "frozen input changed" in result.stderr
+          and not (tmp / "frozen.ready").exists(), "a frozen input mismatch prevents readiness")
+
+    source.write_text("original")
+    live_ready = tmp / "frozen-live.ready"
+    r = runner()
+    with subprocess.Popen(
+        WATCH + ["--arm", "frozen-live", "--group", "selftest", "--ledger", str(tmp / "ledger.json"),
+                 "--log", str(tmp / "frozen-live.log"), "--group-cap", "1", "--total-cap", "1",
+                 "--interval", "0.5", "--journal", str(recent / "*.jsonl"), "--pid", str(r.pid),
+                 "--frozen", str(manifest), "--ready", str(live_ready)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    ) as guard:
+        deadline = time.monotonic() + 10
+        while not live_ready.exists() and guard.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.1)
+        source.write_text("changed")
+        try:
+            out, _ = guard.communicate(timeout=10)
+        finally:
+            if guard.poll() is None:
+                guard.terminate()
+            if r.poll() is None:
+                r.terminate()
+            r.wait()
+    check(live_ready.exists() and guard.returncode == 0
+          and f"STOP {r.pid}: frozen input changed" in out, "a live frozen input change stops the runner")
 
     # 6. fast-replay without a ready guard makes no call.
     if a.mind_bin:

@@ -1,5 +1,5 @@
 {
- "_doc": "Starting heed policies (heed instincts) per species: seed content, docs/ATTENTION_BUDGET.md §2.4. A character without its own policy keeps track of others by its species' entry (heed_<kind>), else heed_default. A mind may rewrite all of it. Whom one is acting on, and whoever made contact with one within the world's heed_contact_s, are individuals whatever the policy (the engine's, not a rule here). hold_s is hysteresis as policy content: what a rule took stays for that long unless a better rule needs the place. Grammar: living/rules/src/heed.rs.",
+ "_doc": "Starting heed policies (heed instincts) per species: seed content, docs/ATTENTION_BUDGET.md §2.4. A character without its own policy keeps track of others by its species' entry (heed_<kind>), else heed_default. A mind may rewrite all of it. Whom one is acting on, and whoever made contact with one within the world's heed_contact_s, are individuals whatever the policy (the engine's, not a rule here). hold_s is hysteresis as policy content: what a rule took stays for that long unless a better rule needs the place. Grammar: living/rules/src/heed.rs. heed_person is the instinct the owner approved (2026-11-23; docs/ATTENTION_E5.md §8, arm a'): whoever goes for one (`attacker`: winding up at one, or a blow that reached one) first, then whoever speaks to one, whoever one is at enmity with and whoever is visibly hostile toward someone one heeds, before family and plain nearness.",
  "heed_person": {
   "heed": [
    {
@@ -51,6 +51,34 @@
     "take": 4,
     "hold_s": 5,
     "why": "whoever I watch for"
+   },
+   {
+    "if": {
+     "who": {
+      "kind": "person",
+      "relation": "enemy"
+     }
+    },
+    "order": "nearest",
+    "hold_s": 5,
+    "why": "whoever stands against me"
+   },
+   {
+    "if": {
+     "all": [
+      {
+       "acting_on_heeded": true
+      },
+      {
+       "doing": {
+        "is": "hostile"
+       }
+      }
+     ]
+    },
+    "order": "nearest",
+    "hold_s": 3,
+    "why": "whoever is going for someone I watch"
    },
    {
     "if": {
