@@ -1535,10 +1535,14 @@ impl<V: Clone, K: Copy + Eq + std::hash::Hash> WriteCache<V, K> {
     }
 }
 
+/// A chunk's structures as cached: shared rows, so a list drawn from them (a scene's, a
+/// filtered one) copies pointers, not rows.
+pub type ChunkList = Rc<Vec<Rc<Structure>>>;
+
 thread_local! {
     static CHUNK_RESOURCES: RefCell<WriteCache<Rc<Vec<ResourceNode>>>> = RefCell::new(WriteCache::new());
     static STRUCTURES_REVISION: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
-    static CHUNK_STRUCTURES: RefCell<WriteCache<Rc<Vec<Structure>>>> = RefCell::new(WriteCache::new());
+    static CHUNK_STRUCTURES: RefCell<WriteCache<ChunkList>> = RefCell::new(WriteCache::new());
     // A body's kind is fixed. Readability changes when an artifact moves, and these
     // entries are dropped with expired remains. As in the chunk cache, values read
     // after a write in this transaction are reloaded in the next transaction.
@@ -1570,9 +1574,9 @@ fn chunk_resources(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<ResourceNode>> {
     CHUNK_RESOURCES.with(|c| c.borrow_mut().get(t, chunk, || Rc::new(ctx.db.resource_node().chunk().filter(chunk).collect())))
 }
 
-pub(crate) fn chunk_structures(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<Structure>> {
+pub(crate) fn chunk_structures(ctx: &ReducerContext, chunk: u32) -> ChunkList {
     let t = stamp(ctx);
-    CHUNK_STRUCTURES.with(|c| c.borrow_mut().get(t, chunk, || Rc::new(ctx.db.structure().chunk().filter(chunk).collect())))
+    CHUNK_STRUCTURES.with(|c| c.borrow_mut().get(t, chunk, || Rc::new(ctx.db.structure().chunk().filter(chunk).map(Rc::new).collect())))
 }
 
 thread_local! {
@@ -1580,18 +1584,18 @@ thread_local! {
     /// drawn from the chunk's cached list, and drawn again whenever that list is (the same `Rc`
     /// or a new one), so it is never staler than the list itself (docs/BATTLE_SCALE.md,
     /// battle-cheap path 3). Remains and the like are not in it.
-    static CHUNK_WARMING: RefCell<std::collections::HashMap<u32, (Rc<Vec<Structure>>, Rc<Vec<Structure>>)>> = RefCell::new(std::collections::HashMap::new());
+    static CHUNK_WARMING: RefCell<std::collections::HashMap<u32, (ChunkList, ChunkList)>> = RefCell::new(std::collections::HashMap::new());
 }
 
 /// The structures of `chunk` that can warm or shelter, by the installed script's traits.
-pub fn chunk_warming(ctx: &ReducerContext, chunk: u32) -> Rc<Vec<Structure>> {
+pub fn chunk_warming(ctx: &ReducerContext, chunk: u32) -> ChunkList {
     let all = chunk_structures(ctx, chunk);
     let rev = scripts_rev(ctx);
     if let Some(w) = CHUNK_WARMING.with(|c| c.borrow().get(&chunk).filter(|(src, _)| Rc::ptr_eq(src, &all)).map(|(_, w)| w.clone())).filter(|_| WARMING_REV.with(|r| r.get()) == rev) {
         return w;
     }
     let sc = scripts(ctx);
-    let w: Rc<Vec<Structure>> = Rc::new(all.iter().filter(|s| { let t = sc.structure(&s.kind); t.roof || t.warms || t.burns.is_some() }).cloned().collect());
+    let w: ChunkList = Rc::new(all.iter().filter(|s| { let t = sc.structure(&s.kind); t.roof || t.warms || t.burns.is_some() }).cloned().collect());
     CHUNK_WARMING.with(|c| {
         let mut c = c.borrow_mut();
         if WARMING_REV.with(|r| r.get()) != rev {
@@ -1626,11 +1630,11 @@ thread_local! {
     /// A `BTreeMap`, not a `HashMap`: std's `RandomState::new()` advances a per-thread key at each
     /// call, so one more `HashMap` made in an instance changes the hash order of every later one
     /// (det_compare found the module's `seen_stock` ids permuted by exactly that).
-    static CHUNK_FEW: RefCell<(u32, std::collections::BTreeMap<(Few, u32), (Rc<Vec<Structure>>, Rc<Vec<Structure>>)>)> = const { RefCell::new((u32::MAX, std::collections::BTreeMap::new())) };
+    static CHUNK_FEW: RefCell<(u32, std::collections::BTreeMap<(Few, u32), (ChunkList, ChunkList)>)> = const { RefCell::new((u32::MAX, std::collections::BTreeMap::new())) };
 }
 
 /// The structures of `chunk` that `which` reads, in the chunk list's order.
-pub fn chunk_few(ctx: &ReducerContext, chunk: u32, which: Few) -> Rc<Vec<Structure>> {
+pub fn chunk_few(ctx: &ReducerContext, chunk: u32, which: Few) -> ChunkList {
     let all = chunk_structures(ctx, chunk);
     let rev = scripts_rev(ctx);
     if let Some(v) = CHUNK_FEW.with(|c| {
@@ -1639,7 +1643,7 @@ pub fn chunk_few(ctx: &ReducerContext, chunk: u32, which: Few) -> Rc<Vec<Structu
     }) {
         return v;
     }
-    let v: Rc<Vec<Structure>> = match which {
+    let v: ChunkList = match which {
         Few::Lights => {
             let sc = scripts(ctx);
             Rc::new(all.iter().filter(|s| sc.structure(&s.kind).light() > 0.0).cloned().collect())
@@ -1657,9 +1661,49 @@ pub fn chunk_few(ctx: &ReducerContext, chunk: u32, which: Few) -> Rc<Vec<Structu
     v
 }
 
+/// What a chunk's cached structure list holds, in brief: its highest id and the box round its
+/// rows (`noticed`'s chunk-level pass, growth-fix-2). `None` for an empty chunk.
+#[derive(Clone, Copy)]
+pub struct ChunkBrief {
+    pub max_id: u64,
+    pub lo: (f32, f32),
+    pub hi: (f32, f32),
+}
+
+impl ChunkBrief {
+    /// The farthest distance from `at` to any point of the box.
+    pub fn farthest(&self, at: (f32, f32)) -> f32 {
+        let dx = (at.0 - self.lo.0).abs().max((self.hi.0 - at.0).abs());
+        let dy = (at.1 - self.lo.1).abs().max((self.hi.1 - at.1).abs());
+        (dx * dx + dy * dy).sqrt()
+    }
+}
+
+thread_local! {
+    /// Per chunk, the brief of its cached list, drawn again whenever the list is (a `BTreeMap`:
+    /// no `RandomState`, see `CHUNK_FEW`).
+    static CHUNK_BRIEF: RefCell<std::collections::BTreeMap<u32, (ChunkList, Option<ChunkBrief>)>> = const { RefCell::new(std::collections::BTreeMap::new()) };
+}
+
+/// `chunk`'s cached structures and their brief.
+pub fn chunk_brief(ctx: &ReducerContext, chunk: u32) -> (ChunkList, Option<ChunkBrief>) {
+    let all = chunk_structures(ctx, chunk);
+    if let Some(b) = CHUNK_BRIEF.with(|c| c.borrow().get(&chunk).filter(|(src, _)| Rc::ptr_eq(src, &all)).map(|(_, b)| *b)) {
+        return (all, b);
+    }
+    let b = all.iter().fold(None, |b: Option<ChunkBrief>, s| {
+        Some(match b {
+            None => ChunkBrief { max_id: s.id, lo: (s.x, s.y), hi: (s.x, s.y) },
+            Some(b) => ChunkBrief { max_id: b.max_id.max(s.id), lo: (b.lo.0.min(s.x), b.lo.1.min(s.y)), hi: (b.hi.0.max(s.x), b.hi.1.max(s.y)) },
+        })
+    });
+    CHUNK_BRIEF.with(|c| c.borrow_mut().insert(chunk, (all.clone(), b)));
+    (all, b)
+}
+
 /// [`structures_near`] of only the structures `which` reads: the same rows in the same order
 /// (nearest first, a stable sort of the chunks' order), without walking or copying the rest.
-pub fn few_near(ctx: &ReducerContext, at: (f32, f32), r: f32, which: Few) -> Vec<(Structure, f32)> {
+pub fn few_near(ctx: &ReducerContext, at: (f32, f32), r: f32, which: Few) -> Vec<(Rc<Structure>, f32)> {
     let mut out = Vec::new();
     for c in chunks_around(at.0, at.1, r) {
         for s in chunk_few(ctx, c, which).iter() {
@@ -1681,6 +1725,15 @@ pub fn invalidate_resources(ctx: &ReducerContext, chunk: Option<u32>) {
 
 pub(crate) fn structures_revision() -> u64 {
     STRUCTURES_REVISION.with(std::cell::Cell::get)
+}
+
+/// [`invalidate_structures`] for a write to one chunk's structures only (a body's remains made
+/// or gone): the other chunks' cached lists stay (growth-fix-2; every death reloaded every
+/// chunk's list, the battle's crowded ones included).
+pub fn invalidate_structures_in(ctx: &ReducerContext, chunk: u32) {
+    STRUCTURES_REVISION.with(|revision| revision.set(revision.get().wrapping_add(1)));
+    let t = stamp(ctx);
+    CHUNK_STRUCTURES.with(|c| c.borrow_mut().invalidate(t, Some(chunk)));
 }
 
 /// Call before inserting a structure.
@@ -1722,9 +1775,17 @@ pub fn resources_near(ctx: &ReducerContext, at: (f32, f32), r: f32) -> Vec<(Reso
     out
 }
 
-pub fn structures_near(ctx: &ReducerContext, at: (f32, f32), r: f32) -> Vec<(Structure, f32)> {
+pub fn structures_near(ctx: &ReducerContext, at: (f32, f32), r: f32) -> Vec<(Rc<Structure>, f32)> {
+    // Shared rows, not copies: a battle's remains put thousands in sight (growth-fix-2).
     let mut out = Vec::new();
-    for_structures_near(ctx, at, r, |s, d| out.push((s.clone(), d)));
+    for c in chunks_around(at.0, at.1, r) {
+        for s in chunk_structures(ctx, c).iter() {
+            let d = dist(at, (s.x, s.y));
+            if d <= r {
+                out.push((s.clone(), d));
+            }
+        }
+    }
     out.sort_by(|a, b| a.1.total_cmp(&b.1));
     out
 }

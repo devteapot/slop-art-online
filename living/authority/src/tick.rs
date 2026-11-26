@@ -303,6 +303,7 @@ fn expire_remains(ctx: &ReducerContext, now: u64) {
     if due.is_empty() {
         return;
     }
+    let mut missing = false;
     for r in due {
         ctx.db.rot().structure().delete(r.structure);
         let owner = STRUCTURE_BIT | r.structure;
@@ -313,9 +314,16 @@ fn expire_remains(ctx: &ReducerContext, now: u64) {
             ctx.db.inventory().id().delete(i);
         }
         common::invalidate_remains_label(ctx, r.structure);
+        match ctx.db.structure().id().find(r.structure) {
+            Some(st) => common::invalidate_structures_in(ctx, st.chunk),
+            None => missing = true,
+        }
         ctx.db.structure().id().delete(r.structure);
     }
-    common::invalidate_structures(ctx);
+    // A rot row whose structure was already gone: the whole map, as before.
+    if missing {
+        common::invalidate_structures(ctx);
+    }
 }
 
 fn spoil(ctx: &ReducerContext, now: u64) {
