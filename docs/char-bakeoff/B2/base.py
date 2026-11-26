@@ -27,13 +27,13 @@ BASE = dict(sh_w=0.0, chest=1.0, chest_d=1.0, bust=1.0, waist=1.0, hip=1.0, bell
             leg=1.0, hand=1.0, foot=1.0, head=1.0, jaw=1.0, chin=0.0, cheek=0.0, brow=0.0, stoop=0.0,
             chin_n=1.5, butt=1.0)
 MORPHS = {
-    'Sex_Male':   dict(sh_w=0.032, chest=1.12, chest_d=1.03, bust=0.0, waist=1.19, hip=0.93, neck=1.40, arm=1.20,
+    'Sex_Male':   dict(sh_w=0.032, chest=1.12, chest_d=1.03, bust=0.0, waist=1.19, hip=0.93, neck=1.40, arm=1.15,
                        leg=1.09, hand=1.13, foot=1.10, jaw=1.17, chin=0.008, brow=0.004, cheek=-0.002, head=1.0, butt=0.9),
     'Age_Child':  dict(head=1.30, sh_w=-0.012, chest=0.95, bust=0.0, waist=1.14, hip=0.90, belly=0.008, neck=0.92,
                        arm=1.04, leg=1.05, jaw=0.95, chin=-0.006, cheek=0.004, hand=1.05, foot=1.04, butt=0.9),
     'Age_Elder':  dict(stoop=0.030, bust=0.45, waist=1.13, belly=0.012, neck=0.95, arm=0.92, leg=0.93,
                        cheek=-0.004, chin=0.003, jaw=1.02, sh_w=-0.008, butt=0.92),
-    'Build_Heavy': dict(waist=1.32, hip=1.15, chest=1.12, chest_d=1.10, belly=0.030, arm=1.22, leg=1.18, neck=1.16,
+    'Build_Heavy': dict(waist=1.32, hip=1.15, chest=1.12, chest_d=1.10, belly=0.030, arm=1.14, leg=1.16, neck=1.16,
                         cheek=0.006, jaw=1.08, butt=1.1),
     'Build_Slim': dict(waist=0.92, hip=0.95, chest=0.96, arm=0.90, leg=0.92, neck=0.94, cheek=-0.003),
     'Face_Round': dict(cheek=0.006, chin=-0.005, jaw=1.07),
@@ -88,7 +88,7 @@ ARMALPHA = [-72, -36, 0, 36, 72, 108, 144, 180, 216, 252]
 LEG = [  # z, rx, ry, cy offset, group
     (.775, .080, .086, .004, 'thigh'), (.680, .071, .076, .002, 'thigh'), (.570, .060, .064, .0, 'thigh'),
     (.515, .053, .057, -.003, 'knee'), (.474, .049, .054, -.007, 'knee'), (.435, .046, .050, -.001, 'knee'),
-    (.360, .053, .058, .010, 'calf'), (.250, .040, .042, .005, 'calf'), (.160, .032, .034, .0, 'ankle'),
+    (.360, .055, .058, .010, 'calf'), (.250, .040, .042, .005, 'calf'), (.160, .032, .034, .0, 'ankle'),
     (.115, .030, .033, .0, 'ankle'),
 ]
 FOOT = [  # centre s, centre z, axis (ds, dz), lateral radius
@@ -127,7 +127,7 @@ def positions(P):
                 y -= P['bust'] * {1: .018, 2: .025, 3: .006}[jj] * {5: .35, 6: 1.0, 7: .5}[k]
                 if k == 5: zz -= 0.006 * P['bust']
             V[('T', k, j)] = np.array([x, y + st, zz])
-    V[('C',)] = np.array([0, .008, .803])
+    V[('C',)] = np.array([0, .008, .797])
     # ---- head (rings NTOR .. NTOR+len(HEAD)-1, then the pole)
     hs = HS * P['head']
     st = 0.0
@@ -211,7 +211,7 @@ def positions(P):
         for i, ph in enumerate(LEGPHI):
             ph = math.radians(ph)
             x = cx + rx * m * math.sin(ph)
-            if r <= 2: x = max(x, .010 if r == 1 else .014)
+            if r <= 2: x = max(x, .016)
             V[('L', r, i)] = np.array([x, c[1] + cyo - ry * m * math.cos(ph), z])
     ff = nrm([.141, -.99, 0]); fp = np.array([.99, .141, 0]); fs = P['foot']
     for q, (s, zc, (ads, adz), rl) in enumerate(FOOT):
@@ -439,7 +439,7 @@ def bake(cage, arm, name):
 def add_keys(ob, base, cols):
     ob.shape_key_add(name='Basis', from_mix=False)
     for n, c in cols.items():
-        k = ob.shape_key_add(name=n, from_mix=False); k.data.foreach_set('co', np.asarray(c, float).ravel())
+        k = ob.shape_key_add(name=n, from_mix=False); k.data.foreach_set('co', np.asarray(c, float).ravel()); k.value = 0.0
 
 def skin_to(ob, arm):
     ob.parent = arm; ob.matrix_parent_inverse = arm.matrix_world.inverted()
@@ -481,28 +481,48 @@ def white(me, shade=None):
     try: me.color_attributes.render_color_index = list(me.color_attributes).index(ca)
     except Exception: pass
 
-def decal_from(body, base, cols, arm):
-    """the face's front as its own thin layer, for the painted eyes, brows and mouth (unshaded in the game)"""
+ZS = -0.0385      # the middle of the texture's lower strip, where the shut eyes and the open mouth are painted
+MZ = 0.0068
+
+def decal_from(body, base, base0, face_polys, spec):
+    """The face's front as its own thin layer for the painted eyes, brows and mouth (unshaded in the game).
+    A second set of patches lies 1.2 mm under the skin with the shut eyes and the open mouth; the two
+    expressions the game drives (Fcl_EYE_Close, Fcl_MTH_A) sink the open ones and raise these."""
     me = body.data
-    fi = MATS.index('face')
-    polys = [p for p in me.polygons if p.material_index == fi]
+    polys = [me.polygons[i] for i in face_polys]
     vs = sorted({v for p in polys for v in p.vertices}); re = {v: i for i, v in enumerate(vs)}
-    nrmls = np.array([me.vertices[v].normal[:] for v in vs])
-    off = nrmls * 0.0007
-    co = base[vs] + off
+    nr = np.array([me.vertices[v].normal[:] for v in vs])
+    l = (base0[vs] - HJ) / HS; lx, lz = l[:, 0], l[:, 2]      # the unmixed base: the map and the regions are the head's own
+    ex, ez, hw, hh = spec['ex'], spec['ez'], spec['hw'], spec['hh']
+    in_eye = ((np.abs(lx) - ex) / (hw + .006)) ** 2 + ((lz - ez) / (hh + .005)) ** 2 < 1
+    in_mouth = (np.abs(lx) < spec['mouth_w'] + .009) & (np.abs(lz - MZ) < .009)
+    faces = [[re[v] for v in p.vertices] for p in polys]
+    co = [base[vs] + nr * 0.0007]; uvs = [np.stack([(lx + 0.09) / 0.18, (lz + 0.05) / 0.18], 1)]
+    src = [np.arange(len(vs))]; allf = list(faces)
+    d_eye = [np.where(in_eye[:, None], -nr * .0016, 0)]; d_mth = [np.where(in_mouth[:, None], -nr * .0016, 0)]
+    n = len(vs)
+    for mask, dz, dl in ((in_eye, ez - ZS, d_eye), (in_mouth, MZ - ZS, d_mth)):
+        fs = [f for f in faces if any(mask[v] for v in f)]
+        ids = sorted({v for f in fs for v in f}); rm = {v: n + i for i, v in enumerate(ids)}
+        ids = np.array(ids)
+        co.append(base[vs][ids] - nr[ids] * .0012); uvs.append(np.stack([(lx[ids] + 0.09) / 0.18, (lz[ids] - dz + 0.05) / 0.18], 1))
+        src.append(ids); allf += [[rm[v] for v in f] for f in fs]
+        for other in (d_eye, d_mth):
+            other.append(nr[ids] * .0026 if other is dl else np.zeros((len(ids), 3)))
+        n += len(ids)
+    co = np.concatenate(co); uvs = np.concatenate(uvs); src = np.concatenate(src)
     dm = bpy.data.meshes.new('FaceLayer')
-    dm.from_pydata(co.tolist(), [], [[re[v] for v in p.vertices] for p in polys]); dm.update()
+    dm.from_pydata(co.tolist(), [], allf); dm.update()
     for p in dm.polygons: p.use_smooth = True
     uv = dm.uv_layers.new(name='UVMap')
-    l = (base[vs] - HJ) / HS
-    for lp in dm.loops:
-        x, z = l[lp.vertex_index][0], l[lp.vertex_index][2]
-        uv.data[lp.index].uv = ((x + 0.09) / 0.18, (z + 0.05) / 0.18)
+    for lp in dm.loops: uv.data[lp.index].uv = uvs[lp.vertex_index]
     ob = bpy.data.objects.new('FaceLayer', dm); bpy.context.scene.collection.objects.link(ob)
-    g = ob.vertex_groups.new(name='J_Bip_C_Head'); g.add(list(range(len(vs))), 1.0, 'REPLACE')
+    g = ob.vertex_groups.new(name='J_Bip_C_Head'); g.add(list(range(len(co))), 1.0, 'REPLACE')
     white(dm)
-    for p in polys: p.material_index = 0
-    return ob, co, {n: c[vs] + off for n, c in cols.items()}
+    off = co - base[vs][src]
+    vsa = np.array(vs)[src]
+    fcl = {'Fcl_EYE_Close': np.concatenate(d_eye), 'Fcl_MTH_A': np.concatenate(d_mth)}
+    return ob, vsa, off, fcl
 
 def glb_patch(path, colours):
     """write each material's own colour as its base colour factor; unlit-safe roughness"""
@@ -543,7 +563,11 @@ def main():
         if m.type == 'ARMATURE': m.show_viewport = False
     body, base, cols = bake(cage, arm, 'Body')
     tex_dir = ARGS[ARGS.index('--tex') + 1] if '--tex' in ARGS else OUT
-    decal, dbase, dcols = decal_from(body, base, cols, arm)
+    fi = MATS.index('face')
+    face_polys = [p.index for p in body.data.polygons if p.material_index == fi]
+    for i in face_polys: body.data.polygons[i].material_index = 0
+    import facetex
+    decal = None
     white(body.data, body_tint(base))
     mats = {}
     c0 = CHARS['woman']
@@ -567,13 +591,18 @@ def main():
             p = b.copy()
             for n, w in mix.items(): p += w * (cs[n] - b)
             return p
-        bco = mixed(base, cols); dco = mixed(dbase, dcols)
+        bco = mixed(base, cols)
         body.shape_key_clear() if body.data.shape_keys else None
-        decal.shape_key_clear() if decal.data.shape_keys else None
         body.data.vertices.foreach_set('co', bco.ravel()); body.data.update()
-        decal.data.vertices.foreach_set('co', dco.ravel()); decal.data.update()
+        tname = name if name != 'base' else 'woman'
+        if decal is not None: bpy.data.objects.remove(decal, do_unlink=True)
+        decal, vsa, off, fcl = decal_from(body, bco, base, face_polys, facetex.SPECS[tname])
+        dco = bco[vsa] + off
+        dkeys = {n: dco + d for n, d in fcl.items()}
         if ch.get('morphs'):
-            add_keys(body, base, cols); add_keys(decal, dbase, dcols)
+            add_keys(body, base, cols)
+            dkeys.update({n: dco + (c[vsa] - base[vsa]) for n, c in cols.items()})
+        add_keys(decal, dco, dkeys)
         for t in MATS[:4]:
             col = srgb(ch['skin' if t == 'skin' else t]); mats[t]['b2_col'] = col
             mats[t].node_tree.nodes['Mix'].inputs[6].default_value = col
@@ -583,7 +612,8 @@ def main():
             img = bpy.data.images.load(tex, check_existing=True)
             dm = bpy.data.materials.get('FACE_' + os.path.basename(tex)) or material('FACE_' + os.path.basename(tex), (1, 1, 1, 1), img)
             o.data.materials.append(dm)
-        skin_to(decal, arm) if decal.parent is None else None
+        arm.scale = (CHARS['woman']['scale'],) * 3; bpy.context.view_layer.update()
+        skin_to(decal, arm)
         # head scale of this mix, for the hair
         hscale = 1.0 + sum(w * (MORPHS[n].get('head', 1.0) - 1.0) for n, w in mix.items())
         for o in [o for o in bpy.data.objects if o.name.startswith('Hair')]: bpy.data.objects.remove(o, do_unlink=True)
@@ -599,7 +629,7 @@ def main():
         bpy.context.view_layer.objects.active = arm
         bpy.ops.export_scene.gltf(filepath=path, use_selection=True, export_format='GLB', export_animations=True,
                                   export_animation_mode='ACTIONS', export_vertex_color='ACTIVE', export_all_vertex_colors=False,
-                                  export_morph=bool(ch.get('morphs')), export_morph_normal=False, export_skins=True,
+                                  export_morph=True, export_morph_normal=False, export_skins=True,
                                   export_yup=True, export_apply=False, export_optimize_animation_size=True,
                                   export_image_format='AUTO')
         cols_out = {MATNAME[t]: mats[t]['b2_col'] for t in MATS[:4]}; cols_out[MATNAME['hair']] = srgb(ch['hair'])

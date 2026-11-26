@@ -4,7 +4,10 @@
 # x -0.09..0.09, z -0.05..0.13, the same planar map base.py gives the face layer.
 # Usage: facetex.py OUT_DIR [name...]
 import sys, os, math, random
-from PIL import Image, ImageDraw, ImageFilter
+try:
+    from PIL import Image, ImageDraw, ImageFilter
+except ImportError:      # Blender's Python: base.py only reads SPECS
+    Image = None
 
 S = 2048
 def px(x, z): return ((x + 0.09) / 0.18 * S, (1 - (z + 0.05) / 0.18) * S)
@@ -45,10 +48,10 @@ SPECS = {
     'woman': dict(hw=.0178, hh=.0152, ex=.0335, ez=.0595, tilt=.0020, iris='#5f8f5a', lash='#3a1f18', brow='#7a3420',
                   brow_w=.0030, brow_z=.0235, lashw=.0034, blush=.30, mouth='#a24a44', mouth_w=.0125, freckles=True, smile=.0016),
     'man': dict(hw=.0160, hh=.0090, ex=.0335, ez=.061, tilt=.0006, iris='#6b5a3c', lash='#241a16', brow='#241d1a',
-                brow_w=.0046, brow_z=.0205, lashw=.0026, blush=.06, mouth='#8a4a40', mouth_w=.0150, smile=.0004, lower_lash=False),
+                brow_w=.0046, brow_z=.0205, lashw=.0026, blush=.06, mouth='#8a4a40', mouth_w=.0150, smile=.0004, lower_lash=False, nose_len=.012),
     'elder': dict(hw=.0150, hh=.0088, ex=.0335, ez=.061, tilt=-.0008, iris='#6d8794', lash='#4a403c', brow='#b9b9b6',
                   brow_w=.0044, brow_z=.0215, lashw=.0022, blush=.10, mouth='#8a5048', mouth_w=.0140, smile=.0002, lower_lash=False,
-                  wrinkles=True, moustache='#cfcfcc'),
+                  wrinkles=True, moustache='#cfcfcc', nose_len=.014),
     'child': dict(hw=.0188, hh=.0170, ex=.0345, ez=.057, tilt=.0010, iris='#7a5a2e', lash='#3a2416', brow='#8a5a22',
                   brow_w=.0022, brow_z=.0300, lashw=.0028, blush=.38, mouth='#b0504a', mouth_w=.0095, smile=.0022, freckles=False),
 }
@@ -127,7 +130,8 @@ def paint(name, path):
     d = ImageDraw.Draw(img)
     sh = hexa(SKIN_SHADOW, 205)
     # the nose: a small shaded wedge on one side and the tip's underline
-    d.polygon([px(.0012, .0455), px(.0058, .0325), px(.0010, .0315)], fill=hexa(SKIN_SHADOW, 120))
+    nl = sp.get('nose_len', 0.0)
+    d.polygon([px(.0012, .0455 + nl), px(.0058 + nl * .12, .0325), px(.0010, .0315)], fill=hexa(SKIN_SHADOW, 120 + int(nl * 2500)))
     stroke(d, cr([(-.0040, .0300), (0, .0288), (.0042, .0300)]), lambda t: .00050 * math.sin(math.pi * t) + .00012, sh)
     # the mouth
     mw = sp['mouth_w']; mz = .0068; mc = hexa(sp['mouth'])
@@ -151,6 +155,21 @@ def paint(name, path):
             stroke(d, ms, lambda t: .0042 * (1 - t) ** .8 + .0003, mcol)
             ms2 = cr([(sg * .0020, .0200), (sg * .0100, .0160), (sg * .0170, .0100)])
             stroke(d, ms2, lambda t: .0006 * math.sin(math.pi * t) + .0001, mixc(mcol, (90, 90, 96), .5))
+    # the lower strip (under the chin, unused by the open face): the shut eyes and the open mouth, each drawn
+    # round ZS where base.py's hidden patches look for them
+    ZS = -0.0385
+    lc = hexa(sp['lash']); hw, ex = sp['hw'], sp['ex']
+    for sg in (-1, 1):
+        arc = cr([(sg * (ex - hw), ZS + .0018), (sg * (ex - .35 * hw), ZS - .0022), (sg * (ex + .30 * hw), ZS - .0026), (sg * (ex + hw + .0015), ZS + .0030)])
+        stroke(d, arc, lambda t: sp['lashw'] * .5 * (0.45 + 0.55 * math.sin(math.pi * t) ** .7) * (0.8 + 0.4 * t) + .0003, lc)
+        for k, (ox, ln) in enumerate(((.55, .0036), (.80, .0040), (1.0, .0036))):
+            x0 = ex + hw * ox; z0 = ZS - .0022 + .0034 * max(0, ox - .45) ** 1.5 * 3
+            stroke(d, [(sg * x0, z0), (sg * (x0 + ln * .55), z0 - ln * .8)], lambda t: .0006 * (1 - t) + .00012, lc)
+        fold = cr([(sg * (ex - .7 * hw), ZS + .0062), (sg * ex, ZS + .0040), (sg * (ex + .8 * hw), ZS + .0070)])
+        stroke(d, fold, lambda t: .00045 * math.sin(math.pi * t) + .0001, hexa(SKIN_SHADOW, 190))
+    mw = sp['mouth_w'] * .56
+    ell(d, 0, ZS, mw + .0008, .0056, mixc(mc, (60, 20, 20), .45)); ell(d, 0, ZS, mw, .0048, (92, 34, 36, 255))
+    ell(d, 0, ZS - .0030, mw * .62, .0020, (214, 120, 118, 255))
     img = img.resize((1024, 1024), Image.LANCZOS)
     img.save(path)
 

@@ -4,9 +4,11 @@ import bpy, sys, math
 from mathutils import Vector
 a = sys.argv[sys.argv.index('--') + 1:]
 out = a[0]; views = (a[1] if len(a) > 1 else 'front,side,back,tq,face').split(',')
-clip = a[2] if len(a) > 2 and ':' in a[2] else None
+clip = a[2] if len(a) > 2 and ':' in a[2] and not a[2].startswith('key:') else None
 wire = 'wire' in a
 sc = bpy.context.scene
+for k in [x[4:] for x in a if x.startswith('key:')]:        # key:Fcl_EYE_Close=1 sets an expression on the face layer
+    n, v = k.split('='); bpy.data.objects['FaceLayer'].data.shape_keys.key_blocks[n].value = float(v)
 arm = next(o for o in bpy.data.objects if o.type == 'ARMATURE')
 if clip:
     n, f = clip.split(':'); act = bpy.data.actions[n]
@@ -16,12 +18,19 @@ if clip:
     for t in arm.animation_data.nla_tracks: t.mute = True
     sc.frame_set(int(f))
 else:
-    if arm.animation_data:
-        arm.animation_data.action = None
-        for t in arm.animation_data.nla_tracks: t.mute = True
+    arm.animation_data_clear()
     for pb in arm.pose.bones: pb.matrix_basis.identity()
 S = arm.scale[0] / 0.9265
 sc.render.engine = 'BLENDER_WORKBENCH' if wire else 'BLENDER_EEVEE'
+cage = 'cage' in a
+if cage:
+    for o in bpy.data.objects:
+        if o.type == 'MESH': o.hide_render = o.name != 'BaseCage'
+    c = bpy.data.objects['BaseCage']
+    for m in c.modifiers:
+        if m.type == 'SUBSURF': m.show_render = False
+    w_ = c.modifiers.new('w', 'WIREFRAME'); w_.thickness = 0.0022; w_.use_replace = False
+    for pl in c.data.polygons: pl.use_smooth = False
 if wire:
     sh = sc.display.shading; sh.light = 'STUDIO'; sh.color_type = 'MATERIAL'; sh.show_object_outline = True
     sc.display.render_aa = '8'
