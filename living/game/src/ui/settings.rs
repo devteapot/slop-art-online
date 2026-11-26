@@ -55,6 +55,10 @@ pub struct FacingSight;
 /// A binding's chip: its act and which of its keys.
 #[derive(Component)]
 pub struct BindChip(Act, usize);
+/// A Settings row or heading for heed for players (the throng's switch, the keeping-track
+/// keys), with its display when shown: shown only while the world's laws let players heed ([`heed_only`]).
+#[derive(Component)]
+pub struct HeedOnly(Display);
 #[derive(Component)]
 pub struct BindText(Act, usize);
 #[derive(Component)]
@@ -91,6 +95,8 @@ fn act_label(a: Act, names: &SkillNames) -> String {
         Act::Log => "Log and people".into(),
         Act::NorthUp => "Snap camera north".into(),
         Act::Glance => "Glance with the camera (hold)".into(),
+        Act::Pin => "Keep track of whoever you point at (again: stop)".into(),
+        Act::ClearPins => "Stop keeping track of everyone".into(),
     }
 }
 
@@ -131,6 +137,10 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                 row(pg, f, "Film", "The warm haze from the top of the screen. Soft keeps dark colours; Full lifts them too", |c| kit::seg(c, f, "settings:film", &crate::post::Film::ALL.map(|m| (m.label(), m.name()))));
                 row(pg, f, "Hair shine", "The highlight on hair. Crown lies over the crown and stays off a fringe", |c| kit::seg(c, f, "settings:hair", &crate::style::HairShine::choices()));
                 row(pg, f, "Weapon", "Draw it by itself when something attacks you", |c| kit::toggle(c, "settings:auto_draw"));
+                // Heed for players (`heed.rs`): shown only while the world's laws let players
+                // heed, so a world without it shows the page as before.
+                let r = row_entity(pg, f, "The throng", "Those you see but don't keep track of, drawn as simple figures", |c| kit::toggle(c, "settings:throng"));
+                pg.commands().entity(r).insert(HeedOnly(Display::Grid));
                 // Facing sight: on/off, the switch where the launcher allows it, and the field's
                 // five values (filled by `ui/facing.rs`).
                 pg.spawn((FacingSight, Node { display: Display::None, flex_direction: FlexDirection::Column, ..default() }, Pickable::IGNORE));
@@ -152,15 +162,21 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
             body.spawn((PageBody(Page::Controls), Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, display: Display::None, ..default() }, Pickable::IGNORE)).with_children(|pg| {
                 row(pg, f, "Skill keys", "Mouse buttons stay the basic attacks", |c| kit::seg(c, f, "settings:preset", &[("Q E R, plus 1–9", "letters"), ("1–9 only", "numbers"), ("My own", "own")]));
                 pg.spawn((Node { display: Display::Grid, grid_template_columns: RepeatedGridTrack::fr(2, 1.0), column_gap: Val::Px(26.0), ..default() }, Pickable::IGNORE)).with_children(|grid| {
-                    let groups: [(&str, Vec<Act>); 3] = [
+                    let groups: [(&str, Vec<Act>); 4] = [
                         ("Moving", vec![Act::Forward, Act::Back, Act::Left, Act::Right, Act::Run, Act::Jump, Act::Dodge, Act::Glance, Act::NorthUp]),
                         ("Fighting", { let mut v = vec![Act::Weapon, Act::Primary, Act::Secondary, Act::Skill1, Act::Skill2, Act::Skill3]; v.extend((0..crate::keys::EXTRA).map(Act::Extra)); v }),
                         ("People and things", vec![Act::Interact, Act::Talk, Act::Address, Act::Way, Act::Wave, Act::Nod, Act::LookOver, Act::Pack, Act::Character, Act::Skills, Act::Log]),
+                        // Heed for players: shown only while the world's laws let players heed.
+                        ("Keeping track", vec![Act::Pin, Act::ClearPins]),
                     ];
                     for (head, acts) in groups {
-                        grid.spawn((Node { grid_column: GridPlacement::span(2), margin: UiRect::new(Val::Px(0.0), Val::Px(0.0), Val::Px(8.0), Val::Px(2.0)), ..default() }, Text::new(head), wood::tface(&f, 16.0), TextColor(wood::heading()), Pickable::IGNORE));
+                        let heed = head == "Keeping track";
+                        let h = grid.spawn((Node { grid_column: GridPlacement::span(2), margin: UiRect::new(Val::Px(0.0), Val::Px(0.0), Val::Px(8.0), Val::Px(2.0)), ..default() }, Text::new(head), wood::tface(&f, 16.0), TextColor(wood::heading()), Pickable::IGNORE)).id();
+                        if heed {
+                            grid.commands().entity(h).insert(HeedOnly(Display::Flex));
+                        }
                         for a in acts {
-                            grid.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, justify_content: JustifyContent::SpaceBetween, column_gap: Val::Px(8.0), padding: UiRect::vertical(Val::Px(3.0)), border: UiRect::bottom(Val::Px(1.5)), ..default() }, BorderColor::all(wood::line()), Pickable::IGNORE)).with_children(|r| {
+                            let row_e = grid.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, justify_content: JustifyContent::SpaceBetween, column_gap: Val::Px(8.0), padding: UiRect::vertical(Val::Px(3.0)), border: UiRect::bottom(Val::Px(1.5)), ..default() }, BorderColor::all(wood::line()), Pickable::IGNORE)).with_children(|r| {
                                 r.spawn((BindName(a), Text::new(act_label(a, &names)), wood::ink(f, 13.5, 700), Pickable::IGNORE));
                                 r.spawn((Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(4.0), ..default() }, Pickable::IGNORE)).with_children(|ks| {
                                     for slot in 0..2 {
@@ -177,7 +193,10 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                                         .with_child((BindText(a, slot), Text::new(""), f.body(12.0, 900), TextColor(wood::text()), Pickable::IGNORE));
                                     }
                                 });
-                            });
+                            }).id();
+                            if heed {
+                                grid.commands().entity(row_e).insert(HeedOnly(Display::Flex));
+                            }
                         }
                     }
                 });
@@ -355,6 +374,11 @@ pub fn update(
                     prefs.auto_draw = !prefs.auto_draw;
                     changed = true;
                 }
+                "settings:throng" => {
+                    prefs.throng = !prefs.throng;
+                    info!("settings: the throng drawn {}", prefs.throng);
+                    changed = true;
+                }
                 "settings:tips" => {
                     prefs.tips = !prefs.tips;
                     changed = true;
@@ -414,6 +438,7 @@ pub fn update(
                 "settings:camera_rotate" => Some(prefs.camera_rotate),
                 "settings:camera_rotate_invert" => Some(prefs.camera_rotate_invert),
                 "settings:auto_draw" => Some(prefs.auto_draw),
+                "settings:throng" => Some(prefs.throng),
                 "settings:tips" => Some(prefs.tips),
                 _ => None,
             },
@@ -643,5 +668,17 @@ pub fn apply_prefs(prefs: Res<Prefs>, mut input: ResMut<crate::controls::Input>,
     }
     if let (Some(l), true) = (prefs.sight_look.as_deref().and_then(crate::sightedge::Look::parse), std::env::var("LIVING_SIGHT_LOOK").is_err()) {
         e.look = l;
+    }
+}
+
+/// Heed's rows shown only while the world's laws let players heed (`heed::Heed::on`); right after
+/// `spawn`, so a world without heed never draws them for a frame.
+pub fn heed_only(heed: Option<Res<crate::heed::Heed>>, mut q: Query<(&mut Node, &HeedOnly)>) {
+    let on = heed.is_some_and(|h| h.on);
+    for (mut n, h) in &mut q {
+        let d = if on { h.0 } else { Display::None };
+        if n.display != d {
+            n.display = d;
+        }
     }
 }
