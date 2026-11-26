@@ -97,6 +97,7 @@ pub mod far_handle_table;
 pub mod far_handle_type;
 pub mod fast_ask_table;
 pub mod fast_ask_type;
+pub mod fight_in_type;
 pub mod fight_seen_table;
 pub mod fight_seen_type;
 pub mod fighter_near_table;
@@ -132,6 +133,8 @@ pub mod heard_sounds_table;
 pub mod heard_table;
 pub mod heard_type;
 pub mod hearer_type;
+pub mod heed_policy_table;
+pub mod heed_policy_type;
 pub mod housekeeping_reducer;
 pub mod human_act_reducer;
 pub mod human_face_reducer;
@@ -198,6 +201,8 @@ pub mod mind_consolidated_reducer;
 pub mod mind_cursor_table;
 pub mod mind_cursor_type;
 pub mod mind_fast_done_reducer;
+pub mod mind_fight_reducer;
+pub mod mind_heed_reducer;
 pub mod mind_install_reducer;
 pub mod mind_install_way_reducer;
 pub mod mind_judged_reducer;
@@ -281,6 +286,8 @@ pub mod record_party_table;
 pub mod record_party_type;
 pub mod record_table;
 pub mod record_type;
+pub mod relation_fight_table;
+pub mod relation_fight_type;
 pub mod relation_in_type;
 pub mod relation_table;
 pub mod relation_type;
@@ -492,6 +499,7 @@ pub use far_handle_table::*;
 pub use far_handle_type::FarHandle;
 pub use fast_ask_table::*;
 pub use fast_ask_type::FastAsk;
+pub use fight_in_type::FightIn;
 pub use fight_seen_table::*;
 pub use fight_seen_type::FightSeen;
 pub use fighter_near_table::*;
@@ -527,6 +535,8 @@ pub use heard_sounds_table::*;
 pub use heard_table::*;
 pub use heard_type::Heard;
 pub use hearer_type::Hearer;
+pub use heed_policy_table::*;
+pub use heed_policy_type::HeedPolicy;
 pub use housekeeping_reducer::housekeeping;
 pub use human_act_reducer::human_act;
 pub use human_face_reducer::human_face;
@@ -593,6 +603,8 @@ pub use mind_consolidated_reducer::mind_consolidated;
 pub use mind_cursor_table::*;
 pub use mind_cursor_type::MindCursor;
 pub use mind_fast_done_reducer::mind_fast_done;
+pub use mind_fight_reducer::mind_fight;
+pub use mind_heed_reducer::mind_heed;
 pub use mind_install_reducer::mind_install;
 pub use mind_install_way_reducer::mind_install_way;
 pub use mind_judged_reducer::mind_judged;
@@ -676,6 +688,8 @@ pub use record_party_table::*;
 pub use record_party_type::RecordParty;
 pub use record_table::*;
 pub use record_type::Record;
+pub use relation_fight_table::*;
+pub use relation_fight_type::RelationFight;
 pub use relation_in_type::RelationIn;
 pub use relation_table::*;
 pub use relation_type::Relation;
@@ -885,6 +899,14 @@ pub enum Reducer {
         asked_ms: u64,
         thought: ThoughtIn,
     },
+    MindFight {
+        actor: u32,
+        fights: Vec<FightIn>,
+    },
+    MindHeed {
+        actor: u32,
+        policy: String,
+    },
     MindInstall {
         actor: u32,
         graph: String,
@@ -1059,6 +1081,8 @@ impl __sdk::Reducer for Reducer {
             Reducer::MindAct { .. } => "mind_act",
             Reducer::MindConsolidated { .. } => "mind_consolidated",
             Reducer::MindFastDone { .. } => "mind_fast_done",
+            Reducer::MindFight { .. } => "mind_fight",
+            Reducer::MindHeed { .. } => "mind_heed",
             Reducer::MindInstall { .. } => "mind_install",
             Reducer::MindInstallWay { .. } => "mind_install_way",
             Reducer::MindJudged { .. } => "mind_judged",
@@ -1216,6 +1240,18 @@ impl __sdk::Reducer for Reducer {
                 asked_ms: asked_ms.clone(),
                 thought: thought.clone(),
             }),
+            Reducer::MindFight { actor, fights } => {
+                __sats::bsatn::to_vec(&mind_fight_reducer::MindFightArgs {
+                    actor: actor.clone(),
+                    fights: fights.clone(),
+                })
+            }
+            Reducer::MindHeed { actor, policy } => {
+                __sats::bsatn::to_vec(&mind_heed_reducer::MindHeedArgs {
+                    actor: actor.clone(),
+                    policy: policy.clone(),
+                })
+            }
             Reducer::MindInstall {
                 actor,
                 graph,
@@ -1512,6 +1548,7 @@ pub struct DbUpdate {
     heard: __sdk::TableUpdate<Heard>,
     heard_asleep: __sdk::TableUpdate<HeardAsleep>,
     heard_sounds: __sdk::TableUpdate<HeardSound>,
+    heed_policy: __sdk::TableUpdate<HeedPolicy>,
     infant_cry: __sdk::TableUpdate<InfantCry>,
     inventory: __sdk::TableUpdate<Inventory>,
     join_request: __sdk::TableUpdate<JoinRequest>,
@@ -1574,6 +1611,7 @@ pub struct DbUpdate {
     record_clock: __sdk::TableUpdate<RecordClock>,
     record_party: __sdk::TableUpdate<RecordParty>,
     relation: __sdk::TableUpdate<Relation>,
+    relation_fight: __sdk::TableUpdate<RelationFight>,
     remembered: __sdk::TableUpdate<Remembered>,
     resource_node: __sdk::TableUpdate<ResourceNode>,
     reveal: __sdk::TableUpdate<Reveal>,
@@ -1797,6 +1835,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "heard_sounds" => db_update
                     .heard_sounds
                     .append(heard_sounds_table::parse_table_update(table_update)?),
+                "heed_policy" => db_update
+                    .heed_policy
+                    .append(heed_policy_table::parse_table_update(table_update)?),
                 "infant_cry" => db_update
                     .infant_cry
                     .append(infant_cry_table::parse_table_update(table_update)?),
@@ -1983,6 +2024,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "relation" => db_update
                     .relation
                     .append(relation_table::parse_table_update(table_update)?),
+                "relation_fight" => db_update
+                    .relation_fight
+                    .append(relation_fight_table::parse_table_update(table_update)?),
                 "remembered" => db_update
                     .remembered
                     .append(remembered_table::parse_table_update(table_update)?),
@@ -2319,6 +2363,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.heard_asleep = cache
             .apply_diff_to_table::<HeardAsleep>("heard_asleep", &self.heard_asleep)
             .with_updates_by_pk(|row| &row.id);
+        diff.heed_policy = cache
+            .apply_diff_to_table::<HeedPolicy>("heed_policy", &self.heed_policy)
+            .with_updates_by_pk(|row| &row.actor);
         diff.infant_cry = cache
             .apply_diff_to_table::<InfantCry>("infant_cry", &self.infant_cry)
             .with_updates_by_pk(|row| &row.infant);
@@ -2438,6 +2485,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.relation = cache
             .apply_diff_to_table::<Relation>("relation", &self.relation)
+            .with_updates_by_pk(|row| &row.id);
+        diff.relation_fight = cache
+            .apply_diff_to_table::<RelationFight>("relation_fight", &self.relation_fight)
             .with_updates_by_pk(|row| &row.id);
         diff.remembered = cache
             .apply_diff_to_table::<Remembered>("remembered", &self.remembered)
@@ -2819,6 +2869,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "heard_sounds" => db_update
                     .heard_sounds
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "heed_policy" => db_update
+                    .heed_policy
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "infant_cry" => db_update
                     .infant_cry
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -3004,6 +3057,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "relation" => db_update
                     .relation
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "relation_fight" => db_update
+                    .relation_fight
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "remembered" => db_update
                     .remembered
@@ -3333,6 +3389,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "heard_sounds" => db_update
                     .heard_sounds
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "heed_policy" => db_update
+                    .heed_policy
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "infant_cry" => db_update
                     .infant_cry
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3518,6 +3577,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "relation" => db_update
                     .relation
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "relation_fight" => db_update
+                    .relation_fight
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "remembered" => db_update
                     .remembered
@@ -3739,6 +3801,7 @@ pub struct AppliedDiff<'r> {
     heard: __sdk::TableAppliedDiff<'r, Heard>,
     heard_asleep: __sdk::TableAppliedDiff<'r, HeardAsleep>,
     heard_sounds: __sdk::TableAppliedDiff<'r, HeardSound>,
+    heed_policy: __sdk::TableAppliedDiff<'r, HeedPolicy>,
     infant_cry: __sdk::TableAppliedDiff<'r, InfantCry>,
     inventory: __sdk::TableAppliedDiff<'r, Inventory>,
     join_request: __sdk::TableAppliedDiff<'r, JoinRequest>,
@@ -3801,6 +3864,7 @@ pub struct AppliedDiff<'r> {
     record_clock: __sdk::TableAppliedDiff<'r, RecordClock>,
     record_party: __sdk::TableAppliedDiff<'r, RecordParty>,
     relation: __sdk::TableAppliedDiff<'r, Relation>,
+    relation_fight: __sdk::TableAppliedDiff<'r, RelationFight>,
     remembered: __sdk::TableAppliedDiff<'r, Remembered>,
     resource_node: __sdk::TableAppliedDiff<'r, ResourceNode>,
     reveal: __sdk::TableAppliedDiff<'r, Reveal>,
@@ -3975,6 +4039,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.heard_sounds,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<HeedPolicy>("heed_policy", &self.heed_policy, event);
         callbacks.invoke_table_row_callbacks::<InfantCry>("infant_cry", &self.infant_cry, event);
         callbacks.invoke_table_row_callbacks::<Inventory>("inventory", &self.inventory, event);
         callbacks.invoke_table_row_callbacks::<JoinRequest>(
@@ -4109,6 +4174,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Relation>("relation", &self.relation, event);
+        callbacks.invoke_table_row_callbacks::<RelationFight>(
+            "relation_fight",
+            &self.relation_fight,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Remembered>("remembered", &self.remembered, event);
         callbacks.invoke_table_row_callbacks::<ResourceNode>(
             "resource_node",
@@ -4946,6 +5016,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         heard_table::register_table(client_cache);
         heard_asleep_table::register_table(client_cache);
         heard_sounds_table::register_table(client_cache);
+        heed_policy_table::register_table(client_cache);
         infant_cry_table::register_table(client_cache);
         inventory_table::register_table(client_cache);
         join_request_table::register_table(client_cache);
@@ -5008,6 +5079,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         record_clock_table::register_table(client_cache);
         record_party_table::register_table(client_cache);
         relation_table::register_table(client_cache);
+        relation_fight_table::register_table(client_cache);
         remembered_table::register_table(client_cache);
         resource_node_table::register_table(client_cache);
         reveal_table::register_table(client_cache);
@@ -5115,6 +5187,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "heard",
         "heard_asleep",
         "heard_sounds",
+        "heed_policy",
         "infant_cry",
         "inventory",
         "join_request",
@@ -5177,6 +5250,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "record_clock",
         "record_party",
         "relation",
+        "relation_fight",
         "remembered",
         "resource_node",
         "reveal",
