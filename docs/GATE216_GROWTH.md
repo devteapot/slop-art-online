@@ -149,8 +149,9 @@ Spans are ms/s of profiled window. Ticks/s and DB thread are the unprofiled 50 s
 
 ### 4.3 Proposed, not built
 
-- **`skill_use` of the dead: keep.**
-  - **Why:** it is read as evidence after the fact. `trials.py` reads `skill_use WHERE actor = S` at a trial's end, and `arena_report.py` builds exposures from it.
+- **`skill_use` of the dead: keep** (the general coordinator's decision, 2026-11-23).
+  - **Future work:** a bounded-retention design for long worlds. 24 rows for every character that ever lived grows without bound over months.
+  - **Why keep:** it is read as evidence after the fact. `trials.py` reads `skill_use WHERE actor = S` at a trial's end, and `arena_report.py` builds exposures from it.
   - **What it is now:** bounded per character (`USES_KEPT`, 24), with no scan over it, about 260 B a row.
   - **If memory matters:** move a character's rows at death into a same-type history table (the archive pattern of the [tables page](https://spacetimedb.com/docs/tables/)), or have long runs export them to the journal.
 - **Noticing and minds' scene structures over remains.** `brain::new_structures_in_place` and `perceive::select_scene_structures` walk every structure in sight by design, since remains are noticed and counted. A per-chunk count of stranger remains, or a structure revision per chunk instead of one global, would bound them. That changes no rule but needs its own known-answer check (`notice_delta_check` exists).
@@ -229,7 +230,13 @@ These are minds' and graphs' noticing over every structure in sight (remains inc
   - **Variant A,** the light and gate change alone without the housekeeping part, also gives it.
   - The base's own hash at that tick also swapped between runs. So this is the comparison's sensitivity to the sweep order, not a rule's result.
 - **growth-fix's own new map:** its cache is a `BTreeMap` for this reason (`fab19a631`).
-- **Proposed separately:** sweeping the players in id order (sort `humans()`). It changes main's order once and removes the sensitivity.
+- **Proposed separately:** a deterministic sweep order, a per-tick rotation over the id-sorted players (on `growth-fix-2`). A plain id order would bring back the low-id-first bias that fair-ties removed.
+
+**After the rebase onto main `6b71513d5`** (heed merged; growth-fix `655fb7550`), the same fixture, two runs each:
+- **growth-fix against main: identical, both times** (113 tables, all 1,800 ticks).
+- **Main against a byte-identical copy of itself: not identical, both times.** Only `seen_stock` ids differ, the same rows once the id is ignored.
+
+So the `seen_stock` difference is the sweep-order noise of the comparison itself, found between copies of one binary too.
 
 ### 5.3 Checks
 
