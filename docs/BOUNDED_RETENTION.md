@@ -144,6 +144,10 @@ Per [AGENTS.md](../AGENTS.md) and [AUDIT_AND_EXPERIMENTS.md](AUDIT_AND_EXPERIMEN
 5. **Measurement & `det_compare` expectations:**
    - Measure `skill_use` rows/bytes and `dead_skill_use_due` count over 30 min (plateau by minute 2.5 at ~5.5k–6k rows vs 82k today — saving ~21 MiB raw / ~35 MiB jemalloc in 30 min).
    - `det_compare` (30 s): **100% identical** on `skill_use` (grace window is 120 s > 30 s; only the new `dead_skill_use_due` table is added, which can be verified separately in a 150 s `verify-core` scene).
+6. **Built (branch `skill-use-drain`, 2026-11-26; [COMBAT.md](COMBAT.md#skill-uses-kept-sent-and-drained-2026-11-26)):**
+   - As designed: `skill_use_event` (private event table; `why` "outcome" at each outcome written or amended, "trimmed"/"drained" for a row that never had one), `dead_skill_use_due` (private; written at death, drained by `due_ms` at 1 Hz, at most 64 a call, by `skill_use().actor().delete`), grace 120 s (a constant, not a law: nothing in the world reads the dead's rows). Living characters keep their last 24: the rules read them (`combat::open_use`, `act::dodge_too_early`) and a player sees its own (`my_skill_uses`). `trials.py` keeps a dead subject's uses for `final.json` when a run goes on past the grace (`life.stop_on_death` false).
+   - **Growth, measured** (Cullet, `spawn_battle` 200 then 40 more every 30 s among the residents, 10 min, ~1.5 deaths/s; both arms side by side on one private server pinned to the A725 cores, ~50 ticks/s under host load): `skill_use` rows at 2 / 4 / 6 / 8 / 9.75 min, main 8,300 / 12,137 / 15,795 / 19,378 / 22,695 (about +1,800 a minute, linear); branch 8,141 / 7,231 / 6,746 / 6,563 / 6,643 (flat), with 160–225 dead waiting out their grace.
+   - **`det_compare` against main: identical** (Cullet, 200 fighters + 16 players, 1,800 ticks, 113 tables, 45,710 rows).
 
 ---
 
