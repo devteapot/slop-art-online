@@ -1,6 +1,6 @@
 # relation_fight_on on the island with real minds
 
-Status: **plan frozen on 2026-11-26 before the first paid call.** The earlier handoff and draft below are historical. The frozen plan at the end governs the run.
+Status: **trial completed on 2026-11-26.** The frozen plan in commit `d8a4ee34e` governed both paid arms. Its rule favors default-on.
 
 Approved by the general coordinator: one small paid real-mind island run, $2 per arm and $4 in total, to decide whether `relation_fight_on` (an ordinary law, off by default on main since 35b0ea218) is switched on by default.
 
@@ -173,3 +173,34 @@ The real trial mind called the local fake model in 40-person law-off and law-on 
 | No journal and no readiness | Guard stopped a runner with no journal. The built mind made zero calls without readiness. | `guard-selftest-with-mind.log` |
 
 The first `just living-check` passed the authority and observer builds, mind build, and Rhai gate. Its game lane stopped on missing Wayland development metadata, so it skipped the remaining test steps. A retry with worktree-local development libraries was running at freeze.
+
+## Paid results
+
+Both batches used freeze commit `d8a4ee34e`, completed the 20-minute window, and produced journals for all 40 subjects. The final guard reports ended by duration. Both observers reported zero polling errors. The two baselines repeated the 52 hostile, 67 peaceful and 25 neutral rows about hostile communities.
+
+| Measure | Law off (`rfpoff`) | Law on (`rfpon`) |
+| --- | ---: | ---: |
+| Journaled model calls | 1,035 | 965 |
+| Journaled call failures | 4 | 0 |
+| Estimated spend | $1.2248 | $1.1594 |
+| Accepted attacks, all targets | 12 | 23 |
+| Accepted threats, all targets | 0 | 0 |
+| Attacks against hostile people | 0 | 0 |
+| Threats against hostile people | 0 | 0 |
+| Fight starts against hostile people | 0 | 0 |
+| Observed wounds, all | 5 | 6 |
+| Observed wounds to residents | 0 | 1 |
+| Deaths, including resident deaths | 0 | 0 |
+| Killing sprees | 0 | 0 |
+| Distinct mind `fight: enemy` orders observed | 0 | 2 |
+| Distinct mind `fight: spare` orders observed | 0 | 4 |
+
+**Verdict under the frozen rule: eligible for default-on.** All checks passed, including the two-event margin for each hostile-target count. Total estimated spend was **$2.3842 of $4**.
+
+Every accepted attack came from a wolf's graph. Law-off had 12 wolf attacks on deer. Law-on had 16 wolf attacks on deer and seven on Wren Ashby, producing one observed resident wound from Frost. No hostile fight start could be attributed to a mind's own act, a personal relation or fight order, or a graph's enemy selector because both arms had zero hostile starts. The two trajectories establish the observed wildlife difference for this pair of worlds. Its cause remains undetermined.
+
+The law-on consolidation notes record three accepted `enemy` writes and five accepted `spare` writes, including repeated pairs. The six distinct rows were `#1 → #253` and `#163 → #81` as `enemy`, and `#30 → #14`, `#84 → #82`, `#152 → #157`, and `#255 → #254` as `spare`. Neither arm used these orders to start a hostile fight in the observed window. `paid-report.json` preserves the sampled rows and decoded journal fields, including nulls and the refusal note. `attack-breakdown.json` joins the observed attacks and the resident wound to a fresh census of the same seed.
+
+The lowest observed memory availability and disk free space were 84.0 GiB and 73.2 GiB. Both paid databases and the final census database returned 404 after the pause and delete path. Private SpacetimeDB and Neo4j both exited 0 after SIGINT, and their final logs are archived. The full `just living-check` passed with worktree-local build dependencies after the initial missing Wayland metadata.
+
+Evidence is in `~/slop-evidence/relation-island-paid-20261126.tar.zst` with a sibling checksum file. It contains `paid-report.json`, the per-arm `switches.json` and guard logs, model journals, the subjects and frozen manifest, and the dry-run proofs. The scan of 1,043 evidence files reported zero key matches. Archive SHA-256 is `1b7a89648eb3d6e667e2c5703839d5bf4c115653ed71d6748a3c59b0526d62b4`.
