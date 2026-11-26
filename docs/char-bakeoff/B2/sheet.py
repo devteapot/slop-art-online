@@ -44,6 +44,14 @@ rows.append(row([tile(P('cage-tq.png'), 'Blender: the cage (1,094 vertices, all 
                  tile(P('wire-hand.png'), 'Blender: hand'),
                  tile(FU('woman', '*run*'), 'run (clip)', body), tile(FU('woman', '*sit_ground*'), 'sit_ground (clip)', body),
                  tile(S('woman', '10-*'), 'walk (clip)', (.3, .05, .7, 1))]))
+if len(sys.argv) > 8:
+    L = lambda pat: g(os.path.join(sys.argv[7], 'b2-woman-l1', pat)); r1 = json.load(open(sys.argv[8]))['woman']
+    rows.append(head('The same person at one subdivision: %s triangles (body %s) against %s; same cage, weights, morphs and face layer' % (
+        format(r1['total_triangles'], ','), format(r1['triangles']['Body'], ','), format(rep['woman']['total_triangles'], ',')), F3))
+    rows.append(row([tile(L('03-*'), 'one subdivision: idle, front', (.28, .0, .72, 1), h=300), tile(L('00-*'), 'one subdivision: face', (.25, 0, .75, 1), h=300),
+                     tile(S('woman', '03-*'), 'two subdivisions: face', (.25, 0, .75, 1), h=300),
+                     tile(L('01-*'), 'one subdivision: Near 8 m', zoom=(300, 300), h=300), tile(S('woman', '05-*'), 'two: Near 8 m', zoom=(300, 300), h=300),
+                     tile(L('02-*'), 'one subdivision: Middle 12 m', zoom=(300, 300), h=300), tile(S('woman', '06-*'), 'two: Middle 12 m', zoom=(300, 300), h=300)]))
 rows.append(head('Stage 2: the same base as four people (morph mix + armature scale + colours + hair piece + painted face layer)'))
 for c in ('woman', 'man', 'elder', 'child'):
     r = rep[c]; mix = ', '.join('%s %.2g' % kv for kv in r['mix'].items()) or 'the base'

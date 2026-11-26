@@ -37,9 +37,9 @@
   "triangles": {
    "Body": 35424,
    "FaceLayer": 1352,
-   "Hair": 4260
+   "Hair": 4402
   },
-  "total_triangles": 41036,
+  "total_triangles": 41178,
   "materials": [
    "M00_000_00_Body_00_SKIN",
    "B2_UnderTop_CLOTH",
@@ -67,7 +67,7 @@
   "textures": [
    "face-man.png 1024x1024 RGBA"
   ],
-  "bytes": 2045644
+  "bytes": 2050292
  },
  "elder": {
   "file": "b2-elder.glb",

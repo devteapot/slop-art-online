@@ -1,0 +1,187 @@
+{
+ "woman": {
+  "file": "b2-woman.glb",
+  "triangles": {
+   "Body": 8856,
+   "FaceLayer": 376,
+   "Hair": 5936
+  },
+  "total_triangles": 15168,
+  "materials": [
+   "M00_000_00_Body_00_SKIN",
+   "B2_UnderTop_CLOTH",
+   "B2_UnderShorts_CLOTH",
+   "B2_Shoes_CLOTH",
+   "M00_000_00_FaceTint_00_FACE",
+   "M00_000_Hair_00_HAIR"
+  ],
+  "bones": 82,
+  "clips": [
+   "idle",
+   "run",
+   "sit_ground",
+   "sit_idle",
+   "talk",
+   "walk"
+  ],
+  "scale": 0.9265,
+  "mix": {},
+  "morph_targets": [],
+  "textures": [
+   "face-woman.png 1024x1024 RGBA"
+  ],
+  "bytes": 1279680
+ },
+ "man": {
+  "file": "b2-man.glb",
+  "triangles": {
+   "Body": 8856,
+   "FaceLayer": 364,
+   "Hair": 4402
+  },
+  "total_triangles": 13622,
+  "materials": [
+   "M00_000_00_Body_00_SKIN",
+   "B2_UnderTop_CLOTH",
+   "B2_UnderShorts_CLOTH",
+   "B2_Shoes_CLOTH",
+   "M00_000_00_FaceTint_00_FACE",
+   "M00_000_Hair_00_HAIR"
+  ],
+  "bones": 82,
+  "clips": [
+   "idle",
+   "run",
+   "sit_ground",
+   "sit_idle",
+   "talk",
+   "walk"
+  ],
+  "scale": 1.0,
+  "mix": {
+   "Sex_Male": 1.0,
+   "Jaw_Square": 0.5,
+   "Face_Long": 0.5
+  },
+  "morph_targets": [],
+  "textures": [
+   "face-man.png 1024x1024 RGBA"
+  ],
+  "bytes": 1149360
+ },
+ "elder": {
+  "file": "b2-elder.glb",
+  "triangles": {
+   "Body": 8856,
+   "FaceLayer": 364,
+   "Hair": 3172
+  },
+  "total_triangles": 12392,
+  "materials": [
+   "M00_000_00_Body_00_SKIN",
+   "B2_UnderTop_CLOTH",
+   "B2_UnderShorts_CLOTH",
+   "B2_Shoes_CLOTH",
+   "M00_000_00_FaceTint_00_FACE",
+   "M00_000_Hair_00_HAIR"
+  ],
+  "bones": 82,
+  "clips": [
+   "idle",
+   "run",
+   "sit_ground",
+   "sit_idle",
+   "talk",
+   "walk"
+  ],
+  "scale": 0.955,
+  "mix": {
+   "Sex_Male": 0.75,
+   "Age_Elder": 1.0,
+   "Face_Long": 0.6
+  },
+  "morph_targets": [],
+  "textures": [
+   "face-elder.png 1024x1024 RGBA"
+  ],
+  "bytes": 1149520
+ },
+ "child": {
+  "file": "b2-child.glb",
+  "triangles": {
+   "Body": 8856,
+   "FaceLayer": 392,
+   "Hair": 5362
+  },
+  "total_triangles": 14610,
+  "materials": [
+   "M00_000_00_Body_00_SKIN",
+   "B2_UnderTop_CLOTH",
+   "B2_UnderShorts_CLOTH",
+   "B2_Shoes_CLOTH",
+   "M00_000_00_FaceTint_00_FACE",
+   "M00_000_Hair_00_HAIR"
+  ],
+  "bones": 82,
+  "clips": [
+   "idle",
+   "run",
+   "sit_ground",
+   "sit_idle",
+   "talk",
+   "walk"
+  ],
+  "scale": 0.7,
+  "mix": {
+   "Age_Child": 1.0,
+   "Face_Round": 0.7
+  },
+  "morph_targets": [],
+  "textures": [
+   "face-child.png 1024x1024 RGBA"
+  ],
+  "bytes": 1262776
+ },
+ "base": {
+  "file": "b2-base.glb",
+  "triangles": {
+   "Body": 8856,
+   "FaceLayer": 376,
+   "Hair": 5936
+  },
+  "total_triangles": 15168,
+  "materials": [
+   "M00_000_00_Body_00_SKIN",
+   "B2_UnderTop_CLOTH",
+   "B2_UnderShorts_CLOTH",
+   "B2_Shoes_CLOTH",
+   "M00_000_00_FaceTint_00_FACE",
+   "M00_000_Hair_00_HAIR"
+  ],
+  "bones": 82,
+  "clips": [
+   "idle",
+   "run",
+   "sit_ground",
+   "sit_idle",
+   "talk",
+   "walk"
+  ],
+  "scale": 0.9265,
+  "mix": {},
+  "morph_targets": [
+   "Sex_Male",
+   "Age_Child",
+   "Age_Elder",
+   "Build_Heavy",
+   "Build_Slim",
+   "Face_Round",
+   "Face_Long",
+   "Jaw_Square"
+  ],
+  "textures": [
+   "face-woman.png 1024x1024 RGBA"
+  ],
+  "bytes": 1557568
+ }
+}

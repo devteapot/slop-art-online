@@ -60,6 +60,7 @@ FING = {  # J1, J2, J3, tip length
 }
 FN = ['Index', 'Middle', 'Ring', 'Little']
 THUMB = ([.279, -.036, .891], [.284, -.056, .849], [.288, -.069, .823], .024)
+LEVEL = int(os.environ.get('B2_LEVEL', '2'))     # subdivisions of the cage: 2 is the near mesh, 1 a quarter of it
 NT = 16      # torso and head ring size
 A0 = 7       # torso ring of the armhole's lower row
 # torso rings: z, rx, front, back, cy, group, dz at the back
@@ -557,7 +558,7 @@ def main():
         P = dict(BASE); P.update(over); V = full(P)
         k = cage.shape_key_add(name=name, from_mix=False)
         k.data.foreach_set('co', np.array([V[key] for key in keys]).ravel())
-    sub = cage.modifiers.new('Subdivision', 'SUBSURF'); sub.levels = 2; sub.render_levels = 2
+    sub = cage.modifiers.new('Subdivision', 'SUBSURF'); sub.levels = LEVEL; sub.render_levels = LEVEL
     # modifier order: the armature first would deform the cage; for the bake, switch it off
     for m in cage.modifiers:
         if m.type == 'ARMATURE': m.show_viewport = False
