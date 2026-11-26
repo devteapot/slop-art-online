@@ -103,11 +103,21 @@ pub struct Index {
     /// Each character's pending deliberation request as `my_deliberations` holds it now (one
     /// row a character; the view delivers a replacement as an insert and a delete).
     requests: crate::prof::Mx<HashMap<u32, Deliberation>>,
+    /// `sex_seen` row ids by (observer, known): one row a pair, written once when the pair is
+    /// first made out at full sight and deleted with the known's remains (`sex::forget_known`).
+    /// The client bindings expose only the table's `id` (SDK 2.14.1 generates accessors for unique
+    /// columns, not for the `by_pair` or `known` btree indexes), so the pair is kept here
+    /// (mind-sex-seen-keyed, 2026-11-26; before, each lookup cloned the whole table).
+    sex_seen: crate::prof::Mx<HashMap<(u32, u32), u64>>,
 }
 
 impl Default for Index {
     fn default() -> Self {
-        Index { exp: crate::prof::Mx::new("index_exp", HashMap::new()), requests: crate::prof::Mx::new("index_requests", HashMap::new()) }
+        Index {
+            exp: crate::prof::Mx::new("index_exp", HashMap::new()),
+            requests: crate::prof::Mx::new("index_requests", HashMap::new()),
+            sex_seen: crate::prof::Mx::new("index_sex_seen", HashMap::new()),
+        }
     }
 }
 
@@ -151,6 +161,23 @@ impl Index {
 
     fn request(&self, actor: u32) -> Option<Deliberation> {
         self.requests.lock().unwrap().get(&actor).cloned()
+    }
+
+    pub fn sex_seen_in(&self, r: &SexSeen) {
+        self.sex_seen.lock().unwrap().insert((r.observer, r.known), r.id);
+    }
+
+    /// The exact row is gone (a later row for the same pair, if any, stays).
+    pub fn sex_seen_out(&self, r: &SexSeen) {
+        let mut m = self.sex_seen.lock().unwrap();
+        if m.get(&(r.observer, r.known)) == Some(&r.id) {
+            m.remove(&(r.observer, r.known));
+        }
+    }
+
+    /// The `sex_seen` row id for what `observer` made out of `known`, if it has.
+    fn sex_seen_id(&self, observer: u32, known: u32) -> Option<u64> {
+        self.sex_seen.lock().unwrap().get(&(observer, known)).copied()
     }
 }
 
@@ -637,7 +664,8 @@ impl Minds {
         if me == other {
             return self.sex_words_of(me);
         }
-        let row = self.conn.db.sex_seen().iter().find(|r| r.observer == me && r.known == other)?;
+        // By the pair's key (`Index::sex_seen_id`), then the one row from the cache by its id.
+        let row = self.conn.db.sex_seen().id().find(&self.index.sex_seen_id(me, other)?)?;
         let c = self.conn.db.character().id().find(&other)?;
         living_rules::sex::Sex::from_code(row.sex).map(|s| prompts::a_sex_word(s, c.stage))
     }
@@ -3110,6 +3138,28 @@ mod tests {
         assert!(index.request(4).is_none());
         index.request_in(&request(4, 30));
         assert_eq!(index.request(4).map(|d| d.updated_ms), Some(30));
+    }
+
+    /// mind-sex-seen-keyed: a pair's `sex_seen` row is found by its key, never by scanning; one
+    /// pair is not another (either way round), and a gone row takes its key with it.
+    #[test]
+    fn the_index_finds_a_sex_seen_pair_by_its_key() {
+        let row = |id: u64, observer: u32, known: u32| SexSeen { id, observer, known, sex: 1, at_ms: id };
+        let index = Index::default();
+        index.sex_seen_in(&row(1, 3, 8));
+        index.sex_seen_in(&row(2, 8, 3));
+        index.sex_seen_in(&row(3, 3, 9));
+        assert_eq!(index.sex_seen_id(3, 8), Some(1));
+        assert_eq!(index.sex_seen_id(8, 3), Some(2));
+        assert_eq!(index.sex_seen_id(3, 9), Some(3));
+        assert_eq!(index.sex_seen_id(9, 3), None);
+        // A stale delete (an older row of the pair) leaves the newer one.
+        index.sex_seen_in(&row(4, 3, 8));
+        index.sex_seen_out(&row(1, 3, 8));
+        assert_eq!(index.sex_seen_id(3, 8), Some(4));
+        index.sex_seen_out(&row(4, 3, 8));
+        assert_eq!(index.sex_seen_id(3, 8), None);
+        assert_eq!(index.sex_seen_id(8, 3), Some(2));
     }
 
 

@@ -520,7 +520,7 @@ Every person's body is female or male, a world fact set once when they come into
 | Kin words (`speech::named_at`) | `sex` (point) per kin hearer near | – | per line with a kin relation near |
 | Conception (`act::facts`, `target_facts`) | `sex` (point), only for a law that reads `sex` | – | per act check |
 | `my_sex` (view) | `player`, `character`, `sex` (points) | – | re-run when one's character changes |
-| Mind service | `sex` and `sex_seen`, subscribed whole as the owner (insert-only rows) | – | initial rows, then one insert per person made and per pair first made out |
+| Mind service | `sex` and `sex_seen`, subscribed whole as the owner; a pair's `sex_seen` row found by its id from the mind's own pair map, kept by the table's row callbacks (`mind::Index`, since mind-sex-seen-keyed 2026-11-26; the 2.14.1 client exposes only the `id` accessor, and a scan cloned the whole cached table per lookup) | – | initial rows, then one insert per person made and per pair first made out, and a delete when a pair's row goes |
 | Remembering (`sex::remember`, from `perceive::scene_json` for each person made out, and a first sight) | `sex_seen.by_pair` (point), `sex` (point) | one `sex_seen` insert, the first time a minded character makes someone out | per person made out in a scene (at most 14), per first sight |
 | `backfill_sex` | every person, `relation` once, the seed | one `sex` per person without one, a chronicle line | admin only |
 
