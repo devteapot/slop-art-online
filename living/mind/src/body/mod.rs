@@ -121,8 +121,8 @@ pub async fn main(server: String, db: String, token: String) -> Result<()> {
     loop {
         tick.tick().await;
         lease_ms = lease_ms_now(&control, lease_ms);
+        // From the end of the last iteration: the worker's own work (an open) is not a stall.
         let gap = last_loop.elapsed();
-        last_loop = Instant::now();
         // The worker itself stalled past the lease: nothing decided before is sent; every session is
         // fenced and reopened from a fresh observation.
         if gap.as_millis() as u64 > lease_ms {
@@ -199,6 +199,7 @@ pub async fn main(server: String, db: String, token: String) -> Result<()> {
             }
             decide(&control, slot.clone(), s.policy.as_mut(), sess, &records, capture.as_mut());
         }
+        last_loop = Instant::now();
     }
 }
 

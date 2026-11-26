@@ -4909,8 +4909,8 @@ def _sql_as(run, token, query):
     return [dict(zip(names, row)) for row in res['rows']]
 
 
-@case('body')
-def body_case(run):
+@case('delegate-body')
+def delegate_body_case(run):
     """The learned-body pilot's plumbing (docs/NEURAL_BODY.md, "Built (pilot plumbing)"), with the
     scripted placeholder policy and no model for the body:
 
@@ -5020,12 +5020,23 @@ def body_case(run):
         stdb('body_open', s, ident(a_id))
         sess = run.private(f'SELECT * FROM body_session WHERE actor = {s}', 'session-1')
         checks['epoch_1_live'] = bool(sess) and sess[0]['epoch'] == 1 and sess[0]['live']
-        x0 = run.private(f'SELECT x, y FROM body WHERE id = {s}', 'pos-0')[0]
+        # A body row's x, y is its segment's start: where it is now follows its velocity since t_ms.
+        def here(label):
+            b = run.private(f'SELECT x, y, vx, vy, t_ms FROM body WHERE id = {s}', label)[0]
+            dt = max(0.0, (time.time() * 1000 - b['t_ms']) / 1000)
+            return {'x': b['x'] + b['vx'] * dt, 'y': b['y'] + b['vy'] * dt}
+        x0 = here('pos-0')
         code, text = call(a_tok, 'human_move', [-1.0, 0.0, False])
         checks['body_input_accepted'] = code == 200
+        # Each probe beats first: the harness's own SQL between probes can take longer than the lease.
+        probes = result.setdefault('probes', {})
+        call(a_tok, 'body_beat', [1])
         code, text = call(a_tok, 'use_skill', ['block', f, 0.0, 0.0])
+        probes['out_of_scope'] = [code, text[:200]]
         checks['out_of_scope_refused'] = code != 200 and 'block is not among the skills the plan delegated' in text
+        call(a_tok, 'body_beat', [1])
         mine = _sql_as(run, a_tok, 'SELECT * FROM my_body')
+        probes['my_body'] = mine if isinstance(mine, str) else [r.get('id') for r in mine]
         checks['body_reads_its_own_character'] = isinstance(mine, list) and [r['id'] for r in mine] == [s]
         private = {t: _sql_as(run, a_tok, f'SELECT * FROM {t}') for t in ('body_brief', 'body_slot', 'body_session', 'brain', 'heed_policy')}
         checks['body_reads_no_private_rows'] = all(not isinstance(v, list) for v in private.values())
@@ -5033,14 +5044,16 @@ def body_case(run):
         for _ in range(8):
             call(a_tok, 'body_beat', [1])
             time.sleep(0.2)
-        x1 = run.private(f'SELECT x, y FROM body WHERE id = {s}', 'pos-1')[0]
+        x1 = here('pos-1')
         checks['body_moved_by_input'] = math.dist((x0['x'], x0['y']), (x1['x'], x1['y'])) > 0.5
         brain = run.private(f'SELECT * FROM brain WHERE id = {s}', 'brain-after-input')[0]
         checks['plan_kept'] = 'delegate' in brain['graph'] and brain['plan'] != 'moving yourself'
         b_id, b_tok = _fresh_identity()
         stdb('body_open', s, ident(b_id))
         code, text = call(a_tok, 'human_move', [1.0, 0.0, False])
-        checks['old_epoch_fenced'] = code != 200 and 'you hold no body session' in text
+        probes['old_epoch'] = [code, text[:200]]
+        # The older identity holds nothing now: it is answered as any identity without a character.
+        checks['old_epoch_fenced'] = code != 200 and 'you have no living character' in text
         code, text = call(b_tok, 'human_move', [0.0, 1.0, False])
         sess = run.private(f'SELECT * FROM body_session WHERE actor = {s}', 'session-2')
         checks['epoch_2_accepted'] = code == 200 and sess[0]['epoch'] == 2
@@ -5069,8 +5082,12 @@ def body_case(run):
         uses_q = f'SELECT * FROM skill_use WHERE actor = {s}'
         start_ms = int(time.time() * 1000)
         positions = []
-        for _ in range(40):
-            positions.append(run.private(f'SELECT x, y FROM body WHERE id = {s}', 'pos-w')[0])
+        for i in range(24):
+            positions.append(here('pos-w'))
+            if i % 6 == 5:
+                # Both keep fighting: the foe's death would end the delegated leaf (its target gone).
+                run.admin('admin_set_vitals', f, 100.0)
+                run.admin('admin_set_vitals', s, 100.0)
             time.sleep(0.5)
         uses = [u for u in run.private(uses_q, 'uses-duel') if u['at_ms'] >= start_ms]
         result['duel_uses'] = {src: sum(1 for u in uses if u['source'] == src) for src in {u['source'] for u in uses}}
@@ -5079,7 +5096,10 @@ def body_case(run):
         checks['duel_moved'] = max(math.dist((p['x'], p['y']), (positions[0]['x'], positions[0]['y'])) for p in positions) > 0.5
         brain = run.private(f'SELECT * FROM brain WHERE id = {s}', 'brain-duel')[0]
         checks['duel_plan_kept'] = 'delegate' in brain['graph'] and brain['source'] != 'human'
-        # The stall: past the lease, the session lapses and the subject stands.
+        # The stall: past the lease, the session lapses and the subject stands (the foe kept alive, so
+        # the delegated leaf, and with it the slot, stays).
+        run.admin('admin_set_vitals', f, 100.0)
+        run.admin('set_behavior', f, json.dumps({'wait': 120}))
         worker.send_signal(signal.SIGSTOP)
         stop_ms = int(time.time() * 1000)
         time.sleep(2.5)
@@ -5095,9 +5115,10 @@ def body_case(run):
         checks['recovery_new_epoch_new_identity'] = e4['identity'] != e3['identity']
         time.sleep(8.0)
         after = [u for u in run.private(uses_q, 'uses-after') if u['source'] == 'body' and u['at_ms'] > resume_ms]
-        moved = run.private(f'SELECT x, y FROM body WHERE id = {s}', 'pos-after')[0]
+        moved = here('pos-after')
         checks['recovery_inputs_resume'] = bool(after) or math.dist((moved['x'], moved['y']), (p_stall['x'], p_stall['y'])) > 0.3
-        worker.send_signal(signal.SIGINT)
+        # SIGTERM: a background job of a non-interactive shell inherits SIGINT ignored.
+        worker.send_signal(signal.SIGTERM)
         worker.wait(timeout=10)
         # The capture: decisions, replies, outcomes; every reply to an old epoch after the resume refused.
         recs = [json.loads(l) for p in sorted(cap.glob('body-*.jsonl')) for l in p.read_text().splitlines()]
@@ -5121,6 +5142,8 @@ def body_case(run):
         result['readback_leaf_shown'] = 'The step of your plan your body carries out now' in user
     finally:
         run.admin('set_world_law', 'body_delegate_on', 'false')
+        result['checks'] = checks
+        (run.directory / 'body-checks.json').write_text(json.dumps(result, indent=1))
     result['checks'] = checks
     (run.directory / 'body-checks.json').write_text(json.dumps(result, indent=1))
     failed = [k for k, v in checks.items() if not v]

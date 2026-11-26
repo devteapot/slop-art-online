@@ -164,7 +164,7 @@ PLAYED_REFUSED = {'mind_fight': lambda actor: [actor, []]}
 # The learned-body pilot's reducers (docs/NEURAL_BODY.md "Built (pilot plumbing)"). With its law off
 # (as shipped) each is refused to everyone in the law's words; `body_close` follows the controller
 # rule (another's character: "not your character"; one's own: nothing to close). With the law on,
-# verify-minds `body` drives them.
+# verify-minds `delegate-body` drives them.
 BODY_LAW = 'the body_delegate_on law is off'
 BODY = {'mind_body_brief': lambda actor: [actor, 0, {'some': {'goal': 'engage', 'target': 0, 'stance': 'even', 'risk': 0.5, 'style': 0.5, 'ttl_s': 10.0, 'rationale': ''}}],
         'body_open': lambda actor: [actor, {'__identity__': '0x' + '11' * 32}],

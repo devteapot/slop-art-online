@@ -298,16 +298,8 @@ pub fn input_for(ctx: &ReducerContext, skill: Option<&str>) -> Result<(Character
     Ok((c, Driver::Body))
 }
 
-/// A connection closed: a live session held by that identity, with no other connection open, lapses.
-pub fn disconnected(ctx: &ReducerContext, who: Identity, now: u64) {
-    if !on(ctx) {
-        return;
-    }
-    let Some(s) = ctx.db.body_session().identity().find(who).filter(|s| s.live) else { return };
-    if ctx.db.connection().identity().filter(who).next().is_none() {
-        lapse(ctx, s, now, "its connection closed");
-    }
-}
+/// A session does not end with its connection: every HTTP call is a connection of its own, so the
+/// lease alone decides (a controller whose connection is gone sends no beat and lapses within it).
 
 /// Every tick: sessions whose lease ran out lapse (an index range of the due rows only). With the law
 /// off, rows left from when it held are ended once (two counts while none exist).
