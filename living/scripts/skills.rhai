@@ -120,7 +120,9 @@ fn laws() {
         // or a friendly word), then the community's stance; minds are told the order and may say
         // `fight` (enemy or spare); a person's own blow says enemy. Off: any personal relation
         // row decides alone and hides the community's stance, as before; nothing is said or told.
-        relation_fight_on: false,
+        // On since relation-fight-on (2026-11-26, after the paid island comparison,
+        // docs/RELATION_ISLAND_PAID.md); a world may set it false.
+        relation_fight_on: true,
         // Attention cues (docs/ATTENTION.md): a mind may write what in what it perceives should
         // bring it to think about one of its stances, goals or projects. Off: none is matched.
         // A cue fires once per thing it matched within `cue_cooldown_s`, and a character is

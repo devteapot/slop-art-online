@@ -603,7 +603,8 @@ pub struct Laws {
     /// Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): on, a graph's
     /// `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a clear
     /// personal relation, then the community's stance, and minds are told so; off, any personal
-    /// relation row decides alone (as before 2026-11-23). An ordinary law: the minds read it.
+    /// relation row decides alone (as before 2026-11-23). On by default since relation-fight-on
+    /// (2026-11-26); an ordinary law a world may set false: the minds read it.
     pub relation_fight_on: bool,
     /// Attention cues (docs/ATTENTION.md): what a mind wrote it should be brought to think
     /// about, matched against what its character perceives. Off: nothing is matched.
@@ -937,7 +938,7 @@ impl Default for Laws {
             alert_while_attacker_near: true,
             renew_in_place: true,
             stranger_by_name: false,
-            relation_fight_on: false,
+            relation_fight_on: true,
             cues_on: false,
             cue_cooldown_s: 600.0,
             cue_gap_s: 60.0,
@@ -4515,6 +4516,7 @@ mod tests {
         assert!(l.act_replace_checks && l.act_input_cost && l.act_turned_back && l.act_same_continues, "a replacing act is checked first, costs an input and is counted for turning back; the same act again goes on (docs/INPUT_LATENCY.md)");
         let d = Laws::default();
         assert_eq!((d.mind_act_replaces, d.act_same_continues), (l.mind_act_replaces, l.act_same_continues), "Laws::default and the shipped script agree");
+        assert!(l.relation_fight_on && d.relation_fight_on, "whom one fights: what was said, a relation that decides, then the community, by default since 2026-11-26 (docs/WORLD_RULES.md)");
         assert_eq!((l.combat_eval_hz, l.combat_every_ticks()), (15.0, 4), "fighters evaluated every 4th tick by default");
         assert_eq!(l.witness_fold_ms, 2000.0, "what an onlooker sees of fights is told every two seconds (docs/BATTLE_SCALE.md)");
         assert!(l.scene_lazy && !l.scene_lazy_check, "the scene worked out as far as asked; its check off");

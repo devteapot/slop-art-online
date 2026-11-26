@@ -952,8 +952,9 @@ def relation_fight(s):
     3. `spare` said over a hostile row (trust -60, "enemy") holds the same way;
     4. a person of no side is no enemy until A says `enemy`, then A attacks them.
     Also: `mind_fight` refuses a word other than enemy, spare or "", and takes "" back. All under
-    the `relation_fight_on` law (default off), switched on here; first, with it off, the neutral
-    row still hides the war (main's rule). The law is switched off again at the end."""
+    the `relation_fight_on` law (on by default since relation-fight-on, 2026-11-26), set on here
+    explicitly; first, set off, the neutral row still hides the war (the rule before 2026-11-23).
+    The law is set back to its shipped value (on) at the end, even on failure."""
     a, r = s.people(2)
     if s.rows(f"SELECT * FROM membership WHERE member = {a}"):
         s.act(a, {"do": "leave"})
@@ -1006,7 +1007,8 @@ def relation_fight(s):
         print(f"relation_fight {name}: A aimed at {got} (near {near}, far {far})", flush=True)
         return got
 
-    # 0. Law off (main's rule): a neutral row hides the war.
+    # 0. Law off (the rule before 2026-11-23), set explicitly: a neutral row hides the war.
+    set_law(s, "relation_fight_on", False)
     b0, = fighters(2)
     feel(b0, 0, "stranger", "a man standing a tile west of me, no word yet")
     got = stage("law off, neutral row", b0)
@@ -1016,7 +1018,8 @@ def relation_fight(s):
     try:
         relation_fight_on(s, a, r, fighters, feel, stage)
     finally:
-        set_law(s, "relation_fight_on", False, check=False)
+        # Back to the shipped value (on since relation-fight-on).
+        set_law(s, "relation_fight_on", True, check=False)
     s.call("set_behavior", r, json.dumps(idle))
 
 

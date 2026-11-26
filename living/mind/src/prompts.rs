@@ -2178,18 +2178,22 @@ mod tests {
         assert!(living_rules::script::Scripts::new(&on).unwrap().laws().stranger_by_name);
     }
 
-    /// relation-fight: with the `relation_fight_on` law off (shipped), no prompt tells the order or
-    /// asks for `fight`, so the minds' prompts are as before; the law parses on. The text with the
-    /// law on is checked live (verify-minds `fight-field`).
+    /// relation-fight: with the `relation_fight_on` law on (shipped since relation-fight-on,
+    /// 2026-11-26), the deliberation and consolidation prompts tell the order and the
+    /// consolidation asks for `fight`; a world may set it off, and the law parses off. Off, the
+    /// prompts are as before 2026-11-23 (the empty strings in `consolidate_system_in` and the
+    /// grammar), checked live with verify-core's and verify-minds' law-off worlds.
     #[test]
     fn whom_one_fights_is_told_only_under_its_law() {
         for purpose in ["deliberate", "consolidate"] {
             let (system, _) = fixture(purpose, "Aria", "person");
-            assert!(!system.contains(FIGHT_WORDS) && !system.contains("\"fight\""), "{purpose}: {system}");
+            assert!(system.contains(FIGHT_WORDS), "{purpose}: {system}");
         }
-        let on = living_rules::script::with_world_laws(include_str!("../../scripts/skills.rhai"), &[("relation_fight_on".into(), serde_json::json!(true))]);
-        assert!(living_rules::script::Scripts::new(&on).unwrap().laws().relation_fight_on);
-        assert!(!living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")).unwrap().laws().relation_fight_on);
+        let (system, _) = fixture("consolidate", "Aria", "person");
+        assert!(system.contains("\"fight\""), "{system}");
+        assert!(living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")).unwrap().laws().relation_fight_on);
+        let off = living_rules::script::with_world_laws(include_str!("../../scripts/skills.rhai"), &[("relation_fight_on".into(), serde_json::json!(false))]);
+        assert!(!living_rules::script::Scripts::new(&off).unwrap().laws().relation_fight_on);
     }
 
     #[test]
