@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from threading import Barrier
 from pathlib import Path
 
 from urllib.error import HTTPError
@@ -617,10 +618,10 @@ def check_speech_selection():
     acting, fight = ["act_gaps", "act_replace", "truthful_refusals"], ["committed", "dodge_told", "health_seen", "seize", "outcomes"]
     expect("speech: speak and told run in the speech group as verify-player scripts",
            all(scene_gate.CASES[c]["group"] == "speech" and scene_gate.CASES[c]["skill"] == "verify-player" for c in ("speak", "told")))
-    expect("step 1: the acting and fight groups, outcomes after skirmish on the island world",
+    expect("step 1: the acting and fight groups, outcomes on its own island world",
            all(scene_gate.CASES[c]["group"] == "acting" for c in acting)
-           and all(scene_gate.CASES[c]["group"] == "fight" for c in fight[:4]) and scene_gate.CASES["outcomes"]["group"] == "island"
-           and scene_gate.ORDER.index("skirmish") < scene_gate.ORDER.index("outcomes"))
+           and all(scene_gate.CASES[c]["group"] == "fight" for c in fight[:4])
+           and scene_gate.CASES["outcomes"]["group"] == "outcomes")
     for path in ("living/authority/src/acts.rs", "living/rules/src/acts.rs", "living/authority/src/outcomes.rs", "living/rules/src/outcome.rs"):
         got = plan([path], {})
         expect(f"step 1: {path} selects the acting group", set(acting) <= set(got) and not set(fight) & set(got), str(got))
@@ -639,6 +640,40 @@ def check_speech_selection():
         expect("cap: LIVING_GATE_GROUPS bounds the groups at once; 0 runs all", uncapped == 9 and scene_gate.workers(9) == 4 and scene_gate.workers(2) == 2)
     finally:
         scene_gate.GROUP_CAP = cap
+
+
+def check_scene_waves():
+    class FakeRunner:
+        notes = {}
+        parts = {("a-steering", "flee_wall"): ["named failure"]}
+
+        def __init__(self):
+            self.case_parts = {}
+            self.finished = set()
+            self.first_wave = Barrier(2)
+
+        def group(self, root, group, cases, tag):
+            if group in {"core", "island"}:
+                self.first_wave.wait(5)
+            elif group in scene_gate.SECOND_WAVE_GROUPS:
+                assert {"core", "island"} <= self.finished
+            elif group == "render":
+                assert scene_gate.SECOND_WAVE_GROUPS <= self.finished
+            self.finished.add(group)
+            return {case: (case != "flee_wall", tag, 0.0) for case in cases}
+
+    runner = FakeRunner()
+    cases = ["say", "tick", "flee_wall", "act_gaps", "committed", "outcomes", "skirmish", "looks"]
+    cap = scene_gate.GROUP_CAP
+    try:
+        scene_gate.GROUP_CAP = 2
+        got = scene_gate.run_cases(runner, None, cases, "a")
+    finally:
+        scene_gate.GROUP_CAP = cap
+    expect("waves: existing groups run concurrently, then all new groups, then render",
+           set(got) == set(cases) and all(got[c][0] for c in cases if c != "flee_wall"), str(got))
+    expect("waves: a second-wave failure preserves its named parts for the flake rule",
+           not got["flee_wall"][0] and runner.case_parts[("a", "flee_wall")] == ["named failure"])
 
 
 def check_render_logs():
@@ -1040,6 +1075,7 @@ def main():
     check_staged_genesis()
     check_render_selection()
     check_speech_selection()
+    check_scene_waves()
     check_render_load()
     check_recorded_verdicts()
     check_render_logs()

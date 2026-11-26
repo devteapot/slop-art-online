@@ -16,9 +16,8 @@ touches behaviour, these cases with the fake model only:
                  and verify-player speak, told on the same world,
                  flee_wall, pursue_last_seen (the steering group, its own world: STEERING_PATHS),
                  act_gaps, act_replace, truthful_refusals (the acting group: ACTS_PATHS),
-                 committed, dodge_told, health_seen, seize (the fight group) and outcomes after
-                 skirmish on the island world (COMBAT_PATHS); at most LIVING_GATE_GROUPS (10)
-                 world groups at once
+                 committed, dodge_told, health_seen, seize (the fight group) and outcomes on
+                 its own island world (COMBAT_PATHS)
   verify-minds   roundtrip, acts, dealings, conversation (each its own world, the real living-mind)
   verify-player  combat (combat.py --scene all: the staged fights, an island world)
   verify-client  cues (cues.py: the cue event tables reach only their viewer under row-level
@@ -49,7 +48,9 @@ touches behaviour, these cases with the fake model only:
                  recorded a pass for the same content and the halves it needs (the `render-passes`
                  branch).
 
-The world groups and the tests run at once. A case whose only failures are parts on the red-on-main
+The existing world groups and tests run in the first wave. The speech, steering, acting,
+fight and outcomes groups run in the second wave. Each wave runs at most LIVING_GATE_GROUPS
+(10 by default; 0 runs all groups in that wave). Render groups run after both waves. A case whose only failures are parts on the red-on-main
 list (a mind test `living-mind::<test>`, a combat scene `combat:<scene>`) passes and says which. Flakes: a failing case runs again once, alone, on a fresh scratch
 database. A rerun that passes excuses the first failure only when every part that failed (a scene's
 check, a combat `scene:check`, a mind test, a minds case's error) matches the case's recorded flake
@@ -198,7 +199,7 @@ ACTS_PATHS = ("living/authority/src/acts.rs", "living/rules/src/acts.rs", "livin
               "living/rules/src/outcome.rs")
 
 # The fight group (gate-say-path step 1): verify-core `committed`, `dodge_told`, `health_seen` and
-# `seize` on a fresh default-seed world, and `outcomes` after `skirmish` on the island world (its
+# `seize` on a fresh default-seed world, and `outcomes` on its own island world (its
 # bows and arrows), for merges that change blows, missiles and their codes.
 COMBAT_PATHS = ("living/authority/src/combat.rs", "living/authority/src/codes.rs", "living/rules/src/combat.rs")
 
@@ -257,12 +258,12 @@ CASES = {
                                            "established (act::refused news/tell): verify-core validation 2026-11-23 gate-say-path step 1",
                                     "parts": ["say leaf: told 'nobody has spoken to you in the last minute'"]}},
     # Fights (step 1): committed moves, a dodge's told outcome, health as seen, seizing the yielded,
-    # and (on the island world, after skirmish) a blow's or missile's outcome told to its maker.
+    # and (on its own island world) a blow's or missile's outcome told to its maker.
     "committed":    {"skill": "verify-core", "group": "fight", "paths": COMBAT_PATHS},
     "dodge_told":   {"skill": "verify-core", "group": "fight", "paths": COMBAT_PATHS},
     "health_seen":  {"skill": "verify-core", "group": "fight", "paths": COMBAT_PATHS},
     "seize":        {"skill": "verify-core", "group": "fight", "paths": COMBAT_PATHS},
-    "outcomes":     {"skill": "verify-core", "group": "island", "paths": COMBAT_PATHS},
+    "outcomes":     {"skill": "verify-core", "group": "outcomes", "paths": COMBAT_PATHS},
     "roundtrip":    {"skill": "verify-minds", "group": "minds"},
     "acts":         {"skill": "verify-minds", "group": "minds"},
     "dealings":     {"skill": "verify-minds", "group": "minds",
@@ -1538,10 +1539,10 @@ def run_part(name):
     return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]", "-", name.lower())).strip("-") or "case"
 
 
-# At most this many scene groups (or, on a retry, cases) run at once (LIVING_GATE_GROUPS, default
-# 10: the groups a gate ran before gate-say-path; 0: all at once). Each group is its own world on
-# the server, and they start together: on the Spark, all 14 at once peaked at load 65-70 against
-# the 10's 31, and the cap at 10 at 42-45 for about 100 s more (gate-say-path step 1 series).
+SECOND_WAVE_GROUPS = frozenset({"speech", "steering", "acting", "fight", "outcomes"})
+
+
+# Apply the cap separately to each wave and to the retry pool.
 GROUP_CAP = int(os.environ.get("LIVING_GATE_GROUPS") or 10)
 
 
@@ -1550,9 +1551,7 @@ def workers(n):
 
 
 def run_cases(runner, root, cases, tag):
-    """All `cases` at once, one task per world group, then the render groups alone (they never run
-    beside another group: a client and its GPU work on top of the scenes would load the host past
-    what the scenes' timings allow); {case: (ok, evidence, seconds)}."""
+    """Run each wave in parallel, then the render groups serially; {case: (ok, evidence, seconds)}."""
     groups = {}
     for c in cases:
         groups.setdefault(spec(c)["group"], []).append(c)
@@ -1573,10 +1572,21 @@ def run_cases(runner, root, cases, tag):
         except Exception as e:  # a driver crash is the group's failure, never the gate's crash
             return {c: (False, f"gate error: {type(e).__name__}: {e}", 0.0) for c in groups[g]}
     scenes = [g for g in groups if g not in RENDER_GROUPS]
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers(len(scenes))) as ex:
-        futs = {ex.submit(one, g): g for g in scenes}
-        for f in concurrent.futures.as_completed(futs):
-            report(futs[f], f.result())
+    for number, wave in enumerate((
+        [g for g in scenes if g not in SECOND_WAVE_GROUPS],
+        [g for g in scenes if g in SECOND_WAVE_GROUPS],
+    ), start=1):
+        if not wave:
+            continue
+        start = time.monotonic()
+        if tag == "a":
+            say(f"{tag}: wave {number} starting ({', '.join(wave)})")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers(len(wave))) as ex:
+            futs = {ex.submit(one, g): g for g in wave}
+            for f in concurrent.futures.as_completed(futs):
+                report(futs[f], f.result())
+        if tag == "a":
+            say(f"{tag}: wave {number} finished in {time.monotonic() - start:.0f} s")
     for g in RENDER_GROUPS:
         if g in groups:
             report(g, one(g))
