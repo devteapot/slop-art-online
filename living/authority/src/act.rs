@@ -1415,6 +1415,25 @@ pub fn cancel(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>) {
     cancel_as(ctx, a, now, why, living_rules::outcome::act::BROKEN_OFF);
 }
 
+/// A graph leaf's activity under way whose leaf can no longer resolve its target (it went out
+/// of sight, died, a role nobody fills now): broken off and told as a failure, as one its
+/// completion said no to is, in the same words for a player's command and a mind's plan, once
+/// per `repeat_failure_s` (`report`), and counted against its routine. `why`: what happened,
+/// `code`: which kind of failure (`living_rules::outcome::act`). The leaf has failed on this look
+/// already, so no leaf result is left for it to read a second time. A deliberate act or a
+/// player's move is not a leaf's; a committed move runs its course (`combat::committed`): the
+/// caller leaves those alone.
+pub fn lost(ctx: &ReducerContext, a: Activity, now: u64, why: &str, code: &'static str) {
+    let (id, node, revision) = (a.id, a.node, a.revision);
+    log::info!("activity {id}: {} (node {node}) broken off: {why}", a.skill);
+    routine_outcome(ctx, id, revision, node, false, why, now);
+    cancel_as(ctx, a, now, Some(why), code);
+    if let Some(mut st) = ctx.db.mind_state().id().find(id).filter(|s| s.last.as_ref().is_some_and(|l| l.node == node && l.revision == revision)) {
+        st.last = None;
+        ctx.db.mind_state().id().update(st);
+    }
+}
+
 /// Break off what `a`'s maker was doing because they moved before it was done (a player's move;
 /// a skill whose spec says `on_the_move` is never broken off this way). Told in the rules' words
 /// (`moved_off(skill)`: "the wave stopped: you moved off before it was done"), code `moved`.
