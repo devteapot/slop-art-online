@@ -6,14 +6,14 @@ Track C is the yardstick: today's composed character generator as S7 left it, re
 
 - **[shots.env](shots.env)** (also published to `~/.local/state/bakeoff/shots.env`):
   - `LIVING_GAME_SIZE="1600x900"`, `LIVING_GAME_HOUR="11"`, `LIVING_GAME_DAY_MINUTES="0"`
-  - `LIVING_GAME_VIEW_SHOTS="idle@1.0/front,idle@1.0/three-quarter,idle@1.0/back,idle@1.0/0:8:0.22:0.88,idle@1.0/near@0,idle@1.0/middle@0,idle@1.0/game,walk/three-quarter"`
-  - `LIVING_GAME_VIEW_SHOTS_BIND="front,three-quarter,back"` (second pass with `LIVING_GAME_VIEW_CLIP=bind`, since `living/game/src/view.rs` activates bind pose per-process via `LIVING_GAME_VIEW_CLIP=bind`)
-- **[shoot.sh](shoot.sh)** (also published to `~/.local/state/bakeoff/shoot.sh`): sources `shots.env`, runs both passes through `living/tools/view_assets.sh` under `flock -s ~/.local/state/slop-build/gate.lock` with `CARGO_BUILD_JOBS=8` and a private `CARGO_TARGET_DIR`, merges the per-character stills and `report.json`, and builds one labelled 4×4 contact sheet per character.
+  - `LIVING_GAME_VIEW_SHOTS="idle@1.0/0:8:0.62:0.50,idle@1.0/40:18:0.62:0.50,idle@1.0/180:8:0.62:0.50,idle@1.0/0:8:0.22:0.88,idle@1.0/0:6:0.26:0.48,idle@1.0/near@0,idle@1.0/middle@0,idle@1.0/game,walk/three-quarter"` (full-body front/3/4/back framed at `zoom=0.62, aim=0.50` so every character fills ~85–90% of frame height from head to boots; plus face close-up, hands close-up at sides, Near/Middle/game play stops, and 6-frame walk)
+  - `LIVING_GAME_VIEW_SHOTS_BIND="0:8:0.62:0.50,40:18:0.62:0.50,180:8:0.62:0.50"` (second pass with `LIVING_GAME_VIEW_CLIP=bind`, since `living/game/src/view.rs` activates bind pose per-process via `LIVING_GAME_VIEW_CLIP=bind`)
+- **[shoot.sh](shoot.sh)** (also published to `~/.local/state/bakeoff/shoot.sh`): sources `shots.env`, runs both passes through `living/tools/view_assets.sh` under `flock -s ~/.local/state/slop-build/gate.lock` with `CARGO_BUILD_JOBS=8` and a private `CARGO_TARGET_DIR`, merges the per-character stills and `report.json`, and builds one labelled contact sheet per character (17 shots).
 
 ## Contact sheets
 
-- **[contact-sheet.png](contact-sheet.png)** — all four Cullet characters side-by-side across `idle · front`, `idle · 3/4`, `idle · back`, `face close-up`, `Near (8m)`, `Middle (12m)`, `play (game)`, `walk f0 · 3/4`, and `bind · front`.
-- **[stage1-woman.png](stage1-woman.png)** — full 16-shot Stage-1 comparison of today's base young woman (`adult-f-b`) in the least-dressed plain underlayer the current generator allows.
+- **[contact-sheet.png](contact-sheet.png)** — all four Cullet characters side-by-side across `idle - front`, `idle - 3/4`, `idle - back`, `face close-up`, `hands close-up`, `Near (8m)`, `Middle (12m)`, `play (game)`, `walk f0 - 3/4`, and `bind - front`.
+- **[stage1-woman.png](stage1-woman.png)** — full 17-shot Stage-1 comparison of today's base young woman (`adult-f-b`) in the least-dressed plain underlayer the current generator allows.
 
 ## Source assets
 

@@ -73,7 +73,7 @@ run_view "$BIND_DIR" \
   LIVING_GAME_HOUR="${LIVING_GAME_HOUR:-11}" \
   LIVING_GAME_DAY_MINUTES="${LIVING_GAME_DAY_MINUTES:-0}" \
   LIVING_GAME_VIEW_CLIP="bind" \
-  LIVING_GAME_VIEW_SHOTS="${LIVING_GAME_VIEW_SHOTS_BIND:-front,three-quarter,back}"
+  LIVING_GAME_VIEW_SHOTS="${LIVING_GAME_VIEW_SHOTS_BIND:-0:8:0.62:0.50,40:18:0.62:0.50,180:8:0.62:0.50}"
 
 # Merge per-character stills + report.json into OUT_DIR and build one labelled contact sheet per character.
 python3 - "$OUT_DIR" "$ANIM_DIR" "$BIND_DIR" <<'PY'
@@ -103,25 +103,30 @@ def load_font(size):
 def pretty_label(filename, is_bind=False):
     stem = os.path.splitext(os.path.basename(filename))[0]
     stem = re.sub(r"^\d+-", "", stem)
+    view_names = {
+        "0_8_0.62_0.50": "front",
+        "0_8_0.62_0.5": "front",
+        "40_18_0.62_0.50": "three-quarter",
+        "40_18_0.62_0.5": "three-quarter",
+        "180_8_0.62_0.50": "back",
+        "180_8_0.62_0.5": "back",
+        "0_8_0.22_0.88": "face close-up",
+        "0_6_0.26_0.48": "hands close-up",
+        "near_0": "Near (8m)",
+        "middle_0": "Middle (12m)",
+        "game": "play camera (game)",
+    }
     if is_bind:
         stem = re.sub(r"^bind-", "", stem)
-        return f"bind · {stem}"
+        return f"bind - {view_names.get(stem, stem)}"
     if stem.startswith("clip-idle@"):
         rest = stem.split("-", 2)[-1] if stem.count("-") >= 2 else stem
-        if rest == "0_8_0.22_0.88":
-            return "idle · face close-up"
-        if rest == "near_0":
-            return "idle · Near (8m)"
-        if rest == "middle_0":
-            return "idle · Middle (12m)"
-        if rest == "game":
-            return "idle · play camera (game)"
-        return f"idle · {rest}"
+        return f"idle - {view_names.get(rest, rest)}"
     if stem.startswith("clip-walk-"):
         m = re.match(r"clip-walk-(\d+)-(.*)", stem)
         if m:
-            return f"walk f{m.group(1)} · {m.group(2)}"
-    return stem
+            return f"walk f{m.group(1)} - {m.group(2)}"
+    return view_names.get(stem, stem)
 
 models = sorted(
     {
@@ -154,6 +159,8 @@ sheets = []
 for name in models:
     dst = os.path.join(out_dir, name)
     os.makedirs(dst, exist_ok=True)
+    for old in glob.glob(os.path.join(dst, "[0-9][0-9]-*.png")):
+        os.remove(old)
     tiles = []
 
     a_dir = os.path.join(anim_dir, name)
