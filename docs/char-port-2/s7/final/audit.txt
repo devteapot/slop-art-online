@@ -1,0 +1,123 @@
+calibrate: lookdev/types/adult-f-a.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.07848, 'density_within_25pct': 0.942, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02781, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/adult-f-b.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.01887, 'density_within_25pct': 0.969, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02314, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/adult-f-c.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 0.97112, 'density_within_25pct': 0.946, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.01765, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/adult-m-a.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.09565, 'density_within_25pct': 0.953, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.04619, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/adult-m-b.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02201, 'density_within_25pct': 0.989, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02358, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/adult-m-c.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 0.9787, 'density_within_25pct': 0.989, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.01736, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/child-u-a.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.07201, 'density_within_25pct': 0.96, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02891, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/child-u-b.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02034, 'density_within_25pct': 0.991, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02303, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/child-u-c.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 0.97946, 'density_within_25pct': 0.993, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02522, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/elder-f-a.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.08604, 'density_within_25pct': 0.911, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.035, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/elder-f-b.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.01924, 'density_within_25pct': 0.975, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02364, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/elder-f-c.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 0.97291, 'density_within_25pct': 0.962, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.01042, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/elder-m-a.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.10408, 'density_within_25pct': 0.978, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.05571, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/elder-m-b.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02269, 'density_within_25pct': 0.991, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.0226, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/elder-m-c.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 0.982, 'density_within_25pct': 0.991, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.01616, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/youth-f-a.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.0849, 'density_within_25pct': 0.935, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.03079, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/youth-f-b.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.01871, 'density_within_25pct': 0.967, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02315, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/youth-f-c.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 0.97186, 'density_within_25pct': 0.949, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.01972, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/youth-m-a.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.10138, 'density_within_25pct': 0.973, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.03957, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/youth-m-b.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02073, 'density_within_25pct': 0.989, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02381, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/types/youth-m-c.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 0.97533, 'density_within_25pct': 0.991, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.01813, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/own-cp7p-woman.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.01887, 'density_within_25pct': 0.969, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02314, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/own-cp7p-man.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02201, 'density_within_25pct': 0.989, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02358, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/own-cp7p-elder.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02269, 'density_within_25pct': 0.991, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.0226, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/own-cp7p-girl.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.07201, 'density_within_25pct': 0.96, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02891, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+calibrate: lookdev/own-cp7p-woman-sb.glb
+  composed: True
+  ink: {'M00_000_00_LidInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.01887, 'density_within_25pct': 0.969, 'carrier': True}, 'M00_000_00_FaceBrowInk_00_FACE': {'width': 'uv', 'map': 'lookdev/types/types.eyes.ink.png', 'map_size': '4096x4096, 3 channel(s)', 'line_texels': 200, 'R': [0, 134], 'm_uv': 1.02314, 'density_within_25pct': 1.0, 'carrier': True}}
+  audit: 0 error(s), 0 warning(s)
+Traceback (most recent call last):
+  File "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/living/tools/characters/calibrate.py", line 840, in <module>
+    main()
+    ~~~~^^
+  File "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/living/tools/characters/calibrate.py", line 778, in main
+    errors, warns, notes, facts = audit(glb)
+                                  ~~~~~^^^^^
+  File "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/living/tools/characters/calibrate.py", line 197, in audit
+    j, binary = read_glb(ASSETS / glb if not os.path.isabs(glb) else glb)
+                ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/living/tools/characters/calibrate.py", line 69, in read_glb
+    b = Path(path).read_bytes()
+  File "/usr/lib64/python3.14/pathlib/__init__.py", line 777, in read_bytes
+    with self.open(mode='rb', buffering=0) as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.14/pathlib/__init__.py", line 771, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/living/game/assets/lookdev/own-cp7p-cora.glb'

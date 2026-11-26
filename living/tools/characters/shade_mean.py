@@ -23,7 +23,8 @@ at the play camera, where whole-person files made 20). Here each class is given 
 - **overlay** (a grey picture with an alpha, a file): the picture's mean over what it covers is
   scaled to `OVERLAY` (a light grey, so that tinting it to a person's colour only darkens it). An overlay still has a picture of its own (and lines and freckles their
   type's shadow map), so it stays a material a file; equal means only make one tint come out the
-  same on every type.
+  same on every type. With `SLOP_PORT=beard` (char-port-2 S7, from char-4-body-joins 8d1659ec5) the opaque far beards,
+  which have no picture, share one area-weighted mean of their grey vertex shading (FAR_BEARD) across types and shapes.
 
 `--check` prints each file's means by class and fails if one is off. Plain Python, numpy and Pillow.
 """
@@ -44,6 +45,8 @@ HAIR = 0.78     # the mean vertex colour of a hair mesh's outer surfaces (its li
 OVERLAY = 0.90  # an overlay picture's mean grey over what it covers, as stored (sRGB): high, so a tint is a darkening
 LUM = np.array([0.2126, 0.7152, 0.0722])
 TOL = 0.004
+FAR_BEARD = 0.709  # (port `beard`) the far beard shells' linear vertex mean, as landed on char-4-body-joins
+BEARD = "beard" in {f.strip() for f in os.environ.get("SLOP_PORT", "").split(",") if f.strip()}
 
 
 def _colours(j, binary, p):
@@ -107,25 +110,30 @@ def mesh_mean(j, binary, ps, grey, outer=False):
     return float((v * a).sum() / max(a.sum(), 1e-12))
 
 
-def outfit(j, binary):
-    """Grey shading round CLOTH for every cloth mesh without a picture."""
+def neutral_meshes(j, binary, material, target):
+    """Keep vertex shading round one area-weighted linear grey for this material's meshes without a picture."""
     out = []
-    for mesh, ps in _prims(j, "_CLOTH"):
+    for mesh, ps in _prims(j, material):
         ps = [p for p in ps if "baseColorTexture" not in (j["materials"][p["material"]].get("pbrMetallicRoughness") or {})]
         if not ps:
             continue
-        k = CLOTH / max(mesh_mean(j, binary, ps, True), 1e-9)
+        k = target / max(mesh_mean(j, binary, ps, True), 1e-9)
         for _ in range(3):  # a clipped vertex pulls the mean down a hair: scale again
             for p in ps:
                 col, acc, n, scale = _colours(j, binary, p)
                 g = np.clip((col[:, :3] @ LUM) * k, 0.0, 1.0)
                 col[:, :3] = g[:, None]
                 _write(j, binary, acc, col, n, scale)
-            k = CLOTH / max(mesh_mean(j, binary, ps, True), 1e-9)
+            k = target / max(mesh_mean(j, binary, ps, True), 1e-9)
             if abs(k - 1) < 1e-4:
                 break
         out.append((mesh["name"], mesh_mean(j, binary, ps, True)))
     return out
+
+
+def outfit(j, binary):
+    """Grey shading round CLOTH for every cloth mesh without a picture."""
+    return neutral_meshes(j, binary, "_CLOTH", CLOTH)
 
 
 def hair(j, binary):
@@ -174,7 +182,7 @@ def overlay(j, binary):
     """Scale each overlay picture's grey so its mean over what it covers is OVERLAY."""
     from PIL import Image
 
-    out = []
+    out = neutral_meshes(j, binary, "_FarOverlay_", FAR_BEARD) if BEARD else []
     for ii, name in _pictures(j):
         pic = _load(j, binary, ii)
         k = OVERLAY / max(picture_mean(pic), 1e-9)
@@ -200,6 +208,9 @@ def measure(path):
     j, binary = read_glb(path)
     rows = []
     kind = os.path.relpath(path).replace(os.sep, "/").split("/styles/")[-1].split("/")[0]
+    if BEARD and kind == "overlay":
+        for mesh, ps in _prims(j, "_FarOverlay_"):
+            rows.append(("far beard", mesh["name"], mesh_mean(j, binary, ps, True), FAR_BEARD))
     if kind == "outfit":
         for mesh, ps in _prims(j, "_CLOTH"):
             rows.append(("cloth", mesh["name"], mesh_mean(j, binary, ps, True), CLOTH))

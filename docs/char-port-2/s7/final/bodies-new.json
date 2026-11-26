@@ -1,0 +1,254 @@
+{
+ "own-cp7p-woman.glb": {
+  "rest": 569,
+  "Fcl_EYE_Close": [
+   3,
+   3
+  ],
+  "Fcl_EYE_Close_L": [
+   2,
+   2
+  ],
+  "Fcl_EYE_Close_R": [
+   1,
+   1
+  ],
+  "Fcl_EYE_Joy": [
+   10,
+   10
+  ],
+  "Fcl_MTH_A": [
+   0,
+   0
+  ],
+  "Fcl_MTH_I": [
+   0,
+   0
+  ],
+  "Fcl_MTH_U": [
+   0,
+   0
+  ],
+  "Fcl_MTH_E": [
+   0,
+   0
+  ],
+  "Fcl_MTH_O": [
+   0,
+   0
+  ],
+  "Fcl_MTH_Fun": [
+   0,
+   0
+  ],
+  "Fcl_MTH_Sorrow": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Angry": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Sorrow": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Surprised": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Fun": [
+   0,
+   0
+  ]
+ },
+ "own-cp7p-man.glb": {
+  "rest": 777,
+  "Fcl_EYE_Close": [
+   8,
+   8
+  ],
+  "Fcl_EYE_Close_L": [
+   4,
+   4
+  ],
+  "Fcl_EYE_Close_R": [
+   4,
+   4
+  ],
+  "Fcl_EYE_Joy": [
+   10,
+   10
+  ],
+  "Fcl_MTH_A": [
+   0,
+   0
+  ],
+  "Fcl_MTH_I": [
+   0,
+   0
+  ],
+  "Fcl_MTH_U": [
+   0,
+   0
+  ],
+  "Fcl_MTH_E": [
+   0,
+   0
+  ],
+  "Fcl_MTH_O": [
+   0,
+   0
+  ],
+  "Fcl_MTH_Fun": [
+   0,
+   0
+  ],
+  "Fcl_MTH_Sorrow": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Angry": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Sorrow": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Surprised": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Fun": [
+   0,
+   0
+  ]
+ },
+ "own-cp7p-elder.glb": {
+  "rest": 768,
+  "Fcl_EYE_Close": [
+   18,
+   18
+  ],
+  "Fcl_EYE_Close_L": [
+   9,
+   9
+  ],
+  "Fcl_EYE_Close_R": [
+   9,
+   9
+  ],
+  "Fcl_EYE_Joy": [
+   8,
+   8
+  ],
+  "Fcl_MTH_A": [
+   0,
+   0
+  ],
+  "Fcl_MTH_I": [
+   0,
+   0
+  ],
+  "Fcl_MTH_U": [
+   0,
+   0
+  ],
+  "Fcl_MTH_E": [
+   0,
+   0
+  ],
+  "Fcl_MTH_O": [
+   0,
+   0
+  ],
+  "Fcl_MTH_Fun": [
+   0,
+   0
+  ],
+  "Fcl_MTH_Sorrow": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Angry": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Sorrow": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Surprised": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Fun": [
+   0,
+   0
+  ]
+ },
+ "own-cp7p-girl.glb": {
+  "rest": 995,
+  "Fcl_EYE_Close": [
+   3,
+   3
+  ],
+  "Fcl_EYE_Close_L": [
+   2,
+   2
+  ],
+  "Fcl_EYE_Close_R": [
+   1,
+   1
+  ],
+  "Fcl_EYE_Joy": [
+   10,
+   10
+  ],
+  "Fcl_MTH_A": [
+   0,
+   0
+  ],
+  "Fcl_MTH_I": [
+   0,
+   0
+  ],
+  "Fcl_MTH_U": [
+   0,
+   0
+  ],
+  "Fcl_MTH_E": [
+   0,
+   0
+  ],
+  "Fcl_MTH_O": [
+   0,
+   0
+  ],
+  "Fcl_MTH_Fun": [
+   0,
+   0
+  ],
+  "Fcl_MTH_Sorrow": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Angry": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Sorrow": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Surprised": [
+   0,
+   0
+  ],
+  "Fcl_BRW_Fun": [
+   0,
+   0
+  ]
+ }
+}
