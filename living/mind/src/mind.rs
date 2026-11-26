@@ -109,6 +109,10 @@ pub struct Index {
     /// columns, not for the `by_pair` or `known` btree indexes), so the pair is kept here
     /// (mind-sex-seen-keyed, 2026-11-26; before, each lookup cloned the whole table).
     sex_seen: crate::prof::Mx<HashMap<(u32, u32), u64>>,
+    /// `relation_fight` row ids by actor: whom each character said it fights. SDK 2.14.1 client
+    /// bindings expose only `id`, not the `by_pair` or `other` btree indexes, so per-actor ids
+    /// are kept here from the row callbacks instead of cloning the whole table with `iter()`.
+    relation_fight: crate::prof::Mx<HashMap<u32, BTreeSet<u64>>>,
 }
 
 impl Default for Index {
@@ -117,6 +121,7 @@ impl Default for Index {
             exp: crate::prof::Mx::new("index_exp", HashMap::new()),
             requests: crate::prof::Mx::new("index_requests", HashMap::new()),
             sex_seen: crate::prof::Mx::new("index_sex_seen", HashMap::new()),
+            relation_fight: crate::prof::Mx::new("index_relation_fight", HashMap::new()),
         }
     }
 }
@@ -178,6 +183,25 @@ impl Index {
     /// The `sex_seen` row id for what `observer` made out of `known`, if it has.
     fn sex_seen_id(&self, observer: u32, known: u32) -> Option<u64> {
         self.sex_seen.lock().unwrap().get(&(observer, known)).copied()
+    }
+
+    pub fn relation_fight_in(&self, r: &RelationFight) {
+        self.relation_fight.lock().unwrap().entry(r.actor).or_default().insert(r.id);
+    }
+
+    pub fn relation_fight_out(&self, r: &RelationFight) {
+        let mut m = self.relation_fight.lock().unwrap();
+        if let Some(ids) = m.get_mut(&r.actor) {
+            ids.remove(&r.id);
+            if ids.is_empty() {
+                m.remove(&r.actor);
+            }
+        }
+    }
+
+    /// `actor`'s `relation_fight` row ids, in ascending id order.
+    fn relation_fight_ids(&self, actor: u32) -> Vec<u64> {
+        self.relation_fight.lock().unwrap().get(&actor).map_or_else(Vec::new, |ids| ids.iter().copied().collect())
     }
 }
 
@@ -2197,8 +2221,13 @@ impl Minds {
         let mut rs: Vec<Relation> = self.conn.db.relation().iter().filter(|r| r.actor == actor).collect();
         rs.sort_by(|a, b| (b.trust.abs() + b.affinity.abs()).total_cmp(&(a.trust.abs() + a.affinity.abs())));
         // Whom it said it fights (relation-fight): beside the feeling, or alone when it has no
-        // relation row for them.
-        let fights: Vec<RelationFight> = if prompts::relation_fight_on() { self.conn.db.relation_fight().iter().filter(|f| f.actor == actor).collect() } else { Vec::new() };
+        // relation row for them. Read through `Index::relation_fight_ids` + PK `id().find()` so
+        // we never clone the whole `relation_fight` table via `iter()`.
+        let fights: Vec<RelationFight> = if prompts::relation_fight_on() {
+            self.index.relation_fight_ids(actor).into_iter().filter_map(|id| self.conn.db.relation_fight().id().find(&id)).collect()
+        } else {
+            Vec::new()
+        };
         let fight_of = |other: u32| fights.iter().find(|f| f.other == other).map_or(String::new(), |f| format!("; fight: {}", f.fight));
         let mut out: Vec<String> = rs
             .iter()
@@ -3160,6 +3189,38 @@ mod tests {
         index.sex_seen_out(&row(4, 3, 8));
         assert_eq!(index.sex_seen_id(3, 8), None);
         assert_eq!(index.sex_seen_id(8, 3), Some(2));
+    }
+
+    /// relation-fight-prune: an actor's `relation_fight` rows are found by actor through `Index`
+    /// instead of scanning `conn.db.relation_fight().iter()`; deletes (including when a target
+    /// dies and is retired) remove only that row and clean up empty actor entries.
+    #[test]
+    fn the_index_finds_an_actors_relation_fights_by_actor() {
+        let row = |id: u64, actor: u32, other: u32, fight: &str| RelationFight {
+            id,
+            actor,
+            other,
+            fight: fight.into(),
+            by: "mind".into(),
+            updated_ms: id,
+        };
+        let index = Index::default();
+        index.relation_fight_in(&row(10, 3, 8, "enemy"));
+        index.relation_fight_in(&row(12, 3, 9, "spare"));
+        index.relation_fight_in(&row(11, 8, 3, "enemy"));
+        assert_eq!(index.relation_fight_ids(3), vec![10, 12]);
+        assert_eq!(index.relation_fight_ids(8), vec![11]);
+        assert_eq!(index.relation_fight_ids(9), Vec::<u64>::new());
+        // Updating a row (delete old, insert new) keeps the id for that actor.
+        index.relation_fight_out(&row(10, 3, 8, "enemy"));
+        index.relation_fight_in(&row(10, 3, 8, "spare"));
+        assert_eq!(index.relation_fight_ids(3), vec![10, 12]);
+        // Deleting a dead target's rows removes only those rows.
+        index.relation_fight_out(&row(10, 3, 8, "spare"));
+        assert_eq!(index.relation_fight_ids(3), vec![12]);
+        index.relation_fight_out(&row(12, 3, 9, "spare"));
+        assert_eq!(index.relation_fight_ids(3), Vec::<u64>::new());
+        assert_eq!(index.relation_fight_ids(8), vec![11]);
     }
 
 

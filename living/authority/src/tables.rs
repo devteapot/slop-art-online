@@ -1257,6 +1257,7 @@ pub struct RelationFight {
     #[auto_inc]
     pub id: u64,
     pub actor: u32,
+    #[index(btree)]
     pub other: u32,
     /// `enemy` or `spare`.
     pub fight: String,
