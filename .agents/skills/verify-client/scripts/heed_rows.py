@@ -27,7 +27,8 @@ of P's on another, one of P's individuals on a throng member, and a throng membe
   accepted: an empty stream proves nothing.
 - **Change only:** while nobody moves, P receives no `seen_throng` insert, update or delete.
 - **Colours carry no identity:** each row has only its cells, counts, bits and three cloth indices
-  (0-9, 255 none) with counts; an index of 255 has count 0.
+  (0-9, 255 none) with counts; an index of 255 has count 0; its counts by kind are no larger than
+  its count allows and its centre lies within its square.
 - **pin_at:** Q picks a walker out of its own throng by its position; it becomes Q's individual,
   not P's, and P's rows never name it; an anonymous `pin_at` is refused as any `human_heed` is.
 
@@ -232,9 +233,15 @@ def main():
         theirs = [r for t, r in rows_of(ev["q"]) if t == "seen_throng"]
         check("seen_throng: P receives its own rows only", mine and all(norm(r["viewer"]) == ident["p"] for r in mine), len(mine))
         fields = {"id", "viewer", "cell", "size", "count", "spread", "heading", "moving", "fighting", "kinds",
-                  "colour_a", "colour_a_count", "colour_b", "colour_b_count", "colour_c", "colour_c_count"}
+                  "colour_a", "colour_a_count", "colour_b", "colour_b_count", "colour_c", "colour_c_count",
+                          "people", "wolves", "deer", "others", "centre_x", "centre_y"}
         colours_ok = all(set(r) == fields and all(r[f"colour_{k}"] in set(range(10)) | {255} for k in "abc")
                          and all((r[f"colour_{k}"] == 255) == (r[f"colour_{k}_count"] == 0) for k in "abc") for r in mine)
+        shape_ok = all(sum(r[k] for k in ("people", "wolves", "deer", "others")) >= (1 if r["count"] else 0)
+                       and all(r[k] <= max(r["count"], 5) for k in ("people", "wolves", "deer", "others"))
+                       and r["centre_x"] < 6 * max(1, r["size"]) and r["centre_y"] < 6 * max(1, r["size"]) for r in mine)
+        check("seen_throng kinds and centre carry no identity: counts by kind no larger than the row's, a centre within its square", mine and shape_ok,
+              [{k: r[k] for k in ("cell", "size", "count", "people", "wolves", "deer", "others", "centre_x", "centre_y")} for r in mine[:3]])
         check("seen_throng colours carry no identity: three cloth indices (0-9, 255 none) with counts, nothing else", mine and colours_ok,
               [{k: r[k] for k in sorted(fields - {"viewer"})} for r in mine[:2]])
         check("seen_throng: Q receives its own rows only", theirs and all(norm(r["viewer"]) == ident["q"] for r in theirs), len(theirs))

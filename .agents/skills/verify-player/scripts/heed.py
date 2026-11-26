@@ -12,7 +12,8 @@ The heed ceiling (`heed_ceiling`) is set to 2, so P's capacity is 2. Checks, in 
 - **on:** P perceives at most 2 of them, the nearest; its `seen_throng` rows count the other six
   (counts exact under 6), none names anyone (cells, counts, bits and colour indices only); each
   cell's three colours are its members' most worn cloth colours from their looks (read as the
-  owner), counts quantized as `count`; with `far_cap` 1 too, still 2 (heed replaces `far_cap`'s
+  owner), counts quantized as `count`; its counts by kind match its members (people here), and its
+  centre is their mean position to the metre within the square; with `far_cap` 1 too, still 2 (heed replaces `far_cap`'s
   trim, never both);
 - **`human_heed`'s refusals:** five pins ("at most 4"); a pin on a throng member and one on an id
   no one has, refused with the same words; a second call within 250 ms ("too many inputs");
@@ -36,6 +37,7 @@ The laws are put back as the world had them. Admin calls (`spawn_crowd`, `set_be
 Python standard library only.
 """
 import argparse
+import math
 import json
 import sys
 import time
@@ -218,7 +220,8 @@ try:
     record("on: seen_throng counts the rest (exact to 5, then to the nearest 5)", rows and abs(total - len(crowd - ind)) <= slack, {"rows": rows, "total": total, "rest": len(crowd - ind)})
     record("on: a throng row carries cells, counts, bits and colour indices only (no id of anyone)",
            all(set(r) == {"id", "viewer", "cell", "size", "count", "spread", "heading", "moving", "fighting", "kinds",
-                          "colour_a", "colour_a_count", "colour_b", "colour_b_count", "colour_c", "colour_c_count"} for r in rows) and all(hexid(r["viewer"]) == ident for r in rows), rows[:2])
+                          "colour_a", "colour_a_count", "colour_b", "colour_b_count", "colour_c", "colour_c_count",
+                          "people", "wolves", "deer", "others", "centre_x", "centre_y"} for r in rows) and all(hexid(r["viewer"]) == ident for r in rows), rows[:2])
     # The colours: each row's three, from its members' looks (positions and looks read as the owner).
     pos = {b["id"]: (b["x"], b["y"]) for b in sql("SELECT id, x, y FROM body") if b["id"] in crowd - ind}
     colours = []
@@ -228,6 +231,18 @@ try:
         colours.append({"cell": r["cell"], "members": len(members), "got": got_c, "want": expected_colours(members)})
     record("on: each cell's colours are its members' most worn cloth colours, counts quantized as count",
            colours and all(c["got"] == c["want"] for c in colours) and any(c["got"][0][0] != 255 for c in colours), colours)
+    # Kinds and centre: each row's counts by kind (all people here) and its members' mean position
+    # to the metre within its square, from the owner's reading of their bodies.
+    shape = []
+    for r in rows:
+        members = [p_ for p_ in pos.values() if inside(r, p_)]
+        x0, y0, side = square(r)
+        mx, my = (sum(p_[0] for p_ in members) / len(members), sum(p_[1] for p_ in members) / len(members)) if members else (x0, y0)
+        want_c = [min(max(math.floor(mx - x0), 0), int(side) - 1), min(max(math.floor(my - y0), 0), int(side) - 1)]
+        shape.append({"cell": r["cell"], "members": len(members), "kinds": [r["people"], r["wolves"], r["deer"], r["others"]],
+                      "want_kinds": [about(len(members)), 0, 0, 0], "centre": [r["centre_x"], r["centre_y"]], "want_centre": want_c})
+    record("on: each cell's counts by kind (quantized as count) and its members' centre to the metre",
+           shape and all(c["kinds"] == c["want_kinds"] and c["centre"] == c["want_centre"] for c in shape), shape)
     record("on: perceived rows are the individuals only", {r["body"] for r in perceived_rows()} == ind, sorted(r["body"] for r in perceived_rows()))
     law("far_cap", 1)
     time.sleep(1.5)

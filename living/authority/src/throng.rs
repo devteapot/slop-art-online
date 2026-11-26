@@ -80,6 +80,12 @@ pub struct Cell6 {
     /// The three colours most worn ([`living_rules::look::CLOTH`] indices, most first, ties by
     /// index) with their counts quantized as `count` is; `(NO_CLOTH, 0)` for a place none fills.
     pub colours: [Colour; 3],
+    /// How many of each kind (people, wolves, deer, others: `kinds`' bits in order), each
+    /// quantized as `count` is.
+    pub by_kind: [u16; 4],
+    /// Where the members stand within the square: their mean position's whole metres east and
+    /// south of its top-left corner (0 to side - 1; a client draws it at + 0.5 m).
+    pub centre: [u8; 2],
 }
 
 /// One of a cell's colours: a cloth index and its quantized count.
@@ -155,6 +161,7 @@ pub fn cells(here: (f32, f32), throng: &[NearCreature], moving: impl Fn(u32) -> 
             let (cx, cy) = (cs.iter().map(|c| c.pos.0).sum::<f32>() / n as f32, cs.iter().map(|c| c.pos.1).sum::<f32>() / n as f32);
             let spread = cs.iter().map(|c| (c.pos.0 - cx).hypot(c.pos.1 - cy)).fold(0.0f32, f32::max) * 2.0;
             let (mut vx, mut vy, mut movers, mut fighters, mut kinds) = (0.0f32, 0.0f32, 0usize, 0usize, 0u8);
+            let mut of_kind = [0usize; 4];
             for c in &cs {
                 if let Some((a, b)) = moving(c.id) {
                     movers += 1;
@@ -164,12 +171,14 @@ pub fn cells(here: (f32, f32), throng: &[NearCreature], moving: impl Fn(u32) -> 
                 if fighting(c.id) {
                     fighters += 1;
                 }
-                kinds |= match &*c.kind {
-                    "person" => PEOPLE,
-                    "wolf" => WOLVES,
-                    "deer" => DEER,
-                    _ => OTHERS,
+                let (bit, slot) = match &*c.kind {
+                    "person" => (PEOPLE, 0),
+                    "wolf" => (WOLVES, 1),
+                    "deer" => (DEER, 2),
+                    _ => (OTHERS, 3),
                 };
+                kinds |= bit;
+                of_kind[slot] += 1;
             }
             let heading = if movers * 2 >= n && movers > 0 && (vx / movers as f32).hypot(vy / movers as f32) >= HEADING_MIN_MPS {
                 ((vy.atan2(vx).to_degrees() / 45.0).round().rem_euclid(8.0)) as u8
@@ -177,7 +186,11 @@ pub fn cells(here: (f32, f32), throng: &[NearCreature], moving: impl Fn(u32) -> 
                 STILL
             };
             let colours = top_colours(cs.iter().map(|c| cloth(c.id)));
-            let row = Cell6 { cell: key(x, y), size: s as u8, count: about(n), spread: ((spread / 2.0).round() * 2.0).min(254.0) as u8, heading, moving: about(movers), fighting: about(fighters), kinds, colours };
+            let side = s as f32 * CELL_M;
+            let at = |v: f32, corner: f32| ((v - corner).floor().clamp(0.0, side - 1.0)) as u8;
+            let centre = [at(cx, x as f32 * CELL_M), at(cy, y as f32 * CELL_M)];
+            let by_kind = of_kind.map(about);
+            let row = Cell6 { cell: key(x, y), size: s as u8, count: about(n), spread: ((spread / 2.0).round() * 2.0).min(254.0) as u8, heading, moving: about(movers), fighting: about(fighters), kinds, colours, by_kind, centre };
             (common::dist(here, (cx, cy)), row)
         })
         .collect();
@@ -241,6 +254,12 @@ fn write(ctx: &ReducerContext, viewer: Identity, new: &[Cell6]) {
             colour_b_count: b.count,
             colour_c: k.index,
             colour_c_count: k.count,
+            people: c.by_kind[0],
+            wolves: c.by_kind[1],
+            deer: c.by_kind[2],
+            others: c.by_kind[3],
+            centre_x: c.centre[0],
+            centre_y: c.centre[1],
         };
         match kept.remove(&(c.cell, c.size)) {
             Some(r) => {
@@ -358,6 +377,24 @@ mod tests {
         // No looks at all: no colours.
         let none = cells((0.0, 0.0), &t[..3], |_| None, |_| false, |_| NO_CLOTH);
         assert_eq!(none[0].colours, [NO_COLOUR; 3]);
+    }
+
+    #[test]
+    fn kinds_counted_and_the_centre_to_the_metre() {
+        // Seven people and two wolves in the square (6, 0)-(12, 6): the people at x 7.0..10.0, y 2.5.
+        let mut t: Vec<NearCreature> = (0..7).map(|i| c(i, 7.0 + 0.5 * i as f32, 2.5)).collect();
+        for i in 7..9 {
+            t.push(NearCreature { id: i, kind: Rc::from("wolf"), pos: (11.5, 5.9), dist: 0.0, facing: 0.0 });
+        }
+        let rows = cells((0.0, 0.0), &t, |_| None, |_| false, |_| NO_CLOTH);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].by_kind, [5, 2, 0, 0], "7 people read as about 5");
+        assert_eq!(rows[0].kinds, PEOPLE | WOLVES);
+        // The mean: x (7*8.5 + 2*11.5) / 9 = 9.17, y (7*2.5 + 2*5.9) / 9 = 3.26: 3 m and 3 m in.
+        assert_eq!(rows[0].centre, [3, 3]);
+        // A lone member's centre is its own position to the metre, within the square.
+        let one = cells((0.0, 0.0), &[c(1, 17.99, 0.2)], |_| None, |_| false, |_| NO_CLOTH);
+        assert_eq!((one[0].cell, one[0].centre), (key(2, 0), [5, 0]));
     }
 
     #[test]
