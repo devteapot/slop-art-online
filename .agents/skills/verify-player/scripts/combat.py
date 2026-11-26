@@ -918,21 +918,33 @@ def scene_committed(st):
     check(st, "a guard pressed mid-dodge is refused and the dodge runs its course",
           d and d["outcome"] == "made way" and moved and moved > 2.2 and b and b["outcome"].startswith("refused: in the middle of a dodge"),
           {"dodge": d and d["outcome"], "block": b and b["outcome"], "moved": moved and round(moved, 2)})
-    call(st, "place_at", [cid, p[0], p[1]], "admin")
-    time.sleep(0.3)
-    p = body(st, cid)
-    t = dummy(st, p, 1.2, 0.0)
-    time.sleep(0.4)
-    ready(st, "strike")
-    ready(st, "dodge")
-    full_breath(st)
-    call(st, "use_skill", ["strike", t, p[0] + 1.2, p[1]])
-    call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
-    time.sleep(1.0)
-    s_, d = last_use(st, "strike"), last_use(st, "dodge")
+    # The strike's HTTP reply can come back after its 350 ms windup. Re-stage only when
+    # authority timestamps prove the strike already released before the dodge was tried.
+    for attempt in range(1, 5):
+        call(st, "place_at", [cid, p[0], p[1]], "admin")
+        time.sleep(0.3)
+        p = body(st, cid)
+        t = dummy(st, p, 1.2, 0.0)
+        time.sleep(0.4)
+        ready(st, "strike")
+        ready(st, "dodge")
+        full_breath(st)
+        prior = uses(st)
+        prior_id = prior[-1]["id"] if prior else 0
+        call(st, "use_skill", ["strike", t, p[0] + 1.2, p[1]])
+        call(st, "use_skill", ["dodge", 0, p[0], p[1] + 3.0])
+        time.sleep(1.0)
+        recent = [u for u in uses(st) if u["id"] > prior_id]
+        strike = next((u for u in recent if u["skill"] == "strike"), None)
+        dodge = next((u for u in recent if u["skill"] == "dodge"), None)
+        late = strike and dodge and dodge["outcome"] == "made way" and 0 < strike["released_ms"] < dodge["at_ms"]
+        if not late or attempt == 4:
+            break
+        V.log(st, f"strike/dodge attempt {attempt}: dodge arrived {dodge['at_ms'] - strike['released_ms']} ms after release, re-staging")
     check(st, "a dodge still cuts in on a committed windup (the strike is broken off)",
-          s_ and s_["accepted_ms"] > 0 and s_["released_ms"] == 0 and s_["outcome"].startswith("broken off") and d and d["outcome"] == "made way",
-          {"strike": s_ and s_["outcome"], "dodge": d and d["outcome"]})
+          strike and strike["accepted_ms"] > 0 and strike["released_ms"] == 0
+          and strike["outcome"].startswith("broken off") and dodge and dodge["outcome"] == "made way",
+          {"attempt": attempt, "strike": strike, "dodge": dodge})
     # A throw (through `human_act`: it is not on the bar) is committed too: the movement keys
     # pressed during its 800 ms windup wait for it, and the spear flies (before committed-moves
     # the keys broke it off: "you moved").
