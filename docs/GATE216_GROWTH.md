@@ -381,6 +381,73 @@ The 60-second and five-minute cuts and all changed gauges are in
 The raw runs, host samples, build and analysis are archived in
 `~/slop-evidence/gate216-growth-remeasure-20261126.tar.zst` with a SHA-256 file beside it.
 
+## 9. Spark X925 re-measure interrupted by Frostmarsh (2026-11-26)
+
+Build `9b55342ac` combines current main `fa2dbc3a6` with the relay
+prototype descended from `b18402236` and both growth fixes. The source
+used by the measurement binaries is identical to `02c4d94b0`. The later
+upstream merge updates the separate mind service. Cullet was compiled in,
+bindings were regenerated with SpacetimeDB 2.14.1, and `just living-check`
+passed. The loaded fixture used 100 scripted human fighters, 116 walkers
+and owner marker subscriptions. The private server ran on X925 CPUs
+5–9 and 15–19. The driver, relay and sampling processes ran on A725 CPUs
+0–4 and 10–14. Detailed profiling and paid inference were off.
+
+The 60 s idle control passed host-quality checks at **60.00 ticks/s**,
+**17.909 ms marker p99** and **0.000% over 25 ms**. The unmodified
+`marker_steps.py` at `e16a43e5e` gives a loaded-arm p99 limit of
+**18.409 ms**, alongside the fixed 59.9 ticks/s and 0.5% over-25-ms limits.
+
+The relay attempt started at 20:59:22 CET. During measurement, 1-minute
+load rose by 4.33 from its running minimum, from 1.56 to a peak of 5.89.
+At 21:21:21 CET the guard saw Frostmarsh-related compiler PID `636462`
+and stopped the attempt after approximately 21m 17s of measured traffic.
+Later preflights found intermittent Frostmarsh build and Python activity.
+At 21:48:41 CET the retry preflight recorded Frostmarsh server PID
+`706732` and Python PID `706179`. The coordinator confirmed both the
+server and GPU daemon had restarted and stopped the series.
+
+The cadence figures below are diagnostic. The start comes from the first
+detail load sample and the end from the last marker before the interruption.
+Rates use counted server markers because the driver stopped before writing the
+final reducer-counter sample. The host-load rule disqualifies the attempt.
+
+| Window | Ticks/s | Marker p99 ms | Over 25 ms | Numerical line |
+|---|---:|---:|---:|---|
+| 0–5 min | 59.91 | 18.034 | 0.150% | meets |
+| 5–10 min | 59.56 | 19.630 | 0.694% | misses |
+| 10–15 min | 59.59 | 19.140 | 0.649% | misses |
+| 15–20 min | 59.43 | 20.675 | 0.909% | misses |
+| 20–21.28 min | 59.17 | 32.366 | 1.189% | misses |
+| Entire partial window | 59.59 | 19.185 | 0.636% | misses |
+
+Four of 21 complete 60 s windows met the numerical line. The first
+20 minutes stayed at 59.43–59.91 ticks/s, above the 53.73–56.49 range
+in the corresponding blocks of §8's disturbed runs. The first four
+blocks are close to the earlier fixed build in §5, with higher p99
+intervals in this attempt. The interruption came before the original
+dusk collapse in §5. Neither loaded arm has a clean 30-minute verdict,
+and the memory-off arm did not start.
+
+The table shows gauges nearest each five-minute checkpoint and the last
+sample. The structure gauge combines remains and other structures.
+
+| Table sample min | RSS sample min | Server RSS MiB | Structure | Character | Line seen | Sex seen | Skill use | Experience | Experience copy |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.30 | 0.13 | 824.3 | 156 | 295 | 6,290 | 5,264 | 2,570 | 15,040 | 6,090 |
+| 5.30 | 4.97 | 886.3 | 768 | 910 | 7,169 | 28,226 | 16,814 | 33,850 | 6,878 |
+| 10.30 | 9.97 | 910.5 | 1,373 | 1,516 | 6,933 | 56,442 | 30,807 | 36,533 | 6,816 |
+| 15.30 | 14.97 | 940.7 | 1,960 | 2,100 | 7,321 | 80,895 | 44,541 | 37,559 | 7,018 |
+| 20.30 | 19.97 | 972.4 | 2,557 | 2,699 | 7,034 | 91,975 | 58,386 | 37,200 | 6,950 |
+| — | 21.13 | 973.6 | — | — | — | — | — | — | — |
+
+The idle and relay worlds were paused, confirmed by SQL and deleted.
+The retry server had an empty database list. All three private servers
+exited 0 after SIGINT. The battle lock was released at **21:49:11 CET**.
+The raw evidence, partial-window analyses, RSS and table-row CSVs, build
+logs and binary hashes are in `~/slop-evidence/gate216-clean-remeasure-20261126.tar.zst`
+with a SHA-256 sidecar.
+
 ## Evidence
 
 - **Runs:** `~/slop-growth-diag/out/runs/{long-relay,long-main,long-relayfix,smoke-main}/`. Each holds `prof.jsonl`, `spans.json`, `ticks.json`, `mem.jsonl`, `cores.jsonl`, `ticks-watch.csv` (the marker), `battle-viewers.json` and the replica's module logs. Plus `out/driver.log` and the server logs.
