@@ -18,6 +18,7 @@ mod cluster;
 mod death;
 mod facing;
 mod frame;
+mod heed;
 pub mod hit;
 pub mod icons;
 pub mod kit;
@@ -101,8 +102,10 @@ impl Plugin for UiPlugin {
             // Connected play: the game UI's input, its windows and the live source.
             app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::camera_controls, settings::update, facing::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, grid::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
                 .add_systems(Update, (people::ingest, say::follow).in_set(crate::phase::Phase::Present))
-                .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, facing::spawn, facing::pill_spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
+                .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, settings::heed_only, facing::spawn, facing::pill_spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, dump.after(UiSystems::Layout))
+                // Heed for players: the keeping-track strip (nothing while the laws are off).
+                .add_systems(PostUpdate, heed::strip.in_set(UiWork).before(UiSystems::Prepare))
                 .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows, facing::pill).chain().in_set(UiWork).before(UiSystems::Prepare))
                 // Light text gets the theme's drop the frame it is spawned (Glass).
                 .add_systems(PostUpdate, wood::shade_text.after(rebuilt).after(kit::paint).after(UiWork).before(UiSystems::Prepare));
@@ -399,6 +402,11 @@ fn dump(
             "errors": extra.net.errors.lock().unwrap().iter().rev().take(12).rev().cloned().collect::<Vec<_>>(),
         },
     });
+    // Heed for players (`heed.rs`, `throng.rs`): pins, focus, the calls and refusals, and the
+    // throng's rows with the figures drawn for each; null while the laws are off.
+    let mut v = v;
+    v["heed"] = extra.heed.as_ref().filter(|h| h.on).map_or(serde_json::Value::Null, |h| h.json());
+    v["throng"] = extra.throng.as_ref().filter(|t| t.on).map_or(serde_json::Value::Null, |t| t.json());
     match std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap_or_default()) {
         Ok(()) => info!("ui: state written to {}", path.display()),
         Err(e) => warn!("ui: could not write {}: {e}", path.display()),
@@ -486,6 +494,8 @@ pub struct DumpExtra<'w, 's> {
     town: Option<Res<'w, crate::town::Town>>,
     loading: Option<Res<'w, crate::loading::Loading>>,
     combat: Option<Res<'w, crate::combat::Combat>>,
+    heed: Option<Res<'w, crate::heed::Heed>>,
+    throng: Option<Res<'w, crate::throng::Throng>>,
 }
 
 impl DumpExtra<'_, '_> {

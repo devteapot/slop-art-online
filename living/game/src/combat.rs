@@ -117,6 +117,9 @@ pub struct Combat {
     pub killer: Option<u32>,
     /// The creature my targeted skills go to: under or nearest the cursor.
     pub target: Option<u32>,
+    /// The creature I last sent a skill aimed at (a creature-aimed `use_skill`), and when (display
+    /// ms): my current combat target, which heed's focus follows (`heed.rs`).
+    pub aimed: Option<(u32, f64)>,
     /// What each drawn character plays now.
     pub actions: HashMap<u32, Action>,
     /// My pressed move awaiting the authority: (skill, pressed at display ms).
@@ -637,6 +640,9 @@ pub fn input(
             }
             _ => (tgt.unwrap_or(0), aim),
         };
+        if card.aim == "creature" && target_id != 0 {
+            c.aimed = Some((target_id, now));
+        }
         let args = || serde_json::json!({"skill": skill, "target": target_id, "x": point.x, "y": point.y});
         let r = conn.reducers.use_skill_then(skill.clone(), target_id, point.x, point.y, net.on_reply("skill", "use_skill", args));
         net.report("skill", r);

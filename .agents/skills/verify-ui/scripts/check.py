@@ -2164,13 +2164,23 @@ def tables_line(feed):
     """The `tables: …;` part of the client's perception lines for a set (`net::Feed::tables`)."""
     tier, m, ch, f, cf = feed
     b = lambda x: str(x).lower()
-    return rf"tables: motion {b(m)} characters {b(ch)} fighters {b(f)} combat_feed {b(cf)};"
+    # Since experience-incremental the client names the lines table after the combat feed
+    # (`lines true|false`), and since heed-client ` throng true` after that while heed is on.
+    return rf"tables: motion {b(m)} characters {b(ch)} fighters {b(f)} combat_feed {b(cf)} lines (?:true|false)(?: throng true)?;"
 
 
 def seen_tables(feed):
     """The seen log's `tables` for a set (the reads)."""
     tier, m, ch, f, cf = feed
     return {"motion": m, "characters": ch, "fighters": f, "combat_feed": cf}
+
+
+def reads_match(tables, feed):
+    """The seen log's `tables` hold the reads `seen_tables` names for the set. The log names more
+    than these switches set (since experience-incremental `lines`, the lines law's, which these
+    scenarios leave as the world has it), so only the four are compared."""
+    want = seen_tables(feed)
+    return {k: tables.get(k) for k in want} == want
 
 
 def set_on_line(feed):
@@ -2386,7 +2396,7 @@ def battle_views(run, c):
             c.check(s, f"{tag}: no frame without a creature or a character kept across the switch", window and keep and keep_c and not gaps and not gaps_c,
                     f"{len(window)} frames, {len(keep)} kept ({len(gaps)} frames missing one), {len(keep_c)} characters kept ({len(gaps_c)} frames missing one)")
             tables = post[0].get("tables", {}) if post else {}
-            c.check(s, f"{tag}: the reads take the tables the laws name", post and post[0].get("reads") == after[0] and tables == seen_tables(after), json.dumps(tables))
+            c.check(s, f"{tag}: the reads take the tables the laws name", post and post[0].get("reads") == after[0] and reads_match(tables, after), json.dumps(tables))
         cp = r["copies"] or {}
         if law == "motion_tables_on":
             if value == "true":
@@ -2962,7 +2972,7 @@ def combat_switches(run, c):
             c.check(s, f"{tag}: no frame without a creature, a character or a fighter kept across the switch",
                     window and all(counts[k][0] > 0 and counts[k][1] == 0 for k in counts), f"{len(window)} frames; kept, frames missing one: {json.dumps(counts)}")
             tables = post[0].get("tables", {}) if post else {}
-            c.check(s, f"{tag}: the reads take the tables the laws name", post and post[0].get("reads") == after[0] and tables == seen_tables(after), json.dumps(tables))
+            c.check(s, f"{tag}: the reads take the tables the laws name", post and post[0].get("reads") == after[0] and reads_match(tables, after), json.dumps(tables))
         cp = r["fighters"] or {}
         if law == "fighter_tables_on":
             if value == "true":
@@ -5464,6 +5474,279 @@ def reply_pace(run, c):
     result["follow"] = {"row": f1, "bubble": b2}
     json.dump(result, open(os.path.join(ev, "reply-pace.json"), "w"), indent=1)
     print(f"{s}: {json.dumps(result)}", flush=True)
+
+
+# ---- heed for players (docs/ATTENTION_BUDGET.md "Built: the player side"; features/heed.md) ----
+
+HEED_LAWS = ("heed_on", "heed_players")
+HEED_MAX = "You can keep at most 4 others pinned at once."
+HEED_UNSEEN = "You can only keep track of someone you can see now."
+
+
+@contextmanager
+def heed_fixture(run):
+    """Both heed laws back to the world's own values (else off, as shipped) when the scene ends."""
+    original = own_laws(lambda q: sql(run, q))
+    try:
+        yield
+    finally:
+        for law in HEED_LAWS:
+            call_admin(run, "set_world_law", [law, original.get(law, shipped_law(law) or "false")], check=True)
+
+
+def heed_on_calls():
+    return [("set_world_law", ["heed_on", "true"]), ("set_world_law", ["heed_players", "true"])]
+
+
+def staged_drive(run, name, plan, handlers, extra=(), env=None, timeout=900):
+    """drive.py with this scenario's own syncs: at each `sync:NAME` the client waits for, the
+    handler `handlers[NAME](me, ident)` runs (admin calls, owner SQL snapshots), then the client
+    goes on. Returns (out, exit code, drive log, the handlers' results by name)."""
+    name = f"{name}-{THEME}" if THEME else name
+    base = os.path.join(ROOT, ".local/living/verify", run, "ui")
+    out = os.path.join(base, name)
+    os.makedirs(base, exist_ok=True)
+    fresh_log(out)
+    cmd = [sys.executable, os.path.join(HERE, "drive.py"), "--run", run, "--name", name, "--plan", plan, "--timeout", str(timeout)] + list(extra)
+    drive_log_path = os.path.join(base, f"{name}.drive.log")
+    p = subprocess.Popen(cmd, stdout=open(drive_log_path, "w"), stderr=subprocess.STDOUT, env=dict(os.environ, **env) if env else None)
+    results, done = {}, set()
+    try:
+        while p.poll() is None:
+            text = log(out)
+            m = re.search(r"playing character #(\d+)", text)
+            me = int(m.group(1)) if m else None
+            for w in re.finditer(r"live script: waiting for (\S+)/([\w-]+)\.go", text):
+                sync = w.group(2)
+                if sync in done or sync not in handlers:
+                    continue
+                done.add(sync)
+                try:
+                    results[sync] = handlers[sync](me, identity_of(out))
+                except Exception as e:  # recorded, and the client goes on
+                    results[sync] = {"error": repr(e)}
+                open(os.path.join(out, f"{sync}.go"), "w").close()
+            time.sleep(0.2)
+    finally:
+        if p.poll() is None:
+            p.terminate()
+        p.wait()
+    verify.require_running(verify.load(run), verify.admin_token())
+    json.dump(results, open(os.path.join(out, "syncs.json"), "w"), indent=1, default=str)
+    return out, p.returncode, open(drive_log_path, errors="replace").read(), results
+
+
+def verify_sql_noon(run):
+    """The world's epoch set so it is noon now (owner SQL through verify.py, which records the
+    epoch for cleanup), as drive.py's `{epoch_at:12}`."""
+    from drive import epoch_at
+    q = f"UPDATE world SET epoch_ms = {epoch_at(run, 12.0)} WHERE id = 0"
+    sql(run, q, check=True)
+    return q
+
+
+def throng_rows(run, ident):
+    """My throng as the authority holds it (owner SQL): (cell, size, count, moving, fighting) rows."""
+    rows = owner_rows(run, f"SELECT cell, size, count, spread, heading, moving, fighting, kinds FROM seen_throng WHERE viewer = 0x{ident}") or []
+    return [{k: r[k] for k in ("cell", "size", "count", "spread", "heading", "moving", "fighting", "kinds")} for r in rows]
+
+
+def heed_choice(run, me):
+    rows = owner_rows(run, f"SELECT actor, pins, focus, at_ms FROM heed_choice WHERE actor = {me}") or []
+    if not rows:
+        return None
+    r = rows[0]
+    f = r.get("focus")
+    # An Option over SQL: {"some": n} or {"none": []}, or [0, n] / [1, []] by version.
+    if isinstance(f, dict):
+        f = f.get("some")
+    elif isinstance(f, list):
+        f = f[1] if f and f[0] == 0 else None
+    return {"pins": list(r.get("pins") or []), "focus": f}
+
+
+def perception_sets(text):
+    """Each `perception: subscribing the … set (N queries; tables: …)` line: (N, tables)."""
+    return re.findall(r"perception: subscribing the \w+ set \((\d+) queries; (tables: [^;)]*)", text)
+
+
+def squares_ok(t):
+    """Each square of a dump's throng drawn as its row says: `count` cards, the poses by its
+    shares, and every card inside the square."""
+    bad = []
+    for q in (t or {}).get("squares") or []:
+        n, f, m = q["count"], q["fighting"], q["moving"]
+        want_f = min(f, n)
+        want_w = min(m, n - want_f)
+        if q["cards"] != n or q["fight"] != want_f or q["walk"] != want_w or q["stand"] != n - want_f - want_w or not q["inside"] or q["tinted"]:
+            bad.append(q)
+    return bad
+
+
+def rows_match(t, auth):
+    """How many of the authority's rows the client holds alike (cell, size, count, moving,
+    fighting), of how many."""
+    mine = {((q["cell"][0] << 16) | q["cell"][1], q["size"], q["count"], q["moving"], q["fighting"]) for q in (t or {}).get("squares") or []}
+    theirs = {(r["cell"], r["size"], r["count"], r["moving"], r["fighting"]) for r in auth or []}
+    return len(mine & theirs), len(theirs), len(mine)
+
+
+@scenario("heed-throng", explicit=True)
+def heed_throng(run, c):
+    """The throng drawn (heed for players; features/heed.md): a 200-fighter sides battle
+    (`spawn_battle_sides`, admin) beside the player, first with the heed laws off (the set and
+    the drawing as before heed: no `seen_throng`, no throng, no keeping-track rows in Settings),
+    then both laws on (`set_world_law`, admin): the client subscribes `seen_throng` beside the
+    rest, make-before-break, and draws each row as `count` figure cards in its square with the
+    poses its shares give, at the play camera and zoomed out; Settings' switch hides them; then
+    `heed_players` off: the rows go and the set is the first one again. The laws go back to the
+    world's own values after."""
+    s = "heed-throng"
+    plan = ("ready;wait:2;sync:battle;wait:5;dump:off;shot:off;"
+            "click:@menu;wait:0.5;click:@menu:Settings;wait:0.8;dump:settings_off;click:@settings:page:controls;wait:0.6;dump:controls_off;click:@settings:page:play;wait:0.4;click:@win:Settings:close;wait:0.5;"
+            "sync:heed;wait:8;sync:rows_on_a;dump:on;sync:rows_on_b;shot:on;"
+            "notches:-12;wait:4;sync:rows_far_a;dump:far;sync:rows_far_b;shot:far;notches:12;wait:3;"
+            "click:@menu;wait:0.5;click:@menu:Settings;wait:0.8;dump:settings_on;click:@settings:page:controls;wait:0.6;dump:controls_on;click:@settings:page:play;wait:0.4;"
+            "click:@settings:throng;wait:1.2;dump:hidden;shot:hidden;"
+            "click:@settings:throng;wait:1.2;dump:shown;click:@win:Settings:close;wait:0.5;"
+            "sync:off;wait:4;dump:after;sync:rows_after;shot:after;quit")
+    st = verify.load(run)
+
+    def battle(me, ident):
+        # Noon, so the player sees the whole battle (the island's night sight is short); the
+        # world's epoch is put back after (`sight_fixture`).
+        calls = [verify_sql_noon(run), call_admin(run, "spawn_battle_sides", [200, 2], check=True)]
+        names = {r["id"]: r["name"] for r in sql(run, "SELECT id, name FROM character WHERE kind = 'person'") if re.fullmatch(r"[AB]\d+", r.get("name") or "")}
+        pos = [(b["x"], b["y"]) for b in sql(run, "SELECT id, x, y FROM body") if b["id"] in names]
+        cx, cy = sum(p[0] for p in pos) / len(pos), sum(p[1] for p in pos) / len(pos)
+        # At the battle's south edge, looking at it (north up on the default camera).
+        calls.append(call_admin(run, "place_at", [me, cx, cy + 9.0], check=True))
+        return {"fighters": len(pos), "centre": [cx, cy], "calls": calls}
+
+    handlers = {
+        "battle": battle,
+        "heed": lambda me, ident: [call_admin(run, r, a, check=True) for r, a in heed_on_calls()],
+        "rows_on_a": lambda me, ident: throng_rows(run, ident),
+        "rows_on_b": lambda me, ident: throng_rows(run, ident),
+        "rows_far_a": lambda me, ident: throng_rows(run, ident),
+        "rows_far_b": lambda me, ident: throng_rows(run, ident),
+        "off": lambda me, ident: call_admin(run, "set_world_law", ["heed_players", "false"], check=True),
+        "rows_after": lambda me, ident: throng_rows(run, ident),
+    }
+    with heed_fixture(run), sight_fixture(run, {}):
+        out, code, text, res = staged_drive(run, s, plan, handlers)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("off", "settings_off", "controls_off", "on", "far", "settings_on", "controls_on", "hidden", "shown", "after")}
+    L = log(out)
+    c.check(s, "the battle is spawned beside the player", (res.get("battle") or {}).get("fighters", 0) >= 150, json.dumps(res.get("battle"))[:300])
+    sets = perception_sets(L)
+    first, laws_on = (sets[0] if sets else None), [x for x in sets if "throng true" in x[1]]
+    # Laws off: the set and the drawing as before heed.
+    c.check(s, "laws off: no throng and no heed in the dump, and the set has no seen_throng", d["off"].get("throng") is None and d["off"].get("heed") is None and first is not None and "throng" not in first[1], f"first set {first}")
+    tags_off, keys_off = d["settings_off"].get("tags") or {}, d["controls_off"].get("tags") or {}
+    c.check(s, "laws off: Settings shows no throng switch and no keeping-track keys", "settings:page:play" in tags_off and "settings:throng" not in tags_off and "bind:NorthUp:0" in keys_off and not any(t.startswith("bind:Pin") or t.startswith("bind:ClearPins") for t in keys_off), str(sorted(t for t in list(tags_off) + list(keys_off) if "throng" in t or "Pin" in t)))
+    # Laws on: one more query, make-before-break.
+    c.check(s, "laws on: the set is subscribed again with seen_throng (one query more), then switched to", bool(laws_on) and first is not None and int(laws_on[0][0]) == int(first[0]) + 1 and re.search(r"perception: on the \w+ set after \d+ ms \([^)]*throng true", L) is not None, f"{first} -> {laws_on[:1]}")
+    c.check(s, "laws on: the log names heed for players", "rules: heed for players true" in L and "heed: players heed true" in L)
+    for k, rows_k in (("on", "rows_on_a"), ("far", "rows_far_a")):
+        t = d[k].get("throng") or {}
+        bad = squares_ok(t)
+        c.check(s, f"{k}: the throng has rows and every square is drawn as its row says (count cards, poses by shares, inside, placeholder tint)", t.get("rows", 0) > 0 and not bad and t.get("tint") == "placeholder", f"rows {t.get('rows')} cards {t.get('cards')}; bad {bad[:2]}")
+        # The authority's rows just before and just after the dump: a row the battle changed
+        # in between counts as alike when it matches either.
+        both = (res.get(rows_k) or []) + (res.get(rows_k[:-1] + "b") or [])
+        same, theirs, mine = rows_match(t, both)
+        n = len(res.get(rows_k) or [])
+        c.check(s, f"{k}: the client's rows are the authority's (owner SQL just before and after the dump)", n > 0 and same >= 0.8 * mine and abs(mine - n) <= max(3, n // 5), f"{same} of the client's {mine} alike; the authority {n} rows")
+        c.check(s, f"{k}: the cards drawn total the rows' counts", t.get("cards") == t.get("count"), f"cards {t.get('cards')} count {t.get('count')}")
+    tags_on, keys_on = d["settings_on"].get("tags") or {}, d["controls_on"].get("tags") or {}
+    c.check(s, "laws on: Settings shows the throng switch and the keeping-track keys", "settings:throng" in tags_on and "bind:Pin:0" in keys_on and "bind:ClearPins:0" in keys_on, str(sorted(t for t in list(tags_on) + list(keys_on) if "throng" in t or "Pin" in t)))
+    th, ts = d["hidden"].get("throng") or {}, d["shown"].get("throng") or {}
+    c.check(s, "the switch off: no cards drawn, the rows still received", th.get("drawn") is False and th.get("cards") == 0 and th.get("on") is True, json.dumps({k: th.get(k) for k in ("on", "drawn", "cards", "leaving")}))
+    c.check(s, "the switch on again: drawn", ts.get("drawn") is True and ts.get("cards", 0) > 0, json.dumps({k: ts.get(k) for k in ("on", "drawn", "cards")}))
+    c.check(s, "heed_players off: the dump has no throng or heed, the authority no rows of mine", d["after"].get("throng") is None and d["after"].get("heed") is None and res.get("rows_after") == [], f"{len(res.get('rows_after') or [])} rows")
+    c.check(s, "heed_players off: the set is the first one again", bool(sets) and sets[-1] == first, f"{first} ... {sets[-1] if sets else None}")
+    c.check(s, "the heed laws are back to the world's own values", all(own_laws(lambda q: sql(run, q)).get(l, "false") == "false" for l in HEED_LAWS))
+
+
+@scenario("heed-pins", explicit=True)
+def heed_pins(run, c):
+    """Pins and focus (heed for players; features/heed.md): the player at a quiet open spot
+    (`UNHEARD_SPOT`, admin `place_at`), five residents held beside them,
+    both heed laws on (admin). The Pin key (T) on four of them pins them (the authority's
+    `heed_choice` row holds the four, owner SQL), on a fifth warns first, and a second press asks:
+    the authority refuses it in its own words, shown in the notes. T on a pinned one unpins it.
+    Focus follows whom the open text box speaks to, and goes when it closes. Y clears every pin.
+    Calls are at least 250 ms apart."""
+    s = "heed-pins"
+    ids = residents(run, 5)
+    c.check(s, "five residents to pin", len(ids) == 5, str(ids))
+    if len(ids) < 5:
+        return
+    A, B, C, D, E = ids
+    offsets = [(1.6, 0.0), (-1.6, 0.0), (0.0, 1.6), (1.2, 1.4), (-1.2, 1.4)]
+    places = [f"{i}:{dx}:{dy}" for i, (dx, dy) in zip(ids, offsets)]
+    pin = lambda i: f"point:{i}:1.0;wait:0.3;key:KeyT:tap;wait:0.7;"
+    # A quiet open spot first (`unheard`'s): a fight nearby would take the player's places
+    # (heed at work), so the residents would not all be individuals.
+    plan = ("ready;wait:2;sync:spot;wait:3;sync:scene;wait:1;sync:heed;wait:4;dump:p0;"
+            + pin(A) + pin(B) + pin(C) + pin(D) + "wait:0.6;dump:p4;sync:row4;"
+            + f"point:{E}:1.0;wait:0.3;key:KeyT:tap;wait:0.6;dump:warn;key:KeyT:tap;wait:1.5;dump:five;shot:five;sync:row5;"
+            + pin(B) + "wait:0.6;dump:unpin;sync:row_unpin;"
+            + f"point:{C}:1.0;wait:0.6;key:Enter:tap;wait:1.5;dump:focus;sync:row_focus;shot:focus;key:Escape:tap;wait:1.5;dump:nofocus;sync:row_nofocus;"
+            + "cursor:;key:KeyY:tap;wait:1.2;dump:clear;sync:row_clear;quit")
+    row = lambda me, ident: heed_choice(run, me)
+    handlers = {"spot": lambda me, ident: call_admin(run, "place_at", [me, UNHEARD_SPOT[0], UNHEARD_SPOT[1]], check=True),
+                "heed": lambda me, ident: [call_admin(run, r, a, check=True) for r, a in heed_on_calls()], "row4": row, "row5": row, "row_unpin": row, "row_focus": row, "row_nofocus": row, "row_clear": row}
+    with resident_fixture(run, ids), heed_fixture(run):
+        out, code, text, res = staged_drive(run, s, plan, handlers, extra=[x for p in places for x in ("--place", p)])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("p0", "p4", "warn", "five", "unpin", "focus", "nofocus", "clear")}
+    h = {k: d[k].get("heed") or {} for k in d}
+    c.check(s, "heed for players is on and the five are individuals", h["p0"].get("on") is True and set(ids) <= set(d["p0"].get("perceived") or []), f"perceived {d['p0'].get('perceived')}")
+    c.check(s, "four pinned, and the authority holds the four", h["p4"].get("pins") == [A, B, C, D] and (res.get("row4") or {}).get("pins") == [A, B, C, D], f"client {h['p4'].get('pins')}; authority {res.get('row4')}")
+    c.check(s, "a fifth is warned about first, not sent", h["warn"].get("pins") == [A, B, C, D] and any("4 already" in n for n in d["warn"].get("notes") or []) and HEED_MAX not in (h["warn"].get("refusals") or []), f"{d['warn'].get('notes')}")
+    c.check(s, "asked again, the authority refuses the fifth in its exact words, shown in the notes", HEED_MAX in (h["five"].get("refusals") or []) and HEED_MAX in (d["five"].get("notes") or []), f"refusals {h['five'].get('refusals')}; notes {d['five'].get('notes')}")
+    c.check(s, "after the refusal the authority still holds the four, and so does the client", h["five"].get("pins") == [A, B, C, D] and (res.get("row5") or {}).get("pins") == [A, B, C, D], f"{h['five'].get('pins')}; {res.get('row5')}")
+    c.check(s, "T on a pinned one unpins them, here and on the authority", h["unpin"].get("pins") == [A, C, D] and (res.get("row_unpin") or {}).get("pins") == [A, C, D], f"{h['unpin'].get('pins')}; {res.get('row_unpin')}")
+    t = d["focus"].get("typing") or {}
+    c.check(s, "focus follows whom the open box speaks to, here and on the authority", t.get("to") == C and h["focus"].get("focus") == C and (res.get("row_focus") or {}).get("focus") == C, f"to {t.get('to')}; focus {h['focus'].get('focus')}; authority {res.get('row_focus')}")
+    c.check(s, "the box closed: no focus, here and on the authority", h["nofocus"].get("focus") is None and (res.get("row_nofocus") or {}).get("focus") is None, f"{h['nofocus'].get('focus')}; {res.get('row_nofocus')}")
+    rc = res.get("row_clear")
+    c.check(s, "Y clears every pin (the authority's row empty or gone)", h["clear"].get("pins") == [] and (rc is None or (rc.get("pins") == [] and rc.get("focus") is None)), f"{h['clear'].get('pins')}; {rc}")
+    L = log(out)
+    stamps = [x for x in re.findall(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+)Z[^\n]*heed: sent", L)]
+    import datetime
+    ts = [datetime.datetime.fromisoformat(x).timestamp() for x in stamps]
+    gaps = [round(b - a, 3) for a, b in zip(ts, ts[1:])]
+    c.check(s, "calls at least 250 ms apart, none refused as too many inputs", len(ts) >= 6 and all(g >= 0.25 for g in gaps) and "refused (paced)" not in L, f"{len(ts)} calls; gaps {gaps}")
+    notes_clear(c, s, out)
+
+
+@scenario("heed-refusal", explicit=True)
+def heed_refusal(run, c):
+    """The authority's words for someone I do not perceive (heed for players; features/heed.md):
+    both heed laws on (admin), a resident put 80 m off, then the live script asks to pin them as
+    they are (`heed:ID`, past the client's own check), then an id no one has: both refused with
+    the same words, shown in the notes; the authority's row holds neither."""
+    s = "heed-refusal"
+    far = residents(run, 1)[0]
+    nobody = 4_000_000_000
+    plan = (f"ready;wait:2;sync:heed;wait:3;dump:r0;heed:{far};wait:1.2;dump:r1;shot:refusal;heed:{nobody};wait:1.2;dump:r2;sync:row;quit")
+    handlers = {
+        "heed": lambda me, ident: [call_admin(run, r, a, check=True) for r, a in heed_on_calls()] + [call_admin(run, "place_at", [far] + [v + 80.0 for v in (sql(run, f"SELECT x, y FROM body WHERE id = {me}") or [{"x": 0, "y": 0}])[0].values()], check=True)],
+        "row": lambda me, ident: heed_choice(run, me),
+    }
+    with resident_fixture(run, [far]), heed_fixture(run):
+        out, code, text, res = staged_drive(run, s, plan, handlers)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("r0", "r1", "r2")}
+    c.check(s, "the far resident is not perceived", far not in (d["r0"].get("perceived") or []), str(d["r0"].get("perceived")))
+    r1, r2 = (d["r1"].get("heed") or {}).get("refusals") or [], (d["r2"].get("heed") or {}).get("refusals") or []
+    c.check(s, "pinning someone not perceived: the authority's exact words, in the notes", HEED_UNSEEN in r1 and HEED_UNSEEN in (d["r1"].get("notes") or []), f"{r1}; {d['r1'].get('notes')}")
+    c.check(s, "an id no one has: the same words", r2.count(HEED_UNSEEN) >= 2, str(r2))
+    row = res.get("row")
+    c.check(s, "the authority's row names neither", row is None or (far not in row.get("pins", []) and nobody not in row.get("pins", [])), str(row))
 
 
 def main():

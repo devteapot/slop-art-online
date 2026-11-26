@@ -1,6 +1,6 @@
 # Attention budget: who a character keeps track of (heed)
 
-Status: **current, built (authority, mind and player side), off by default**, 2026-11-23, branch `heed` from `origin/main` `5b13f1ba7`; the player side on branch `heed-player` from `origin/main` `6b71513d5`. The law `heed_on` stays off until the owner has seen heed in a play-test, and players perceive through heed only with the law `heed_players` too (off until its own play-test). The client's throng figures and pins are the laptop's: see "Player-side interface" and "Built: the player side" below. Everything from "Why v2" on is the design history (v1, v2, v2.1) and the experiments; where it and "Built" differ, "Built" holds. The history says "crowd" for what is now the **throng** (v2.1's name table); no built name uses "crowd" for it.
+Status: **current, built (authority, mind and player side), off by default**, 2026-11-23, branch `heed` from `origin/main` `5b13f1ba7`; the player side on branch `heed-player` from `origin/main` `6b71513d5`. The law `heed_on` stays off until the owner has seen heed in a play-test, and players perceive through heed only with the law `heed_players` too (off until its own play-test). The client's throng figures and pins are built on branch `heed-client` (from `origin/main` `1465e1599`; "Built: the client side" below), idle while either law is off. Everything from "Why v2" on is the design history (v1, v2, v2.1) and the experiments; where it and "Built" differ, "Built" holds. The history says "crowd" for what is now the **throng** (v2.1's name table); no built name uses "crowd" for it.
 
 ## Built (2026-11-23)
 
@@ -131,6 +131,37 @@ pub struct SeenThrong {
 - verify-player `heed.py` 19/19 and verify-client `heed_rows.py` 14/14 (the privacy probes: a throng member named on no path of P's, `seen_throng` to its own viewer only, none to an anonymous connection or a peek by identity; `heed_choice` refused to anonymous and players by subscription and SQL in `drive.py`'s visibility check); verify-client's `run.py` (drive 45/45, cues, near tier, motion tables, combat feed, lines table, tick marker) and `earshot.py`; records `2026-11-26-1300-heed-player.md` in both skills.
 
 **Rows and cost.** `perceived` and every copy shrink to the individuals (at most the capacity plus the forced). `seen_throng`: per viewer at most 48 rows, rewritten only where a cell's quantized fields change, at most at each sweep where the pass ran or the throng's members changed; read by the `viewer` index (at most 48 rows) when it is worked out. `heed_choice`: one row per player, written per accepted call (at least 250 ms apart and an input token each). `heed::individual` for a player reads its `perceived` rows by the `viewer` index (its individuals). Measured cost is not claimed here.
+
+## Built: the client side (2026-11-26)
+
+Branch `heed-client` (laptop), game client only; the authority is untouched. Nothing here runs while `heed_on` or `heed_players` is off: then the client's subscriptions (the same queries in the same order, the same set key), its drawing and its calls are as on main.
+
+| Part | Where | What |
+|---|---|---|
+| The subscription | `living/game/src/net.rs`: `Feed::throng` (bit 6 of the perception set's key), `Delivery::throng`, `net::throng` | `heed_on && heed_players`, read from the compiled script with the `law_override` rows laid over it, adds `SELECT * FROM seen_throng` to the perception set (nothing replaced). Switched by `perception_law` like the other delivery laws: the new set subscribed beside the old, the old dropped once the new one is applied. Rows are read only while the set in place has the table |
+| The figures | `living/game/src/throng.rs` | Per row, `count` flat figure cards (E1b's look: person standing, walking or fighting with a spear; an animal stand-in by `kinds`), on a sunflower spiral round the square's centre within half its `spread` and inside the square (a merged row's square is 12 m). The `fighting` share fights, then the `moving` share walks (mirrored toward `heading`, stepping along it), the rest stand. Cards are kept per `(cell, size)` and moved in place when the row changes; new ones fade in and dropped ones fade out over the person fade's times, so a person moving between individuals and throng crossfades. The fallen are no row: they stay the game's remains. Settings › Play › The throng turns it off (on by default) |
+| Colour | `throng::tops`, `throng::PLACEHOLDER` | **None invented:** rows carry no colour, so every card is one neutral slate placeholder (the general coordinator's ruling, 2026-11-26). `tops` is where the authority's colour summary will be read; the coloured card (skin, top, trousers) is ready |
+| Pins | `living/game/src/heed.rs` | T (`Act::Pin`) on whoever the cursor points at (`pick.rs`) pins or unpins; Y (`Act::ClearPins`) clears. At most 4: a fifth is warned about, and asked for only on a second press (the authority refuses it). Green rings mark pins, an amber ring the focus; a strip at the top left names them |
+| A throng figure | `heed::ThrongPick`, `heed::in_throng` | The throng has no ids. Until `HeedInput` takes a position pin (`pin_at`, being added on the authority), T on a figure pins the individual the client perceives nearest it in its square, else a note says no one there can be picked out yet. `ThrongPick` (the figure's row and ground point) is what `pin_at` will carry |
+| Focus | `heed.rs` | Whom the open text box speaks to, else the creature my last creature-aimed skill went to (10 s). Hover stays on the client |
+| The call | `heed::Sender` | `human_heed` carries the whole choice; at most one in flight, at least 0.3 s apart, never one that changes nothing, and only ids the client perceives now (a pin out of sight is kept 10 s but not sent). "too many inputs" is retried after 0.4 s |
+| Refusals | `verbs.rs` toasts | The authority's words, exactly |
+| Settings | `ui/settings.rs` `HeedOnly` | The throng's switch and the two keys show only while heed applies |
+
+**SpacetimeDB documentation read for this** (2026-11-26; pages marked version 2.0.0, the selector offering 2.0.0 and 1.12.0; the pinned server and SDK are 2.14.1, whose client code this follows as main's other delivery switches do):
+- [Subscriptions](https://spacetimedb.com/docs/clients/subscriptions/): "you should subscribe to the new set before unsubscribing from the old one", since "subscribing to the same query more than once doesn't incur additional processing or serialization overhead"; group subscriptions by lifetime; keep them small. So the throng goes into the perception set (its lifetime is the delivery laws'), switched make-before-break, and is not a set of its own. The pages do not say whether dropping one of two overlapping sets deletes rows the other still matches; the overlap here is the unchanged queries, which the existing switch already handles.
+- [Subscription semantics](https://spacetimedb.com/docs/clients/subscriptions/semantics): a transaction's result is an unordered state delta and callback order is not guaranteed; the client keys cards by square, not by callback order.
+- [Row-level security](https://spacetimedb.com/docs/how-to/rls): experimental; `:sender` is the caller's identity; "RLS rules automatically apply to subscriptions", so `SELECT * FROM seen_throng` returns only the caller's rows (verify-client `heed_rows.py` proves it on the authority; the client also checks `viewer` against its own identity).
+
+**Cost.** One more query in the perception set while heed is on: at most 48 rows a viewer, updated in place on change. Drawing: at most one card a counted member (about 200 in a 200-fighter battle) with one material each for its fade, and one ring per pin. Not measured: frame time with the throng drawn (dev-box's render pass).
+
+**Gaps for the authority** (reported to the general coordinator):
+1. **Colour:** `seen_throng` has no colour or outfit data; a compact per-cell colour summary is being added (dev-box `frame-views`). Until then the placeholder tint.
+2. **Ids for throng picks:** a figure names no one, so a click cannot pin a throng member; `pin_at` (a ground point in `HeedInput`, the authority promoting the nearest perceivable member or refusing) is being added. v2.1 point 6's "a click on a throng figure is a focus on the nearest throng member" cannot be built on the current shape.
+3. **Kinds without counts:** `kinds` is a bit set, so a mixed row (people and wolves) is shared out in turn; a per-kind count would say how many of each.
+4. **No centroid:** a row gives its square, not where in it its members stand, so cards centre on the square; a spread without a centre can draw a group on the wrong side of its cell.
+
+**Verification:** verify-ui `heed-throng`, `heed-pins`, `heed-refusal` ([features/heed.md](../.agents/skills/verify-ui/features/heed.md)); unit tests in `net.rs`, `throng.rs`, `heed.rs`.
 
 ## Player-side interface (for dev-box)
 

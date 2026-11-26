@@ -1313,6 +1313,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `skill:NAME[:AIM]`: use a skill-bar skill through `use_skill` (`combat.rs`); AIM is
 ///   `nearest`, a creature kind (`wolf`) or `DX,DY` metres from me; `release:NAME` lets go of
 ///   a held one; `aim:NAME[:AIM]` shows its indicator (until `aim:`);
+/// - `heed:ID`: ask the authority to pin character ID as it is (heed for players, `heed.rs`), past
+///   the client's own check that I perceive ID: the authority's refusal words show in the notes.
 /// - `gesture:wave|nod|appraise[:ID]`: greet, or look someone over, through `human_act` as the
 ///   G, B and V keys do (`town.rs`), at character ID, else whom the keys would pick;
 /// - verbs (`verbs.rs`): `act:SKILL[:ITEM][@AIM]` sends an act as a list pick does (AIM is
@@ -1767,6 +1769,15 @@ fn script(
         }
         "release" => {
             skills.release.push(arg.to_string());
+            true
+        }
+        "heed" => {
+            // Ask the authority to pin this id as it is, past the client's own check that I
+            // perceive them (`heed::ask`): so a check can see the authority's refusal words.
+            match arg.parse::<u32>() {
+                Ok(id) => crate::heed::ask(id),
+                Err(_) => warn!("live script: heed wants an id, got {arg:?}"),
+            }
             true
         }
         "gesture" => {

@@ -90,3 +90,5 @@ docs/ATTENTION_BUDGET.md, "Built: the player side": with `heed_on` and `heed_pla
 - `pin_at`: Q picks a walker out of its own throng by its position (an individual to Q, not P, and no `seen_characters` row of it reaching P in the 1.5 s after); an anonymous `pin_at` is refused as any `human_heed` is.
 
 Evidence: `heed-<who>.jsonl`, `heed_rows.json`. `human_heed`'s refusal words (the same for a throng member and an id no one has) and the kill switch are verify-player's `heed.py`.
+
+The game client subscribes `seen_throng` in its perception set while both laws are on (`net::Feed::throng`, [game-client.md](game-client.md)), draws it, and sends `human_heed`: verify-ui's [heed.md](../../verify-ui/features/heed.md) (`check.py heed-throng`, `heed-pins`, `heed-refusal`), which also compares the rows the client holds with the authority's.
