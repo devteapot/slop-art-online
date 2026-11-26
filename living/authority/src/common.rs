@@ -1293,10 +1293,15 @@ pub fn lit_at(ctx: &ReducerContext, at: (f32, f32)) -> bool {
         return false;
     }
     let now = now_ms(ctx);
-    structures_near(ctx, at, widest).into_iter().any(|(s, d)| {
-        let t = sc.structure(&s.kind);
-        let l = t.light();
-        l > 0.0 && d <= l && (t.burns.is_none() || living_rules::fire::lit(s.lit_until_ms, now))
+    // Only the kinds that give light, read in place (a battle's remains give none): the same
+    // answer as a walk of every structure within `widest`, since a light reaches no farther.
+    chunks_around(at.0, at.1, widest).into_iter().any(|c| {
+        chunk_few(ctx, c, Few::Lights).iter().any(|s| {
+            let d = dist(at, (s.x, s.y));
+            let t = sc.structure(&s.kind);
+            let l = t.light();
+            d <= widest && l > 0.0 && d <= l && (t.burns.is_none() || living_rules::fire::lit(s.lit_until_ms, now))
+        })
     })
 }
 
@@ -1603,6 +1608,71 @@ thread_local! {
     static WARMING_REV: std::cell::Cell<u32> = const { std::cell::Cell::new(u32::MAX) };
 }
 
+/// Which of a chunk's structures a hot path reads (`chunk_of_kind`).
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Few {
+    /// Kinds that give light (`StructureTraits::light`, lamplight for `lit_at`).
+    Lights,
+    /// Gates (`known::remember_gates`).
+    Gates,
+}
+
+thread_local! {
+    /// Per chunk, the few structures one hot path reads, drawn from the chunk's cached list and
+    /// drawn again whenever that list is (the same `Rc` or a new one) or the script changes, as
+    /// `CHUNK_WARMING` is. A battle leaves remains where people fall (one structure per death,
+    /// kept 48 game hours in Cullet), so a walk of the whole list grew with every death
+    /// (growth-fix, 2026-11-23: the 216 gate's 30-minute run).
+    /// A `BTreeMap`, not a `HashMap`: std's `RandomState::new()` advances a per-thread key at each
+    /// call, so one more `HashMap` made in an instance changes the hash order of every later one
+    /// (det_compare found the module's `seen_stock` ids permuted by exactly that).
+    static CHUNK_FEW: RefCell<(u32, std::collections::BTreeMap<(Few, u32), (Rc<Vec<Structure>>, Rc<Vec<Structure>>)>)> = const { RefCell::new((u32::MAX, std::collections::BTreeMap::new())) };
+}
+
+/// The structures of `chunk` that `which` reads, in the chunk list's order.
+pub fn chunk_few(ctx: &ReducerContext, chunk: u32, which: Few) -> Rc<Vec<Structure>> {
+    let all = chunk_structures(ctx, chunk);
+    let rev = scripts_rev(ctx);
+    if let Some(v) = CHUNK_FEW.with(|c| {
+        let c = c.borrow();
+        (c.0 == rev).then(|| c.1.get(&(which, chunk)).filter(|(src, _)| Rc::ptr_eq(src, &all)).map(|(_, v)| v.clone())).flatten()
+    }) {
+        return v;
+    }
+    let v: Rc<Vec<Structure>> = match which {
+        Few::Lights => {
+            let sc = scripts(ctx);
+            Rc::new(all.iter().filter(|s| sc.structure(&s.kind).light() > 0.0).cloned().collect())
+        }
+        Few::Gates => Rc::new(all.iter().filter(|s| &*s.kind == "gate").cloned().collect()),
+    };
+    CHUNK_FEW.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.0 != rev {
+            c.1.clear();
+            c.0 = rev;
+        }
+        c.1.insert((which, chunk), (all, v.clone()));
+    });
+    v
+}
+
+/// [`structures_near`] of only the structures `which` reads: the same rows in the same order
+/// (nearest first, a stable sort of the chunks' order), without walking or copying the rest.
+pub fn few_near(ctx: &ReducerContext, at: (f32, f32), r: f32, which: Few) -> Vec<(Structure, f32)> {
+    let mut out = Vec::new();
+    for c in chunks_around(at.0, at.1, r) {
+        for s in chunk_few(ctx, c, which).iter() {
+            let d = dist(at, (s.x, s.y));
+            if d <= r {
+                out.push((s.clone(), d));
+            }
+        }
+    }
+    out.sort_by(|a, b| a.1.total_cmp(&b.1));
+    out
+}
+
 /// Call before inserting (`None`: any chunk) or updating (`Some(chunk)`) a resource node.
 pub fn invalidate_resources(ctx: &ReducerContext, chunk: Option<u32>) {
     let t = stamp(ctx);
@@ -1765,6 +1835,35 @@ pub fn species(kind: &str) -> Option<living_rules::species::Species> {
 /// A species' scent, if it has one (without cloning the whole profile).
 pub fn scent_of(kind: &str) -> Option<living_rules::species::Scent> {
     SPECIES.with(|s| s.get(kind).and_then(|sp| sp.scent.clone()))
+}
+
+/// The people who have died in this world (`census`, what `stats.deaths` reports), made by one
+/// walk of the table where the row is missing.
+pub fn dead_people(ctx: &ReducerContext) -> u32 {
+    match ctx.db.census().id().find(0) {
+        Some(c) => c.dead_people,
+        None => census_made(ctx),
+    }
+}
+
+/// Count one more dead person (`act::die_unseen`, after the character's row says it is dead).
+pub fn person_died(ctx: &ReducerContext) {
+    match ctx.db.census().id().find(0) {
+        Some(mut c) => {
+            c.dead_people += 1;
+            ctx.db.census().id().update(c);
+        }
+        // Made by the walk, which already counts this death.
+        None => {
+            census_made(ctx);
+        }
+    }
+}
+
+fn census_made(ctx: &ReducerContext) -> u32 {
+    let n = ctx.db.character().alive().filter(false).filter(|c| c.kind == "person").count() as u32;
+    ctx.db.census().insert(Census { id: 0, dead_people: n });
+    n
 }
 
 pub fn chronicle(ctx: &ReducerContext, now: u64, kind: &str, a: u32, b: u32, at: (f32, f32), text: String) {

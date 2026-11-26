@@ -3427,7 +3427,10 @@ def laws(s):
     src = (ROOT / "living/seeds" / seed["laws_file"]).read_text()
     s.expect("the world's day is the seed's day_minutes", w["day_ms"] == round(seed["day_minutes"] * 60000), {"day_ms": w["day_ms"], "day_minutes": seed["day_minutes"]})
     script = s.rows("SELECT name, revision, source FROM script")[0]
-    over = script["source"].split("// ---- floor overlay ----", 1)
+    # The authority appends the world's own law values (the seed's `rules`) after the overlay
+    # (`install_script.WORLD_LAW_MARK`); the overlay is what comes before them.
+    from install_script import without_world_laws  # noqa: E402
+    over = without_world_laws(script["source"]).split("// ---- floor overlay ----", 1)
     s.expect("the installed script is the shipped one with the seed's laws composed over it",
              len(over) == 2 and over[1].strip() == src.strip() and "fn base_rates(a)" in over[0] and "fn base_senses(a)" in over[0], {"revision": script["revision"]})
     hour_ms = w["day_ms"] / 24
