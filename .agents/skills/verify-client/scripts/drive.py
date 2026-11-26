@@ -96,6 +96,8 @@ PRIVATE = ['attention', 'copy_state', 'lines_state', 'applied_gaze', 'cover_grou
            'knowledge_epoch',
            # A mind's own heed policy and its last refusal (docs/ATTENTION_BUDGET.md "Built"): mind_heed's.
            'heed_policy',
+           # A player's pins and focus (heed for players, `human_heed`): the authority's only.
+           'heed_choice',
            # Who heard each line (docs/COMMUNICATION.md §6); a speaker's person reads its own through my_heard.
            'line_heard',
            # What each player's character senses (the `senses` law), read through my_senses.
@@ -122,8 +124,8 @@ SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'plac
 # The per-sender views: what a player perceives and its own state.
 # The tables filtered per client by row-level security (`viewer = :sender`): the cue event tables
 # (frame-views), the public motion copies and the mirror of a player's projections (battle-views).
-# Each has its isolation case (`cues.py`, `motion_tables.py`, the copy tables, `combat_feed.py`, `lines_table.py`) and is named in docs/TICK_RATE.md's pin list.
-RLS_TABLES = ['seen_body_cue', 'seen_fighter_cue', 'seen_doing_cue', 'seen_body_copy', 'seen_character_copy', 'seen_fighter_copy', 'combat_feed', 'experience_copy']
+# Each has its isolation case (`cues.py`, `motion_tables.py`, the copy tables, `combat_feed.py`, `lines_table.py`, `heed_rows.py`) and is named in docs/TICK_RATE.md's pin list.
+RLS_TABLES = ['seen_body_cue', 'seen_fighter_cue', 'seen_doing_cue', 'seen_body_copy', 'seen_character_copy', 'seen_fighter_copy', 'combat_feed', 'experience_copy', 'seen_throng']
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
          'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex',
@@ -139,7 +141,9 @@ UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 # `my_combat`, so these calls succeed for any living character.
 PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block'],
           # The player's look (fov-1): any living character may send it.
-          'human_face': [1.0, 0.0], 'human_gaze': [1]}
+          'human_face': [1.0, 0.0], 'human_gaze': [1],
+          # Heed for players: no pins and no focus (clears the choice), for any living character.
+          'human_heed': [{'pins': [], 'focus': {'none': []}}]}
 MIND = ['mind_routines', 'mind_install', 'mind_install_way', 'mind_say', 'mind_act', 'mind_skip',
         'mind_consolidated', 'mind_update', 'mind_judged', 'mind_where', 'mind_heed']
 # Procedures (their answer goes to the caller alone), under the same controller rule: a talk turn's
@@ -486,7 +490,7 @@ class Run:
         if everything:
             raise RuntimeError(f'a program subscribes every table (cue tables included, RLS bypassed for the owner): {everything}')
         owners = [str(p.relative_to(ROOT)) for d in ('living/mind', 'living/viewer') for p in (ROOT / d).rglob('*.rs')
-                  if '/target' not in str(p) and re.search(r'seen_(body|fighter|doing)_cue|seen_body_copy|seen_character_copy|seen_fighter_copy|combat_feed|experience_copy', p.read_text(errors='replace'))]
+                  if '/target' not in str(p) and re.search(r'seen_(body|fighter|doing)_cue|seen_body_copy|seen_character_copy|seen_fighter_copy|combat_feed|experience_copy|seen_throng', p.read_text(errors='replace'))]
         if owners:
             raise RuntimeError(f'an owner program names a row-level-security table: {owners}')
         # Every row-level-security rule, by table (docs/TICK_RATE.md, "Every RLS-filtered table",

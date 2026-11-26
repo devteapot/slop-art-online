@@ -267,7 +267,7 @@ Second change. Every path by which a mind, or a behaviour graph, learns about an
 
 ### Heed: individuals and the throng (names, 2026-11-23)
 
-Heed (docs/ATTENTION_BUDGET.md, built for AI characters and minds, off by default) splits what a character sees into **individuals** and the **throng**. For a player (not built yet) the individuals are its committed `perceived` set and the throng is `seen_throng`, a public table of 6 m cells under row-level security; for a mind the individuals are its scene's `creatures` and the throng its `throngs` lines. The word is "throng" on every path: "crowd" stays the name of the battle laws `crowd_sweep_n` and `crowd_frame_max_ms` and of nothing heed adds.
+Heed (docs/ATTENTION_BUDGET.md, built for AI characters and minds, off by default) splits what a character sees into **individuals** and the **throng**. For a player (with the law `heed_players` too, off by default) the individuals are its committed `perceived` set, which the sweep fills from `heed::split` in place of `far_cap`'s trim and contact fills in the blow's own transaction, and the throng is `seen_throng`, a public table of 6 m cells under row-level security, written on change only; for a mind the individuals are its scene's `creatures` and the throng its `throngs` lines. The word is "throng" on every path: "crowd" stays the name of the battle laws `crowd_sweep_n` and `crowd_frame_max_ms` and of nothing heed adds.
 
 ### A body's sex in a scene (sex-1, 2026-11-13)
 

@@ -1,6 +1,6 @@
 # Attention budget: who a character keeps track of (heed)
 
-Status: **current, built (authority and mind side), off by default**, 2026-11-23, branch `heed` from `origin/main` `5b13f1ba7`. The law `heed_on` stays off until the owner has seen heed in a play-test. The player side (`sweep_one`, `human_heed`, `seen_throng`, the client) is dev-box's and the laptop's, later: see "Player-side interface" below. Everything from "Why v2" on is the design history (v1, v2, v2.1) and the experiments; where it and "Built" differ, "Built" holds. The history says "crowd" for what is now the **throng** (v2.1's name table); no built name uses "crowd" for it.
+Status: **current, built (authority, mind and player side), off by default**, 2026-11-23, branch `heed` from `origin/main` `5b13f1ba7`; the player side on branch `heed-player` from `origin/main` `6b71513d5`. The law `heed_on` stays off until the owner has seen heed in a play-test, and players perceive through heed only with the law `heed_players` too (off until its own play-test). The client's throng figures and pins are the laptop's: see "Player-side interface" and "Built: the player side" below. Everything from "Why v2" on is the design history (v1, v2, v2.1) and the experiments; where it and "Built" differ, "Built" holds. The history says "crowd" for what is now the **throng** (v2.1's name table); no built name uses "crowd" for it.
 
 ## Built (2026-11-23)
 
@@ -56,9 +56,60 @@ One row per character whose mind wrote a heed; deleted at death (`act::forget_de
 - verify-minds: `heed` 10/10, `roundtrip`, `acts`.
 - verify-client: 45/45 (`heed_policy` refused to anonymous and players; `mind_heed` refused for another's character).
 
+## Built: the player side (2026-11-23)
+
+Behind the value-only law `heed_players` (off as shipped; with `heed_on` on too). Both off, a player's perception, tables written and the tick are as on main (det_compare, below). On:
+
+| Part | Where | What |
+|---|---|---|
+| Who heed applies to | `heed::applies` | `heed_on && (heed_players \|\| not played)`; `heed::applies_player` for the sweep and the kill switch |
+| The sweep | `perception::sweep_one` | `heed::split` in place of `far_cap`'s trim (never both): the individuals are the seen set, so `perceived`, the copies, the scene, its near tier and cues, the projections and the kept projections follow them; the throng is not heard (like the capped) and is counted in `seen_throng` |
+| Individual, for a played character | `heed::individual` | its committed `perceived` set (`heed::perceives`); every path that asks `masked` or `individual` (the feed, speech, fold and witness lines, the fast lane) follows that set |
+| Contact | `heed::contact` → `perception::admit` | the attacker, when the victim sees it, joins the victim's `perceived` set in the blow's own transaction, with its motion copy, projection, fighter and doing copies; its scene holds it at once (`frame::join_scene`), so cues follow it. An event that takes a creature into a played character's set (a windup, words to it) admits it the same way |
+| The combat feed | `combat::show` | an onlooker's row only when the actor or the target is an individual to it; the other party, if in its throng, as 0 |
+| Earshot | `frame::show_earshot` | reads sight (the scene and the throng: v2.1 point 4); `ways` lists individuals only, the text counts the rest ("Within earshot: Ife Okoro, and 3 in the throng") |
+| The throng | `throng.rs`, table `seen_throng` | below |
+| Pins and focus | reducer `human_heed`, table `heed_choice` | below; read at each heed pass into `Candidate.chosen` (focus 1.0, a pin 0.75; the instinct's third rule takes `chosen`) |
+| The kill switch | `throng::off_tick` (each tick, in `perception::sweep`) | `heed_players` or `heed_on` off: every `seen_throng` row goes in that tick; nothing is read while none can exist (module memory, asked of the table once per instance); each player's next sweep perceives its whole sight again |
+
+**The shapes the laptop builds on** (settled 2026-11-23; bindings regenerated with the pinned image):
+
+```rust
+// Private: only reducers and the database owner read it.
+#[spacetimedb::table(accessor = heed_choice)]
+pub struct HeedChoice { #[primary_key] pub actor: u32, pub pins: Vec<u32>, pub focus: Option<u32>, pub at_ms: u64 }
+
+#[derive(SpacetimeType)]
+pub struct HeedInput { pub pins: Vec<u32>, pub focus: Option<u32> }
+#[spacetimedb::reducer]
+pub fn human_heed(ctx: &ReducerContext, input: HeedInput) -> Result<(), String>
+
+// Public, row-level security `SELECT * FROM seen_throng WHERE viewer = :sender`.
+#[spacetimedb::table(accessor = seen_throng, public)]
+pub struct SeenThrong {
+    #[primary_key] #[auto_inc] pub id: u64,
+    #[index(btree)] pub viewer: Identity,
+    pub cell: u32,      // the square's top-left 6 m cell: (x / 6) << 16 | (y / 6), map metres
+    pub size: u8,       // 1, or 2 for four far cells merged
+    pub count: u16,     // exact to 5, then to the nearest 5
+    pub spread: u8,     // the members' widest extent, metres, to 2 m
+    pub heading: u8,    // mean way of moving, 0 east then clockwise (2 south, 4 west, 6 north); 255 still or mixed
+    pub moving: u16,    // as count
+    pub fighting: u16,  // as count
+    pub kinds: u8,      // bits: 1 people, 2 wolves, 4 deer, 8 others
+}
+```
+
+- **`human_heed`'s refusals**, word for word: more than four pins, `You can keep at most 4 others pinned at once.`; a pin or the focus on an id not in the caller's `perceived` set now (whether or not the id exists), `You can only keep track of someone you can see now.`; a call within 250 ms of the last accepted one, or an empty input bucket, `too many inputs`; no living character, `you have no living character`. Empty pins and no focus clear the choice. Pins are deduplicated; the row goes with the character.
+- **`seen_throng`**: at most 48 rows a viewer (the farthest cells merge 2 × 2 first). A viewer's cells are worked out at its sweep when its heed pass ran (at most once a second) or its throng's members changed, and written field by field: an unchanged cell writes nothing, a changed one is updated in place (its `id` kept), a new one inserted, an empty one deleted. A client keys a row by `id`, or by `(cell, size)`.
+
+**SpacetimeDB documentation read for this** (2026-11-23, pages marked 2.0.0; the pinned server and crate are 2.14.1): [access permissions](https://spacetimedb.com/docs/tables/access-permissions) (private tables reach reducers and views only; the page now recommends views over `ctx.sender()` for per-caller rows and does not describe `client_visibility_filter`, which this module already uses under its `unstable` feature for the cue, copy and feed tables, `living/authority/Cargo.toml`; `seen_throng` follows them), [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations) (adding tables and reducers is always allowed; connected clients stay connected and keep their subscriptions), [column types](https://spacetimedb.com/docs/tables/column-types) (`Vec<T>` and `Option<T>` columns). `Vec` and `Option` as reducer arguments inside a `SpacetimeType` struct: `spacetimedb-sats` 2.14.1 `typespace.rs` (as read for v2.1 point 6).
+
+**Rows and cost.** `perceived` and every copy shrink to the individuals (at most the capacity plus the forced). `seen_throng`: per viewer at most 48 rows, rewritten only where a cell's quantized fields change, at most at each sweep where the pass ran or the throng's members changed; read by the `viewer` index (at most 48 rows) when it is worked out. `heed_choice`: one row per player, written per accepted call (at least 250 ms apart and an input token each). `heed::individual` for a player reads its `perceived` rows by the `viewer` index (its individuals). Measured cost is not claimed here.
+
 ## Player-side interface (for dev-box)
 
-What the player side can rely on, and what it must call. Nothing here is built for players yet: `heed::applies` is false for a character a person plays.
+What the player side can rely on, and what it must call. Built as "Built: the player side" above says; where they differ, that section holds.
 
 **The selector** (`living_rules::heed`, pure, no world access):
 - `select(policy: &Policy, me: &SelfState, all: &[Candidate], limits: &Limits, held: &[Held]) -> Vec<Pick>`: the full pass. Forced places first (`Place::Acting`, `Place::Contact`; outside the capacity), then the policy's rules in order up to `limits.capacity`, each rule's `hold_s` kept through `held`. Returns the picks in rank order; `Pick { id, place, held }`.

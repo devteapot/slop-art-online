@@ -73,3 +73,17 @@ Since 2026-11-22 (branch `experience-incremental`; docs/HUMAN_FIGHTER_COST.md §
 - `lines_table_check` (off; a diagnostic) compares every viewer's copies with what the view returns it, every tick (`lines_table:differed` must stay 0).
 - Drive it with `scripts/lines_table.py --run "$R"` (any seed, about 2 min; build the probe first): 18 checks, written to `RUN/lines_table.json`.
 
+
+## Heed for players
+
+docs/ATTENTION_BUDGET.md, "Built: the player side": with `heed_on` and `heed_players` on (both off as shipped), a player's `perceived` set is its individuals and the rest of its sight is the public `seen_throng` (6 m cells, quantized counts, heading and kinds bits, no ids; row-level security `viewer = :sender`; written on change only). `heed_choice` (a player's pins and focus) is private (`PRIVATE` in drive.py); `human_heed` is in the permission matrix (`PLAYER`, empty pins and no focus); `seen_throng` is in `RLS_TABLES` and docs/TICK_RATE.md's pin list.
+
+`scripts/heed_rows.py --run "$R"` (any seed; build the probe first). Players P and Q join with fresh identities beside eight held walkers, the heed laws on with `heed_ceiling` 2, cues and the feed's events on. Rust SDK probes stream P's views, copies, cues, feed, earshot and heard rows and `seen_throng`, Q's and an anonymous connection's `seen_throng`, and P asking for Q's by identity. Checks:
+- every subscription accepted;
+- a walker P never had as an individual is named in none of P's rows (views, copies, cues, feed actor and target, earshot hearers, heard rows);
+- the feed's rule: a throng member's blow on another gives P no feed row; an individual's blow on a throng member names the individual with target 0;
+- contact: the throng member that strikes P becomes an individual;
+- `seen_throng` reaches only its own viewer (P and Q receive their own, the anonymous connection and P's peek none);
+- change only: no `seen_throng` insert, update or delete while nobody moves.
+
+Evidence: `heed-<who>.jsonl`, `heed_rows.json`. `human_heed`'s refusal words (the same for a throng member and an id no one has) and the kill switch are verify-player's `heed.py`.

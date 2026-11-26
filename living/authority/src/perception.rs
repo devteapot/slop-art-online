@@ -1124,6 +1124,9 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Swept {
     if tick % 60 == 0 {
         CHANGED.with(|c| c.borrow_mut().retain(|id, _| ctx.db.character().id().find(*id).is_some_and(|c| c.alive)));
     }
+    // Heed for players off: every `seen_throng` row goes, in this tick (nothing read while none
+    // can exist).
+    crate::throng::off_tick(ctx);
     let humans = crate::combat::humans(ctx);
     if humans.is_empty() {
         return Swept { ids: Vec::new(), health: HashMap::new() };
@@ -1307,9 +1310,28 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     drop(sight_span);
     // (a) battle law `far_cap` (docs/BATTLE_LAWS.md): at most this many seen, whoever is engaged
     // with the player first, then the nearest; the rest are neither seen nor heard this sweep.
+    // Under heed for players (`heed_players`), heed's split in its place, never both
+    // (docs/ATTENTION_BUDGET.md, "Player-side interface"): the individuals are the seen set (so
+    // `perceived`, the copies, the scene and its cues, the projections follow them), the throng
+    // is counted in `seen_throng` and, like the capped, not heard.
     let mut capped: HashSet<u32> = HashSet::new();
     let cap = common::laws(ctx).far_cap as usize;
-    if cap > 0 && seen.len() > cap {
+    let heeding = crate::heed::applies(ctx, id);
+    // The throng, and whether the heed pass ran at this sweep (its cells are worked out then).
+    let mut heeded: Option<(Vec<NearCreature>, bool)> = None;
+    if heeding {
+        let _heed = common::detail_span("sweep.heed");
+        let mut in_sight: Vec<NearCreature> = crowd.iter().filter(|(c, _)| seen.contains(&c.id)).map(|(c, _)| c.clone()).collect();
+        in_sight.sort_by(|a, b| a.dist.total_cmp(&b.dist).then(a.id.cmp(&b.id)));
+        let before = crate::heed::last_pass(id);
+        let (_individuals, thr) = crate::heed::split(ctx, &me, here, in_sight, now);
+        for c in &thr {
+            seen.remove(&c.id);
+            near.remove(&c.id);
+            capped.insert(c.id);
+        }
+        heeded = Some((thr, crate::heed::last_pass(id) != before));
+    } else if cap > 0 && seen.len() > cap {
         let engaged = crate::frame::engaged_with(id);
         let keep_engaged = seen.iter().filter(|b| engaged.contains(b)).count();
         let mut rest: Vec<(f32, u32)> = seen.iter().filter(|b| !engaged.contains(b)).map(|b| (near.get(b).copied().unwrap_or(f32::MAX), *b)).collect();
@@ -1377,6 +1399,13 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     let scene = common::detail_span("sweep.scene");
     crate::frame::scene(ctx, id, viewer, &seen, &near, now);
     drop(scene);
+    match heeded {
+        Some((throng, passed)) => {
+            crate::frame::set_throng(id, capped);
+            crate::throng::show(ctx, id, viewer, here, &throng, passed, now);
+        }
+        None => crate::frame::set_throng(id, HashSet::new()),
+    }
     // The projections, kept or afresh, to the end of the sweep.
     let _projecting = common::detail_span("sweep.project");
     // The projections follow: a row per creature in the scene (itself included), projected
@@ -2168,9 +2197,38 @@ pub fn health_moved(ctx: &ReducerContext, id: u32, now: u64) {
     }
 }
 
+/// Contact under heed for players (`heed::contact`, in the blow's own transaction): `body`, which
+/// player character `id` (its player `viewer`) sees, joins its `perceived` set now if it is not
+/// there, with its motion copy, its projection and its fighter and doing copies, as a sweep's
+/// newcomer gets them; its scene holds it, so cues follow it at once. Its next sweep keeps it
+/// (contact forces it for `heed_contact_s`).
+pub fn admit(ctx: &ReducerContext, id: u32, viewer: Identity, body: u32, now: u64) {
+    if body == id || crate::heed::perceives(ctx, viewer, body) {
+        return;
+    }
+    let (Some(me), Some(t), Some(b)) = (ctx.db.character().id().find(id), ctx.db.character().id().find(body), ctx.db.body().id().find(body)) else { return };
+    common::diag(|| "heed:contact_admit", 1);
+    ctx.db.perceived().insert(Perceived { id: 0, viewer, body, since_ms: now });
+    crate::frame::new_motion(ctx, id, viewer, &b);
+    crate::frame::join_scene(id, body);
+    let mut band = None;
+    if ctx.db.projected().by_viewer_body().filter((viewer, body)).next().is_none() {
+        let pr = project_as(ctx, regard(ctx, &me, &t, now), &t, now);
+        band = Some(pr.band);
+        proj_insert(ctx, pr.into_row(viewer, body, false, 0));
+    }
+    // Written outside the sweep: its kept projection is looked at again at the next.
+    row_touched(viewer, body);
+    let near = crate::frame::is_near(id, body);
+    crate::frame::show_fighter(ctx, id, viewer, body, near, true, now, band);
+    crate::frame::show_doing(ctx, id, viewer, body, near);
+}
+
 /// A player's character died: it perceives nothing any more.
 pub fn forget(ctx: &ReducerContext, id: u32, viewer: Identity) {
     crate::frame::forget(ctx, id);
+    crate::throng::clear(ctx, id, viewer);
+    ctx.db.heed_choice().actor().delete(id);
     for p in ctx.db.perceived().viewer().filter(viewer).map(|p| p.id).collect::<Vec<_>>() {
         ctx.db.perceived().id().delete(p);
     }
