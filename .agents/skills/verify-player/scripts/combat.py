@@ -357,12 +357,10 @@ def told(st, cid, skill, t0_ms, secs=4.0):
 
 
 def scene_strike(st):
-    # relation-fight's check below runs under the `relation_fight_on` law (default off).
+    # relation-fight's check below runs under the `relation_fight_on` law (on by default since
+    # relation-fight-on, 2026-11-26), set on explicitly in case the world holds it off.
     call(st, "set_world_law", ["relation_fight_on", "true"], "admin")
-    try:
-        return strike_scene(st)
-    finally:
-        call(st, "set_world_law", ["relation_fight_on", "false"], "admin")
+    return strike_scene(st)
 
 
 def strike_scene(st):
