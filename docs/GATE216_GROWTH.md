@@ -315,6 +315,46 @@ So the `seen_stock` difference is the sweep-order noise of the comparison itself
 | `die_unseen` | `census` | `census` +1 | pk | none | per death | one row |
 | `set_player` | `line_seen` (`by_observer_shown`, the old character, both values) | deletes them | `by_observer_shown` | the person's `my_experience` (already moved) | per join with another character | ≤ 64 rows per person |
 
+## 8. Spark X925 relay re-measure after both growth fixes
+
+On 2026-11-26, the Cullet relay arm at `e2cb6cbec` used 100 human fighters and 116 walkers,
+with profiling off and the server marker on. The relay accepted 216 clients. The fighters
+sent 302.4 inputs/s, with 3,570 deaths and 3,566 rejoins in the measured window.
+The private SpacetimeDB 2.14.1 server ran on CPUs 5–9 and 15–19 (X925). The driver,
+clients, relay and samplers ran on CPUs 0–4 and 10–14 (A725).
+
+The same-session idle reference had 64 residents, no load clients, 60.01 ticks/s and
+17.909 ms marker p99. The bound from the unchanged `marker_steps.py` at `e16a43e5e`
+was 18.409 ms. First two idle attempts were rejected for load rises of 2.34 and 1.40
+and outside activity on X925.
+
+| 5-min block | Recorded build §5: ticks/s, p99 ms, % over 25 ms | Earlier fixed build §5 | Relay 1, host-disturbed |
+|---|---|---|---|
+| 0–5 | 59.47, 17.63, 0.88 | 59.80, 17.62, 0.34 | 56.26, 33.919, 6.606 |
+| 5–10 | 58.41, 17.68, 2.61 | 59.55, 17.60, 0.71 | 54.81, 34.235, 9.317 |
+| 10–15 | 57.60, 17.81, 4.15 | 59.06, 17.56, 1.55 | 54.41, 34.261, 10.012 |
+| 15–20 | 56.50, 17.82, 5.91 | 58.14, 17.74, 3.10 | 54.30, 34.272, 10.278 |
+| 20–25 | 47.27, 84.56, 17.28 | 58.03, 17.80, 3.31 | 54.72, 34.170, 9.468 |
+| 25–30 | 12.16, 118.35, 100 | 58.55, 17.67, 2.41 | 55.10, 34.103, 8.712 |
+
+Relay 1 measured 54.93 ticks/s, 34.169 ms p99 and 9.051% of intervals over 25 ms.
+It missed all three cadence thresholds (59.9 ticks/s, 18.409 ms, 0.5%).
+Zero of 30 one-minute windows passed. Cadence held above 54 ticks/s in all five-minute
+blocks despite the late decline in the recorded build. Host load started at 3.60
+and ran at 5.93–12.75 in the measured window, ending at 7.52 with a 6.82 rise
+above its running minimum. Snapshots placed Frostmarsh PID 3493788 and Python
+PID 3393902 on the X925 cores. Treat this run as diagnostic evidence.
+
+From first to last in-window sample, server RSS rose from 867.0 to 1,022.6 MiB,
+server cgroup memory from 968.1 to 3,158.8 MiB (3,340.4 MiB peak), and combined
+relay/checker/client RSS from 84.7 to 134.9 MiB. The gate-load processes grew
+from 762.9 to 919.7 MiB RSS. SpacetimeDB table-row gauges showed
+`character` 280 → 3,728, `structure` 130 → 3,591, `line_seen` 3,564 → 6,710,
+`sex_seen` 4,635 → 85,859 and `skill_use` 1,694 → 81,856.
+The 60-second and five-minute cuts and all changed gauges are in
+`relay-1.long_windows.json`. The window was entirely unprofiled, so
+`relay-1.unprof_marker.json` covers all 300 seconds of each block.
+
 ## Evidence
 
 - **Runs:** `~/slop-growth-diag/out/runs/{long-relay,long-main,long-relayfix,smoke-main}/`. Each holds `prof.jsonl`, `spans.json`, `ticks.json`, `mem.jsonl`, `cores.jsonl`, `ticks-watch.csv` (the marker), `battle-viewers.json` and the replica's module logs. Plus `out/driver.log` and the server logs.
