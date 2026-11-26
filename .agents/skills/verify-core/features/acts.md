@@ -27,7 +27,7 @@ The diagnostic law `latency_acts` logs each act's course (`input_latency act_sub
 
 ## Act replacement gaps
 
-`scenes.py act_gaps --run "$R"` (default seed, about 1 min; verify-player `act_gaps.py` drives the same through `human_act`) holds `mind_act_replaces` on and drives a spawned person through `mind_act`, each law beside its control:
+`scenes.py act_gaps --run "$R"` (default seed, about 1 min) holds `mind_act_replaces` on and drives spawned people through `mind_act`, each law beside its control. Verify-player `act_gaps.py` drives the same through `human_act`.
 
 - `act_replace_checks` (on as shipped): a walk under way, then "eat cooked_meat" the person does not carry. On, the walk keeps its `started_ms` and the refusal is told ("What you had decided did not work out: eat cooked_meat: no cooked_meat in your pack …"). Off, the walk is gone (broken off before the check) and the same refusal is told. The replacement goes through `act::begin` with the act under way as its current activity, so every check before the start (combat timing, the skill's check for an act that starts here, sight, reach, the intent checks) runs before the break. An act that walks to its target first is checked when it arrives, as a graph's is.
 - `act_input_cost` (on): 40 `mind_act` calls sent at once over HTTP are cut at the input bucket (`input_burst` 15 plus `input_hz` 30/s refilled during the burst; on the Spark 15 accepted, 25 refused "too many inputs" in about 22 ms), and an act goes through a second later. Off, all 40 go through. A refused call writes nothing (`mind_act_checked` returns the same error).
