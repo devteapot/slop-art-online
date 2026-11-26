@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from threading import Barrier
 from pathlib import Path
 
 from urllib.error import HTTPError
@@ -580,6 +581,101 @@ def check_render_selection():
     expect("plan: --cases names them exactly", scene_gate.plan_cases(A, [], []) == (["tick", "render-smoke"], ["hair"]))
 
 
+def check_speech_selection():
+    """The speech group (say, heard_first, audience) and the steering group (flee_wall,
+    pursue_last_seen): selected by their paths, and the speech group also by speech words in the
+    changed hunks of brain.rs, perceive.rs and skills.rhai (gate-say-path: say-once changed
+    speech.rs and brain.rs, and no gate case ran `say` for ten days)."""
+    class A:
+        cases, force, render_only = None, False, False
+    speech, steering = ["say", "heard_first", "audience"], ["flee_wall", "pursue_last_seen"]
+    brain, rhai = "living/authority/src/brain.rs", "living/scripts/skills.rhai"
+    expect("speech: its cases run in their own groups on fresh default-seed worlds",
+           all(scene_gate.CASES[c]["group"] == "speech" for c in speech) and all(scene_gate.CASES[c]["group"] == "steering" for c in steering))
+
+    def plan(paths, hunks=None):
+        return scene_gate.plan_cases(A, paths, scene_gate.behavioural(paths), hunks)[0]
+    for path in ("living/authority/src/speech.rs", "living/authority/src/earshot.rs", "living/rules/src/normalize.rs",
+                 "living/rules/src/script/speech.rs"):
+        got = plan([path], {})
+        expect(f"speech: {path} selects the speech group", set(speech) <= set(got) and not set(steering) & set(got), str(got))
+    for path in ("living/authority/src/motion.rs", "living/rules/src/steer.rs", "living/rules/src/nav.rs"):
+        got = plan([path], {})
+        expect(f"steering: {path} selects the steering group", set(steering) <= set(got) and not set(speech) & set(got), str(got))
+    got = plan(["living/authority/src/act.rs"], {})
+    expect("speech: a behavioural diff outside both selects neither", "tick" in got and not set(speech + steering) & set(got), str(got))
+    say_once = "@@ -745,6 +745,12 @@\n+                if to != 0 && self.from_mind() && crate::speech::said_to_recently(self.ctx, self.me.id, to, &s.text, self.now) {"
+    got = plan([brain], {brain: say_once})
+    expect("speech: say-once's brain.rs hunk (said_to_recently) selects the speech group", set(speech) <= set(got), str(got))
+    got = plan([brain], {brain: "@@ -10,3 +10,3 @@\n-    let cap = 256;\n+    let cap = 2048;\n     prune_familiar(ctx);"})
+    expect("speech: a brain.rs hunk with no speech word does not", not set(speech) & set(got), str(got))
+    got = plan([rhai], {rhai: "@@ -21,1 +21,1 @@\n-        whisper_speech: 0.2,\n+        whisper_speech: 0.3,"})
+    expect("speech: a skills.rhai hunk naming a way of speaking selects it (identifiers by their parts)", set(speech) <= set(got), str(got))
+    got = plan([rhai], {rhai: "@@ -21,1 +21,1 @@\n-        slow_radius: 1.2,\n+        slow_radius: 1.0,"})
+    expect("speech: a skills.rhai hunk with no speech word does not", not set(speech) & set(got), str(got))
+    got = plan([brain])
+    expect("speech: without hunk text a touched hunk file selects it (the safe side)", set(speech) <= set(got), str(got))
+    acting, fight = ["act_gaps", "act_replace", "truthful_refusals"], ["committed", "dodge_told", "health_seen", "seize", "outcomes"]
+    expect("speech: speak and told run in the speech group as verify-player scripts",
+           all(scene_gate.CASES[c]["group"] == "speech" and scene_gate.CASES[c]["skill"] == "verify-player" for c in ("speak", "told")))
+    expect("step 1: the acting and fight groups, outcomes on its own island world",
+           all(scene_gate.CASES[c]["group"] == "acting" for c in acting)
+           and all(scene_gate.CASES[c]["group"] == "fight" for c in fight[:4])
+           and scene_gate.CASES["outcomes"]["group"] == "outcomes")
+    for path in ("living/authority/src/acts.rs", "living/rules/src/acts.rs", "living/authority/src/outcomes.rs", "living/rules/src/outcome.rs"):
+        got = plan([path], {})
+        expect(f"step 1: {path} selects the acting group", set(acting) <= set(got) and not set(fight) & set(got), str(got))
+    for path in ("living/authority/src/combat.rs", "living/authority/src/codes.rs", "living/rules/src/combat.rs"):
+        got = plan([path], {})
+        expect(f"step 1: {path} selects the fight group and outcomes", set(fight) <= set(got) and not set(acting) & set(got), str(got))
+    got = plan(["living/authority/src/act.rs"], {})
+    expect("step 1: act.rs alone (too broad) selects neither", not set(acting + fight) & set(got), str(got))
+    expect("cap: 10 groups at once by default (LIVING_GATE_GROUPS unset)",
+           os.environ.get("LIVING_GATE_GROUPS") is not None or scene_gate.GROUP_CAP == 10, str(scene_gate.GROUP_CAP))
+    cap = scene_gate.GROUP_CAP
+    try:
+        scene_gate.GROUP_CAP = 0
+        uncapped = scene_gate.workers(9)
+        scene_gate.GROUP_CAP = 4
+        expect("cap: LIVING_GATE_GROUPS bounds the groups at once; 0 runs all", uncapped == 9 and scene_gate.workers(9) == 4 and scene_gate.workers(2) == 2)
+    finally:
+        scene_gate.GROUP_CAP = cap
+
+
+def check_scene_waves():
+    class FakeRunner:
+        notes = {}
+        parts = {("a-steering", "flee_wall"): ["named failure"]}
+
+        def __init__(self):
+            self.case_parts = {}
+            self.finished = set()
+            self.first_wave = Barrier(2)
+
+        def group(self, root, group, cases, tag):
+            if group in {"core", "island"}:
+                self.first_wave.wait(5)
+            elif group in scene_gate.SECOND_WAVE_GROUPS:
+                assert {"core", "island"} <= self.finished
+            elif group == "render":
+                assert scene_gate.SECOND_WAVE_GROUPS <= self.finished
+            self.finished.add(group)
+            return {case: (case != "flee_wall", tag, 0.0) for case in cases}
+
+    runner = FakeRunner()
+    cases = ["say", "tick", "flee_wall", "act_gaps", "committed", "outcomes", "skirmish", "looks"]
+    cap = scene_gate.GROUP_CAP
+    try:
+        scene_gate.GROUP_CAP = 2
+        got = scene_gate.run_cases(runner, None, cases, "a")
+    finally:
+        scene_gate.GROUP_CAP = cap
+    expect("waves: existing groups run concurrently, then all new groups, then render",
+           set(got) == set(cases) and all(got[c][0] for c in cases if c != "flee_wall"), str(got))
+    expect("waves: a second-wave failure preserves its named parts for the flake rule",
+           not got["flee_wall"][0] and runner.case_parts[("a", "flee_wall")] == ["named failure"])
+
+
 def check_render_logs():
     """The client log's verdicts: shader/pipeline, asset, set stale and panics; WARN never fails."""
     t = "2026-11-20T20:01:16.183575Z"
@@ -968,6 +1064,28 @@ def check_render_passes_cli(t, tools):
            and "--cases seat" in out, out)
 
 
+def check_client_parts():
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "cues.json"
+        for checks in ({"delivered": True, "windup": False}, [["delivered", True], ["windup", False]]):
+            path.write_text(json.dumps({"checks": checks}))
+            expect("client parts: extract the failed boolean check",
+                   scene_gate.client_failed_parts(path, 1) == ["windup"])
+        path.write_text(json.dumps({"checks": {"windup": True}}))
+        expect("client parts: a crash with green evidence remains an unknown failure",
+               scene_gate.client_failed_parts(path, 124) == ["cues: exit 124 without failed checks"])
+        path.write_text(json.dumps({"checks": {"windup": False}}))
+        expect("client parts: a timeout with a partial report cannot be excused",
+               scene_gate.client_failed_parts(path, 124) == ["cues: exit 124 without failed checks"])
+        tier = Path(td) / "near_tier.json"
+        runner = Runner("client-parts", {}, Path(td), None)
+        path.write_text(json.dumps({"checks": {"windup": False}}))
+        runner.client_result("a-client", "cues", path, 1)
+        runner.client_result("a-client", "cues", tier, 1)
+        expect("client parts: record both cues drivers and keep an unexplained failure",
+               runner.parts[("a-client", "cues")] == ["windup", "near_tier: exit 1 without failed checks"])
+
+
 def main():
     check_run_part()
     check_genesis()
@@ -976,8 +1094,11 @@ def main():
     check_seed_fresh()
     check_generation_group()
     check_flake_scope()
+    check_client_parts()
     check_staged_genesis()
     check_render_selection()
+    check_speech_selection()
+    check_scene_waves()
     check_render_load()
     check_recorded_verdicts()
     check_render_logs()
