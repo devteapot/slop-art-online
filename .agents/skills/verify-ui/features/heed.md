@@ -16,7 +16,7 @@ Since `heed-client` (2026-11-26; [docs/ATTENTION_BUDGET.md](../../../../docs/ATT
 
 ## Drive
 
-On an island world (`verify.py launch --seed island`), all explicit. Run them after the ordinary scenarios: `heed-throng` leaves 200 fighters and their remains by the arrival.
+On an island world (`verify.py launch --seed island`), all explicit. `heed-throng` sets noon for its scene (the island's night sight is short) and puts the world's epoch back after. Run them after the ordinary scenarios: `heed-throng` leaves 200 fighters and their remains by the arrival.
 
 ```sh
 S=.agents/skills/verify-ui/scripts
@@ -26,7 +26,7 @@ $S/check.py --run "$R" heed-refusal   # an id not perceived, and one nobody has:
 ```
 
 - **`heed-throng`**: `spawn_battle_sides(200, 2)` (admin) and the player put 9 m south of the fighters' centroid; laws off: no `throng`/`heed` in the dump, the first set without `seen_throng`, no heed rows in Settings; both laws on (`set_world_law`, admin): the set subscribed again with one query more and switched to, then at the play camera and zoomed out (`notches:-6`) every square drawn as its row says and the client's rows the authority's (owner SQL `seen_throng WHERE viewer = 0x<identity>` right after the dump: at least 70% alike); Settings › The throng off and on; `heed_players` off: no rows of mine on the authority, no throng in the dump, the set the first one again. Shots `off`, `on`, `far`, `hidden`, `after`.
-- **`heed-pins`**: five residents held 1.6 m round the player (`place_at`, `set_behavior`); T on four: the client's pins and the authority's `heed_choice` row hold the four; T on a fifth: the warning note, nothing sent; T again: refused with `You can keep at most 4 others pinned at once.` in the notes, the row still the four; T on a pinned one unpins; the box opened on one: focus on them in the row; closed: no focus; Y: no pins. Every `heed: sent` at least 250 ms after the one before, none paced. Shots `five`, `focus`.
+- **`heed-pins`**: the player moved to a quiet open spot (`UNHEARD_SPOT`: a fight nearby would take its places, so the residents would not all be individuals), five residents held 1.6 m round it (`place_at`, `set_behavior`); T on four: the client's pins and the authority's `heed_choice` row hold the four; T on a fifth: the warning note, nothing sent; T again: refused with `You can keep at most 4 others pinned at once.` in the notes, the row still the four; T on a pinned one unpins; the box opened on one: focus on them in the row; closed: no focus; Y: no pins. Every `heed: sent` at least 250 ms after the one before, none paced. Shots `five`, `focus`.
 - **`heed-refusal`**: a resident put 80 m off; `heed:ID` and then an id nobody has: both refused with `You can only keep track of someone you can see now.`; the row names neither. Shot `refusal`.
 
 Each restores the heed laws to the world's own values (`law_values.own_laws`, else the shipped ones), and the residents.

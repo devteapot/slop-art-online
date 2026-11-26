@@ -5671,7 +5671,8 @@ def heed_throng(run, c):
 
 @scenario("heed-pins", explicit=True)
 def heed_pins(run, c):
-    """Pins and focus (heed for players; features/heed.md): five residents held beside the player,
+    """Pins and focus (heed for players; features/heed.md): the player at a quiet open spot
+    (`UNHEARD_SPOT`, admin `place_at`), five residents held beside them,
     both heed laws on (admin). The Pin key (T) on four of them pins them (the authority's
     `heed_choice` row holds the four, owner SQL), on a fifth warns first, and a second press asks:
     the authority refuses it in its own words, shown in the notes. T on a pinned one unpins it.
@@ -5686,14 +5687,17 @@ def heed_pins(run, c):
     offsets = [(1.6, 0.0), (-1.6, 0.0), (0.0, 1.6), (1.2, 1.4), (-1.2, 1.4)]
     places = [f"{i}:{dx}:{dy}" for i, (dx, dy) in zip(ids, offsets)]
     pin = lambda i: f"point:{i}:1.0;wait:0.3;key:KeyT:tap;wait:0.7;"
-    plan = ("ready;wait:2;sync:scene;wait:1;sync:heed;wait:4;dump:p0;"
+    # A quiet open spot first (`unheard`'s): a fight nearby would take the player's places
+    # (heed at work), so the residents would not all be individuals.
+    plan = ("ready;wait:2;sync:spot;wait:3;sync:scene;wait:1;sync:heed;wait:4;dump:p0;"
             + pin(A) + pin(B) + pin(C) + pin(D) + "wait:0.6;dump:p4;sync:row4;"
             + f"point:{E}:1.0;wait:0.3;key:KeyT:tap;wait:0.6;dump:warn;key:KeyT:tap;wait:1.5;dump:five;shot:five;sync:row5;"
             + pin(B) + "wait:0.6;dump:unpin;sync:row_unpin;"
             + f"point:{C}:1.0;wait:0.6;key:Enter:tap;wait:1.5;dump:focus;sync:row_focus;shot:focus;key:Escape:tap;wait:1.5;dump:nofocus;sync:row_nofocus;"
             + "cursor:;key:KeyY:tap;wait:1.2;dump:clear;sync:row_clear;quit")
     row = lambda me, ident: heed_choice(run, me)
-    handlers = {"heed": lambda me, ident: [call_admin(run, r, a, check=True) for r, a in heed_on_calls()], "row4": row, "row5": row, "row_unpin": row, "row_focus": row, "row_nofocus": row, "row_clear": row}
+    handlers = {"spot": lambda me, ident: call_admin(run, "place_at", [me, UNHEARD_SPOT[0], UNHEARD_SPOT[1]], check=True),
+                "heed": lambda me, ident: [call_admin(run, r, a, check=True) for r, a in heed_on_calls()], "row4": row, "row5": row, "row_unpin": row, "row_focus": row, "row_nofocus": row, "row_clear": row}
     with resident_fixture(run, ids), heed_fixture(run):
         out, code, text, res = staged_drive(run, s, plan, handlers, extra=[x for p in places for x in ("--place", p)])
     c.check(s, "client ran and joined", code == 0, text[-300:])
