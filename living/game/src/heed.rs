@@ -170,6 +170,16 @@ pub fn in_throng(pick: &ThrongPick, individuals: &[(u32, Vec2)]) -> Option<u32> 
         .map(|(id, _)| *id)
 }
 
+/// Pins asked for as they are by the live script (`heed:ID`, `live.rs`), not yet sent.
+static ASKS: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+
+/// The live script asks the authority to pin `id` as it is: sent with my other pins, past this
+/// client's check that I perceive `id`, so the authority's own answer shows (a check of its
+/// refusal words; the Pin key never sends someone I do not perceive).
+pub fn ask(id: u32) {
+    ASKS.lock().unwrap().push(id);
+}
+
 /// Heed for players as this client holds it.
 #[derive(Resource, Default)]
 pub struct Heed {
@@ -373,6 +383,19 @@ fn input(
             }
             h.pins = pins;
         }
+    }
+
+    // The live script's asks (`heed:ID`): sent as they are.
+    for id in std::mem::take(&mut *ASKS.lock().unwrap()) {
+        let mut c = h.sender.acked.seen(seen);
+        let extra: Vec<u32> = h.pins.iter().copied().filter(|p| seen(*p) && !c.pins.contains(p)).collect();
+        c.pins.extend(extra);
+        if !c.pins.contains(&id) {
+            c.pins.push(id);
+        }
+        c.focus = h.focus;
+        h.note(format!("asked for #{id} as a pin as it is (live script)"));
+        h.force = Some(c);
     }
 
     // Focus: whom the open box speaks to, else my last aimed skill's creature.
