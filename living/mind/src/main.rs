@@ -274,6 +274,18 @@ async fn main() -> Result<()> {
         });
     }
     {
+        // What each mind remembers of others' bodies, by pair (`Index::sex_seen_id`).
+        let add = index.clone();
+        conn.db.sex_seen().on_insert(move |_, r| add.sex_seen_in(r));
+        let gone = index.clone();
+        conn.db.sex_seen().on_delete(move |_, r| gone.sex_seen_out(r));
+        let moved = index.clone();
+        conn.db.sex_seen().on_update(move |_, old, r| {
+            moved.sex_seen_out(old);
+            moved.sex_seen_in(r);
+        });
+    }
+    {
         let tx = tx.clone();
         let index = index.clone();
         let trace = std::env::var("LIVING_INPUT_LATENCY").is_ok_and(|v| v == "1");

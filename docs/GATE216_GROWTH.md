@@ -173,7 +173,7 @@ Spans are ms/s of profiled window. Ticks/s and DB thread are the unprofiled 50 s
 3. **`sex_seen` bounded like the knowledge it belongs to** (`38a30b878`, rules-visible):
    - a dead person's rows go when their remains are gone (`tick::expire_remains`, through a new index on `sex_seen.known`);
    - an observer's row about someone goes when `prune_familiar` forgets that creature.
-4. **A mind-side cost found on the way** (not changed): the mind service subscribes to the whole `sex_seen` table and finds a pair with `conn.db.sex_seen().iter().find(..)` (`living/mind/src/mind.rs:640`).
+4. **A mind-side cost found on the way** (changed later, on `mind-sex-seen-keyed`, 2026-11-26: the mind keeps a pair map from `sex_seen`'s row callbacks in its `Index` and reads the one row by `id`): the mind service subscribes to the whole `sex_seen` table and finds a pair with `conn.db.sex_seen().iter().find(..)` (`living/mind/src/mind.rs:640`).
    - That clones the whole SDK cache under its lock on every lookup, the pattern that collapsed battles before ([INPUT_LATENCY.md](INPUT_LATENCY.md#mind-dispatch-profile-fast-dispatch-2026-11-20)).
    - With the table now bounded it grows less. A keyed index in the mind's own `Index` would remove it.
 
