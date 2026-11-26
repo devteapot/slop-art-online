@@ -27,7 +27,7 @@ BASE = dict(sh_w=0.0, chest=1.0, chest_d=1.0, bust=1.0, waist=1.0, hip=1.0, bell
             leg=1.0, hand=1.0, foot=1.0, head=1.0, jaw=1.0, chin=0.0, cheek=0.0, brow=0.0, stoop=0.0,
             chin_n=1.5, butt=1.0)
 MORPHS = {
-    'Sex_Male':   dict(sh_w=0.032, chest=1.12, chest_d=1.03, bust=0.0, waist=1.19, hip=0.93, neck=1.40, arm=1.15,
+    'Sex_Male':   dict(sh_w=0.032, chest=1.12, chest_d=1.07, bust=0.0, waist=1.19, hip=0.93, neck=1.40, arm=1.15,
                        leg=1.09, hand=1.13, foot=1.10, jaw=1.17, chin=0.008, brow=0.004, cheek=-0.002, head=1.0, butt=0.9),
     'Age_Child':  dict(head=1.30, sh_w=-0.012, chest=0.95, bust=0.0, waist=1.14, hip=0.90, belly=0.008, neck=0.92,
                        arm=1.04, leg=1.05, jaw=0.95, chin=-0.006, cheek=0.004, hand=1.05, foot=1.04, butt=0.9),
@@ -42,10 +42,10 @@ MORPHS = {
 }
 # name: armature scale (height), morph mix, colours
 CHARS = {
-    'woman': dict(scale=0.9265, mix={}, skin='#f2c9a8', hair='#a8482a', top='#e9dfcc', shorts='#3d4756', shoes='#6b4a36'),
-    'man':   dict(scale=1.0, mix={'Sex_Male': 1.0, 'Jaw_Square': 0.5, 'Face_Long': 0.5}, skin='#e3b08c', hair='#2f2a28', top='#d8d2c2', shorts='#35404a', shoes='#4a3628'),
-    'elder': dict(scale=0.955, mix={'Sex_Male': 0.75, 'Age_Elder': 1.0, 'Face_Long': 0.6}, skin='#e6bfa2', hair='#c9c9c6', top='#ddd6c6', shorts='#4a4a52', shoes='#4f3d30'),
-    'child': dict(scale=0.70, mix={'Age_Child': 1.0, 'Face_Round': 0.7}, skin='#f5cfb0', hair='#c98a3a', top='#e6e0cf', shorts='#4b5a48', shoes='#70503a'),
+    'woman': dict(scale=0.9265, mix={}, skin='#f2c9a8', hair='#a8482a', top='#8f7fa6', shorts='#3a3f4c', shoes='#6b4a36'),
+    'man':   dict(scale=1.0, mix={'Sex_Male': 1.0, 'Jaw_Square': 0.5, 'Face_Long': 0.5}, skin='#e3b08c', hair='#2f2a28', top='#c79a3a', shorts='#2f3b52', shoes='#4a3628'),
+    'elder': dict(scale=0.955, mix={'Sex_Male': 0.75, 'Age_Elder': 1.0, 'Face_Long': 0.6}, skin='#e6bfa2', hair='#c9c9c6', top='#5f8a80', shorts='#4a3f38', shoes='#3f332c'),
+    'child': dict(scale=0.70, mix={'Age_Child': 1.0, 'Face_Round': 0.7}, skin='#f5cfb0', hair='#c98a3a', top='#a8483e', shorts='#4b5a48', shoes='#70503a'),
 }
 
 # skeleton joints of the bind figure (world, metres; the armature of docs/char-live-2, scale 0.9265)
@@ -65,11 +65,11 @@ NT = 16      # torso and head ring size
 A0 = 7       # torso ring of the armhole's lower row
 # torso rings: z, rx, front, back, cy, group, dz at the back
 TORSO = [
-    (0.850, .158, .088, .100, .004, 'hip', 0), (0.915, .163, .092, .106, .004, 'hip', 0),
-    (0.985, .146, .086, .092, .002, 'waist', 0), (1.055, .116, .076, .074, .000, 'waist', 0),
-    (1.125, .120, .084, .076, -.002, 'waist', 0), (1.180, .126, .092, .082, -.002, 'chest', 0),
-    (1.232, .130, .100, .088, .000, 'chest', 0), (1.268, .130, .100, .092, .000, 'chest', 0),
-    (1.298, .127, .094, .094, .002, 'sh', 0), (1.327, .123, .080, .090, .004, 'sh', 0),
+    (0.850, .158, .088, .110, .006, 'hip', 0), (0.915, .163, .092, .116, .008, 'hip', 0),
+    (0.985, .146, .086, .092, .004, 'waist', 0), (1.055, .116, .078, .066, -.002, 'waist', 0),
+    (1.125, .120, .085, .073, -.004, 'waist', 0), (1.180, .126, .092, .082, -.004, 'chest', 0),
+    (1.232, .130, .100, .092, -.002, 'chest', 0), (1.268, .130, .100, .096, .000, 'chest', 0),
+    (1.298, .127, .094, .097, .002, 'sh', 0), (1.327, .123, .080, .092, .004, 'sh', 0),
     (1.352, .110, .056, .070, .006, 'sh', 0), (1.384, .045, .042, .050, .000, 'nb', .006),
     (1.404, .0305, .031, .034, -.006, 'neck', .008), (1.424, .0295, .030, .033, -.010, 'neck', .012),
 ]
@@ -87,9 +87,9 @@ HS = 1.06; YS = 0.010
 LEGPHI = [306, 342, 18, 54, 90, 126, 162, 198, 234, 270]
 ARMALPHA = [-72, -36, 0, 36, 72, 108, 144, 180, 216, 252]
 LEG = [  # z, rx, ry, cy offset, group
-    (.775, .080, .086, .004, 'thigh'), (.680, .071, .076, .002, 'thigh'), (.570, .060, .064, .0, 'thigh'),
-    (.515, .053, .057, -.003, 'knee'), (.474, .049, .054, -.007, 'knee'), (.435, .046, .050, -.001, 'knee'),
-    (.360, .055, .058, .010, 'calf'), (.250, .040, .042, .005, 'calf'), (.160, .032, .034, .0, 'ankle'),
+    (.775, .080, .088, .004, 'thigh'), (.680, .071, .080, -.003, 'thigh'), (.570, .060, .066, -.003, 'thigh'),
+    (.515, .053, .058, -.004, 'knee'), (.474, .049, .054, -.008, 'knee'), (.435, .046, .050, .001, 'knee'),
+    (.360, .055, .060, .013, 'calf'), (.250, .040, .043, .008, 'calf'), (.160, .032, .034, .002, 'ankle'),
     (.115, .030, .033, .0, 'ankle'),
 ]
 FOOT = [  # centre s, centre z, axis (ds, dz), lateral radius
@@ -125,7 +125,7 @@ def positions(P):
             zz = z + dzb * (1 - math.cos(th)) / 2
             if k in (5, 6, 7) and j in (1, 2, 3, 13, 14, 15):   # the bust
                 jj = j if j < 8 else NT - j
-                y -= P['bust'] * {1: .018, 2: .025, 3: .006}[jj] * {5: .35, 6: 1.0, 7: .5}[k]
+                y -= P['bust'] * {1: .022, 2: .030, 3: .007}[jj] * {5: .35, 6: 1.0, 7: .5}[k]
                 if k == 5: zz -= 0.006 * P['bust']
             V[('T', k, j)] = np.array([x, y + st, zz])
     V[('C',)] = np.array([0, .008, .797])
@@ -266,7 +266,7 @@ def topology():
     for r in range(11):                                  # arm and palm
         for i in range(10):
             if r == 9 and i == 9: continue               # the thumb's opening
-            L.append(([arm_key(r, i), arm_key(r, (i + 1) % 10), arm_key(r + 1, (i + 1) % 10), arm_key(r + 1, i)], 'skin'))
+            L.append(([arm_key(r, i), arm_key(r, (i + 1) % 10), arm_key(r + 1, (i + 1) % 10), arm_key(r + 1, i)], 'top' if r == 0 else 'skin'))   # a cap sleeve: the top ends on the arm's first ring
     def tube_faces(tag, base):
         ring = lambda fr: base if fr == 0 else [tag + (fr, q) for q in range(4)]
         for fr in range(4):

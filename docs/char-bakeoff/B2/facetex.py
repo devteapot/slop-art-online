@@ -47,7 +47,7 @@ def mixc(a, b, t): return tuple(int(a[i] * (1 - t) + b[i] * t) for i in range(3)
 SPECS = {
     'woman': dict(hw=.0178, hh=.0152, ex=.0335, ez=.0595, tilt=.0020, iris='#5f8f5a', lash='#3a1f18', brow='#7a3420',
                   brow_w=.0030, brow_z=.0235, lashw=.0034, blush=.30, mouth='#a24a44', mouth_w=.0125, freckles=True, smile=.0016),
-    'man': dict(hw=.0160, hh=.0090, ex=.0335, ez=.061, tilt=.0006, iris='#6b5a3c', lash='#241a16', brow='#241d1a',
+    'man': dict(hw=.0158, hh=.0084, ex=.0335, ez=.063, stubble=True, tilt=.0006, iris='#6b5a3c', lash='#241a16', brow='#241d1a',
                 brow_w=.0046, brow_z=.0205, lashw=.0026, blush=.06, mouth='#8a4a40', mouth_w=.0150, smile=.0004, lower_lash=False, nose_len=.012),
     'elder': dict(hw=.0150, hh=.0088, ex=.0335, ez=.061, tilt=-.0008, iris='#6d8794', lash='#4a403c', brow='#b9b9b6',
                   brow_w=.0044, brow_z=.0215, lashw=.0022, blush=.10, mouth='#8a5048', mouth_w=.0140, smile=.0002, lower_lash=False,
@@ -126,6 +126,11 @@ def paint(name, path):
             x = random.uniform(-.052, .052); z = .034 + random.uniform(-.010, .010) - abs(x) * .10
             if abs(x) < .007 and z < .034: continue
             r = random.uniform(.00045, .00085); ell(d, x, z, r, r, (176, 104, 72, random.randint(90, 160)))
+    if sp.get('stubble'):                       # a shadow of beard round the mouth and along the jaw
+        st = Image.new('RGBA', (S, S), (0, 0, 0, 0)); ds = ImageDraw.Draw(st)
+        ell(ds, 0, -.004, .030, .017, (92, 70, 62, 46)); ell(ds, 0, .016, .017, .0045, (92, 70, 62, 40))
+        for sg in (-1, 1): ell(ds, sg * .040, .004, .012, .020, (92, 70, 62, 34))
+        img.alpha_composite(st.filter(ImageFilter.GaussianBlur(m2p(.005))))
     for sg in (-1, 1): eye(img, sp, sg)
     d = ImageDraw.Draw(img)
     sh = hexa(SKIN_SHADOW, 205)

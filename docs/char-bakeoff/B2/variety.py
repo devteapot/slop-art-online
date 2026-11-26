@@ -25,7 +25,7 @@ tgt = Vector((0, 0, 0.98)); cam.location = tgt + Vector((0.9, -5, 0.5)); cam.rot
 SKIN = ['#f2c9a8', '#e9b996', '#dca882', '#c98f6a', '#f5d3b8']
 HAIRC = ['#a8482a', '#2f2a28', '#5a3a22', '#c98a3a', '#7a5230', '#1e1c20', '#8a3a1e']
 GREY = ['#c9c9c6', '#a9a9a8', '#dcdcd8']
-TOP = ['#e9dfcc', '#d8d2c2', '#cfd6d2', '#e2d2b8', '#c9cfc0']
+TOP = ['#8f7fa6', '#c79a3a', '#5f8a80', '#a8483e', '#d8d2c2', '#6f86a8', '#b9b08a']
 BOT = ['#3d4756', '#35404a', '#4b5a48', '#5a4a3c', '#4a4a52', '#6a3a34']
 SHOE = ['#6b4a36', '#4a3628', '#3a3230']
 kinds = ['woman', 'man', 'child', 'elder_m', 'woman', 'man', 'elder_w', 'child', 'man', 'woman', 'woman', 'elder_m', 'child', 'man', 'woman', 'man']

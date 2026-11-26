@@ -67,7 +67,7 @@
   "textures": [
    "face-man.png 1024x1024 RGBA"
   ],
-  "bytes": 2050292
+  "bytes": 2108940
  },
  "elder": {
   "file": "b2-elder.glb",
@@ -140,7 +140,7 @@
   "textures": [
    "face-child.png 1024x1024 RGBA"
   ],
-  "bytes": 2166340
+  "bytes": 2166336
  },
  "base": {
   "file": "b2-base.glb",
@@ -182,6 +182,6 @@
   "textures": [
    "face-woman.png 1024x1024 RGBA"
   ],
-  "bytes": 3241288
+  "bytes": 3239356
  }
 }
