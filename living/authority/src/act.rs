@@ -2672,6 +2672,7 @@ fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), sk
 pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.familiar().actor().delete(id);
     ctx.db.seen_structures().actor().delete(id);
+    crate::seen_structures::forget(id);
     crate::known::forget(ctx, id);
     ctx.db.last_look().id().delete(id);
     ctx.db.character_senses().id().delete(id);
