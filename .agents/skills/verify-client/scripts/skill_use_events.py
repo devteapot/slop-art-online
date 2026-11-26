@@ -9,18 +9,19 @@ dead character whose rows go `DEAD_USES_GRACE_MS` (120 s) after its death.
 Three players join with fresh identities: A and B 1 m apart on a quiet open line, D 40 m or more
 away. Rust SDK probes stream `skill_use_event` from their connections on: the owner (the world
 admin's token), an anonymous connection and player A. B strikes A three times, A tries a strike
-at D (out of reach: refused), then A's health is set to 1 and B strikes until A is dead. The
-script reads A's and B's `skill_use` rows and A's `dead_skill_use_due` row (owner SQL) right
+at D (out of reach: refused), then A starts a strike at B and is killed in its windup (admin
+`kill`), so one of A's uses is still open at its death. The script reads A's and B's `skill_use` rows and A's `dead_skill_use_due` row (owner SQL) right
 after the death, waits past the grace, and reads them again. Checks:
 
 - privacy: the anonymous connection and player A are refused (`private`), nothing delivered;
   owner SQL of the event table returns no row (it holds none between transactions);
 - the events: every finished row (an outcome, not "in flight") of A and B read at the end has an
   `outcome` event equal to it, field by field, and the last event per use id is its final row;
-  the refused strike is among them; no event names an actor other than A and B;
+  the refused strike is among them (other characters' events, the world's own fights, are
+  counted, not checked);
 - the grace: A's `dead_skill_use_due` row is due 120 s after its death; A's rows are there at its
-  death and gone (with the due row) once the grace is over, while B's are still there; A's rows
-  that never had an outcome event (if any) were sent as `drained`.
+  death and gone (with the due row) once the grace is over, while B's are still there; A's open
+  use (at least one) was sent as `drained`, with no outcome.
 
 Writes `RUN/skill-use-events-<who>.jsonl` and `RUN/skill_use_events.json`. Python standard
 library only.
@@ -89,12 +90,11 @@ def main():
         time.sleep(1.6)
     hcall(db, tok["a"], "use_skill", ["strike", d, *pos[d]])
     time.sleep(1.6)
-    call(rid, "admin_set_vitals", [a, 1.0])
-    for _ in range(8):
-        if not any(x["alive"] for x in sql(rid, f"SELECT alive FROM character WHERE id = {a}")):
-            break
-        hcall(db, tok["b"], "use_skill", ["strike", a, pa[0], pa[1]])
-        time.sleep(1.6)
+    # A strikes B and dies in its windup: the use stays open (accepted, no outcome).
+    pb = pos[b]
+    # The kill follows at once, well inside the strike's 350 ms windup.
+    hcall(db, tok["a"], "use_skill", ["strike", b, pb[0], pb[1]])
+    hcall(db, V.admin_token(), "kill", [a, "verify-client skill_use_events"])
     dead = sql(rid, f"SELECT alive, died_ms FROM character WHERE id = {a}")[0]
     killed = not dead["alive"]
     died_ms = int(dead["died_ms"])
@@ -127,24 +127,23 @@ def main():
         "anonymous and player subscriptions are refused as private, nothing delivered":
             all(any(x.get("status") == "rejected" and "private" in str(x.get("error", "")).lower() for x in ev[w]) and not events(ev[w]) for w in ("anon", "player")),
         "owner SQL of the event table returns no row": not owner_sql_events,
-        "B killed A": killed,
+        "A died (killed in its windup)": killed,
         "A had skill_use rows at its death, the refused strike at D among them": bool(at_death["a"]) and bool(refusal),
         "every finished row of A and B has an outcome event equal to it": bool(done) and all(
             any(why == "outcome" and same(u, r) for why, _, r in got if r["id"] == u["id"]) for u in done),
         "the last event per use id is that use's final row": all(same(last[k][2], u) for k, u in final_rows.items() if k in last),
-        "no event names an actor other than A and B": all(r["actor"] in (a, b) for _, _, r in got),
         "A's dead_skill_use_due row is due 120 s after its death": len(at_death["due"]) == 1 and int(at_death["due"][0]["due_ms"]) == died_ms + GRACE_MS,
         "past the grace A's rows and its due row are gone, B's still there": not after["a"] and not after["due"] and bool(after["b"]),
-        "A's rows that never had an outcome were sent as drained":
-            all(any(why == "drained" and r["id"] == u["id"] for why, _, r in got) for u in open_rows),
+        "A's use open at its death (at least one) was sent as drained, with no outcome":
+            bool(open_rows) and all(any(why == "drained" and r["id"] == u["id"] and not r["outcome"] for why, _, r in got) for u in open_rows),
     }
-    result = {"a": a, "b": b, "d": d, "died_ms": died_ms, "events": len(got), "by_why": {w: sum(1 for x in got if x[0] == w) for w in ("outcome", "trimmed", "drained")},
+    result = {"a": a, "b": b, "d": d, "died_ms": died_ms, "events": len(got), "others": sum(1 for _, _, r in got if r["actor"] not in (a, b)), "by_why": {w: sum(1 for x in got if x[0] == w) for w in ("outcome", "trimmed", "drained")},
               "a_rows_at_death": len(at_death["a"]), "a_open_at_death": len(open_rows), "due": at_death["due"], "after": {k: len(v) for k, v in after.items()},
               "owner_sql_error": owner_sql_error[:200], "checks": checks}
     (out / "skill_use_events.json").write_text(json.dumps(result, indent=1) + "\n")
     for k, v in checks.items():
         print(("PASS " if v else "FAIL ") + k)
-    print(json.dumps({k: result[k] for k in ("events", "by_why", "a_rows_at_death", "a_open_at_death", "after")}))
+    print(json.dumps({k: result[k] for k in ("events", "others", "by_why", "a_rows_at_death", "a_open_at_death", "after")}))
     return 0 if all(checks.values()) else 1
 
 
