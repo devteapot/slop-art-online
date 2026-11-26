@@ -20,9 +20,7 @@ enum St {
 }
 
 const MAX_VISITS: u32 = 160;
-const ROOT_MARK: u16 = u16::MAX - 1;
-const FAIL_MARK: u16 = u16::MAX - 2;
-pub(crate) const REFLECT_MARK: u16 = u16::MAX - 3;
+use crate::marks::{FAIL_MARK, KEPT_FROM, REFLECT_MARK, ROOT_MARK};
 thread_local! {
     /// What each character looked at lately (docs/BATTLE_SCALE.md, fix 1): the fast path in front
     /// of `familiar`, keyed as `recently_seen` keys things (a creature's id, `0x4000_0000 | a
@@ -107,10 +105,9 @@ const SEEN_MS: u64 = 90_000;
 /// a little under the 1 Hz slot, since a slot can come a tick early (a strict 1,000 ms skipped
 /// every other second).
 const NOTICE_MS: u64 = 900;
-/// Marks at 0xC000 | node: when a desire last began to act.
-const DESIRE_MARK: u16 = 0xC000;
-/// Set when the current plan's routine completes; cleared by the next install.
-const PLAN_DONE_MARK: u16 = 0xCFFF;
+/// Marks at 0xC000 | node: when a desire last began to act; set when the current plan's routine
+/// completes (cleared by the next install). Every range: `marks`.
+use crate::marks::{DESIRE_MARK, PLAN_DONE_MARK};
 /// How long an animal's impulse keeps any pull.
 const IMPULSE_MS: f32 = 60_000.0;
 /// How long being greeted weighs on the `hailed` desire signal.
@@ -2610,8 +2607,8 @@ impl<'a> Ev<'a> {
         cur.cursors = self.st.cursors.clone();
         // Speech and signal marks may be written during evaluation; keep their stored
         // values. The top three marks are evaluator timers, despite sharing the high range.
-        let mut marks: Vec<Mark> = self.st.marks.iter().filter(|m| m.node < 0xD000 || m.node >= REFLECT_MARK).cloned().collect();
-        marks.extend(cur.marks.iter().filter(|m| m.node >= 0xD000 && m.node < REFLECT_MARK).cloned());
+        let mut marks: Vec<Mark> = self.st.marks.iter().filter(|m| m.node < KEPT_FROM || m.node >= REFLECT_MARK).cloned().collect();
+        marks.extend(cur.marks.iter().filter(|m| m.node >= KEPT_FROM && m.node < REFLECT_MARK).cloned());
         cur.marks = marks;
         // The seen marks live in the per-character seen set now (`SEEN`); the row's own list
         // stays empty, so it is not rewritten at every evaluation.

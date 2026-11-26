@@ -113,6 +113,23 @@ A small reactive behavior tree the mind writes as JSON and the authority validat
 
 Selectors only resolve entities within the character's current perception radius (sight; for a skill's target also its species' scent, below) or its own remembered places, so the graph cannot act on observer truth.
 
+**Marks.** The private `mind_state.marks` list (`Mark { node: u16, at_ms }`, at most 24 a character) holds the evaluator's and the rules' timers and counters. Every key range is mapped in one place, `living/authority/src/marks.rs`, and a test there checks that no two uses share a key. From 0xD000 up to the evaluator's own timers the marks are kept across plan installs.
+
+| Keys | Use |
+| --- | --- |
+| 0x0000–0xBFFF | a behavior node's own mark, by node id (a say's pacing) |
+| 0xC000–0xCFFF | when a desire last began to act; the plan's routine done (0xCFFF) |
+| 0xD200, 0xD210–0xD214 | the last fight report and the health quarter it reported |
+| 0xD400–0xD402 | yielded, an animal's balk in the story, struck while yielded |
+| 0xD500 | the fast lane last changed the plan |
+| 0xD800–0xDFFF | a species signal made (hashed by name; 45 s) |
+| 0xE000–0xEFFF | a failure told (hashed by action and reason; `repeat_failure_s`) |
+| 0xF000–0xF0FF | a threat made (by victim; 30 s) |
+| 0xF100–0xF10F | walks turned back for another walk (the count; 20 s) |
+| 0xFFFC–0xFFFE | the evaluator's reflection, "keeps failing" and plan-root timers |
+
+Until turn-mark-band (2026-11-26) signals spread over 0xD000–0xDFFF and the turn counter sat at 0xD300–0xD30F, so a wolf's `howl` (0xD305) read as five turns back: a false "You keep turning back and forth" line when a howling wolf's graph replaced one walk with another, and the howl's own 45 s mark consumed. No table changed; an old 0xD305 mark is read by nothing and ages out.
+
 ### Deliberate acts (experiment, 2026-09-26)
 
 The behavior graph is the body's real-time layer (moving, keeping close, fleeing, fighting, eating, sleeping, work loops). Deliberate one-off interactions that need no sub-second reaction (starting a family, trading, giving, teaching, writing, reading, joining a community, a single piece of work, a single walk as the step before one) are *acts* a mind decides in its slow loop, like speech ([acts.rs](../living/authority/src/acts.rs), shared rules in [rules acts.rs](../living/rules/src/acts.rs)):
