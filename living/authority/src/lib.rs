@@ -17,6 +17,7 @@ mod frame;
 mod frame_trace;
 mod island;
 mod look;
+mod marks;
 mod mind;
 mod motion;
 mod outcomes;
