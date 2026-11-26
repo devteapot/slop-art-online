@@ -2,9 +2,14 @@
 //! character the authority runs keeps track of as individuals. Everyone else it sees is a
 //! **throng**: counted and placed, never named.
 //!
-//! Behind the value-only law `heed_on` (off by default: then nothing here runs and every reader
-//! is as before). Players keep today's perception either way: their side (replacing `far_cap`'s
-//! trim in `perception::sweep_one`, throng rows to clients) waits for dev-box's frame work.
+//! Behind the law `heed_on` (off by default: then nothing here runs and every reader is as
+//! before). Players perceive through heed only with the value-only law `heed_players` too (off by
+//! default): then a played character's committed `perceived` set is its individuals
+//! (`perception::sweep_one` takes [`split`] in place of `far_cap`'s trim), the rest of its sight is
+//! counted in `seen_throng` (`throng.rs`), and its pins and focus (`human_heed`, the `heed_choice`
+//! row) weigh in its picks. For a played character [`individual`] reads that committed set, so
+//! nothing but `perceived` decides who receives what (docs/ATTENTION_BUDGET.md, "Player-side
+//! interface").
 //!
 //! **The set.** Kept per character in module memory ([`HEED`]): the selector's picks
 //! (`living_rules::heed::select`, the same code the E3 replay runs), each pick's last time on
@@ -54,6 +59,13 @@ pub const STALE_MS: u64 = 3_000;
 const ENGAGEMENT_MS: u64 = 20_000;
 /// A cue's match marks its subject `cued` for this long.
 const CUED_MS: u64 = 5_000;
+/// A player pins at most this many creatures (`human_heed`); more is refused with a reason.
+pub const MAX_PINS: usize = 4;
+/// A player's `human_heed` calls are at least this far apart (ms).
+pub const CHOICE_FLOOR_MS: u64 = 250;
+/// What a player's focus and each of its pins weigh in its candidate's `chosen`.
+const FOCUS_WEIGHT: f32 = 1.0;
+const PIN_WEIGHT: f32 = 0.75;
 
 #[derive(Default)]
 struct State {
@@ -114,9 +126,22 @@ pub fn on(ctx: &ReducerContext) -> bool {
     common::laws(ctx).heed_on
 }
 
-/// Whether character `id` perceives through heed: the law is on and no person plays it.
+/// Whether character `id` perceives through heed: the law is on and no person plays it, or one
+/// does and `heed_players` holds too.
 pub fn applies(ctx: &ReducerContext, id: u32) -> bool {
-    on(ctx) && crate::combat::human(ctx, id).is_none()
+    on(ctx) && (common::laws(ctx).heed_players || crate::combat::human(ctx, id).is_none())
+}
+
+/// Whether heed applies to players in this world: `heed_on` and `heed_players` both hold.
+pub fn applies_player(ctx: &ReducerContext) -> bool {
+    let l = common::laws(ctx);
+    l.heed_on && l.heed_players
+}
+
+/// Whether `other` is in the committed `perceived` set of the player `viewer` (its individuals
+/// while heed applies to it).
+pub fn perceives(ctx: &ReducerContext, viewer: spacetimedb::Identity, other: u32) -> bool {
+    ctx.db.perceived().viewer().filter(viewer).any(|p| p.body == other)
 }
 
 /// Whether `other` must stay anonymous to `observer` (a throng member to it): the law applies to
@@ -126,11 +151,16 @@ pub fn masked(ctx: &ReducerContext, observer: &Character, other: u32, now: u64) 
 }
 
 /// Whether `me` perceives `other` as an individual now: always when heed does not apply to it;
-/// else forced (acted on, contact) or in its heeded set (a pass first when its set is missing or
-/// older than [`STALE_MS`]). Says nothing about sight: callers ask it of creatures in sight.
+/// for a played character, `other` is in its committed `perceived` set (contact puts the attacker
+/// there in the blow's own transaction, [`contact`]); else forced (acted on, contact) or in its
+/// heeded set (a pass first when its set is missing or older than [`STALE_MS`]). Says nothing
+/// about sight: callers ask it of creatures in sight.
 pub fn individual(ctx: &ReducerContext, me: u32, other: u32, now: u64) -> bool {
     if other == me || !applies(ctx, me) {
         return true;
+    }
+    if let Some(viewer) = crate::combat::human(ctx, me) {
+        return perceives(ctx, viewer, other);
     }
     if forced(ctx, me, other, now).is_some() {
         return true;
@@ -365,6 +395,11 @@ pub fn pass(ctx: &ReducerContext, me: &Character, at: (f32, f32), seen: &[NearCr
     });
 }
 
+/// When `me`'s last full pass ran (ms; 0: none in this instance).
+pub fn last_pass(me: u32) -> u64 {
+    HEED.with(|m| m.borrow().get(&me).map_or(0, |s| s.pass_ms))
+}
+
 /// `seen` split into the individuals and the throng for `me` (both nearest first, as given): a
 /// full pass when one is due ([`PASS_MS`]). Unchanged (all individuals) when heed does not apply.
 pub fn split(ctx: &ReducerContext, me: &Character, at: (f32, f32), seen: Vec<NearCreature>, now: u64) -> (Vec<NearCreature>, Vec<NearCreature>) {
@@ -420,7 +455,8 @@ fn event(ctx: &ReducerContext, me: &Character, at: (f32, f32), c: &NearCreature,
     });
     let Some((admit, cand)) = got else { return false };
     common::diag(|| "heed:events", 1);
-    HEED.with(|m| {
+    let taken = !matches!(admit, h::Admit::No);
+    let now_individual = HEED.with(|m| {
         let mut m = m.borrow_mut();
         let Some(s) = m.get_mut(&me.id) else { return false };
         s.in_sight.entry(c.id).or_insert(now);
@@ -457,7 +493,15 @@ fn event(ctx: &ReducerContext, me: &Character, at: (f32, f32), c: &NearCreature,
                 true
             }
         }
-    })
+    });
+    // A played character's individuals are its committed `perceived` set: one taken by an event
+    // joins it in this transaction (a displaced one goes at its next sweep).
+    if taken && now_individual {
+        if let Some(viewer) = crate::combat::human(ctx, me.id) {
+            crate::perception::admit(ctx, me.id, viewer, c.id, now);
+        }
+    }
+    now_individual
 }
 
 /// A windup aimed at `victim` began, by `attacker` (`act::begin`): the event pass for the victim,
@@ -518,11 +562,24 @@ pub fn contact(ctx: &ReducerContext, attacker: u32, victim: u32, outcome: &str, 
         v.retain(|(a, t)| *a != attacker && now.saturating_sub(*t) <= ENGAGEMENT_MS);
         v.push((attacker, now));
     });
-    if crate::combat::human(ctx, victim).is_some() {
-        // A played victim: no heed set of its own yet. The player side, when it lands, inserts the
-        // attacker into the victim's committed `perceived` set here, in this same transaction, so
-        // `masked` and `perceived` never disagree on who receives what (docs/ATTENTION_BUDGET.md,
-        // "Player-side interface").
+    if let Some(viewer) = crate::combat::human(ctx, victim) {
+        // A played victim: with heed on for players, the attacker joins its committed
+        // `perceived` set here, in the blow's own transaction (when it sees it), so `masked` and
+        // `perceived` never disagree on who receives what (docs/ATTENTION_BUDGET.md, "Player-side
+        // interface"); its set in memory takes it as forced too, like a mind's.
+        if applies(ctx, victim) {
+            HEED.with(|m| {
+                if let Some(s) = m.borrow_mut().get_mut(&victim) {
+                    s.picks.retain(|p| p.id != attacker);
+                    s.picks.insert(0, Pick::new(attacker, Place::Contact));
+                    s.merit.remove(&attacker);
+                    s.since.entry(attacker).or_insert(now);
+                }
+            });
+            if crate::perception::sees_creature(ctx, victim, attacker, now) {
+                crate::perception::admit(ctx, victim, viewer, attacker, now);
+            }
+        }
         return;
     }
     if applies(ctx, victim) {
@@ -636,6 +693,8 @@ struct Field<'a> {
     acting: Option<u32>,
     contacts: Vec<(u32, u64)>,
     community: Option<u32>,
+    /// A player's pins and focus (`heed_choice`), as weights for `chosen`.
+    chosen: Vec<(u32, f32)>,
 }
 
 impl<'a> Field<'a> {
@@ -654,7 +713,9 @@ impl<'a> Field<'a> {
         }
         let contacts = CONTACT.with(|c| c.borrow().get(&me.id).cloned().unwrap_or_default());
         let community = if reads.community { ctx.db.membership().member().find(me.id).map(|m| m.community) } else { None };
-        Field { me, at, heeded, since, in_sight, cued, reads, now, sc: common::scripts(ctx), winding, hurt, spoke, acting: acting_on(ctx, me.id), contacts, community }
+        // A player's pins and focus, while a person plays it (minds holding it read none).
+        let chosen = if crate::combat::human(ctx, me.id).is_some() { ctx.db.heed_choice().actor().find(me.id).map(|c| chosen_weights(&c)).unwrap_or_default() } else { Vec::new() };
+        Field { me, at, heeded, since, in_sight, cued, reads, now, sc: common::scripts(ctx), winding, hurt, spoke, acting: acting_on(ctx, me.id), contacts, community, chosen }
     }
 
     fn candidate(&self, ctx: &ReducerContext, c: &NearCreature) -> Candidate {
@@ -720,7 +781,7 @@ impl<'a> Field<'a> {
             acted_on: self.acting == Some(id),
             contact_ago_s: self.contacts.iter().find(|(a, _)| *a == id).map(|(_, t)| now.saturating_sub(*t) as f32 / 1000.0),
             cued: self.cued.get(&id).is_some_and(|t| now.saturating_sub(*t) < CUED_MS),
-            chosen: None,
+            chosen: self.chosen.iter().find(|(who, _)| *who == id).map(|(_, w)| *w),
             heeded_s: self.heeded.contains(&id).then(|| self.since.get(&id).map_or(0.0, |t| now.saturating_sub(*t) as f32 / 1000.0)),
             in_sight_s: self.in_sight.get(&id).map_or(0.0, |t| now.saturating_sub(*t) as f32 / 1000.0),
             fighting,
@@ -731,6 +792,36 @@ impl<'a> Field<'a> {
         }
     }
 }
+
+/// A player's choice as weights: its focus [`FOCUS_WEIGHT`], each pin [`PIN_WEIGHT`] (a pinned
+/// focus counts once, as the focus).
+fn chosen_weights(c: &HeedChoice) -> Vec<(u32, f32)> {
+    let mut out: Vec<(u32, f32)> = c.focus.map(|f| vec![(f, FOCUS_WEIGHT)]).unwrap_or_default();
+    for &p in &c.pins {
+        if !out.iter().any(|(id, _)| *id == p) {
+            out.push((p, PIN_WEIGHT));
+        }
+    }
+    out
+}
+
+/// Why `human_heed` refuses `input` from the played character `me` (its player `viewer`) now, if
+/// it does: more than [`MAX_PINS`] pins, or a pin or the focus on a creature it does not perceive
+/// now (its committed `perceived` set). The words for an unperceived id are the same whether or
+/// not the id exists, so the refusal tells nothing of who is where.
+pub fn refuse_choice(ctx: &ReducerContext, viewer: spacetimedb::Identity, input: &HeedInput) -> Option<String> {
+    if input.pins.len() > MAX_PINS {
+        return Some(format!("You can keep at most {MAX_PINS} others pinned at once."));
+    }
+    let set: Vec<u32> = ctx.db.perceived().viewer().filter(viewer).map(|p| p.body).collect();
+    if input.pins.iter().chain(input.focus.iter()).any(|id| !set.contains(id)) {
+        return Some(UNSEEN.to_string());
+    }
+    None
+}
+
+/// `human_heed`'s words for a pin or focus on someone the character does not perceive now.
+pub const UNSEEN: &str = "You can only keep track of someone you can see now.";
 
 /// The throng as a mind's scene tells it (docs/ATTENTION_BUDGET.md §5.1): one line per direction
 /// and distance band, with no ids: about how many, how widely spread, which way they move, what

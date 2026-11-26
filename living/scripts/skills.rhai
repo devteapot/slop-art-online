@@ -234,6 +234,9 @@ fn laws() {
         // A diagnostic, off in play: the authority logs each heed pass, windup and blow of a
         // character with a mind (the verify-core heed scene reads them).
         heed_trace: false,
+        // ...and for players too (with heed_on): their perceived set is whom they heed, the rest of
+        // their sight a counted throng. Off until its own play-test.
+        heed_players: false,
         // A test switch (docs/PERCEPTION.md, "Module memory and rollback"), 0 in play: a step the
         // world fails on purpose, to prove nothing kept in module memory outlives a failed one.
         memory_test: 0.0,
@@ -3291,6 +3294,7 @@ fn law_about(l, name) {
         "heed_closing_s" => `whether someone is coming toward one is judged over ${short(l.heed_closing_s)} s, not a glance`,
         "heed_contact_s" => `someone whose blow reached one stays an individual to one for ${short(l.heed_contact_s)} s, whatever one heeds`,
         "heed_trace" => "A test switch that logs how each mind's character keeps track of others in a fight; it is off in play.",
+        "heed_players" => if l.heed_players { "a player keeps track of only so many others as individuals too; everyone else in sight is a throng" } else { "a player perceives everyone in sight as an individual" },
         "far_cap" => if l.far_cap > 0.0 { `a player sees at most ${short(l.far_cap)} others at once, the nearest` } else { "a player sees everyone in sight" },
         "crowd_sweep_n" => if l.crowd_sweep_n > 0.0 { `what a player sees is looked at again less often in a crowd of more than ${short(l.crowd_sweep_n)}` } else { "what a player sees is looked at again at the same pace in any crowd" },
         "crowd_frame_max_ms" => if l.crowd_frame_max_ms > 0.0 { `in a crowd, a player's view of others follows at least every ${short(l.crowd_frame_max_ms)} ms` } else { "in a crowd, a player's view of others follows at least every 100 ms" },
