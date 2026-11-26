@@ -30,6 +30,7 @@ mod twist;
 mod fade;
 mod pointer;
 mod heard;
+mod heed;
 mod jump;
 mod hud;
 mod keys;
@@ -57,6 +58,7 @@ mod takes;
 mod talk;
 mod style;
 mod terrain;
+mod throng;
 mod town;
 mod ui;
 mod verbs;
@@ -216,6 +218,9 @@ fn main() {
         app.add_plugins(pick::PickPlugin);
         // Combat: skill input, perceived events, clips and effects (docs/COMBAT.md).
         app.add_plugins((combat::CombatPlugin, vfx::VfxPlugin));
+        // Heed for players (docs/ATTENTION_BUDGET.md): the throng's figures, pins and focus; idle
+        // unless the world's heed_on and heed_players laws are both on.
+        app.add_plugins((throng::ThrongPlugin, heed::HeedPlugin));
         // Town life: what residents are seen doing, my gestures, the authority's weather
         // (docs/TOWN_LIFE.md).
         app.add_plugins(town::TownPlugin);
