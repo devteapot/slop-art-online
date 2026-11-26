@@ -295,20 +295,22 @@ def seize(s):
     s.rows(f"SELECT kind, text FROM experience WHERE observer = {witness}", "witness-feedback")
     s.story("seize", a, "chronicle")
     previous = max(r["at_ms"] for r in s.story("yield", b))
-    # b keeps yielding (again every 5 s): a yield holds 20 s (`yield_ms`), and under load the blows
-    # to death took longer than that once (gate-1123072442-8633b3: the kill 21.7 s after the attack
-    # began, "Walker1 killed Walker2" with no "who had yielded").
-    s.graph(b, {"first": [{"seq": [{"do": "yield", "target": {"id": a}}, {"wait": 5}]}]})
-    s.wait(lambda: max(r["at_ms"] for r in s.story("yield", b)) > previous, seconds=30)
     s.call("grant_items", a, "spear", 1)
-    # No mode: an attack's blows go on to death, a yield does not hold them back, and striking
-    # the yielded is news.
+    # Yield checks refuse a repeat until the 20 s yield expires. Wait for a fresh yield, then
+    # stage the first landed blow to be lethal. Repeated blows can run past the yield window.
+    s.graph(b, {"first": [{"seq": [{"do": "yield", "target": {"id": a}}, {"wait": 5}]}]})
+    renewed = s.wait(lambda: [r for r in s.story("yield", b) if r["at_ms"] > previous], seconds=30)[-1]
+    s.http_call("admin_set_vitals", [b, 1.0])
+    # An attack can land a fatal blow during a yield, and striking the yielded is news.
     s.graph(a, {"first": [{"do": {"skill": "attack", "target": {"id": b}}}, {"wait": 1}]})
     s.wait(lambda: not s.rows(f"SELECT alive FROM character WHERE id = {b}")[0]["alive"], seconds=90)
     dead = s.rows(f"SELECT * FROM character WHERE id = {b}", "killed")[0]
-    news = [r for r in s.story("attack", a, "struck-yielded") if "had yielded" in r["text"]]
+    news = [r for r in s.story("attack", a, "struck-yielded")
+            if r["at_ms"] >= renewed["at_ms"] and "had yielded" in r["text"]]
+    killing = s.story("killing", a, "killing")
     s.expect("a blow can kill someone who yielded, and striking them is news",
-             "after yielding" in dead["cause"] and bool(s.story("killing", a, "killing")) and bool(news))
+             "after yielding" in dead["cause"] and bool(killing) and bool(news),
+             {"cause": dead["cause"], "yield": renewed, "killing": killing, "news": news})
 
 
 def death_names(s):
