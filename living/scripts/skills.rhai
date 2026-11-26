@@ -114,6 +114,13 @@ fn laws() {
         // labelled "stranger". On: anyone whose name one does not know, the rule that names
         // people in scenes, percepts and memory (`perception::knows_name`).
         stranger_by_name: false,
+        // Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): a graph's
+        // `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a
+        // personal relation only when it is clear (trust -25 or less or a hostile word; 25 or more
+        // or a friendly word), then the community's stance; minds are told the order and may say
+        // `fight` (enemy or spare); a person's own blow says enemy. Off: any personal relation
+        // row decides alone and hides the community's stance, as before; nothing is said or told.
+        relation_fight_on: false,
         // Attention cues (docs/ATTENTION.md): a mind may write what in what it perceives should
         // bring it to think about one of its stances, goals or projects. Off: none is matched.
         // A cue fires once per thing it matched within `cue_cooldown_s`, and a character is
@@ -195,6 +202,9 @@ fn laws() {
         // can read (`experience_copy`, written as lines are released; experience-incremental) as
         // well as through `my_experience`; off: the kill switch. The client reads either the same.
         lines_table_on: true, lines_table_check: false,
+        // A measuring aid (off): each tick writes its own time in µs to a private row a watcher
+        // reads, to time the steps (docs/TICK_RATE.md "The step marker").
+        tick_marker_on: false,
         // A bystander (one who sees an event it is not party to) is woken by what it sees at most
         // once per `witness_wake_ms` (docs/BATTLE_SCALE.md); what it sees is still told at once,
         // in full. 0: woken by each sight, as before.
@@ -212,6 +222,16 @@ fn laws() {
         far_motion_tol_m: 0.0,
         // ...and how often one in a fight weighs what to do (docs/BATTLE_LAWS.md (d)): 15, as before.
         combat_eval_hz: 15.0,
+        // heed (docs/ATTENTION_BUDGET.md): off until the owner's play-test; the ceiling on every capacity, set from cost;
+        // how long a creature that made contact (a blow that landed, was blocked or dodged) stays
+        // an individual whatever one heeds.
+        heed_on: false, heed_ceiling: 16.0, heed_contact_s: 4.0,
+        // ...and the window closing speed is measured over (seconds): smoothed, so one sweep's
+        // step does not flip who stands out.
+        heed_closing_s: 1.0,
+        // A diagnostic, off in play: the authority logs each heed pass, windup and blow of a
+        // character with a mind (the verify-core heed scene reads them).
+        heed_trace: false,
         // A test switch (docs/PERCEPTION.md, "Module memory and rollback"), 0 in play: a step the
         // world fails on purpose, to prove nothing kept in module memory outlives a failed one.
         memory_test: 0.0,
@@ -309,6 +329,32 @@ fn senses(a) {
     let s = #{ sight: sight_in(light_of(a)), hearing: hearing_of_people() };
     if law("fov_on") { s.field = sight_field(a); }
     s
+}
+
+// ---- heed (docs/ATTENTION_BUDGET.md; read by the authority while its switch law is on) -----
+// How many others a creature heeds: keeps track of as individuals; everyone else in sight is a
+// throng. Seed content: a world may change every number. The engine clamps the answer to the
+// world's heed ceiling (a law). `a.actor.factor` is the inborn knack times practice at the skill
+// `heed_knack()` names (1.0 untrained, up to 1.6 with long practice); a world without that skill
+// (the shipped ones: `watch` and the `keeping_watch` technique are an overlay's) reads 1.0.
+// A person's base is 14 (the owner's decision, 2026-11-23, after docs/ATTENTION_E4.md).
+fn heed_knack() { "watch" }
+fn heed_capacity(a) {
+    let c = switch a.actor.kind { "person" => 14.0, "wolf" => 8.0, "deer" => 6.0, _ => 6.0 };
+    c *= switch a.actor.stage { "infant" => 0.3, "child" => 0.7, "elder" => 0.9, _ => 1.0 };
+    c *= a.actor.factor;
+    // A technique one can learn or be taught (a world that has it: keeping_watch).
+    if knows(a, "keeping_watch") { c += 4.0; }
+    // Tiredness and pain narrow attention; so does being out of breath.
+    if a.actor.energy < 15.0 { c *= 0.6; } else if a.actor.energy < 35.0 { c *= 0.8; }
+    let health = a.actor.hp / (max_hp(a.actor.kind) * a.actor.vitality);
+    if health < 0.25 { c *= 0.6; } else if health < 0.5 { c *= 0.8; }
+    if a.actor.stamina < 10.0 { c *= 0.85; }
+    if c < 1.0 { 1.0 } else { c.floor() }
+}
+fn heed_capacity_law() {
+    #{ cadence: "event",
+       about: "How many others one keeps track of at once as individuals; everyone else in sight is seen as a throng. Tiredness, wounds and lost breath narrow it." }
 }
 
 // Band numbers are stable protocol values: Middle 0, Far 1, Near 2.
@@ -3223,6 +3269,7 @@ fn law_about(l, name) {
         "speech_truth" => if l.speech_truth { "a speaker learns when the one they spoke to could not have heard them, and a planned line is not said to someone out of earshot or after the talk has moved on" } else { "a speaker whose words did not reach the one they spoke to, unseen, gets no answer, and a planned line is said when it comes due" },
         "longing_after_min" => `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
         "longing_food" => if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
+        "relation_fight_on" => if l.relation_fight_on { "whom one fights: what one said (enemy or spare) first, then a clear feeling about them, then how one's people stand with theirs" } else { "whom one fights: how one feels about someone, if one has any feeling about them, else how one's people stand with theirs" },
         "stranger_by_name" => if l.stranger_by_name { "in a routine, a stranger is someone whose name one does not know" } else { "in a routine, a stranger is someone one has no feelings about yet" },
         "cues_on" => if l.cues_on { "what one wrote one would watch for brings one to think when one perceives it" } else { "one thinks when something happens to one, not because one watches for it" },
         "cue_cooldown_s" => `the same thing seen again brings no new thought from what one watches for within ${short(l.cue_cooldown_s)} s`,
@@ -3237,6 +3284,11 @@ fn law_about(l, name) {
         "memory_test" => "A test switch that makes one step of the world fail on purpose; it is off in play.",
         "det_clock" => "A test switch that makes the world's time and chance follow its steps alone, to compare two builds; it is off in play.",
         "det_stop" => "A test switch that pauses the world at a given step; it is off in play.",
+        "heed_on" => if l.heed_on { "one keeps track of only so many others as individuals; everyone else in sight is a throng" } else { "everyone in sight is perceived as an individual" },
+        "heed_ceiling" => `no one keeps track of more than ${short(l.heed_ceiling)} others as individuals at once`,
+        "heed_closing_s" => `whether someone is coming toward one is judged over ${short(l.heed_closing_s)} s, not a glance`,
+        "heed_contact_s" => `someone whose blow reached one stays an individual to one for ${short(l.heed_contact_s)} s, whatever one heeds`,
+        "heed_trace" => "A test switch that logs how each mind's character keeps track of others in a fight; it is off in play.",
         "far_cap" => if l.far_cap > 0.0 { `a player sees at most ${short(l.far_cap)} others at once, the nearest` } else { "a player sees everyone in sight" },
         "crowd_sweep_n" => if l.crowd_sweep_n > 0.0 { `what a player sees is looked at again less often in a crowd of more than ${short(l.crowd_sweep_n)}` } else { "what a player sees is looked at again at the same pace in any crowd" },
         "crowd_frame_max_ms" => if l.crowd_frame_max_ms > 0.0 { `in a crowd, a player's view of others follows at least every ${short(l.crowd_frame_max_ms)} ms` } else { "in a crowd, a player's view of others follows at least every 100 ms" },
@@ -3258,6 +3310,7 @@ fn law_about(l, name) {
         "fighter_tables_on" => if l.fighter_tables_on { "how the fighters a player sees move and fare reaches it as rows meant for that player alone" } else { "how the fighters a player sees move and fare reaches it through what it may look at" },
         "lines_table_on" => if l.lines_table_on { "what reaches each player's senses reaches it as rows meant for that player alone" } else { "what reaches each player's senses reaches it through what it may look at" },
         "lines_table_check" => "a diagnostic: each player's lines as rows are checked against what it may look at",
+        "tick_marker_on" => "a measuring aid: each tick notes its own time in microseconds for a watcher",
         "combat_feed_on" => if l.combat_feed_on { "what each player sees of fights reaches it as rows meant for that player alone" } else { "what each player sees of fights reaches it through what it may look at" },
         "motion_tables_on" => if l.motion_tables_on { "how others move reaches each player as rows meant for that player alone" } else { "how others move reaches each player through what it may look at" },
         "cue_transport_on" => if l.cue_transport_on { "what is near a player, or fighting it, reaches the player's screen at once" } else { "what is near a player reaches the player's screen with the rest of what it sees" },

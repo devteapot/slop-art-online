@@ -54,7 +54,7 @@ BASE_QUERIES = [
 ]
 # Private in every build: the authority's bookkeeping and developer audit truth
 # (docs/PERCEPTION.md). The observer and the mind service read them as the database owner.
-PRIVATE = ['attention', 'copy_state', 'lines_state', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'last_look', 'deliberation', 'rearing',
+PRIVATE = ['attention', 'copy_state', 'lines_state', 'applied_gaze', 'cover_ground', 'fast_ask', 'far_handle', 'slumber', 'land_plan', 'clock', 'tick_mark', 'steer', 'walk_route', 'rot', 'wake', 'familiar', 'last_look', 'deliberation', 'rearing',
            'known_ground', 'remembered', 'ground_edit', 'seen_structures',
            'act_queue', 'pasture', 'tick_timer', 'slow_timer', 'infant_cry',
            'combat_seen', 'fight_seen', 'missile', 'skill_use', 'readiness', 'skill_code',
@@ -66,6 +66,8 @@ PRIVATE = ['attention', 'copy_state', 'lines_state', 'applied_gaze', 'cover_grou
            'guest', 'judged', 'rhythm',
            # Attention cues a mind wrote (docs/ATTENTION.md): read only by reducers and the owner.
            'cue',
+           # Whom a character said it fights (relation-fight): the authority's and the owner's.
+           'relation_fight',
            # The world's law revision (docs/LAW_OVERRIDE.md): the authority's cache key; `law_override` is public.
            'law_revision',
            # Handles for figures too far away to make out (far-handle, docs/STRANGERS.md §1): the authority's only.
@@ -92,6 +94,8 @@ PRIVATE = ['attention', 'copy_state', 'lines_state', 'applied_gaze', 'cover_grou
            # When what each character can make of others last changed (cullet-sweep,
            # docs/PERCEPTION.md "Module memory and rollback"): the perception sweep's only.
            'knowledge_epoch',
+           # A mind's own heed policy and its last refusal (docs/ATTENTION_BUDGET.md "Built"): mind_heed's.
+           'heed_policy',
            # Who heard each line (docs/COMMUNICATION.md §6); a speaker's person reads its own through my_heard.
            'line_heard',
            # What each player's character senses (the `senses` law), read through my_senses.
@@ -137,7 +141,7 @@ PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block'],
           # The player's look (fov-1): any living character may send it.
           'human_face': [1.0, 0.0], 'human_gaze': [1]}
 MIND = ['mind_routines', 'mind_install', 'mind_install_way', 'mind_say', 'mind_act', 'mind_skip',
-        'mind_consolidated', 'mind_update', 'mind_judged', 'mind_where']
+        'mind_consolidated', 'mind_update', 'mind_judged', 'mind_where', 'mind_heed']
 # Procedures (their answer goes to the caller alone), under the same controller rule: a talk turn's
 # reach (reply-timing, docs/COMMUNICATION.md §21), called for the character and someone else.
 # `mind_act_checked` (bystanders-2) is driven by verify-minds `act-repair` and verify-player `gaze`.
@@ -145,6 +149,10 @@ PROCEDURES = {'mind_reach': lambda actor, other: [actor, other]}
 # The fast lane's answers (docs/FAST_LANE.md): for an open request only, which exists only for a
 # body its mind holds, so a player is refused even on its own character.
 FAST = ['mind_patch', 'mind_fast_done']
+# Whom a mind's character fights (relation-fight): the controller rule as for MIND, and never for
+# a character a person plays, so the player's own call is refused too ("a person plays this
+# character"); an empty list writes nothing.
+PLAYED_REFUSED = {'mind_fight': lambda actor: [actor, []]}
 ADMIN = {
     'set_paused': [False], 'install_script': [''], 'set_profile': [False],
     'spawn_crowd': [0, False], 'grant_know_how': [0, 'gather'], 'own_habits': [],
@@ -192,6 +200,8 @@ def mind_args(name, actor, marker):
         'mind_act': [actor, ['{"do":"signal","item":"client-probe"}'], 'probe'],
         # Where the character stands, for a talk turn (talk-places): the same controller rule.
         'mind_where': [actor],
+        # Whom the character keeps track of (heed): the same controller rule; a played character keeps nothing.
+        'mind_heed': [actor, '{"heed": []}'],
         'mind_skip': [actor, 0, t], 'mind_consolidated': [actor, 0],
         'mind_patch': [actor, 'combat', '{"wait":30}', 1, t], 'mind_fast_done': [actor, 1, t],
         'mind_judged': [actor, [{'q': 'client probe', 'value': 0.5, 'choice': '', 'ttl_ms': 1000}]],
@@ -446,7 +456,7 @@ class Run:
             text = path.read_text()
             for match in re.finditer(r'#\[spacetimedb::reducer\]\s*pub fn (\w+)\(', text):
                 reducers[match[1]] = f'{path.relative_to(ROOT)}:{text[:match.start()].count(chr(10)) + 2}'
-        expected = set(ADMIN) | set(MIND) | set(FAST) | set(PLAYER) | {'join', 'join_as', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step', 'cover_step'}
+        expected = set(ADMIN) | set(MIND) | set(FAST) | set(PLAYED_REFUSED) | set(PLAYER) | {'join', 'join_as', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step', 'cover_step'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
         procedures = {m[1] for path in (ROOT / 'living/authority/src').glob('*.rs')
@@ -544,6 +554,10 @@ class Run:
                 for actor in [ai['id'], other]:
                     self.call(label, token, reducer, mind_args(reducer, actor, label), 'not your character')
                 self.call(label, token, reducer, mind_args(reducer, own, label), 'no fast re-plan was asked')
+            for reducer, args in PLAYED_REFUSED.items():
+                for actor in [ai['id'], other]:
+                    self.call(label, token, reducer, args(actor), 'not your character')
+                self.call(label, token, reducer, args(own), 'a person plays this character')
             for procedure, args in PROCEDURES.items():
                 for actor in [ai['id'], other]:
                     self.call_procedure(label, token, procedure, args(actor, own), 'not your character')
@@ -566,6 +580,8 @@ class Run:
             self.call('anonymous-http-no-token', None, reducer, args, 'admin only')
         for reducer in MIND + FAST:
             self.call('anonymous-http-no-token', None, reducer, mind_args(reducer, ai['id'], 'anonymous'), 'not your character')
+        for reducer, args in PLAYED_REFUSED.items():
+            self.call('anonymous-http-no-token', None, reducer, args(ai['id']), 'not your character')
         for procedure, args in PROCEDURES.items():
             self.call_procedure('anonymous-http-no-token', None, procedure, args(ai['id'], 0), 'not your character')
         for reducer in ['tick', 'housekeeping']:

@@ -62,7 +62,8 @@ pub fn move_started(ctx: &ReducerContext, a: &Activity, now: u64) {
         return;
     }
     let Some(vc) = ctx.db.character().id().find(a.victim) else { return };
-    if !served(ctx, &vc) || !crate::perception::sees_creature(ctx, vc.id, a.id, now) {
+    // Under heed, a move by someone in the victim's throng is not seen coming (nothing when off).
+    if !served(ctx, &vc) || !crate::perception::sees_creature(ctx, vc.id, a.id, now) || crate::heed::masked(ctx, &vc, a.id, now) {
         return;
     }
     let n = laws.seen_again_n.max(1.0) as u32;

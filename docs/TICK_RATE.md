@@ -610,3 +610,35 @@ The laptop owns the game client (`living/game`); nothing in it changes in this b
 - **Elsewhere:** the late-row timing callbacks (`net.rs`, docs/LATENCY.md step 3) attach to both motion tiers and to `seen_body_cue`; the counts in `live.rs` add the two tiers.
 - **Bindings:** regenerated here, additive: the six views, the three event tables and the three near-tier tables (private), with their types. No existing type changed.
 - **Until the client moves:** it keeps working on the untiered views, but sees near creatures change at most every 500 ms (their copies follow at `NEAR_COPY_MS`). Land the client change with this branch, or before it.
+
+## The step marker
+
+Added 2026-11-23 (branch `tick-marker`). It is a measuring aid like the profiling laws: the `tick_marker_on` law, value-only, off by default.
+
+**What it writes.** While the law holds, each tick writes one row of the private `tick_mark` table (id 0): the tick's count and its reducer timestamp in microseconds (`ctx.timestamp`).
+- That is the time the scheduler dispatched the tick's call. SpacetimeDB 2.14.1 sets it in `call_reducer_params`, before any wait in the database's queue (see `common::now_ms`).
+- A reducer in 2.14.1 has no wall clock of its own: the bindings expose no "now", and `procedure_sleep_until` is for procedures. So the marker is the dispatch time, at µs resolution, not the moment the module began.
+- The difference is the queue wait (`reducer_wait_time`), which was 0.02–0.26 ms for the tick in [BATTLE_CONTRACT_CASES.md](BATTLE_CONTRACT_CASES.md)'s arms.
+- `clock` is unchanged, and so are its readers.
+- With the law off, nothing is written.
+
+**Who receives it.** Only the database owner: the table is private. `gate-load watch` with `"marker": true` subscribes it on its unconfirmed connection and writes `m,tick,start_us,arrival_us` lines to its `ticks-watch.csv`.
+
+**The analysis.** `living/tools/marker_steps.py`, with a known-answer self-test (`marker_steps_selftest.py`). It holds the coordinator's line, fixed before any result:
+- ticks/s ≥ 59.9;
+- p99 step interval ≤ 17.5 ms;
+- ≤ 0.5% of intervals over 25 ms.
+
+The intervals are the marker's own (server time), between consecutive ticks in the run's window. Arrival at the watcher is reported beside them, never judged: client experience belongs with the contract's latency lines, measured with the watcher on a separate machine.
+
+**Its cost.**
+- **In a calm world** (64 residents, profiling on), the write is 0.27 ms/s by its own span (`tick.marker`), about 4.5 µs a tick.
+- **In the 216 gate case on the relay arm**, the database thread was the same with it on and off: 509 ms/s (502–515) on, 507 (504–511) off. That is two runs each, on branch `npc-measure` (`b18402236`).
+- **What it sends:** one updated row a tick, to the owner's watcher alone.
+
+**What it showed first (dev-box, 2026-11-23).** The dispatch times of an idle world's ticks scatter about ±1.5 ms around the 60 Hz grid, and no slot is skipped.
+- With profiling: p50 16.69, p99 17.80, max 18.05 ms.
+- Without (L0): p99 18.04–18.08, max 18.5 ms.
+- In both, the scatter is spread evenly over the millisecond, so it is not a 1 ms timer step.
+
+So a p99 interval within 17.5 ms is not reached even with no load. Slots skipped (an interval near 33 ms) and the share over 25 ms are where load shows.

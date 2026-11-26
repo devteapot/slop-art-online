@@ -117,6 +117,12 @@ pub struct Resolved {
     pub name: String,
 }
 
+/// Whether a resolved target is a kind of ground (a tile of grass or forest), not a place, a
+/// point or a thing.
+fn on_ground_kind(t: &Resolved) -> bool {
+    t.class == 4 && t.id == 0 && living_rules::catalog::TERRAINS.contains(&t.kind.as_str())
+}
+
 impl Resolved {
     pub fn point(at: (f32, f32)) -> Self {
         Self { class: 4, id: 0, at, kind: "place".into(), name: String::new() }
@@ -1193,6 +1199,12 @@ pub fn begin_with(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill
             "back_off" if creature => Goal::held(motion::GOAL_FLEE, target.id as u32, target.at, spacing.distance.unwrap_or(BACK_OFF_M), 0.0, sp, 0),
             "back_off" => Goal { kind: motion::GOAL_FLEE, target: 0, at: target.at, keep: spacing.distance.unwrap_or(BACK_OFF_M), speed: sp, flags: 0, pace: sp, far: 0.0, apart: 0.0 },
             "goto" if creature => Goal::creature(target.id as u32, target.at, r, sp, motion::FLAG_EARLY),
+            // A walk to a kind of ground (`{"nearest": "forest"}`: `brain` resolves it to the
+            // centre of the nearest tile of it) is there only once the walker stands on it, for
+            // every controller: the work that follows is done where one stands (clear, plant,
+            // graze). Its arrival is reported on the tile's centre, not as the final approach
+            // begins (`FLAG_EARLY`), up to `slow_radius` short of it on the ground beside.
+            "goto" if on_ground_kind(&target) => Goal::point(target.at, sp, 0),
             "goto" | "wander" | "follow" => Goal::point(target.at, sp, motion::FLAG_EARLY),
             _ if aside => Goal::point(target.at, sp * common::moves_of(ctx, id, now).aside, 0),
             // Closing in on a creature: every look checks whether it is within reach.
@@ -1298,6 +1310,11 @@ fn perform(ctx: &ReducerContext, mut act: Activity, now: u64) -> Result<(), Stri
     act.ends_ms = now + dur.max(100);
     let id = act.id;
     let shape = shape_of(&sc, &act.skill);
+    if act.victim != 0 {
+        // A move aimed at someone is an event for whom they heed, before anything reads it
+        // (the fast lane's count): heed law, nothing when off.
+        crate::heed::windup(ctx, id, act.victim, now);
+    }
     if shape.is_some_and(|s| s.timed) {
         // The windup starts: the cooldown runs, others see it coming, the use is accepted.
         crate::combat::started(ctx, id, &act.skill, now);
@@ -1849,6 +1866,7 @@ fn complete(ctx: &ReducerContext, a: Activity, now: u64) {
             let from = ctx.db.body().id().find(a.id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
             engage(ctx, a.id, now);
             engage(ctx, a.victim, now);
+            crate::heed::contact(ctx, a.id, a.victim, "dodged", now);
             common::count(|k| k.dodged += 1);
             if let Some(vc) = ctx.db.character().id().find(a.victim) {
                 let at_v = ctx.db.body().id().find(a.victim).map(|b| pos(&b, now)).unwrap_or(from);
@@ -2639,6 +2657,8 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.last_look().id().delete(id);
     ctx.db.character_senses().id().delete(id);
     crate::attention::forget(ctx, id);
+    crate::heed::forget(id);
+    ctx.db.heed_policy().actor().delete(id);
     ctx.db.character_earshot().id().delete(id);
     ctx.db.experience().observer().delete(id);
     ctx.db.line_heard().speaker().delete(id);
@@ -2680,6 +2700,9 @@ pub fn retire(ctx: &ReducerContext, id: u32) {
     ctx.db.rhythm().id().delete(id);
     ctx.db.rearing().id().delete(id);
     ctx.db.relation().actor().delete(id);
+    for f in ctx.db.relation_fight().by_pair().filter(id).map(|f| f.id).collect::<Vec<_>>() {
+        ctx.db.relation_fight().id().delete(f);
+    }
     ctx.db.belief().actor().delete(id);
     if ctx.db.character().id().find(id).is_some_and(|c| c.kind != "person") {
         common::invalidate_traits(ctx, id);
@@ -2706,6 +2729,13 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
     }
     engage(ctx, attacker, now);
     engage(ctx, victim, now);
+    // A person's own blow says whom their character fights (relation-fight, under the
+    // `relation_fight_on` law): one they attack (the blow reaching them, landed, blocked or
+    // dodged) is its enemy from then on. A mind's blows say nothing of it; its reply does
+    // (`mind_fight`). Only the person's own acts: not while a mind holds their character.
+    if attacker != victim && vc.kind == "person" && common::laws(ctx).relation_fight_on && crate::presence::played(ctx, attacker) && ctx.db.character().id().find(attacker).is_some_and(|c| !c.ai) {
+        crate::mind::set_fight(ctx, attacker, victim, "enemy", "player", now);
+    }
     // Defense in progress: a dodge makes the blow miss, a raised guard facing the blow takes
     // most of it (from behind, a guard does not help).
     let guard = ctx.db.activity().id().find(victim);
@@ -2729,6 +2759,9 @@ pub fn damage(ctx: &ReducerContext, attacker: u32, victim: u32, amount: f32, ski
         }
     }
     let code = sc.shapes().code(skill);
+    // The blow reached the victim: contact, which makes its maker an individual to it for
+    // `heed_contact_s` whatever it heeds (heed law; nothing when off).
+    crate::heed::contact(ctx, attacker, victim, match defense { Aim::Dash => "dodged", Aim::Facing => "blocked", _ => "hit" }, now);
     // A missile's shooter is told to the victim only when the victim sees them (`seen_shooter`);
     // the combat feed hides it from whoever does not (`Seen::far_actor`).
     let seen_shooter = missile.is_none() || crate::perception::sees_creature(ctx, victim, attacker, now);

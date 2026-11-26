@@ -943,6 +943,125 @@ def sides_battle(s):
     s.expect("no resident dies over 60 s", not res_dead, res_dead[:5], fatal=False)
 
 
+def relation_fight(s):
+    """Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): a graph's `nearest
+    relation: enemy` takes, in order, what the character said (`mind_fight`: enemy or spare),
+    then a personal relation that decides (trust -25 or less or a hostile label; 25 or more or a
+    friendly one), then its community's stance. A minded walker A founds `Side A`, and
+    `spawn_battle_sides` makes Side B's fighters its people's enemies (held still). A's graph
+    attacks the nearest enemy; each stage reads whom its attacks aim at (`skill_use`):
+    1. a neutral relation row ("stranger", trust 0, as E5's minds wrote) does not mask the war;
+    2. a truce (trust 40, "truce-keeper") on the nearer one holds: A goes past it to the farther;
+    3. `spare` said over a hostile row (trust -60, "enemy") holds the same way;
+    4. a person of no side is no enemy until A says `enemy`, then A attacks them.
+    Also: `mind_fight` refuses a word other than enemy, spare or "", and takes "" back. All under
+    the `relation_fight_on` law (default off), switched on here; first, with it off, the neutral
+    row still hides the war (main's rule). The law is switched off again at the end."""
+    a, r = s.people(2)
+    if s.rows(f"SELECT * FROM membership WHERE member = {a}"):
+        s.act(a, {"do": "leave"})
+        s.wait(lambda: not s.rows(f"SELECT * FROM membership WHERE member = {a}"), 20)
+    s.act(a, {"do": "found", "text": "Side A"})
+    s.expect("A founds Side A", s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {a}"), 30), a)
+    s.expect("the resident R is of no community", not s.rows(f"SELECT * FROM membership WHERE member = {r}"), r)
+    home = s.rows(f"SELECT x, y FROM body WHERE id = {a}")[0]
+    ax, ay = home["x"], home["y"]
+    idle = {"wait": 120}
+    attack = {"first": [{"do": {"skill": "attack", "target": {"nearest": {"kind": "person", "relation": "enemy"}}}}, {"wait": 1}]}
+
+    def fighters(n):
+        before = {c["id"] for c in s.http_rows("SELECT id FROM character")}
+        s.call("spawn_battle_sides", n, 2)
+        names = {c["id"]: c["name"] for c in s.http_rows("SELECT id, name FROM character") if c["id"] not in before}
+        for f in names:
+            s.graph(f, idle)
+        return [f for f, n_ in sorted(names.items()) if n_.startswith("B")]
+
+    def feel(other, trust, label, note):
+        update = {"persona": {"none": []}, "relations": [{"other": other, "trust": float(trust), "affinity": 0.0, "label": label, "note": note}],
+                  "beliefs": {"none": []}, "judgments": [], "places": [], "thought": {"none": []}, "replace": False, "cues": {"none": []}}
+        s.call("mind_update", a, update)
+
+    def aimed(seconds, before):
+        """Whom A's attacks aimed at over `seconds` (every use seen, polled twice a second), not
+        counting the uses in `before` (the table keeps an actor's last 24)."""
+        seen = {}
+        end = time.time() + seconds
+        while time.time() < end:
+            for u in s.http_rows(f"SELECT * FROM skill_use WHERE actor = {a}"):
+                if u["skill"] == "attack" and u["target"] and u["id"] not in before:
+                    seen[u["id"]] = u["target"]
+            time.sleep(0.5)
+        return sorted(set(seen.values()))
+
+    def stage(name, near, far=None):
+        s.call("place_at", near, ax + 1.5, ay)
+        if far:
+            s.call("place_at", far, ax - 3.5, ay)
+        # The graph first, then the teleport: a new graph waits for the activity under way (A's
+        # 120 s wait) to end, and a placement ends it.
+        before = {u["id"] for u in s.http_rows(f"SELECT * FROM skill_use WHERE actor = {a}")}
+        s.graph(a, attack)
+        s.call("place_at", a, ax, ay)
+        got = aimed(10, before)
+        s.graph(a, idle)
+        s.call("place_at", a, ax, ay)
+        print(f"relation_fight {name}: A aimed at {got} (near {near}, far {far})", flush=True)
+        return got
+
+    # 0. Law off (main's rule): a neutral row hides the war.
+    b0, = fighters(2)
+    feel(b0, 0, "stranger", "a man standing a tile west of me, no word yet")
+    got = stage("law off, neutral row", b0)
+    s.expect("law off: a neutral relation row still hides the community's war (A does not attack B0)", got == [], got, fatal=False)
+    s.call("kill", b0, "verify-core relation_fight")
+    set_law(s, "relation_fight_on", True)
+    try:
+        relation_fight_on(s, a, r, fighters, feel, stage)
+    finally:
+        set_law(s, "relation_fight_on", False, check=False)
+    s.call("set_behavior", r, json.dumps(idle))
+
+
+def relation_fight_on(s, a, r, fighters, feel, stage):
+    """`relation_fight`'s stages under the law (see there)."""
+    # 1. A neutral row does not mask the war.
+    b1, = fighters(2)
+    feel(b1, 0, "stranger", "a man standing a tile west of me, no word yet")
+    got = stage("neutral row", b1)
+    s.expect("a neutral relation row (stranger, trust 0) leaves the community's war: A attacks B1", got == [b1], got, fatal=False)
+    s.call("kill", b1, "verify-core relation_fight")
+    # 2. A truce on the nearer one holds.
+    b2, b3 = fighters(4)
+    feel(b2, 40, "truce-keeper", "called truce and gave me their name")
+    got = stage("truce", b2, b3)
+    s.expect("a truce (trust 40, truce-keeper) holds: A goes past the nearer B2 to B3", got == [b3], got, fatal=False)
+    s.call("kill", b2, "verify-core relation_fight")
+    s.call("kill", b3, "verify-core relation_fight")
+    # 3. `spare` said over a hostile row holds.
+    b4, b5 = fighters(4)
+    feel(b4, -60, "enemy", "struck me twice")
+    refused = s.call("mind_fight", a, [{"other": b4, "fight": "never"}], check=False)
+    s.expect("mind_fight refuses a word other than enemy, spare or empty", refused.returncode != 0 and "enemy, spare or empty" in refused.stderr + refused.stdout,
+             (refused.stderr + refused.stdout)[-200:], fatal=False)
+    s.call("mind_fight", a, [{"other": b4, "fight": "spare"}])
+    said = [f for f in s.rows("SELECT * FROM relation_fight") if f["actor"] == a and f["other"] == b4]
+    s.expect("spare is written as the mind's", said and said[0]["fight"] == "spare" and said[0]["by"] == "mind", said, fatal=False)
+    got = stage("spare over a hostile row", b4, b5)
+    s.expect("spare said over a hostile row (trust -60, enemy) holds: A goes past the nearer B4 to B5", got == [b5], got, fatal=False)
+    s.call("kill", b4, "verify-core relation_fight")
+    s.call("kill", b5, "verify-core relation_fight")
+    # 4. A person of no side: no enemy until A says so.
+    got = stage("no side, nothing said", r)
+    s.expect("a person of no community, nothing said: not attacked", got == [], got, fatal=False)
+    s.call("mind_fight", a, [{"other": r, "fight": "enemy"}])
+    got = stage("no side, enemy said", r)
+    s.expect("an explicit enemy is attacked without any community stance", got == [r], got, fatal=False)
+    s.call("mind_fight", a, [{"other": r, "fight": ""}])
+    left = [f for f in s.rows("SELECT * FROM relation_fight") if f["actor"] == a and f["other"] == r]
+    s.expect("\"\" takes back what was said (no row left)", not left, left, fatal=False)
+
+
 LAYOUT_SEEDS = (1001, 1002)
 
 
@@ -5749,6 +5868,7 @@ def alert_after_hit(s):
 
 SCENES["alert_after_hit"] = alert_after_hit
 SCENES["sides_battle"] = sides_battle
+SCENES["relation_fight"] = relation_fight
 SCENES["sides_layout"] = sides_layout
 
 
@@ -7882,6 +8002,20 @@ def seen_remains_gaze(s):
 SCENES["seen_remains_gaze"] = seen_remains_gaze
 
 
+def deliberate_activity(s, actor):
+    rows = s.http_rows(f"SELECT skill, node, started_ms, target FROM activity WHERE id = {actor}")
+    return (rows or [None])[0]
+
+
+def is_deliberate_walk(activity, point):
+    return (activity is not None and activity["skill"] == "goto" and activity["node"] == 65534
+            and activity["target"] == [4, 0, *point])
+
+
+def act_experiences(s, actor):
+    return s.http_rows(f"SELECT id, kind, text, at_ms FROM experience WHERE observer = {actor}")
+
+
 def act_replace(s):
     """A mind's act under way and the next one it decides (docs/INPUT_LATENCY.md, "Mind acts
     replace"; features/acts.md). With `mind_act_replaces` off (the control; on as shipped since
@@ -7926,11 +8060,30 @@ def act_replace(s):
     s.expect("on: the next act replaces the walk at once and drops what waited", now and now["started_ms"] != first["started_ms"] and now["skill"] == "goto" and not queued(),
              {"first": first, "now": now, "queue": queued()})
     s.expect("on: the broken-off walks are told nothing (as a player's command is)", not any("did not work out: goto" in t for t in told()[before:]), told()[before:])
-    under_way = doing()
-    s.act(a, {"do": "gaze", "band": "middle"})
-    s.act(a, {"do": "no_such_skill"})
-    now = doing()
-    s.expect("on: a gaze change or an unreadable act replaces nothing", now and now["started_ms"] == under_way["started_ms"], {"under_way": under_way, "now": now})
+    # Stage the last check on a full-length walk with time for two separate calls.
+    s.call("place_at", a, *start)
+    pose, = s.http_rows(f"SELECT x, y FROM body WHERE id = {a}")
+    distance = math.dist((pose["x"], pose["y"]), far)
+    if distance < 28:
+        raise AssertionError(f"no-op walk staging: expected at least 28 m to {far}, got {distance:.2f} m from {pose}")
+    s.http_call("mind_act", [a, [json.dumps(goto(far))], "verify-core"])
+    try:
+        under_way = s.wait(lambda: is_deliberate_walk((d := deliberate_activity(s, a)), far) and d,
+                           10, 0.05)
+    except TimeoutError as exc:
+        raise TimeoutError(f"no-op walk staging: goto {far} never observed active from {pose}") from exc
+    observations = []
+    for command in ({"do": "gaze", "band": "middle"}, {"do": "no_such_skill"}):
+        s.http_call("mind_act", [a, [json.dumps(command)], "verify-core"])
+        now = deliberate_activity(s, a)
+        observations.append({"command": command, "activity": now})
+        if now != under_way:
+            observations[-1]["experiences"] = [r for r in act_experiences(s, a)
+                                               if r["at_ms"] >= under_way["started_ms"]]
+            break
+    s.expect("on: a gaze change or an unreadable act replaces nothing",
+             len(observations) == 2 and all(row["activity"] == under_way for row in observations),
+             {"pose": pose, "distance": distance, "under_way": under_way, "after_each_call": observations})
     set_law(s, "mind_act_replaces", True)
     s.graph(a, {"wait": 120})
 
@@ -7948,8 +8101,8 @@ def act_gaps(s):
     2. `act_input_cost`: a burst of 40 acts sent at once is cut at the input bucket (`input_burst`
        15 plus what `input_hz` 30/s refills during the burst), the rest refused "too many inputs"
        with nothing written; a second later acts go through again; off, all 40 go through.
-    3. `act_turned_back`: seven walks each given up within 3 s for another the other way are
-       noticed; the sixth in 20 s is told, "You keep turning back and forth"; off, nothing is told.
+    3. `act_turned_back`: seven alternating walks on a fresh actor give six replacements
+       within 3 s each. The sixth in 20 s is told, "You keep turning back and forth"; off, nothing is told.
     4. `act_same_continues` (on as shipped since 2026-11-22): the same walk again while it runs goes on (its start
        unchanged); off, it starts over.
 
@@ -8012,17 +8165,10 @@ def act_gaps(s):
                 s.expect("input cost off (control): all 40 go through", ok == 40 and not refused, detail)
         set_law(s, "act_input_cost", True)
 
-        # 3. Turning back and forth (off first: nothing is counted, so the window starts clean).
+        # 3. Isolate each arm from the turn that the bucket recovery may have started.
         for counted in (False, True):
             set_law(s, "act_turned_back", counted)
-            s.call("place_at", a, *line[14])
-            time.sleep(0.5)
-            n = len(told())
-            for i in range(7):
-                s.act(a, goto(far if i % 2 == 0 else start))
-                time.sleep(0.4)
-            time.sleep(0.5)
-            dither = [r["text"] for r in told()[n:] if r["kind"] == "self" and "turning back and forth" in r["text"]]
+            dither = stage_turns(s, line, counted)
             if counted:
                 s.expect("turned back on: seven walks given up for one the other way are noticed and told once", len(dither) == 1, dither)
             else:
@@ -8046,6 +8192,51 @@ def act_gaps(s):
 
 
 SCENES["act_gaps"] = act_gaps
+
+
+def stage_turns(s, line, counted):
+    """Drive six qualifying replacements and return the new turn notices from that actor."""
+    arm = "on" if counted else "off"
+    evidence = s.out / f"{s.name}-turns-{arm}.json"
+    attempts = []
+    deadline = time.monotonic() + 45
+    reason = "no time left to spawn a fresh walker"
+    while time.monotonic() < deadline:
+        walker, = s.people(1)
+        s.call("place_at", walker, *line[14])
+        before = {r["id"] for r in act_experiences(s, walker)}
+        walks = []
+        attempt = {"actor": walker, "walks": walks}
+        attempts.append(attempt)
+        try:
+            for i in range(7):
+                if time.monotonic() >= deadline:
+                    reason = f"deadline before walk {i + 1}/7"
+                    break
+                point = line[-1] if i % 2 == 0 else line[0]
+                command = {"do": "goto", "target": {"at": list(point)}}
+                s.http_call("mind_act", [walker, [json.dumps(command)], "verify-core"])
+                activity = deliberate_activity(s, walker)
+                walks.append({"point": point, "activity": activity})
+                if not is_deliberate_walk(activity, point):
+                    raise AssertionError(f"turn staging ({arm}): walk {i + 1}/7 to {point} did not start: {activity}")
+                if i:
+                    interval = activity["started_ms"] - walks[-2]["activity"]["started_ms"]
+                    elapsed = activity["started_ms"] - walks[1]["activity"]["started_ms"]
+                    if interval >= 3000 or elapsed > 20000:
+                        reason = f"walk {i + 1}/7 missed the turn window ({interval} ms since last start, {elapsed} ms since first turn)"
+                        break
+            else:
+                new = [r for r in act_experiences(s, walker) if r["id"] not in before]
+                attempt["experiences"] = new
+                if any(r["kind"] == "act" and "goto" in r["text"] and
+                       r["at_ms"] <= walks[-1]["activity"]["started_ms"] for r in new):
+                    raise AssertionError(f"turn staging ({arm}): a prior walk ended during the sequence; see {evidence}")
+                return [r for r in new if r["kind"] == "self" and "turning back and forth" in r["text"]]
+            attempt["restage"] = reason
+        finally:
+            evidence.write_text(json.dumps(attempts, indent=2) + "\n")
+    raise TimeoutError(f"turn staging ({arm}): six qualifying replacements not staged in 45 s: {reason}; see {evidence}")
 
 
 def far_spot(s, at, lo=40.0, hi=70.0):
@@ -8168,10 +8359,23 @@ def truthful_refusals(s):
         try:
             own = s.wait(lambda: [r for r in s.http_rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}") if r["kind"] == "own" and r["at_ms"] >= t0 and "nobody has spoken to you" in r["text"]], 8)
         except TimeoutError:
-            # Its named check fails, not the scene (once on the gate's acting world the leaf's status
-            # said why and no line was told: gate-1123072442-8633b3, cause not established).
+            # Missed once in the gate (gate-say-path step 1, gate-1123072442-8633b3) and never in 76
+            # fresh worlds since (refusal-tell): keep what decides whether the line is written
+            # (`act::refused`: the failure's mark in `marks`, news only outside `repeat_failure_s`;
+            # `tell`: A a mind's, alive, not an infant), so a next miss names its cause.
+            mark = 2166136261
+            for byte in 'say "Verify hello"nobody has spoken to you in the last minute'.encode():
+                mark = ((mark ^ byte) * 16777619) & 0xFFFFFFFF
+            evidence["say leaf missed"] = {
+                "t0": t0, "failure_mark": 0xE000 + mark % 0x1000,
+                "mind_state": s.http_rows(f"SELECT * FROM mind_state WHERE id = {a}"),
+                "character": s.http_rows(f"SELECT id, ai, alive, stage, controller FROM character WHERE id = {a}"),
+                "activity": s.http_rows(f"SELECT * FROM activity WHERE id = {a}"),
+                "brain": s.http_rows(f"SELECT * FROM brain WHERE id = {a}"),
+                "experience": s.http_rows(f"SELECT id, kind, text, at_ms FROM experience WHERE observer = {a}"),
+                "clock": s.http_rows("SELECT last_ms, tick FROM clock"),
+            }
             own = []
-            evidence["say leaf status"] = s.http_rows(f"SELECT status, fails FROM mind_state WHERE id = {a}")
         evidence["say leaf"] = own
         s.expect("say leaf: told 'nobody has spoken to you in the last minute'", own, own)
         s.graph(a, {"wait": 120})
@@ -8198,6 +8402,366 @@ def truthful_refusals(s):
 
 
 SCENES["truthful_refusals"] = truthful_refusals
+
+
+def heed(s):
+    """Heed for AI characters (docs/ATTENTION_E4.md; docs/ATTENTION_BUDGET.md v2.1), behind the
+    value-only law `heed_on`, beside its control (the law off, as shipped). On an open line an
+    observer O stands with six people 1-3.5 m east of it, a striker S 4 m east and an onlooker W
+    5 m east (within a said line's reach, and within sight by night): 8 others in O's sight. Each character's capacity is fixed per phase by an installed
+    `heed_capacity` that returns a number for O, S and W (the shipped formula for everyone else).
+
+    - **Off:** O's graph `sees` S and `count`s 8 people, as before.
+    - **On, O's capacity 2:** O sees no S by id (S is in its throng), still counts 8 (a throng is
+      counted), and its deliberation scene lists at most its 2 individuals with the rest as
+      anonymous `throngs` lines (no throng member's id anywhere in the scene).
+    - **Forced contact, O's capacity 0, S's 2:** S strikes O twice. O guards whenever it is
+      `threatened`. Off: the first windup is seen and blocked. On: the first is from S in O's
+      throng: not foreseen, it lands; the blow is contact, so S is an individual for
+      `heed_contact_s` and the second windup is seen and blocked. The module log (the diagnostic
+      law `heed_trace` on) says so (`heed blow … heeded_at_windup=0`, then `=1`) and holds no
+      `heed invariant` line.
+    - **Lines name no throng member (W's capacity 0):** the line W hears O say is "someone in the
+      throng", with no id; off, it names O.
+    - **The combat feed's rule** (docs/ATTENTION_BUDGET.md "Built"): W, at capacity 0, gets no
+      fight line for S's strikes on O (both in its throng: the blow reaches it only as its throng
+      lines); off, its line names them. Then W keeps track of S by a policy of its own (`mind_heed`,
+      `{"who": S}`, capacity 1): its line names S and tells O as "someone in the throng".
+
+    The shipped script is restored and the law set off at the end."""
+    line = clear_line(s)
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    o, S, W, *others = s.people(9)
+    born = time.monotonic()
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+
+    def caps(**fixed):
+        ids = {"o": o, "S": S, "W": W}
+        head = "".join(f"\n    if a.actor.id == {ids[k]} {{ return {float(v)}; }}" for k, v in fixed.items())
+        src = shipped.replace("fn heed_capacity(a) {", "fn heed_capacity(a) {" + head, 1)
+        assert src != shipped
+        s.call("install_script", src)
+
+    def place():
+        s.call("place_at", o, *line[0])
+        for k, c in enumerate(others):
+            s.call("place_at", c, line[1 + k // 2][0] + 0.5 * (k % 2), line[1 + k // 2][1] + (1.0 if k % 2 else -1.0))
+        s.call("place_at", S, *line[4])
+        s.call("place_at", W, *line[5])
+        for c in others:
+            s.graph(c, {"wait": 300})
+        s.graph(W, {"wait": 300})
+
+    rounds = iter(range(1000))
+
+    def probe(label):
+        """O says whether it sees S and whether it counts 8 people (one line every 2.2 s)."""
+        tag = f"{label}-{next(rounds)}"
+        t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        tell = [{"if": {"cond": {"sees": {"id": S}}, "then": {"say": f"{tag} sees S"}, "else": {"say": f"{tag} not S"}}}, {"wait": 2.2},
+                {"if": {"cond": {"count": {"of": {"kind": "person"}, "at_least": 8}}, "then": {"say": f"{tag} counts 8"}, "else": {"say": f"{tag} counts fewer"}}}, {"wait": 2.2}]
+        s.graph(o, {"seq": [{"wait": 1.5}, *tell, {"wait": 300}]})
+
+        def said():
+            rows = [r for r in s.rows(f"SELECT * FROM chronicle WHERE kind = 'speech' AND a = {o}") if r["at_ms"] >= t0 and tag in r["text"]]
+            return rows if len(rows) >= 2 else None
+        rows = s.wait(said, seconds=40, every=1)
+        (s.out / f"{s.name}-said-{tag}.json").write_text(json.dumps(rows, indent=2) + "\n")
+        return {"sees_S": any(f"{tag} sees S" in r["text"] for r in rows), "counts_8": any(f"{tag} counts 8" in r["text"] for r in rows), "t0": t0, "tag": tag}
+
+    def duel(label):
+        """S strikes O twice; O blocks whenever threatened. The two strikes' outcomes."""
+        s.call("place_at", S, line[0][0] + 1.0, line[0][1])
+        s.graph(o, {"first": {"label": "guard", "children": [{"if": {"cond": {"threatened": True}, "then": {"do": {"skill": "block"}}}}, {"wait": 0.2}]}})
+        time.sleep(3)
+        t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        s.graph(S, {"seq": [{"do": {"skill": "strike", "target": {"id": o}}}, {"wait": 0.3}, {"do": {"skill": "strike", "target": {"id": o}}}, {"wait": 60 + next(rounds)}]})
+
+        def struck():
+            u = [x for x in s.rows("SELECT * FROM skill_use") if x["at_ms"] >= t0 and x["actor"] == S and x["skill"] == "strike" and x["outcome"]]
+            return u if len(u) >= 2 else None
+        strikes = sorted(s.wait(struck, seconds=30, every=1), key=lambda x: x["at_ms"])
+        s.graph(S, {"wait": 1.0 + 0.01 * next(rounds)})
+        time.sleep(1.5 + law_value(s, "witness_fold_ms") / 1000)
+        uses = [x for x in s.rows("SELECT * FROM skill_use", f"duel-uses-{label}") if x["at_ms"] >= t0]
+        blocks = [x for x in uses if x["actor"] == o and x["skill"] == "block"]
+        seen = [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {W}", f"duel-exp-{label}") if r["at_ms"] >= t0]
+        return {"outcomes": [x["outcome"] for x in strikes[:2]], "blocks": len(blocks), "t0": t0}, seen
+
+    blocked = lambda out: "blocked" in (out or "")
+    try:
+        place()
+        caps(o=2, S=2, W=0)
+        got = probe("off")
+        s.expect("off (as shipped): O sees S and counts 8 people", got["sees_S"] and got["counts_8"], got)
+        heard_off = [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {W}") if r["at_ms"] >= got["t0"] and got["tag"] in r["text"]]
+        s.expect("off: W hears O's line from O by id", heard_off and all(r["subject"] == o for r in heard_off), heard_off)
+        set_law(s, "heed_on", True)
+        time.sleep(2.5)
+        got = probe("on-cap2")
+        s.expect("on, O's capacity 2: S is in O's throng (not seen by id)", not got["sees_S"], got)
+        s.expect("on: a throng's numbers are perceived (O still counts 8 people)", got["counts_8"], got)
+        heard_on = [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {W}", "heard-on") if r["at_ms"] >= got["t0"] and got["tag"] in r["text"]]
+        s.expect("on, W's capacity 0: O's line is heard from someone in the throng, with no id",
+                 heard_on and all(r["subject"] == 0 and "someone in the throng" in r["text"].lower() for r in heard_on), heard_on)
+        # O's deliberation scene: individuals listed, the rest in `throngs`, no throng member's id.
+        time.sleep(max(1.5, 47.0 - (time.monotonic() - born)))
+        stamp = lambda: next((d["updated_ms"] for d in s.rows(f"SELECT actor, updated_ms FROM deliberation WHERE actor = {o}")), -1)
+        before = stamp()
+        s.call("set_behavior", o, json.dumps({"seq": [{"think": "a look around"}, {"wait": 300}]}))
+        row = s.wait(lambda: next((d for d in s.rows(f"SELECT * FROM deliberation WHERE actor = {o}") if d["updated_ms"] > before), None), 20)
+        scene = json.loads(row["scene"])
+        (s.out / f"{s.name}-scene-on.json").write_text(json.dumps(scene, indent=1, ensure_ascii=False) + "\n")
+        listed = [c.get("id") for c in scene.get("creatures", [])]
+        throngs = scene.get("throngs", [])
+        about = sum(t.get("about", 0) for t in throngs)
+        s.expect("on: the scene lists at most O's 2 individuals", len(listed) <= 2, listed)
+        s.expect("on: the rest are anonymous throng lines (count, direction, spread, heading, activity)",
+                 throngs and about >= 8 - len(listed) - 1 and all({"dir", "dist", "about", "across", "moving", "visibly", "kinds"} <= set(t) for t in throngs), throngs)
+        hidden = [c for c in [S, W, *others] if c not in listed]
+        text = row["scene"]
+        s.expect("on: no throng member's id appears in the scene", not any(re.search(rf'"id":\s*{c}\b|#{c}\b', text) for c in hidden), hidden)
+        s.expect("on: no player in the throng, so no level-of-detail mark", "_stage" not in scene, list(scene))
+
+        # Forced contact. Off first (the control), then on, with the E4 diagnostic lines logged.
+        set_law(s, "heed_trace", True)
+        set_law(s, "heed_on", False)
+        caps(o=0, S=2, W=0)
+        off, seen_off = duel("off")
+        s.expect("off: O blocks the first strike (seen coming) and the second", blocked(off["outcomes"][0]) and blocked(off["outcomes"][1]), off)
+        fight_off = [r for r in seen_off if r["kind"] == "fight"]
+        s.expect("off: W's fight line names S and O", fight_off and any(r["subject"] in (S, o) for r in fight_off), fight_off)
+        time.sleep(31)
+        set_law(s, "heed_on", True)
+        time.sleep(2.5)
+        on, seen_on = duel("on")
+        s.expect("on, O's capacity 0: the first strike, from O's throng, is not foreseen and lands", not blocked(on["outcomes"][0]), on)
+        s.expect("on: its contact makes S an individual: the second strike is seen coming and blocked", blocked(on["outcomes"][1]), on)
+        fight_on = [r for r in seen_on if r["kind"] == "fight"]
+        s.expect("on, W's capacity 0: no fight line for a blow between two of W's throng (the feed's rule)", not fight_on, fight_on)
+        logs = s.command("logs", "-s", "local", s.db).stdout
+        (s.out / f"{s.name}-module-log.txt").write_text(redact(logs))
+        blows = [l for l in logs.splitlines() if f"heed blow a={S} v={o}" in l]
+        s.expect("the module log: the first blow's maker was not an individual at its windup, the second was",
+                 len(blows) >= 2 and "heeded_at_windup=0" in blows[-2] and "heeded_at_windup=1" in blows[-1], blows[-4:])
+        s.expect("no invisible repeated blow (no `heed invariant` line)", "heed invariant" not in logs, [l for l in logs.splitlines() if "heed invariant" in l][:5])
+
+        # One party an individual, the other in the throng: W keeps track of S by its own policy
+        # (`mind_heed`, the admin controls these minded characters), with one place.
+        s.call("mind_heed", W, json.dumps({"heed": [{"if": {"who": S}, "why": "verify"}]}))
+        caps(o=0, S=2, W=1)
+        time.sleep(31)
+        _, seen_one = duel("one")
+        fight_one = [r for r in seen_one if r["kind"] == "fight"]
+        s.expect("on, W keeps track of S only: its fight line names S and tells O as someone in the throng",
+                 fight_one and any(r["subject"] == S for r in fight_one)
+                 and all(r["object"] == 0 and "someone in the throng" in r["text"].lower() for r in fight_one), fight_one)
+        s.call("mind_heed", W, json.dumps("instinct"))
+    finally:
+        set_law(s, "heed_on", False, check=False)
+        set_law(s, "heed_trace", False, check=False)
+        s.call("install_script", shipped, check=False)
+        off_the_line(s, line, [o, S, W, *others], dy=48)
+
+
+SCENES["heed"] = heed
+
+
+GROUND_THOUGHT = {"kind": "deliberate", "summary": "verify-core ground_goto", "detail": "", "latency_ms": 0, "tokens": 0, "model": "fake", "reference": ""}
+GRASS_TILE, FOREST_TILE = 0, 1
+
+
+def ground_edges(at, W, H, kind, other, need, run=10, sep=30.0):
+    """Tiles of `kind` at the edge of a body of it (the tile behind is `kind` too), each with a
+    direction in which `run` tiles of `other`, and the tiles either side of them, lie straight
+    out: from a start on that run the nearest tile of `kind` is this one. At least `sep` m apart;
+    the first `need` found, scanning every third tile."""
+    found = []
+    for y in range(run + 2, H - run - 2, 3):
+        for x in range(run + 2, W - run - 2, 3):
+            if at(x, y) != kind:
+                continue
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                if at(x - dx, y - dy) != kind:
+                    continue
+                px, py = -dy, dx
+                if not all(at(x + dx * k + px * j, y + dy * k + py * j) == other for k in range(1, run + 1) for j in (-1, 0, 1)):
+                    continue
+                if all((x - fx) ** 2 + (y - fy) ** 2 >= sep * sep for fx, fy, _, _ in found):
+                    found.append((x, y, dx, dy))
+                    break
+            if len(found) >= need:
+                return found
+    return found
+
+
+def ground_goto(s):
+    """A `goto` to a kind of ground (`{"nearest": "forest"}`, `{"nearest": "grass"}`) ends with the
+    walker standing on that ground, so work chained after it that is done where one stands
+    succeeds at its first attempt: goto forest then clear, goto grass then plant. Each start is
+    on the other ground at the edge of the kind, on a tile straight out from the nearest tile of
+    it or one beside that line (`place_at` stands a body on a tile's centre): 1 m from that
+    tile's centre (the edge of the forest: the final approach, `slow_radius` 1.2 m, begins at
+    once), 1.4 m (diagonal), and 2 to 6 m (8 m can be beyond sight at dusk: "stuck: goto:
+    no nearest forest in sight"). Three controllers: a graph the admin installs
+    (`set_behavior`), a mind's plan (`mind_install`) and a player (`human_act` goto, then clear
+    or plant once the goto's outcome says it is done, as a client does). A first attempt passes
+    when no refusal in the rules' words ("there is no forest to clear where you stand",
+    "nothing grows here") was told and the work took effect (2 wood; a `plant` chronicle row).
+    Before goto-arrival a goto reported its arrival as its final approach began (`FLAG_EARLY`),
+    so the work could start on the ground beside."""
+    W, H, at, _walk = world_tiles(s)
+    starts = [(1, 0), (1, 1), (2, 0), (2, 1), (3, 0), (4, 1), (5, 0), (6, 0)]
+    player_starts = [(1, 0), (1, 1), (2, 0), (4, 0)]
+    tasks = {
+        # task: (kind walked to, its tile, the tile started on, the refusal's words)
+        "clear": ("forest", FOREST_TILE, GRASS_TILE, "no forest to clear where you stand"),
+        "plant": ("grass", GRASS_TILE, FOREST_TILE, "nothing grows here"),
+    }
+    names = {GRASS_TILE: "grass", FOREST_TILE: "forest"}
+    jobs = [(task, path, k) for task in tasks for path in ("set_behavior", "mind_install") for k in starts]
+    edges = {}
+    for task, (_, kind, other, _) in tasks.items():
+        need = sum(1 for j in jobs if j[0] == task) + len(player_starts)
+        edges[task] = ground_edges(at, W, H, kind, other, need)
+        s.expect(f"{task}: {need} edges of {names[kind]} found", len(edges[task]) >= need, len(edges[task]))
+    used = {t: 0 for t in tasks}
+
+    def trial(who, task, path, k):
+        x, y, dx, dy = edges[task][used[task]]
+        used[task] += 1
+        along, side = k
+        start = (x + 0.5 + dx * along - dy * side, y + 0.5 + dy * along + dx * side)
+        return {"actor": who, "task": task, "path": path, "start_tiles": list(k), "tile": [x, y], "start": start}
+
+    def under(who):
+        """Where `who` is now (its body row is a segment from `x`, `y` at `t_ms`) and the tile
+        code under it."""
+        b = s.http_rows(f"SELECT x, y, t_ms, vx, vy, next_ms FROM body WHERE id = {who}")[0]
+        now_ms = s.http_rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        t = max(0, min(now_ms, b["next_ms"]) - b["t_ms"]) / 1000.0
+        p = (b["x"] + b["vx"] * t, b["y"] + b["vy"] * t)
+        return p, at(math.floor(p[0]), math.floor(p[1]))
+
+    def wood(who):
+        return sum(r["qty"] for r in s.http_rows(f"SELECT item, qty FROM inventory WHERE owner = {who}") if r["item"] == "wood")
+
+    def placed(p):
+        pos, code = under(p["actor"])
+        p["placed"], p["placed_on"] = [round(v, 2) for v in pos], names.get(code, code)
+        p["d"] = round(math.dist(pos, (p["tile"][0] + 0.5, p["tile"][1] + 0.5)), 2)
+        p["wood_before"] = wood(p["actor"])
+        p["t0"] = s.http_rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    def watch(group, seconds):
+        """Each actor's first attempt at its task as it is seen: the moment its activity is seen
+        under way (with the ground under it then), or a refusal in the rules' words, first."""
+        ids = {p["actor"] for p in group}
+        end = time.monotonic() + seconds
+        while time.monotonic() < end and any("first" not in p for p in group):
+            t_min = min(p["t0"] for p in group)
+            acts = {r["id"]: r for r in s.http_rows("SELECT id, skill FROM activity") if r["id"] in ids}
+            told = s.http_rows(f"SELECT observer, text, at_ms FROM experience WHERE at_ms >= {t_min} AND (" + " OR ".join(f"observer = {i}" for i in sorted(ids)) + ")")
+            for p in group:
+                if "first" in p:
+                    continue
+                refused = [r for r in told if r["observer"] == p["actor"] and r["at_ms"] >= p["t0"] and tasks[p["task"]][3] in r["text"]]
+                a = acts.get(p["actor"])
+                if refused or (a and a["skill"] == p["task"]):
+                    p["first"] = "refused" if refused else "under way"
+                    if refused:
+                        p["refusal"] = refused[0]["text"]
+                    pos, code = under(p["actor"])
+                    p["seen_at"], p["seen_on"] = [round(v, 2) for v in pos], names.get(code, code)
+            time.sleep(0.2)
+        for p in group:
+            p.setdefault("first", "not seen")
+
+    def settle(group):
+        """After the work's time (12 s clearing, 5 s planting): its effect, and every refusal
+        in the rules' words told since the install."""
+        plants = s.http_rows("SELECT a, at_ms FROM chronicle WHERE kind = 'plant'")
+        for p in group:
+            if p["task"] == "clear":
+                p["effect"] = wood(p["actor"]) >= p["wood_before"] + 2
+            else:
+                p["effect"] = any(r["a"] == p["actor"] and r["at_ms"] >= p["t0"] for r in plants)
+            p["refusals"] = len([r for r in s.http_rows(f"SELECT text, at_ms FROM experience WHERE observer = {p['actor']}") if r["at_ms"] >= p["t0"] and tasks[p["task"]][3] in r["text"]])
+
+    # Graphs: every actor at once, each at its own edge (30 m apart and more).
+    actors = s.people(len(jobs))
+    plan = [trial(who, *job) for who, job in zip(actors, jobs)]
+    for p in plan:
+        if p["task"] == "plant":
+            s.call("grant_know_how", p["actor"], "planting")
+            s.call("grant_items", p["actor"], "berries", 4)
+        s.call("place_at", p["actor"], *p["start"])
+    time.sleep(2)
+    for p in plan:
+        placed(p)
+        graph = {"seq": [{"do": {"skill": "goto", "target": {"nearest": tasks[p["task"]][0]}}}, {"do": p["task"]}, {"wait": 120}]}
+        if p["path"] == "set_behavior":
+            s.call("set_behavior", p["actor"], json.dumps(graph))
+        else:
+            s.call("mind_install", p["actor"], json.dumps(graph), "verify ground_goto", "", 0, 0, GROUND_THOUGHT)
+    watch(plan, 45)
+    time.sleep(14)
+    settle(plan)
+    for p in plan:
+        s.graph(p["actor"], {"wait": 300})
+
+    # A player: the goto, then the work once the goto's outcome says it is done.
+    st = json.loads((s.out / "state.json").read_text())
+    verify = [str(ROOT / ".agents/skills/verify/scripts/verify.py")]
+    me, _viewer, present = _sweep_player(s, "Groundling")
+    s.call("grant_know_how", me, "planting")
+    played = []
+    for task in tasks:
+        for k in player_starts:
+            p = trial(me, task, "human_act", k)
+            if task == "plant":
+                s.call("grant_items", me, "berries", 4)
+            s.call("place_at", me, *p["start"])
+            present()
+            time.sleep(1.5)
+            placed(p)
+            subprocess.run(["python3", *verify, "player", "--run", st["run"], "act", json.dumps({"do": "goto", "target": {"nearest": tasks[task][0]}})], check=False, capture_output=True)
+            try:
+                p["goto_outcome"] = s.wait(lambda: [r for r in s.http_rows(f"SELECT * FROM act_outcome WHERE observer = {me}") if r["at_ms"] >= p["t0"] and r["skill"] == "goto"], 30, 0.1)[0]
+            except TimeoutError:
+                p["goto_outcome"] = None
+            if p["goto_outcome"] and p["goto_outcome"]["ok"]:
+                pos, code = under(me)
+                p["at_goto_done"], p["on_goto_done"] = [round(v, 2) for v in pos], names.get(code, code)
+                subprocess.run(["python3", *verify, "player", "--run", st["run"], "act", json.dumps({"do": task})], check=False, capture_output=True)
+                watch([p], 10)
+                time.sleep(13 if task == "clear" else 6)
+                settle([p])
+            else:
+                p["first"], p["effect"], p["refusals"] = "goto not done", False, 0
+            played.append(p)
+
+    (s.out / f"{s.name}-trials.json").write_text(json.dumps(plan + played, indent=1, default=str) + "\n")
+    for p in plan + played:
+        extra = f"; the goto done on {p['on_goto_done']}" if p.get("on_goto_done") else ""
+        print(f"  {p['path']:12} {p['task']} from {p['d']:.2f} m on {p['placed_on']}{extra}: first seen {p['first']}"
+              f"{' on ' + str(p.get('seen_on')) if p.get('seen_on') else ''}; refusals {p['refusals']}; effect {p['effect']}", flush=True)
+    for task, (kind, *_rest) in tasks.items():
+        for path in ("set_behavior", "mind_install", "human_act"):
+            group = [p for p in plan + played if p["task"] == task and p["path"] == path]
+            first = [p for p in group if p["refusals"] == 0 and p["effect"]]
+            s.expect(f"{path}: goto {kind} then {task} succeeds at the first attempt ({len(first)}/{len(group)})",
+                     len(first) == len(group), [(p["d"], p["refusals"], p["effect"]) for p in group], fatal=False)
+            seen = [p for p in group if p["first"] == "under way"]
+            s.expect(f"{path}: each {task} seen under way stands on {kind} ({sum(p['seen_on'] == kind for p in seen)}/{len(seen)})",
+                     all(p["seen_on"] == kind for p in seen), [(p["d"], p.get("seen_on")) for p in seen], fatal=False)
+            if path == "human_act":
+                done = [p for p in group if p.get("on_goto_done")]
+                s.expect(f"human_act: the goto to {kind} is done only standing on {kind} ({sum(p['on_goto_done'] == kind for p in done)}/{len(group)})",
+                         len(done) == len(group) and all(p["on_goto_done"] == kind for p in done), [(p["d"], p.get("on_goto_done")) for p in group], fatal=False)
+
+
+SCENES["ground_goto"] = ground_goto
 
 if __name__ == "__main__":
     raise SystemExit(main())
