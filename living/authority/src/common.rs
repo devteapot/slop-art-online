@@ -2031,6 +2031,15 @@ fn wake_rotation(tick: u64, n: usize) -> usize {
     (tick % n as u64) as usize
 }
 
+/// Where tick `tick` starts a turn over `n` in id order: `tick` mod `n` (the players' sweeps,
+/// `perception::sweep`).
+pub fn tick_rotation(tick: u64, n: usize) -> usize {
+    if n < 2 {
+        return 0;
+    }
+    (tick % n as u64) as usize
+}
+
 /// While profiling, each wake is counted under where it was asked from (`wake@act.rs:1540`).
 #[track_caller]
 pub fn wake(ctx: &ReducerContext, id: u32) {
