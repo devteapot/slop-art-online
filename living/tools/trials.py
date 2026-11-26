@@ -328,6 +328,8 @@ def dist(a, b):
 
 def up(_a=None):
     guard()
+    cpuset = os.environ.get("TRIALS_CPUSET")
+    affinity = ["--cpuset-cpus", cpuset] if cpuset else []
     (OUT / "wasm").mkdir(parents=True, exist_ok=True)
     os.chmod(OUT / "wasm", 0o755)
     env = OUT / "neo4j.env"
@@ -337,7 +339,7 @@ def up(_a=None):
         os.umask(old)
     state = docker_state(CONTAINER)
     if state is None:
-        sh("docker", "run", "-d", "--name", CONTAINER, "--restart", "no", "--stop-signal", "SIGINT",
+        sh("docker", "run", "-d", "--name", CONTAINER, "--restart", "no", "--stop-signal", "SIGINT", *affinity,
            "-p", f"{BIND}:{PORT}:3000", "-v", f"{CONTAINER}:/home/spacetime",
            "-v", f"{OUT / 'wasm'}:/wasm:ro", IMAGE_STDB, "start", "--listen-addr", "0.0.0.0:3000")
     elif state != "running":
@@ -353,7 +355,7 @@ def up(_a=None):
                      setup=[("server", "set-default", "local")])
     state = docker_state(NEO4J)
     if state is None:
-        sh("docker", "run", "-d", "--name", NEO4J, "--restart", "no", "-p", f"127.0.0.1:{NEO4J_PORT}:7687",
+        sh("docker", "run", "-d", "--name", NEO4J, "--restart", "no", *affinity, "-p", f"127.0.0.1:{NEO4J_PORT}:7687",
            "-e", f"NEO4J_AUTH=neo4j/{neo4j_password()}", "-e", "NEO4J_server_memory_heap_max__size=2G",
            "-e", "NEO4J_server_memory_pagecache_size=1G", "-v", f"{NEO4J}:/data", IMAGE_NEO4J)
     elif state != "running":
@@ -939,7 +941,7 @@ class Mind:
 
     def stop(self):
         try:
-            os.killpg(self.pid, signal.SIGTERM)
+            os.kill(self.pid, signal.SIGTERM)
         except ProcessLookupError:
             return
         for _ in range(50):
@@ -947,7 +949,7 @@ class Mind:
                 return
             time.sleep(0.2)
         try:
-            os.killpg(self.pid, signal.SIGKILL)
+            os.kill(self.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
 
@@ -1242,8 +1244,16 @@ class Instance:
     def pick(self, spec, taken):
         chars, bgs, know, knows, groups = self.census_cache
         admin = self.world["admin"]
+        ids = spec.get("ids")
+        if ids is not None and (not ids or spec.get("count", len(ids)) != len(ids)):
+            raise RuntimeError(f"pick {spec}: expected a nonempty ids list matching count")
+        id_order = {} if ids is None else {actor: index for index, actor in enumerate(ids)}
+        if ids is not None and len(id_order) != len(ids):
+            raise RuntimeError(f"pick {spec}: duplicate ids")
         out = []
         for c in chars:
+            if ids is not None and c["id"] not in id_order:
+                continue
             bg = bgs.get(c["id"], {})
             kinds = spec.get("kinds") or [spec.get("kind", "person")]
             if c["id"] in taken or c["kind"] not in kinds:
@@ -1264,7 +1274,9 @@ class Instance:
             if any(t in knows[c["id"]] for t in spec.get("lacks", [])):
                 continue
             out.append(c)
-        if spec.get("nearest"):
+        if ids is not None:
+            out.sort(key=lambda c: id_order[c["id"]])
+        elif spec.get("nearest"):
             at = self.anchor(spec["nearest"])
             pos = self.bodies([c["id"] for c in out])
             out.sort(key=lambda c: (dist(pos.get(c["id"], (1e9, 1e9)), at), c["id"]))
@@ -1273,7 +1285,10 @@ class Instance:
         elif spec.get("youngest"):
             # Seeded characters share a birth time, so the youngest has the fewest days at birth.
             out.sort(key=lambda c: (c["birth_age_days"], c["id"]))
-        n = len(out) if spec.get("count") == "all" else spec.get("count", 1)
+        if ids is not None:
+            n = len(ids)
+        else:
+            n = len(out) if spec.get("count") == "all" else spec.get("count", 1)
         if len(out) < n:
             raise RuntimeError(f"pick {spec}: only {len(out)} match")
         return [c["id"] for c in out[:n]]
@@ -1851,6 +1866,7 @@ class Instance:
 
     def save(self):
         st = {k: getattr(self, k, None) for k in self.STATE}
+        st["db"] = self.db
         st["fired"] = {json.dumps(k): v for k, v in self.fired.items()}
         st["done_at"] = sorted(self.done_at)
         st["mind_pid"] = self.mind.pid if self.mind else None
@@ -2185,6 +2201,15 @@ class Instance:
             time.sleep(2)
         self.status = "starting"
         self.run_phase("start")
+        observer_ready = getattr(self.opts, "observer_ready", None)
+        if observer_ready:
+            deadline = time.monotonic() + 120
+            while not Path(observer_ready).is_file():
+                if self.shared.get("abort") or time.monotonic() >= deadline:
+                    raise RuntimeError("observer did not finish its baseline before launch")
+                time.sleep(0.2)
+        if self.shared.get("abort"):
+            raise RuntimeError("trial stopped before starting the mind")
         self.t0 = time.time()
         if self.trial.get("record", {}).get("bodies"):
             threading.Thread(target=self.watch_bodies, args=(self.trial["record"]["bodies"],), daemon=True).start()
@@ -2300,12 +2325,14 @@ class Instance:
             if self.published:
                 try:
                     delete = not keep and self.status != "failed-keep"
+                    archive = not getattr(self.opts, "no_commitlog_archive", False)
                     record = trial_archive.finish(
                         self.dir, URL, CONTAINER, self.db, self.database_identity, self.shared["token"],
-                        delete=delete, expected_epoch=getattr(self, "world_epoch", None),
+                        delete=delete, archive_commitlog=archive,
+                        expected_epoch=getattr(self, "world_epoch", None),
                     )
-                    self.log(f"commitlog archive: {record}")
-                    self.published = bool(record and not delete)
+                    self.log(f"commitlog archive: {record}" if archive else "world paused without a commitlog archive")
+                    self.published = not delete and (bool(record) or not archive)
                     self.save()
                 except Exception as error:
                     self.status = "failed-keep"
@@ -2722,9 +2749,17 @@ def shared_for(trials, a, bdir):
         s.close()
         # `--fake-script`: the fake server's script (fake-llm.md), e.g. capacity 429s on consolidation, or living/trials/fake/latency.json (model latencies like the real ones).
         script = ["--script", str(Path(a.fake_script).resolve())] if getattr(a, "fake_script", None) else []
-        shared["fake"] = subprocess.Popen([sys.executable, str(FAKE), "--port", str(shared["fake_port"]), "--log", str(bdir / "fake-requests.jsonl"), *script],
-                                          stdout=open(bdir / "fake.log", "a"), stderr=subprocess.STDOUT, start_new_session=True)
-        time.sleep(1)
+        with (bdir / "fake.log").open("a") as log:
+            fake = subprocess.Popen([sys.executable, str(FAKE), "--port", str(shared["fake_port"]),
+                                     "--log", str(bdir / "fake-requests.jsonl"), *script],
+                                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        shared["fake"] = fake
+        try:
+            time.sleep(1)
+        except BaseException:
+            fake.send_signal(signal.SIGINT)
+            fake.wait(timeout=15)
+            raise
     return shared
 
 
@@ -2736,20 +2771,23 @@ def execute(a, instances, shared, resume=False):
             inst.run(resume=resume)
 
     threads = [threading.Thread(target=go, args=(i,), daemon=True) for i in instances]
-    for th in threads:
-        th.start()
-        # Starts are staggered so world creation (seeding, births) does not land at once.
-        time.sleep(getattr(a, "stagger", 2) or 2)
     old = signal.signal(signal.SIGINT, lambda *_: shared.__setitem__("abort", True))
     try:
+        for th in threads:
+            if shared.get("abort"):
+                break
+            th.start()
+            # Starts are staggered so world creation does not land at once.
+            time.sleep(getattr(a, "stagger", 2) or 2)
         while any(th.is_alive() for th in threads):
             time.sleep(15)
             line = " ".join(f"{i.name}:{i.status}{'@' + str(round((i.t() or 0) / 60, 1)) + 'm' if i.status == 'running' else ''}" for i in instances)
             print(f"[{time.strftime('%H:%M:%S')}] tokens {shared['spent']:,} | {line}", flush=True)
     finally:
         signal.signal(signal.SIGINT, old)
-        if shared.get("fake"):
-            os.killpg(shared["fake"].pid, signal.SIGTERM)
+        if fake := shared.get("fake"):
+            fake.send_signal(signal.SIGINT)
+            fake.wait(timeout=15)
     if not a.fake:
         led = ledger()
         sums = [json.loads(p.read_text()) for p in (OUT / a.batch).glob("*/summary.json")]
@@ -2771,6 +2809,10 @@ def run(a):
             sys.exit(f"unknown variant {v}; see living/trials/variants.json")
     # A trial may name the only variants it runs with (`variants`): others are skipped for it.
     plan = [(t, v, r) for t in trials for v in names if not t.get("variants") or v in t["variants"] for r in range(1, a.replicates + 1)]
+    if a.observer_ready and (len(plan) != 1 or Path(a.observer_ready).exists()):
+        sys.exit("--observer-ready requires one instance and a new baseline file")
+    if a.no_commitlog_archive and not all(a.keep_db or t.get("keep_db") for t, _, _ in plan):
+        sys.exit("--no-commitlog-archive requires keeping each database for the caller")
     if getattr(a, "interleave", False):
         # Replicate by replicate, the arms side by side (r1 of every variant, then r2, …): with
         # --parallel equal to the number of variants, the arms share each window of provider load.
@@ -3339,6 +3381,8 @@ def main():
     p.add_argument("--keep-db", action="store_true")
     p.add_argument("--stagger", type=float, default=2, help="seconds between instance starts")
     p.add_argument("--sample-s", type=float, default=SAMPLE_S, help="seconds between samples of each subject (default 2)")
+    p.add_argument("--observer-ready", help="wait for the observer's baseline file before starting a single instance's mind")
+    p.add_argument("--no-commitlog-archive", action="store_true", help="pause a kept database without writing a commitlog archive")
     p.add_argument("--allow-partial", action="store_true")
     p.set_defaults(f=run)
     p = sub.add_parser("report")
