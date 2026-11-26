@@ -948,36 +948,52 @@ def scene_committed(st):
     # A throw (through `human_act`: it is not on the bar) is committed too: the movement keys
     # pressed during its 800 ms windup wait for it, and the spear flies (before committed-moves
     # the keys broke it off: "you moved").
-    call(st, "set_behavior", [t, '{"wait":60}'], "admin")
-    call(st, "place_at", [cid, p[0], p[1]], "admin")
-    time.sleep(0.3)
-    p = body(st, cid)
-    t = dummy(st, p, 3.0, 0.0)
-    call(st, "grant_items", [cid, "spear", 1], "admin")
-    time.sleep(0.4)
-    ready(st, "throw")
-    full_breath(st)
-    before = last_use(st, "throw")
-    call(st, "human_act", [json.dumps({"do": "throw", "target": {"id": t}})])
     code = code_of(st, "throw")
-    wound = False
-    for _ in range(40):
-        f = sql(st, f"SELECT act, release_ms FROM fighter WHERE id = {cid}")
-        if f and f[0]["act"] == code and f[0]["release_ms"] > time.time() * 1000:
-            wound = True
+    for attempt in range(1, 5):
+        call(st, "set_behavior", [t, '{"wait":60}'], "admin")
+        call(st, "place_at", [cid, p[0], p[1]], "admin")
+        time.sleep(0.3)
+        p = body(st, cid)
+        t = dummy(st, p, 3.0, 0.0)
+        call(st, "grant_items", [cid, "spear", 1], "admin")
+        time.sleep(0.4)
+        ready(st, "throw")
+        full_breath(st)
+        before = last_use(st, "throw")
+        before_id = before["id"] if before else 0
+        call(st, "human_act", [json.dumps({"do": "throw", "target": {"id": t}})])
+        wound = False
+        for _ in range(40):
+            f = sql(st, f"SELECT act, release_ms FROM fighter WHERE id = {cid}")
+            if f and f[0]["act"] == code and f[0]["release_ms"] > time.time() * 1000:
+                wound = True
+                break
+            observed = last_use(st, "throw")
+            if observed and observed["id"] > before_id and observed["released_ms"] > 0:
+                break
+            time.sleep(0.03)
+        at0 = body(st, cid)
+        move_status, _ = call(st, "human_move", [0.0, 1.0, False])
+        time.sleep(0.25)
+        mid = body(st, cid)
+        time.sleep(1.5)
+        # Read the direction input before releasing the keys. Deferred movement resumes in
+        # the same transaction as the throw's release, so its input_ms equals released_ms.
+        steer = sql(st, f"SELECT input_ms FROM steer WHERE id = {cid} AND goal = 3 AND gx = 0 AND gy = 1")
+        move_ms = steer[0]["input_ms"] if steer else 0
+        call(st, "human_move", [0.0, 0.0, False])
+        u = last_use(st, "throw")
+        end = body(st, cid)
+        fresh = u and u["id"] > before_id
+        late = move_status == 200 and fresh and 0 < u["released_ms"] < move_ms
+        if not late or attempt == 4:
             break
-        time.sleep(0.03)
-    at0 = body(st, cid)
-    call(st, "human_move", [0.0, 1.0, False])
-    time.sleep(0.25)
-    mid = body(st, cid)
-    time.sleep(1.5)
-    call(st, "human_move", [0.0, 0.0, False])
-    u = last_use(st, "throw")
-    end = body(st, cid)
+        V.log(st, f"throw/move attempt {attempt}: movement arrived {move_ms - u['released_ms']} ms after release, re-staging")
     check(st, "movement keys during a throw's windup wait for it: the spear flies, then the body walks",
-          wound and u and u != before and u["released_ms"] > 0 and not u["outcome"].startswith("broken off") and mid and math.dist(at0, mid) < 0.2 and end and math.dist(at0, end) > 0.5,
-          {"windup seen": wound, "throw": u and u["outcome"], "moved during windup": mid and round(math.dist(at0, mid), 2), "moved after": end and round(math.dist(at0, end), 2)})
+          not late and wound and fresh and u["released_ms"] > 0 and not u["outcome"].startswith("broken off") and mid and math.dist(at0, mid) < 0.2 and end and math.dist(at0, end) > 0.5,
+          {"attempt": attempt, "windup seen": wound, "throw": u and u["outcome"],
+           "released_ms": u and u["released_ms"], "move_ms": move_ms,
+           "moved during windup": mid and round(math.dist(at0, mid), 2), "moved after": end and round(math.dist(at0, end), 2)})
     call(st, "set_behavior", [t, '{"wait":60}'], "admin")
     # The world's own laws may make a skill uncommitted (an overlay through `floors::compose`,
     # `install_script.py`'s `compose_laws`): with the dodge uncommitted, a guard pressed mid-dodge
