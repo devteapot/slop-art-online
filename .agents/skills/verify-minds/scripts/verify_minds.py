@@ -421,6 +421,9 @@ def basic_case(run, case):
     if case == 'acts':
         run.harness('player', 'join', 'MindsReceiver')
         other = run.sql("SELECT id FROM character WHERE name = 'MindsReceiver'", 'receiver')[0]['id']
+        # Park the actor before placing it: its seeded instinct graph wanders after a 3 s wait,
+        # and under load setup takes longer than 3 s before `run.request` replaces the graph.
+        run.admin('set_behavior', actor, json.dumps({'wait': 120}))
         run.admin('place_near', actor, other)
         run.admin('grant_items', actor, 'stone', 3)
         # A thing the scene lists by id is a target like a creature (feedback-1): a gather aimed
