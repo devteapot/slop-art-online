@@ -271,7 +271,8 @@ pub fn signal(ctx: &ReducerContext, from: u32, name: &str, now: u64) -> Result<S
     }
     // Calling the same call again within 45 s is still the same call, not news.
     if let Some(mut st) = ctx.db.mind_state().id().find(from) {
-        let key = 0xD000 + (name.bytes().fold(7u32, |h, b| h.wrapping_mul(31) ^ b as u32) % 0x1000) as u16;
+        // Its own band (`marks::SIGNALS`): at 0xD000–0xDFFF a howl met the turn counter.
+        let key = crate::marks::signal_key(name);
         if st.marks.iter().any(|m| m.node == key && now.saturating_sub(m.at_ms) < 45_000) {
             return Ok(format!("kept making {}", sig.sound));
         }

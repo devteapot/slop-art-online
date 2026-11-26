@@ -42,13 +42,11 @@ fn has(sc: &living_rules::script::Scripts, skill: &str, t: impl Fn(&Shape) -> bo
 }
 
 /// How long a `follow` walks alongside its target.
-/// Mark (in `mind_state.marks`, kept across plan installs) holding when a character last yielded.
-pub const YIELD_MARK: u16 = 0xD400;
-/// Mark spacing the story's record of an animal holding back from attacking a person.
-const BALK_MARK: u16 = 0xD401;
-/// Mark holding when a blow last landed on a character while it had yielded: the news of striking
-/// the yielded is told once a yield (and attacker), from this, not from the victim's last hurt.
-const YIELD_STRUCK_MARK: u16 = 0xD402;
+// Marks (in `mind_state.marks`, kept across plan installs; every range in `marks`): when a
+// character last yielded; spacing the story's record of an animal holding back from attacking a
+// person; when a blow last landed on a character while it had yielded (the news of striking the
+// yielded is told once a yield and attacker, from this, not from the victim's last hurt).
+use crate::marks::{BALK_MARK, YIELD_MARK, YIELD_STRUCK_MARK};
 
 /// When a character's mark `node` was last set, if it has one.
 fn mark_at(ctx: &ReducerContext, id: u32, node: u16) -> Option<u64> {
@@ -1127,7 +1125,7 @@ pub fn begin_with(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill
     // routine that repeats it every second otherwise floods them with threats).
     if shape.is_some_and(|s| s.menace) && act.victim != 0 {
         if let Some(mut st) = ctx.db.mind_state().id().find(id) {
-            let key = 0xF000 | (act.victim % 0x100) as u16; // 0xF000-0xF0FF: threats (failures use 0xE000-0xEFFF)
+            let key = crate::marks::threat_key(act.victim);
             if st.marks.iter().any(|m| m.node == key && now.saturating_sub(m.at_ms) < 30_000) {
                 return Err("you are already threatening them; to ask or urge someone, speak (say)".into());
             }
@@ -1632,13 +1630,14 @@ fn cooldown_news(ctx: &ReducerContext, id: u32, what: &str, waiting: &str, until
     true
 }
 
-/// A mark slot (above behavior node ids, below the evaluator's reserved marks) per failure kind.
+/// A mark slot per failure kind, in its own band (`marks::FAILURES`).
 fn failure_mark(label: &str, why: &str) -> u16 {
     let mut h: u32 = 2166136261;
     for b in label.bytes().chain(why.bytes()) {
         h = (h ^ b as u32).wrapping_mul(16777619);
     }
-    0xE000 + (h % 0x1000) as u16
+    let band = crate::marks::FAILURES;
+    band.start + (h % (band.end - band.start) as u32) as u16
 }
 
 /// Record how a routine's action went (the routine owning the action's node, if any).
@@ -2510,16 +2509,18 @@ pub fn engage(ctx: &ReducerContext, id: u32, now: u64) {
     }
 }
 
-/// Marks counting walks abandoned for another walk (0xD300 + count, at the window start).
-const TURN_MARK: u16 = 0xD300;
+/// Marks counting walks abandoned for another walk (`marks::TURN_MARK` + count, at the window
+/// start; 0xF100–0xF10F since turn-mark-band, 2026-11-26: at 0xD300 the wolf's howl, 0xD305,
+/// read as five turns).
+use crate::marks::{TURNS, TURN_MARK};
 
 /// Nothing stops a character from changing its mind every second, but it notices when it
 /// keeps turning back and forth, and that is worth a thought.
 fn turned_back(ctx: &ReducerContext, id: u32, from: &str, to: &str, now: u64) {
     let Some(mut st) = ctx.db.mind_state().id().find(id) else { return };
-    let (count, start) = st.marks.iter().find(|m| (TURN_MARK..TURN_MARK + 16).contains(&m.node)).map(|m| (m.node - TURN_MARK, m.at_ms)).unwrap_or((0, now));
+    let (count, start) = crate::marks::turns(&st.marks).unwrap_or((0, now));
     let (count, start) = if now.saturating_sub(start) > 20_000 { (0, now) } else { (count, start) };
-    st.marks.retain(|m| !(TURN_MARK..TURN_MARK + 16).contains(&m.node));
+    st.marks.retain(|m| !TURNS.contains(&m.node));
     let count = count + 1;
     if count >= 6 {
         ctx.db.mind_state().id().update(st);
@@ -2539,8 +2540,7 @@ fn turned_back(ctx: &ReducerContext, id: u32, from: &str, to: &str, now: u64) {
 }
 
 /// Marks remembering the last fight report and the health quarter it reported.
-const REPORT_MARK: u16 = 0xD200;
-const BAND_MARK: u16 = 0xD210;
+use crate::marks::{BANDS, BAND_MARK, REPORT_MARK};
 
 /// While people fight, their minds hear how the exchange is going when something changes:
 /// their health drops into a new quarter, three of their blows are blocked, dodged or miss,
@@ -2585,7 +2585,7 @@ pub fn fight_report(ctx: &ReducerContext, id: u32, other: u32, now: u64) {
     let Some(v) = ctx.db.vitals().id().find(id) else { return };
     let hp = common::needs(&v, now).hp;
     let band = ((hp / v.max_hp.max(1.0)) * 4.0).floor().clamp(0.0, 3.0) as u16;
-    let last_band = st.marks.iter().find(|m| (BAND_MARK..BAND_MARK + 5).contains(&m.node)).map(|m| m.node - BAND_MARK).unwrap_or(4);
+    let last_band = st.marks.iter().find(|m| BANDS.contains(&m.node)).map(|m| m.node - BAND_MARK).unwrap_or(4);
     let their_defense = they_blocked + they_dodged + whiffed;
     let my_defense = blocked + dodged + evaded;
     let mut what = Vec::new();
@@ -2616,7 +2616,7 @@ pub fn fight_report(ctx: &ReducerContext, id: u32, other: u32, now: u64) {
         what.join("; ")
     };
     let text = format!("The fight with {label}: {change}. {}", living_rules::combat::fight_health(hp, theirs));
-    st.marks.retain(|m| m.node != REPORT_MARK && !(BAND_MARK..BAND_MARK + 5).contains(&m.node));
+    st.marks.retain(|m| m.node != REPORT_MARK && !BANDS.contains(&m.node));
     st.marks.push(Mark { node: REPORT_MARK, at_ms: now });
     st.marks.push(Mark { node: BAND_MARK + band, at_ms: now });
     while st.marks.len() > 24 {
