@@ -1822,6 +1822,10 @@ impl<'a> Ev<'a> {
             }
             common::diag(|| "familiar:evict", 1);
             self.ctx.db.familiar().id().delete(id);
+            // What it remembered of their body fades with them (`sex_seen`).
+            if thing & !((1 << 40) - 1) == FAM_CREATURE {
+                crate::sex::forget_pair(self.ctx, me, (thing & ((1 << 40) - 1)) as u32);
+            }
             over -= 1;
         }
     }

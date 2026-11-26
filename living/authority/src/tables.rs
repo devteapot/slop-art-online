@@ -83,7 +83,9 @@ pub struct SexRow {
 /// once per pair, the first time: in the observer's scene (`perceive::scene_json`, a person made
 /// out) and at a first sight (`brain.rs`); never from afar, by name, kinship, a relation or speech.
 /// The mind service states another's sex only from this row, from what is in sight now, or face
-/// to face. Deleted with the observer at death. Read by the pair index; the mind service reads it
+/// to face. Deleted with the observer at death, with the one known when their remains are gone,
+/// and with the observer's familiarity with them when that fades (growth-fix-2: bounded like
+/// the perceived knowledge it belongs to). Read by the pair index; the mind service reads it
 /// as the owner.
 #[spacetimedb::table(accessor = sex_seen, index(accessor = by_pair, btree(columns = [observer, known])))]
 pub struct SexSeen {
@@ -92,6 +94,8 @@ pub struct SexSeen {
     pub id: u64,
     #[index(btree)]
     pub observer: u32,
+    /// Indexed: the rows about someone go when their remains are gone (`sex::forget_known`).
+    #[index(btree)]
     pub known: u32,
     pub sex: u8,
     pub at_ms: u64,

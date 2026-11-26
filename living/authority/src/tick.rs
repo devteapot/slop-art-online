@@ -315,7 +315,13 @@ fn expire_remains(ctx: &ReducerContext, now: u64) {
         }
         common::invalidate_remains_label(ctx, r.structure);
         match ctx.db.structure().id().find(r.structure) {
-            Some(st) => common::invalidate_structures_in(ctx, st.chunk),
+            Some(st) => {
+                common::invalidate_structures_in(ctx, st.chunk);
+                // With a person's remains goes what minds remembered of their body.
+                if st.kind == "remains" && ctx.db.character().id().find(st.owner).is_some_and(|c| !c.alive && c.kind == "person") {
+                    crate::sex::forget_known(ctx, st.owner);
+                }
+            }
             None => missing = true,
         }
         ctx.db.structure().id().delete(r.structure);
