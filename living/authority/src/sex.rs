@@ -63,6 +63,20 @@ pub fn remember(ctx: &ReducerContext, observer: &Character, target: &Character, 
     ctx.db.sex_seen().insert(SexSeen { id: 0, observer: observer.id, known: target.id, sex: s.code(), at_ms: now });
 }
 
+/// What observers remembered of `known`'s body goes once their remains are gone (`tick::expire_remains`).
+pub fn forget_known(ctx: &ReducerContext, known: u32) {
+    for r in ctx.db.sex_seen().known().filter(known).map(|r| r.id).collect::<Vec<_>>() {
+        ctx.db.sex_seen().id().delete(r);
+    }
+}
+
+/// `observer`'s memory of `known`'s body fades with its familiarity with them (`brain::prune_familiar`).
+pub fn forget_pair(ctx: &ReducerContext, observer: u32, known: u32) {
+    for r in ctx.db.sex_seen().by_pair().filter((observer, known)).map(|r| r.id).collect::<Vec<_>>() {
+        ctx.db.sex_seen().id().delete(r);
+    }
+}
+
 /// What `id` remembered goes with it at death (`perception::gone`).
 pub fn forget(ctx: &ReducerContext, id: u32) {
     for r in ctx.db.sex_seen().observer().filter(id).map(|r| r.id).collect::<Vec<_>>() {

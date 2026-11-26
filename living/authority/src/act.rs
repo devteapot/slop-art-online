@@ -3102,7 +3102,7 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
     }
     let held: Vec<Artifact> = ctx.db.artifact().holder().filter(id as u64).collect();
     if !left.is_empty() || !held.is_empty() || kind == "person" {
-        common::invalidate_structures(ctx);
+        common::invalidate_structures_in(ctx, chunk_of(at.0, at.1));
         let s = ctx.db.structure().insert(Structure { id: 0, kind: "remains".into(), x: at.0, y: at.1, chunk: chunk_of(at.0, at.1), owner: id, built_ms: now, lit_until_ms: 0 });
         for (item, q) in left {
             common::inv_add(ctx, STRUCTURE_BIT | s.id, &item, q);
