@@ -42,6 +42,13 @@ compares each tick's `det tick` line (a hash of every table's rows as a multiset
 replicas' whole module logs, and every table's rows read through SQL at the stop. Writes
 `<out>/det-compare.json`; exit 0 only when every tick and every table is identical. The two
 copies' containers and volumes are removed at the end (by their exact names).
+
+Deliberation scene IDs are ranked in their table's namespace, including character references,
+far handles, structures, resource nodes and trade offers. The comparison preserves references
+and scene content. The authority trace and final SQL comparison both apply the rule. Build both
+WASMs with the same det.rs trace format when comparing tick hashes. Run the regression controls
+with `python3 living/tools/det_compare_selftest.py -v`.
+See https://spacetimedb.com/docs/tables/auto-increment/ for which inserts use a sequence.
 """
 import argparse
 import hashlib
@@ -204,7 +211,7 @@ AUTO_INC = """acquaintance act_queue artifact audience belief bond_offer charact
 community cue expecting experience familiar far_handle fight_seen ground_edit guest heard_asleep
 inventory join_request judged judgment know_how known_ground law_change look_line membership missile
 perceived place practice projected record_party record relation remembered reveal routine seen_stock
-seen_structures sex_seen skill_use structure thought trade_offer""".split()
+seen_structures sex_seen skill_use structure thought trade_offer resource_node""".split()
 # Players' tables (det.rs): rows inserted in a hash set's order, which a module instance's history
 # decides, so two copies give the same rows other ids. Compared by content, the id columns left out
 # (and the ids naming them: the mirror's `projected` id, act outcomes' and released lines'
@@ -231,6 +238,79 @@ def normalized(rows):
         # A far handle in a scene's JSON (a deliberation's `"id":1000008249`), renamed alike.
         return re.sub(r'"id":(\d{10})(?!\d)', lambda m: '"id":%010d' % far(int(m.group(1))) if FAR_BASE <= int(m.group(1)) < 2**32 else m.group(0), x)
 
+    def target_rank(n):
+        if FAR_BASE <= n < 2**32 and "far_handle" in ids:
+            return f"far_handle:{rank('far_handle', n - FAR_BASE)}"
+        for table in ("character", "structure", "resource_node"):
+            if table in ids:
+                k = rank(table, n)
+                if k < STRUCTURE_BIT:
+                    return f"{table}:{k}"
+        return str(n)
+
+    def rank_field(row, key, table):
+        if isinstance(row, dict) and type(row.get(key)) is int and table in ids:
+            row[key] = rank(table, row[key])
+
+    def scene(source):
+        try:
+            value = json.loads(source)
+        except (ValueError, TypeError):
+            return source
+        if not isinstance(value, dict):
+            return source
+        you = value.get("you", {})
+        rank_field(you, "id", "character")
+        for key in ("creatures", "you smell (out of sight)"):
+            for row in value.get(key, []):
+                n = row.get("id")
+                if type(n) is int and FAR_BASE <= n < 2**32:
+                    row["id"] = far(n)
+                else:
+                    rank_field(row, "id", "character")
+                rank_field(row.get("visibly"), "at", "character")
+        for row in value.get("structures", []):
+            rank_field(row, "id", "structure")
+        for row in value.get("resources", []):
+            rank_field(row.get("nearest"), "id", "resource_node")
+        for key, party in (("asked of you", "from"), ("you are waiting on", "to")):
+            for row in you.get(key, []):
+                rank_field(row, party, "character")
+                rank_field(row, "offer", "trade_offer")
+        earshot = "who would hear you now"
+        if earshot in value:
+            def hearer(match):
+                n = int(match[0])
+                table, key = ("far_handle", n - FAR_BASE) if FAR_BASE <= n < 2**32 else ("character", n)
+                return f"{table}:{rank(table, key)}" if table in ids else match[0]
+
+            value[earshot] = re.sub(r"(?<=\(#)[0-9]+(?=\))", hearer, value[earshot])
+        queue = "decided, not yet done"
+        if queue in you:
+            you[queue] = [re.sub(r"(?<= → #)[0-9]+\Z", lambda m: target_rank(int(m[0])), act)
+                          for act in you[queue]]
+        value = deep(value)
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+    def reason(source):
+        def rename(pattern, table, line):
+            if table not in ids:
+                return line
+            return re.sub(pattern, lambda m: str(rank(table, int(m[0]))), line)
+
+        lines = []
+        for line in source.split("\n"):
+            line = rename(r"(?<=\(offer )[0-9]+(?=\), or let it pass\.)", "trade_offer", line)
+            line = rename(r"(?<=\(#)[0-9]+(?=\) asks to start a family with you;)", "character", line)
+            if line.startswith(("You long for a child with ", "You long for another child with ")):
+                line = rename(r"(?<=\(#)[0-9]+(?=\)\.)", "character", line)
+            elif line.startswith("What you had decided did not work out: "):
+                line = re.sub(r"(?<= → #)[0-9]+(?=:)|(?<=no #)[0-9]+(?= in sight)",
+                              lambda m: target_rank(int(m[0])), line)
+                line = rename(r"(?<=#)[0-9]+(?= is dead: their remains lie in sight)", "character", line)
+            lines.append(line)
+        return text("\n".join(lines))
+
     def skey(k, bit):
         return bit | (rank("structure", k & (STRUCTURE_BIT - 1)) & (STRUCTURE_BIT - 1)) if k & KIND_MASK == bit else k
 
@@ -247,7 +327,13 @@ def normalized(rows):
     for t, rs in rows.items():
         new = []
         for r in rs:
-            r = deep(dict(r))
+            if t == "deliberation":
+                r = dict(r)
+                rank_field(r, "actor", "character")
+                r["scene"] = scene(r["scene"])
+                r["reason"] = reason(r["reason"])
+            else:
+                r = deep(dict(r))
             if t in CONTENT:
                 r["id"] = 0
                 # A released line's copy of its experience row comes as a product (a list in
@@ -264,6 +350,8 @@ def normalized(rows):
                 r["subject"], r["object"] = far(r["subject"]), far(r["object"])
             elif t == "inventory":
                 r["owner"] = skey(r["owner"], STRUCTURE_BIT)
+            elif t == "resource_node" and r["pool"] != 0:
+                rank_field(r, "pool", "resource_node")
             elif t == "rot":
                 r["structure"] = rank("structure", r["structure"])
             elif t == "familiar":
