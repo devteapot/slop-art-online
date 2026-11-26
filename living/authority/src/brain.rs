@@ -131,7 +131,7 @@ struct Scene {
     resources: Option<Vec<(ResourceNode, f32)>>,
     /// Built when first asked for (`Ev::structures`): an evaluation that reads no structure (a
     /// fighter's at combat cadence) does not gather every remains in sight. The same set either way.
-    structures: Option<Vec<(Structure, f32)>>,
+    structures: Option<Vec<(std::rc::Rc<Structure>, f32)>>,
 }
 
 struct Ev<'a> {
@@ -470,7 +470,7 @@ impl<'a> Ev<'a> {
 
     /// The structures in sight, nearest first (the scene's, gathered when first asked for).
     #[track_caller]
-    fn structures(&mut self) -> &[(Structure, f32)] {
+    fn structures(&mut self) -> &[(std::rc::Rc<Structure>, f32)] {
         self.scene();
         if self.scene.as_ref().is_some_and(|s| s.structures.is_none()) {
             let _span = common::detail_span("brain.scene.structures");
@@ -1822,6 +1822,10 @@ impl<'a> Ev<'a> {
             }
             common::diag(|| "familiar:evict", 1);
             self.ctx.db.familiar().id().delete(id);
+            // What it remembered of their body fades with them (`sex_seen`).
+            if thing & !((1 << 40) - 1) == FAM_CREATURE {
+                crate::sex::forget_pair(self.ctx, me, (thing & ((1 << 40) - 1)) as u32);
+            }
             over -= 1;
         }
     }
@@ -2357,8 +2361,14 @@ impl<'a> Ev<'a> {
         let mut other: Vec<(u64, u32, f32)> = Vec::new();
         let mut passed: Vec<(u64, u32)> = Vec::new();
         let mut top = 0u64;
-        common::for_structures_near(ctx, at, r, |s, d| {
-            top = top.max(s.id);
+        // A whole chunk whose rows all pass is passed at once (growth-fix-2: a battle's remains
+        // put thousands in sight, all older than the last look): its highest id is no newer than
+        // the last look's and the box round its rows lies inside the last look's disc (a margin
+        // for rounding), so each of its rows would be passed over one by one. Only without the
+        // check laws, which list every passed row. Its rows in sight still count for `top`.
+        const MARGIN: f32 = 0.05;
+        let whole_ok = last.is_some() && !(delta_check || check);
+        let mut visit = |s: &Structure, d: f32| {
             if let Some(l) = &last {
                 if s.id <= l.max_structure && common::dist((l.x, l.y), (s.x, s.y)) <= l.r {
                     if delta_check || check {
@@ -2374,7 +2384,33 @@ impl<'a> Ev<'a> {
             } else {
                 other.push((s.id, s.chunk, d));
             }
-        });
+        };
+        for c in living_rules::map::chunks_around(at.0, at.1, r) {
+            let (list, brief) = common::chunk_brief(ctx, c);
+            if whole_ok {
+                let l = last.as_ref().unwrap();
+                if let Some(b) = brief.filter(|b| b.max_id <= l.max_structure && b.farthest((l.x, l.y)) <= l.r - MARGIN) {
+                    common::diag(|| "notice_delta:chunk_passed", 1);
+                    if b.farthest(at) <= r - MARGIN {
+                        top = top.max(b.max_id);
+                    } else {
+                        for s in list.iter() {
+                            if common::dist(at, (s.x, s.y)) <= r {
+                                top = top.max(s.id);
+                            }
+                        }
+                    }
+                    continue;
+                }
+            }
+            for s in list.iter() {
+                let d = common::dist(at, (s.x, s.y));
+                if d <= r {
+                    top = top.max(s.id);
+                    visit(s, d);
+                }
+            }
+        }
         if delta {
             let row = LastLook { id: me, x: at.0, y: at.1, r, max_structure: top, at_ms: now };
             if last.is_some() || ctx.db.last_look().id().find(me).is_some() {

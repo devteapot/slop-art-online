@@ -32,8 +32,8 @@ import genesis_wait  # noqa: E402
 import world_delete  # noqa: E402
 
 STDB = os.environ.get("LIVING_STDB", str(Path(__file__).resolve().parent / "stdb"))
-URL = os.environ["LIVING_STDB_URL"].rstrip("/")
-ATTACKS = {"attack", "strike", "shoot", "throw", "fire_bolt", "bowshot", "threaten"}
+URL = os.environ.get("LIVING_STDB_URL", "").rstrip("/")
+ATTACKS = {"attack", "strike", "shoot", "throw", "fire_bolt", "firebolt", "bowshot", "threaten"}
 HOSTILE = ("rival", "enemy", "threat", "foe")
 
 
@@ -50,6 +50,8 @@ def token():
 
 
 def sql(db, tok, q):
+    if not URL:
+        raise RuntimeError("set LIVING_STDB_URL to the measurement server")
     req = urllib.request.Request(f"{URL}/v1/database/{db}/sql", data=q.encode(), method="POST", headers={"Authorization": f"Bearer {tok}"})
     res = json.loads(urllib.request.urlopen(req, timeout=60).read())[-1]
     names = [e["name"].get("some", "?") for e in res["schema"]["elements"]]
@@ -68,6 +70,20 @@ def world(arm, n, a, tok, out):
     genesis_wait.wait_ready_cli(lambda *x: cli(*x).stdout, db)
     if arm == "on":
         call(db, "set_world_law", "relation_fight_on", "true")
+    deadline = time.monotonic() + a.minutes * 60
+    observe(db, arm, tok, d, a.every, lambda: time.monotonic() >= deadline, deadline + a.every)
+    deleted, why = world_delete.cli_pause_and_delete(lambda *x: subprocess.run([STDB, *x], capture_output=True, text=True), db)
+    (d / "deleted.txt").write_text(f"{db}: {why}\n")
+
+
+def band(trust, label):
+    label = label.lower()
+    hostile = trust <= -25 or any(w in label for w in ("enemy", "rival", "threat", "thief", "foe"))
+    peaceful = trust >= 25 or any(w in label for w in ("friend", "family", "partner", "ally", "kin"))
+    return "hostile" if hostile and not peaceful else "peaceful" if peaceful and not hostile else "neutral"
+
+
+def exposure_at(db, tok):
     laws = {"world_law": sql(db, tok, "SELECT * FROM world_law"), "law_override": sql(db, tok, "SELECT * FROM law_override")}
     comm = {c["id"]: c["name"] for c in sql(db, tok, "SELECT id, name FROM community")}
     member = {m["member"]: m["community"] for m in sql(db, tok, "SELECT member, community FROM membership")}
@@ -87,38 +103,46 @@ def world(arm, n, a, tok, out):
     friendly = lambda a_, b_: (lambda s: s is not None and (s[1] >= 25 or any(w in str(s[0]).lower() for w in ("friend", "ally", "kin"))))(hold.get((member.get(a_), member.get(b_))))
     # Exposure: the relation rows held about people of a people one's own holds as an enemy, by
     # how they decide under the law (brain.rs `personal`): hostile, peaceful or neutral.
-    def band(t, l):
-        l = l.lower()
-        h = t <= -25 or any(w in l for w in ("enemy", "rival", "threat", "thief", "foe"))
-        p = t >= 25 or any(w in l for w in ("friend", "family", "partner", "ally", "kin"))
-        return "hostile" if h and not p else "peaceful" if p and not h else "neutral"
+    pairs = {}
     exposure = {}
     for r in sql(db, tok, "SELECT actor, other, trust, label FROM relation"):
         if hostile(r["actor"], r["other"]):
             k = band(r["trust"], r["label"])
+            pairs[(r["actor"], r["other"])] = k
             exposure[k] = exposure.get(k, 0) + 1
+    return laws, comm, member, hold, residents, hostile, friendly, pairs, exposure
+
+
+def observe(db, arm, tok, d, every, finished, deadline, sample=None):
+    laws, comm, member, hold, residents, hostile, friendly, _, exposure = exposure_at(db, tok)
     start = {"db": db, "arm": arm, "laws": laws, "communities": comm, "members": len(member), "residents": len(residents),
              "regard": [[comm.get(a_), comm.get(b_), l, v] for (a_, b_), (l, v) in hold.items()],
              "rows_about_hostile_people_by_band": exposure}
     (d / "start.json").write_text(json.dumps(start, indent=1) + "\n")
-    seen_use, seen_flee, seen_hurt, hp = set(), set(), set(), {}
+    seen_use, seen_flee, seen_hurt, hp = {}, set(), set(), {}
     deaths = {}
-    t_end = time.time() + a.minutes * 60
     with open(d / "events.jsonl", "w") as ev:
-        while time.time() < t_end:
+        while True:
             t0 = time.time()
+            final = finished()
             try:
-                for u in sql(db, tok, "SELECT id, actor, target, skill, accepted_ms, outcome FROM skill_use"):
-                    if u["id"] not in seen_use and u["target"]:
-                        seen_use.add(u["id"])
+                for u in sql(db, tok, "SELECT id, actor, target, skill, source, at_ms, accepted_ms, outcome FROM skill_use"):
+                    if ((u["target"] or sample and u["skill"] in ATTACKS)
+                            and (u["id"] not in seen_use or sample and seen_use[u["id"]] != u["accepted_ms"])):
+                        seen_use[u["id"]] = u["accepted_ms"]
+                        from_group, to_group = member.get(u["actor"]), member.get(u["target"])
+                        regard = hold.get((from_group, to_group))
                         ev.write(json.dumps({"e": "use", "skill": u["skill"], "a": u["actor"], "b": u["target"], "ms": u["accepted_ms"],
                                              "hostile_people": hostile(u["actor"], u["target"]), "friendly_people": friendly(u["actor"], u["target"]),
-                                             "resident_target": u["target"] in residents}) + "\n")
-                for x in sql(db, tok, "SELECT id, skill, started_ms FROM activity WHERE skill = 'flee'"):
+                                             "resident_target": u["target"] in residents, "source": u["source"],
+                                             "attempt_ms": u["at_ms"], "outcome": u["outcome"],
+                                             "actor_community": comm.get(from_group), "target_community": comm.get(to_group),
+                                             "regard": regard[0] if regard else None}) + "\n")
+                for x in sql(db, tok, "SELECT id, victim, started_ms FROM activity WHERE skill = 'flee'"):
                     k = (x["id"], x["started_ms"])
                     if k not in seen_flee:
                         seen_flee.add(k)
-                        ev.write(json.dumps({"e": "flee", "a": x["id"], "ms": x["started_ms"]}) + "\n")
+                        ev.write(json.dumps({"e": "flee", "a": x["id"], "victim": x["victim"], "ms": x["started_ms"]}) + "\n")
                 for v in sql(db, tok, "SELECT id, hp, hurt_ms, hurt_by FROM vitals"):
                     k = (v["id"], v["hurt_ms"])
                     if v["hurt_ms"] and k not in seen_hurt and v["hp"] < hp.get(v["id"], 1e9):
@@ -130,17 +154,21 @@ def world(arm, n, a, tok, out):
                     if c["id"] not in deaths:
                         deaths[c["id"]] = c
                         ev.write(json.dumps({"e": "death", "a": c["id"], "kind": c["kind"], "ms": c["died_ms"], "cause": c["cause"], "resident": c["id"] in residents}) + "\n")
-                ev.flush()
+                if sample:
+                    sample(ev, final)
             except Exception as e:  # a busy server can refuse one poll; the next one catches up
                 ev.write(json.dumps({"e": "poll_error", "why": str(e)[:200], "t": time.time()}) + "\n")
-            time.sleep(max(0.0, a.every - (time.time() - t0)))
+            ev.flush()
+            if final:
+                break
+            if time.monotonic() >= deadline:
+                raise RuntimeError("observer timed out waiting for runner")
+            time.sleep(max(0.0, every - (time.time() - t0)))
     kinds = {}
     for r in sql(db, tok, "SELECT kind, a, b, text FROM chronicle"):
         kinds[r["kind"]] = kinds.get(r["kind"], 0) + 1
     clock = sql(db, tok, "SELECT tick, last_ms FROM clock")[0]
     (d / "end.json").write_text(json.dumps({"chronicle_kinds": kinds, "clock": clock}, indent=1) + "\n")
-    deleted, why = world_delete.cli_pause_and_delete(lambda *x: subprocess.run([STDB, *x], capture_output=True, text=True), db)
-    (d / "deleted.txt").write_text(f"{db}: {why}\n")
 
 
 def summarize(out):

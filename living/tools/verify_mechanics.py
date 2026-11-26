@@ -497,22 +497,26 @@ def main():
     alive = lambda who: rows(db, f"SELECT id, alive FROM character WHERE id = {who}")[0]["alive"] == "true"
     max_hp = lambda who: float(rows(db, f"SELECT id, max_hp FROM vitals WHERE id = {who}")[0]["max_hp"])
     call(db, "place_near", str(G), str(F))
-    call(db, "set_behavior", str(G), json.dumps({"first": [{"if": {"threatened": True}, "then": {"do": "yield", "target": {"id": F}}}, {"wait": 1}]}))
-    # Threatened holds only while a threat is under way (2 s, brain.rs), and G must evaluate
-    # inside it; under load one window can pass unseen (gate flakes, 2026-11-20), so F keeps
-    # threatening until G gives in.
+    # Require a live threat to enter the sequence. Once yield starts, the sequence keeps its
+    # place: G's yield can take longer than F's threat when their knacks differ.
+    yield_graph = {"first": [{"seq": [
+        {"if": {"threatened": True}, "then": {"think": "I should yield to this threat."}},
+        {"do": "yield", "target": {"id": F}},
+    ]}, {"wait": 1}]}
+    call(db, "set_behavior", str(G), json.dumps(yield_graph))
+    # The authority permits at most one threat against the same target per 30 seconds.
     call(db, "set_behavior", str(F), json.dumps({"first": [{"do": {"skill": "threaten", "target": {"id": G}}}, {"wait": 1}]}))
     menaced = wait_for(lambda: heard(G, "threatens you"), timeout=20)
-    gave_in = wait_for(lambda: [r for r in story("yield") if int(r["a"]) == G], timeout=30)
-    call(db, "set_behavior", str(F), idle)
-    results["force: a threat is perceived and counts as being threatened"] = bool(menaced) and bool(story("threat")) and bool(gave_in)
+    gave_in = wait_for(lambda: [r for r in story("yield") if int(r["a"]) == G and int(r["b"]) == F], timeout=30)
+    threats = [r for r in story("threat") if int(r["a"]) == F and int(r["b"]) == G]
+    results["force: a threat is perceived and counts as being threatened"] = bool(menaced and threats and gave_in)
     if not results["force: a threat is perceived and counts as being threatened"]:
-        print("  threat:", bool(menaced), story("threat"), [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {G}")][-5:])
-        # What G and F were doing when G did not give in (a teleport mid-approach can leave an
-        # activity unfinishable; the stuck-jump report, 2026-11-20).
+        print("  threat:", bool(menaced), threats)
         for who in (G, F):
+            print(f"  threat feedback {who}:", [r["text"][:150] for r in rows(db, f"SELECT kind, text FROM experience WHERE observer = {who}")][-5:])
             print(f"  threat state {who}:", rows(db, f"SELECT id, skill, phase, node, started_ms, ends_ms, victim FROM activity WHERE id = {who}"),
                   rows(db, f"SELECT id, status FROM mind_state WHERE id = {who}"))
+    call(db, "set_behavior", str(F), idle)
     # F attacks H (who does not defend) with a spear: there is no beating that stops short;
     # the blows go on and the one that exceeds H's health kills.
     call(db, "grant_items", str(F), "spear", "1")

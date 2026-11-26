@@ -3309,6 +3309,35 @@ def remains(s):
     s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
 
 
+def sex_seen_bound(s):
+    """What a mind remembers of a person's body (`sex_seen`) is bounded like the knowledge it
+    belongs to (growth-fix-2): a minded observer that made out two people at full sight holds a
+    row for each; when one of them dies, the rows about them go once their remains are gone
+    (`remains_h`, short here), and the row about the living one stays. Default seed."""
+    src = compose((ROOT / "living/scripts/skills.rhai").read_text(), {"remains_h": f"fn remains_h(kind) {{ {REMAINS_H}.0 }}"})
+    s.call("install_script", src)
+    a, b, c = s.people(3)
+    s.call("place_near", b, a)
+    s.call("place_near", c, a)
+    pair = lambda o, k, label=None: s.rows(f"SELECT * FROM sex_seen WHERE observer = {o} AND known = {k}", label)
+    s.wait(lambda: pair(a, b) and pair(a, c), seconds=90, every=1)
+    s.expect("a minded observer remembers the bodies of two people it made out", bool(pair(a, b, "seen-b")) and bool(pair(a, c, "seen-c")),
+             {"b": pair(a, b), "c": pair(a, c)})
+    s.call("kill", b, "verify-core sex_seen")
+    remains = lambda label=None: s.rows(f"SELECT * FROM structure WHERE kind = 'remains' AND owner = {b}", label)
+    r = s.wait(lambda: remains(), seconds=10)
+    s.expect("the dead leaves remains", bool(r), r)
+    s.expect("while the remains lie, the observer still remembers the dead's body", bool(pair(a, b, "seen-b-remains")), pair(a, b))
+    rot = s.rows(f"SELECT * FROM rot WHERE structure = {r[0]['id']}", "rot")
+    wait_s = max(0, rot[0]["due_ms"] - s.rows("SELECT last_ms FROM clock")[0]["last_ms"]) / 1000 + 70
+    s.wait(lambda: not remains(), seconds=wait_s + 30, every=5)
+    s.expect("the remains are gone after their time", not remains("expired"), remains())
+    gone = s.rows(f"SELECT * FROM sex_seen WHERE known = {b}", "about-b-after")
+    s.expect("with the remains gone, no one remembers the dead's body", not gone, gone)
+    s.expect("the row about the living one stays", bool(pair(a, c, "seen-c-after")), pair(a, c))
+    s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
+
+
 def family_laws(s):
     """The laws of starting a family and of the longing for a child (docs/TRIALS.md, "Births
     that keep a settlement's numbers"). An installed overlay sets `conceive_roof` true and
@@ -5738,6 +5767,7 @@ def workplace(s):
     s.expect("two fish rendered to lamp oil with a pot, the pot kept", inv.get("lamp_oil", 0) == before.get("lamp_oil", 0) + 1 and inv.get("fish", 0) == before.get("fish", 0) - 2 and inv.get("pot") == 1, {"before": before, "after": inv})
 
 
+SCENES["sex_seen_bound"] = sex_seen_bound
 SCENES["goods"] = goods
 SCENES["workplace"] = workplace
 SCENES["making"] = making
