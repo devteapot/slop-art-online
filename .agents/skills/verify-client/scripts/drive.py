@@ -501,8 +501,17 @@ class Run:
                       and str(p.relative_to(ROOT)) not in on_purpose]
         if everything:
             raise RuntimeError(f'a program subscribes every table (cue tables included, RLS bypassed for the owner): {everything}')
+        # The body controller worker (docs/NEURAL_BODY.md) names them on its session connections,
+        # each with a fresh identity of its own (no token), never on the owner's: exempt by path, and
+        # the owner's subscription list in that file is checked to name none.
+        body_worker = ROOT / 'living/mind/src/body/mod.rs'
+        if body_worker.exists():
+            text = body_worker.read_text()
+            control = text[text.index('let control = DbConnection::builder()'):text.index('control.run_threaded()')]
+            if re.search(r'seen_(body|fighter|doing)_cue|seen_body_copy|seen_character_copy|seen_fighter_copy|combat_feed|experience_copy|seen_throng', control) or 'with_token(None::<String>)' not in text:
+                raise RuntimeError('the body worker names a row-level-security table on the owner connection, or its sessions use a token')
         owners = [str(p.relative_to(ROOT)) for d in ('living/mind', 'living/viewer') for p in (ROOT / d).rglob('*.rs')
-                  if '/target' not in str(p) and re.search(r'seen_(body|fighter|doing)_cue|seen_body_copy|seen_character_copy|seen_fighter_copy|combat_feed|experience_copy|seen_throng', p.read_text(errors='replace'))]
+                  if '/target' not in str(p) and p != body_worker and re.search(r'seen_(body|fighter|doing)_cue|seen_body_copy|seen_character_copy|seen_fighter_copy|combat_feed|experience_copy|seen_throng', p.read_text(errors='replace'))]
         if owners:
             raise RuntimeError(f'an owner program names a row-level-security table: {owners}')
         # Every row-level-security rule, by table (docs/TICK_RATE.md, "Every RLS-filtered table",

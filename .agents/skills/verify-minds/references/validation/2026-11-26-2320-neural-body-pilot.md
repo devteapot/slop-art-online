@@ -1,0 +1,14 @@
+# neural-body-pilot: the learned-body pilot's plumbing (delegate-body)
+
+Branch `neural-body-pilot` (origin/main `fa2dbc3a6` merged in), built from `ea36f3d7a`. Spark (aarch64), private server `slop-nbpilot-1126` (SpacetimeDB 2.14.1, `127.0.0.1:3391`). Builds through `build-slot` with a private `CARGO_TARGET_DIR`, pinned to CPUs 0-4,10-14; launches under `trial-activity.lock`; the fake model only, no paid calls. New case `delegate-body` ([features/delegate-body.md](../../features/delegate-body.md)); a shape change (new tables, reducers, the `living-mind body` subcommand), so the feature map gained its row and file in this change.
+
+| Check | Result |
+|---|---|
+| `living-mind` cargo tests | 159 passed, 14 ignored, incl. `body::encode::tests` (leakage, 6), `body::policy::tests` (3), `body::capture::tests`, `prompts::tests::the_body_section_…` |
+| `delegate-body` (`minds-dbody-235015-delegate-body`) | **32/32** |
+
+What `delegate-body` drove (`body-checks.json`): law off, the `delegate` graph and a brief refused in the law's words, nothing written; law on, the slot (target, scope `strike, dodge`, goal); seven brief refusals with their words (revision, goal, risk, lifetime, an id that does not exist, a hidden creature 123 m off with the same words, a caller that is not the controller) and an accepted brief at revision 1; over HTTP with fresh identities: no session no input, epoch 1 moves the subject, `block` refused as outside the scope, the session reads `my_body` = its character and none of `body_brief`, `body_slot`, `body_session`, `brain`, `heed_policy`, the plan kept, epoch 2 fences the first identity, a lapse refused and the subject standing; the `living-mind body` worker (HoldDistance) in a duel against a spear foe: 24 skill uses, all `source = body`, some accepted, the subject moving, the plan kept; SIGSTOP past the lease: the session lapses, the subject stands, no new inputs; SIGCONT: a new epoch with a new identity and inputs resume; capture 431 decisions, 85 replies, 81 outcomes, 3 session records, every encoded vector of length 91, no acceptance for the old epoch after the resume; the owning mind's think prompt with "# Your body", the brief and the delegated step.
+
+Earlier attempts (kept): `minds-dbody-233706` (the foe died in the duel, so the leaf's target was gone and no session reopened: the scene now keeps both alive), `minds-dbody-234110` (probe lease misses; the worker ignored SIGINT as a background job: SIGTERM now), `minds-dbody-234343` (a session lapsed at every HTTP call's disconnect: that rule was removed, the lease alone ends a session; the worker counted its own open as a stall: fixed), `minds-dbody-234727` (31/32: a position read from a segment's start; the check now extrapolates). Evidence: `.local/living/verify/minds-dbody-*`.
+
+Not covered: a mind writing a brief or a `delegate` leaf from its own reply (no prompt grammar), several delegated characters at once, timing.
