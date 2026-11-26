@@ -1,6 +1,6 @@
 # A learned body under the mind
 
-Status **design and survey**, 2026-11-26, Spark. The proposal is a small policy that turns a character's perceptions and the mind's current intent into player inputs at 10–15 Hz. Start with one melee duel, one compact CPU policy and a graph-based plan whose selected leaves can use the learned executor. A successful trial would show better timing and spacing under the same rules while the fighter still pursues its goal. The LLM remains responsible for goals, commitments, and what the character makes of its experience.
+Status **proposed** (design and survey, 2026-11-26, Spark; the general coordinator approved a narrow CPU-only pilot of §7 the same day). The proposal is a small policy that turns a character's perceptions and the mind's current intent into player inputs at 10–15 Hz. Start with one melee duel, one compact CPU policy and a graph-based plan whose selected leaves can use the learned executor. A successful trial would show better timing and spacing under the same rules while the fighter still pursues its goal. The LLM remains responsible for goals, commitments, and what the character makes of its experience.
 
 ## 1. Where it fits
 
