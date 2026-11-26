@@ -993,7 +993,8 @@ pub const FAM_ARTIFACT: u64 = 4 << 40;
 /// is a new sighting). Acts, graph targets and speech that name the handle reach the person.
 /// When the observer can make them out, `made_out_ms` is set and the observer is told whom the
 /// handle was (an experience with subject the person and object the handle), so its memory joins
-/// the two. Private; read by the authority only. A few rows per observer, bounded (`far::prune`).
+/// the two. Private; read by the authority only. A few rows per observer, bounded (`far::prune`),
+/// gone at death (`act::forget_dead`).
 #[spacetimedb::table(accessor = far_handle,
     index(accessor = by_observer_target, btree(columns = [observer, target])))]
 #[derive(Clone, Debug)]
