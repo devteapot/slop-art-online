@@ -3641,11 +3641,26 @@ def say(s):
         "do-object": lambda t, to: {"do": {"skill": "say", "text": t, "to": to}},
     }
     targets = {"id": {"id": b}, "bare-id": b, "nearest": {"nearest": {"kind": "person"}}}
+    # Each line has words of its own. `mind_install` makes a mind's plan, whose say node does not
+    # say nearly the line (shared-word Jaccard 0.6 or more) its speaker said to the same person
+    # within 45 s (say-once, `speech::said_to_recently`); lines differing only in their number and
+    # form ("Morning, line 14 (canonical, bare-id, mind_install).") were held back as repeats of
+    # the last one spoken (8 of 12 on main 5655887af). Any two of these share under 0.3.
+    phrases = [
+        "Fresh bread waits beside ovens", "Cold rivers carry silver trout", "Winter wolves howl past midnight",
+        "Golden barley sways under wind", "Tired horses drink from troughs", "Bright lanterns glow along alleys",
+        "Old sailors mend torn nets", "Quiet monks copy ancient scrolls", "Heavy rain floods lower fields",
+        "Young goats climb steep cliffs", "Smiths hammer glowing iron bars", "Merchants weigh copper coins carefully",
+        "Pale moonlight touches distant hills", "Children chase painted kites", "Weavers spin blue wool slowly",
+        "Hunters track deer through ferns", "Bees gather nectar among clover", "Potters shape wet clay bowls",
+        "Owls watch mice beneath barns", "Farmers plough dark muddy soil", "Sparrows nest inside thatched roofs",
+        "Fishermen haul crabs ashore early", "Shepherds count woolly lambs twice", "Candles flicker behind chapel windows",
+    ]
     for path in ("set_behavior", "mind_install"):
         for form, make in forms.items():
             for tname, to in targets.items():
                 n[0] += 1
-                text = f"Morning, line {n[0]} ({form}, {tname}, {path})."
+                text = f"{phrases[n[0] - 1]} (line {n[0]}, {form}, {tname}, {path})."
                 t0 = now()
                 install(path, {"seq": [make(text, to), hold]})
                 got = heard(text, t0)
@@ -8236,7 +8251,26 @@ def truthful_refusals(s):
         s.expect("graph leaf: stuck, 'goto: you know no place called \"verify nowhere\"'", st[0]["status"] == 'stuck: goto: you know no place called "verify nowhere"', st)
         t0 = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
         s.graph(a, {"say": {"text": "Verify hello", "to": "speaker"}})
-        own = s.wait(lambda: [r for r in s.http_rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}") if r["kind"] == "own" and r["at_ms"] >= t0 and "nobody has spoken to you" in r["text"]], 8)
+        try:
+            own = s.wait(lambda: [r for r in s.http_rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {a}") if r["kind"] == "own" and r["at_ms"] >= t0 and "nobody has spoken to you" in r["text"]], 8)
+        except TimeoutError:
+            # Missed once in the gate (gate-say-path step 1, gate-1123072442-8633b3) and never in 76
+            # fresh worlds since (refusal-tell): keep what decides whether the line is written
+            # (`act::refused`: the failure's mark in `marks`, news only outside `repeat_failure_s`;
+            # `tell`: A a mind's, alive, not an infant), so a next miss names its cause.
+            mark = 2166136261
+            for byte in 'say "Verify hello"nobody has spoken to you in the last minute'.encode():
+                mark = ((mark ^ byte) * 16777619) & 0xFFFFFFFF
+            evidence["say leaf missed"] = {
+                "t0": t0, "failure_mark": 0xE000 + mark % 0x1000,
+                "mind_state": s.http_rows(f"SELECT * FROM mind_state WHERE id = {a}"),
+                "character": s.http_rows(f"SELECT id, ai, alive, stage, controller FROM character WHERE id = {a}"),
+                "activity": s.http_rows(f"SELECT * FROM activity WHERE id = {a}"),
+                "brain": s.http_rows(f"SELECT * FROM brain WHERE id = {a}"),
+                "experience": s.http_rows(f"SELECT id, kind, text, at_ms FROM experience WHERE observer = {a}"),
+                "clock": s.http_rows("SELECT last_ms, tick FROM clock"),
+            }
+            own = []
         evidence["say leaf"] = own
         s.expect("say leaf: told 'nobody has spoken to you in the last minute'", own, own)
         s.graph(a, {"wait": 120})
