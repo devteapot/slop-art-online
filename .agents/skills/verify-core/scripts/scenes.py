@@ -863,31 +863,38 @@ def sides_battle(s):
     of a fighter targets a resident or its own side (every use seen: `skill_use` polled each
     second, which keeps the last 24 per actor), no resident dies, and each side mixes block and
     dodge evenly (within one; by id parity a whole side blocked, sides-mixed-defence)."""
-    before = {c["id"] for c in s.rows("SELECT id FROM character")}
-    s.call("spawn_battle_sides", SIDES_FIGHTERS, 2)
-    chars = s.rows("SELECT id, name, kind, alive, born_ms, died_ms, cause FROM character", "spawned")
-    made = {c["id"] for c in chars if c["id"] not in before}
-    s.expect("sides fighters created", len(made) == SIDES_FIGHTERS, len(made))
-    start = min(c["born_ms"] for c in chars if c["id"] in made)
-    residents = {c["id"] for c in chars if c["id"] not in made and c["alive"] and c["kind"] == "person"}
-    sides = {c["id"]: c["name"] for c in s.rows("SELECT id, name FROM community") if c["name"] in ("Side A", "Side B")}
-    s.expect("two side communities", len(sides) == 2, sides)
-    side = {m["member"]: m["community"] for m in s.rows("SELECT member, community FROM membership") if m["community"] in sides}
-    s.expect("every fighter is a member of one side", all(f in side for f in made), sorted(made - set(side))[:8])
-    # Each side mixes block and dodge (sides-mixed-defence): by id parity with the side by
-    # creation order, one whole side blocked and the other dodged. Read right after the spawn,
-    # before any mind could replace a graph.
-    defence = {}
-    for b in s.rows("SELECT id, graph FROM brain"):
-        if b["id"] in made:
-            g = str(b["graph"])
-            defence[b["id"]] = "dodge" if re.search(r'"skill"\s*:\s*"dodge"', g) else "block" if re.search(r'"skill"\s*:\s*"block"', g) else "?"
-    (s.out / f"{s.name}-defence.json").write_text(json.dumps({str(f): [side.get(f), defence.get(f)] for f in sorted(made)}, indent=1) + "\n")
-    per_side = {sides[c]: {d: sum(1 for f in made if side.get(f) == c and defence.get(f) == d) for d in ("block", "dodge", "?")} for c in sides}
-    print("sides_battle defence by side: " + json.dumps(per_side), flush=True)
-    s.expect("each side mixes block and dodge within one (not one defence per side)",
-             all(v["?"] == 0 and v["block"] > 0 and v["dodge"] > 0 and abs(v["block"] - v["dodge"]) <= 1 for v in per_side.values()),
-             per_side, fatal=False)
+    s.http_call("set_paused", [True])
+    try:
+        before = {c["id"] for c in s.rows("SELECT id FROM character")}
+        s.call("spawn_battle_sides", SIDES_FIGHTERS, 2)
+        chars = s.rows("SELECT id, name, kind, alive, born_ms, died_ms, cause FROM character", "spawned")
+        made = {c["id"] for c in chars if c["id"] not in before}
+        s.expect("sides fighters created", len(made) == SIDES_FIGHTERS, len(made))
+        residents = {c["id"] for c in chars if c["id"] not in made and c["alive"] and c["kind"] == "person"}
+        sides = {c["id"]: c["name"] for c in s.rows("SELECT id, name FROM community") if c["name"] in ("Side A", "Side B")}
+        s.expect("two side communities", len(sides) == 2, sides)
+        side = {m["member"]: m["community"] for m in s.rows("SELECT member, community FROM membership") if m["community"] in sides}
+        s.expect("every fighter is a member of one side", all(f in side for f in made), sorted(made - set(side))[:8])
+        # Each side mixes block and dodge (sides-mixed-defence): by id parity with the side by
+        # creation order, one whole side blocked and the other dodged. Read right after the spawn,
+        # before any mind could replace a graph.
+        defence = {}
+        for b in s.rows("SELECT id, graph FROM brain"):
+            if b["id"] in made:
+                g = str(b["graph"])
+                defence[b["id"]] = "dodge" if re.search(r'"skill"\s*:\s*"dodge"', g) else "block" if re.search(r'"skill"\s*:\s*"block"', g) else "?"
+        (s.out / f"{s.name}-defence.json").write_text(json.dumps({str(f): [side.get(f), defence.get(f)] for f in sorted(made)}, indent=1) + "\n")
+        per_side = {sides[c]: {d: sum(1 for f in made if side.get(f) == c and defence.get(f) == d) for d in ("block", "dodge", "?")} for c in sides}
+        print("sides_battle defence by side: " + json.dumps(per_side), flush=True)
+        s.expect("each side mixes block and dodge within one (not one defence per side)",
+                 all(v["?"] == 0 and v["block"] > 0 and v["dodge"] > 0 and abs(v["block"] - v["dodge"]) <= 1 for v in per_side.values()),
+                 per_side, fatal=False)
+
+    finally:
+        s.http_call("set_paused", [False])
+    born = min(c["born_ms"] for c in chars if c["id"] in made)
+    start = s.wait(lambda: next((r["last_ms"] for r in s.http_rows("SELECT last_ms FROM clock")
+                                 if r["last_ms"] > born), None), 30, every=0.05)
 
     def stances():
         parties = s.http_rows("SELECT record, party, role FROM record_party")
@@ -2348,6 +2355,11 @@ def pursue_last_seen(s):
     people = [c["id"] for c in s.rows("SELECT id FROM character WHERE kind = 'person' AND alive = true")]
     setups = hidden_spots(s)
     s.expect("the map has a wall to hide behind", len(setups) >= 1, {"setups": setups})
+    def steering(actor, target, goal):
+        rows = s.http_rows(f"SELECT goal, target, gx, gy, unseen_ms FROM steer WHERE id = {actor}")
+        return next((r for r in rows if r["goal"] == goal and r["target"] == target
+                     and r["unseen_ms"] == 0), None)
+
     chases = []
     for i, (a, b, c) in enumerate(setups):
         p, t = people[2 * i], people[2 * i + 1]
@@ -2356,9 +2368,9 @@ def pursue_last_seen(s):
         time.sleep(0.6)
         since = max([r["id"] for r in s.rows(f"SELECT id FROM experience WHERE observer = {p}")] or [0])
         s.graph(p, {"seq": [{"do": {"skill": "goto", "target": {"id": t}}}, {"wait": 300}]})
-        time.sleep(0.5)
-        last = body_at(s, t)
-        s.call("place_at", t, *c)
+        visible = s.wait(lambda: steering(p, t, 2), 30, every=0.05)
+        last = (visible["gx"], visible["gy"])
+        s.http_call("place_at", [t, *c])
         hid = body_at(s, t)
         t0 = time.monotonic()
         track, goals, nearest_c = [], [], 99.0
@@ -2393,10 +2405,10 @@ def pursue_last_seen(s):
     time.sleep(0.6)
     start = apart(s, f, t)
     s.graph(f, {"seq": [{"do": {"skill": "flee", "target": {"id": t}}}, {"wait": 300}]})
-    time.sleep(0.8)
-    last = body_at(s, t)
+    visible = s.wait(lambda: steering(f, t, 4), 30, every=0.05)
+    last = (visible["gx"], visible["gy"])
     far = (spot[0] - 40.0, spot[1]) if spot[0] > 50 else (spot[0] + 40.0, spot[1])
-    s.call("place_at", t, *far)
+    s.http_call("place_at", [t, *far])
     t0 = time.monotonic()
     while time.monotonic() - t0 < 12:
         if not any(r["skill"] == "flee" for r in s.rows(f"SELECT skill FROM activity WHERE id = {f}")):
@@ -4674,7 +4686,7 @@ def committed(s):
 
     def dash(label, toward):
         p = fresh(1)[0]
-        clear(set(cast))
+        clear({p})
         stage(p, back, label)
         start = at_of(p)
         t0 = now()
@@ -4687,24 +4699,29 @@ def committed(s):
         return out
 
     def engaged(who):
-        st = s.rows(f"SELECT fast_until FROM mind_state WHERE id = {who}")
-        return st and st[0]["fast_until"] > now() + 1500
+        st = s.http_rows(f"SELECT fast_until FROM mind_state WHERE id = {who}")
+        clock = s.http_rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        return next((r["fast_until"] for r in st if r["fast_until"] > clock + 1500), None)
 
     def standing(label, skill):
         """A fresh P in a fight (a fresh Z threatens it), its routine doing `skill` while it stands."""
         p, z = fresh(2)
-        clear(set(cast))
+        clear({p, z})
         stage(p, opened, label)
         s.call("place_near", z, p)
-        s.graph(z, {"seq": [{"do": {"skill": "threaten", "target": {"id": p}}}, {"wait": 30 + next(rounds)}]})
-        s.wait(lambda: engaged(p), 10, every=0.3)
-        s.graph(z, {"wait": 30 + next(rounds)})
-        stage(p, opened, label + "-again")
-        s.expect(f"{label}: P is in a fight (its graph is looked at at fight cadence)", engaged(p), s.rows(f"SELECT fast_until FROM mind_state WHERE id = {p}"))
-        t0 = now()
-        s.graph(p, {"first": {"label": f"standing-{label}", "children": [
-            {"if": {"cond": {"moving": False}, "then": {"do": skill}}}, {"wait": 0.2 + 0.001 * next(rounds)}]}})
+        t0 = s.http_rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        threat = {"seq": [{"do": {"skill": "threaten", "target": {"id": p}}},
+                          {"wait": 30 + next(rounds)}]}
+        s.http_call("set_behavior", [z, json.dumps(threat)])
+        fast_until = s.wait(lambda: engaged(p), 30, every=0.05)
+        routine = {"first": {"label": f"standing-{label}", "children": [
+            {"if": {"cond": {"moving": False}, "then": {"do": skill}}},
+            {"wait": 0.2 + 0.001 * next(rounds)}]}}
+        s.http_call("set_behavior", [p, json.dumps(routine)])
         u = use_of(t0, p, skill)
+        s.expect(f"{label}: P is in a fight (its graph is looked at at fight cadence)",
+                 0 < u["accepted_ms"] < fast_until,
+                 {"fast_until": fast_until, "accepted_ms": u["accepted_ms"]})
         s.graph(p, {"wait": 30 + next(rounds)})
         (s.out / f"{s.name}-standing-{label}.json").write_text(json.dumps(u, indent=2) + "\n")
         return u
@@ -4728,7 +4745,7 @@ def committed(s):
         tries = []
         for k in range(3):
             w, y = fresh(2)
-            clear(set(cast))
+            clear({w, y})
             stage(w, opened, f"death-{k}")
             s.call("place_near", y, w)
             s.graph(y, {"wait": 60})
@@ -4774,7 +4791,7 @@ def committed(s):
         # Off the spots, so the next run on this world finds them clear.
         for k, c in enumerate(cast):
             s.call("set_behavior", c, json.dumps({"wait": 120}), check=False)
-            s.call("place_at", c, opened[0] + 60 + 2 * (k % 10), opened[1] - 50 - 2 * (k // 10), check=False)
+            s.call("place_at", c, opened[0] + 60 + 2 * (k % 10), opened[1] + 50 + 2 * (k // 10), check=False)
 
 
 def doing_cost(s):
@@ -6223,10 +6240,19 @@ def dodge_told(s):
     # again on the next tick after each one and is refused until it is ready.
     s.call("mind_routines", a, [{"name": "hop", "graph": json.dumps({"if": {"cond": {"chance": 1.0}}, "then": {"do": "dodge"}})}])
     routine = next(r for r in s.rows(f"SELECT id, name FROM routine WHERE actor = {a}") if r["name"] == "hop")
-    t1 = clock()
-    s.graph(a, {"routine": "hop"})
+    s.http_call("place_near", [b, a])
+    s.http_call("set_behavior", [b, json.dumps({"seq": [
+        {"do": {"skill": "threaten", "target": {"id": a}}}, {"wait": 61}]})])
+    def fight_cadence():
+        now = s.http_rows("SELECT last_ms FROM clock")[0]["last_ms"]
+        rows = s.http_rows(f"SELECT fast_until FROM mind_state WHERE id = {a}")
+        return rows and rows[0]["fast_until"] > now + 5_000
+
+    s.wait(fight_cadence, 20, every=0.05)
+    t1 = s.http_rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    s.http_call("set_behavior", [a, json.dumps({"routine": "hop"})])
     time.sleep(4.0)
-    s.graph(a, {"wait": 60})
+    s.http_call("set_behavior", [a, json.dumps({"wait": 60})])
     waiting = told(t1, "dodge is not ready yet")
     made = [u for u in s.rows("SELECT * FROM skill_use", "streak-uses") if u["actor"] == a and u["skill"] == "dodge" and u["at_ms"] >= t1 and u["accepted_ms"]]
     stat = s.rows(f"SELECT * FROM routine_stat WHERE id = {routine['id']}", "streak-stat")

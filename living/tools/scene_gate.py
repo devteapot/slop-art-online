@@ -1128,12 +1128,15 @@ class Runner:
                 with LOCK:
                     self.procs.discard(p)
 
-    def world(self, root, run, seed, log, *launch_args):
+    def world(self, root, run, seed, log):
         """Launch a fresh scratch world; True when launch and doctor pass."""
         with LOCK:
             self.runs.append((root, run))
         args = ["--seed", seed] if seed != "world" else []
-        if self.sh([sys.executable, V, "launch", "--run", run, *args, *launch_args], root, log, 1500):
+        # Every group is owned by this gate process. Its scene drivers use raw
+        # CLI or HTTP operations that do not renew the verify.py inactivity lease.
+        if self.sh([sys.executable, V, "launch", "--run", run, *args, "--driver-pid", str(os.getpid())],
+                   root, log, 1500):
             return False
         return self.sh([sys.executable, V, "doctor", "--run", run], root, log, 300) == 0
 
@@ -1299,10 +1302,8 @@ class Runner:
         ev.mkdir(parents=True, exist_ok=True)
         log = ev / "gate.log"
         seed = "world" if group in {"core", "mechanics", "client", "speech", "steering", "acting", "fight"} else "cullet" if group == "battle" else "island"
-        # Mechanics uses the raw CLI, so the gate process supervises its world instead of an inactivity lease.
-        launch_args = ("--driver-pid", str(os.getpid())) if group == "mechanics" else ()
         try:
-            if not self.world(root, run, seed, log, *launch_args):
+            if not self.world(root, run, seed, log):
                 return {c: (False, f"{log} (launch or doctor failed)", time.time() - t0) for c in cases}
             if group == "mechanics":
                 report = ev / "mechanics.json"

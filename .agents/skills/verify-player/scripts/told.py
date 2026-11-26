@@ -109,9 +109,9 @@ def main():
     call("set_behavior", [ai, json.dumps({"seq": [{"do": "graze"}, {"wait": 120}]})], as_admin=True)
     code, body = call("human_act", [json.dumps({"do": "graze"})])
     check("human_act {do:graze} is accepted (refused in the tick, not by the reducer)", code == 200, f"{code} {body.strip()[:120]}")
-    got = wait_for(lambda: mine("graze"), 6)
+    got = wait_for(lambda: mine("graze"), 20)
     snaps["refused_player"] = got
-    snaps["refused_ai"] = theirs(ai, "graze")
+    snaps["refused_ai"] = wait_for(lambda: theirs(ai, "graze"), 20)
     snaps["refused_played"] = played(me)
     snaps["refused_plan"] = sql(f"SELECT plan, source FROM brain WHERE id = {me}", admin)
     check("the person still plays the character (no takeover)", not snaps["refused_played"]["character_ai"], snaps["refused_played"])
@@ -120,10 +120,11 @@ def main():
           {"player": [r["text"] for r in got], "ai": [r["text"] for r in snaps["refused_ai"]]})
     check("the failed command falls back to waiting for you", snaps["refused_plan"] and snaps["refused_plan"][0]["plan"] == "waiting for you", snaps["refused_plan"])
     code, body = call("human_act", [json.dumps({"do": "graze"})])
-    time.sleep(4)
+    repeat_done = wait_for(lambda: any(r["plan"] == "waiting for you"
+        for r in sql(f"SELECT plan FROM brain WHERE id = {me}", admin)), 20)
     again = mine("graze")
     snaps["refused_again"] = again
-    check("the same refusal inside the window adds no line", code == 200 and len(again) == 1, again)
+    check("the same refusal inside the window adds no line", code == 200 and repeat_done and len(again) == 1, again)
 
     # 2. Failed after starting: a gift whose receiver is taken away while it is handed over
     #    (`complete`: "they moved away"). The player's command, then the AI's graph.
@@ -131,17 +132,37 @@ def main():
 
     def break_off(actor, start):
         call("grant_items", [actor, "berries", 3], as_admin=True)
-        call("place_near", [other, actor], as_admin=True)
-        call("set_behavior", [other, json.dumps({"wait": 120})], as_admin=True)
-        start()
-        end, seen = time.monotonic() + 8, None
-        while time.monotonic() < end and not seen:
-            r = sql(f"SELECT skill, phase, label FROM activity WHERE id = {actor}", admin)
-            seen = r[0] if r and r[0]["skill"] == "give" and r[0]["phase"] == 1 else None
-            time.sleep(0.05)
-        b = sql(f"SELECT x, y FROM body WHERE id = {other}", admin)[0]
-        call("place_at", [other, b["x"] + (6.0 if b["x"] < 300 else -6.0), b["y"]], as_admin=True)
-        return seen
+        query = f"SELECT skill, phase, started_ms, ends_ms FROM activity WHERE id = {actor}"
+        def performing():
+            return next((r for r in sql(query, admin) if r["skill"] == "give" and r["phase"] == 1), None)
+
+        for _ in range(3):
+            call("place_near", [other, actor], as_admin=True)
+            call("set_behavior", [other, json.dumps({"wait": 120})], as_admin=True)
+            b = sql(f"SELECT x, y FROM body WHERE id = {other}", admin)[0]
+            start_ms = sql("SELECT last_ms FROM clock", admin)[0]["last_ms"]
+            code, body = start()
+            if code != 200:
+                raise RuntimeError(f"start gift: {code} {body}")
+            end = time.monotonic() + 12
+            seen = performing()
+            while not seen and time.monotonic() < end:
+                time.sleep(0.05)
+                seen = performing()
+            if seen:
+                call("set_paused", [True], as_admin=True)
+                try:
+                    if performing() == seen:
+                        call("place_at", [other, b["x"] + (6.0 if b["x"] < 300 else -6.0), b["y"]], as_admin=True)
+                        return seen
+                finally:
+                    call("set_paused", [False], as_admin=True)
+            late = sql(f"SELECT id FROM chronicle WHERE kind = 'give' AND a = {actor} "
+                       f"AND b = {other} AND at_ms > {start_ms}", admin)
+            snaps.setdefault("gift_staging", []).append({"actor": actor, "activity": seen, "completed": late})
+            if not late:
+                return None
+        return None
 
     started = break_off(me, lambda: call("human_act", [json.dumps(give)]))
     check("the player's gift started (performing)", started, started)
