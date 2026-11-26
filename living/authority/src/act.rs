@@ -3069,6 +3069,9 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
     let name = c.name.clone();
     let kind = c.kind.clone();
     ctx.db.character().id().update(c);
+    if kind == "person" {
+        common::person_died(ctx);
+    }
     let items = common::inv_list(ctx, id as u64);
     for r in ctx.db.inventory().owner().filter(id as u64).collect::<Vec<_>>() {
         ctx.db.inventory().id().delete(r.id);

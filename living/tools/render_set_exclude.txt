@@ -34,6 +34,7 @@ characters/ortho_selftest.py
 # characters: measurements, comparisons and check pages
 characters/bone_reach.py
 characters/cage_accept.py
+characters/cage_accept_selftest.py
 characters/clips_compare.py
 characters/crowd.py
 characters/hair_shimmer.py

@@ -159,6 +159,9 @@ BLUSH_PIGMENT = (0.70, 0.26, 0.22)
 # char-port-2 S2 (`SLOP_PORT=paint`, docs/char-port-2/s2): Cora's face paint (char-live-1..3) as
 # parameters of the generator's own landmarks. Off unless named; with it off nothing changes.
 PORT = {f.strip() for f in os.environ.get("SLOP_PORT", "").split(",") if f.strip()}
+# `beard` (char-port-2 S7, from the paused char-4-body-joins: 8d1659ec5, 537eb0457's paint): stubble and beards drawn
+# in hairs, their coverage feathered, the short beard's core near opaque; the painted coverage is the overlay's alpha.
+BEARD = "beard" in PORT
 # The part of the face's picture the types' shared tint page keeps (living/tools/characters/share.py
 # TYPE_PAGES["tint"]): u0, v0, u1, v1.
 TINT_WINDOW = (0.1875, 0.59375, 0.8125, 0.875)
@@ -321,20 +324,34 @@ def paint_skin(hf, look, rng, layer=None):
     beard = look.get("beard")
     grain = value_noise((rows, cols), 3, rng)
     hairs = strands((rows, cols), rng)
+    whiskers = None
     if stub > 0:
         low = smooth((zm + 0.012 - z) / 0.030) * smooth((y + 0.02) / 0.04) * (0.60 + 0.40 * smooth((ax - 0.010) / 0.03))
         low = np.maximum(low, 0.9 * np.exp(-((ax / (mw * 1.15)) ** 2 + ((z - (zs - 0.0085)) / 0.0055) ** 2)))
         low *= smooth((104 - np.abs(az)) / 12)
         low *= 1 - upper - lower
-        c.blend(look["stubble_colour"], stub * low * (0.20 + 0.45 * grain**1.5), where=np.ones_like(front))
+        if BEARD:
+            whiskers = stub * low * (0.08 + 0.36 * grain**1.5) * (0.35 + 0.65 * hairs)
+            c.blend(look["stubble_colour"], whiskers, where=np.ones_like(front))
+        else:
+            c.blend(look["stubble_colour"], stub * low * (0.20 + 0.45 * grain**1.5), where=np.ones_like(front))
     # A beard: the hair's colour in fine strokes, its edge broken into hairs.
-    cover = hf.beard_cover(beard, ax, z, az, e=0.0030 * (hairs - 0.5), soft=0.0007)
+    cover = hf.beard_cover(beard, ax, z, az, e=0.0030 * (hairs - 0.5), soft=0.0025 if BEARD else 0.0007)
     if cover is not None:
         cover = cover * smooth((y + 0.03) / 0.03)
         bc = np.array(look["beard_colour"])
         tone = 0.62 + 0.76 * hairs
         hair = bc[None, None, :] * tone[..., None] + (0.10 * np.clip(tone - 1.0, 0, 1))[..., None]
-        a = np.clip(cover * look.get("beard_density", 1.0), 0, 1)
+        if BEARD:
+            # The short and full beards show their hair colour through the core (the GC's choice in S7: drawn
+            # at a density, a dark full beard read pale); the mask gives the soft edge, the cheek taper and the
+            # opening round the lips. Other shapes are drawn in hairs at their density.
+            density = 0.90 if beard == "full" else 0.76
+            opacity = (0.95 + 0.05 * hairs) if beard in ("short", "full") else density * (0.30 + 0.70 * hairs)
+            a = np.clip(cover * look.get("beard_density", 1.0) * opacity, 0, 1)
+            whiskers = a
+        else:
+            a = np.clip(cover * look.get("beard_density", 1.0), 0, 1)
         c.img += (np.clip(hair, 0, 1) - c.img) * a[..., None]
     # Age: folds from the nose past the mouth, lines on the forehead and between the brows,
     # crow's feet, bags, lines down from the mouth's corners.
@@ -371,7 +388,7 @@ def paint_skin(hf, look, rng, layer=None):
         layer["rgb"] = np.where(acc["w"][..., None] > 1e-5, acc["sum"] / np.maximum(acc["w"], 1e-5)[..., None], np.array(BLUSH_PIGMENT))
         layer["alpha"] = 1 - acc["clear"]
     # Behind the face the skin is plain; hair or a beard covers most of it.
-    return c.img, dict(x=x, y=y, z=z)
+    return c.img, dict(x=x, y=y, z=z, whiskers=whiskers)
 
 
 # -------------------------------------------------------------------------------------- eyes

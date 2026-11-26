@@ -1,0 +1,107 @@
+{
+ "adult-f-a": {
+  "spacing_mm": 100.8,
+  "with_ears": 1.947,
+  "ears_excluded": 1.647
+ },
+ "adult-f-b": {
+  "spacing_mm": 97.8,
+  "with_ears": 2.014,
+  "ears_excluded": 1.764
+ },
+ "adult-f-c": {
+  "spacing_mm": 96.1,
+  "with_ears": 2.082,
+  "ears_excluded": 1.892
+ },
+ "adult-m-a": {
+  "spacing_mm": 95.5,
+  "with_ears": 2.002,
+  "ears_excluded": 1.736
+ },
+ "adult-m-b": {
+  "spacing_mm": 92.5,
+  "with_ears": 2.068,
+  "ears_excluded": 1.816
+ },
+ "adult-m-c": {
+  "spacing_mm": 90.7,
+  "with_ears": 2.135,
+  "ears_excluded": 1.9
+ },
+ "child-u-a": {
+  "spacing_mm": 101.3,
+  "with_ears": 1.971,
+  "ears_excluded": 1.688
+ },
+ "child-u-b": {
+  "spacing_mm": 98.3,
+  "with_ears": 2.042,
+  "ears_excluded": 1.745
+ },
+ "child-u-c": {
+  "spacing_mm": 96.3,
+  "with_ears": 2.11,
+  "ears_excluded": 2.002
+ },
+ "elder-f-a": {
+  "spacing_mm": 99.9,
+  "with_ears": 1.96,
+  "ears_excluded": 1.749
+ },
+ "elder-f-b": {
+  "spacing_mm": 96.9,
+  "with_ears": 2.03,
+  "ears_excluded": 1.913
+ },
+ "elder-f-c": {
+  "spacing_mm": 95.1,
+  "with_ears": 2.087,
+  "ears_excluded": 1.995
+ },
+ "elder-m-a": {
+  "spacing_mm": 95.0,
+  "with_ears": 2.007,
+  "ears_excluded": 1.747
+ },
+ "elder-m-b": {
+  "spacing_mm": 92.0,
+  "with_ears": 2.075,
+  "ears_excluded": 1.824
+ },
+ "elder-m-c": {
+  "spacing_mm": 90.2,
+  "with_ears": 2.132,
+  "ears_excluded": 1.892
+ },
+ "youth-f-a": {
+  "spacing_mm": 100.8,
+  "with_ears": 1.946,
+  "ears_excluded": 1.651
+ },
+ "youth-f-b": {
+  "spacing_mm": 97.8,
+  "with_ears": 2.013,
+  "ears_excluded": 1.746
+ },
+ "youth-f-c": {
+  "spacing_mm": 96.1,
+  "with_ears": 2.081,
+  "ears_excluded": 1.89
+ },
+ "youth-m-a": {
+  "spacing_mm": 96.2,
+  "with_ears": 1.992,
+  "ears_excluded": 1.73
+ },
+ "youth-m-b": {
+  "spacing_mm": 93.2,
+  "with_ears": 2.061,
+  "ears_excluded": 1.811
+ },
+ "youth-m-c": {
+  "spacing_mm": 91.4,
+  "with_ears": 2.129,
+  "ears_excluded": 1.894
+ }
+}

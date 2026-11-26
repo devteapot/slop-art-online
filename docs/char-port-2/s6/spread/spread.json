@@ -16,45 +16,51 @@
     263
    ],
    "cheek_width_px": 148,
+   "face_over_eyes": 1.751,
    "hair_px": [
     27,
     319
    ],
    "hair_width_px": 292,
-   "spread_face": 1.973
+   "spread_face": 1.973,
+   "row_rule": "landmark",
+   "row_fraction": 0.2967
   },
   "stage-1 targets front drawing": {
    "body_over_eyes": 3.121,
    "whole_over_eyes": 3.403,
    "body_width_px": 233,
-   "body": 1.835,
+   "body": 1.82,
    "opening_px": 17,
    "eye_line_px": 147.7,
    "eye_spacing_px": 74.6,
    "head_px": 248.8,
    "chin_row": 253,
-   "cheek_row": 180,
+   "cheek_row": 179,
    "cheek_px": [
     93,
-    220
+    221
    ],
-   "cheek_width_px": 127,
+   "cheek_width_px": 128,
+   "face_over_eyes": 1.715,
    "hair_px": [
     16,
     270
    ],
    "hair_width_px": 254,
-   "spread_face": 2.0
+   "spread_face": 1.984,
+   "row_rule": "landmark",
+   "row_fraction": 0.297
   }
  },
  "drawing": {
-  "spread_face": 1.986,
-  "body": 1.823,
+  "spread_face": 1.978,
+  "body": 1.816,
   "body_over_eyes": 3.146,
   "band": [
    2.973,
    3.319
   ]
  },
- "method": "- **The chin:** where the face's centre run of skin is narrowest (its ink point), between the\n  mouth and the neck.\n- **The eyes:** the iris pieces parted into two eyes at the widest gap across (`two_eyes`); their\n  centres give the eye line and the eye spacing.\n- **The head's height:** the eye spacing over 0.30, stage-1's front ratio (eye spacing over head\n  height).\n- **The cheek row:** 0.030 m under the eye line, the generator's (`eye_z - 0.030`), in head\n  heights of the generator's standard head (0.030 / 0.2322, Cora's head height in metres).\n- **The cheek width:** the run of skin on that row that holds the face's centre column: the face\n  across the cheekbones (the generator's, in front of the pinna): the face's outline on that row.\n  On the drawing no hair covers the cheeks there; on a render it is taken from the same frame drawn\n  with no hair (image_spread.py), where nothing covers it (at this head's cheek row the ears join\n  the outline: the generator's head has no line between them and the face).\n- **The spread:** the hair's (and its ink's) widest extent over all rows above the chin, over the\n  cheek width."
+ "method": "- **The chin:** where the face's centre run of skin is narrowest (its ink point), between the\n  mouth and the neck.\n- **The eyes:** the iris pieces parted into two eyes at the widest gap across (`two_eyes`); their\n  centres give the eye line and the eye spacing.\n- **The head's height:** the eye spacing over 0.30, stage-1's front ratio (eye spacing over head\n  height).\n- **The cheek row** (by landmarks since S7's ortho re-measure, the GC's 2026-11-21: the same on the drawing and a\n  render, never by millimetres): `ROW_FRACTION` of the way from the eye line to the chin. The fraction is the\n  row the drawing's 1.751 was measured at (review.jpg: row 206, eye line 169.7, chin 292: 0.2967). That row was\n  first set as 0.030 m under the eye line in head heights of Cora's standard head (0.030 / 0.2322), the head's\n  height taken from the eye spacing by stage-1's ratio (0.30); on a generated head, whose spacing is 0.38 of its\n  height, that rule put the row 41-44 mm under the eyes instead of 30 (`rule=\"spacing\"` keeps it, for S6b's\n  numbers).\n- **The chin on a render** (`chin_px`): a render has no ink at the chin's midline, so its chin is the lowest\n  pixel of the face's front on the eyes' middle column, from a frame drawn with the chin-ID copy\n  (docs/char-port-2/s7/chin_id.py: the skin in front of the irises in pure yellow). It is the tip of the chin, as\n  the drawing's ink point is.\n- **The cheek width:** the run of skin on that row that holds the face's centre column: the face\n  across the cheekbones (the generator's, in front of the pinna): the face's outline on that row.\n  On the drawing no hair covers the cheeks there; on a render it is taken from the same frame drawn\n  with no hair (image_spread.py), where nothing covers it (at this head's cheek row the ears join\n  the outline: the generator's head has no line between them and the face).\n- **The spread:** the hair's (and its ink's) widest extent over all rows above the chin, over the\n  cheek width."
 }

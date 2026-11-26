@@ -1,0 +1,611 @@
+{
+ "adult-f-a": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 107.6,
+  "d2": {
+   "L": {
+    "top": 0.143,
+    "bottom": 0.48,
+    "height": 0.623
+   },
+   "R": {
+    "top": 0.143,
+    "bottom": 0.47,
+    "height": 0.613
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.183,
+    "bottom": 0.463,
+    "height": 0.646
+   },
+   "R": {
+    "top": 0.183,
+    "bottom": 0.463,
+    "height": 0.646
+   }
+  }
+ },
+ "adult-f-b": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 111.8,
+  "d2": {
+   "L": {
+    "top": 0.109,
+    "bottom": 0.472,
+    "height": 0.581
+   },
+   "R": {
+    "top": 0.109,
+    "bottom": 0.472,
+    "height": 0.581
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.141,
+    "bottom": 0.472,
+    "height": 0.614
+   },
+   "R": {
+    "top": 0.141,
+    "bottom": 0.472,
+    "height": 0.614
+   }
+  }
+ },
+ "adult-f-c": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 118.5,
+  "d2": {
+   "L": {
+    "top": 0.064,
+    "bottom": 0.477,
+    "height": 0.54
+   },
+   "R": {
+    "top": 0.064,
+    "bottom": 0.477,
+    "height": 0.54
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.092,
+    "bottom": 0.477,
+    "height": 0.569
+   },
+   "R": {
+    "top": 0.092,
+    "bottom": 0.477,
+    "height": 0.569
+   }
+  }
+ },
+ "adult-m-a": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 124.0,
+  "d2": {
+   "L": {
+    "top": 0.129,
+    "bottom": 0.476,
+    "height": 0.605
+   },
+   "R": {
+    "top": 0.129,
+    "bottom": 0.476,
+    "height": 0.605
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.139,
+    "bottom": 0.474,
+    "height": 0.613
+   },
+   "R": {
+    "top": 0.139,
+    "bottom": 0.474,
+    "height": 0.613
+   }
+  }
+ },
+ "adult-m-b": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 126.2,
+  "d2": {
+   "L": {
+    "top": 0.11,
+    "bottom": 0.469,
+    "height": 0.579
+   },
+   "R": {
+    "top": 0.11,
+    "bottom": 0.469,
+    "height": 0.579
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.118,
+    "bottom": 0.475,
+    "height": 0.593
+   },
+   "R": {
+    "top": 0.118,
+    "bottom": 0.475,
+    "height": 0.593
+   }
+  }
+ },
+ "adult-m-c": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 132.8,
+  "d2": {
+   "L": {
+    "top": 0.077,
+    "bottom": 0.473,
+    "height": 0.55
+   },
+   "R": {
+    "top": 0.077,
+    "bottom": 0.473,
+    "height": 0.55
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.085,
+    "bottom": 0.474,
+    "height": 0.56
+   },
+   "R": {
+    "top": 0.085,
+    "bottom": 0.474,
+    "height": 0.56
+   }
+  }
+ },
+ "child-u-a": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 76.7,
+  "d2": {
+   "L": {
+    "top": 0.212,
+    "bottom": 0.466,
+    "height": 0.678
+   },
+   "R": {
+    "top": 0.212,
+    "bottom": 0.466,
+    "height": 0.678
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.242,
+    "bottom": 0.461,
+    "height": 0.703
+   },
+   "R": {
+    "top": 0.242,
+    "bottom": 0.461,
+    "height": 0.703
+   }
+  }
+ },
+ "child-u-b": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 80.2,
+  "d2": {
+   "L": {
+    "top": 0.172,
+    "bottom": 0.464,
+    "height": 0.636
+   },
+   "R": {
+    "top": 0.172,
+    "bottom": 0.464,
+    "height": 0.636
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.197,
+    "bottom": 0.47,
+    "height": 0.668
+   },
+   "R": {
+    "top": 0.197,
+    "bottom": 0.47,
+    "height": 0.668
+   }
+  }
+ },
+ "child-u-c": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 86.4,
+  "d2": {
+   "L": {
+    "top": 0.122,
+    "bottom": 0.468,
+    "height": 0.59
+   },
+   "R": {
+    "top": 0.122,
+    "bottom": 0.468,
+    "height": 0.59
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.14,
+    "bottom": 0.476,
+    "height": 0.616
+   },
+   "R": {
+    "top": 0.14,
+    "bottom": 0.476,
+    "height": 0.616
+   }
+  }
+ },
+ "elder-f-a": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 111.0,
+  "d2": {
+   "L": {
+    "top": 0.144,
+    "bottom": 0.478,
+    "height": 0.621
+   },
+   "R": {
+    "top": 0.144,
+    "bottom": 0.478,
+    "height": 0.621
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.166,
+    "bottom": 0.471,
+    "height": 0.637
+   },
+   "R": {
+    "top": 0.166,
+    "bottom": 0.471,
+    "height": 0.637
+   }
+  }
+ },
+ "elder-f-b": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 114.3,
+  "d2": {
+   "L": {
+    "top": 0.119,
+    "bottom": 0.475,
+    "height": 0.595
+   },
+   "R": {
+    "top": 0.128,
+    "bottom": 0.475,
+    "height": 0.603
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.13,
+    "bottom": 0.478,
+    "height": 0.608
+   },
+   "R": {
+    "top": 0.13,
+    "bottom": 0.478,
+    "height": 0.608
+   }
+  }
+ },
+ "elder-f-c": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 120.0,
+  "d2": {
+   "L": {
+    "top": 0.092,
+    "bottom": 0.475,
+    "height": 0.567
+   },
+   "R": {
+    "top": 0.1,
+    "bottom": 0.475,
+    "height": 0.575
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.097,
+    "bottom": 0.476,
+    "height": 0.573
+   },
+   "R": {
+    "top": 0.097,
+    "bottom": 0.476,
+    "height": 0.573
+   }
+  }
+ },
+ "elder-m-a": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 125.6,
+  "d2": {
+   "L": {
+    "top": 0.131,
+    "bottom": 0.467,
+    "height": 0.597
+   },
+   "R": {
+    "top": 0.131,
+    "bottom": 0.467,
+    "height": 0.597
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.134,
+    "bottom": 0.475,
+    "height": 0.609
+   },
+   "R": {
+    "top": 0.134,
+    "bottom": 0.475,
+    "height": 0.609
+   }
+  }
+ },
+ "elder-m-b": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 127.4,
+  "d2": {
+   "L": {
+    "top": 0.115,
+    "bottom": 0.466,
+    "height": 0.581
+   },
+   "R": {
+    "top": 0.123,
+    "bottom": 0.466,
+    "height": 0.589
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.119,
+    "bottom": 0.474,
+    "height": 0.593
+   },
+   "R": {
+    "top": 0.119,
+    "bottom": 0.474,
+    "height": 0.593
+   }
+  }
+ },
+ "elder-m-c": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 134.1,
+  "d2": {
+   "L": {
+    "top": 0.081,
+    "bottom": 0.471,
+    "height": 0.552
+   },
+   "R": {
+    "top": 0.089,
+    "bottom": 0.471,
+    "height": 0.559
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.087,
+    "bottom": 0.473,
+    "height": 0.561
+   },
+   "R": {
+    "top": 0.087,
+    "bottom": 0.473,
+    "height": 0.561
+   }
+  }
+ },
+ "youth-f-a": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 107.8,
+  "d2": {
+   "L": {
+    "top": 0.141,
+    "bottom": 0.462,
+    "height": 0.603
+   },
+   "R": {
+    "top": 0.141,
+    "bottom": 0.462,
+    "height": 0.603
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.183,
+    "bottom": 0.463,
+    "height": 0.647
+   },
+   "R": {
+    "top": 0.183,
+    "bottom": 0.463,
+    "height": 0.647
+   }
+  }
+ },
+ "youth-f-b": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 111.9,
+  "d2": {
+   "L": {
+    "top": 0.108,
+    "bottom": 0.473,
+    "height": 0.581
+   },
+   "R": {
+    "top": 0.108,
+    "bottom": 0.473,
+    "height": 0.581
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.143,
+    "bottom": 0.472,
+    "height": 0.615
+   },
+   "R": {
+    "top": 0.143,
+    "bottom": 0.472,
+    "height": 0.615
+   }
+  }
+ },
+ "youth-f-c": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 118.5,
+  "d2": {
+   "L": {
+    "top": 0.064,
+    "bottom": 0.477,
+    "height": 0.54
+   },
+   "R": {
+    "top": 0.064,
+    "bottom": 0.477,
+    "height": 0.54
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.093,
+    "bottom": 0.477,
+    "height": 0.57
+   },
+   "R": {
+    "top": 0.093,
+    "bottom": 0.477,
+    "height": 0.57
+   }
+  }
+ },
+ "youth-m-a": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 121.0,
+  "d2": {
+   "L": {
+    "top": 0.132,
+    "bottom": 0.471,
+    "height": 0.603
+   },
+   "R": {
+    "top": 0.132,
+    "bottom": 0.471,
+    "height": 0.603
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.149,
+    "bottom": 0.472,
+    "height": 0.621
+   },
+   "R": {
+    "top": 0.149,
+    "bottom": 0.472,
+    "height": 0.621
+   }
+  }
+ },
+ "youth-m-b": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 122.5,
+  "d2": {
+   "L": {
+    "top": 0.111,
+    "bottom": 0.469,
+    "height": 0.58
+   },
+   "R": {
+    "top": 0.111,
+    "bottom": 0.469,
+    "height": 0.58
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.123,
+    "bottom": 0.475,
+    "height": 0.598
+   },
+   "R": {
+    "top": 0.123,
+    "bottom": 0.475,
+    "height": 0.598
+   }
+  }
+ },
+ "youth-m-c": {
+  "pose": "bind",
+  "view": "ortho",
+  "eye_to_chin_px": 129.5,
+  "d2": {
+   "L": {
+    "top": 0.081,
+    "bottom": 0.475,
+    "height": 0.556
+   },
+   "R": {
+    "top": 0.081,
+    "bottom": 0.475,
+    "height": 0.556
+   }
+  },
+  "d3": {
+   "L": {
+    "top": 0.09,
+    "bottom": 0.475,
+    "height": 0.565
+   },
+   "R": {
+    "top": 0.09,
+    "bottom": 0.475,
+    "height": 0.565
+   }
+  }
+ }
+}

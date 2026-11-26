@@ -1,0 +1,852 @@
+{
+ "cp7p-woman": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 1496
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 1533
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 1855
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 434
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "cp7p-man": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 802
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 790
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 888
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 299
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "cp7p-elder": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 658
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 651
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 717
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 244
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "cp7p-girl": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 1911
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 1907
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 2314
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 593
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-child-u-a": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 1398
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 1393
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 1743
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 410
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-child-u-b": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 1154
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 1157
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 1452
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 325
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-child-u-c": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 993
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 996
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 1241
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 301
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-youth-f-a": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 1349
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 1353
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 1703
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 339
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-youth-f-b": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 1079
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 1107
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 1362
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 292
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-youth-f-c": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 937
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 964
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 1155
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 280
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-youth-m-a": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 805
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 821
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 951
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 291
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-youth-m-b": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 627
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 640
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 721
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 232
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-youth-m-c": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 554
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 558
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 625
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 208
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-adult-f-a": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 1328
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 1330
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 1714
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 354
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-adult-f-b": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 1075
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 1104
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 1363
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 291
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-adult-f-c": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 943
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 971
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 1167
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 282
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-adult-m-a": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 744
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 750
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 868
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 266
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-adult-m-b": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 572
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 575
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 645
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 216
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-adult-m-c": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 498
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 508
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 564
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 189
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-elder-f-a": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 1073
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 1088
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 1406
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 228
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-elder-f-b": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 845
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 861
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 1092
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 205
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-elder-f-c": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 742
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 762
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 926
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 216
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-elder-m-a": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 607
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 619
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 702
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 228
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-elder-m-b": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 466
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 462
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 529
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 174
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ },
+ "ey3-elder-m-c": {
+  "Close@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@0": {
+   "closing": 0,
+   "other": 410
+  },
+  "Close_R@0": {
+   "closing": 0,
+   "other": 408
+  },
+  "Joy@0": {
+   "closing": 0,
+   "other": null
+  },
+  "Close@-35": {
+   "closing": 0,
+   "other": null
+  },
+  "Close_L@-35": {
+   "closing": 0,
+   "other": 450
+  },
+  "Close_R@-35": {
+   "closing": 0,
+   "other": 159
+  },
+  "Joy@-35": {
+   "closing": 0,
+   "other": null
+  }
+ }
+}

@@ -17,6 +17,14 @@ tool's output folder, .local/ref) and compares with the type's record:
 `adult-f-b` is the reference's own proportions, so its row is the reference's. A type passes when
 every width is within the tolerance (0.03 H) and the eye's centre and spacing within 0.02 H.
 Exit status 1 if any type fails. numpy; no Blender.
+
+**S1's taper** (port `jaw`: `chin_taper`, `jaw_taper`) narrows the lower face on purpose: the records
+are the VRoid reference's proportions, not the drawing's (docs/char-port-2/s1). A tapered type is
+built a second time with its tapers at 0, and each width's taper is what it took there
+(built over built untapered), but never more than the cage's declared factor at that height
+(`cage_head.taper_factor`): a width is held to the record times that, so a narrowing beyond the
+taper still fails. Both departures are printed and kept: from the record, and from the tapered
+record (docs/char-port-2/s7/cage-accept.md). Known-answer test: cage_accept_selftest.py.
 """
 
 import argparse
@@ -31,6 +39,8 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "blender"))
+import copy  # noqa: E402
+
 import cage_head  # noqa: E402
 import face_types  # noqa: E402
 import person_params  # noqa: E402
@@ -81,6 +91,34 @@ def measure_type(t, ref, keep=None):
     return face_types.measure_one(out), sum(1 if len(f) == 3 else 2 for f in skin)
 
 
+def check_type(t, ref, keep=None, tolerance=0.03):
+    """One type against its record: (ok, the row cage_accept prints and keeps). A tapered type is
+    held to its tapered record (the module's text)."""
+    m, tris = measure_type(t, ref, keep)
+    s, e, no = t["sections"], t["eye"], t["nose"]
+    tapered = bool(t["jaw"].get("chin_taper") or t["jaw"].get("jaw_taper"))
+    if tapered:
+        u = copy.deepcopy(t)
+        u["jaw"]["chin_taper"] = u["jaw"]["jaw_taper"] = 0.0
+        mu, _ = measure_type(u, ref, keep)
+    widths, raw = [], []
+    for i, z in enumerate(face_types.Z):
+        if z > 0.76:
+            continue
+        for k in ("w15", "w30"):
+            if m[k][i] is not None and s[k][i] is not None:
+                took = m[k][i] / mu[k][i] if tapered and mu[k][i] else 1.0
+                want = s[k][i] * max(took, float(cage_head.taper_factor(t["jaw"], z))) if tapered else s[k][i]
+                widths.append((abs(m[k][i] - want), z, k, m[k][i], round(want, 3), round(m[k][i] - s[k][i], 3)))
+                raw.append(abs(m[k][i] - s[k][i]))
+    worst = max(widths)
+    eye = dict(z=m["eye_z"] - e["z"], apart=m["eye_apart"] - e["apart"], w=m["eye_w"] - e["w"], h=m["eye_h"] - e["h"], brow=m["socket_brow"] - e["behind_brow"], cheek=m["socket_cheek"] - e["behind_cheek"])
+    ok = worst[0] <= tolerance and abs(eye["z"]) <= 0.02 and abs(eye["apart"]) <= 0.02
+    return ok, dict(ok=ok, triangles=tris, worst_width=round(worst[0], 3), worst_at=[worst[1], worst[2]], worst_from_record=round(max(raw), 3), tapered=tapered,
+                    widths=[[z, k, round(x, 3), y, r] for _, z, k, x, y, r in widths], eye={k: round(v, 3) for k, v in eye.items()},
+                    nose_tip_z=round(m["nose_tip_z"] - no["tip_z"], 3), nose_out=round(m["nose_out"] - no["out"], 3), measured=m, _worst=worst, _raw=max(raw), _tris=tris)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("ref")
@@ -95,27 +133,16 @@ def main():
     failed, rows = [], {}
     for tid in ids:
         t = data["types"][tid]
-        m, tris = measure_type(t, os.path.abspath(a.ref), a.keep)
-        s, e, no = t["sections"], t["eye"], t["nose"]
-        widths = []
-        for i, z in enumerate(face_types.Z):
-            if z > 0.76:
-                continue
-            for k in ("w15", "w30"):
-                if m[k][i] is not None and s[k][i] is not None:
-                    widths.append((abs(m[k][i] - s[k][i]), z, k, m[k][i], s[k][i]))
-        worst = max(widths)
-        eye = dict(z=m["eye_z"] - e["z"], apart=m["eye_apart"] - e["apart"], w=m["eye_w"] - e["w"], h=m["eye_h"] - e["h"], brow=m["socket_brow"] - e["behind_brow"], cheek=m["socket_cheek"] - e["behind_cheek"])
-        ok = worst[0] <= a.tolerance and abs(eye["z"]) <= 0.02 and abs(eye["apart"]) <= 0.02
+        ok, row = check_type(t, os.path.abspath(a.ref), a.keep, a.tolerance)
+        worst, tris, eye, tapered = row.pop("_worst"), row.pop("_tris"), row["eye"], row["tapered"]
         if not ok:
             failed.append(tid)
-        rows[tid] = dict(ok=ok, triangles=tris, worst_width=round(worst[0], 3), worst_at=[worst[1], worst[2]], widths=[[z, k, round(x, 3), y] for _, z, k, x, y in widths], eye={k: round(v, 3) for k, v in eye.items()},
-                         nose_tip_z=round(m["nose_tip_z"] - no["tip_z"], 3), nose_out=round(m["nose_out"] - no["out"], 3), measured=m)
-        print(f"{tid:12s} {'ok  ' if ok else 'FAIL'} {tris} triangles; widths within {worst[0]:.3f} H (worst: {worst[2]} at {worst[1]:.2f} H, {worst[3]:.3f} for {worst[4]:.3f}); "
-              f"eye centre {eye['z']:+.3f}, apart {eye['apart']:+.3f}, width {eye['w']:+.3f}, height {eye['h']:+.3f}; behind brow {eye['brow']:+.3f}, cheek {eye['cheek']:+.3f}; nose tip {rows[tid]['nose_tip_z']:+.3f}, out {rows[tid]['nose_out']:+.3f}")
+        rows[tid] = row
+        print(f"{tid:12s} {'ok  ' if ok else 'FAIL'} {tris} triangles; widths within {worst[0]:.3f} H{' of the tapered record' if tapered else ''} (worst: {worst[2]} at {worst[1]:.2f} H, {worst[3]:.3f} for {worst[4]:.3f}); from the record itself within {row.pop('_raw'):.3f} H; "
+              f"eye centre {eye['z']:+.3f}, apart {eye['apart']:+.3f}, width {eye['w']:+.3f}, height {eye['h']:+.3f}; behind brow {eye['brow']:+.3f}, cheek {eye['cheek']:+.3f}; nose tip {row['nose_tip_z']:+.3f}, out {row['nose_out']:+.3f}")
         if a.table:
             for z in face_types.Z:
-                cells = [f"{k} {x:.3f}/{y:.3f}" for zz, k, x, y in rows[tid]["widths"] if zz == z]
+                cells = [f"{k} {x:.3f}/{y:.3f} (record {r:+.3f})" for zz, k, x, y, r in rows[tid]["widths"] if zz == z]
                 if cells:
                     print(f"    {z:.2f} H: " + "   ".join(cells))
     if a.json:

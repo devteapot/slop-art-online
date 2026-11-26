@@ -78,6 +78,13 @@ PROFILE = dict(palette="tag", ref=AUBURN, shade=[41, 1, 0], mid=[101, 34, 5], li
 ANCHORS = [{"ref": [19, 17, 17], "shade": [0, 0, 0], "mid": [6, 5, 5], "light": [21, 19, 18], "highlight": [50, 46, 46]}, {"ref": [51, 34, 23], "shade": [7, 2, 1], "mid": [44, 28, 15], "light": [56, 37, 26], "highlight": [66, 48, 36]}, {"ref": [158, 125, 71], "shade": [88, 64, 32], "mid": [161, 123, 51], "light": [190, 159, 102], "highlight": [237, 197, 122]}, {"ref": [133, 133, 133], "shade": [68, 68, 68], "mid": [126, 126, 126], "light": [159, 159, 159], "highlight": [193, 193, 193]}]
 
 
+def own_profile(glb):
+    """A file's own profile values over PROFILE: a master's (hair.MASTERS[...]["profile"]), written by person.py to
+    the file's .hairpage.json; {} for every other style."""
+    side = glb[:-4] + ".hairpage.json"
+    return json.load(open(side)).get("profile", {}) if os.path.exists(side) else {}
+
+
 # The lock lines' colour (the third pass, 2026-11-20): a darker shade of the hair's own mid swatch,
 # never near-black on hair that is not: OKLab lightness `lightness` x the mid's, and at least
 # `contrast` below it (which keeps a line on black hair, whose mid is near black, at black), the
@@ -179,14 +186,22 @@ def hair_prims(j):
 
 
 def place(files):
-    """Each file's cells: [page, col, row, w, h]."""
-    pages, out = [], {}
-    for name, (w, h) in files:
+    """Each file's cells: [page, col, row, w, h]. `files`: (name, (w, h)) or (name, (w, h), group). A page holds one
+    group's files only: the client draws a page's files as one material, so a file whose own profile differs from the
+    shared one (a master's, hair.MASTERS[...]["profile"]) goes on a page of its own group (S7, the coordinator's
+    decision 2026-11-21; the pages audit holds a page to one profile)."""
+    pages, groups, out = [], [], {}
+    for item in files:
+        name, (w, h) = item[0], item[1]
+        grp = item[2] if len(item) > 2 else None
         if w > 2 or h > 2:
             raise SystemExit(f"hair_page: {name} needs {w} x {h} cells at {DENSITY_MM} mm a texel: over the hair budget (2 x 2)")
         for k in range(len(pages) + 1):
             if k == len(pages):
                 pages.append(np.zeros((GRID, GRID), bool))
+                groups.append(grp)
+            if groups[k] != grp:
+                continue
             g = pages[k]
             spot = next(((c, r) for r in range(GRID - h + 1) for c in range(GRID - w + 1) if not g[r:r + h, c:c + w].any()), None)
             if spot:
@@ -356,6 +371,7 @@ def main():
                         h.pop(k)
                 prof, anc = with_inks(PROFILE, anchors)
                 h.update(prof)
+                h.update(own_profile(g))
                 if anc:
                     h["anchors"] = anc
                 if strands_on(h.get("highlight_map")):
@@ -376,7 +392,7 @@ def main():
         files.append((os.path.basename(g), sp, (int(math.ceil(sp["size"][0] / CELL)), int(math.ceil(sp["size"][1] / CELL)))))
     if not files:
         raise SystemExit(f"hair_page: no file in {a.folder} has a .hairpage.json (build with SLOP_PORT=hair)")
-    cells, n_pages = place([(n, wh) for n, _, wh in files])
+    cells, n_pages = place([(n, wh, json.dumps(sp["profile"], sort_keys=True) if sp.get("profile") else None) for n, sp, wh in files])
     rng = files[0][1]["range_px"]
     R = [np.zeros((PAGE, PAGE), np.float32) for _ in range(n_pages)]
     # The strands (B) when any file carries their mapping; a page without them keeps B 0.
@@ -398,6 +414,7 @@ def main():
         j, binary = read_glb(path)
         prof, anc = with_inks(PROFILE, anchors)
         profile = dict(prof, ink_range=rng / PAGE, ink_m_uv=PAGE * DENSITY_MM / 1000, highlight_map=page_path(k))
+        profile.update(sp.get("profile", {}))  # a master's own (hair.MASTERS[...]["profile"]), over PROFILE
         if anc:
             profile["anchors"] = anc
         if B is not None:

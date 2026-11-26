@@ -1,0 +1,233 @@
+{
+ "adult-f-a.glb": {
+  "rest": 707,
+  "Fcl_EYE_Close": [
+   3,
+   3
+  ],
+  "Fcl_MTH_A": [
+   34,
+   0
+  ]
+ },
+ "adult-f-b.glb": {
+  "rest": 483,
+  "Fcl_EYE_Close": [
+   3,
+   3
+  ],
+  "Fcl_MTH_A": [
+   20,
+   0
+  ]
+ },
+ "adult-f-c.glb": {
+  "rest": 451,
+  "Fcl_EYE_Close": [
+   0,
+   0
+  ],
+  "Fcl_MTH_A": [
+   32,
+   32
+  ]
+ },
+ "adult-m-a.glb": {
+  "rest": 679,
+  "Fcl_EYE_Close": [
+   17,
+   16
+  ],
+  "Fcl_MTH_A": [
+   2,
+   0
+  ]
+ },
+ "adult-m-b.glb": {
+  "rest": 579,
+  "Fcl_EYE_Close": [
+   8,
+   8
+  ],
+  "Fcl_MTH_A": [
+   4,
+   4
+  ]
+ },
+ "adult-m-c.glb": {
+  "rest": 489,
+  "Fcl_EYE_Close": [
+   8,
+   8
+  ],
+  "Fcl_MTH_A": [
+   2,
+   2
+  ]
+ },
+ "child-u-a.glb": {
+  "rest": 893,
+  "Fcl_EYE_Close": [
+   3,
+   3
+  ],
+  "Fcl_MTH_A": [
+   14,
+   0
+  ]
+ },
+ "child-u-b.glb": {
+  "rest": 993,
+  "Fcl_EYE_Close": [
+   3,
+   3
+  ],
+  "Fcl_MTH_A": [
+   9,
+   0
+  ]
+ },
+ "child-u-c.glb": {
+  "rest": 831,
+  "Fcl_EYE_Close": [
+   3,
+   3
+  ],
+  "Fcl_MTH_A": [
+   20,
+   16
+  ]
+ },
+ "elder-f-a.glb": {
+  "rest": 911,
+  "Fcl_EYE_Close": [
+   8,
+   8
+  ],
+  "Fcl_MTH_A": [
+   9,
+   0
+  ]
+ },
+ "elder-f-b.glb": {
+  "rest": 821,
+  "Fcl_EYE_Close": [
+   8,
+   8
+  ],
+  "Fcl_MTH_A": [
+   4,
+   0
+  ]
+ },
+ "elder-f-c.glb": {
+  "rest": 801,
+  "Fcl_EYE_Close": [
+   8,
+   8
+  ],
+  "Fcl_MTH_A": [
+   24,
+   22
+  ]
+ },
+ "elder-m-a.glb": {
+  "rest": 677,
+  "Fcl_EYE_Close": [
+   18,
+   18
+  ],
+  "Fcl_MTH_A": [
+   2,
+   0
+  ]
+ },
+ "elder-m-b.glb": {
+  "rest": 597,
+  "Fcl_EYE_Close": [
+   18,
+   18
+  ],
+  "Fcl_MTH_A": [
+   6,
+   0
+  ]
+ },
+ "elder-m-c.glb": {
+  "rest": 467,
+  "Fcl_EYE_Close": [
+   18,
+   18
+  ],
+  "Fcl_MTH_A": [
+   4,
+   4
+  ]
+ },
+ "youth-f-a.glb": {
+  "rest": 809,
+  "Fcl_EYE_Close": [
+   3,
+   3
+  ],
+  "Fcl_MTH_A": [
+   38,
+   0
+  ]
+ },
+ "youth-f-b.glb": {
+  "rest": 497,
+  "Fcl_EYE_Close": [
+   3,
+   3
+  ],
+  "Fcl_MTH_A": [
+   20,
+   0
+  ]
+ },
+ "youth-f-c.glb": {
+  "rest": 457,
+  "Fcl_EYE_Close": [
+   3,
+   3
+  ],
+  "Fcl_MTH_A": [
+   36,
+   32
+  ]
+ },
+ "youth-m-a.glb": {
+  "rest": 693,
+  "Fcl_EYE_Close": [
+   10,
+   10
+  ],
+  "Fcl_MTH_A": [
+   18,
+   0
+  ]
+ },
+ "youth-m-b.glb": {
+  "rest": 593,
+  "Fcl_EYE_Close": [
+   8,
+   8
+  ],
+  "Fcl_MTH_A": [
+   4,
+   0
+  ]
+ },
+ "youth-m-c.glb": {
+  "rest": 417,
+  "Fcl_EYE_Close": [
+   10,
+   10
+  ],
+  "Fcl_MTH_A": [
+   0,
+   0
+  ]
+ }
+}

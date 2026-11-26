@@ -36,6 +36,8 @@ pub mod bond_offer_table;
 pub mod bond_offer_type;
 pub mod brain_table;
 pub mod brain_type;
+pub mod census_table;
+pub mod census_type;
 pub mod character_earshot_table;
 pub mod character_earshot_type;
 pub mod character_senses_table;
@@ -444,6 +446,8 @@ pub use bond_offer_table::*;
 pub use bond_offer_type::BondOffer;
 pub use brain_table::*;
 pub use brain_type::Brain;
+pub use census_table::*;
+pub use census_type::Census;
 pub use character_earshot_table::*;
 pub use character_earshot_type::CharacterEarshot;
 pub use character_senses_table::*;
@@ -1528,6 +1532,7 @@ pub struct DbUpdate {
     body: __sdk::TableUpdate<Body>,
     bond_offer: __sdk::TableUpdate<BondOffer>,
     brain: __sdk::TableUpdate<Brain>,
+    census: __sdk::TableUpdate<Census>,
     character: __sdk::TableUpdate<Character>,
     character_earshot: __sdk::TableUpdate<CharacterEarshot>,
     character_senses: __sdk::TableUpdate<CharacterSenses>,
@@ -1735,6 +1740,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "brain" => db_update
                     .brain
                     .append(brain_table::parse_table_update(table_update)?),
+                "census" => db_update
+                    .census
+                    .append(census_table::parse_table_update(table_update)?),
                 "character" => db_update
                     .character
                     .append(character_table::parse_table_update(table_update)?),
@@ -2274,6 +2282,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.brain = cache
             .apply_diff_to_table::<Brain>("brain", &self.brain)
             .with_updates_by_pk(|row| &row.id);
+        diff.census = cache
+            .apply_diff_to_table::<Census>("census", &self.census)
+            .with_updates_by_pk(|row| &row.id);
         diff.character = cache
             .apply_diff_to_table::<Character>("character", &self.character)
             .with_updates_by_pk(|row| &row.id);
@@ -2780,6 +2791,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "brain" => db_update
                     .brain
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "census" => db_update
+                    .census
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "character" => db_update
                     .character
@@ -3307,6 +3321,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "brain" => db_update
                     .brain
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "census" => db_update
+                    .census
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "character" => db_update
                     .character
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3807,6 +3824,7 @@ pub struct AppliedDiff<'r> {
     body: __sdk::TableAppliedDiff<'r, Body>,
     bond_offer: __sdk::TableAppliedDiff<'r, BondOffer>,
     brain: __sdk::TableAppliedDiff<'r, Brain>,
+    census: __sdk::TableAppliedDiff<'r, Census>,
     character: __sdk::TableAppliedDiff<'r, Character>,
     character_earshot: __sdk::TableAppliedDiff<'r, CharacterEarshot>,
     character_senses: __sdk::TableAppliedDiff<'r, CharacterSenses>,
@@ -3999,6 +4017,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Body>("body", &self.body, event);
         callbacks.invoke_table_row_callbacks::<BondOffer>("bond_offer", &self.bond_offer, event);
         callbacks.invoke_table_row_callbacks::<Brain>("brain", &self.brain, event);
+        callbacks.invoke_table_row_callbacks::<Census>("census", &self.census, event);
         callbacks.invoke_table_row_callbacks::<Character>("character", &self.character, event);
         callbacks.invoke_table_row_callbacks::<CharacterEarshot>(
             "character_earshot",
@@ -5026,6 +5045,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         body_table::register_table(client_cache);
         bond_offer_table::register_table(client_cache);
         brain_table::register_table(client_cache);
+        census_table::register_table(client_cache);
         character_table::register_table(client_cache);
         character_earshot_table::register_table(client_cache);
         character_senses_table::register_table(client_cache);
@@ -5199,6 +5219,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "body",
         "bond_offer",
         "brain",
+        "census",
         "character",
         "character_earshot",
         "character_senses",
