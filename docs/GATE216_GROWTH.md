@@ -158,6 +158,25 @@ Spans are ms/s of profiled window. Ticks/s and DB thread are the unprofiled 50 s
 - **`sex_seen`:** a mind's row per person whose body it has seen, kept for the observer's life. It is memory by design, but it is unbounded per observer, unlike `familiar` (bounded per actor). Propose a bound by age like `familiar`'s, as a design decision.
 - **The global structures revision.** Every death bumps `STRUCTURES_REVISION` and clears every chunk's cache and every viewer's cached scene structures (`perceive::scene_structures`). A per-chunk revision would keep the battle's neighbours' caches.
 
+### 4.4 The follow-up (`growth-fix-2`, the general coordinator's decisions of 2026-11-23)
+
+1. **The players' sweep order** (`4caac784d`): the due players are swept in id order, starting at `tick mod n` (`common::tick_rotation`, the bystander wakes' rule).
+   - **Before:** they went in `combat::humans()`'s std `HashMap` order. On wasm32 that order follows memory addresses, so it differed between runs and builds (§5.2).
+   - **Why a rotation:** a plain id order would put the lowest ids first in every tick, the bias fair-ties removed.
+2. **Structures in sight without copying every row** (`b67061d42`). The same values in the same order:
+   - Chunk caches hold `Rc<Structure>` (`common::ChunkList`), so `structures_near`, `few_near` and the filtered lists share rows. A graph's scene list (`brain.scene.structures`, which `brain.target` and `brain.nearest` build when first asked) no longer copies the thousands of remains in sight.
+   - **Per-chunk invalidation:** remains made at a death or gone at their time invalidate only their own chunk's list (`invalidate_structures_in`). The structures revision moves as before.
+   - **Noticing** (`notice_delta`) passes a whole chunk when every row in it would be passed one by one (`common::chunk_brief`):
+     - its highest id is no newer than the last look's;
+     - the box round its rows lies inside the last look's disc, with a 5 cm margin.
+   - That chunk's ids in sight still count for the look's highest id. Only without the check laws, which list every passed row.
+3. **`sex_seen` bounded like the knowledge it belongs to** (`38a30b878`, rules-visible):
+   - a dead person's rows go when their remains are gone (`tick::expire_remains`, through a new index on `sex_seen.known`);
+   - an observer's row about someone goes when `prune_familiar` forgets that creature.
+4. **A mind-side cost found on the way** (not changed): the mind service subscribes to the whole `sex_seen` table and finds a pair with `conn.db.sex_seen().iter().find(..)` (`living/mind/src/mind.rs:640`).
+   - That clones the whole SDK cache under its lock on every lookup, the pattern that collapsed battles before ([INPUT_LATENCY.md](INPUT_LATENCY.md#mind-dispatch-profile-fast-dispatch-2026-11-20)).
+   - With the table now bounded it grows less. A keyed index in the mind's own `Index` would remove it.
+
 ## 5. The fixes measured at 30 minutes
 
 **The clean run** (`long-relayfix2`, 11:41–12:12):
@@ -237,6 +256,14 @@ These are minds' and graphs' noticing over every structure in sight (remains inc
 - **Main against a byte-identical copy of itself: not identical, both times.** Only `seen_stock` ids differ, the same rows once the id is ignored.
 
 So the `seen_stock` difference is the sweep-order noise of the comparison itself, found between copies of one binary too.
+
+**On growth-fix-2**, a fixture with many remains: `det_compare prepare --remains 1500`, which spawns 1,500 fighters where the battle will be and kills them first. Then the battle of 200 with 16 players, Cullet, 1,800 ticks, 61k rows compared:
+
+| Base | Candidate | Result |
+|---|---|---|
+| sweep rotation (`4caac784d`) | a byte-identical copy, twice | identical both times: the order noise is gone |
+| sweep rotation | + structures without copies (`b67061d42`) | identical: what is noticed and what minds' scenes hold are unchanged |
+| sweep rotation | + `sex_seen` bounded (`38a30b878`) | identical in 30 s: no remains expire and no familiarity is evicted in that time; see verify-core `sex_seen_bound` |
 
 ### 5.3 Checks
 
