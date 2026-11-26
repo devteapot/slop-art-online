@@ -741,7 +741,16 @@ impl<'a> Ev<'a> {
                                     return St::Run;
                                 }
                             }
-                            let (_, why) = self.unresolved(t);
+                            let (code, why) = self.unresolved(t);
+                            // This leaf's own activity under way (performing: an approach is
+                            // held above) has lost its target: it is broken off now and told,
+                            // in the leaf's own look, not left for `after` to drop unsaid
+                            // (or for a fallback branch's start to replace).
+                            let own = self.ctx.db.activity().id().find(self.me.id).filter(|x| x.node == id && x.revision == self.st.revision);
+                            if let Some(act) = own.filter(|x| !crate::combat::committed(&common::scripts(self.ctx), x)) {
+                                let told = lost_why(code, &why, act.target.class);
+                                act::lost(self.ctx, act, self.now, &told, code);
+                            }
                             return self.leaf_fail(id, &format!("{}: {why}", a.skill));
                         }
                     },
@@ -2519,8 +2528,10 @@ impl<'a> Ev<'a> {
         let ctx = self.ctx;
         let id = self.me.id;
         let cancel = common::detail_span("after.cancel");
-        // Interrupt an activity no running leaf owns anymore (the branch lost priority);
-        // a deliberate act is not the graph's to interrupt (only a reflex does, in `leaf`).
+        // Interrupt an activity no running leaf owns anymore (the branch lost priority, a new
+        // plan replaced it: the character's own choice, not told); a deliberate act is not the
+        // graph's to interrupt (only a reflex does, in `leaf`). A leaf whose own activity lost
+        // its target has broken it off and told why already (`act::lost`, in `Node::Do`).
         if let Some(a) = ctx.db.activity().id().find(id) {
             if act::held(a.node) {
                 self.running = Some(a.node);
@@ -2636,6 +2647,19 @@ impl<'a> Ev<'a> {
 /// A character's last look is the base of the next (`notice_delta`) for this long: about the seen
 /// set's horizon halved, so a look that came long after its last checks everything.
 const LOOK_VALID_MS: u64 = SEEN_MS / 2;
+
+/// Why a leaf's activity under way lost its target (`act::lost`), from why the leaf could not
+/// resolve it now (`Ev::unresolved`) and what the activity was aimed at (`TargetRef::class`).
+/// Out of sight, in steering's words for a target lost on the way ("lost sight of them",
+/// `motion::held`), since the target was in sight when it started; otherwise the resolver's own
+/// words ("#7 is dead: their remains lie in sight", "nobody has spoken to you in the last minute").
+fn lost_why(code: &str, why: &str, class: u8) -> String {
+    match (code == living_rules::outcome::act::UNSEEN, class) {
+        (true, 3) => "lost sight of them".into(),
+        (true, _) => "lost sight of it".into(),
+        (false, _) => why.to_string(),
+    }
+}
 
 /// A structure's key in the seen set (`recently_seen`).
 fn structure_key(id: u64) -> u32 {
@@ -2897,7 +2921,18 @@ fn joined_tiles(all: &[(u64, String, u32, (f32, f32), f32)], same: &[usize], sta
 
 #[cfg(test)]
 mod tests {
-    use super::{fight_fits, personal, Personal};
+    use super::{fight_fits, lost_why, personal, Personal};
+
+    /// give-out-of-sight-line: a leaf's activity whose target went out of sight is told in
+    /// steering's words; any other reason in the resolver's own.
+    #[test]
+    fn a_lost_target_is_told_what_happened() {
+        use living_rules::outcome::act::{REFUSED, UNKNOWN, UNSEEN};
+        assert_eq!(lost_why(UNSEEN, "no #4 in sight", 3), "lost sight of them");
+        assert_eq!(lost_why(UNSEEN, "no berry bush in sight", 1), "lost sight of it");
+        assert_eq!(lost_why(REFUSED, "#4 is dead: their remains lie in sight", 3), "#4 is dead: their remains lie in sight");
+        assert_eq!(lost_why(UNKNOWN, "nobody has spoken to you in the last minute", 3), "nobody has spoken to you in the last minute");
+    }
 
     /// relation-fight: what one said decides, then a relation that is clear, then the stance.
     #[test]
