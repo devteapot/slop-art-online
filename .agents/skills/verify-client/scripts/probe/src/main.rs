@@ -106,6 +106,8 @@ fn stream_callbacks(c: &DbConnection, signals: Arc<Mutex<Signals>>) {
     }
     // A player's combat feed as event rows (views step 2, `combat_feed`).
     events!(c, signals; seen_body_cue, seen_fighter_cue, seen_doing_cue, combat_feed);
+    // Each finished skill use for exporters (private, the owner's; `skill_use_events.py`).
+    events!(c, signals; skill_use_event);
 }
 
 fn stream_initial(c: &DbConnection, r: &Request, identity: &str) {

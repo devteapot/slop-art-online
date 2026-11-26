@@ -451,9 +451,14 @@ pub fn grant_repertoires(ctx: &ReducerContext) -> Result<(), String> {
 pub fn purge_dead(ctx: &ReducerContext) -> Result<(), String> {
     require_admin(ctx)?;
     let dead: Vec<u32> = ctx.db.character().iter().filter(|c| !c.alive).map(|c| c.id).collect();
+    let now = common::now_ms(ctx);
     for id in &dead {
         act::forget_dead(ctx, *id);
         act::retire(ctx, *id);
+        // Their skill uses go after the grace, as a death's do now.
+        if ctx.db.dead_skill_use_due().actor().find(*id).is_none() {
+            combat::uses_died(ctx, *id, now);
+        }
     }
     log::info!("purged mind-serving rows of {} dead characters", dead.len());
     Ok(())

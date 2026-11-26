@@ -1799,7 +1799,8 @@ fn dodge_too_early(ctx: &ReducerContext, vc: &Character, attacker: u32, skill: &
     let why = format!("it was over before {came} came");
     u.outcome = format!("{MADE_WAY}: {why}");
     let skill = u.skill.clone();
-    ctx.db.skill_use().id().update(u);
+    let u = ctx.db.skill_use().id().update(u);
+    crate::combat::sent(ctx, "outcome", u, now);
     tell(ctx, vc.id, false, &skill, &skill, &why, now, living_rules::outcome::act::FAILED, true);
 }
 
@@ -3145,6 +3146,7 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
     forget_dead(ctx, id);
     retire(ctx, id);
     crate::combat::died(ctx, id, killer, at, now, unseen.is_some());
+    crate::combat::uses_died(ctx, id, now);
 }
 
 #[cfg(test)]
