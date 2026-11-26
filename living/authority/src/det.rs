@@ -13,7 +13,7 @@
 //! among its table's rows (the order ids are given in, which a skip keeps), and the references to
 //! such ids that the battle writes are renamed the same way: far handles in text and in
 //! experiences, structures (remains) in inventories, rot and familiarity, lines heard, missiles'
-//! uses. One rule depends on an id's value: an experience's insert checks its observer's window
+//! uses, and typed ids in deliberation scenes. One rule depends on an id's value: an experience's insert checks its observer's window
 //! when `id % 32 == 0` (`perceive::percept`); under the law it checks on every 32nd insert instead
 //! ([`window_due`]), the same cadence without the server's skips.
 
@@ -22,6 +22,7 @@ use crate::floor::genesis;
 use crate::records::{record, record_clock, record_party};
 use crate::tables::*;
 use living_rules::script::FAR_HANDLE_BASE;
+use serde_json::Value;
 use spacetimedb::{ReducerContext, Table};
 use std::collections::HashMap;
 
@@ -106,6 +107,107 @@ impl Ranks {
         }
     }
 
+    /// Deliberation's JSON carries ids in several namespaces. Rank them where the
+    /// scene builder provides the type, since unrelated tables may allocate the same number.
+    fn scene(&self, source: &str) -> Option<String> {
+        let mut scene: Value = serde_json::from_str(source).ok()?;
+        let character = |id| self.of("character", id);
+        if let Some(you) = scene.get_mut("you") {
+            rank_field(you, "id", character);
+        }
+        for key in ["creatures", living_rules::species::SMELLED] {
+            if let Some(rows) = scene.get_mut(key).and_then(Value::as_array_mut) {
+                for row in rows {
+                    rank_field(row, "id", |id| {
+                        if (FAR_HANDLE_BASE as u64..=u32::MAX as u64).contains(&id) {
+                            self.far(id as u32) as u64
+                        } else {
+                            character(id)
+                        }
+                    });
+                    if let Some(visibly) = row.get_mut("visibly") {
+                        rank_field(visibly, "at", character);
+                    }
+                }
+            }
+        }
+        for (key, table) in [("structures", "structure"), ("resources", "resource_node")] {
+            if let Some(rows) = scene.get_mut(key).and_then(Value::as_array_mut) {
+                for row in rows {
+                    let row = if table == "resource_node" {
+                        let Some(nearest) = row.get_mut("nearest") else { continue };
+                        nearest
+                    } else {
+                        row
+                    };
+                    rank_field(row, "id", |id| self.of(table, id));
+                }
+            }
+        }
+        for (key, party) in [("asked of you", "from"), ("you are waiting on", "to")] {
+            if let Some(rows) = scene.get_mut("you").and_then(|you| you.get_mut(key)).and_then(Value::as_array_mut) {
+                for row in rows {
+                    rank_field(row, party, character);
+                    rank_field(row, "offer", |id| self.of("trade_offer", id));
+                }
+            }
+        }
+        if let Some(words) = scene.get_mut(living_rules::script::speech::EARSHOT) {
+            if let Some(source) = words.as_str() {
+                *words = replace_ids(source, "(#", &[")"], |id| {
+                    if (FAR_HANDLE_BASE as u64..=u32::MAX as u64).contains(&id) {
+                        Some(format!("far_handle:{}", self.of("far_handle", id - FAR_HANDLE_BASE as u64)))
+                    } else {
+                        Some(format!("character:{}", character(id)))
+                    }
+                }).into();
+            }
+        }
+        if let Some(acts) = scene.pointer_mut("/you/decided, not yet done").and_then(Value::as_array_mut) {
+            for act in acts {
+                if let Some(source) = act.as_str() {
+                    *act = replace_ids(source, " → #", &[""], |id| {
+                        let (table, rank) = self.target_rank(id)?;
+                        Some(format!("{table}:{rank}"))
+                    }).into();
+                }
+            }
+        }
+        Some(scene.to_string())
+    }
+
+    // Queued target descriptions erase the type. Follow brain::resolve's namespace
+    // priority for extant ids and leave unresolvable numbers alone.
+    fn target_rank(&self, id: u64) -> Option<(&'static str, u64)> {
+        if (FAR_HANDLE_BASE as u64..=u32::MAX as u64).contains(&id) {
+            return Some(("far_handle", self.of("far_handle", id - FAR_HANDLE_BASE as u64)));
+        }
+        ["character", "structure", "resource_node"].into_iter().find_map(|table| {
+            self.0[table].binary_search(&id).ok().map(|rank| (table, rank as u64))
+        })
+    }
+
+    fn reason(&self, source: &str) -> String {
+        let character = |id| Some(self.of("character", id).to_string());
+        let target = |id| self.target_rank(id).map(|(table, rank)| format!("{table}:{rank}"));
+        source.split('\n').map(|line| {
+            // These are authority-generated sentences. Leave other prose and its numbers alone.
+            let line = replace_ids(line, "(offer ", &["), or let it pass."], |id| {
+                Some(self.of("trade_offer", id).to_string())
+            });
+            let line = replace_ids(&line, "(#", &[") asks to start a family with you;"], character);
+            if line.starts_with("You long for a child with ") || line.starts_with("You long for another child with ") {
+                replace_ids(&line, "(#", &[")."], character)
+            } else if line.starts_with("What you had decided did not work out: ") {
+                let line = replace_ids(&line, " → #", &[":"], target);
+                let line = replace_ids(&line, "no #", &[" in sight"], target);
+                replace_ids(&line, "#", &[" is dead: their remains lie in sight"], character)
+            } else {
+                line
+            }
+        }).collect::<Vec<_>>().join("\n")
+    }
+
     /// A structure's owner key (`STRUCTURE_BIT | id`) or familiarity key (`FAM_STRUCTURE | id`)
     /// by the structure's rank.
     fn structure_key(&self, key: u64, bit: u64) -> u64 {
@@ -115,6 +217,34 @@ impl Ranks {
             key
         }
     }
+}
+
+fn rank_field(row: &mut Value, key: &str, rank: impl Fn(u64) -> u64) {
+    if let Some(field) = row.get_mut(key) {
+        if let Some(id) = field.as_u64() {
+            *field = rank(id).into();
+        }
+    }
+}
+
+fn replace_ids(source: &str, prefix: &str, suffixes: &[&str], rank: impl Fn(u64) -> Option<String>) -> String {
+    let mut out = String::with_capacity(source.len());
+    let mut rest = source;
+    while let Some((before, after)) = rest.split_once(prefix) {
+        out.push_str(before);
+        out.push_str(prefix);
+        let digits = after.bytes().take_while(u8::is_ascii_digit).count();
+        let (number, tail) = after.split_at(digits);
+        let matches = suffixes.iter().any(|suffix| if suffix.is_empty() { tail.is_empty() } else { tail.starts_with(suffix) });
+        if let Some(replacement) = matches.then(|| number.parse().ok().and_then(&rank)).flatten() {
+            out.push_str(&replacement);
+        } else {
+            out.push_str(number);
+        }
+        rest = tail;
+    }
+    out.push_str(rest);
+    out
 }
 
 /// A table's rows as a multiset: the wrapping sum of the rows' hashes and the row count. The
@@ -170,7 +300,18 @@ pub fn trace(ctx: &ReducerContext, tick: u64) {
     hash_plain!(ctx, r, out;
         world, look, sex, gate, routine_stat, background, world_law, law_override, law_revision,
         cover_law, cover_ground, land_plan, settlement, lot, body, steer, walk_route, vitals, activity,
-        brain, mind_state, wake, infant_cry, speech_card, slumber, deliberation, persona, standing,
+        brain, mind_state, wake, infant_cry, speech_card, slumber,
+    );
+    out.push(("deliberation", table_hash(r, ctx.db.deliberation().iter().map(|mut d| {
+        d.actor = r.of("character", d.actor as u64) as u32;
+        d.reason = r.reason(&d.reason);
+        if let Some(scene) = r.scene(&d.scene) {
+            d.scene = scene;
+        }
+        d
+    }))));
+    hash_plain!(ctx, r, out;
+        persona, standing,
         rearing, genome, pasture, skill_card, fighter, readiness, character_senses, character_earshot,
         weather, skill_code, act_card, doing, heard, knowledge_epoch, hear_salt,
         fighter_seen, player, motion_seen, doing_seen, motion_near, fighter_near, doing_near,
@@ -217,7 +358,13 @@ pub fn trace(ctx: &ReducerContext, tick: u64) {
         x.use_id = r.of("skill_use", x.use_id);
         x
     }))));
-    out.push(("resource_node", table_hash(r, ctx.db.resource_node().iter())));
+    out.push(("resource_node", table_hash(r, ctx.db.resource_node().iter().map(|mut n| {
+        n.id = r.of("resource_node", n.id);
+        if n.pool != 0 {
+            n.pool = r.of("resource_node", n.pool);
+        }
+        n
+    }))));
     // Players' rows (det_compare with players). A sweep inserts a viewer's `perceived` and
     // `projected` rows in a hash set's order, which a module instance's history decides, so two
     // copies give the same rows other ids, and other ranks. These tables, and the rows that name
