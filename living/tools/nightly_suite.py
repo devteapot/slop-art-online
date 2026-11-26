@@ -86,14 +86,12 @@ def plan_entries():
                "chronicle_recent", "notice_inplace", "notice_delta", "seen_remains", "regard_check", "moves",
                "known_ground", "nav_belief", "stamina", "death-names", "intents", "fov", "placement", "answers",
                "admin_vitals", "alert_after_hit", "apart", "howl_reach", "fast_diag", "ground_goto", "relation_fight",
-               # the gate's step-1 cases, for a main from before them (dropped when the gate reaches them)
-               "say", "heard_first", "audience", "flee_wall", "pursue_last_seen", "act_gaps", "act_replace",
-               "truthful_refusals", "committed", "dodge_told", "health_seen", "seize"]
+               "heed", "sex_seen_bound"]
     for s in default:
         e.append({"id": s, "seed": W, "area": "core", "cmds": SCENE(s), "scene": s})
     for s in ("seen_remains_gaze", "sweep_kept", "sweep_rollback", "sweep_marks"):
         e.append({"id": s, "seed": "cullet", "area": "perception", "cmds": SCENE(s), "scene": s})
-    for s in ("low", "dealings", "outcomes"):
+    for s in ("low", "dealings"):
         e.append({"id": s, "seed": "island", "area": "core", "cmds": SCENE(s), "scene": s})
     for s in ("drop", "owners"):
         e.append({"id": s, "seed": "plan-test", "area": "perception", "cmds": SCENE(s), "scene": s})
@@ -103,7 +101,7 @@ def plan_entries():
         e.append({"id": s, "seed": "cullet-laws", "area": "laws", "cmds": SCENE(s), "scene": s, "minutes": 50})
     e.append({"id": "winter", "seed": "{root}/" + C + "/winter", "area": "laws", "cmds": SCENE("winter"), "scene": "winter", "minutes": 15})
     e.append({"id": "infant", "seed": "{root}/" + C + "/infant", "area": "life", "cmds": SCENE("infant"), "scene": "infant",
-              "target": "verify-infant", "minutes": 130})
+              "minutes": 130})
     for s in ("lifecycle", "family_laws", "wildlife", "remains", "flee", "grazing"):
         e.append({"id": s, "seed": "stage1-acts", "area": "life" if s in ("lifecycle", "family_laws") else "wildlife",
                   "cmds": SCENE(s), "scene": s, "minutes": 30 if s == "wildlife" else 10})
@@ -152,8 +150,8 @@ def scenes_in(root):
     return names
 
 
-def gate_cases(root):
-    """The verify-core cases the merge's scene gate runs (CASES in that checkout's scene_gate.py)."""
+def gate_cases(root, surface="verify-core"):
+    """The given verification surface's cases the merge's scene gate runs (CASES in that checkout's scene_gate.py)."""
     tree = ast.parse((Path(root) / "living/tools/scene_gate.py").read_text())
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "CASES" for t in node.targets):
@@ -162,7 +160,7 @@ def gate_cases(root):
                 if isinstance(k, ast.Constant) and isinstance(v, ast.Dict):
                     fields = {kk.value: vv for kk, vv in zip(v.keys, v.values) if isinstance(kk, ast.Constant)}
                     skill = fields.get("skill")
-                    if isinstance(skill, ast.Constant) and skill.value == "verify-core":
+                    if isinstance(skill, ast.Constant) and skill.value == surface:
                         out.add(k.value)
             return out
     return set()
@@ -185,17 +183,20 @@ def plan(root):
 STOP = threading.Event()
 
 
-def lock_held(path):
-    """Whether another process holds `path` (an flock): taken and let go at once when free."""
+def lock_held(path, proc):
+    """Inspect a queue flock without acquiring or opening the queue's lock file."""
     try:
-        with open(path, "a") as f:
-            try:
-                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                return False
-            except BlockingIOError:
-                return True
-    except OSError:
+        st = path.stat()
+    except FileNotFoundError:
         return False
+    device_inode = (os.major(st.st_dev), os.minor(st.st_dev), st.st_ino)
+    for line in (proc / "locks").read_text().splitlines():
+        fields = line.split()
+        if fields[1] == "FLOCK":
+            major, minor, inode = fields[5].split(":")
+            if (int(major, 16), int(minor, 16), int(inode)) == device_inode:
+                return True
+    return False
 
 
 def merge_queue_active(mq=MQ, proc=Path("/proc")):
@@ -204,7 +205,7 @@ def merge_queue_active(mq=MQ, proc=Path("/proc")):
     draining them do not count (the drain that starts later is seen at the next entry): on
     2026-11-23 queue.txt kept a branch merged hours before, which would have held a night."""
     for name in ("drain.lock", "lock"):
-        if lock_held(mq / name):
+        if lock_held(mq / name, proc):
             return f"{name} is held (the merge queue is at work)"
     for p in proc.iterdir():
         if not p.name.isdecimal() or p.name == str(os.getpid()):
@@ -247,10 +248,10 @@ def wait_turn(until, max_load, say, mq=MQ, sleep=None, now=datetime.datetime.now
 
 
 @contextlib.contextmanager
-def battle_lock(until, say, mq=MQ, sleep=time.sleep, now=datetime.datetime.now):
+def battle_lock(until, say, path=MQ / "battle.lock", sleep=time.sleep, now=datetime.datetime.now):
     """battle.lock exclusively, taken first with nothing else held; yields False when `until`
     came before it was free."""
-    f = (mq / "battle.lock").open("a")
+    f = path.open("a")
     try:
         while True:
             try:
@@ -355,6 +356,12 @@ def first_failures(evidence, entry):
     return got[:5]
 
 
+def launch_command(run, seed, target):
+    # Raw CLI and HTTP scene drivers do not renew the inactivity lease.
+    return [sys.executable, V, "launch", "--run", run, "--seed", seed,
+            "--target-dir", str(target), "--driver-pid", str(os.getpid())]
+
+
 def run_entry(entry, root, stamp, env, until, max_load, say):
     run = f"{entry.get('prefix', 'core')}-nt{stamp}-{re.sub(r'[^a-z0-9]+', '-', entry['id'].lower()).strip('-')}"[:56]
     ev = Path(root) / ".local/living/verify" / run
@@ -372,14 +379,21 @@ def run_entry(entry, root, stamp, env, until, max_load, say):
     codes = []
     try:
         for cmd in entry.get("prep", []):
-            codes.append(sh(slot + [fmt(c) for c in cmd] if cmd[0] == "cargo" else [fmt(c) for c in cmd], root, log, env, 1800))
+            prep = [fmt(c) for c in cmd]
+            if cmd[0] == "cargo":
+                # drive.py finds the client probe in the verification checkout.
+                probe_dir = ev.parent / "target-client"
+                prep = lock + slot + prep + ["--target-dir", str(probe_dir)]
+            codes.append(sh(prep, root, log, env, 1800))
         if any(codes):
             return dict(result, status="red", why="prep failed", codes=codes, minutes=round((time.time() - t0) / 60, 1),
                         failed=first_failures(ev, entry))
         if not entry.get("driver"):
-            launch = [ "python3", V, "launch", "--run", run, "--seed", fmt(entry["seed"])]
-            if entry.get("target"):
-                launch += ["--target-dir", str(STATE / entry["target"])]
+            target = Path(env["CARGO_TARGET_DIR"])
+            if entry["seed"] != W:
+                seed_key = entry["id"] if "{" in entry["seed"] else entry["seed"]
+                target = target / seed_key
+            launch = launch_command(run, fmt(entry["seed"]), target)
             code = sh(lock + slot + launch, root, log, env, 3600)
             if code:
                 return dict(result, status="red", why=f"launch exit {code}", minutes=round((time.time() - t0) / 60, 1),
@@ -504,11 +518,11 @@ def cmd_run(a):
                 say("UNPLANNED scenes (no entry, gate case or exclusion): " + ", ".join(unplanned))
             # verify_steering publishes /wasm/living_authority.wasm: the default seed's build, made by
             # one default launch whose module copy is kept under that name.
-            if any(x.get("driver") for x in entries):
+            if any(x.get("driver") for x in entries) and wait_turn(until, a.max_load, say):
                 base = f"core-nt{stamp}-base"
                 blog = day_dir / "base-launch.log"
                 code = sh(["flock", "-s", str(MQ / "trial-activity.lock")] + ([str(MQ / "build-slot")] if (MQ / "build-slot").exists() else [])
-                          + ["python3", V, "launch", "--run", base], root, blog, env, 3600)
+                          + launch_command(base, W, env["CARGO_TARGET_DIR"]), root, blog, env, 3600)
                 built = wasm / f"living_authority_verify_{base.replace('-', '_')}.wasm"
                 if code == 0 and built.exists():
                     shutil.copyfile(built, wasm / "living_authority.wasm")
@@ -543,13 +557,23 @@ def cmd_selftest(_a):
     ids = [x["id"] for x in entries]
     expect("entry ids are unique", len(ids) == len(set(ids)))
     gate = gate_cases(root)
-    expect("no entry repeats a gate case", not {x.get("scene") for x in entries if x["id"] == x.get("scene")} & gate)
+    step_one = {"say", "heard_first", "audience", "flee_wall", "pursue_last_seen", "act_gaps",
+                "act_replace", "truthful_refusals", "committed", "dodge_told", "health_seen", "seize", "outcomes"}
+    expect("the gate covers all step-1 core scenes", step_one <= gate, sorted(step_one - gate))
+    expect("no nightly scene repeats a gate case", not {x.get("scene") for x in entries} & gate)
+    expect("speak and told belong only to the gate's player surface",
+           {"speak", "told"} <= gate_cases(root, "verify-player") and not {"speak", "told"} & (gate | set(ids)))
+    expect("core dealings stays nightly despite the gate's minds case",
+           "dealings" in ids and "dealings" in gate_cases(root, "verify-minds"))
+    launch = launch_command("core-nightly-test", W, "/private/target")
+    expect("launches watch the nightly process", launch[-2:] == ["--driver-pid", str(os.getpid())])
     expect("measurements are left out", not {"doing_cost", "intents_cost", "fights", "chase"} & set(ids))
     expect("the long waits are in (wildlife, laws, decay, winter, infant)", {"wildlife", "laws", "decay", "winter", "infant"} <= set(ids))
     expect("run names fit verify.py (core-*, client-*; at most 56 characters)",
            all(re.fullmatch(r"[a-z0-9-]+", re.sub(r"[^a-z0-9]+", "-", x["id"].lower())) for x in entries))
     with tempfile.TemporaryDirectory() as t:
         mq = Path(t)
+        (mq / "locks").write_text("")
         (mq / "queue.txt").write_text("")
         expect("an empty queue is idle", merge_queue_active(mq, proc=mq) is None)
         (mq / "queue.txt").write_text("some-branch\tMerge it\n")
@@ -557,7 +581,8 @@ def cmd_selftest(_a):
                merge_queue_active(mq, proc=mq) is None and queue_note(mq) == ["some-branch"])
         held = (mq / "drain.lock").open("a")
         fcntl.flock(held, fcntl.LOCK_EX)
-        expect("a held drain.lock is the queue at work", "drain.lock is held" in (merge_queue_active(mq, proc=mq) or ""))
+        expect("a held drain.lock is the queue at work",
+               "drain.lock is held" in (merge_queue_active(mq) or ""))
         held.close()
         fake = mq / "123"
         fake.mkdir()
@@ -580,11 +605,11 @@ def cmd_selftest(_a):
         (mq / "battle.lock").write_text("")
         holder = (mq / "battle.lock").open("a")
         fcntl.flock(holder, fcntl.LOCK_EX)
-        with battle_lock(datetime.datetime(2026, 1, 1, 1, 0), lambda m: None, mq=mq, sleep=lambda s: None,
+        with battle_lock(datetime.datetime(2026, 1, 1, 1, 0), lambda m: None, path=mq / "battle.lock", sleep=lambda s: None,
                          now=lambda: datetime.datetime(2026, 1, 1, 2, 0)) as held:
             expect("battle.lock held by another until the window's end: nothing runs", held is False)
         holder.close()
-        with battle_lock(datetime.datetime(2026, 1, 1, 1, 0), lambda m: None, mq=mq) as held:
+        with battle_lock(datetime.datetime(2026, 1, 1, 1, 0), lambda m: None, path=mq / "battle.lock") as held:
             expect("battle.lock free: taken", held is True)
         rec = {"date": "2026-01-01", "main": "a" * 40, "entries": [
             {"id": "wildlife", "seed": "stage1-acts", "area": "wildlife", "status": "red", "failed": ["arrival"], "evidence": "/x"},
