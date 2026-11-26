@@ -813,7 +813,7 @@ pub fn refuse_choice(ctx: &ReducerContext, viewer: spacetimedb::Identity, input:
     if input.pins.len() > MAX_PINS {
         return Some(format!("You can keep at most {MAX_PINS} others pinned at once."));
     }
-    let set: std::collections::HashSet<u32> = ctx.db.perceived().viewer().filter(viewer).map(|p| p.body).collect();
+    let set: Vec<u32> = ctx.db.perceived().viewer().filter(viewer).map(|p| p.body).collect();
     if input.pins.iter().chain(input.focus.iter()).any(|id| !set.contains(id)) {
         return Some(UNSEEN.to_string());
     }

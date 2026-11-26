@@ -20,7 +20,7 @@ use crate::common::{self, NearCreature};
 use crate::tables::*;
 use spacetimedb::{Identity, ReducerContext, Table};
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// A cell's side (metres; the owner's decision).
 pub const CELL_M: f32 = 6.0;
@@ -38,7 +38,9 @@ const HEADING_MIN_MPS: f32 = 0.3;
 
 thread_local! {
     /// Per viewer (its character): the throng's members at its last cells (sorted ids).
-    static LAST: RefCell<HashMap<u32, Vec<u32>>> = RefCell::new(HashMap::new());
+    /// (BTree maps here and below: a std map would shift the hash keys of every later one,
+    /// docs/GATE216_GROWTH.md.)
+    static LAST: RefCell<BTreeMap<u32, Vec<u32>>> = const { RefCell::new(BTreeMap::new()) };
     /// Whether `seen_throng` may hold rows (`None`: not known in this instance).
     static ANY: Cell<Option<bool>> = const { Cell::new(None) };
 }
@@ -78,7 +80,7 @@ pub fn cells(here: (f32, f32), throng: &[NearCreature], moving: impl Fn(u32) -> 
         return Vec::new();
     }
     // Squares (top-left x, y, side) -> members.
-    let mut by: HashMap<(u32, u32, u32), Vec<&NearCreature>> = HashMap::new();
+    let mut by: BTreeMap<(u32, u32, u32), Vec<&NearCreature>> = BTreeMap::new();
     for c in throng {
         let (cx, cy) = cell_of(c.pos);
         by.entry((cx, cy, 1)).or_default().push(c);
@@ -170,7 +172,7 @@ pub fn show(ctx: &ReducerContext, id: u32, viewer: Identity, here: (f32, f32), t
 /// Make `viewer`'s rows exactly `new`, writing only what changed.
 fn write(ctx: &ReducerContext, viewer: Identity, new: &[Cell6]) {
     let old: Vec<SeenThrong> = ctx.db.seen_throng().viewer().filter(viewer).collect();
-    let mut kept: HashMap<(u32, u8), SeenThrong> = HashMap::with_capacity(old.len());
+    let mut kept: BTreeMap<(u32, u8), SeenThrong> = BTreeMap::new();
     for r in old {
         // Two rows of one square (should not happen): the second goes.
         if let Some(dup) = kept.insert((r.cell, r.size), r) {
@@ -227,7 +229,11 @@ pub fn off_tick(ctx: &ReducerContext) {
         return;
     }
     let rows: Vec<u64> = ctx.db.seen_throng().iter().map(|r| r.id).collect();
-    LAST.with(|l| l.borrow_mut().clear());
+    LAST.with(|l| {
+        if !l.borrow().is_empty() {
+            l.borrow_mut().clear();
+        }
+    });
     if rows.is_empty() {
         ANY.with(|a| a.set(Some(false)));
         return;

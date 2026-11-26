@@ -70,7 +70,7 @@ use crate::perception::{Moving, Segment};
 use crate::tables::*;
 use spacetimedb::{Identity, ReducerContext, Table};
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 /// The shortest interval between a viewer's frames: every other tick (30 Hz). Clients
 /// extrapolate others' motion segments between rows, as they always did between writes.
@@ -190,13 +190,14 @@ struct Viewer {
     reconcile: bool,
     /// Under heed (the `heed_players` law): the rest of its sight, its throng, as its last sweep
     /// left it. Earshot reads sight, the scene and the throng (docs/ATTENTION_BUDGET.md v2.1
-    /// point 4); nothing else reads it. Empty while heed does not apply.
-    throng: HashSet<u32>,
+    /// point 4); nothing else reads it. Empty while heed does not apply. A `BTreeSet`: a std
+    /// set made per viewer would shift the hash keys of every later map (docs/GATE216_GROWTH.md).
+    throng: BTreeSet<u32>,
 }
 
 impl Viewer {
     fn new(who: Identity) -> Self {
-        Self { who, scene: None, seq: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new(), senses_ms: 0, senses: None, earshot_ms: 0, earshot: None, near: HashSet::new(), near_ms: 0, near_seq: 0, cued: HashMap::new(), pending: HashMap::new(), pending_seq: 0, deferred: HashMap::new(), reconcile: true, throng: HashSet::new() }
+        Self { who, scene: None, seq: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new(), senses_ms: 0, senses: None, earshot_ms: 0, earshot: None, near: HashSet::new(), near_ms: 0, near_seq: 0, cued: HashMap::new(), pending: HashMap::new(), pending_seq: 0, deferred: HashMap::new(), reconcile: true, throng: BTreeSet::new() }
     }
 }
 
@@ -420,10 +421,19 @@ pub fn scene(ctx: &ReducerContext, id: u32, who: Identity, seen: &HashSet<u32>, 
 }
 
 /// Viewer `id`'s throng at this sweep (after [`scene`]; empty while heed does not apply to it).
-pub fn set_throng(id: u32, throng: HashSet<u32>) {
+pub fn set_throng(id: u32, throng: BTreeSet<u32>) {
     VIEWERS.with(|v| {
         if let Some(e) = v.borrow_mut().get_mut(&id) {
             e.throng = throng;
+        }
+    });
+}
+
+/// Heed does not apply to viewer `id`: its throng is empty (nothing is made while it already is).
+pub fn clear_throng(id: u32) {
+    VIEWERS.with(|v| {
+        if let Some(e) = v.borrow_mut().get_mut(&id).filter(|e| !e.throng.is_empty()) {
+            e.throng.clear();
         }
     });
 }

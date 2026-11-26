@@ -1401,10 +1401,10 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     drop(scene);
     match heeded {
         Some((throng, passed)) => {
-            crate::frame::set_throng(id, capped);
+            crate::frame::set_throng(id, capped.into_iter().collect());
             crate::throng::show(ctx, id, viewer, here, &throng, passed, now);
         }
-        None => crate::frame::set_throng(id, HashSet::new()),
+        None => crate::frame::clear_throng(id),
     }
     // The projections, kept or afresh, to the end of the sweep.
     let _projecting = common::detail_span("sweep.project");
