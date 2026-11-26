@@ -4,7 +4,7 @@ Status **proposed** (design and survey, 2026-11-26, Spark; the general coordinat
 
 ## Built (pilot plumbing)
 
-Status: **built, off by default** (2026-11-26, Spark, branch `neural-body-pilot` from `origin/main` `8948974bc`; not merged). The §7 pilot's plumbing only: a delegating graph leaf, the brief, body sessions on the player input path, a controller worker in `living/mind` with a scripted placeholder policy, the capture format and the leakage tests. No trained net, no reinforcement learning, no personal adapters, no Colab, no GPU, no model calls. Nothing here runs while the law `body_delegate_on` is off: a `delegate` leaf is refused at install, the new tables stay empty and the tick, perception and prompts are as on main (det_compare below).
+Status: **built, off by default** (2026-11-26, Spark, branch `neural-body-pilot` from `origin/main` `8948974bc`, `fa2dbc3a6` merged in; not merged to main). The §7 pilot's plumbing only: a delegating graph leaf, the brief, body sessions on the player input path, a controller worker in `living/mind` with a scripted placeholder policy, the capture format and the leakage tests. No trained net, no reinforcement learning, no personal adapters, no Colab, no GPU, no model calls. Nothing here runs while the law `body_delegate_on` is off: a `delegate` leaf is refused at install, the new tables stay empty and the tick, perception and prompts are as on main (det_compare below).
 
 **The law.** `body_delegate_on` (false), with `body_lease_ms` (750) and `body_brief_max_s` (300): value-only (`ValueOnly::Delivery`), read at the next install, reducer call or tick. The shipped script grows by 251 bytes; with a test overlay it now sits a few hundred bytes under the 256 KiB source cap (`script::body::tests::the_shipped_parts_joined_are_the_law_before_the_split`).
 
@@ -45,7 +45,7 @@ All three are deleted at death (`act::forget_dead`). An expired brief is inert: 
 
 **The worker** (`living-mind body`, `living/mind/src/body/`):
 
-- connects as the characters' controller and subscribes to `body_slot`, `body_brief`, `body_session`, `skill_card` and `world` only;
+- connects as the characters' controller and subscribes to `body_slot`, `body_brief`, `body_session`, `skill_card` and `law_override` (for `body_lease_ms`) only;
 - per delegated character (`LIVING_BODY_ONLY` narrows them) opens a session: a new connection with no token (a fresh identity), `body_open`, then the player subscriptions of the world's delivery laws (`my_body`, `my_fighter`, `my_readiness`, `my_skill_uses`, `my_combat`, `combat_feed`, `seen_character_copy`, `seen_body_copy`, `seen_fighter_copy`, the cue tables, and the views for worlds with those laws off);
 - each decision (15 Hz, `LIVING_BODY_HZ`) builds an `Observation` from those rows only, encodes it (`encode.rs`: the character, the target, 3 nearest others, 4 recent cues and the brief's typed values in a fixed vector of 91 floats; no ids or names, no one's future release time, nothing about a creature not delivered), runs the policy and sends its intents through the player reducers (movement and the look only on a change); it beats every third of the lease;
 - the policy is pluggable (`policy::Policy`); the pilot ships the scripted `HoldDistance` (hold a distance from the target; under `engage`, press the first ready skill in scope within reach), not a trained net;

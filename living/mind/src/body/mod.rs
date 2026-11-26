@@ -101,7 +101,7 @@ pub async fn main(server: String, db: String, token: String) -> Result<()> {
                     }
                 })
                 .on_error(|_, e| log::error!("body worker: subscription error: {e:?}"))
-                .subscribe(["SELECT * FROM body_slot", "SELECT * FROM body_brief", "SELECT * FROM body_session", "SELECT * FROM skill_card", "SELECT * FROM world"].map(String::from).to_vec());
+                .subscribe(["SELECT * FROM body_slot", "SELECT * FROM body_brief", "SELECT * FROM body_session", "SELECT * FROM skill_card", "SELECT * FROM law_override"].map(String::from).to_vec());
         })
         .on_disconnect(|_, e| {
             log::error!("body worker: the controller connection closed: {e:?}");
@@ -112,7 +112,7 @@ pub async fn main(server: String, db: String, token: String) -> Result<()> {
     control.run_threaded();
     ready_rx.await.map_err(|_| anyhow!("the controller subscription never applied"))?;
     log::info!("body worker: serving {} at {hz} Hz", only.as_ref().map_or("every delegated character".to_string(), |o| format!("{o:?}")));
-    let lease_ms = lease_ms(&control);
+    let mut lease_ms = lease_ms(&control);
     let period = Duration::from_secs_f32(1.0 / hz.clamp(1.0, 60.0));
     let mut served: HashMap<u32, Served> = HashMap::new();
     let mut last_loop = Instant::now();
@@ -120,6 +120,7 @@ pub async fn main(server: String, db: String, token: String) -> Result<()> {
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         tick.tick().await;
+        lease_ms = lease_ms_now(&control, lease_ms);
         let gap = last_loop.elapsed();
         last_loop = Instant::now();
         // The worker itself stalled past the lease: nothing decided before is sent; every session is
@@ -201,10 +202,15 @@ pub async fn main(server: String, db: String, token: String) -> Result<()> {
     }
 }
 
-/// The `body_lease_ms` law as the controller reads it (the script row is not subscribed: the law's
-/// shipped value, overridable for a run with `LIVING_BODY_LEASE_MS`).
-fn lease_ms(_control: &DbConnection) -> u64 {
-    std::env::var("LIVING_BODY_LEASE_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(750)
+/// The `body_lease_ms` law: the world's own value (`law_override`, public), else the shipped 750, or
+/// `LIVING_BODY_LEASE_MS` for a run.
+fn lease_ms(control: &DbConnection) -> u64 {
+    let shipped = std::env::var("LIVING_BODY_LEASE_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(750);
+    lease_ms_now(control, shipped)
+}
+
+fn lease_ms_now(control: &DbConnection, before: u64) -> u64 {
+    control.db.law_override().iter().find(|l| l.name == "body_lease_ms").and_then(|l| l.value.trim().parse::<f64>().ok()).map_or(before, |v| v.clamp(100.0, 10_000.0) as u64)
 }
 
 /// Open a session for `actor`: a new connection with a fresh identity, bound by `body_open` (a new
