@@ -7,11 +7,18 @@ Two commands, each beside an AI character given the same graph as the control:
 - refused at start: `{"do":"graze"}` ("only grazing animals graze"); sent twice, the second inside the
   window must add no line;
 - failed after starting: a gift (`{"seq":[give]}`, so it runs as a graph, not a deliberate
-  act) whose receiver is moved 6 m away (out of reach, still in sight) while it is handed over
-  ("they moved away"). A
-  target out of sight is no use here (a `follow`, or a receiver moved 40 m): the evaluator drops
-  the node without a report,
-  for an AI too.
+  act) whose receiver retreats along a quiet open line to 5 m from the giver (past the 2.8 m
+  completion reach, still in sight even unlit at night, 6 m) while it is handed over ("they moved
+  away"); the gift is checked to be performing (the world paused) before the receiver moves, and a
+  miss keeps a diagnostic capture;
+- lost from sight while it is handed over (give-out-of-sight-line, 2026-11-26): on the same open
+  line, the receiver is moved to 20 m from the giver (beyond sight in any light). A graph's gift (the player's command, the AI's
+  graph) is broken off by its leaf's next look ("lost sight of them", `act::lost`) unless its 1 s
+  timer finds them gone first ("they moved away"); a deliberate act (`human_act {do:give}`, a
+  mind's `mind_act`, here called as the admin) only by its timer. Each attempt must give exactly
+  one line; each graph form retries (a new item each time, so the repeat window does not hold
+  the line back) until the leaf's look has told it at least once. Before the fix the leaf's look
+  told nothing, for an AI too (only `stuck: give: no #N in sight` in its status).
 
 The player reads its lines through `my_experience` with its own identity. The AI's lines, and
 `character.ai`/`presence.ai` (the person still plays it, the minds have not taken over), are
@@ -20,7 +27,8 @@ read as the owner. Before 2026-11-11 a player got no line for either.
     told.py --run RUN
 
 Needs `verify.py launch --run RUN` on a seed with AI people (the default `world`). Admin
-reducers set the scene only: `place_near`, `place_at`, `set_behavior`, `grant_items`. Writes `RUN/told.json`.
+reducers set the scene only: `place_near`, `place_at`, `set_behavior`, `grant_items` (and
+`mind_act` for the AI's deliberate act). Writes `RUN/told.json`.
 Python standard library only.
 """
 
@@ -226,6 +234,75 @@ def main():
     check("failed after starting: the same text as the AI's", len(got) == 1 and len(snaps["broken_ai"]) == 1 and got[0]["text"] == snaps["broken_ai"][0]["text"],
           {"player": [r["text"] for r in got], "ai": [r["text"] for r in snaps["broken_ai"]]})
     check("the failed command falls back to waiting for you", snaps["broken_plan"] and snaps["broken_plan"][0]["plan"] == "waiting for you", snaps["broken_plan"])
+
+    # 3. Lost from sight while it is handed over: the receiver moved 20 m away.
+    def gift(item):
+        return {"do": {"skill": "give", "target": {"id": other}, "item": item, "qty": 1}}
+
+    def failed_gift(actor, item, since):
+        rows = (sql("SELECT id, kind, text, at_ms FROM my_experience", st["token"]) if actor == me
+                else sql(f"SELECT id, kind, text, at_ms FROM experience WHERE observer = {actor}", admin))
+        return [r for r in rows if r["kind"] in ("own", "act") and r["at_ms"] >= since and f"give {item} " in r["text"]
+                and ("You failed to" in r["text"] or "did not work out" in r["text"])]
+
+    # On part 2's open line: the giver on its spot, the receiver beside it, then 20 m along the
+    # line from the giver (beyond sight in any light; nothing else within 30 m of the line).
+    sight_spots = {me: (line[10], line[11], line[30]), ai: (line[22], line[23], line[2])}
+
+    def out_of_sight(actor, start, item):
+        at, beside, away = sight_spots[actor]
+        call("set_behavior", [other, json.dumps({"wait": 120})], as_admin=True)
+        if actor == ai:
+            call("set_behavior", [ai, json.dumps({"wait": 120})], as_admin=True)
+        call("place_at", [actor, *at], as_admin=True)
+        call("grant_items", [actor, item, 2], as_admin=True)
+        call("place_at", [other, *beside], as_admin=True)
+        since = sql("SELECT last_ms FROM clock", admin)[0]["last_ms"]
+        start(item)
+        end, seen = time.monotonic() + 8, None
+        while time.monotonic() < end and not seen:
+            r = sql(f"SELECT skill, phase, node, item FROM activity WHERE id = {actor}", admin)
+            seen = r[0] if r and r[0]["skill"] == "give" and r[0]["phase"] == 1 and r[0]["item"] == item else None
+            time.sleep(0.03)
+        if not seen:
+            return {"item": item, "performing": None, "lines": failed_gift(actor, item, since)}
+        call("place_at", [other, *away], as_admin=True)
+        got = wait_for(lambda: failed_gift(actor, item, since), 6)
+        time.sleep(3)  # a second line would come within the leaf's next looks
+        got = failed_gift(actor, item, since)
+        return {"item": item, "performing": seen, "lines": got,
+                "status": sql(f"SELECT status FROM mind_state WHERE id = {actor}", admin)}
+
+    forms = [
+        ("the player's command", me, True, lambda item: call("human_act", [json.dumps({"seq": [gift(item)]})])),
+        ("the AI's graph", ai, True, lambda item: call("set_behavior", [ai, json.dumps({"seq": [gift(item), {"wait": 120}]})], as_admin=True)),
+        ("the player's deliberate act", me, False, lambda item: call("human_act", [json.dumps(gift(item))])),
+        ("the AI's deliberate act", ai, False, lambda item: call("mind_act", [ai, [json.dumps(gift(item))], "told"], as_admin=True)),
+    ]
+    # Not berries for a graph's gift: part 2 told "give berries → person: they moved away" less
+    # than `repeat_failure_s` ago, so the timer's path would be held back as that repeat.
+    items = ["meat", "stone", "wood", "fiber", "stick", "hide"]
+    for name, actor, graph, start in forms:
+        tries = []
+        # A try whose gift never reached its handing over (a slow look) proves nothing: another.
+        for item in items:
+            t = out_of_sight(actor, start, item)
+            tries.append(t)
+            if t["performing"] and (not graph or any("lost sight of them" in r["text"] for r in t["lines"])):
+                break
+        snaps[f"sight_{name}"] = tries
+        started = [t for t in tries if t["performing"]]
+        check(f"out of sight, {name}: a gift started (performing)", started, [t["performing"] for t in tries])
+        check(f"out of sight, {name}: exactly one line for each gift", all(len(t["lines"]) == 1 for t in started),
+              [[r["text"] for r in t["lines"]] for t in tries])
+        texts = [r["text"] for t in started for r in t["lines"]]
+        check(f"out of sight, {name}: each line says what happened", all("lost sight of them" in x or "they moved away" in x for x in texts), texts)
+        if graph:
+            check(f"out of sight, {name}: the leaf's look told it at least once (\"lost sight of them\")", any("lost sight of them" in x for x in texts), texts)
+    lost = [r["text"] for name in ("the player's command", "the AI's graph") for t in snaps[f"sight_{name}"] for r in t["lines"] if "lost sight of them" in r["text"]]
+    check("out of sight: the player's line is the AI's (item aside)", len({x.split(" → ")[1] for x in lost}) == 1 and len(lost) >= 2, lost)
+    snaps["sight_played"] = played(me)
+    check("out of sight: the person still plays the character (no takeover)", not snaps["sight_played"]["character_ai"], snaps["sight_played"])
 
     out = V.run_dir(a.run) / "told.json"
     out.write_text(json.dumps({"results": results, "snapshots": snaps}, indent=2) + "\n")
