@@ -2164,13 +2164,23 @@ def tables_line(feed):
     """The `tables: …;` part of the client's perception lines for a set (`net::Feed::tables`)."""
     tier, m, ch, f, cf = feed
     b = lambda x: str(x).lower()
-    return rf"tables: motion {b(m)} characters {b(ch)} fighters {b(f)} combat_feed {b(cf)};"
+    # Since experience-incremental the client names the lines table after the combat feed
+    # (`lines true|false`), and since heed-client ` throng true` after that while heed is on.
+    return rf"tables: motion {b(m)} characters {b(ch)} fighters {b(f)} combat_feed {b(cf)} lines (?:true|false)(?: throng true)?;"
 
 
 def seen_tables(feed):
     """The seen log's `tables` for a set (the reads)."""
     tier, m, ch, f, cf = feed
     return {"motion": m, "characters": ch, "fighters": f, "combat_feed": cf}
+
+
+def reads_match(tables, feed):
+    """The seen log's `tables` hold the reads `seen_tables` names for the set. The log names more
+    than these switches set (since experience-incremental `lines`, the lines law's, which these
+    scenarios leave as the world has it), so only the four are compared."""
+    want = seen_tables(feed)
+    return {k: tables.get(k) for k in want} == want
 
 
 def set_on_line(feed):
@@ -2386,7 +2396,7 @@ def battle_views(run, c):
             c.check(s, f"{tag}: no frame without a creature or a character kept across the switch", window and keep and keep_c and not gaps and not gaps_c,
                     f"{len(window)} frames, {len(keep)} kept ({len(gaps)} frames missing one), {len(keep_c)} characters kept ({len(gaps_c)} frames missing one)")
             tables = post[0].get("tables", {}) if post else {}
-            c.check(s, f"{tag}: the reads take the tables the laws name", post and post[0].get("reads") == after[0] and tables == seen_tables(after), json.dumps(tables))
+            c.check(s, f"{tag}: the reads take the tables the laws name", post and post[0].get("reads") == after[0] and reads_match(tables, after), json.dumps(tables))
         cp = r["copies"] or {}
         if law == "motion_tables_on":
             if value == "true":
@@ -2962,7 +2972,7 @@ def combat_switches(run, c):
             c.check(s, f"{tag}: no frame without a creature, a character or a fighter kept across the switch",
                     window and all(counts[k][0] > 0 and counts[k][1] == 0 for k in counts), f"{len(window)} frames; kept, frames missing one: {json.dumps(counts)}")
             tables = post[0].get("tables", {}) if post else {}
-            c.check(s, f"{tag}: the reads take the tables the laws name", post and post[0].get("reads") == after[0] and tables == seen_tables(after), json.dumps(tables))
+            c.check(s, f"{tag}: the reads take the tables the laws name", post and post[0].get("reads") == after[0] and reads_match(tables, after), json.dumps(tables))
         cp = r["fighters"] or {}
         if law == "fighter_tables_on":
             if value == "true":
@@ -5526,6 +5536,15 @@ def staged_drive(run, name, plan, handlers, extra=(), env=None, timeout=900):
     return out, p.returncode, open(drive_log_path, errors="replace").read(), results
 
 
+def verify_sql_noon(run):
+    """The world's epoch set so it is noon now (owner SQL through verify.py, which records the
+    epoch for cleanup), as drive.py's `{epoch_at:12}`."""
+    from drive import epoch_at
+    q = f"UPDATE world SET epoch_ms = {epoch_at(run, 12.0)} WHERE id = 0"
+    sql(run, q, check=True)
+    return q
+
+
 def throng_rows(run, ident):
     """My throng as the authority holds it (owner SQL): (cell, size, count, moving, fighting) rows."""
     rows = owner_rows(run, f"SELECT cell, size, count, spread, heading, moving, fighting, kinds FROM seen_throng WHERE viewer = 0x{ident}") or []
@@ -5584,16 +5603,19 @@ def heed_throng(run, c):
     world's own values after."""
     s = "heed-throng"
     plan = ("ready;wait:2;sync:battle;wait:5;dump:off;shot:off;"
-            "click:@menu;wait:0.5;click:@menu:Settings;wait:0.8;dump:settings_off;click:@win:Settings:close;wait:0.5;"
-            "sync:heed;wait:8;dump:on;sync:rows_on;shot:on;"
-            "notches:-6;wait:2.5;dump:far;sync:rows_far;shot:far;notches:6;wait:1.5;"
-            "click:@menu;wait:0.5;click:@menu:Settings;wait:0.8;dump:settings_on;click:@settings:throng;wait:1.2;dump:hidden;shot:hidden;"
+            "click:@menu;wait:0.5;click:@menu:Settings;wait:0.8;dump:settings_off;click:@settings:page:controls;wait:0.6;dump:controls_off;click:@settings:page:play;wait:0.4;click:@win:Settings:close;wait:0.5;"
+            "sync:heed;wait:8;sync:rows_on_a;dump:on;sync:rows_on_b;shot:on;"
+            "notches:-12;wait:4;sync:rows_far_a;dump:far;sync:rows_far_b;shot:far;notches:12;wait:3;"
+            "click:@menu;wait:0.5;click:@menu:Settings;wait:0.8;dump:settings_on;click:@settings:page:controls;wait:0.6;dump:controls_on;click:@settings:page:play;wait:0.4;"
+            "click:@settings:throng;wait:1.2;dump:hidden;shot:hidden;"
             "click:@settings:throng;wait:1.2;dump:shown;click:@win:Settings:close;wait:0.5;"
             "sync:off;wait:4;dump:after;sync:rows_after;shot:after;quit")
     st = verify.load(run)
 
     def battle(me, ident):
-        calls = [call_admin(run, "spawn_battle_sides", [200, 2], check=True)]
+        # Noon, so the player sees the whole battle (the island's night sight is short); the
+        # world's epoch is put back after (`sight_fixture`).
+        calls = [verify_sql_noon(run), call_admin(run, "spawn_battle_sides", [200, 2], check=True)]
         names = {r["id"]: r["name"] for r in sql(run, "SELECT id, name FROM character WHERE kind = 'person'") if re.fullmatch(r"[AB]\d+", r.get("name") or "")}
         pos = [(b["x"], b["y"]) for b in sql(run, "SELECT id, x, y FROM body") if b["id"] in names]
         cx, cy = sum(p[0] for p in pos) / len(pos), sum(p[1] for p in pos) / len(pos)
@@ -5604,35 +5626,41 @@ def heed_throng(run, c):
     handlers = {
         "battle": battle,
         "heed": lambda me, ident: [call_admin(run, r, a, check=True) for r, a in heed_on_calls()],
-        "rows_on": lambda me, ident: throng_rows(run, ident),
-        "rows_far": lambda me, ident: throng_rows(run, ident),
+        "rows_on_a": lambda me, ident: throng_rows(run, ident),
+        "rows_on_b": lambda me, ident: throng_rows(run, ident),
+        "rows_far_a": lambda me, ident: throng_rows(run, ident),
+        "rows_far_b": lambda me, ident: throng_rows(run, ident),
         "off": lambda me, ident: call_admin(run, "set_world_law", ["heed_players", "false"], check=True),
         "rows_after": lambda me, ident: throng_rows(run, ident),
     }
-    with heed_fixture(run):
+    with heed_fixture(run), sight_fixture(run, {}):
         out, code, text, res = staged_drive(run, s, plan, handlers)
     c.check(s, "client ran and joined", code == 0, text[-300:])
-    d = {k: dump(out, k) or {} for k in ("off", "settings_off", "on", "far", "settings_on", "hidden", "shown", "after")}
+    d = {k: dump(out, k) or {} for k in ("off", "settings_off", "controls_off", "on", "far", "settings_on", "controls_on", "hidden", "shown", "after")}
     L = log(out)
     c.check(s, "the battle is spawned beside the player", (res.get("battle") or {}).get("fighters", 0) >= 150, json.dumps(res.get("battle"))[:300])
     sets = perception_sets(L)
     first, laws_on = (sets[0] if sets else None), [x for x in sets if "throng true" in x[1]]
     # Laws off: the set and the drawing as before heed.
     c.check(s, "laws off: no throng and no heed in the dump, and the set has no seen_throng", d["off"].get("throng") is None and d["off"].get("heed") is None and first is not None and "throng" not in first[1], f"first set {first}")
-    tags_off = d["settings_off"].get("tags") or {}
-    c.check(s, "laws off: Settings shows no throng switch and no keeping-track keys", "settings:page:play" in tags_off and "settings:throng" not in tags_off and not any(t.startswith("bind:Pin") or t.startswith("bind:ClearPins") for t in tags_off), sorted(t for t in tags_off if "throng" in t or "Pin" in t))
+    tags_off, keys_off = d["settings_off"].get("tags") or {}, d["controls_off"].get("tags") or {}
+    c.check(s, "laws off: Settings shows no throng switch and no keeping-track keys", "settings:page:play" in tags_off and "settings:throng" not in tags_off and "bind:NorthUp:0" in keys_off and not any(t.startswith("bind:Pin") or t.startswith("bind:ClearPins") for t in keys_off), str(sorted(t for t in list(tags_off) + list(keys_off) if "throng" in t or "Pin" in t)))
     # Laws on: one more query, make-before-break.
     c.check(s, "laws on: the set is subscribed again with seen_throng (one query more), then switched to", bool(laws_on) and first is not None and int(laws_on[0][0]) == int(first[0]) + 1 and re.search(r"perception: on the \w+ set after \d+ ms \([^)]*throng true", L) is not None, f"{first} -> {laws_on[:1]}")
     c.check(s, "laws on: the log names heed for players", "rules: heed for players true" in L and "heed: players heed true" in L)
-    for k, rows_k in (("on", "rows_on"), ("far", "rows_far")):
+    for k, rows_k in (("on", "rows_on_a"), ("far", "rows_far_a")):
         t = d[k].get("throng") or {}
         bad = squares_ok(t)
         c.check(s, f"{k}: the throng has rows and every square is drawn as its row says (count cards, poses by shares, inside, placeholder tint)", t.get("rows", 0) > 0 and not bad and t.get("tint") == "placeholder", f"rows {t.get('rows')} cards {t.get('cards')}; bad {bad[:2]}")
-        same, theirs, mine = rows_match(t, res.get(rows_k))
-        c.check(s, f"{k}: the client's rows are the authority's (owner SQL within a second)", theirs > 0 and same >= 0.7 * theirs and abs(mine - theirs) <= max(3, theirs // 5), f"{same} alike of the authority's {theirs}; client {mine}")
+        # The authority's rows just before and just after the dump: a row the battle changed
+        # in between counts as alike when it matches either.
+        both = (res.get(rows_k) or []) + (res.get(rows_k[:-1] + "b") or [])
+        same, theirs, mine = rows_match(t, both)
+        n = len(res.get(rows_k) or [])
+        c.check(s, f"{k}: the client's rows are the authority's (owner SQL just before and after the dump)", n > 0 and same >= 0.8 * mine and abs(mine - n) <= max(3, n // 5), f"{same} of the client's {mine} alike; the authority {n} rows")
         c.check(s, f"{k}: the cards drawn total the rows' counts", t.get("cards") == t.get("count"), f"cards {t.get('cards')} count {t.get('count')}")
-    tags_on = d["settings_on"].get("tags") or {}
-    c.check(s, "laws on: Settings shows the throng switch and the keeping-track keys", "settings:throng" in tags_on and "bind:Pin:0" in tags_on and "bind:ClearPins:0" in tags_on, sorted(t for t in tags_on if "throng" in t or "Pin" in t))
+    tags_on, keys_on = d["settings_on"].get("tags") or {}, d["controls_on"].get("tags") or {}
+    c.check(s, "laws on: Settings shows the throng switch and the keeping-track keys", "settings:throng" in tags_on and "bind:Pin:0" in keys_on and "bind:ClearPins:0" in keys_on, str(sorted(t for t in list(tags_on) + list(keys_on) if "throng" in t or "Pin" in t)))
     th, ts = d["hidden"].get("throng") or {}, d["shown"].get("throng") or {}
     c.check(s, "the switch off: no cards drawn, the rows still received", th.get("drawn") is False and th.get("cards") == 0 and th.get("on") is True, json.dumps({k: th.get(k) for k in ("on", "drawn", "cards", "leaving")}))
     c.check(s, "the switch on again: drawn", ts.get("drawn") is True and ts.get("cards", 0) > 0, json.dumps({k: ts.get(k) for k in ("on", "drawn", "cards")}))

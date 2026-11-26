@@ -61,6 +61,11 @@ const PLACEHOLDER_LEGS: [u8; 3] = [84, 88, 100];
 const SKIN: [u8; 3] = [214, 170, 138];
 const TROUSERS: [u8; 3] = [52, 48, 58];
 const SPEAR: [u8; 3] = [120, 92, 60];
+/// The key light's illuminance by day (the island's noon, `assets/envs/island.json`): cards are
+/// unlit, so they are shaded by the light's colour and its share of this ([`shade`]).
+const DAY_LUX: f32 = 9000.0;
+/// The darkest the shading goes (the island's night is about 0.3 of noon).
+const NIGHT_SHADE: f32 = 0.3;
 /// A crowd card is under the cursor's ground point within this (m).
 const PICK_M: f32 = 0.9;
 
@@ -192,6 +197,15 @@ pub fn places(row: &Row, n: usize) -> Vec<Vec2> {
 /// every card takes the placeholder. When `seen_throng` gains its colour summary, it is read here.
 pub fn tops(_row: &Row, n: usize) -> Vec<Option<[u8; 3]>> {
     vec![None; n]
+}
+
+/// How an unlit card is shaded under the scene's light: the key light's colour (sRGB) times its
+/// share of the day's illuminance, at least [`NIGHT_SHADE`]; full white without an atmosphere.
+pub fn shade(atmo: Option<&crate::daylight::Atmo>) -> Vec3 {
+    match atmo.filter(|a| a.active) {
+        Some(a) => Vec3::from(a.light) * (a.lux / DAY_LUX).clamp(NIGHT_SHADE, 1.0),
+        None => Vec3::ONE,
+    }
 }
 
 /// One card drawn.
@@ -452,6 +466,7 @@ fn draw(
     time: Res<Time>,
     (mut meshes, mut images, mut mats): (ResMut<Assets<Mesh>>, ResMut<Assets<Image>>, ResMut<Assets<StandardMaterial>>),
     mut tfs: Query<&mut Transform>,
+    atmo: Option<Res<crate::daylight::Atmo>>,
 ) {
     if t.rows.is_empty() && t.squares.is_empty() && t.leaving.is_empty() {
         return;
@@ -525,6 +540,7 @@ fn draw(
             }));
         }
     }
+    let lit = shade(atmo.as_deref());
     let eye = cam.pose.translation();
     let right = cam.pose.right().as_vec3();
     let mut step = |c: &mut Card, heading: Option<Vec2>| -> bool {
@@ -553,9 +569,10 @@ fn draw(
             tf.scale = Vec3::splat(c.alpha * if c.kind == Kind::Person { 0.9 } else { 1.2 });
         }
         if let Some(mut m) = mats.get_mut(&c.mat) {
-            let a = c.alpha * 0.95;
-            if (m.base_color.alpha() - a).abs() > 0.004 {
-                m.base_color.set_alpha(a);
+            let want = Color::srgba(lit.x, lit.y, lit.z, c.alpha * 0.95);
+            let (h, w) = (m.base_color.to_srgba(), want.to_srgba());
+            if (h.alpha - w.alpha).abs() > 0.004 || (h.red - w.red).abs() > 0.01 || (h.green - w.green).abs() > 0.01 || (h.blue - w.blue).abs() > 0.01 {
+                m.base_color = want;
             }
         }
         // Gone: fully faded out.
@@ -696,6 +713,20 @@ mod tests {
         // A wide spread on a small square stays in the square.
         let r = Row::of(&row((1 << 16) | 1, 1, 6, 30, STILL, 0, 0, PEOPLE));
         assert!(places(&r, 6).iter().all(|p| r.holds(*p)));
+    }
+
+    #[test]
+    fn cards_darken_with_the_light_but_not_to_nothing() {
+        assert_eq!(shade(None), Vec3::ONE);
+        let mut a = crate::daylight::Atmo { active: true, light: [1.0, 0.96, 0.88], lux: 9000.0, ..Default::default() };
+        assert!((shade(Some(&a)) - Vec3::new(1.0, 0.96, 0.88)).length() < 1e-5);
+        a.lux = 2800.0;
+        a.light = [0.46, 0.6, 1.0];
+        assert!((shade(Some(&a)) - Vec3::new(0.46, 0.6, 1.0) * (2800.0 / 9000.0)).length() < 1e-5);
+        a.lux = 100.0;
+        assert!((shade(Some(&a)) - Vec3::new(0.46, 0.6, 1.0) * NIGHT_SHADE).length() < 1e-5);
+        a.active = false;
+        assert_eq!(shade(Some(&a)), Vec3::ONE);
     }
 
     #[test]
