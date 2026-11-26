@@ -1,0 +1,232 @@
+{
+  "triangles": 68654,
+  "body_triangles": 35512,
+  "drawn_materials": 15,
+  "material_records": 15,
+  "joints": 82,
+  "shared_clips": 84,
+  "shared_target_names": 52,
+  "missing_targets": [],
+  "shared_sha256": "6f776dcb11ba56b490e0898f0f9d0f7543045028833ff774b4fa3037250a9817",
+  "embedded_clips": [
+    "idle",
+    "walk",
+    "run",
+    "talk",
+    "sit_idle",
+    "sit_ground"
+  ],
+  "bind_max_error_m": 8.141004310679989e-07,
+  "maps": {
+    "cora.atlas": [
+      1024,
+      1024
+    ],
+    "cora.iris": [
+      192,
+      192
+    ],
+    "cora.tint": [
+      512,
+      512
+    ],
+    "own-b1-base.eyes.ink.png": [
+      2048,
+      2048
+    ],
+    "own-b1-base.hair.png": [
+      2048,
+      2048
+    ],
+    "own-b1-base.face.png": [
+      512,
+      512
+    ]
+  },
+  "body_deformation": {
+    "idle": [
+      {
+        "phase": 0,
+        "edge_length_ratio_p01_p99": [
+          0.789,
+          1.288
+        ],
+        "edge_length_ratio_extremes": [
+          0.197,
+          3.202
+        ]
+      },
+      {
+        "phase": 0.25,
+        "edge_length_ratio_p01_p99": [
+          0.809,
+          1.252
+        ],
+        "edge_length_ratio_extremes": [
+          0.203,
+          3.181
+        ]
+      },
+      {
+        "phase": 0.5,
+        "edge_length_ratio_p01_p99": [
+          0.812,
+          1.25
+        ],
+        "edge_length_ratio_extremes": [
+          0.211,
+          3.187
+        ]
+      },
+      {
+        "phase": 0.75,
+        "edge_length_ratio_p01_p99": [
+          0.808,
+          1.253
+        ],
+        "edge_length_ratio_extremes": [
+          0.218,
+          3.18
+        ]
+      }
+    ],
+    "walk": [
+      {
+        "phase": 0,
+        "edge_length_ratio_p01_p99": [
+          0.773,
+          1.304
+        ],
+        "edge_length_ratio_extremes": [
+          0.299,
+          3.175
+        ]
+      },
+      {
+        "phase": 0.25,
+        "edge_length_ratio_p01_p99": [
+          0.803,
+          1.26
+        ],
+        "edge_length_ratio_extremes": [
+          0.174,
+          3.23
+        ]
+      },
+      {
+        "phase": 0.5,
+        "edge_length_ratio_p01_p99": [
+          0.774,
+          1.313
+        ],
+        "edge_length_ratio_extremes": [
+          0.392,
+          3.249
+        ]
+      },
+      {
+        "phase": 0.75,
+        "edge_length_ratio_p01_p99": [
+          0.801,
+          1.26
+        ],
+        "edge_length_ratio_extremes": [
+          0.183,
+          3.244
+        ]
+      }
+    ],
+    "run": [
+      {
+        "phase": 0,
+        "edge_length_ratio_p01_p99": [
+          0.694,
+          1.389
+        ],
+        "edge_length_ratio_extremes": [
+          0.172,
+          3.099
+        ]
+      },
+      {
+        "phase": 0.25,
+        "edge_length_ratio_p01_p99": [
+          0.661,
+          1.511
+        ],
+        "edge_length_ratio_extremes": [
+          0.14,
+          3.083
+        ]
+      },
+      {
+        "phase": 0.5,
+        "edge_length_ratio_p01_p99": [
+          0.69,
+          1.4
+        ],
+        "edge_length_ratio_extremes": [
+          0.163,
+          3.127
+        ]
+      },
+      {
+        "phase": 0.75,
+        "edge_length_ratio_p01_p99": [
+          0.659,
+          1.468
+        ],
+        "edge_length_ratio_extremes": [
+          0.165,
+          3.098
+        ]
+      }
+    ],
+    "sit_ground": [
+      {
+        "phase": 0,
+        "edge_length_ratio_p01_p99": [
+          0.549,
+          1.781
+        ],
+        "edge_length_ratio_extremes": [
+          0.091,
+          3.515
+        ]
+      },
+      {
+        "phase": 0.25,
+        "edge_length_ratio_p01_p99": [
+          0.537,
+          1.744
+        ],
+        "edge_length_ratio_extremes": [
+          0.085,
+          3.351
+        ]
+      },
+      {
+        "phase": 0.5,
+        "edge_length_ratio_p01_p99": [
+          0.538,
+          1.743
+        ],
+        "edge_length_ratio_extremes": [
+          0.081,
+          3.346
+        ]
+      },
+      {
+        "phase": 0.75,
+        "edge_length_ratio_p01_p99": [
+          0.543,
+          1.771
+        ],
+        "edge_length_ratio_extremes": [
+          0.094,
+          3.293
+        ]
+      }
+    ]
+  }
+}
