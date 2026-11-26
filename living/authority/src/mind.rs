@@ -29,6 +29,14 @@ pub struct PersonaIn {
     pub calling: String,
 }
 
+/// A mind's word on whether its character fights a person (`mind_fight`): `enemy`, `spare`, or
+/// "" to take back what it said (the relation and the community's stance decide again).
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct FightIn {
+    pub other: u32,
+    pub fight: String,
+}
+
 #[derive(SpacetimeType, Clone, Debug)]
 pub struct RelationIn {
     pub other: u32,
@@ -294,6 +302,53 @@ pub fn rework(ctx: &ReducerContext, actor: u32, name: &str, graph: &str, now: u6
         },
         Err(e) => format!("You could not rework \"{name}\": {e}"),
     }
+}
+
+/// A mind sets whom its character keeps track of as individuals (docs/ATTENTION_BUDGET.md §8): a
+/// heed policy, `{"heed": [rules]}` or the bare list, validated as the authority reads it
+/// (`heed::validate`); `"instinct"` (or null) returns the character to its species' instinct. A
+/// refused policy leaves the one in force and records why, which the character's next think prompt
+/// shows; that is written with `Ok`, since an `Err` would roll the record back (docs: reducers,
+/// error handling). Only the character's controller may write it; it takes effect under `heed_on`.
+#[spacetimedb::reducer]
+pub fn mind_heed(ctx: &ReducerContext, actor: u32, policy: String) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
+    let me = authorize(ctx, actor)?;
+    // A character a person plays keeps track with its player's eyes: nothing is kept (as
+    // `mind_update` keeps no cue for one); the player side has its own input.
+    if crate::combat::human(ctx, actor).is_some() {
+        return Ok(());
+    }
+    let now = common::now_ms(ctx);
+    let row = ctx.db.heed_policy().actor().find(actor);
+    let parsed: Result<serde_json::Value, String> =
+        if policy.len() > living_rules::heed::MAX_BYTES { Err(format!("the policy is {} bytes; at most {}", policy.len(), living_rules::heed::MAX_BYTES)) } else { serde_json::from_str(&policy).map_err(|e| format!("not JSON: {e}")) };
+    if matches!(&parsed, Ok(serde_json::Value::Null)) || matches!(&parsed, Ok(serde_json::Value::String(s)) if s == "instinct") {
+        ctx.db.heed_policy().actor().delete(actor);
+        return Ok(());
+    }
+    let verdict = parsed.and_then(|v| crate::heed::validate(ctx, &me, &v, now).map(|(_, notes)| notes));
+    let next = match verdict {
+        Ok(notes) => {
+            // Kept as the mind wrote it (the authority reads it with the same lenient parser).
+            let v: serde_json::Value = serde_json::from_str(&policy).unwrap_or_default();
+            let rules = match &v {
+                serde_json::Value::Array(_) => v.clone(),
+                _ => v.get("heed").cloned().unwrap_or_default(),
+            };
+            HeedPolicy { actor, policy: serde_json::json!({ "heed": rules }).to_string(), written_ms: now, notes: if notes.is_empty() { String::new() } else { serde_json::json!(notes).to_string() }, refusal: String::new(), refused_ms: 0 }
+        }
+        Err(reason) => {
+            let old = row.clone().unwrap_or(HeedPolicy { actor, policy: String::new(), written_ms: 0, notes: String::new(), refusal: String::new(), refused_ms: 0 });
+            HeedPolicy { refusal: reason, refused_ms: now, ..old }
+        }
+    };
+    if row.is_some() {
+        ctx.db.heed_policy().actor().update(next);
+    } else {
+        ctx.db.heed_policy().insert(next);
+    }
+    Ok(())
 }
 
 /// A mind edits its character's routines (one or a few at a time).
@@ -703,6 +758,8 @@ fn reach(ctx: &ReducerContext, actor: u32, other: u32, now: u64) -> Reach {
     let other = crate::far::resolve(ctx, actor, other);
     let Some(them) = ctx.db.character().id().find(other).filter(|c| c.alive && c.id != actor) else { return r };
     match crate::perception::Sensing::new(ctx, actor, at, now).sensed_id(ctx, now, other) {
+        // Under heed, someone in the character's throng is not perceived as them (nothing when off).
+        Some((_, true)) if crate::heed::masked(ctx, &me, other, now) => return r,
         Some((c, true)) => {
             // A figure too far away to make out is not known to be them (far-label).
             let seen = crate::perception::project(ctx, &me, &them, now);
@@ -813,6 +870,58 @@ pub fn mind_consolidated(ctx: &ReducerContext, actor: u32, upto: u64) -> Result<
         }
     }
     Ok(())
+}
+
+/// Whether a mind's character means to fight people (relation-fight, docs/WORLD_RULES.md "Whom one
+/// fights"), from its reply's `fight` on a relation: `enemy`, `spare`, or "" to take it back. Only the
+/// character's own mind (its controller) says it, and never for a character a person plays: there
+/// only the person's own acts do (a blow at someone, `act::damage`). At most 32 at a time, each of
+/// a living person other than itself; a word other than those is refused with the reason, and
+/// nothing is written.
+#[spacetimedb::reducer]
+pub fn mind_fight(ctx: &ReducerContext, actor: u32, fights: Vec<FightIn>) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
+    authorize(ctx, actor)?;
+    if crate::presence::played(ctx, actor) {
+        return Err("a person plays this character: only their own acts say whom it fights".into());
+    }
+    if fights.len() > 32 {
+        return Err(format!("at most 32 at a time, not {}", fights.len()));
+    }
+    for f in &fights {
+        if !matches!(f.fight.as_str(), "enemy" | "spare" | "") {
+            return Err(format!("fight is enemy, spare or empty, not {:?}", f.fight));
+        }
+        if f.other == actor {
+            return Err("not toward oneself".into());
+        }
+        if !ctx.db.character().id().find(f.other).is_some_and(|c| c.kind == "person") {
+            return Err(format!("{} is not a person", f.other));
+        }
+    }
+    let now = common::now_ms(ctx);
+    for f in fights {
+        set_fight(ctx, actor, f.other, &f.fight, "mind", now);
+    }
+    Ok(())
+}
+
+/// Write (or with "" remove) whether `actor` means to fight `other`; no write when it says so already.
+pub fn set_fight(ctx: &ReducerContext, actor: u32, other: u32, fight: &str, by: &str, now: u64) {
+    let old = ctx.db.relation_fight().by_pair().filter((actor, other)).next();
+    match (old, fight) {
+        (None, "") => {}
+        (Some(o), "") => {
+            ctx.db.relation_fight().id().delete(o.id);
+        }
+        (Some(o), f) if o.fight == f && o.by == by => {}
+        (Some(o), f) => {
+            ctx.db.relation_fight().id().update(RelationFight { fight: f.into(), by: by.into(), updated_ms: now, ..o });
+        }
+        (None, f) => {
+            ctx.db.relation_fight().insert(RelationFight { id: 0, actor, other, fight: f.into(), by: by.into(), updated_ms: now });
+        }
+    }
 }
 
 /// Project consolidated mind state: persona, relations, beliefs, judgments, places.

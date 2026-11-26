@@ -2,48 +2,76 @@
  "about": "char-port-2 features (docs/char-port-2/PLAN.md), each off unless named in SLOP_PORT (comma-separated). face_types.load() merges a feature's per-class values into each type's records; a class is the type id without its line letter. With SLOP_PORT unset every type and file is built exactly as before.",
  "features": {
   "jaw": {
-   "about": "S1: the lower face's taper toward the drawing (chin over jaw 0.507, jaw 0.952 of the pupil-to-chin span; docs/char-port-2/s1). cage_head's jaw_taper and chin_taper: fractional offsets of the local half-width, the chin's below 0.095 H, the jaw's from 0.15 to 0.27 H. Per-person spread stays with the identity bones J_Id_Jaw (jaw_width) and J_Id_Chin (chin_width).",
+   "about": "S1: the lower face's taper toward the drawing (chin over jaw 0.507, jaw 0.952 of the pupil-to-chin span; docs/char-port-2/s1). cage_head's jaw_taper and chin_taper: fractional offsets of the local half-width, the chin's below 0.095 H, the jaw's from 0.15 to 0.27 H. Per-person spread stays with the identity bones J_Id_Jaw (jaw_width) and J_Id_Chin (chin_width). S7: `rise` (0.25, 0.7; the men's classes 0.3, 0.8), the jaw line climbing out of the chin sooner below a quarter of its height (cage_head Plan.jaw_line): the cage's jaw had stayed at the chin's height 0.18-0.23 H behind it, where the reference's has risen (cage_accept's w30 at 0.04 H; docs/char-port-2/s7/cage-accept.md).",
    "classes": {
     "adult-f": {
      "jaw": {
       "jaw_taper": -0.05,
-      "chin_taper": -0.18
+      "chin_taper": -0.18,
+      "rise": [
+       0.25,
+       0.7
+      ]
      }
     },
     "youth-f": {
      "jaw": {
       "jaw_taper": -0.04,
-      "chin_taper": -0.145
+      "chin_taper": -0.145,
+      "rise": [
+       0.25,
+       0.7
+      ]
      }
     },
     "elder-f": {
      "jaw": {
       "jaw_taper": -0.02,
-      "chin_taper": -0.16
+      "chin_taper": -0.16,
+      "rise": [
+       0.25,
+       0.7
+      ]
      }
     },
     "adult-m": {
      "jaw": {
       "jaw_taper": 0.0,
-      "chin_taper": -0.06
+      "chin_taper": -0.06,
+      "rise": [
+       0.3,
+       0.8
+      ]
      }
     },
     "youth-m": {
      "jaw": {
       "jaw_taper": 0.0,
-      "chin_taper": -0.05
+      "chin_taper": -0.05,
+      "rise": [
+       0.3,
+       0.8
+      ]
      }
     },
     "elder-m": {
      "jaw": {
       "jaw_taper": 0.0,
-      "chin_taper": -0.05
+      "chin_taper": -0.05,
+      "rise": [
+       0.3,
+       0.8
+      ]
      }
     },
     "child-u": {
      "jaw": {
       "jaw_taper": 0.0,
-      "chin_taper": -0.1
+      "chin_taper": -0.1,
+      "rise": [
+       0.25,
+       0.7
+      ]
      }
     }
    }
@@ -67,44 +95,52 @@
    "about": "S6: hair masters, a cut as a named set of parameters in the generator (hair.MASTERS): swept_braid, Cora's cut, its rear layers as stations, wide locks and companions joining a three-strand plait at staggered heights, the plait lifted at its start for the game camera and its crossings lit (docs/char-port-2/s6). Written as styles (`swept_braid`, its cuts and `.collar`) only with the flag."
   },
   "faceprop": {
-   "about": "S6b: the face's width against its eyes toward Cora's drawing (the face's outline at the cheek row, 0.030 m under the eyes, over the eye spacing, iris to iris, the ears left out: 1.75; docs/char-port-2/s6b). One width factor a class on the type's sections (w15, w30, wide), whole over the cheeks and fading to none by the chin and above the eyes (face_types.faceprop); the eyes, nose and mouth as they are, the ears carried in with the skull's side. A class's three lines take the same factor, so their differences stay.",
+   "about": "S6b: the face's width against its eyes toward Cora's drawing (the face's outline at the cheek row, 0.030 m under the eyes, over the eye spacing, iris to iris, the ears left out: 1.75; docs/char-port-2/s6b). One width factor a class on the type's sections (w15, w30, wide), whole over the cheeks and fading to none by the chin and above the eyes (face_types.faceprop); the eyes, nose and mouth as they are, the ears carried in with the skull's side. A class's three lines take the same factor, so their differences stay. **S7 step 3 (the GC's, 2026-11-21): 1.751 over each class's mean at 1.0 in the measuring view (orthographic, bind, level) at the landmark row (0.2967 of eye line to chin, the chin by the chin-ID); the children aimed at 1.80, rounder; elder-m 0.962, not 0.970, so elder-m-a's chin keeps cage_accept's 0.03 H (0.970 gives 0.031)** (docs/char-port-2/s7/ortho/README.md). S6b's 0.935-0.973 were derived on idle frames, a turned head.",
    "classes": {
     "adult-f": {
      "faceprop": {
-      "width": 1.0
+      "width": 0.987
      }
     },
     "adult-m": {
      "faceprop": {
-      "width": 0.935
+      "width": 0.961
      }
     },
     "child-u": {
      "faceprop": {
-      "width": 0.973
+      "width": 0.961
      }
     },
     "elder-f": {
      "faceprop": {
-      "width": 0.957
+      "width": 0.936
      }
     },
     "elder-m": {
      "faceprop": {
-      "width": 0.961
+      "width": 0.962
      }
     },
     "youth-f": {
      "faceprop": {
-      "width": 1.0
+      "width": 0.987
      }
     },
     "youth-m": {
      "faceprop": {
-      "width": 0.95
+      "width": 0.965
      }
     }
    }
+  },
+  "eyes": {
+   "about": "S7, must-fix 1: no eye white or iris above a closed lid. The eye's parts (the white's bowl, the iris and its lights) are placed against the open eye's plane in every face state (cage_head CageFace._eye), not against a plane fitted to the lids' ring as the state leaves it: eye-joy folds the ring onto one arc, and a plane fitted to a line tipped the iris forward through the skin above it (docs/char-port-2/s7).",
+   "classes": {}
+  },
+  "beard": {
+   "about": "S7, must-fix 3: the man's and elder's beards, a solid dark block over the lower face, by the paused char-4-body-joins beard work (8d1659ec5 and 537eb0457's face paint only; the neck lift is a later body pass, PLAN.md §9). Stubble and beards drawn in hairs at a density, their upper edge feathered, cheek hair thinning to the sideburn and the mouth's corners bare (face_paint.paint_skin, head_form.Head.beard_cover); the short and full beards' cores near opaque (the full's by the GC's choice in S7: drawn at a density it read pale); the overlay's alpha is the painted coverage (person.make_overlay); the far beard 1.5 mm off the skin (person.far_beard); the far beards share one grey mean (shade_mean FAR_BEARD).",
+   "classes": {}
   }
  }
 }

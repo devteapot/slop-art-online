@@ -11,7 +11,8 @@ on one style was off on the others.
 
 **The person:** a composed woman (`adult-f-b`) wearing `--style`, from a one-line book a bin, at
 11:00 (soft film), idle at 0 s, the calibration portrait (0:8:0.36:0.88) and three-quarter
-(-35:8:0.36:0.88).
+(-35:8:0.36:0.88). `--pose bind` draws the same shots in the bind pose (no clip); the pose is recorded in
+bins.json and printed (PLAN.md §7).
 
 **The bands:** a copy of the style (`zzcal-<style>.glb` beside it, removed afterwards) whose
 profile is fixed and pure (shade red, mid green, light blue, highlight yellow) is drawn first;
@@ -182,12 +183,15 @@ def book(path, style, tags):
     return keys
 
 
+POSE = 'idle'  # --pose: 'idle' (idle at 0 s, the calibration frame every palette was tuned in) or 'bind' (no clip)
+
+
 def render(key, book_path, binary, out):
     out.mkdir(parents=True, exist_ok=True)
     env = {k: v for k, v in os.environ.items() if not k.startswith('LIVING_GAME_')}
-    env.update(LIVING_GAME_VIEW=f'look:{key}', LIVING_GAME_LOOK_BOOK=str(book_path), LIVING_GAME_VIEW_SHOTS=','.join(f'idle@0/{s}' for s in SHOTS),
+    env.update(LIVING_GAME_VIEW=f'look:{key}', LIVING_GAME_LOOK_BOOK=str(book_path), LIVING_GAME_VIEW_SHOTS=','.join(f'idle@0/{s}' if POSE == 'idle' else s for s in SHOTS),
                LIVING_GAME_VIEW_OUT=str(out), LIVING_GAME_HOUR='11', LIVING_GAME_DAY_MINUTES='0', LIVING_GAME_FILM='soft',
-               LIVING_GAME_SETTINGS=str(out/'settings.json'), LIVING_GAME_SIZE='1600x900', LIVING_GAME_VIEW_CLIP='idle', RUST_LOG='warn,living_game=info')
+               LIVING_GAME_SETTINGS=str(out/'settings.json'), LIVING_GAME_SIZE='1600x900', LIVING_GAME_VIEW_CLIP=POSE, RUST_LOG='warn,living_game=info')
     with (out/'client.log').open('w') as log:
         subprocess.run([binary], env=env, stdout=log, stderr=subprocess.STDOUT, timeout=600, check=True)
     return [np.asarray(Image.open(p).convert('RGB')).astype(int) for p in sorted(out.rglob('*.png'))]
@@ -239,6 +243,7 @@ def main():
     ap.add_argument('--style', default='bob')
     ap.add_argument('--rounds', type=int, default=2)
     ap.add_argument('--start', help='a bins.json to start from (its last round\'s swatches)')
+    ap.add_argument('--pose', choices=('idle', 'bind'), default='idle', help="the frame's pose, recorded in bins.json (PLAN.md §7): idle at 0 s, the calibration frame, or the bind pose")
     ap.add_argument('--measure-only', action='store_true')
     ap.add_argument('--palette-chroma', action='store_true', help="reset the anchors' chroma to the palette's own before tuning")
     a = ap.parse_args()
@@ -273,7 +278,9 @@ def main():
     for st in styles:
         shutil.copyfile(HAIR/f'{st}.glb', dbgs[st])
         set_profile(dbgs[st])
-    log = dict(targets=tgt, styles=styles, rounds=[])
+    global POSE
+    POSE = a.pose
+    log = dict(pose=a.pose, targets=tgt, styles=styles, rounds=[])
     try:
         keys, ms = {}, {}
         for st in styles:
@@ -322,9 +329,9 @@ def main():
             if len(styles) > 1:
                 for st in styles:
                     fails = {f'{n}.{b}': per_checks[st][n][b].get('delta', per_checks[st][n][b].get('luma_delta')) for n in BINS for b in BANDS if not per_checks[st][n][b]['passed']}
-                    print(f'  round {rnd} {st}:', 'PASS' if per_ok[st] else f'fails {fails}', flush=True)
+                    print(f'  round {rnd} {st} (pose {a.pose}):', 'PASS' if per_ok[st] else f'fails {fails}', flush=True)
             (a.out/'bins.json').write_text(json.dumps(log, indent=1))
-            print(f'round {rnd}:', 'PASS' if ok else 'not yet', {n: {b: (checks[n][b].get('delta'), checks[n][b].get('luma_delta', checks[n][b].get('luma_above')), 'ok' if checks[n][b]['passed'] else 'FAIL') for b in BANDS} for n in BINS}, flush=True)
+            print(f'round {rnd} (pose {a.pose}):', 'PASS' if ok else 'not yet', {n: {b: (checks[n][b].get('delta'), checks[n][b].get('luma_delta', checks[n][b].get('luma_above')), 'ok' if checks[n][b]['passed'] else 'FAIL') for b in BANDS} for n in BINS}, flush=True)
             if ok or a.measure_only or rnd == a.rounds:
                 break
             for n in BINS:

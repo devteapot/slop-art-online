@@ -360,10 +360,12 @@ A record with a `holder` and a `toward` party whose terms carry a `label` (and a
 
 **Where stances are read:**
 
-- **Graph relation filters.** When `me` has no personal relation to `other`, `relation_ok` (`brain.rs`) checks whether my community's stance toward theirs fits the filter word:
+- **Graph relation filters.** `relation_ok` (`brain.rs`) checks whether my community's stance toward theirs fits the filter word:
   - `enemy`: value ≤ -25, or a label with rival, enemy, threat or foe;
   - `friend`: value ≥ 25, or a label with friend, ally or kin;
   - any other word: a word of the label (`"relation": "rival town"`).
+
+  For `enemy` and `friend` it does so when nothing before it decides (below, "Whom one fights"); for any other word, when `me` has no personal relation to `other`.
 
   Stances are cached per module instance and rebuilt when `record_clock` moves (any change to a record with a `holder` party).
 - **Laws:** `a.records` includes the stance records of the actor's community. `regard_toward(a, community)` in the script returns their terms.
@@ -390,6 +392,37 @@ Not built:
 
 - **Perception's `perceived_of` does not read stances yet.** A projection label such as "a Kettlebridge carter (rival town)" needs to know whether the observer can tell the target's community. That is the perception work's (`scale-1`).
 - **A regard writable by an act.** Rule gap 1 proposed that a community's head could change it. The world has no heads (no roles); a `declare` skill whose check is the script's own condition would be content on the same ops.
+
+### Whom one fights
+
+**Under the `relation_fight_on` law** (an ordinary law, since the minds read it: a change installs the rules again; **on by default since 2026-11-26**, [below](#default-on-relation-fight-on-2026-11-26); off by default from 2026-11-23 until then), a graph's `relation: enemy` (and `friend`) is decided in this order (relation-fight, 2026-11-23; `brain.rs` `relation_ok`, `fight_fits`, `personal`):
+
+1. **What the character said** (`relation_fight`, a private table keyed by the pair): `enemy` makes them an enemy whatever the community holds or the relation says; `spare` makes them no enemy, even of an enemy people. `spare` says nothing of friendship; `enemy` rules friendship out.
+2. **A personal relation that decides**, by its trust and label:
+   - clearly hostile: trust -25 or less, or a label with enemy, rival, threat, thief or foe: an enemy, not a friend;
+   - clearly peaceful: trust 25 or more, or a label with friend, family, partner, ally or kin: a friend, not an enemy;
+   - neither (a neutral row, or one with signs both ways): it does not decide.
+3. **The community's stance** (above).
+
+**With the law off** (`set_world_law relation_fight_on false`; shipped off from 2026-11-23 to 2026-11-26, and the rule before 2026-11-23), any personal relation row decides alone, and the community's stance is read only when there is none; nothing below is said or told: `relation_fight` is neither read nor written, the minds' prompts carry no order and no `fight` field, and their replies' `fight` is ignored. det_compare against main with the law off: identical.
+
+Before the law, any personal relation row decided alone, and a row with trust above -25 and no enemy word hid the community's war: in E5's real-mind melee 129 such rows about living foes switched fighters' targets off, 61 of them neutral first impressions ("stranger, trust 0"), wary notes or hostile rows without the word, against 68 truces (docs/SIDE_ASYMMETRY.md on `side-asymmetry`; the re-score is in the validation record `2026-11-23-0500-relation-fight.md`).
+
+**Who says it** (all under the law):
+- **A mind**, for its own character, with an optional `fight` on a relation in its consolidation reply (`"enemy"`, `"spare"`, or null to take it back). The service validates it and calls `mind_fight` (with or without a memory store); a word other than those, or an id that is not a living person other than itself, is left out with a note in the thought. Its later prompts show it beside the person ("fight: spare"). The graph grammar and the consolidation prompt gloss the order (`prompts.rs` `FIGHT_WORDS`), with no tactics suggested.
+- **A person**, for the character they play, only by their own acts: a blow of theirs that reaches someone (landed, blocked or dodged; `act::damage`) makes that person its enemy (`by: "player"`). No act says `spare` yet; a future control would. `mind_fight` refuses any character a person plays ("a person plays this character"), so no model, not even the player-memory service, sets it for them. While a mind holds a person's character after a takeover, what the person's acts said still stands.
+- The rows of a character are removed when it dies.
+
+**Behaviour change on seeded worlds, with the law on:** a neutral relation row no longer hides a community's stance. On the island, a resident with a neutral row toward someone of a town its people hold as "rival town" (-35, -40) or "outlaws" (-60) now counts them as `enemy` in its graphs, where before the row made them neither.
+
+#### Default on (relation-fight-on, 2026-11-26)
+
+**The general coordinator's decision (2026-11-23):** merge the law off by default, run one paid real-mind island comparison with the law off against on, and switch it on by default if the law-on arm shows no more than a modest rise in attacks, threats, wounds, deaths and fights started against people of a rival town or outlaws. The comparison (branch `relation-island-paid` at `f84d93533`, `docs/RELATION_ISLAND_PAID.md` there; a frozen plan and decision rule, 40 real minds for 20 minutes per arm, the same island seed and subjects; $2.38 spent of $4) found **no attacks, threats or fight starts against rival or outlaw people in either arm, and no deaths**. Under the frozen rule the law is eligible for default-on, so it is now on as shipped.
+
+- **The open observation.** Every attack in both arms came from a wolf's graph. The law-on arm had seven wolf attacks on one resident (Wren Ashby, one observed wound) against none with the law off, beside 16 and 12 wolf attacks on deer. Wolves' graphs do not read this law (it decides only a graph's `relation: enemy`/`friend` and the minds' prompts, and the wolves had no mind), so this is probably chance between the two worlds' trajectories, but its cause was not determined.
+- **Where the default is stated.** `laws()` in [`living/scripts/skills.rhai`](../living/scripts/skills.rhai) and `Laws::default()` in [`living/rules/src/script.rs`](../living/rules/src/script.rs); the rules test `attention_cues_are_the_world_s_laws` asserts both are on. The `law_about` line reads the value and did not change. No seed or laws overlay names the law; Cullet's overlay builds on `base_laws()` and inherits it. No trial variant on main sets it, so a trial batch made from this commit runs with it on (`relation-island-paid`'s `relation-fight-off`/`-on` variants set it either way).
+- **How it reaches a world** is as for any law default ([input latency, "How a law default reaches a world"](INPUT_LATENCY.md#how-a-law-default-reaches-a-world)): a new world gets it; a plain update keeps the world's installed script and its `false`; `just living-publish`'s script install brings it unless the world set its own value; a world whose script predates the law (before 2026-11-23) takes `Laws::default()`, now on, at its next update. The mind service compiles the world's `script` row, so it tells its minds the order exactly when the authority applies it.
+- **Keeping a world off:** `set_world_law relation_fight_on false` (an ordinary law: the rules are installed again, and the minds read it at their next compile).
 
 ### Experiences from rules
 

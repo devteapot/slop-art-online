@@ -44,3 +44,16 @@ The shipped script and the law are restored at the end, even on failure. Evidenc
 ## Since `laws-2` (2026-11-11)
 
 Which skills a graph keeps doing until they end (`latch`), which are worth an experience when done (`notable`), which are done while moving (`moving`), which are behaviour of the moment and not one-off acts (`moment`, was `combat::MOVES`) and which take the body back from a deliberate act (`reflex`, was `skill == "flee"`) are traits of each skill's `_spec()`. The sets are unchanged (`rules_read_traits_not_lists`); `scenes.py refusal`, the mechanics driver and the skirmish drive them.
+
+## Whom one fights
+
+Under the `relation_fight_on` law (ordinary, on by default since relation-fight-on, 2026-11-26, after the paid island comparison: docs/WORLD_RULES.md "Default on"; off, the rule before 2026-11-23: any relation row decides alone), a filter's `relation: enemy` and `friend` (relation-fight, 2026-11-23; docs/WORLD_RULES.md "Whom one fights"; `brain.rs` `relation_ok`, `fight_fits`, `personal`) take, in order: what the character said (`relation_fight`, private, keyed by `(actor, other)`: `enemy` or `spare`; a mind's `mind_fight`, a person's own blow in `act::damage`), then a personal relation that decides (hostile: trust -25 or less or a label with enemy, rival, threat, thief or foe; peaceful: trust 25 or more or a label with friend, family, partner, ally or kin; both or neither: undecided), then the community's stance. Before, any relation row decided alone, and a neutral one hid the community's war. Authority test `brain::tests::whom_one_fights_said_then_felt_then_the_community`.
+
+`scenes.py relation_fight` (any seed, about 2 minutes): first, with the law set off explicitly, a neutral row about B0 still hides the war (A attacks no one); then the law is set on explicitly for the stages below, and back to its shipped value (on) at the end, even on failure. Neither arm relies on the world's default. A minded walker A founds `Side A`; `spawn_battle_sides` makes Side B's fighters its people's enemies, held still. A's graph attacks `{"nearest": {"kind": "person", "relation": "enemy"}}`; each stage places the people around A (the graph first, then A's placement, which ends the 120 s wait under way) and reads whom A's new attack uses aim at over 10 s:
+- a neutral row ("stranger", trust 0, written with `mind_update`) about B1: A attacks B1;
+- a truce row (trust 40, "truce-keeper") about the nearer B2: A attacks only the farther B3;
+- `spare` said (`mind_fight`) over a hostile row (trust -60, "enemy") about the nearer B4: A attacks only B5; a word other than enemy, spare or "" is refused;
+- a walker R of no community: not attacked with nothing said, attacked once A says `enemy`; `""` takes it back.
+
+Evidence: `relation_fight.txt` (whom A aimed at, stage by stage) and the run's SQL files. Players: verify-player `combat.py` scene `strike` reads the `relation_fight` row the player's strike writes (`enemy`, by `player`). Minds: verify-minds `fight-field`.
+

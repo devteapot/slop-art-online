@@ -167,6 +167,78 @@ pub fn cues_on() -> bool {
     compiled().is_some_and(|s| s.laws().cues_on)
 }
 
+/// Whether the world's `heed_on` law holds (docs/ATTENTION_BUDGET.md §8): the think reply's
+/// optional `heed` field and the "# Whom you keep track of" section. Off in the bundled rules, so
+/// the prompts are as before.
+pub fn heed_on() -> bool {
+    compiled().is_some_and(|s| s.laws().heed_on)
+}
+
+/// The think reply's `heed` field while `heed_on` holds; empty otherwise.
+fn heed_reply_field() -> &'static str {
+    if heed_on() { HEED_REPLY_FIELD } else { "" }
+}
+
+/// The heed grammar after the reply's form while `heed_on` holds; empty otherwise.
+fn heed_grammar() -> &'static str {
+    if heed_on() { HEED_GRAMMAR } else { "" }
+}
+
+const HEED_REPLY_FIELD: &str = ", \"heed\": [rules] (optional: only when you mean to change whom you keep track of; \"instinct\" goes back to your instinct)";
+
+/// How a mind writes whom it keeps track of (`living_rules::heed`'s grammar; docs/ATTENTION_E5.md
+/// §6-§8): what each condition means, never what to watch for. Placeholders only, no person,
+/// duty or tactic (`the_heed_grammar_names_no_one`).
+pub const HEED_GRAMMAR: &str = "\n\n\
+Whom you keep track of (the heed field): you keep track of only so many others at once as individuals; everyone else you see is a throng, counted but not told apart. \
+Whoever you are acting on, and whoever's blow has just reached you, you always see; anyone else you see coming only while you keep track of them. \
+Your heed is a list of rules read in order; each takes the creatures in sight its condition holds for, up to its \"take\", until your places are full. Every rule is one of two shapes, with no other fields:\n\
+- {\"if\": condition, \"order\": \"nearest|closing|newest|longest\", \"take\": a number or \"rest\", \"hold_s\": 0 to 60, \"why\": \"your own words\"}\n\
+- {\"score\": [{\"if\": condition, \"w\": weight from -10 to 10}, ...], \"take\": ..., \"hold_s\": 0 to 60, \"why\": ...}: ranks by the summed weights, nearer first on ties (no \"order\").\n\
+\"hold_s\" keeps what the rule took for that many seconds after its condition stops holding. \
+A condition is {\"word\": value}; when one condition has several words, each of them has to hold. The words, about the one considered:\n\
+\"who\": an id you see (a number), a kind, a relation, an age, or {\"kind\": ..., \"relation\": ..., \"age\": ...}. Kinds of creature: person, or an animal's kind as you see it. Ages, as you see them: baby, child, adult, old. Relations: friend, enemy, stranger (anyone whose name you do not know), family, community, any.\n\
+\"threatened\": true (its attack or throw is winding up at you now, before it lands); \
+\"attacker\": {\"within_s\": s} (it went for you within s seconds: winding up at you now, or a blow of its reached you, landed, blocked or dodged); \"hurt_me\": {\"within_s\": s} (a blow of its hurt you); \
+\"doing\": {\"is\": a skill or a kind word, \"phase\": \"winding up|about to release|releasing|recovering|holding|under way\", \"at_me\": true} (what it visibly does, at anyone or at you); \
+\"addressing\": {\"within_s\": s} (it spoke, waved or offered to you); \"near\": metres; \"closing\": {\"above\": m/s} (coming toward you); \
+\"fighting\": true (visibly in a fight move); \"fallen\": true (down); \"acting_on_heeded\": true (its act is aimed at someone you keep track of); \
+\"new\": s (in sight for under s seconds); \"loud\": true (calling, shouting or crying); \"lit\": true (carrying a light at night); \
+\"cued\": true (it matches something you said to look out for); \"chosen\": true; \"heeded_s\": {\"above\": s} (how long you have kept track of it); \
+\"self\": one of your own: health, energy, hunger, stamina (above/below), night, hurt_within; \"count\": {\"of\": a kind, \"within\": metres, \"at_least\": n}; \
+\"all\" or \"any\": [conditions]; \"not\": condition. At most 12 rules. \
+The form only, with placeholders: {\"if\": {\"who\": \"<a kind>\"}, \"take\": 2, \"why\": \"<your words>\"}, \
+{\"if\": {\"who\": <an id>, \"doing\": {\"is\": \"<a skill>\"}}, \"hold_s\": 10, \"why\": \"<your words>\"}, \
+{\"score\": [{\"if\": <a condition>, \"w\": 2}, {\"if\": <another>, \"w\": 1}], \"take\": \"rest\", \"hold_s\": 3, \"why\": \"<your words>\"}.";
+
+/// The think prompt's "# Whom you keep track of" section from the scene's `_heed` (the authority's
+/// note on the character's own heed): how many, by its own policy or its instinct, each rule's
+/// `why`, the notes on its own policy, and the last refusal. Empty when the scene has none.
+pub fn heed_section(scene: &str) -> String {
+    if !scene.contains("\"_heed\"") {
+        return String::new();
+    }
+    let Some(h) = serde_json::from_str::<serde_json::Value>(scene).ok().and_then(|v| v.get("_heed").cloned()) else { return String::new() };
+    let mut out = format!(
+        "\n# Whom you keep track of\nAbout {} others at once as individuals, by {}",
+        h["capacity"].as_u64().unwrap_or(0),
+        h["by"].as_str().unwrap_or("your instinct")
+    );
+    let whys: Vec<&str> = h["rules"].as_array().map(|a| a.iter().filter_map(|w| w.as_str()).collect()).unwrap_or_default();
+    if !whys.is_empty() {
+        out.push_str(&format!(": {}", whys.join("; ")));
+    }
+    out.push_str(".\n");
+    if let Some(n) = h["notes"].as_array().filter(|a| !a.is_empty()) {
+        let n: Vec<&str> = n.iter().filter_map(|x| x.as_str()).collect();
+        out.push_str(&format!("Noted on your heed: {}.\n", n.join("; ")));
+    }
+    if let Some(r) = h["refused"].as_str().filter(|r| !r.is_empty()) {
+        out.push_str(&format!("Your last heed was refused, so the one before stays: {r}.\n"));
+    }
+    out
+}
+
 /// Whether the world's rules tell a speaker the truth about a line no one addressed could hear
 /// (the `speech_truth` law; on in the bundled rules).
 pub fn speech_truth() -> bool {
@@ -435,6 +507,13 @@ pub fn world_rules() -> Arc<str> {
 
 /// What a graph's `relation: "stranger"` matches under the world's rules in force (the
 /// `stranger_by_name` law, docs/STRANGERS.md), in the words the graph grammar gives it.
+/// Whether the world's `relation_fight_on` law holds (relation-fight, docs/WORLD_RULES.md "Whom
+/// one fights"): the minds are told the order and the `fight` field, and their replies' `fight`
+/// is sent, only while it does; off, their prompts are as before.
+pub fn relation_fight_on() -> bool {
+    compiled().is_some_and(|s| s.laws().relation_fight_on)
+}
+
 fn stranger_words() -> &'static str {
     stranger_words_for(compiled().is_some_and(|s| s.laws().stranger_by_name))
 }
@@ -472,6 +551,7 @@ Deliberate one-off interactions (starting a family, trading, giving, teaching, w
     // Only people's graphs read judgments for now (the first one is a person's fight).
     let judged = if speaks { judged_line() } else { String::new() };
     let stranger = stranger_words();
+    let fight = if relation_fight_on() { format!("; {FIGHT_WORDS}") } else { String::new() };
     // The world's `speech_truth`: what becomes of a planned line to someone.
     let say_note = if speaks && speech_truth() {
         " A line to someone is not said if, when it comes due, they are beyond what it carries (you are told instead) or the talk with them has moved on since you planned it (they spoke to you, or you answered them)."
@@ -497,7 +577,7 @@ Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}
   {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"bedtime\": true}} (your own hours for sleep) {{\"evening\": true}} (your own evening) {{\"work_hours\": true}} (your own working hours) {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
   {{\"can\": {{\"do\": \"eat\", \"item\": \"food\"}}}} whether a skill could go ahead now by the world's rules (what it takes is at hand; its target in sight), e.g. {{\"can\": {{\"do\": \"cook\", \"target\": {{\"nearest\": \"campfire\"}}, \"item\": \"fish\"}}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
-Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"sound\" (toward what you hear and cannot see, when sight depends on facing) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|family, stranger {stranger}, or any label you gave a relationship, e.g. partner)
+Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"sound\" (toward what you hear and cannot see, when sight depends on facing) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|family, stranger {stranger}, or any label you gave a relationship, e.g. partner{fight})
   {{\"nearest\": {{\"kind\": \"storage\", \"mine\": true}}}} {{\"nearest\": {{\"kind\": \"remains\", \"holds\": \"meat\"}}}} {{\"id\": 6}} {{\"named\": \"Oren\"}} {{\"place\": \"a quoted name under Places you remember\"}} {{\"at\": [x, y]}}
   Kinds: berry_bush tree boulder reeds fishing_spot clay_bank | campfire shelter house storage sign gate remains | person deer wolf | grass forest (the nearest tile of that ground in sight).
   People/creature/resource targets resolve only when currently in sight. A place resolves only by a quoted name under Places you remember (\"home\" is your own home); coordinates always resolve: reach a resource listed under Resources you have seen, or any spot, with {{\"at\": [x, y]}}. A do-node whose target is missing fails, so \"first\" moves on.
@@ -525,6 +605,13 @@ Every branch must lead to action: a guard whose then-branch can only wait blocks
         g.lines().filter(|l| !l.contains("\"say\"")).collect::<Vec<_>>().join("\n")
     }
 }
+
+/// Whom the body counts as an enemy or a friend (relation-fight; the authority's `relation_ok`,
+/// docs/WORLD_RULES.md "Whom one fights"), in the words the graph grammar and consolidation give.
+pub const FIGHT_WORDS: &str = "Whom your body counts as an enemy (relation: enemy), in this order: whom you said you fight (a relation's \"fight\": \"enemy\") \
+or said you spare (\"spare\": never an enemy); else how you feel about them, when it is clear (trust -25 or less, or a label with enemy, rival, threat, thief or foe: \
+an enemy; trust 25 or more, or a label with friend, family, partner, ally or kin: not one); else how your people stand with theirs (your dealings). \
+A friend (relation: friend) is the same the other way, except that \"spare\" says nothing of friendship.";
 
 pub const ACT_REPAIR: &str = "Repair only the refused one-off actions listed by the authority. Keep their original intentions and use the valid act names and known targets. Return one JSON object with \"replacements\": an array in the same order and of the same length as \"rejected\", each entry either one corrected action object or null if you cannot repair it. A walk to a known place is {\"do\":\"goto\",\"target\":{\"place\":\"home\"}}. Do not add speech, repeat any other act, change a plan, or invent targets.";
 
@@ -672,12 +759,14 @@ Reply with ONE JSON object: {{\"thought\": \"what you make of this moment (1-3 s
 meet Mira (#3) at the ford at dawn; from now on keep watch at night)\"] (may be empty), \
 \"say\": {{\"text\": \"...\", \"to\": id or null{}}} or null, \
 \"judgments\": [{{\"key\": \"snake_case\", \"value\": 0.0-1.0, \"why\": \"...\"}}] (optional stances), \
-\"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering){}{}}}",
+\"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}] (optional places worth remembering){}{}{}}}{}",
         opening(frame, THINK_OPENING),
         world_rules(),
         say_way_field(),
         if projects { THINK_PROJECTS } else { "" },
-        notice_field()
+        notice_field(),
+        heed_reply_field(),
+        heed_grammar()
     ))
 }
 
@@ -768,7 +857,29 @@ fn projects_section(out: &mut Segments, projects: &str) {
     }
 }
 
+/// A scene as a model reads it: without the authority's `_stage` (level-of-detail plumbing: how
+/// many players are in a heed throng, docs/ATTENTION_BUDGET.md v2.1 point 4), which is nothing
+/// the character perceives. Unchanged when it has none.
+pub fn model_scene(scene: &str) -> std::borrow::Cow<'_, str> {
+    if !scene.contains("\"_stage\"") && !scene.contains("\"_heed\"") {
+        return std::borrow::Cow::Borrowed(scene);
+    }
+    match serde_json::from_str::<serde_json::Value>(scene) {
+        Ok(mut v) => {
+            if let Some(o) = v.as_object_mut() {
+                o.remove("_stage");
+                // `_heed` is rendered as its own section (`heed_section`), not shown in the scene.
+                o.remove("_heed");
+            }
+            std::borrow::Cow::Owned(v.to_string())
+        }
+        Err(_) => std::borrow::Cow::Borrowed(scene),
+    }
+}
+
 pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str, projects: &str) -> String {
+    let heed = heed_section(scene);
+    let scene = &*model_scene(scene);
     let mut out = Segments::default();
     common(c, &mut out);
     out.push(Stability::Character, format!("\n# Your habits (your body keeps to them)\n{habits}\n"));
@@ -777,6 +888,9 @@ pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str, 
     out.push(Stability::Dynamic, "\n# Recent experiences (oldest first)\n");
     for e in &c.experiences {
         out.push(Stability::Dynamic, format!("- {e}\n"));
+    }
+    if !heed.is_empty() {
+        out.push(Stability::Dynamic, heed);
     }
     out.push(Stability::Dynamic, format!("\n# What you perceive right now\n{scene}\n"));
     out.push(Stability::Dynamic, format!("\n# What you were doing\n{plan}\n"));
@@ -820,6 +934,12 @@ pub fn consolidate_system() -> String {
 
 /// The consolidation system prompt under a frame, with or without projects (`LIVING_PROJECTS`).
 fn consolidate_system_in(frame: Frame, projects: bool) -> String {
+    // Whom one fights, only under the `relation_fight_on` law: the order and the `fight` field.
+    let (fight, fight_field) = if relation_fight_on() {
+        (format!(" A relation may also say whether the person fights them: \"fight\": \"enemy\" or \"spare\" (null takes back what was said; leaving it out says nothing). {FIGHT_WORDS}"), " \"fight\": \"enemy|spare|null (optional)\",")
+    } else {
+        (String::new(), "")
+    };
     shared(format!(
         "{} \
 You keep the person's mind as a graph that you shape freely: concepts (people, places, things, ideas, plans, fears, customs, promises...) \
@@ -841,7 +961,7 @@ Any other key is yours to invent (\"idea:shared_storage\", \"plan:river_camp\").
 The body acts on three parts of the mind without thinking: how the person feels about people (self -FEELS {{trust, affinity -100..100, label, note}}-> person:<id>), \
 stances the behavior graph can test (self -JUDGES {{value 0..1, why}}-> stance:<key>, e.g. stance:wolves_hunt_near_camp; stances relax toward 0.5 unless reinforced) \
 and places with coordinates (place:<name> with props x, y). You can write those edges directly, or use the shorthand arrays below \
-(relations, judgments, places), which become exactly those edges. Keep stance keys stable.\n\n\
+(relations, judgments, places), which become exactly those edges. Keep stance keys stable.{fight}\n\n\
 Reply with ONE JSON object:\n\
 Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not every event).\n\
 {{\"summary\": \"what this meant to the person (1-2 sentences)\",\n\
@@ -850,7 +970,7 @@ Keep the reply compact: at most 12 nodes and 20 edges (meaning and change, not e
  \"edges\": [{{\"from\": \"person:4\", \"rel\": \"TOOK_FOOD_FROM\", \"to\": \"place:our_storage\", \"confidence\": 0.0-1.0, \"because\": [experience ids], \"props\": {{...}}}}],\n\
  \"retract\": [{{\"from\": \"self\", \"rel\": \"TRUSTS\", \"to\": \"person:4\"}}],\n\
  \"merge\": [{{\"from\": \"idea:kael_seems_kind\", \"into\": \"idea:kael_is_friendly\"}}],\n\
- \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"friend|family|partner|ally|rival|enemy|stranger|...\", \"note\": \"short\", \"because\": [experience ids]}}],\n\
+ \"relations\": [{{\"id\": person id, \"trust\": 0, \"affinity\": 0, \"label\": \"friend|family|partner|ally|rival|enemy|stranger|...\", \"note\": \"short\",{fight_field} \"because\": [experience ids]}}],\n\
  \"judgments\": [{{\"key\": \"...\", \"value\": 0.0-1.0, \"why\": \"...\", \"because\": [experience ids]}}],\n\
  \"places\": [{{\"name\": \"...\", \"x\": 0, \"y\": 0}}],\n\
  \"identity\": null or {{\"narrative\": \"first person, 2-4 sentences\", \"values\": [...], \"goals\": [...], \"pastimes\": [...], \"calling\": \"...\", \"traits\": {{...}}, \"mood\": \"...\", \"why\": \"what changed\"}}{}}}",
@@ -1233,6 +1353,7 @@ pub fn fast_user_v(f: FastFrame, reason: &str, persona: &str, experiences: &[Str
 }
 
 pub fn deliberate_user(c: &Ctx, scene: &str, graph_outline: &str, plan: &str, reason: &str, repertoire: &str) -> Segments {
+    let scene = &*model_scene(scene);
     let mut out = Segments::default();
     out.push(Stability::Dynamic, format!("\n# Why you are thinking now\n{reason}\n\n"));
     common(c, &mut out);
@@ -1270,6 +1391,7 @@ Feel the moment as the animal does. Answer with ONE JSON object of two short str
 }
 
 pub fn animal_think_user(name: &str, kind: &str, temperament: &str, mind: &[String], experiences: &[String], scene: &str, reason: &str) -> String {
+    let scene = &*model_scene(scene);
     let (scene, smells) = split_smells(scene);
     let mut out = Segments::default();
     out.push(Stability::Character, format!("# Who you are\n{name}, a {kind}.\nYour temperament: {temperament}.\n"));
@@ -1362,6 +1484,7 @@ or {{\"graph\": \"keep\"}} when the impulse needs nothing its instincts don't al
 }
 
 pub fn animal_compile_user(name: &str, kind: &str, impulse: &str, feeling: &str, scene: &str, top: &str, routines: &str) -> String {
+    let scene = &*model_scene(scene);
     let mut out = Segments::default();
     out.push(Stability::Character, format!("{name} the {kind}\n"));
     out.push(Stability::Character, format!("\n\nIts routines (how each has gone):\n{routines}"));
@@ -1518,7 +1641,7 @@ mod tests {
     /// the minds on its old value until the next install.
     #[test]
     fn the_laws_minds_read_change_by_an_install() {
-        let read = ["cues_on", "cue_cooldown_s", "cue_gap_s", "speech_truth", "stranger_by_name", "think_framing", "fast_lane_inflight"];
+        let read = ["cues_on", "cue_cooldown_s", "cue_gap_s", "speech_truth", "stranger_by_name", "relation_fight_on", "think_framing", "fast_lane_inflight", "heed_on"];
         for l in read {
             assert!(living_rules::script::VALUE_ONLY.iter().all(|(n, _)| *n != l), "{l} is value-only: the mind service must lay `law_override` over its script first");
         }
@@ -1652,6 +1775,43 @@ mod tests {
 
     /// The cue field's examples and its schema name no one and no duty: what a mind watches
     /// for is its own (docs/ATTENTION.md).
+    #[test]
+    fn the_heed_grammar_names_no_one() {
+        let f = HEED_GRAMMAR.to_lowercase();
+        for w in ["attacker", "enemy", "stranger", "guard", "duty", "role", "should", "best", "must", "flank", "ambush", "protect", "kill"] {
+            // The grammar's own words (a relation, the `attacker` condition) appear once each.
+            let in_grammar = matches!(w, "stranger" | "enemy" | "attacker");
+            let n = f.split(|c: char| !c.is_ascii_alphanumeric() && c != '_').filter(|x| *x == w).count();
+            assert!(n <= usize::from(in_grammar), "`{w}` appears {n} times in the heed grammar");
+        }
+        assert!(f.contains("<a kind>") && f.contains("<your words>"));
+    }
+
+    #[test]
+    fn the_heed_section_shows_capacity_rules_and_the_refusal() {
+        let scene = r#"{"_heed":{"capacity":11,"by":"your own policy","rules":["whoever goes for me","my own"],"notes":["rule 2: held 60 s"],"refused":"rule 1: `dragon` is not a kind of creature"},"creatures":[],"you":{"id":1}}"#;
+        let h = heed_section(scene);
+        assert!(h.contains("# Whom you keep track of") && h.contains("About 11 others") && h.contains("by your own policy: whoever goes for me; my own"), "{h}");
+        assert!(h.contains("Noted on your heed: rule 2: held 60 s") && h.contains("refused, so the one before stays: rule 1: `dragon`"), "{h}");
+        assert!(!model_scene(scene).contains("_heed"), "the note is a section, never part of the scene");
+        assert!(heed_section(r#"{"creatures":[]}"#).is_empty());
+        // Without the law (no compiled rules here), the think system prompt has no heed at all.
+        assert!(!think_system().contains("heed"));
+    }
+
+    #[test]
+    fn a_scenes_stage_mark_never_reaches_a_model() {
+        // Heed (docs/ATTENTION_BUDGET.md v2.1 point 4): the authority counts players in a mind's
+        // throng under `_stage` for the level of detail; no prompt shows it.
+        let scene = r#"{"_stage":{"throng_players":2},"creatures":[],"throngs":[{"about":5,"dir":"east"}],"you":{"id":1}}"#;
+        let shown = model_scene(scene);
+        assert!(!shown.contains("_stage") && !shown.contains("throng_players") && shown.contains("throngs"), "{shown}");
+        assert!(!think_user(&context("Ivo"), scene, "", "", "", "").contains("throng_players"));
+        // A scene without one passes through untouched.
+        let plain = r#"{"creatures":[{"id":9}],"you":{"id":1}}"#;
+        assert!(matches!(model_scene(plain), std::borrow::Cow::Borrowed(s) if s == plain));
+    }
+
     #[test]
     fn cue_examples_name_no_one() {
         let field = notice_field_for(600.0, 60.0).to_lowercase();
@@ -2016,6 +2176,24 @@ mod tests {
         assert!(!system.contains(stranger_words_for(true)));
         let on = living_rules::script::with_world_laws(include_str!("../../scripts/skills.rhai"), &[("stranger_by_name".into(), serde_json::json!(true))]);
         assert!(living_rules::script::Scripts::new(&on).unwrap().laws().stranger_by_name);
+    }
+
+    /// relation-fight: with the `relation_fight_on` law on (shipped since relation-fight-on,
+    /// 2026-11-26), the deliberation and consolidation prompts tell the order and the
+    /// consolidation asks for `fight`; a world may set it off, and the law parses off. Off, the
+    /// prompts are as before 2026-11-23 (the empty strings in `consolidate_system_in` and the
+    /// grammar), checked live with verify-core's and verify-minds' law-off worlds.
+    #[test]
+    fn whom_one_fights_is_told_only_under_its_law() {
+        for purpose in ["deliberate", "consolidate"] {
+            let (system, _) = fixture(purpose, "Aria", "person");
+            assert!(system.contains(FIGHT_WORDS), "{purpose}: {system}");
+        }
+        let (system, _) = fixture("consolidate", "Aria", "person");
+        assert!(system.contains("\"fight\""), "{system}");
+        assert!(living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")).unwrap().laws().relation_fight_on);
+        let off = living_rules::script::with_world_laws(include_str!("../../scripts/skills.rhai"), &[("relation_fight_on".into(), serde_json::json!(false))]);
+        assert!(!living_rules::script::Scripts::new(&off).unwrap().laws().relation_fight_on);
     }
 
     #[test]

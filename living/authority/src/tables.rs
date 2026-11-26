@@ -83,7 +83,9 @@ pub struct SexRow {
 /// once per pair, the first time: in the observer's scene (`perceive::scene_json`, a person made
 /// out) and at a first sight (`brain.rs`); never from afar, by name, kinship, a relation or speech.
 /// The mind service states another's sex only from this row, from what is in sight now, or face
-/// to face. Deleted with the observer at death. Read by the pair index; the mind service reads it
+/// to face. Deleted with the observer at death, with the one known when their remains are gone,
+/// and with the observer's familiarity with them when that fades (growth-fix-2: bounded like
+/// the perceived knowledge it belongs to). Read by the pair index; the mind service reads it
 /// as the owner.
 #[spacetimedb::table(accessor = sex_seen, index(accessor = by_pair, btree(columns = [observer, known])))]
 pub struct SexSeen {
@@ -92,6 +94,8 @@ pub struct SexSeen {
     pub id: u64,
     #[index(btree)]
     pub observer: u32,
+    /// Indexed: the rows about someone go when their remains are gone (`sex::forget_known`).
+    #[index(btree)]
     pub known: u32,
     pub sex: u8,
     pub at_ms: u64,
@@ -401,6 +405,9 @@ pub struct Character {
     pub controller: Identity,
     /// Driven by an LLM mind (deliberations and percepts are produced).
     pub ai: bool,
+    /// Indexed: the living are read without walking the dead, whose rows stay (death is
+    /// permanent and its records are kept), and grow by every death (`combat::human`).
+    #[index(btree)]
     pub alive: bool,
     pub born_ms: u64,
     pub died_ms: u64,
@@ -1236,6 +1243,28 @@ pub struct Relation {
     pub updated_ms: u64,
 }
 
+/// Whether a character means to fight a person, when it has said so (relation-fight,
+/// docs/WORLD_RULES.md "Whom one fights"): `enemy` (a graph's `relation: enemy` counts them, whatever
+/// the community's stance or the relation's trust) or `spare` (not an enemy, even of an enemy
+/// people). No row: the relation's trust and label decide when they are clear, else the
+/// community's stance. Set by a mind's reply (`mind_fight`) for its own character, and for a
+/// person's character by that person's own acts (a blow at someone: `enemy`), never by a model.
+/// Private: the authority's and the owner's (the mind service shows a mind its own).
+#[spacetimedb::table(accessor = relation_fight,
+    index(accessor = by_pair, btree(columns = [actor, other])))]
+pub struct RelationFight {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    pub actor: u32,
+    pub other: u32,
+    /// `enemy` or `spare`.
+    pub fight: String,
+    /// Who said it: `mind` (its reply) or `player` (the person's own act).
+    pub by: String,
+    pub updated_ms: u64,
+}
+
 #[spacetimedb::table(accessor = belief)]
 pub struct Belief {
     #[primary_key]
@@ -1460,6 +1489,18 @@ pub struct Chronicle {
     pub x: f32,
     pub y: f32,
     pub text: String,
+}
+
+/// How many people have died in this world, kept as they die (private; one row, id 0): what
+/// `stats.deaths` reports, without housekeeping walking every dead character's row each second
+/// (the dead keep their rows; growth-fix, 2026-11-23). Written by `act::die_unseen` in the
+/// death's own transaction; made once by a walk of the table where it is missing (a new world,
+/// or a world from before this table), so it always equals the dead `person` rows.
+#[spacetimedb::table(accessor = census)]
+pub struct Census {
+    #[primary_key]
+    pub id: u8,
+    pub dead_people: u32,
 }
 
 /// Rolling counters for load measurement (one row, updated by housekeeping).
@@ -2612,4 +2653,99 @@ pub struct SlowTimer {
     #[auto_inc]
     pub scheduled_id: u64,
     pub scheduled_at: ScheduleAt,
+}
+
+/// A character's own heed policy, written by its mind (`mind_heed`; docs/ATTENTION_BUDGET.md §8):
+/// the policy in force (validated JSON, `{"heed": [rules]}`; while there is no row, the species'
+/// instinct), what the validation noted, and the last refusal, which the character's next think
+/// prompt shows until a new policy is accepted. Private: only reducers and the database owner read
+/// it (docs: tables, access permissions). Read by primary key at each heed pass; written only when a
+/// mind sends a policy.
+#[spacetimedb::table(accessor = heed_policy)]
+#[derive(Clone)]
+pub struct HeedPolicy {
+    #[primary_key]
+    pub actor: u32,
+    /// The accepted policy as JSON; empty: none accepted yet (the instinct).
+    pub policy: String,
+    pub written_ms: u64,
+    /// What the accepted policy's validation changed or left out, for the mind (JSON list of words).
+    pub notes: String,
+    /// The last refusal's reason; empty when the last policy sent was accepted.
+    pub refusal: String,
+    pub refused_ms: u64,
+}
+
+/// A player's pins and focus for its heed (docs/ATTENTION_BUDGET.md, "Player-side interface",
+/// point 5; the `heed_players` law): whom it asks to keep track of. One row per played character,
+/// replaced by each accepted `human_heed` call and read by primary key at its heed pass, where each
+/// pin and the focus weigh in its candidate's `chosen` (the instinct's third rule). Private: only
+/// reducers and the database owner read it (docs: tables, access permissions); the player knows
+/// what it sent. Goes with the character's body.
+#[spacetimedb::table(accessor = heed_choice)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct HeedChoice {
+    #[primary_key]
+    pub actor: u32,
+    /// At most [`crate::heed::MAX_PINS`] creatures, each one the character perceived when pinned.
+    pub pins: Vec<u32>,
+    pub focus: Option<u32>,
+    /// When it was accepted (authority ms): the next call waits [`crate::heed::CHOICE_FLOOR_MS`].
+    pub at_ms: u64,
+}
+
+/// What `human_heed` takes (docs/ATTENTION_BUDGET.md, "The player's input"): up to four pins and
+/// one focus, each a creature its character perceives now; an empty list and `None` clear them.
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct HeedInput {
+    pub pins: Vec<u32>,
+    pub focus: Option<u32>,
+}
+
+/// A player's throng, counted in cells (docs/ATTENTION_BUDGET.md, "`seen_throng`"; the
+/// `heed_players` law): what it sees but does not keep track of, never named. Public with
+/// row-level security (`viewer = :sender`): a client receives only its own rows.
+///
+/// - `cell`: the cell's top-left 6 m square, `(x / 6) << 16 | (y / 6)` in map metres; `size`: its
+///   side in 6 m squares (1, or 2 for four merged far cells; at most [`crate::throng::MAX_ROWS`]
+///   rows a viewer, the farthest merged first).
+/// - Quantized, so a row changes only when what one would make out changes: `count` exact to 5,
+///   then to the nearest 5; `moving` and `fighting` the same way; `spread` (the cell's members'
+///   widest extent, metres) to 2 m; `heading` the members' mean way of moving in eight sectors
+///   (0 east, then clockwise in map coordinates: 2 south, 4 west, 6 north), 255 when most stand
+///   or their ways cancel; `kinds` bits ([`crate::throng::PEOPLE`], `WOLVES`, `DEER`, `OTHERS`).
+/// - Written by the viewer's sweep when a cell's fields change, never rewritten unchanged; a
+///   viewer's rows go when heed stops applying to it (the law off: all of them in one tick), when
+///   its character dies or another is played.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_throng, public)]
+pub struct SeenThrong {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub cell: u32,
+    pub size: u8,
+    pub count: u16,
+    pub spread: u8,
+    pub heading: u8,
+    pub moving: u16,
+    pub fighting: u16,
+    pub kinds: u8,
+}
+
+/// The tick's own time in microseconds, for measuring its cadence (the `tick_marker_on` law, a
+/// measuring aid, off by default; docs/TICK_RATE.md "The step marker"). One row (id 0), written by
+/// each tick while the law holds: its count and its reducer timestamp (`ctx.timestamp`, the time
+/// the scheduler dispatched the call: SpacetimeDB 2.14.1 sets it in `call_reducer_params`, before
+/// any wait in the database's queue). Private: the owner's watcher subscribes it. `clock`'s readers
+/// are unaffected.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = tick_mark)]
+pub struct TickMark {
+    #[primary_key]
+    pub id: u8,
+    pub tick: u64,
+    pub start_us: i64,
 }

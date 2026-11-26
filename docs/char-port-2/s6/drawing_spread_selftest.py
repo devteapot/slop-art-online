@@ -22,6 +22,9 @@ The cases:
 - **render() with the ear-ID frame** (image_spread.py run with the ear-ID type installed): its cheek stops at the
   ears too. Known: the cheek 100 px, the hair body over it 1.6.
 
+- **the landmark row** (`landmark_cases`): a face that narrows under the eyes, so the row's height matters; the
+  drawing's chin and a render's chin-ID chin (drawing_spread.chin_px), each with its row and width known.
+
 Each must return the known answer exactly (whole pixels) or to 0.001 (ratios). Exit status 1 on any failure.
     python3 drawing_spread_selftest.py
 """
@@ -70,6 +73,61 @@ def save(a, d, name):
     return p
 
 
+def tapered(a, skin):
+    """A face whose width changes under the eyes, so the row matters: half-width 50 to row 220, then 50 - (y - 220) // 2
+    to row 270 (25), then to a 3 px chin at row 300; a 41 px neck under it."""
+    for y in range(120, 331):
+        hw = 50 if y <= 220 else 50 - (y - 220) // 2 if y <= 270 else round(25 - 22 * (y - 270) / 30) if y <= 300 else 20
+        a[y, CX - hw:CX + hw + 1] = skin
+    yy, xx = np.mgrid[0:Hh, 0:W]
+    return a, yy, xx
+
+
+def landmark_cases():
+    """The landmark row (ROW_FRACTION of the eye line to the chin), the drawing's and a render's.
+    - **a drawing** (its chin the centre run's narrowest row, 300): row round(200 + 0.2967 x 100) = 230, the face
+      2 x 45 = 90 px; S6b's spacing rule's row 226 would give 94;
+    - **a render with a chin-ID frame** (the face's front yellow down to row 290, the neck's skin under it unbroken,
+      as a render has it): chin 290, row round(200 + 0.2967 x 90) = 227, the face 2 x 47 = 94 px; and the same with the
+      yellow shaded (200, 190, 40) and as the client draws it (227, 217, 113); a chin-ID frame with no front stops;
+    - **a render without a chin-ID frame:** S6b's spacing rule (row 226), as before."""
+    out = []
+    box = (0, 0, W, Hh)
+    with tempfile.TemporaryDirectory() as d:
+        a, yy, xx = tapered(canvas((240, 240, 240)), (241, 183, 148))
+        for ex in (CX - SPACING // 2, CX + SPACING // 2):
+            a[(yy - EYE_Y) ** 2 + (xx - ex) ** 2 <= 36] = (60, 150, 60)
+        a[60:141, 120:281] = (152, 72, 43)  # hair, as the drawing case
+        r, _ = D.measure(save(a, d, "tapered.png"), box)
+        out += [("landmark, drawing: chin row", r["chin_row"], 300, 0), ("landmark, drawing: cheek row", r["cheek_row"], 230, 0),
+                ("landmark, drawing: cheek width px", r["cheek_width_px"], 90, 0), ("landmark, drawing: face over eyes", r["face_over_eyes"], round(90 / 60, 3), 0.001)]
+        grey, rskin = (120, 138, 160), (232, 182, 152)
+        f = np.tile(np.array(grey, np.uint8), (Hh, W, 1))
+        for y in range(120, 400):  # the render: the face's skin runs on into the neck at the midline
+            hw = 50 if y <= 220 else 50 - (y - 220) // 2 if y <= 270 else 25 if y <= 290 else 20
+            f[y, CX - hw:CX + hw + 1] = rskin
+        for ex in (CX - SPACING // 2, CX + SPACING // 2):
+            f[(yy - EYE_Y) ** 2 + (xx - ex) ** 2 <= 36] = (70, 160, 70)
+        frame = save(f, d, "render.png")
+        for label, yellow in (("", (255, 255, 0)), (", shaded yellow", (200, 190, 40)), (", the client's yellow", (227, 217, 113))):
+            c = f.copy()
+            front = np.zeros(f.shape[:2], bool)
+            front[120:291] = (f[120:291] == rskin).all(axis=2)
+            c[front] = yellow
+            r, _ = D.face_render(frame, box=box, chin_frame=save(c, d, "chin.png"))
+            out += [(f"landmark, render{label}: chin row", r["chin_row"], 290, 0), (f"landmark, render{label}: cheek row", r["cheek_row"], 227, 0),
+                    (f"landmark, render{label}: cheek width px", r["cheek_width_px"], 94, 0)]
+        r, _ = D.face_render(frame, box=box)
+        out += [("render without a chin-ID frame: S6b's spacing row", (r["row_rule"], r["cheek_row"]), ("spacing", 226), None)]
+        try:
+            D.face_render(frame, box=box, chin_frame=frame)
+            stopped = False
+        except SystemExit:
+            stopped = True
+        out += [("a chin-ID frame with no chin stops the measure (no fallback to the drawing's search)", stopped, True, None)]
+    return out
+
+
 def main():
     checks = []
     box = (0, 0, W, Hh)
@@ -80,7 +138,7 @@ def main():
         a[60:141, 120:281] = hair
         r, _ = D.measure(save(a, d, "drawing.png"), box)
         checks += [("drawing: cheek width px", r["cheek_width_px"], 100, 0), ("drawing: eye spacing px", r["eye_spacing_px"], 60, 0),
-                   ("drawing: face over eyes", r["face_over_eyes"], round(100 / 60, 3), 0.001), ("drawing: cheek row", r["cheek_row"], 226, 0),
+                   ("drawing: face over eyes", r["face_over_eyes"], round(100 / 60, 3), 0.001), ("drawing: cheek row (landmark: 0.2967 of eye 200 to chin 300)", r["cheek_row"], 230, 0),
                    ("drawing: chin row", r["chin_row"], 300, 0), ("drawing: hair body over eyes", r["body_over_eyes"], round(160 / 60, 3), 0.001)]
         # A render (image_spread.py): the no-hair frame, ears joined to the face; the all-hair ID.
         grey, rskin = (120, 138, 160), (232, 182, 152)
@@ -113,9 +171,10 @@ def main():
         noear = face(canvas(grey), rskin)
         r, _ = D.face_render(save(noear, d, "noear.png"), box=box)
         checks += [("face_render: no ears", r["cheek_width_px"], 100, 0), ("face_render: no ear on the row", r["ear_on_cheek_row"], False, 0)]
+    checks += landmark_cases()
     bad = 0
     for label, got, want, tol in checks:
-        ok = got == want if isinstance(want, bool) else abs(got - want) <= tol + 1e-9
+        ok = got == want if isinstance(want, (bool, tuple)) else abs(got - want) <= tol + 1e-9
         bad += not ok
         print(f"{'ok  ' if ok else 'FAIL'} {label}: {got} (known {want})")
     print("drawing_spread_selftest:", "PASS" if not bad else f"{bad} FAILED")

@@ -1,0 +1,40 @@
+start 10:15:11 at 132a737fa
+== builds 10:15:11
+eye_colours: every type's iris has the shared iris's source colour
+brow_check: 21 types, every brow there and at least 0.3 mm before the skin in every pose
+hair failed
+hair_page: 92 files on 4 page(s), 214 cells of 256; lines from 2138 creases; partings over 57780 texels; strands at 0.9
+rebuilt types: 66 files, 0 differ from final2/types
+rebuilt styles/overlay: 72 files, 0 differ from styles/overlay
+rebuilt hairset/hair: 189 files, 0 differ from hairp/hair
+== parity 10:33:07
+S7 files back, tree clean
+flag-off parity: 78 files identical, 0 different []
+== bundle 10:44:23
+installed: 21 types, 72 overlays, 92 hair files
+looks: book c4-cbcc40bf (2374 lines, holds ['c4-aa393793', 'c4-e61b01c0', 'c4-5d64f53e', 'c4-cbcc40bf']); worlds {'cullet': 'c4-cbcc40bf', 'island': 'c4-cbcc40bf'}
+eye_colours: eye_colours: every type's iris has the shared iris's source colour
+shade_mean: shade_mean: 192 files, 95 meshes and pictures checked, 0 off their class's mean
+look_lines wear: look_lines: 28 outfit files carry their slot and layer
+skeleton_check: skeleton_check: 372 files against types/adult-f-a.glb: 0 with a bone at another place
+book_drift: book_drift: committed c4-cbcc40bf; built again c4-cbcc40bf: 791 lines the same, 0 with an outfit colour off by at most 0 of 255
+brow_check: brow_check: 21 types, every brow there and at least 0.3 mm before the skin in every pose
+fringe_check: fringe_check: the fullest fringe ends 1.2 to 1.3 mm above the brows' top over 21 types (92 styles); a style is at most 2.4 mm from where it ends on the standard head
+cloth_check alder-fenwick: cloth_check: 1 pairs of pieces over 33 poses: none comes through by more than 2.0 mm
+cloth_check corvin-hollin: cloth_check: 3 pairs of pieces over 33 poses: none comes through by more than 2.0 mm
+cloth_check gwil-stannard: cloth_check: 3 pairs of pieces over 33 poses: none comes through by more than 2.0 mm
+cloth_check kenji-sato: cloth_check: 6 pairs of pieces over 33 poses: none comes through by more than 2.0 mm
+cloth_check nell-tarn: cloth_check: 1 pairs of pieces over 33 poses: none comes through by more than 2.0 mm
+cloth_check ren-sato: cloth_check: 1 pairs of pieces over 33 poses: none comes through by more than 2.0 mm
+cloth_check vessa-pontil: cloth_check: 10 pairs of pieces over 33 poses: none comes through by more than 2.0 mm
+pictures png: pictures: /home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/b7/bundle/char-composed-s7-257e636c.tar.gz (png, 0 KTX2, 44570499 bytes)
+pictures check png: pictures: png, 0 KTX2, 0 failures
+pictures ktx2: pictures: /home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/b7/bundle/char-composed-s7-257e636c-ktx2.tar.gz (ktx2-bc7, 122 KTX2, 48805311 bytes)
+pictures check ktx2: pictures: ktx2-bc7, 122 KTX2, 0 failures
+/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/b7/bundle/char-composed-s7-257e636c.tar.gz: 343 files, 44.6 MB
+/home/carlid/.t3/worktrees/slop-art-online/t3-3fb95567-51da5b50b200809d/.local/char-port-2/s7/b7/bundle/char-composed-s7-257e636c-ktx2.tar.gz: 558 files, 48.8 MB
+bundle: 343 files, port hair,ink, 206 s
+bundle exit 0
+pages audit exit 0
+installed restored
+end 10:47:51

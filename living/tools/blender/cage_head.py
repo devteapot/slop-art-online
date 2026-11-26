@@ -106,8 +106,17 @@ class Plan:
         return plane
 
     def jaw_line(self, z):
-        """The jaw line's depth at height z: straight from the chin to the angle of the jaw."""
-        return lerp(self.chin_y - 0.01, -self.jaw["angle_back"], min(max(z / self.jaw["angle_z"], 0.0), 1.0) ** self.jaw.get("curve", 1.0))
+        """The jaw line's depth at height z: from the chin to the angle of the jaw, `curve` the
+        power of the height's share. With `rise` (t1, p; the port's `jaw`, char-port-2 S7), below t1
+        of the way up the line climbs out of the chin sooner, as (t / t1) ** p of its depth at t1,
+        so the jaw is off the chin's height just behind it, as the reference's is; above t1 it is
+        as before."""
+        t = min(max(z / self.jaw["angle_z"], 0.0), 1.0)
+        g = t ** self.jaw.get("curve", 1.0)
+        rise = self.jaw.get("rise")
+        if rise and t < rise[0]:
+            g = rise[0] ** self.jaw.get("curve", 1.0) * (t / rise[0]) ** rise[1]
+        return lerp(self.chin_y - 0.01, -self.jaw["angle_back"], g)
 
     def back(self, z):
         """The back of the skull's depth at height z, and below it the nape's."""
@@ -262,6 +271,17 @@ def neck_radius_of(t):
     return head_form.neck_radius(masc=(1.0 if band in ("adult", "elder") else 0.6) if male and band != "child" else 0.0, child=1.0 if band == "child" else 0.0)
 
 
+def taper_factor(jaw, height):
+    """S1's lower-face taper (port `jaw`): the factor on a lower-face row's half-width at a height
+    (in H over the chin): 1 + chin_taper x the chin's weight (whole below 0.095 H) + jaw_taper x the
+    jaw's (from there to 0.27 H). The cage builds with it, and cage_accept.py compares the front's
+    widths with the type's record times it."""
+    height = np.asarray(height, float)
+    chin_weight = 1 - smooth((height - 0.095) / 0.05)
+    jaw_weight = (1 - chin_weight) * (1 - smooth((height - 0.15) / 0.12))
+    return 1 + (jaw.get("chin_taper", 0.0) * chin_weight + jaw.get("jaw_taper", 0.0) * jaw_weight)
+
+
 class Cage:
     """A type's head as a grid of quads. `v` are positions in head_form's frame; `faces` the
     quads (and the two poles' triangles); `sharp` the creases; `eye` and `mouth` name the
@@ -346,10 +366,7 @@ class Cage:
             # of the local half-width. Leave the lips and nose in place.
             for name, _ in shares:
                 row = grid[R[name]]
-                height = row[:, 2]
-                chin_weight = 1 - smooth((height - 0.095) / 0.05)
-                jaw_weight = (1 - chin_weight) * (1 - smooth((height - 0.15) / 0.12))
-                row[:, 0] *= 1 + (chin_width * chin_weight + jaw_width * jaw_weight)
+                row[:, 0] *= taper_factor(jaw, row[:, 2])
         # Under the jaw and the neck's ring.
         # The neck's ring meets the neck's own tube (person.py make_neck, at NECK_RING_Z; the chin
         # at 1.535 m). The neck is a narrow column set well in under the jaw (head_form.neck_radius:
@@ -965,6 +982,8 @@ def far_jaw_line(m, hf, look):
 # char-port-2 features on in this process (`SLOP_PORT=jaw_shell,…`, face_types.port_features).
 PORT = {f.strip() for f in os.environ.get("SLOP_PORT", "").split(",") if f.strip()}
 JAW_SHELL = "jaw_shell" in PORT
+# `eyes` (S7): the eye's parts placed against the open eye's plane in every state (CageFace._eye).
+EYES_REST = "eyes" in PORT
 # `faceprop` (S6b): where an ear's lobe ends, under the eye line, as a share of eye-to-chin (Cora's
 # drawing: 0.47; docs/char-port-2/s6b).
 EAR_LOW = 0.47
@@ -1228,9 +1247,13 @@ class CageFace(head_mesh.Face):
         d_iris, d_white, d_rim = 0.004 * scale, 0.015 * scale, RIM_FOLD * scale
         mid = ring_pos.mean(axis=0)
         # The opening's own plane (it leans back toward the outer corner, as the front plane does):
-        # depths behind the lid are measured from it.
-        A = np.stack([np.ones(k), ring_pos[:, 0], ring_pos[:, 2]], axis=1)
-        coef = np.linalg.lstsq(A, ring_pos[:, 1], rcond=None)[0]
+        # depths behind the lid are measured from it. With port `eyes` (char-port-2 S7) it is the
+        # open eye's, whatever the state: a closing key folds the ring onto one line (eye-joy's arc),
+        # and a plane fitted to a line is free to tip, which carried the iris forward through the
+        # skin above the arc.
+        plane = self.skin_pos[first : first + k] if EYES_REST else ring_pos
+        A = np.stack([np.ones(k), plane[:, 0], plane[:, 2]], axis=1)
+        coef = np.linalg.lstsq(A, plane[:, 1], rcond=None)[0]
         lid_y = lambda x, z: coef[0] + coef[1] * x + coef[2] * z
         # The lids' rim: the edge again, turned in as far as the white's rim.
         rim = ring_pos.copy()

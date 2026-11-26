@@ -60,10 +60,14 @@ python3 "$C/scenes.py" truthful_refusals --run "$R" > "$E/truthful_refusals.txt"
 # The fast lane's triggers: the repeat at the law's N, never told; unseen moves not counted (features/fast.md, about 2 min).
 python3 "$C/scenes.py" seen_again --run "$R" > "$E/seen_again.txt" 2>&1
 python3 "$C/scenes.py" dodge_told --run "$R" > "$E/dodge_told.txt" 2>&1
+# Heed for AI characters (the heed_on law, off as shipped): individuals, the counted anonymous throng, forced contact, beside the law off (features/heed.md, about 2.5 min).
+python3 "$C/scenes.py" heed --run "$R" > "$E/heed.txt" 2>&1
 # First sights in a crowd: everyone in sight is told, several in one line (features/sight.md, about 30 s).
 python3 "$C/scenes.py" crowd_sight --run "$R" > "$E/crowd_sight.txt" 2>&1
 # A graph's "stranger" under the stranger_by_name law, off and on (features/graphs.md, about 30 s).
 python3 "$C/scenes.py" stranger_filter --run "$R" > "$E/stranger_filter.txt" 2>&1
+# Whom one fights: what was said (mind_fight), then a relation that decides, then the community's stance (features/graphs.md, about 1.5 min).
+python3 "$C/scenes.py" relation_fight --run "$R" > "$E/relation_fight.txt" 2>&1
 # Attention cues under the cues_on law: once per thing, the cooldown and the gap, never a far figure, nothing off (features/cues.md, about 1.5 min).
 python3 "$C/scenes.py" cues --run "$R" > "$E/cues.txt" 2>&1
 # First sights that ask for a thought under first_sight_thinks: refused then owed, the gap, never far or named, sleepers, with a cue (features/first-sight.md, about 4 min).

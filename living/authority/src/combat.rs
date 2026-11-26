@@ -57,7 +57,11 @@ pub fn human(ctx: &ReducerContext, id: u32) -> Option<Identity> {
         let (_, map) = h.get_or_insert_with(|| {
             let db = ctx.database_identity();
             let admin = common::world(ctx).admin;
-            (now, ctx.db.character().iter().filter(|c| c.alive && !c.ai && c.controller != db && c.controller != admin).map(|c| (c.id, c.controller)).collect())
+            // The living only, through the `alive` index: the dead keep their rows and grow with
+            // every death, so a walk over the whole table grew with the run (the 216 gate's
+            // 30-minute decline, 2026-11-23). The same characters, the same map.
+            let _span = common::detail_span("combat.humans");
+            (now, ctx.db.character().alive().filter(true).filter(|c| !c.ai && c.controller != db && c.controller != admin).map(|c| (c.id, c.controller)).collect())
         });
         map.get(&id).copied()
     })
@@ -172,9 +176,26 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
         if !crate::perception::in_sight(ctx, &map, c.id, c.pos, c.facing, ev.actor, ev.at, c.dist, &w, now, false) {
             continue;
         }
+        // The feed's rule on every path (docs/ATTENTION_BUDGET.md "Built"): an onlooker's row goes
+        // only to a viewer whose individual set holds the actor or the target; throng blows reach it
+        // as `seen_throng` counts (the player side). Always true while heed does not apply to it.
+        let (ind_actor, ind_target) = (crate::heed::individual(ctx, c.id, ev.actor, now), ev.target != 0 && crate::heed::individual(ctx, c.id, ev.target, now));
+        if !ind_actor && !ind_target {
+            continue;
+        }
         told.push(c.id);
         let amount = if ev.kind == seen::LAUNCH { ev.amount } else { 0.0 };
-        let ev = masked(c.id);
+        let mut ev = masked(c.id);
+        // The party in its throng stays unnamed (players under heed; never while it does not apply).
+        if !ind_actor || (ev.target != 0 && !ind_target) {
+            let e = ev.to_mut();
+            if !ind_actor {
+                e.actor = 0;
+            }
+            if !ind_target {
+                e.target = 0;
+            }
+        }
         if ev.kind == seen::DEATH {
             insert(ctx, c.id, viewer, now, &ev, amount, SEEN_MS);
         } else {

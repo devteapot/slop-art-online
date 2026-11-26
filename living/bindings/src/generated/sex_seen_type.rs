@@ -47,6 +47,7 @@ impl __sdk::__query_builder::HasCols for SexSeen {
 /// Provides typed access to indexed columns for query building.
 pub struct SexSeenIxCols {
     pub id: __sdk::__query_builder::IxCol<SexSeen, u64>,
+    pub known: __sdk::__query_builder::IxCol<SexSeen, u32>,
     pub observer: __sdk::__query_builder::IxCol<SexSeen, u32>,
 }
 
@@ -55,6 +56,7 @@ impl __sdk::__query_builder::HasIxCols for SexSeen {
     fn ix_cols(table_name: &'static str) -> Self::IxCols {
         SexSeenIxCols {
             id: __sdk::__query_builder::IxCol::new(table_name, "id"),
+            known: __sdk::__query_builder::IxCol::new(table_name, "known"),
             observer: __sdk::__query_builder::IxCol::new(table_name, "observer"),
         }
     }

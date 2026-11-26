@@ -124,11 +124,14 @@ struct Scene {
     creatures: Option<Vec<NearCreature>>,
     /// Heard and not seen (only while sight depends on facing), nearest first.
     heard: Option<Vec<NearCreature>>,
+    /// Under heed (`heed::applies`): the seen who are not individuals to this character, nearest
+    /// first (`creatures` then holds the individuals only). Empty otherwise.
+    throng: Vec<NearCreature>,
     /// Gathered when first asked for (`Ev::resources`).
     resources: Option<Vec<(ResourceNode, f32)>>,
     /// Built when first asked for (`Ev::structures`): an evaluation that reads no structure (a
     /// fighter's at combat cadence) does not gather every remains in sight. The same set either way.
-    structures: Option<Vec<(Structure, f32)>>,
+    structures: Option<Vec<(std::rc::Rc<Structure>, f32)>>,
 }
 
 struct Ev<'a> {
@@ -165,6 +168,9 @@ struct Ev<'a> {
     acting: bool,
     /// The leaf whose activity's success this evaluation read (`finished`), and its skill.
     done: Option<(u16, String)>,
+    /// Whether this character perceives through heed (`heed::applies`): its individual queries
+    /// read its heeded set, its counts the individuals and the throng.
+    heed: bool,
 }
 
 /// Work that, once begun under an `if`, is finished even after the `if`'s condition stops
@@ -206,7 +212,8 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     drop(part);
     let part = common::detail_span("load.ev");
     let acting = cur.as_ref().map_or(false, |a| act::held(a.node));
-    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting, done: None };
+    let heed = crate::heed::applies(ctx, id);
+    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting, done: None, heed };
     // A pace aside (an `aside` skill in the script) is a short walk that finishes on its own too.
     let sc = common::scripts(ctx);
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && (sc.skills().get(&a.skill).is_some_and(|k| k.latch) || sc.shows().aside(&a.skill))).map(|a| a.node);
@@ -256,7 +263,8 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Resul
     let g = common::compiled(ctx, id, st.revision).ok_or_else(gone)?;
     let at = pos(&body, now);
     let needs = common::needs(&vit, now);
-    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false, done: None };
+    let heed = crate::heed::applies(ctx, id);
+    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false, done: None, heed };
     match ev.sensed(t) {
         Some(r) => Ok(r),
         None => Err(ev.unresolved(t)),
@@ -350,7 +358,7 @@ impl<'a> Ev<'a> {
             // What the body sees: within its sight and with a clear sight line (the rule every
             // observer perceives by, `perception::in_sight`).
             let sensing = crate::perception::Sensing::new(self.ctx, self.me.id, self.at, self.now);
-            self.scene = Some(Scene { sensing, creatures: None, heard: None, resources: None, structures: None });
+            self.scene = Some(Scene { sensing, creatures: None, heard: None, throng: Vec::new(), resources: None, structures: None });
             if !common::laws(self.ctx).scene_lazy {
                 self.creatures();
                 self.resources();
@@ -361,18 +369,33 @@ impl<'a> Ev<'a> {
 
     /// The creatures seen, nearest first: every one in sight range tested.
     fn creatures(&mut self) -> &[NearCreature] {
-        let (ctx, now, actor) = (self.ctx, self.now, self.me.id);
+        let (ctx, now, actor, at) = (self.ctx, self.now, self.me.id, self.at);
         let s = self.scene();
-        if s.creatures.is_none() {
+        let pending = if s.creatures.is_none() {
             let _span = common::detail_span("scene.sensed");
             let (seen, heard) = s.sensing.all(ctx, now);
             note_sight_changes(actor, &seen);
             common::note_scene(seen.len());
             common::diag(|| "scene:all", 1);
-            s.creatures = Some(seen);
             s.heard = Some(heard);
+            Some(seen)
+        } else {
+            None
+        };
+        if let Some(seen) = pending {
+            // Under heed the individuals are listed and the rest kept as the throng (counted).
+            let (seen, throng) = if self.heed { crate::heed::split(ctx, &self.me, at, seen, now) } else { (seen, Vec::new()) };
+            let s = self.scene.as_mut().unwrap();
+            s.creatures = Some(seen);
+            s.throng = throng;
         }
-        s.creatures.as_deref().unwrap()
+        self.scene.as_ref().and_then(|s| s.creatures.as_deref()).unwrap()
+    }
+
+    /// The seen who are not individuals to this character (heed's throng; empty without heed).
+    fn throng(&mut self) -> &[NearCreature] {
+        self.creatures();
+        self.scene.as_ref().map(|s| s.throng.as_slice()).unwrap_or(&[])
     }
 
     /// Heard and not seen, nearest first.
@@ -402,6 +425,9 @@ impl<'a> Ev<'a> {
         if !laws.scene_lazy || self.scene().creatures.is_some() {
             return self.creatures().iter().find(|c| pred(c)).cloned();
         }
+        // Under heed, only an individual: its set is fresh first (a pass when it is stale).
+        let (heed, me) = (self.heed, self.me.id);
+        let mut pred = move |c: &NearCreature| pred(c) && (!heed || crate::heed::individual(ctx, me, c.id, now));
         let got = self.scene().sensing.first(ctx, now, &mut pred);
         common::diag(|| "scene:first", 1);
         if laws.scene_lazy_check {
@@ -419,6 +445,11 @@ impl<'a> Ev<'a> {
     /// Creature `id` as seen, if it is: `creatures()` holds it, testing only it (`scene_lazy`).
     fn seen_by_id(&mut self, id: u32) -> Option<NearCreature> {
         let (ctx, now) = (self.ctx, self.now);
+        // Under heed, someone in the throng is not seen as anyone in particular.
+        if self.heed && !crate::heed::individual(ctx, self.me.id, id, now) {
+            common::diag(|| "heed:by_id_throng", 1);
+            return None;
+        }
         let laws = common::laws(ctx);
         if !laws.scene_lazy || self.scene().creatures.is_some() {
             return self.creatures().iter().find(|c| c.id == id).cloned();
@@ -439,7 +470,7 @@ impl<'a> Ev<'a> {
 
     /// The structures in sight, nearest first (the scene's, gathered when first asked for).
     #[track_caller]
-    fn structures(&mut self) -> &[(Structure, f32)] {
+    fn structures(&mut self) -> &[(std::rc::Rc<Structure>, f32)] {
         self.scene();
         if self.scene.as_ref().is_some_and(|s| s.structures.is_none()) {
             let _span = common::detail_span("brain.scene.structures");
@@ -504,7 +535,9 @@ impl<'a> Ev<'a> {
             (0.0, 0.0, 0.0)
         };
         // An attack or a threat aimed at me right now.
-        let threatened = if self.ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now) { 1.0 } else { 0.0 };
+        // Under heed, only a windup by an individual weighs: one from the throng is not seen coming.
+        let (ctx, heed) = (self.ctx, self.heed);
+        let threatened = if ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now && (!heed || crate::heed::individual(ctx, me, a.id, now))) { 1.0 } else { 0.0 };
         // Company is one's own kind (people for a person, the herd or pack for an animal).
         let kind = self.me.kind.clone();
         let people = self.creatures().iter().filter(|c| *c.kind == *kind).count() as f32;
@@ -1298,9 +1331,13 @@ impl<'a> Ev<'a> {
             Cond::Count(c) => {
                 let at = self.at;
                 self.creatures();
-                let creatures = self.scene.as_ref().and_then(|s| s.creatures.as_deref()).unwrap_or(&[]);
+                // A throng's numbers are perceived: individuals and throng alike (heed).
+                let (ind, thr): (&[NearCreature], &[NearCreature]) = match self.scene.as_ref() {
+                    Some(s) => (s.creatures.as_deref().unwrap_or(&[]), s.throng.as_slice()),
+                    None => (&[], &[]),
+                };
                 let mut n = 0u32;
-                for x in creatures {
+                for x in ind.iter().chain(thr.iter()) {
                     if c.within.is_some_and(|w| dist(at, x.pos) > w) || (c.of.kind != "creature" && *x.kind != *c.of.kind) {
                         continue;
                     }
@@ -1367,6 +1404,9 @@ impl<'a> Ev<'a> {
                 let now = self.now;
                 // Only a hostile move (its `<skill>_combat()` says so) names a victim.
                 let coming: Vec<u32> = self.ctx.db.activity().victim().filter(me).filter(|a| a.phase == 1 && a.ends_ms > now).map(|a| a.id).collect();
+                // Under heed, only a windup by an individual is seen coming: one from the throng
+                // lands unforeseen (and its maker is an individual from its contact on).
+                let coming: Vec<u32> = if self.heed { coming.into_iter().filter(|x| crate::heed::individual(self.ctx, me, *x, now)).collect() } else { coming };
                 // While sight depends on facing (the `fov_on` law), a windup is a threat only when
                 // its maker is seen: one from behind is not seen coming (docs/COMBAT.md). Without a
                 // field, as before: any windup aimed at me.
@@ -1607,6 +1647,10 @@ impl<'a> Ev<'a> {
         let places: Vec<Place> = if cues.iter().any(|c| !c.at.is_empty()) { ctx.db.place().actor().filter(me).collect() } else { Vec::new() };
         let place_of = |name: &str| places.iter().find(|p| p.name.eq_ignore_ascii_case(name)).map(|p| (p.id, (p.x, p.y)));
         let creatures: Vec<NearCreature> = self.creatures().to_vec();
+        // Under heed a cue is matched against everyone in sight: a throng member it matches is
+        // `cued`, and the event pass decides whether it becomes an individual now (then the cue
+        // fires on it), else it stays in the throng, unnamed.
+        let throng: Vec<NearCreature> = if self.heed { self.throng().to_vec() } else { Vec::new() };
         let things: Vec<(u64, String, (f32, f32), f32)> = {
             let mut v: Vec<(u64, String, (f32, f32), f32)> = self.resources().iter().map(|(r, d)| (CUE_RESOURCE | r.id, r.kind.clone(), (r.x, r.y), *d)).collect();
             v.extend(self.structures().iter().map(|(s, d)| (CUE_STRUCTURE | s.id, s.kind.clone(), (s.x, s.y), *d)));
@@ -1625,7 +1669,7 @@ impl<'a> Ev<'a> {
             };
             let near_me = |d: f32| c.near_me <= 0.0 || d <= c.near_me;
             if c.who_id != 0 || !c.who.is_empty() {
-                for n in &creatures {
+                for (k, n) in creatures.iter().chain(throng.iter()).enumerate() {
                     if n.id == me || (c.who_id != 0 && n.id != c.who_id) || !near_me(n.dist) || !near_place(n.pos) {
                         continue;
                     }
@@ -1660,6 +1704,9 @@ impl<'a> Ev<'a> {
                             continue;
                         }
                         seen_doing = format!(", {} ({})", v.skill.replace('_', " "), v.phase.word());
+                    }
+                    if k >= creatures.len() && !crate::heed::cued(ctx, &self.me, at, n, now) {
+                        continue;
                     }
                     let who = common::label_for(ctx, &self.me, n.id);
                     let doing = seen_doing;
@@ -1775,6 +1822,10 @@ impl<'a> Ev<'a> {
             }
             common::diag(|| "familiar:evict", 1);
             self.ctx.db.familiar().id().delete(id);
+            // What it remembered of their body fades with them (`sex_seen`).
+            if thing & !((1 << 40) - 1) == FAM_CREATURE {
+                crate::sex::forget_pair(self.ctx, me, (thing & ((1 << 40) - 1)) as u32);
+            }
             over -= 1;
         }
     }
@@ -1998,7 +2049,8 @@ impl<'a> Ev<'a> {
         let me_kind = self.me.kind.clone();
         common::diag(|| "noticed:creatures", self.creatures().len() as u64);
         let cands: Vec<NearCreature> = self.creatures().iter().filter(|c| &*c.kind != "deer" || me_kind != "person").cloned().collect();
-        let people = cands.iter().filter(|c| &*c.kind == "person").count();
+        // A throng's numbers are perceived (heed): its people count toward a crowd.
+        let people = cands.iter().filter(|c| &*c.kind == "person").count() + self.throng().iter().filter(|c| &*c.kind == "person").count();
         let laws = common::laws(self.ctx);
         let crowded = people as f32 > laws.crowd;
         // Crowds and nearby danger are noticed when they begin, not re-announced while they last.
@@ -2309,8 +2361,14 @@ impl<'a> Ev<'a> {
         let mut other: Vec<(u64, u32, f32)> = Vec::new();
         let mut passed: Vec<(u64, u32)> = Vec::new();
         let mut top = 0u64;
-        common::for_structures_near(ctx, at, r, |s, d| {
-            top = top.max(s.id);
+        // A whole chunk whose rows all pass is passed at once (growth-fix-2: a battle's remains
+        // put thousands in sight, all older than the last look): its highest id is no newer than
+        // the last look's and the box round its rows lies inside the last look's disc (a margin
+        // for rounding), so each of its rows would be passed over one by one. Only without the
+        // check laws, which list every passed row. Its rows in sight still count for `top`.
+        const MARGIN: f32 = 0.05;
+        let whole_ok = last.is_some() && !(delta_check || check);
+        let mut visit = |s: &Structure, d: f32| {
             if let Some(l) = &last {
                 if s.id <= l.max_structure && common::dist((l.x, l.y), (s.x, s.y)) <= l.r {
                     if delta_check || check {
@@ -2326,7 +2384,33 @@ impl<'a> Ev<'a> {
             } else {
                 other.push((s.id, s.chunk, d));
             }
-        });
+        };
+        for c in living_rules::map::chunks_around(at.0, at.1, r) {
+            let (list, brief) = common::chunk_brief(ctx, c);
+            if whole_ok {
+                let l = last.as_ref().unwrap();
+                if let Some(b) = brief.filter(|b| b.max_id <= l.max_structure && b.farthest((l.x, l.y)) <= l.r - MARGIN) {
+                    common::diag(|| "notice_delta:chunk_passed", 1);
+                    if b.farthest(at) <= r - MARGIN {
+                        top = top.max(b.max_id);
+                    } else {
+                        for s in list.iter() {
+                            if common::dist(at, (s.x, s.y)) <= r {
+                                top = top.max(s.id);
+                            }
+                        }
+                    }
+                    continue;
+                }
+            }
+            for s in list.iter() {
+                let d = common::dist(at, (s.x, s.y));
+                if d <= r {
+                    top = top.max(s.id);
+                    visit(s, d);
+                }
+            }
+        }
         if delta {
             let row = LastLook { id: me, x: at.0, y: at.1, r, max_structure: top, at_ms: now };
             if last.is_some() || ctx.db.last_look().id().find(me).is_some() {
@@ -2704,7 +2788,7 @@ fn first_sight_text(parts: &[String]) -> String {
 /// Whether `me`'s relationship to `other` fits a selector's relation filter. Every creature
 /// filter of a graph goes through here: `sees`, `near`, `nearest` targets, `count` and
 /// `health_of`.
-fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
+pub(crate) fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
     // With the world's `stranger_by_name` law, "stranger" is what the scene's word means:
     // someone whose name I do not know (docs/STRANGERS.md). A relation row or its label does
     // not count: feelings about someone are not knowing their name.
@@ -2716,6 +2800,14 @@ fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
     }
     let r = ctx.db.relation().by_pair().filter((me, other)).next();
     let label = r.as_ref().map(|r| r.label.to_lowercase()).unwrap_or_default();
+    // Enemy and friend under the `relation_fight_on` law (relation-fight, docs/WORLD_RULES.md "Whom
+    // one fights"): what one said of fighting them first, then a personal relation that decides,
+    // then the community's stance. Off: the rule below, where any personal row decides alone.
+    if matches!(want, "enemy" | "friend") && common::laws(ctx).relation_fight_on {
+        let said = ctx.db.relation_fight().by_pair().filter((me, other)).next().map(|f| f.fight);
+        let felt = r.as_ref().map_or(Personal::Neutral, |r| personal(r.trust, &r.label));
+        return fight_fits(want, said.as_deref(), felt, || stance_fits(ctx, me, other, want));
+    }
     let trust = r.as_ref().map(|r| r.trust).unwrap_or(0.0);
     let fits = match want {
         "friend" => r.is_some() && (trust >= 25.0 || ["friend", "family", "partner", "ally", "kin"].iter().any(|l| label.contains(l))),
@@ -2731,6 +2823,44 @@ fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str) -> bool {
         other => label.contains(&other.to_lowercase()),
     };
     fits || (r.is_none() && stance_fits(ctx, me, other, want))
+}
+
+/// How a personal relation decides a fight by its trust and label (relation-fight): clearly
+/// hostile (trust -25 or less, or a label with enemy, rival, threat, thief or foe), clearly
+/// peaceful (trust 25 or more, or a label with friend, family, partner, ally or kin), or neither:
+/// a neutral row, or one with signs both ways, which leaves it to the community's stance.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Personal {
+    Hostile,
+    Peaceful,
+    Neutral,
+}
+
+pub(crate) fn personal(trust: f32, label: &str) -> Personal {
+    let label = label.to_lowercase();
+    let hostile = trust <= -25.0 || ["enemy", "rival", "threat", "thief", "foe"].iter().any(|l| label.contains(l));
+    let peaceful = trust >= 25.0 || ["friend", "family", "partner", "ally", "kin"].iter().any(|l| label.contains(l));
+    match (hostile, peaceful) {
+        (true, false) => Personal::Hostile,
+        (false, true) => Personal::Peaceful,
+        _ => Personal::Neutral,
+    }
+}
+
+/// Whether someone fits `enemy` or `friend`, in order: what one said of fighting them (`enemy`
+/// or `spare`, `relation_fight`), then a personal relation that decides, then the community's
+/// stance (`stance`, asked only when nothing before decided). `spare` says only "not an enemy".
+pub(crate) fn fight_fits(want: &str, said: Option<&str>, felt: Personal, stance: impl FnOnce() -> bool) -> bool {
+    match (want, said) {
+        ("enemy", Some("enemy")) => return true,
+        ("enemy", Some("spare")) | ("friend", Some("enemy")) => return false,
+        _ => {}
+    }
+    match (want, felt) {
+        ("enemy", Personal::Hostile) | ("friend", Personal::Peaceful) => true,
+        ("enemy", Personal::Peaceful) | ("friend", Personal::Hostile) => false,
+        _ => stance(),
+    }
 }
 
 /// Without a personal relation: how my community regards theirs, when a stance record says
@@ -2767,6 +2897,39 @@ fn joined_tiles(all: &[(u64, String, u32, (f32, f32), f32)], same: &[usize], sta
 
 #[cfg(test)]
 mod tests {
+    use super::{fight_fits, personal, Personal};
+
+    /// relation-fight: what one said decides, then a relation that is clear, then the stance.
+    #[test]
+    fn whom_one_fights_said_then_felt_then_the_community() {
+        let war = || true;
+        let peace = || false;
+        // A neutral row (E5's "stranger, trust 0") leaves the community's war standing.
+        assert_eq!(personal(0.0, "stranger"), Personal::Neutral);
+        assert!(fight_fits("enemy", None, personal(0.0, "stranger"), war));
+        assert!(fight_fits("enemy", None, personal(-20.0, "stranger"), war));
+        // A clear relation decides either way, whatever the community holds.
+        assert!(!fight_fits("enemy", None, personal(40.0, "truce-keeper"), war));
+        assert!(fight_fits("enemy", None, personal(5.0, "foe"), peace));
+        assert!(fight_fits("enemy", None, personal(-30.0, "acquaintance"), peace));
+        // Signs both ways decide nothing.
+        assert_eq!(personal(40.0, "rival"), Personal::Neutral);
+        assert!(fight_fits("enemy", None, personal(40.0, "rival"), war));
+        // What one said comes first.
+        assert!(!fight_fits("enemy", Some("spare"), personal(-60.0, "enemy"), war));
+        assert!(fight_fits("enemy", Some("enemy"), personal(60.0, "friend"), peace));
+        assert!(fight_fits("enemy", Some("enemy"), Personal::Neutral, peace));
+        // Friend: `enemy` said rules it out, `spare` says nothing of friendship.
+        assert!(!fight_fits("friend", Some("enemy"), personal(60.0, "friend"), war));
+        assert!(fight_fits("friend", Some("spare"), personal(60.0, "friend"), peace));
+        assert!(!fight_fits("friend", Some("spare"), Personal::Neutral, peace));
+        // No row and nothing said: the community's stance, as before.
+        assert!(fight_fits("enemy", None, Personal::Neutral, war));
+        assert!(!fight_fits("enemy", None, Personal::Neutral, peace));
+        // The stance is not asked when something before it decided.
+        assert!(fight_fits("enemy", Some("enemy"), Personal::Neutral, || panic!("asked the stance")));
+    }
+
     #[test]
     fn first_sights_of_one_look_share_one_line() {
         let p = |v: &[&str]| super::first_sight_text(&v.iter().map(|s| s.to_string()).collect::<Vec<_>>());
