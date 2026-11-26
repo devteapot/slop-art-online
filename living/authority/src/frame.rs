@@ -609,7 +609,8 @@ pub fn deliver(ctx: &ReducerContext, now: u64, swept: crate::perception::Swept) 
     let seeded: HashSet<u32> = health.keys().copied().collect();
     NOW.with(|n| *n.borrow_mut() = Some(Sources { health, seeded, ..Sources::default() }));
     let swept = swept.as_slice();
-    let humans = crate::combat::humans(ctx);
+    // The people's characters and live body controller sessions (docs/NEURAL_BODY.md).
+    let humans = crate::combat::viewers(ctx);
     // The `cue_transport_on` law: off, no cue is written and near copies follow at every frame.
     // With `near_tier_on` off too, frames are scheduled as before frame-views.
     let on = common::laws(ctx).cue_transport_on;

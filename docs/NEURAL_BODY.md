@@ -2,6 +2,63 @@
 
 Status **proposed** (design and survey, 2026-11-26, Spark; the general coordinator approved a narrow CPU-only pilot of §7 the same day). The proposal is a small policy that turns a character's perceptions and the mind's current intent into player inputs at 10–15 Hz. Start with one melee duel, one compact CPU policy and a graph-based plan whose selected leaves can use the learned executor. A successful trial would show better timing and spacing under the same rules while the fighter still pursues its goal. The LLM remains responsible for goals, commitments, and what the character makes of its experience.
 
+## Built (pilot plumbing)
+
+Status: **built, off by default** (2026-11-26, Spark, branch `neural-body-pilot` from `origin/main` `8948974bc`; not merged). The §7 pilot's plumbing only: a delegating graph leaf, the brief, body sessions on the player input path, a controller worker in `living/mind` with a scripted placeholder policy, the capture format and the leakage tests. No trained net, no reinforcement learning, no personal adapters, no Colab, no GPU, no model calls. Nothing here runs while the law `body_delegate_on` is off: a `delegate` leaf is refused at install, the new tables stay empty and the tick, perception and prompts are as on main (det_compare below).
+
+**The law.** `body_delegate_on` (false), with `body_lease_ms` (750) and `body_brief_max_s` (300): value-only (`ValueOnly::Delivery`), read at the next install, reducer call or tick. The shipped script grows by 251 bytes; with a test overlay it now sits a few hundred bytes under the 256 KiB source cap (`script::body::tests::the_shipped_parts_joined_are_the_law_before_the_split`).
+
+**The leaf** (`living_rules::graph::Node::Delegate`, option §3(c)):
+
+```json
+{"delegate": {"goal": "engage", "target": {"id": 21}, "skills": ["strike", "dodge"],
+              "enter": {"sees": {"id": 21}}, "exit": {"health": {"below": 15}}}}
+```
+
+- `goal` is one of `engage`, `hold`, `withdraw` (`DELEGATE_GOALS`); `skills` is the scope, at most 8 (empty: movement only); `target`, `enter` and `exit` are an ordinary target and conditions. Unknown fields are refused, so no cue-to-action recipe can be written into it.
+- Evaluation (`brain.rs` `Ev::delegate`): the leaf fails while its law is off, for a played character, when its target is not perceived, or, before it runs, while `enter` does not hold; it is done when `exit` holds; otherwise it runs and starts nothing itself. Its target and conditions read the character's own perception, as any leaf's.
+- While it runs, the leaf stands in `body_slot`; the body controller's activities (node `act::PLAYER`) are not cancelled by the graph's after-step, and the leaf stays the plan's running step. When it ends (exit, a higher branch, a new graph), the slot goes and the body's held inputs are let go (`delegation::end_delegation`); a committed move runs its course.
+- Refused at install (`mind::set_graph`, `set_routines`, `mind_patch`) with "a `delegate` leaf cannot be installed: in this world a plan carries out its own steps (the body_delegate_on law is off)", and for a played character with its own words.
+
+**Tables** (new, private: reducers and the owner read them; keyed by character; nothing appended to an existing table):
+
+| Table | Written | Read |
+| --- | --- | --- |
+| `body_brief` (actor, revision, goal, target, stance, risk, style, rationale, written_ms, expires_ms) | `mind_body_brief`, on replace or clear | the worker (typed values; never the rationale), the owning mind (`_body`) |
+| `body_slot` (actor, revision, node, goal, target, skills, label, since_ms) | the character's evaluation, only on a change | input admission (`delegation::input_for`), the worker, the owning mind |
+| `body_session` (actor, identity unique, controller, epoch, live, lease_ms btree, opened_ms, beat_ms) | `body_open`, `body_beat`, accepted inputs, the lease pass, disconnects | the player reducers, the viewer lists, `perception::current` |
+
+All three are deleted at death (`act::forget_dead`). An expired brief is inert: its row is the character's one revision.
+
+**Reducers.**
+
+- `mind_body_brief(actor, expected, Option<BodyBriefIn>)`: replace (`Some`) or clear (`None`). Checked in order: the law; the caller controls a living mind-driven character ("not your character"); `expected` is the current revision ("the brief is at revision 3, not 2: read it again"); the schema and finite bounded values (`living_rules::body::check`: goal, stance `guarded`/`even`/`pressing`, risk and style 0–1, `ttl_s` 1 to `body_brief_max_s`, rationale at most 400 bytes); a target the character perceives now (`brain::resolve_for`), with the same words for a hidden creature and an id that does not exist ("#7 is not someone you perceive now"). A refusal is the reducer's error and writes nothing.
+- `body_open(actor, body)`: the controller binds an identity of the body controller's own to the character (not its own, not the admin's, not a player's). The epoch rises; a session still live lapses first. The identity is swept at once (`perception::sweep_viewer_now`).
+- `body_close(actor)`, `body_beat(epoch)`.
+- The player input reducers `human_move`, `human_face`, `use_skill` and `release_skill` take a body session's identity too (`delegation::input_for`): the caller's played character first, else the live session's character while a leaf is delegated, a pressed skill within the leaf's `skills`. Every check, the input bucket, costs, timing and outcomes are the player's; a body's skill uses are recorded with source `body`. A person taking the controls replaces the plan with waiting; a body controller does not (`Driver::Body`). A body's movement deferred behind a rooted move resumes as a player's does (`combat::resume_move`).
+
+**Perception.** A live session's identity is a player-equivalent viewer of its character: `combat::viewers` (people's characters, then live sessions) feeds the sweep, frames and the combat feed; `perception::current` answers the player views (`my_body`, `my_fighter`, `my_readiness`, `my_skill_uses`, `my_combat`, `seen_*`) with the session's character. `combat::human` still means a person (experience lines, heed's player side and memory are unchanged). No lines are staged for a session.
+
+**Lease, stall and return.** The tick (`delegation::tick`, before the sweep) lapses sessions whose lease ran out (a btree range on `lease_ms`): the held direction stops, a held guard is let go, a movement waiting on a rooted move is dropped, its perception rows go, and committed moves settle under their rules. That is a key release, the input a player's client would send; the authority does not expire a disconnected player's held direction today, so this is the nearest equivalent and is stated as such. The delegated leaf keeps running, so the character stands: no graph takeover. A closed connection lapses its session too. With the law turned off, every live session lapses and every slot ends at the next tick.
+
+**The owning mind** reads its scene's `_body` (`delegation::scene_note`; never while the law is off), rendered by the mind service as "# Your body" (`prompts::body_section`): the accepted brief, its revision and time left, the rationale it gave, the delegated step and how long it has run, and "Your body is not answering now: you stand until it does" while no session holds it.
+
+**The worker** (`living-mind body`, `living/mind/src/body/`):
+
+- connects as the characters' controller and subscribes to `body_slot`, `body_brief`, `body_session`, `skill_card` and `world` only;
+- per delegated character (`LIVING_BODY_ONLY` narrows them) opens a session: a new connection with no token (a fresh identity), `body_open`, then the player subscriptions of the world's delivery laws (`my_body`, `my_fighter`, `my_readiness`, `my_skill_uses`, `my_combat`, `combat_feed`, `seen_character_copy`, `seen_body_copy`, `seen_fighter_copy`, the cue tables, and the views for worlds with those laws off);
+- each decision (15 Hz, `LIVING_BODY_HZ`) builds an `Observation` from those rows only, encodes it (`encode.rs`: the character, the target, 3 nearest others, 4 recent cues and the brief's typed values in a fixed vector of 91 floats; no ids or names, no one's future release time, nothing about a creature not delivered), runs the policy and sends its intents through the player reducers (movement and the look only on a change); it beats every third of the lease;
+- the policy is pluggable (`policy::Policy`); the pilot ships the scripted `HoldDistance` (hold a distance from the target; under `engage`, press the first ready skill in scope within reach), not a trained net;
+- on a stall past the lease, a lapsed session or an identity that no longer holds it, it drops what it decided, closes the old connection (its identity is fenced: no session holds it) and opens a new epoch with a new identity from a fresh observation. A timed-out press is never sent again.
+
+**Capture** (`LIVING_BODY_CAPTURE=<dir>`, `capture.rs`): JSON lines, format version 1, in files rotated at `LIVING_BODY_CAPTURE_FILE_MB` (16) with at most `LIVING_BODY_CAPTURE_FILES` (8) kept. Records: `decision` (actor, epoch, sequence, the encoded vector, a summary of the delivered rows and their age, the slot, the brief, the policy, the intent and what was sent), `reply` (each reducer's answer by sequence: accepted or the refusal's words), `outcome` (each skill use's resolved outcome from `my_skill_uses`) and `session` (opened, stalled, lost, closed). Joining decisions to outcomes is by actor, skill and time; nothing per inference is written to the database.
+
+**Leakage tests** (before anything is trained): `body::encode::tests` (another creature's release time never reaches the vector; a creature not delivered contributes nothing, as an empty target slot; feed rows of another viewer are dropped; consistent renaming of every id changes nothing; an expired brief is none), and the verify-minds `body` scene's client checks (a session identity reads its own character's `my_body` and none of `body_brief`, `body_slot`, `body_session`, `brain`, `heed_policy`), with verify-client's privacy and permission matrix for the new tables and reducers.
+
+**SpacetimeDB.** Docs read 2026-11-26 (labelled 2.0.0; the module pins 2.14.1): [tables](https://spacetimedb.com/docs/tables/) and [access permissions](https://spacetimedb.com/docs/tables/access-permissions/) (private: reducers and the owner only), [indexes](https://spacetimedb.com/docs/tables/indexes/) (a primary key with a separate unique `Identity` column; btree range filters), [reducers](https://spacetimedb.com/docs/functions/reducers/) and [error handling](https://spacetimedb.com/docs/functions/reducers/error-handling/) (an `Err` rolls back every write, so a refusal is the reply and the service journals it), [lifecycle](https://spacetimedb.com/docs/functions/reducers/lifecycle) (`client_disconnected` per connection), [views](https://spacetimedb.com/docs/functions/views/) (per-subscriber computation; the session's views are the player's own), [subscriptions](https://spacetimedb.com/docs/clients/subscriptions/), [the Rust client](https://spacetimedb.com/docs/clients/rust) (no token: a new identity and token), [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations) (new tables keep clients connected; appended columns are avoided). Data paths: every read is a primary-key or unique lookup, or a btree range of due leases; the slot is written on change only; one session per delegated character, renewed by a beat every lease/3 or an accepted input; the views a session subscribes to are computed per subscriber, like a player's. Module memory is not used for any of it. Not measured: the cost of sessions at scale (the pilot runs one or two).
+
+**Not covered by this pass:** the mind writing a brief or a `delegate` leaf from its own replies (no prompt grammar; the reducer and the read-back exist), a body controller's level of detail, batching several characters' intents into one call (one connection and one reducer call per input), measured timing (§5's budgets), and training, collection or evaluation (§4, §7).
+
 ## 1. Where it fits
 
 | Today | Proposed |

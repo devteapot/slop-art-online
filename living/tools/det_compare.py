@@ -379,6 +379,38 @@ def copy_volume(src, dst):
     subprocess.run(["docker", "run", "--rm", "--user", "0", "-v", f"{src}:/from:ro", "-v", f"{dst}:/to", "--entrypoint", "sh", IMAGE, "-c", "cp -a /from/. /to/"], check=True, timeout=1800)
 
 
+# R2's heavy arena (living/trials/arena-heavy.json, docs/COMBAT_MIND.md §4.1) as a det fixture: the
+# subject a spawned newcomer on its instinct graph with the trial's kit (no mind: nothing thinks), the
+# foe the adult person nearest the arrival with a spear, 6 m east, opening every time with its heavy
+# `attack`, mending below 70 health and pausing 2 or 3 s. The trial's re-approach step (a timeline
+# step) is not staged: the comparison runs a fixed number of ticks from the first meeting.
+ARENA_PAUSE = {"first": [{"if": {"cond": {"chance": 0.5}, "then": {"wait": 2}}}, {"wait": 3}]}
+
+
+def arena_heavy(A, db):
+    land = A.sql(db, "SELECT * FROM land")
+    arrive = (land[0]["arrive_x"], land[0]["arrive_y"]) if land else (55.0, 60.0)
+    before = {r["id"] for r in A.sql(db, "SELECT id FROM character")}
+    A.call(db, "spawn_newcomer", ["Wren"])
+    subject = next(r["id"] for r in A.sql(db, "SELECT id FROM character") if r["id"] not in before)
+    people = [r for r in A.sql(db, "SELECT * FROM character WHERE kind = 'person'") if r["alive"] and r["stage"] == 2 and r["id"] != subject]
+    bodies = {b["id"]: (b["x"], b["y"]) for b in A.sql(db, "SELECT id, x, y FROM body")}
+    foe = min((p["id"] for p in people if p["id"] in bodies), key=lambda i: (bodies[i][0] - arrive[0]) ** 2 + (bodies[i][1] - arrive[1]) ** 2)
+    A.call(db, "place_at", [subject, arrive[0], arrive[1]])
+    sat = A.sql(db, f"SELECT x, y FROM body WHERE id = {subject}")[0]
+    A.call(db, "place_at", [foe, sat["x"] + 6.0, sat["y"]])
+    for item, qty in (("bow", 1), ("arrow", 30), ("berries", 4), ("spear", 1)):
+        A.call(db, "grant_items", [subject, item, qty])
+    A.call(db, "grant_items", [foe, "spear", 1])
+    for t in ("fire", "fire_bolt", "wound_tending"):
+        A.call(db, "grant_know_how", [subject, t])
+    A.call(db, "grant_know_how", [foe, "wound_tending"])
+    graph = {"first": [{"seq": [{"do": {"skill": "attack", "target": {"id": subject}}},
+                                {"if": {"cond": {"health": {"below": 70}}, "then": {"first": [{"seq": [{"do": {"skill": "heal", "target": "self"}}, ARENA_PAUSE]}, ARENA_PAUSE]}, "else": ARENA_PAUSE}}]}]}
+    A.call(db, "set_behavior", [foe, json.dumps(graph)])
+    print(f"det_compare: arena-heavy staged: subject #{subject}, foe #{foe}", flush=True)
+
+
 def prepare(a):
     import genesis_wait
     A = Server(a.container, a.url)
@@ -408,7 +440,9 @@ def prepare(a):
         print(f"det_compare: {len(doomed)} remains staged under the battle", flush=True)
     # The battle staged by the base build: `spawn_battle`, or `--sides N` the sides fixture
     # (`spawn_battle_sides`, or with `--layout-seed` the fixed-layout one, sides-layout-seed).
-    if a.sides and a.layout_seed is not None:
+    if a.arena_heavy:
+        arena_heavy(A, db)
+    elif a.sides and a.layout_seed is not None:
         A.call(db, "spawn_battle_sides_layout", [a.fighters, a.sides, a.layout_seed, a.deal])
     elif a.sides:
         A.call(db, "spawn_battle_sides", [a.fighters, a.sides])
@@ -440,7 +474,7 @@ def prepare(a):
     A.call(db, "set_world_law", ["det_clock", "true"])
     A.call(db, "set_world_law", ["det_stop", str(float(t0 + a.ticks))])
     meta = {"db": db, "start_tick": t0, "stop_tick": t0 + a.ticks, "fighters": a.fighters, "sides": a.sides,
-            "layout": {"seed": a.layout_seed, "deal": a.deal} if a.sides and a.layout_seed is not None else None, "players": a.players, "remains": a.remains, "ring": a.ring, "ticks": a.ticks, "replica": A.newest_replica(), "made_with": a.base}
+            "layout": {"seed": a.layout_seed, "deal": a.deal} if a.sides and a.layout_seed is not None else None, "arena_heavy": a.arena_heavy, "players": a.players, "remains": a.remains, "ring": a.ring, "ticks": a.ticks, "replica": A.newest_replica(), "made_with": a.base}
     print(f"det_compare: {db} paused at tick {t0}, battle of {a.fighters}, stop at {t0 + a.ticks}", flush=True)
     subprocess.run(["docker", "kill", "-s", "INT", a.container], check=True, capture_output=True)
     subprocess.run(["docker", "wait", a.container], check=True, capture_output=True, timeout=300)
@@ -589,6 +623,7 @@ def main():
     ap.add_argument("--sides", type=int, default=0, help="prepare: the fighters in this many sides (spawn_battle_sides) instead of spawn_battle")
     ap.add_argument("--layout-seed", type=int, default=None, help="prepare: with --sides, the fixed layout (spawn_battle_sides_layout)")
     ap.add_argument("--deal", type=int, default=0, help="prepare: with --layout-seed, the place deal (1: the sides swapped)")
+    ap.add_argument("--arena-heavy", action="store_true", help="prepare: R2's heavy arena (a newcomer and a spear foe) instead of a battle; build the modules with LIVING_SEED=island")
     ap.add_argument("--remains", type=int, default=0, help="prepare: this many fighters spawned and killed first, a field of remains under the battle")
     ap.add_argument("--players", type=int, default=0, help="prepare: players joined (no connection) and placed on --ring round the battle (exact items)")
     ap.add_argument("--ring", default="10,10", help="prepare: the players' ring LO,HI m from the battle's centre")

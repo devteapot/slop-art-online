@@ -50,6 +50,8 @@ pub fn client_disconnected(ctx: &ReducerContext) -> Result<(), String> {
         ctx.db.connection().id().delete(id);
     }
     settle(ctx, ctx.sender(), common::now_ms(ctx));
+    // A body controller's connection (docs/NEURAL_BODY.md): its session lapses with it.
+    crate::delegation::disconnected(ctx, ctx.sender(), common::now_ms(ctx));
     Ok(())
 }
 

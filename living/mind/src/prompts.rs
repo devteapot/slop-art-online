@@ -239,6 +239,44 @@ pub fn heed_section(scene: &str) -> String {
     out
 }
 
+/// The think prompt's "# Your body" section from the scene's `_body` (docs/NEURAL_BODY.md, "Built
+/// (pilot plumbing)"; the authority writes it only under the `body_delegate_on` law): the brief the
+/// authority accepted and how long it has left, the step of the plan delegated to the body now, and
+/// whether a body controller holds the character. Empty when the scene has none.
+pub fn body_section(scene: &str) -> String {
+    if !scene.contains("\"_body\"") {
+        return String::new();
+    }
+    let Some(b) = serde_json::from_str::<serde_json::Value>(scene).ok().and_then(|v| v.get("_body").cloned()) else { return String::new() };
+    let mut out = String::from("\n# Your body\n");
+    match b.get("brief") {
+        Some(r) => {
+            let target = r["target"].as_u64().filter(|t| *t != 0).map_or(String::new(), |t| format!(", about #{t}"));
+            let left = if r["expired"].as_bool() == Some(true) { "it has run out".to_string() } else { format!("{} s left", r["left_s"].as_f64().unwrap_or(0.0)) };
+            out.push_str(&format!(
+                "What you asked of your body (revision {}): {}{target}, {} stance, risk {}, style {}; {left}.\n",
+                r["revision"].as_u64().unwrap_or(0),
+                r["goal"].as_str().unwrap_or(""),
+                r["stance"].as_str().unwrap_or(""),
+                r["risk"].as_f64().unwrap_or(0.0),
+                r["style"].as_f64().unwrap_or(0.0)
+            ));
+            if let Some(why) = r["rationale"].as_str().filter(|w| !w.is_empty()) {
+                out.push_str(&format!("Your reason then: {why}\n"));
+            }
+        }
+        None => out.push_str("You have asked nothing of your body.\n"),
+    }
+    match b.get("leaf") {
+        Some(l) => out.push_str(&format!("The step of your plan your body carries out now: {} (for {} s).\n", l["label"].as_str().unwrap_or(""), l["since_s"].as_f64().unwrap_or(0.0))),
+        None => out.push_str("No step of your plan is handed to your body now.\n"),
+    }
+    if b["controlled"].as_bool() != Some(true) && b.get("leaf").is_some() {
+        out.push_str("Your body is not answering now: you stand until it does.\n");
+    }
+    out
+}
+
 /// Whether the world's rules tell a speaker the truth about a line no one addressed could hear
 /// (the `speech_truth` law; on in the bundled rules).
 pub fn speech_truth() -> bool {
@@ -861,7 +899,7 @@ fn projects_section(out: &mut Segments, projects: &str) {
 /// many players are in a heed throng, docs/ATTENTION_BUDGET.md v2.1 point 4), which is nothing
 /// the character perceives. Unchanged when it has none.
 pub fn model_scene(scene: &str) -> std::borrow::Cow<'_, str> {
-    if !scene.contains("\"_stage\"") && !scene.contains("\"_heed\"") {
+    if !scene.contains("\"_stage\"") && !scene.contains("\"_heed\"") && !scene.contains("\"_body\"") {
         return std::borrow::Cow::Borrowed(scene);
     }
     match serde_json::from_str::<serde_json::Value>(scene) {
@@ -870,6 +908,8 @@ pub fn model_scene(scene: &str) -> std::borrow::Cow<'_, str> {
                 o.remove("_stage");
                 // `_heed` is rendered as its own section (`heed_section`), not shown in the scene.
                 o.remove("_heed");
+                // `_body` likewise (`body_section`).
+                o.remove("_body");
             }
             std::borrow::Cow::Owned(v.to_string())
         }
@@ -879,6 +919,7 @@ pub fn model_scene(scene: &str) -> std::borrow::Cow<'_, str> {
 
 pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str, projects: &str) -> String {
     let heed = heed_section(scene);
+    let body = body_section(scene);
     let scene = &*model_scene(scene);
     let mut out = Segments::default();
     common(c, &mut out);
@@ -891,6 +932,9 @@ pub fn think_user(c: &Ctx, scene: &str, plan: &str, reason: &str, habits: &str, 
     }
     if !heed.is_empty() {
         out.push(Stability::Dynamic, heed);
+    }
+    if !body.is_empty() {
+        out.push(Stability::Dynamic, body);
     }
     out.push(Stability::Dynamic, format!("\n# What you perceive right now\n{scene}\n"));
     out.push(Stability::Dynamic, format!("\n# What you were doing\n{plan}\n"));
@@ -1785,6 +1829,17 @@ mod tests {
             assert!(n <= usize::from(in_grammar), "`{w}` appears {n} times in the heed grammar");
         }
         assert!(f.contains("<a kind>") && f.contains("<your words>"));
+    }
+
+    #[test]
+    fn the_body_section_shows_the_brief_the_leaf_and_a_body_not_answering() {
+        let scene = r#"{"creatures":[],"_body":{"brief":{"revision":3,"goal":"engage","target":21,"stance":"even","risk":0.4,"style":0.5,"rationale":"keep the spear's distance","left_s":42.0,"expired":false},"leaf":{"node":4,"label":"delegate to the body: engage → #21 (with strike)","since_s":7.0},"controlled":false}}"#;
+        let b = body_section(scene);
+        assert!(b.contains("revision 3") && b.contains("engage, about #21") && b.contains("42 s left"), "{b}");
+        assert!(b.contains("keep the spear's distance") && b.contains("for 7 s") && b.contains("not answering"), "{b}");
+        // The scene the model reads has no `_body` of its own; no `_body`, no section.
+        assert!(!model_scene(scene).contains("_body"));
+        assert!(body_section(r#"{"creatures":[]}"#).is_empty());
     }
 
     #[test]

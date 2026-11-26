@@ -855,6 +855,7 @@ fn outline(ui: &mut egui::Ui, n: &Node, depth: usize, id: &mut u16, active: &[u1
         Node::Think(_) => Color32::from_rgb(240, 200, 140),
         Node::Routine(_) => Color32::from_rgb(140, 220, 210),
         Node::Desires(_) => Color32::from_rgb(240, 170, 170),
+        Node::Delegate(_) => Color32::from_rgb(230, 210, 120),
     };
     let mut rt = RichText::new(text).monospace().size(12.5);
     rt = if on { rt.background_color(Color32::from_rgb(86, 74, 20)).color(Color32::from_rgb(255, 235, 140)).strong() } else { rt.color(col) };

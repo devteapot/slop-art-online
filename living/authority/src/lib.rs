@@ -4,6 +4,7 @@
 //! `mind_*` reducers; they read only their characters' experiences and deliberations.
 
 mod act;
+mod delegation;
 mod seen_structures;
 mod acts;
 mod attention;
@@ -983,7 +984,8 @@ pub(crate) fn command_done(ctx: &ReducerContext, id: u32, now: u64) {
 #[spacetimedb::reducer]
 pub fn human_face(ctx: &ReducerContext, dx: f32, dy: f32) -> Result<(), String> {
     crate::floor::ready(ctx)?;
-    let me = my_character(ctx)?;
+    // A person's character, or one a body controller drives under a delegated leaf.
+    let (me, _) = delegation::input_for(ctx, None)?;
     if !dx.is_finite() || !dy.is_finite() {
         return Err("direction must be finite".into());
     }
@@ -1043,7 +1045,9 @@ pub fn human_heed(ctx: &ReducerContext, input: HeedInput) -> Result<(), String> 
 #[spacetimedb::reducer]
 pub fn human_move(ctx: &ReducerContext, dx: f32, dy: f32, run: bool) -> Result<(), String> {
     crate::floor::ready(ctx)?;
-    let me = my_character(ctx)?;
+    // A person's character, or one a body controller drives under a delegated leaf
+    // (docs/NEURAL_BODY.md): the same checks, budget and steering either way.
+    let (me, driver) = delegation::input_for(ctx, None)?;
     latency::nav(ctx, me.id, "human_move", 0, format_args!(""));
     if !dx.is_finite() || !dy.is_finite() {
         return Err("direction must be finite".into());
@@ -1066,7 +1070,11 @@ pub fn human_move(ctx: &ReducerContext, dx: f32, dy: f32, run: bool) -> Result<(
         if let Some(a) = ctx.db.activity().id().find(me.id).filter(|a| a.skill != "wait" && !(guard(a) && a.node == act::PLAYER) && !on_the_move(a)) {
             act::cancel_moved(ctx, a, now);
         }
-        player_controls(ctx, me.id, now)?;
+        // A person taking the controls replaces the plan; a body controller acts within the plan's
+        // delegated step, which the graph keeps.
+        if driver == delegation::Driver::Player {
+            player_controls(ctx, me.id, now)?;
+        }
     }
     // A guard is held at a walk.
     let guarding = ctx.db.activity().id().find(me.id).is_some_and(|a| guard(&a));

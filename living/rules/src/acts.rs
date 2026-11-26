@@ -77,6 +77,7 @@ fn node_name(n: &Node) -> &'static str {
         Node::Think(_) => "think",
         Node::Routine(_) => "routine",
         Node::Desires(_) => "desires",
+        Node::Delegate(_) => "delegate",
     }
 }
 

@@ -39,6 +39,39 @@ pub enum Node {
     Routine(String),
     /// Weighted desires: each check, the strongest desire that can act now wins.
     Desires(Vec<Desire>),
+    /// Hand this leaf's movement and combat inputs to the character's body controller while it
+    /// is active (docs/NEURAL_BODY.md §3(c), "Built (pilot plumbing)"); the graph keeps
+    /// everything else. Installed only in a world whose `body_delegate_on` law holds.
+    Delegate(DelegateNode),
+}
+
+/// The goals a delegated leaf (and a body brief) may name: what the body is to pursue, never
+/// how (docs/NEURAL_BODY.md §2). Mechanics, not seed content.
+pub const DELEGATE_GOALS: &[&str] = &["engage", "hold", "withdraw"];
+/// At most this many skills in a delegated leaf's scope.
+pub const MAX_DELEGATE_SKILLS: usize = 8;
+
+/// A delegated leaf: what the body controller is meant to do while the leaf runs, and the
+/// scope of the delegation. It names no cue and no reaction: when to move or use a skill is
+/// the controller's, within `skills` and through the player input path.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct DelegateNode {
+    /// One of [`DELEGATE_GOALS`].
+    pub goal: String,
+    /// Whom or where it is about (resolved by the character's own perception, as a `do`'s target).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<Target>,
+    /// The skills the body may use under it (combat skills on the skill bar); empty: movement only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skills: Vec<String>,
+    /// Entry: the leaf starts only while this holds (it fails otherwise, so a `first` tries the
+    /// next branch). Not checked again once the leaf runs; `exit` ends it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enter: Option<Cond>,
+    /// Exit: the leaf is done (it succeeds) once this holds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit: Option<Cond>,
 }
 
 /// One desire: what it is for, how strongly it is felt, and what it does.
@@ -588,11 +621,18 @@ pub fn skills_used(root: &Node) -> Vec<String> {
     preorder(root)
         .into_iter()
         .filter_map(|n| match n {
-            Node::Do(a) => Some(a.skill.clone()),
-            Node::Say(_) => Some("say".into()),
+            Node::Do(a) => Some(vec![a.skill.clone()]),
+            Node::Say(_) => Some(vec!["say".into()]),
+            Node::Delegate(d) => Some(d.skills.clone()),
             _ => None,
         })
+        .flatten()
         .collect()
+}
+
+/// Whether a graph holds a delegated leaf (`Node::Delegate`).
+pub fn delegates(root: &Node) -> bool {
+    preorder(root).into_iter().any(|n| matches!(n, Node::Delegate(_)))
 }
 
 /// Parse a model-written graph, pruning invalid branches; returns what was pruned.
@@ -684,6 +724,28 @@ fn check_with(n: &Node, depth: usize, count: &mut usize, max_nodes: usize, max_d
         Node::Routine(name) => {
             if name.trim().is_empty() || name.len() > 60 {
                 return Err("a routine name is 1..60 bytes".into());
+            }
+        }
+        Node::Delegate(d) => {
+            if !DELEGATE_GOALS.contains(&d.goal.as_str()) {
+                return Err(format!("delegate goal `{}` is not one of {}", d.goal, DELEGATE_GOALS.join(", ")));
+            }
+            if d.skills.len() > MAX_DELEGATE_SKILLS {
+                return Err(format!("a delegate names at most {MAX_DELEGATE_SKILLS} skills"));
+            }
+            for (i, k) in d.skills.iter().enumerate() {
+                if k.is_empty() || k.len() > 32 || !k.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
+                    return Err("a delegate's skills are skill names".into());
+                }
+                if d.skills[..i].contains(k) {
+                    return Err(format!("a delegate names `{k}` twice"));
+                }
+            }
+            if let Some(t) = &d.target {
+                check_target(t)?;
+            }
+            for c in [&d.enter, &d.exit].into_iter().flatten() {
+                check_cond(c, 0)?;
             }
         }
         Node::Desires(ds) => {
@@ -867,6 +929,21 @@ pub fn describe(n: &Node) -> String {
         Node::Think(r) => format!("think: {r}"),
         Node::Routine(r) => format!("routine: {r}"),
         Node::Desires(ds) => format!("desires: {}", ds.iter().map(|d| format!("{} [{}]", d.want, describe_weight(&d.weight))).collect::<Vec<_>>().join("; ")),
+        Node::Delegate(d) => {
+            let mut s = format!("delegate to the body: {}", d.goal);
+            if let Some(t) = &d.target {
+                s.push_str(" → ");
+                s.push_str(&describe_target(t));
+            }
+            s.push_str(&if d.skills.is_empty() { " (movement only)".to_string() } else { format!(" (with {})", d.skills.join(", ")) });
+            if let Some(c) = &d.enter {
+                s.push_str(&format!(" when {}", describe_cond(c)));
+            }
+            if let Some(c) = &d.exit {
+                s.push_str(&format!(" until {}", describe_cond(c)));
+            }
+            s
+        }
     }
 }
 
@@ -1147,6 +1224,32 @@ pub fn branch_of(graph: &serde_json::Value, label: &str) -> Option<serde_json::V
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_delegated_leaf_parses_validates_and_describes_its_scope() {
+        // docs/NEURAL_BODY.md §3(c): target, goal, entry and exit, skill scope; no cue or reaction.
+        let g = from_value(serde_json::json!({"first": [
+            {"delegate": {"goal": "engage", "target": {"nearest": {"kind": "person", "relation": "enemy"}}, "skills": ["strike", "dodge"],
+                          "enter": {"sees": {"nearest": "person"}}, "exit": {"health": {"below": 30}}}},
+            {"do": {"skill": "wander"}}]})).unwrap();
+        assert!(delegates(&g.root));
+        let text = outline(&g.root);
+        assert!(text.contains("delegate to the body: engage") && text.contains("(with strike, dodge)") && text.contains("until"), "{text}");
+        assert_eq!(skills_used(&g.root), vec!["strike", "dodge", "wander"]);
+        // A leaf: it holds no node of its own, so preorder ids stay one per node.
+        assert_eq!(g.nodes, 3);
+        // Movement only, no target: valid.
+        assert!(from_value(serde_json::json!({"delegate": {"goal": "withdraw"}})).is_ok());
+        // Refused: an unknown goal, an unknown field (a cue-to-action recipe has no place), a skill
+        // named twice, too many skills.
+        assert!(from_value(serde_json::json!({"delegate": {"goal": "dance"}})).unwrap_err().contains("goal"));
+        assert!(from_value(serde_json::json!({"delegate": {"goal": "engage", "on_windup": "dodge"}})).is_err());
+        assert!(from_value(serde_json::json!({"delegate": {"goal": "engage", "skills": ["strike", "strike"]}})).unwrap_err().contains("twice"));
+        let many: Vec<String> = (0..9).map(|i| format!("s{}", char::from(b'a' + i))).collect();
+        assert!(from_value(serde_json::json!({"delegate": {"goal": "engage", "skills": many}})).is_err());
+        // A graph without one does not delegate.
+        assert!(!delegates(&from_value(serde_json::json!({"do": {"skill": "wander"}})).unwrap().root));
+    }
 
     #[test]
     fn judged_reads_a_cached_value_or_its_fallback() {

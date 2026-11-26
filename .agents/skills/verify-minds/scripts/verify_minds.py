@@ -10,6 +10,7 @@ import math
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -4868,6 +4869,262 @@ def seen_remains_case(run):
     }
     return {'status': 'pass' if all(checks.values()) else 'fail', 'checks': checks,
             'field_ids': sorted(field.values()), 'scene_structures': structures}
+
+
+# ---- the learned-body pilot's plumbing (docs/NEURAL_BODY.md, "Built (pilot plumbing)") ----------
+
+def _http(path, body=None, token=None):
+    """A call or SQL over HTTP as `token` (None: anonymous): (status, text)."""
+    req = urllib.request.Request(shared.STDB_URL + path, data=json.dumps(body).encode() if body is not None else (b'' if path == '/v1/identity' else None),
+                                 method='POST' if body is not None or path == '/v1/identity' else 'GET')
+    req.add_header('Content-Type', 'application/json')
+    if token:
+        req.add_header('Authorization', f'Bearer {token}')
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return r.status, r.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+
+
+def _fresh_identity():
+    code, text = _http('/v1/identity')
+    assert code == 200, (code, text)
+    v = json.loads(text)
+    return v['identity'], v['token']
+
+
+def _sql_as(run, token, query):
+    """Rows of `query` as `token`, or the refusal's text."""
+    req = urllib.request.Request(f'{shared.STDB_URL}/v1/database/{run.db}/sql', data=query.encode(), method='POST')
+    if token:
+        req.add_header('Authorization', f'Bearer {token}')
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            out = json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        return e.read().decode()
+    res = out[0]
+    names = [c['name']['some'] if isinstance(c['name'], dict) else c['name'] for c in res['schema']['elements']]
+    return [dict(zip(names, row)) for row in res['rows']]
+
+
+@case('body')
+def body_case(run):
+    """The learned-body pilot's plumbing (docs/NEURAL_BODY.md, "Built (pilot plumbing)"), with the
+    scripted placeholder policy and no model for the body:
+
+    - **Law off (as shipped):** a graph with a `delegate` leaf, a brief and a body session are refused
+      in the law's words, and nothing is written.
+    - **The brief** (`mind_body_brief`, law on): refused truthfully for a wrong revision, an unknown
+      goal, an out-of-range value, a lifetime past the law, and a target the character does not
+      perceive (the same words for a hidden creature and an id that does not exist), and for a caller
+      that does not control the character; the accepted brief holds revision 1.
+    - **The player input path** (over HTTP, fresh identities): no session, no input; a session bound by
+      `body_open` (epoch 1) moves its character with `human_move` while the leaf is delegated, is
+      refused a skill outside the leaf's scope, reads its own character's `my_body` and none of the
+      private body rows; a new `body_open` (epoch 2) fences the first identity; a session left without
+      beats lapses (its character stands; its next input is refused as lapsed).
+    - **The worker** (`living-mind body`, the `HoldDistance` placeholder) drives the subject in an
+      R2-heavy-like duel (a spear foe opening with its heavy `attack`, then 2–3 s pauses): the subject
+      moves and uses skills only through the player path (`skill_use.source = body`), its plan is the
+      installed one throughout, and every decision, reply and outcome is captured. A stall past the
+      lease (SIGSTOP) lapses the session and the subject stands; on SIGCONT the worker opens a new
+      epoch with a new identity and inputs resume.
+    - **Read-back:** the owning mind's think prompt shows "# Your body" with the brief and the step."""
+    run.harness('launch')
+    run.harness('doctor')
+    subject, foe = prepare(run)
+    s, f = subject['id'], foe['id']
+    result = {'subject': s, 'foe': f}
+    admin_token = re.findall(r'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', subprocess.run([str(ROOT / 'living/tools/stdb'), 'login', 'show', '--token'], cwd=ROOT, capture_output=True, text=True, check=True, timeout=20).stdout)[0]
+
+    class Out:
+        def __init__(self, code, text):
+            self.returncode, self.stdout, self.stderr = (0 if code == 200 else code), text, ''
+
+    def stdb(reducer, *args):
+        # The owner's call over HTTP (the reply's words kept in the run's log, never the token).
+        code, text = _http(f'/v1/database/{run.db}/call/{reducer}', list(args), admin_token)
+        run.note(f'owner {reducer}{json.dumps(args)} -> {code} {text.strip()[:300]}')
+        return Out(code, text)
+    ident = lambda i: {'__identity__': i if i.startswith('0x') else '0x' + i}
+    brief = lambda **kw: {'some': {**{'goal': 'engage', 'target': 0, 'stance': 'even', 'risk': 0.5, 'style': 0.5, 'ttl_s': 120.0, 'rationale': 'keep the spear distance'}, **kw}}
+    graph = {'first': [{'delegate': {'goal': 'engage', 'target': {'id': f}, 'skills': ['strike', 'dodge'], 'exit': {'health': {'below': 15}}}}, {'wait': 5}]}
+    law_words = 'the body_delegate_on law is off'
+    checks = {}
+    # Law off: everything refused, nothing written.
+    out = stdb('set_behavior', s, json.dumps(graph))
+    checks['law_off_graph_refused'] = out.returncode != 0 and 'a `delegate` leaf cannot be installed' in out.stdout + out.stderr
+    out = stdb('mind_body_brief', s, 0, brief(target=f))
+    checks['law_off_brief_refused'] = out.returncode != 0 and law_words in out.stdout + out.stderr
+    checks['law_off_nothing_written'] = not run.private(f'SELECT * FROM body_brief WHERE actor = {s}', 'brief-off') and not run.private(f'SELECT * FROM body_slot WHERE actor = {s}', 'slot-off')
+    try:
+        run.admin('set_world_law', 'body_delegate_on', 'true')
+        assert own_laws(lambda q: run.sql(q, 'world-law')).get('body_delegate_on') == 'true'
+        # The duel's ground: an open line, 3 m apart; spears; the foe's heavy opening and pauses.
+        line = open_line(run, 14)
+        run.admin('place_at', s, *line[4])
+        run.admin('place_at', f, *line[7])
+        for who in (s, f):
+            run.admin('grant_items', who, 'spear', 1)
+            run.admin('admin_set_vitals', who, 100.0)
+        run.admin('grant_know_how', f, 'wound_tending')
+        pause = {'first': [{'if': {'cond': {'chance': 0.5}, 'then': {'wait': 2}}}, {'wait': 3}]}
+        foe_graph = {'first': [{'seq': [{'do': {'skill': 'attack', 'target': {'id': s}}},
+                                         {'if': {'cond': {'health': {'below': 70}}, 'then': {'first': [{'seq': [{'do': {'skill': 'heal', 'target': 'self'}}, pause]}, pause]}, 'else': pause}}]}]}
+        run.admin('set_behavior', f, json.dumps({'wait': 120}))
+        # A hidden creature: an adult far from the subject (not perceived).
+        far = next(c for c in run.sql("SELECT * FROM character WHERE kind = 'person'", 'people-far') if c['alive'] and c['id'] not in (s, f))
+        # The subject's plan: the delegated step (installed now the law holds).
+        out = stdb('set_behavior', s, json.dumps(graph))
+        checks['law_on_graph_installed'] = out.returncode == 0
+        run.wait(lambda: run.private(f'SELECT * FROM body_slot WHERE actor = {s}', 'slot-on'), 'the delegated leaf in body_slot', 20)
+        slot = run.private(f'SELECT * FROM body_slot WHERE actor = {s}', 'slot-on')[0]
+        checks['slot_names_target_and_scope'] = slot['target'] == f and slot['skills'] == ['strike', 'dodge'] and slot['goal'] == 'engage'
+        # The brief's refusals, then one accepted.
+        refusals = {}
+        for name, args, words in [
+            ('revision', (s, 5, brief(target=f)), 'the brief is at revision 0, not 5'),
+            ('goal', (s, 0, brief(goal='dance')), "a brief's goal is one of engage, hold, withdraw"),
+            ('risk', (s, 0, brief(risk=1.5)), "a brief's risk is a number from 0 to 1"),
+            ('ttl', (s, 0, brief(ttl_s=99999.0)), 'a brief lasts from 1 to 300 seconds'),
+            ('nonexistent', (s, 0, brief(target=4_000_000)), '#4000000 is not someone you perceive now'),
+        ]:
+            out = stdb('mind_body_brief', *args)
+            refusals[name] = {'refused': out.returncode != 0, 'words': words in out.stdout + out.stderr}
+        # The hidden creature: placed far, then the same words as for no one at all.
+        stdb('place_at', far['id'], line[0][0], line[0][1] - 120.0 if line[0][1] > 130 else line[0][1] + 120.0)
+        time.sleep(1.0)
+        hidden_at = run.private(f"SELECT x, y FROM body WHERE id = {far['id']}", 'hidden-at')[0]
+        result['hidden_distance_m'] = round(math.dist((hidden_at['x'], hidden_at['y']), line[4]), 1)
+        out = stdb('mind_body_brief', s, 0, brief(target=far['id']))
+        # Hidden only if it is really far (place_at may put it on the nearest walkable ground).
+        if result['hidden_distance_m'] > 60:
+            refusals['hidden'] = {'refused': out.returncode != 0, 'words': f"#{far['id']} is not someone you perceive now" in out.stdout + out.stderr}
+        else:
+            result['hidden_skipped'] = 'the far creature could not be put out of sight'
+        pid, ptok = _fresh_identity()
+        code, text = _http(f'/v1/database/{run.db}/call/mind_body_brief', [s, 0, brief(target=f)], ptok)
+        refusals['not_controller'] = {'refused': code != 200, 'words': 'not your character' in text}
+        result['brief_refusals'] = refusals
+        checks['brief_refusals_truthful'] = all(r['refused'] and r['words'] for r in refusals.values())
+        out = stdb('mind_body_brief', s, 0, brief(target=f))
+        row = run.private(f'SELECT * FROM body_brief WHERE actor = {s}', 'brief-accepted')
+        checks['brief_accepted'] = out.returncode == 0 and row and row[0]['revision'] == 1 and row[0]['target'] == f
+        # The player input path, by hand, with fresh identities.
+        a_id, a_tok = _fresh_identity()
+        call = lambda tok, reducer, args: _http(f'/v1/database/{run.db}/call/{reducer}', args, tok)
+        code, text = call(a_tok, 'human_move', [1.0, 0.0, False])
+        checks['no_session_no_input'] = code != 200 and 'you have no living character' in text
+        stdb('body_open', s, ident(a_id))
+        sess = run.private(f'SELECT * FROM body_session WHERE actor = {s}', 'session-1')
+        checks['epoch_1_live'] = bool(sess) and sess[0]['epoch'] == 1 and sess[0]['live']
+        x0 = run.private(f'SELECT x, y FROM body WHERE id = {s}', 'pos-0')[0]
+        code, text = call(a_tok, 'human_move', [-1.0, 0.0, False])
+        checks['body_input_accepted'] = code == 200
+        code, text = call(a_tok, 'use_skill', ['block', f, 0.0, 0.0])
+        checks['out_of_scope_refused'] = code != 200 and 'block is not among the skills the plan delegated' in text
+        mine = _sql_as(run, a_tok, 'SELECT * FROM my_body')
+        checks['body_reads_its_own_character'] = isinstance(mine, list) and [r['id'] for r in mine] == [s]
+        private = {t: _sql_as(run, a_tok, f'SELECT * FROM {t}') for t in ('body_brief', 'body_slot', 'body_session', 'brain', 'heed_policy')}
+        checks['body_reads_no_private_rows'] = all(not isinstance(v, list) for v in private.values())
+        result['private_as_body'] = {k: (v if isinstance(v, str) else f'{len(v)} rows') for k, v in private.items()}
+        for _ in range(8):
+            call(a_tok, 'body_beat', [1])
+            time.sleep(0.2)
+        x1 = run.private(f'SELECT x, y FROM body WHERE id = {s}', 'pos-1')[0]
+        checks['body_moved_by_input'] = math.dist((x0['x'], x0['y']), (x1['x'], x1['y'])) > 0.5
+        brain = run.private(f'SELECT * FROM brain WHERE id = {s}', 'brain-after-input')[0]
+        checks['plan_kept'] = 'delegate' in brain['graph'] and brain['plan'] != 'moving yourself'
+        b_id, b_tok = _fresh_identity()
+        stdb('body_open', s, ident(b_id))
+        code, text = call(a_tok, 'human_move', [1.0, 0.0, False])
+        checks['old_epoch_fenced'] = code != 200 and 'you hold no body session' in text
+        code, text = call(b_tok, 'human_move', [0.0, 1.0, False])
+        sess = run.private(f'SELECT * FROM body_session WHERE actor = {s}', 'session-2')
+        checks['epoch_2_accepted'] = code == 200 and sess[0]['epoch'] == 2
+        time.sleep(1.6)
+        code, text = call(b_tok, 'human_move', [1.0, 0.0, False])
+        sess = run.private(f'SELECT * FROM body_session WHERE actor = {s}', 'session-lapsed')
+        checks['lapse_refused'] = code != 200 and 'lapsed' in text and not sess[0]['live']
+        time.sleep(0.8)
+        p2 = run.private(f'SELECT x, y, vx, vy FROM body WHERE id = {s}', 'pos-lapsed')[0]
+        checks['lapsed_stands'] = abs(p2['vx']) < 1e-3 and abs(p2['vy']) < 1e-3
+        # The worker in a duel.
+        run.admin('admin_set_vitals', s, 100.0)
+        run.admin('admin_set_vitals', f, 100.0)
+        run.admin('place_at', s, *line[4])
+        run.admin('place_at', f, *line[8])
+        run.admin('set_behavior', f, json.dumps(foe_graph))
+        cap = run.directory / 'capture'
+        env = dict(os.environ, LIVING_ROOT=str(ROOT), LIVING_SERVER=shared.STDB_URL, LIVING_DB=run.db, LIVING_TOKEN=admin_token,
+                   LIVING_BODY_ONLY=str(s), LIVING_BODY_CAPTURE=str(cap), RUST_LOG='info,spacetimedb_sdk=warn')
+        stream = (run.directory / 'body.log').open('a')
+        run.streams.append(stream)
+        worker = subprocess.Popen([str(shared.MIND_BIN), 'body'], cwd=ROOT, env=env, stdout=stream, stderr=subprocess.STDOUT)
+        run.processes.append(worker)
+        live_epoch = lambda: [r for r in run.private(f'SELECT * FROM body_session WHERE actor = {s}', 'session-w') if r['live'] and r['epoch'] >= 3]
+        e3 = run.wait(live_epoch, 'the worker opening epoch 3', 30)[0]
+        uses_q = f'SELECT * FROM skill_use WHERE actor = {s}'
+        start_ms = int(time.time() * 1000)
+        positions = []
+        for _ in range(40):
+            positions.append(run.private(f'SELECT x, y FROM body WHERE id = {s}', 'pos-w')[0])
+            time.sleep(0.5)
+        uses = [u for u in run.private(uses_q, 'uses-duel') if u['at_ms'] >= start_ms]
+        result['duel_uses'] = {src: sum(1 for u in uses if u['source'] == src) for src in {u['source'] for u in uses}}
+        checks['duel_uses_through_player_path'] = bool(uses) and all(u['source'] == 'body' for u in uses)
+        checks['duel_some_accepted'] = any(u['accepted_ms'] for u in uses)
+        checks['duel_moved'] = max(math.dist((p['x'], p['y']), (positions[0]['x'], positions[0]['y'])) for p in positions) > 0.5
+        brain = run.private(f'SELECT * FROM brain WHERE id = {s}', 'brain-duel')[0]
+        checks['duel_plan_kept'] = 'delegate' in brain['graph'] and brain['source'] != 'human'
+        # The stall: past the lease, the session lapses and the subject stands.
+        worker.send_signal(signal.SIGSTOP)
+        stop_ms = int(time.time() * 1000)
+        time.sleep(2.5)
+        sess = run.private(f'SELECT * FROM body_session WHERE actor = {s}', 'session-stall')[0]
+        p_stall = run.private(f'SELECT x, y, vx, vy FROM body WHERE id = {s}', 'pos-stall')[0]
+        checks['stall_lapses'] = not sess['live'] and sess['epoch'] == e3['epoch']
+        checks['stall_stands'] = abs(p_stall['vx']) < 1e-3 and abs(p_stall['vy']) < 1e-3
+        late = [u for u in run.private(uses_q, 'uses-stall') if u['source'] == 'body' and u['at_ms'] > stop_ms + 100]
+        checks['stall_no_new_inputs'] = not late
+        worker.send_signal(signal.SIGCONT)
+        resume_ms = int(time.time() * 1000)
+        e4 = run.wait(lambda: [r for r in run.private(f'SELECT * FROM body_session WHERE actor = {s}', 'session-r') if r['live'] and r['epoch'] > e3['epoch']], 'a new epoch after the stall', 30)[0]
+        checks['recovery_new_epoch_new_identity'] = e4['identity'] != e3['identity']
+        time.sleep(8.0)
+        after = [u for u in run.private(uses_q, 'uses-after') if u['source'] == 'body' and u['at_ms'] > resume_ms]
+        moved = run.private(f'SELECT x, y FROM body WHERE id = {s}', 'pos-after')[0]
+        checks['recovery_inputs_resume'] = bool(after) or math.dist((moved['x'], moved['y']), (p_stall['x'], p_stall['y'])) > 0.3
+        worker.send_signal(signal.SIGINT)
+        worker.wait(timeout=10)
+        # The capture: decisions, replies, outcomes; every reply to an old epoch after the resume refused.
+        recs = [json.loads(l) for p in sorted(cap.glob('body-*.jsonl')) for l in p.read_text().splitlines()]
+        kinds = {k: sum(1 for r in recs if r['kind'] == k) for k in {r['kind'] for r in recs}}
+        result['capture'] = kinds
+        checks['capture_has_decisions_replies_outcomes'] = all(kinds.get(k) for k in ('decision', 'reply', 'session'))
+        checks['capture_encoded_fixed_length'] = all(len(r['encoded']) == r['len'] for r in recs if r['kind'] == 'decision')
+        stale = [r for r in recs if r['kind'] == 'reply' and r.get('epoch') == e3['epoch'] and r['wall_ms'] > resume_ms + 200 and r.get('ok')]
+        checks['old_epoch_replies_after_resume_refused'] = not stale
+        # Read-back: the owning mind's think prompt (the real mind with the fake model).
+        script = {'replies': {'think': {'thought': 'I hold.', 'intend': ['wait'], 'say': None}, 'deliberate': basic_reply()}}
+        run.admin('set_behavior', f, json.dumps({'wait': 120}))
+        run.start(model(run, script), [s])
+        run.admin('set_behavior', s, json.dumps({'seq': [{'think': 'I finished my plan. verify body-read'}, graph]}))
+        requests = lambda: [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'think']
+        msgs = lambda e: {x.get('role'): str(x.get('content', '')) for x in e['body'].get('messages', [])}
+        asked = run.wait(lambda: [msgs(e) for e in requests() if 'verify body-read' in msgs(e).get('user', '')], 'the think prompt', 90)[0]
+        user = asked.get('user', '')
+        (run.directory / 'body-prompt.txt').write_text(user)
+        checks['readback_brief'] = '# Your body' in user and 'What you asked of your body (revision 1): engage' in user
+        result['readback_leaf_shown'] = 'The step of your plan your body carries out now' in user
+    finally:
+        run.admin('set_world_law', 'body_delegate_on', 'false')
+    result['checks'] = checks
+    (run.directory / 'body-checks.json').write_text(json.dumps(result, indent=1))
+    failed = [k for k, v in checks.items() if not v]
+    return {'status': 'fail' if failed else 'pass', 'failed': failed, 'checks': len(checks)}
 
 
 def main():

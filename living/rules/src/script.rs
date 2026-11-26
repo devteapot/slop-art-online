@@ -570,6 +570,16 @@ pub struct Laws {
     /// `far_cap`'s trim) and the rest of its sight is counted in `seen_throng`; its pins and
     /// focus (`human_heed`) weigh in its picks. Off by default, until its own play-test.
     pub heed_players: bool,
+    /// The learned-body pilot's plumbing (docs/NEURAL_BODY.md, "Built (pilot plumbing)"): off, a
+    /// graph's `delegate` leaf is refused at install and nothing about bodies runs. On, a delegated
+    /// leaf hands its character's movement and combat inputs to a body controller session (the
+    /// player input path, under one writer and a short lease) while it is active.
+    pub body_delegate_on: bool,
+    /// A body session's lease (ms): with no beat or accepted input for this long, it lapses and its
+    /// held inputs are let go as a key release would.
+    pub body_lease_ms: f32,
+    /// The longest a body brief may hold (seconds).
+    pub body_brief_max_s: f32,
     pub cover_sight_on: bool,
     /// How far a character sees ground by day (metres): the cells of `known_ground` it marks
     /// (docs/MOVEMENT_MIND.md, step 3). At night, its own sight.
@@ -928,6 +938,9 @@ impl Default for Laws {
             heed_closing_s: crate::heed::DEFAULT_CLOSING_S,
             heed_trace: false,
             heed_players: false,
+            body_delegate_on: false,
+            body_lease_ms: 750.0,
+            body_brief_max_s: 300.0,
             cover_sight_on: false,
             ground_sight_m: 24.0,
             known_cells_pass: 0.0,
@@ -3305,6 +3318,9 @@ impl Scripts {
             heed_closing_s: g("heed_closing_s", l.heed_closing_s).clamp(0.0, 60.0),
             heed_trace: flag("heed_trace", l.heed_trace),
             heed_players: flag("heed_players", l.heed_players),
+            body_delegate_on: flag("body_delegate_on", l.body_delegate_on),
+            body_lease_ms: g("body_lease_ms", l.body_lease_ms).clamp(100.0, 10_000.0),
+            body_brief_max_s: g("body_brief_max_s", l.body_brief_max_s).clamp(1.0, 3_600.0),
             cover_sight_on: flag("cover_sight_on", l.cover_sight_on),
             ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
             known_cells_pass: g("known_cells_pass", l.known_cells_pass).clamp(0.0, 100_000.0),
@@ -3638,7 +3654,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 34] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 37] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3692,6 +3708,11 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 34] = [
     ("heed_trace", ValueOnly::Delivery),
     // heed for players: read at each player's sweep (perception::sweep_one).
     ("heed_players", ValueOnly::Delivery),
+    // the learned-body pilot's plumbing (docs/NEURAL_BODY.md): read by the install checks, the
+    // body reducers and the tick's lease pass at their next call.
+    ("body_delegate_on", ValueOnly::Delivery),
+    ("body_lease_ms", ValueOnly::Delivery),
+    ("body_brief_max_s", ValueOnly::Delivery),
 ];
 
 /// The functions a value-only law may be named in: the constants (`laws`, an overlay's

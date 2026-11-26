@@ -3,6 +3,7 @@
 //! memory graphs in Neo4j and calls LLMs (outside any reducer) to consolidate experience
 //! and revise behavior.
 
+mod body;
 mod llm;
 mod memory;
 mod mind;
@@ -81,6 +82,11 @@ async fn main() -> Result<()> {
             cfg.get("spacetimedb_token").and_then(|t| t.as_str()).ok_or_else(|| anyhow!("no spacetimedb_token in cli.toml"))?.to_string()
         }
     };
+    // The body controller worker (docs/NEURAL_BODY.md, "Built (pilot plumbing)"): its own process,
+    // the characters' controller's identity for the delegation rows, a fresh identity per session.
+    if std::env::args().nth(1).as_deref() == Some("body") {
+        return body::main(server, db, token).await;
+    }
     let models: llm::ModelsFile = serde_json::from_str(&std::fs::read_to_string(
         std::env::var("LIVING_MODELS").map(PathBuf::from).unwrap_or_else(|_| root.join("living/configs/models.json")),
     )?)?;
