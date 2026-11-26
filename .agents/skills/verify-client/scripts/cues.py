@@ -145,6 +145,19 @@ def accepted(events):
         not any(e.get("status") == "rejected" or e.get("status") == "error" for e in events)
 
 
+def wait_applied(probes, deadline):
+    """Return once each SDK has applied its subscription, while its stream is live."""
+    while time.time() < deadline and all(t.is_alive() for t in probes):
+        try:
+            # The probe writes "complete" at the end of the hold, after its live "initial".
+            if all(any(e.get("event") == "initial" for e in lines(path)) for path in probes.values()):
+                return True
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass  # the child is still opening or writing its transcript
+        time.sleep(0.1)
+    return False
+
+
 def hcall(db, token, reducer, args):
     code, body = V.http(f"/v1/database/{db}/call/{reducer}", args, token)
     if code != 200:
@@ -361,14 +374,18 @@ def main():
     call(rid, "place_at", [b, *line[11]])
     time.sleep(1.5)
     off_paths = {w: out / f"cues-off-{w}.jsonl" for w in ("a", "b", "anon")}
-    off_end = time.time() + 20
-    off_threads = [stream(db, tok["a"], TIERS + CUES, 20, off_paths["a"]), stream(db, tok["b"], CUES, 20, off_paths["b"]),
-                   stream(db, None, CUES, 20, off_paths["anon"])]
-    time.sleep(3.0)
-    # Only the moves struck from here on: the streams' initial rows hold the last one of the first phase.
+    off_seconds = 40
+    off_end = time.time() + off_seconds
+    off_probes = {
+        stream(db, token, queries, off_seconds, off_paths[who]): off_paths[who]
+        for who, token, queries in (("a", tok["a"], TIERS + CUES),
+                                    ("b", tok["b"], CUES), ("anon", None, CUES))
+    }
+    off_ready = wait_applied(off_probes, off_end - 4)
+    # Only the moves struck from here on: the initial rows may hold a strike from the first phase.
     off_t0 = int(time.time() * 1000)
-    off_struck = strike_until(rid, db, tok["b"], b, a, pa, 4, 8, off_t0, off_end - 3)
-    for t in off_threads:
+    off_struck = strike_until(rid, db, tok["b"], b, a, pa, 4, 8, off_t0, off_end - 4) if off_ready else []
+    for t in off_probes:
         t.join()
     off = {w: lines(p) for w, p in off_paths.items()}
     off_first = {}
@@ -395,7 +412,7 @@ def main():
                "load1": round(os.getloadavg()[0], 2)}
     result = {"a": a, "b": b, "c": c, "f": f, "dist": {k: round(math.dist(pos[a], pos[k]), 2) for k in (b, c, f)},
               "cues": {w: len(r) for w, r in cue_rows.items()}, "cue_tables_a": {t: sum(e["table"] == t for e in a_cues) for t in CUE_OF},
-              "windups": {str(k): v for k, v in first.items()}, "struck": struck, "off_struck": off_struck, "differ": differ, "overlap": overlap, "split": split, "tiers": tiers, "act_window": act_window,
+              "windups": {str(k): v for k, v in first.items()}, "struck": struck, "off_struck": off_struck, "off_ready": off_ready, "off_windups": off_first, "differ": differ, "overlap": overlap, "split": split, "tiers": tiers, "act_window": act_window,
               "off": {"cues": off_cues, "windups": {str(k): v for k, v in off_first.items()}}, "measure": measure,
               "f_cued": f_cued, "faults": faults[:10], "checks": checks}
     (out / "cues.json").write_text(json.dumps(result, indent=1) + "\n")
