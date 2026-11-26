@@ -26,6 +26,13 @@ python3 living/tools/trials.py clean --batch dry1
 - Every `summary.json` has `prompt_frame` (per purpose, the subject's journaled requests that opened with the player frame) and `out_of_character` (`ooc_lines`, `ooc_private`: [`ooc.py`](../../../../living/tools/ooc.py) over spoken and written lines and over private reply fields). Under `default` every purpose reads `character 0/n`; under `player-frame` every think, deliberate, talk and consolidation request is framed and starting identities are not ([frame.md](frame.md)).
 - From a git worktree, `build` copies each module into the container's `/wasm` mount (the starting checkout's `.local/living/trials/wasm/`) as `<module>-wt<tag>.wasm` and `run` publishes that copy; `actions.log` names it. The worktree needs its own `.local/living/trials/neo4j.env` and does not run `up` against a running stack.
 
+## Seeded paired cast and observer baseline
+
+- `subject.pick.ids` chooses the explicit ordered list after applying the existing eligibility and stage filters. It refuses duplicates, unavailable subjects and a count that disagrees with the list.
+- `run --observer-ready PATH` holds the mind's start until the sidecar creates the baseline file. It requires a single instance and a fresh path.
+- `run --no-commitlog-archive` pauses a kept database for an external observer without writing a raw commitlog archive. The caller owns final reads and database deletion.
+- The relation island trial uses both options to hold the cast fixed and record the law and baseline before the first model call. Its launcher and stop-rule evidence are documented in [the island trial plan](../../../../docs/RELATION_ISLAND_PAID.md).
+
 ## The arrival trial (2026-11-11; kept as tooling, 2026-11-12)
 
 - `human.script: arrive` (`Player.arrive_session`; living/trials/arrive.json, docs/TRIALS.md, "Arrivals") joins after the world has lived `subject.join.after_s` seconds, walks (`goto` to the densest group's centre, re-aimed every 15 s) until two residents are within `within_m`, then stands silent `stand_s`, `stands` times, each next group sharing the fewest members with the last; it never speaks or gestures. Each stand is a `human_stand` / `human_stand_end` event pair with from/to ms, the group and who was within 12 m. It counts and approaches only residents the minds think for (`Player.is_mind`: past infancy, in `LIVING_ONLY` or the `minds.max` thinkers); the greeting script counts every resident.

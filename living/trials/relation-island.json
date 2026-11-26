@@ -1,0 +1,19 @@
+{
+ "kind": "life",
+ "title": "The island with relation_fight_on off and on",
+ "world": {"seed": "island"},
+ "minutes": 20,
+ "keep_db": true,
+ "subject": {
+  "pick": {"kind": "person", "ids": [1, 2, 3, 4, 5, 9, 10, 11, 12, 29, 30, 31, 35, 38, 39, 40, 53, 54, 55, 62, 63, 64, 74, 81, 82, 83, 84, 134, 136, 152, 163, 167, 170, 193, 202, 221, 253, 255, 256, 260], "count": 40},
+  "clear_items": false,
+  "clear_routines": false
+ },
+ "cast": {},
+ "timeline": [],
+ "minds": {"concurrency": 64},
+ "record": {"thoughts": true},
+ "life": {"snapshot_min": 60, "stop_on_death": false},
+ "budget": {"runaway_calls_per_min": 400},
+ "variants": ["relation-fight-off", "relation-fight-on"]
+}
