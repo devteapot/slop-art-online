@@ -72,7 +72,7 @@ Behind the value-only law `heed_players` (off as shipped; with `heed_on` on too)
 | Pins and focus | reducer `human_heed`, table `heed_choice` | below; read at each heed pass into `Candidate.chosen` (focus 1.0, a pin 0.75; the instinct's third rule takes `chosen`) |
 | The kill switch | `throng::off_tick` (each tick, in `perception::sweep`) | `heed_players` or `heed_on` off: every `seen_throng` row goes in that tick; nothing is read while none can exist (module memory, asked of the table once per instance); each player's next sweep perceives its whole sight again |
 
-**The shapes the laptop builds on** (settled 2026-11-23; bindings regenerated with the pinned image):
+**The shapes the laptop builds on** (settled 2026-11-23; `pin_at` and the colours added 2026-11-26 on `heed-player-2`, after the laptop's heed client; bindings regenerated with the pinned image):
 
 ```rust
 // Private: only reducers and the database owner read it.
@@ -80,7 +80,9 @@ Behind the value-only law `heed_players` (off as shipped; with `heed_on` on too)
 pub struct HeedChoice { #[primary_key] pub actor: u32, pub pins: Vec<u32>, pub focus: Option<u32>, pub at_ms: u64 }
 
 #[derive(SpacetimeType)]
-pub struct HeedInput { pub pins: Vec<u32>, pub focus: Option<u32> }
+pub struct HeedInput { pub pins: Vec<u32>, pub focus: Option<u32>, pub pin_at: Option<PinAt> }
+#[derive(SpacetimeType)]
+pub struct PinAt { pub x: f32, pub y: f32 }   // map metres, as `cell` counts them
 #[spacetimedb::reducer]
 pub fn human_heed(ctx: &ReducerContext, input: HeedInput) -> Result<(), String>
 
@@ -97,10 +99,18 @@ pub struct SeenThrong {
     pub moving: u16,    // as count
     pub fighting: u16,  // as count
     pub kinds: u8,      // bits: 1 people, 2 wolves, 4 deer, 8 others
+    // The three cloth colours most worn (most first, ties by index): an index into
+    // living_rules::look::CLOTH, 255 none; its count as `count` (0 with 255). Appended with defaults.
+    #[default(255u8)] pub colour_a: u8,  #[default(0u16)] pub colour_a_count: u16,
+    #[default(255u8)] pub colour_b: u8,  #[default(0u16)] pub colour_b_count: u16,
+    #[default(255u8)] pub colour_c: u8,  #[default(0u16)] pub colour_c_count: u16,
 }
 ```
 
 - **`human_heed`'s refusals**, word for word: more than four pins, `You can keep at most 4 others pinned at once.`; a pin or the focus on an id not in the caller's `perceived` set now (whether or not the id exists), `You can only keep track of someone you can see now.`; a call within 250 ms of the last accepted one, or an empty input bucket, `too many inputs`; no living character, `you have no living character`. Empty pins and no focus clear the choice. Pins are deduplicated; the row goes with the character.
+- **Picking someone out of the throng** (`pin_at`): the point must fall in one of the caller's own `seen_throng` squares (a merged square counts whole). Among the throng members it sees there (in that square now, not in its `perceived` set), the one nearest the point is put through the heed event pass as chosen (the instinct's "whoever I watch for", a pin's weight): the policy decides whether a place is free for it, as it would for a pin. Taken, it joins `perceived` in this transaction (its id reaches the client only now, through the ordinary perception rows) and its id becomes one of the pins (the pins and the pick together at most four). Same 250 ms floor and input token as any call. Refusals, word for word, naming no one: no throng cell of the caller's at the point, or no throng member of its in that square (or heed not on for players), `There is no one in the throng there to pick out.`; the pass took no place for it (every place held for someone the policy ranks higher, or a capacity of 0), `You are already keeping track of as many as you can.`; four pins and a point, the four-pin words above.
+- **Colours** (`colour_*`): each member's cloth colour is its look's `top` word (`look.words.top`, "a yellow coat"), the word a mind is told, mapped by `living_rules::look::cloth_index` to `CLOTH` = 0 yellow, 1 black, 2 green, 3 tan, 4 blue, 5 red, 6 cream, 7 navy, 8 purple, 9 grey (the generator's cloth words; the order is a protocol, a new word goes at the end). 255: no look (animals, a world without looks) or a word outside it (the plan-test fixture's). A cell carries its three most worn, counts quantized as `count` (exact to 5, then to the nearest 5), so a colour says no more than `count` does about who is there. The laptop draws index `i` as the mean of its book's outfit colours for word `CLOTH[i]`. Every line of the Cullet and island look data maps (a test in `living_rules::look`).
+- **Publishing it:** the colour columns are appended with defaults (an automatic migration that rewrites `seen_throng` and disconnects every client once), and `human_heed`'s argument changed shape (a caller with the old bindings is refused until it regenerates). One publish at a merge window with the mind service restarted.
 - **`seen_throng`**: at most 48 rows a viewer (the farthest cells merge 2 × 2 first). A viewer's cells are worked out at its sweep when its heed pass ran (at most once a second) or its throng's members changed, and written field by field: an unchanged cell writes nothing, a changed one is updated in place (its `id` kept), a new one inserted, an empty one deleted. A client keys a row by `id`, or by `(cell, size)`.
 
 **SpacetimeDB documentation read for this** (2026-11-23 and 2026-11-26; every page is marked 2.0.0, and its version selector offers only 2.0.0 and 1.12.0, so the pinned 2.14.1 server and crate are checked against the versioned source as docs/TICK_RATE.md records):

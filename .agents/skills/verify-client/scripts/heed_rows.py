@@ -170,8 +170,9 @@ def main():
         qp = spare[0] if spare else None
         q_pick = None
         if qp is not None:
+            tq = time.time() * 1000
             code, body = V.http(f"/v1/database/{db}/call/human_heed", [{"pins": [], "focus": {"none": []}, "pin_at": {"some": {"x": pos[qp][0], "y": pos[qp][1]}}}], tok["q"])
-            q_pick = {"code": code, "body": body[:200], "q_has": qp in perceived_q(), "p_has": qp in perceived()}
+            q_pick = {"code": code, "body": body[:200], "q_has": qp in perceived_q(), "p_has": qp in perceived(), "at": tq}
         code, body = V.http(f"/v1/database/{db}/call/human_heed", [{"pins": [], "focus": {"none": []}, "pin_at": {"some": {"x": pos[t2][0], "y": pos[t2][1]}}}], None)
         anon_pick = {"code": code, "body": body[:200]}
         time.sleep(1.0)
@@ -218,8 +219,12 @@ def main():
             check("the feed's rule: an individual's blow on a throng member names the individual, target 0",
                   in_throng and all(m["target"] == 0 for m in in_throng) and all(m["target"] in (0, t3) for m in mixed), {"i1": i1, "t3": t3, "rows": mixed[:6]})
         check("contact: the throng member that struck P is an individual to it after", t4_throng and t4 in ever, {"t4": t4, "was_throng": t4_throng})
+        # P gains nothing from Q's pick: not in P's perceived set right after it, and no seen_characters
+        # row of it reaching P in the 1.5 s after the call.
+        leaked = [e for e in ev["p"] if q_pick and e.get("table") == "seen_characters" and e.get("event") == "insert"
+                  and e["row"].get("id") == qp and q_pick["at"] <= e.get("ms", 0) < q_pick["at"] + 1500]
         check("pin_at: Q picks a walker out of its throng (an individual to Q), and P is told nothing of it",
-              q_pick and q_pick["code"] == 200 and q_pick["q_has"] and not q_pick["p_has"] and qp in never, {"qp": qp, **(q_pick or {})})
+              q_pick and q_pick["code"] == 200 and q_pick["q_has"] and not q_pick["p_has"] and not leaked, {"qp": qp, **(q_pick or {}), "leaked": leaked[:2]})
         check("pin_at from an anonymous connection is refused as any human_heed is", anon_pick["code"] != 200 and "no living character" in anon_pick["body"], anon_pick)
         ears = [r for t, r in rows_of(ev["p"]) if t == "my_earshot"]
         check("earshot reads sight: its text counts the throng, its hearers are individuals (above)", any("in the throng" in r.get("text", "") for r in ears), [r.get("text") for r in ears][:3])
