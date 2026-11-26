@@ -2686,6 +2686,65 @@ pub struct HeedPolicy {
     pub refused_ms: u64,
 }
 
+/// A player's pins and focus for its heed (docs/ATTENTION_BUDGET.md, "Player-side interface",
+/// point 5; the `heed_players` law): whom it asks to keep track of. One row per played character,
+/// replaced by each accepted `human_heed` call and read by primary key at its heed pass, where each
+/// pin and the focus weigh in its candidate's `chosen` (the instinct's third rule). Private: only
+/// reducers and the database owner read it (docs: tables, access permissions); the player knows
+/// what it sent. Goes with the character's body.
+#[spacetimedb::table(accessor = heed_choice)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct HeedChoice {
+    #[primary_key]
+    pub actor: u32,
+    /// At most [`crate::heed::MAX_PINS`] creatures, each one the character perceived when pinned.
+    pub pins: Vec<u32>,
+    pub focus: Option<u32>,
+    /// When it was accepted (authority ms): the next call waits [`crate::heed::CHOICE_FLOOR_MS`].
+    pub at_ms: u64,
+}
+
+/// What `human_heed` takes (docs/ATTENTION_BUDGET.md, "The player's input"): up to four pins and
+/// one focus, each a creature its character perceives now; an empty list and `None` clear them.
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct HeedInput {
+    pub pins: Vec<u32>,
+    pub focus: Option<u32>,
+}
+
+/// A player's throng, counted in cells (docs/ATTENTION_BUDGET.md, "`seen_throng`"; the
+/// `heed_players` law): what it sees but does not keep track of, never named. Public with
+/// row-level security (`viewer = :sender`): a client receives only its own rows.
+///
+/// - `cell`: the cell's top-left 6 m square, `(x / 6) << 16 | (y / 6)` in map metres; `size`: its
+///   side in 6 m squares (1, or 2 for four merged far cells; at most [`crate::throng::MAX_ROWS`]
+///   rows a viewer, the farthest merged first).
+/// - Quantized, so a row changes only when what one would make out changes: `count` exact to 5,
+///   then to the nearest 5; `moving` and `fighting` the same way; `spread` (the cell's members'
+///   widest extent, metres) to 2 m; `heading` the members' mean way of moving in eight sectors
+///   (0 east, then clockwise in map coordinates: 2 south, 4 west, 6 north), 255 when most stand
+///   or their ways cancel; `kinds` bits ([`crate::throng::PEOPLE`], `WOLVES`, `DEER`, `OTHERS`).
+/// - Written by the viewer's sweep when a cell's fields change, never rewritten unchanged; a
+///   viewer's rows go when heed stops applying to it (the law off: all of them in one tick), when
+///   its character dies or another is played.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_throng, public)]
+pub struct SeenThrong {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub viewer: Identity,
+    pub cell: u32,
+    pub size: u8,
+    pub count: u16,
+    pub spread: u8,
+    pub heading: u8,
+    pub moving: u16,
+    pub fighting: u16,
+    pub kinds: u8,
+}
+
 /// The tick's own time in microseconds, for measuring its cadence (the `tick_marker_on` law, a
 /// measuring aid, off by default; docs/TICK_RATE.md "The step marker"). One row (id 0), written by
 /// each tick while the law holds: its count and its reducer timestamp (`ctx.timestamp`, the time

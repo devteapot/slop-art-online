@@ -109,9 +109,26 @@ A small reactive behavior tree the mind writes as JSON and the authority validat
 - Composites: `first` (reactive priority), `seq` (remembered progress), `if/then/else` (continuous guard), `repeat`.
 - Leaves: `do` (skill with a target selector; walks into range automatically), `say`, `wait`, `think` (request LLM deliberation without blocking).
 - Conditions: needs, inventory, `sees`/`near` a target selector, `smells` one (species with a scent), recently hurt/heard, night, `believes` a mind-maintained judgment, `chance`, boolean combinators.
-- Target selectors: nearest resource/structure/character with relation filters (`friend`, `enemy`, `stranger`, by name; `stranger` means "no relation row" unless the world's `stranger_by_name` law is on, then "someone whose name I do not know", since strangers-1, [strangers](STRANGERS.md)), structures by what they hold (`{"kind": "remains", "holds": "meat"}`, since 2026-11-11), remembered named places, `attacker`, `speaker`, `home`, `sound` (toward the nearest thing heard and not seen, while sight depends on facing; since 2026-11-11, [perception](PERCEPTION.md#heard-not-seen)), coordinates, and an id the scene listed (a creature, else a structure or resource in sight; since 2026-11-10, [mind feedback](MIND_FEEDBACK.md#4-the-phantom-map)).
+- Target selectors: nearest resource/structure/character with relation filters (`friend`, `enemy`, `stranger`, by name; `enemy` and `friend` take what the character said of fighting someone, then a relation that decides, then its community's stance, under the `relation_fight_on` law, on by default since 2026-11-26 after a paid island comparison found no attacks on rival or outlaw people with it on or off ([whom one fights](WORLD_RULES.md#whom-one-fights)); `stranger` means "no relation row" unless the world's `stranger_by_name` law is on, then "someone whose name I do not know", since strangers-1, [strangers](STRANGERS.md)), structures by what they hold (`{"kind": "remains", "holds": "meat"}`, since 2026-11-11), remembered named places, `attacker`, `speaker`, `home`, `sound` (toward the nearest thing heard and not seen, while sight depends on facing; since 2026-11-11, [perception](PERCEPTION.md#heard-not-seen)), coordinates, and an id the scene listed (a creature, else a structure or resource in sight; since 2026-11-10, [mind feedback](MIND_FEEDBACK.md#4-the-phantom-map)).
 
 Selectors only resolve entities within the character's current perception radius (sight; for a skill's target also its species' scent, below) or its own remembered places, so the graph cannot act on observer truth.
+
+**Marks.** The private `mind_state.marks` list (`Mark { node: u16, at_ms }`, at most 24 a character) holds the evaluator's and the rules' timers and counters. Every key range is mapped in one place, `living/authority/src/marks.rs`, and a test there checks that no two uses share a key. From 0xD000 up to the evaluator's own timers the marks are kept across plan installs.
+
+| Keys | Use |
+| --- | --- |
+| 0x0000–0xBFFF | a behavior node's own mark, by node id (a say's pacing) |
+| 0xC000–0xCFFF | when a desire last began to act; the plan's routine done (0xCFFF) |
+| 0xD200, 0xD210–0xD214 | the last fight report and the health quarter it reported |
+| 0xD400–0xD402 | yielded, an animal's balk in the story, struck while yielded |
+| 0xD500 | the fast lane last changed the plan |
+| 0xD800–0xDFFF | a species signal made (hashed by name; 45 s) |
+| 0xE000–0xEFFF | a failure told (hashed by action and reason; `repeat_failure_s`) |
+| 0xF000–0xF0FF | a threat made (by victim; 30 s) |
+| 0xF100–0xF10F | walks turned back for another walk (the count; 20 s) |
+| 0xFFFC–0xFFFE | the evaluator's reflection, "keeps failing" and plan-root timers |
+
+Until turn-mark-band (2026-11-26) signals spread over 0xD000–0xDFFF and the turn counter sat at 0xD300–0xD30F, so a wolf's `howl` (0xD305) read as five turns back: a false "You keep turning back and forth" line when a howling wolf's graph replaced one walk with another, and the howl's own 45 s mark consumed. No table changed; an old 0xD305 mark is read by nothing and ages out.
 
 ### Deliberate acts (experiment, 2026-09-26)
 

@@ -70,7 +70,7 @@ use crate::perception::{Moving, Segment};
 use crate::tables::*;
 use spacetimedb::{Identity, ReducerContext, Table};
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 
 /// The shortest interval between a viewer's frames: every other tick (30 Hz). Clients
 /// extrapolate others' motion segments between rows, as they always did between writes.
@@ -188,11 +188,16 @@ struct Viewer {
     /// Reconcile every creature in the scene at the next frame (a fresh instance, a step this
     /// instance did not see commit: what it was sent is unknown).
     reconcile: bool,
+    /// Under heed (the `heed_players` law): the rest of its sight, its throng, as its last sweep
+    /// left it. Earshot reads sight, the scene and the throng (docs/ATTENTION_BUDGET.md v2.1
+    /// point 4); nothing else reads it. Empty while heed does not apply. A `BTreeSet`: a std
+    /// set made per viewer would shift the hash keys of every later map (docs/GATE216_GROWTH.md).
+    throng: BTreeSet<u32>,
 }
 
 impl Viewer {
     fn new(who: Identity) -> Self {
-        Self { who, scene: None, seq: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new(), senses_ms: 0, senses: None, earshot_ms: 0, earshot: None, near: HashSet::new(), near_ms: 0, near_seq: 0, cued: HashMap::new(), pending: HashMap::new(), pending_seq: 0, deferred: HashMap::new(), reconcile: true }
+        Self { who, scene: None, seq: 0, full: true, last_ms: 0, lines_ms: 0, band_ms: 0, band_seq: 0, events: Vec::new(), feed: VecDeque::new(), senses_ms: 0, senses: None, earshot_ms: 0, earshot: None, near: HashSet::new(), near_ms: 0, near_seq: 0, cued: HashMap::new(), pending: HashMap::new(), pending_seq: 0, deferred: HashMap::new(), reconcile: true, throng: BTreeSet::new() }
     }
 }
 
@@ -423,6 +428,38 @@ pub fn aiming(id: u32) -> bool {
 /// Whom creature `id`'s move, or else its visible act, is aimed at now (E2 prototype, `attend.rs`).
 pub fn target_of(id: u32) -> Option<u32> {
     TARGETS.with(|t| t.borrow().get(&id).and_then(|t| t.fighter.or(t.doing).map(|(b, _)| b)))
+}
+
+/// Viewer `id`'s throng at this sweep (after [`scene`]; empty while heed does not apply to it).
+pub fn set_throng(id: u32, throng: BTreeSet<u32>) {
+    VIEWERS.with(|v| {
+        if let Some(e) = v.borrow_mut().get_mut(&id) {
+            e.throng = throng;
+        }
+    });
+}
+
+/// Heed does not apply to viewer `id`: its throng is empty (nothing is made while it already is).
+pub fn clear_throng(id: u32) {
+    VIEWERS.with(|v| {
+        if let Some(e) = v.borrow_mut().get_mut(&id).filter(|e| !e.throng.is_empty()) {
+            e.throng.clear();
+        }
+    });
+}
+
+/// Contact put `body` in viewer `id`'s `perceived` set between its sweeps (`perception::admit`):
+/// its scene holds it from now, so cues and the engaged path follow it at once; its sweep keeps
+/// it (forced) or lets it go as any other.
+pub fn join_scene(id: u32, body: u32) {
+    VIEWERS.with(|v| {
+        if let Some(e) = v.borrow_mut().get_mut(&id) {
+            if let Some(scene) = e.scene.as_mut() {
+                scene.insert(body);
+            }
+            e.throng.remove(&body);
+        }
+    });
 }
 
 /// The creatures engaged with viewer `id` at the last tick (battle law `far_cap` keeps them).
@@ -1205,8 +1242,17 @@ fn show_earshot(ctx: &ReducerContext, id: u32, v: &mut Viewer, now: u64) {
         }
         return;
     }
-    let ways = crate::earshot::reach(ctx, id, common::pos(&b, now), |x| scene.contains(&x), now);
-    let text = crate::earshot::short_words(&ways, |x| common::label_for(ctx, &me, x));
+    let (ways, text) = if v.throng.is_empty() {
+        let ways = crate::earshot::reach(ctx, id, common::pos(&b, now), |x| scene.contains(&x), now);
+        let text = crate::earshot::short_words(&ways, |x| common::label_for(ctx, &me, x));
+        (ways, text)
+    } else {
+        // Under heed: reach reads sight (the scene and the throng); the row names individuals only.
+        let all = crate::earshot::reach(ctx, id, common::pos(&b, now), |x| scene.contains(&x) || v.throng.contains(&x), now);
+        let ways: Vec<EarshotWay> = all.iter().map(|w| EarshotWay { way: w.way.clone(), hearers: w.hearers.iter().copied().filter(|x| scene.contains(x)).collect() }).collect();
+        let text = crate::earshot::short_words_throng(&ways, &all, |x| common::label_for(ctx, &me, x));
+        (ways, text)
+    };
     let row = CharacterEarshot { id, ways, text, at_ms: now };
     match v.earshot.as_ref() {
         Some(old) if old.ways == row.ways && old.text == row.text => {}
@@ -1649,6 +1695,9 @@ const COMBAT_FEED_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT
 // Row-level security for a player's copies of its lines (experience-incremental, `lines_table_on`).
 #[spacetimedb::client_visibility_filter]
 const EXPERIENCE_COPY_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT * FROM experience_copy WHERE viewer = :sender");
+// Row-level security for a player's throng cells (heed for players, `heed_players`).
+#[spacetimedb::client_visibility_filter]
+const SEEN_THRONG_FILTER: spacetimedb::Filter = spacetimedb::Filter::Sql("SELECT * FROM seen_throng WHERE viewer = :sender");
 
 /// A creature's band as this viewer perceives it now (255 while its projection hides health),
 /// with its projection row.

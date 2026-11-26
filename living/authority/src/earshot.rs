@@ -90,6 +90,31 @@ pub fn short_words(reach: &[EarshotWay], label: impl Fn(u32) -> String) -> Strin
     out
 }
 
+/// The short form under heed (the `heed_players` law; docs/ATTENTION_BUDGET.md v2.1 point 4):
+/// earshot reads sight, so everyone a line would reach counts (`all`), but only the individuals
+/// (`named`, the same ways kept to the viewer's `perceived` set) are named; the rest are "in the
+/// throng". `named`'s ids are the row's `ways`.
+pub fn short_words_throng(named: &[EarshotWay], all: &[EarshotWay], label: impl Fn(u32) -> String) -> String {
+    let (Some(say), Some(say_all)) = (named.iter().find(|r| r.way == SAY), all.iter().find(|r| r.way == SAY)) else { return String::new() };
+    let throng = say_all.hearers.len().saturating_sub(say.hearers.len());
+    let who = match (short_names(&say.hearers, &label), throng) {
+        (Some(n), 0) => n,
+        (Some(n), k) => format!("{n}, and {k} in the throng"),
+        (None, 0) => "no one you see".into(),
+        (None, k) => format!("{k} in the throng"),
+    };
+    let mut out = format!("Within earshot: {who}");
+    for r in all.iter().filter(|r| r.way != SAY && r.hearers.len() > say_all.hearers.len() && say_all.hearers.iter().all(|id| r.hearers.contains(id))) {
+        let more = r.hearers.len() - say_all.hearers.len();
+        if say_all.hearers.is_empty() {
+            out.push_str(&format!("; a {} would reach {more}", r.way));
+        } else {
+            out.push_str(&format!("; a {} would also reach {more} more", r.way));
+        }
+    }
+    out
+}
+
 /// At most this many people are named in a player's short form; the rest are counted.
 pub const SHORT_NAMED: usize = 2;
 

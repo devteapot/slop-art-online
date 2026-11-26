@@ -10,7 +10,14 @@ touches behaviour, these cases with the fake model only:
   verify-core    tick, sight, senses, refusal (one default-seed world), skirmish (an island world),
                  mechanics (its own default-seed world), sides_battle and sides_layout (a Cullet world: the battle
                  fixtures spawn_battle_sides and spawn_battle_sides_layout, only when a merge touches
-                 SIDES_BATTLE_PATHS)
+                 SIDES_BATTLE_PATHS),
+                 say, heard_first, audience (the speech group, a default-seed world of its own: only
+                 when a merge touches SPEECH_PATHS, or names speech in a changed hunk of SPEECH_HUNKS),
+                 and verify-player speak, told on the same world,
+                 flee_wall, pursue_last_seen (the steering group, its own world: STEERING_PATHS),
+                 act_gaps, act_replace, truthful_refusals (the acting group: ACTS_PATHS),
+                 committed, dodge_told, health_seen, seize (the fight group) and outcomes on
+                 its own island world (COMBAT_PATHS)
   verify-minds   roundtrip, acts, dealings, conversation (each its own world, the real living-mind)
   verify-player  combat (combat.py --scene all: the staged fights, an island world)
   verify-client  cues (cues.py: the cue event tables reach only their viewer under row-level
@@ -41,7 +48,9 @@ touches behaviour, these cases with the fake model only:
                  recorded a pass for the same content and the halves it needs (the `render-passes`
                  branch).
 
-The world groups and the tests run at once. A case whose only failures are parts on the red-on-main
+The existing world groups and tests run in the first wave. The speech, steering, acting,
+fight and outcomes groups run in the second wave. Each wave runs at most LIVING_GATE_GROUPS
+(10 by default; 0 runs all groups in that wave). Render groups run after both waves. A case whose only failures are parts on the red-on-main
 list (a mind test `living-mind::<test>`, a combat scene `combat:<scene>`) passes and says which. Flakes: a failing case runs again once, alone, on a fresh scratch
 database. A rerun that passes excuses the first failure only when every part that failed (a scene's
 check, a combat `scene:check`, a mind test, a minds case's error) matches the case's recorded flake
@@ -165,6 +174,35 @@ SIDES_BATTLE_PATHS = ("living/authority/src/lib.rs", "living/authority/src/recor
                       "living/authority/src/combat.rs", "living/rules/src/records.rs",
                       "living/tools/battle_viewers.py", ".agents/skills/verify-core/scripts/scenes.py")
 
+# The speech group (gate-say-path, 2026-11-23): verify-core `say`, `heard_first` and `audience` on a
+# fresh default-seed world, for merges that change how lines are said, held back or heard.
+# say-once (7f21e425e, 2026-11-13: speech.rs and brain.rs) broke `say` and no gate case ran it for
+# ten days. A path in SPEECH_PATHS selects the group; so does a changed hunk (its lines and two of
+# context) of a file in SPEECH_HUNKS that names speech (SPEECH_WORDS): brain.rs, perceive.rs and
+# skills.rhai change in about a third of behavioural merges each, mostly not speech.
+SPEECH_PATHS = ("living/authority/src/speech.rs", "living/authority/src/earshot.rs", "living/authority/src/mind.rs",
+                "living/rules/src/normalize.rs", "living/rules/src/saying.rs", "living/rules/src/ways.rs",
+                "living/rules/src/graph.rs", "living/rules/src/script/speech.rs")
+SPEECH_HUNKS = ("living/authority/src/brain.rs", "living/authority/src/perceive.rs", "living/scripts/skills.rhai")
+SPEECH_WORDS = re.compile(r"\b(say|says|said|unsaid|saying|speak\w*|speech\w*|spoken\w*|earshot\w*|whisper\w*|"
+                          r"hear|hears|heard|hearing|audience|overtaken)\b", re.I)
+
+# The steering group (gate-say-path): verify-core `flee_wall` and `pursue_last_seen` on a fresh
+# default-seed world, for merges that change how bodies steer (motion.rs, the rules' steer and nav).
+STEERING_PATHS = ("living/authority/src/motion.rs", "living/rules/src/steer.rs", "living/rules/src/steer_drive.rs",
+                  "living/rules/src/nav.rs")
+
+# The acting group (gate-say-path step 1): verify-core `act_gaps`, `act_replace` and
+# `truthful_refusals` on a fresh default-seed world, for merges that change how an act is taken,
+# replaced or refused and how its outcome is told.
+ACTS_PATHS = ("living/authority/src/acts.rs", "living/rules/src/acts.rs", "living/authority/src/outcomes.rs",
+              "living/rules/src/outcome.rs")
+
+# The fight group (gate-say-path step 1): verify-core `committed`, `dodge_told`, `health_seen` and
+# `seize` on a fresh default-seed world, and `outcomes` on its own island world (its
+# bows and arrows), for merges that change blows, missiles and their codes.
+COMBAT_PATHS = ("living/authority/src/combat.rs", "living/authority/src/codes.rs", "living/rules/src/combat.rs")
+
 # The render group (gate-render, 2026-11-20): verify-ui's drawing cases, for merges that change how
 # the client draws people, the camera or sight. Each glob's `*` stays within a folder, `**` crosses
 # folders. The group is split in two halves by path (render-autosplit, 2026-11-21; the whole group
@@ -198,6 +236,34 @@ CASES = {
     # The fixed-layout fixture (sides-layout-seed), paused on the same world after sides_battle:
     # deal 1 mirrors deal 0 place by place, one seed gives one layout.
     "sides_layout": {"skill": "verify-core", "group": "battle", "paths": SIDES_BATTLE_PATHS},
+    # Speech (gate-say-path): a graph's and a mind's lines to a person in every form, a line held
+    # back when another spoke first, and who heard a line. Only for merges touching speech.
+    "say":          {"skill": "verify-core", "group": "speech", "paths": SPEECH_PATHS, "hunks": (SPEECH_HUNKS, SPEECH_WORDS)},
+    "heard_first":  {"skill": "verify-core", "group": "speech", "paths": SPEECH_PATHS, "hunks": (SPEECH_HUNKS, SPEECH_WORDS)},
+    "audience":     {"skill": "verify-core", "group": "speech", "paths": SPEECH_PATHS, "hunks": (SPEECH_HUNKS, SPEECH_WORDS)},
+    # The player's path through the same speech rules (verify-player speak.py and told.py): a
+    # player's own lines in each way, refusals and `my_heard`; a failed command told as an AI is told.
+    "speak":        {"skill": "verify-player", "group": "speech", "paths": SPEECH_PATHS, "hunks": (SPEECH_HUNKS, SPEECH_WORDS)},
+    "told":         {"skill": "verify-player", "group": "speech", "paths": SPEECH_PATHS, "hunks": (SPEECH_HUNKS, SPEECH_WORDS)},
+    # Steering (gate-say-path): a flight out of a corner, a pursuit to the last-seen place.
+    "flee_wall":    {"skill": "verify-core", "group": "steering", "paths": STEERING_PATHS},
+    "pursue_last_seen": {"skill": "verify-core", "group": "steering", "paths": STEERING_PATHS},
+    # Acts (step 1): a replacing act's gaps, a mind's act replacing the one under way, truthful refusals.
+    "act_gaps":     {"skill": "verify-core", "group": "acting", "paths": ACTS_PATHS},
+    "act_replace":  {"skill": "verify-core", "group": "acting", "paths": ACTS_PATHS},
+    "truthful_refusals": {"skill": "verify-core", "group": "acting", "paths": ACTS_PATHS,
+                          "flaky": {"why": "once in 13 first runs (gate-say-path step 1 shake-out, gate-1123072442-8633b3): the say leaf to "
+                                           "'speaker' was stuck with the truthful status but its 'You failed to say' line was never written "
+                                           "(the world's commit log holds the status and no line); passed alone on retry; cause not "
+                                           "established (act::refused news/tell): verify-core validation 2026-11-23 gate-say-path step 1",
+                                    "parts": ["say leaf: told 'nobody has spoken to you in the last minute'"]}},
+    # Fights (step 1): committed moves, a dodge's told outcome, health as seen, seizing the yielded,
+    # and (on its own island world) a blow's or missile's outcome told to its maker.
+    "committed":    {"skill": "verify-core", "group": "fight", "paths": COMBAT_PATHS},
+    "dodge_told":   {"skill": "verify-core", "group": "fight", "paths": COMBAT_PATHS},
+    "health_seen":  {"skill": "verify-core", "group": "fight", "paths": COMBAT_PATHS},
+    "seize":        {"skill": "verify-core", "group": "fight", "paths": COMBAT_PATHS},
+    "outcomes":     {"skill": "verify-core", "group": "outcomes", "paths": COMBAT_PATHS},
     "roundtrip":    {"skill": "verify-minds", "group": "minds"},
     "acts":         {"skill": "verify-minds", "group": "minds"},
     "dealings":     {"skill": "verify-minds", "group": "minds",
@@ -437,6 +503,31 @@ def now():
 
 def changed(base, head, cwd=None):
     return [p for p in git("diff", "--name-only", base, head, cwd=cwd).splitlines() if p]
+
+
+def changed_hunks(base, head, files, cwd=None):
+    """{path: the changed hunks' text (their lines and two of context)} for each of `files` that
+    base..head changes."""
+    out = {}
+    for f in files:
+        text = git("diff", "-U2", base, head, "--", f, cwd=cwd, check=False)
+        if text:
+            out[f] = "\n".join(l for l in text.splitlines() if l[:1] in "+- @" and not l.startswith(("+++", "---")))
+    return out
+
+
+def selected(case, paths, hunks=None):
+    """Whether a case with `paths` (and `hunks`: files and the words that select it in their changed
+    hunks) is needed. Without hunk text (None) a touched hunk file selects it."""
+    c = CASES[case]
+    if not c.get("paths") or any(p.startswith(c["paths"]) for p in paths):
+        return True
+    if not c.get("hunks"):
+        return False
+    files, words = c["hunks"]
+    hit = [p for p in paths if p in files]
+    # identifiers count by their parts: `said_to_recently` names `said`
+    return bool(hit) and (hunks is None or any(words.search(hunks.get(p, "").replace("_", " ")) for p in hit))
 
 
 def behavioural(paths):
@@ -980,6 +1071,25 @@ def case_status(case, first_ok, second_ok, parts, main_verdict=None):
     return status, status != "red-on-main", ""
 
 
+def client_failed_parts(evidence, code):
+    """A failed client script must account for its exit before a flake can be excused."""
+    if code == 0:
+        return []
+    path = Path(evidence)
+    report = load_json(path, None)
+    checks = report.get("checks") if isinstance(report, dict) else None
+    if isinstance(checks, dict):
+        checks = list(checks.items())
+    if code == 1 and isinstance(checks, list) and all(
+        isinstance(pair, (list, tuple)) and len(pair) == 2
+        and isinstance(pair[0], str) and type(pair[1]) is bool for pair in checks
+    ):
+        failed = [name for name, ok in checks if not ok]
+        if failed:
+            return failed
+    return [f"{path.stem}: exit {code} without failed checks"]
+
+
 def minds_parts(r, evidence_dir):
     """A failing minds case's parts: its error, and for a bare assert the failing source line."""
     err = (r or {}).get("error")
@@ -1037,12 +1147,15 @@ class Runner:
                 with LOCK:
                     self.procs.discard(p)
 
-    def world(self, root, run, seed, log, *launch_args):
+    def world(self, root, run, seed, log):
         """Launch a fresh scratch world; True when launch and doctor pass."""
         with LOCK:
             self.runs.append((root, run))
         args = ["--seed", seed] if seed != "world" else []
-        if self.sh([sys.executable, V, "launch", "--run", run, *args, *launch_args], root, log, 1500):
+        # Every group is owned by this gate process. Its scene drivers use raw
+        # CLI or HTTP operations that do not renew the verify.py inactivity lease.
+        if self.sh([sys.executable, V, "launch", "--run", run, *args, "--driver-pid", str(os.getpid())],
+                   root, log, 1500):
             return False
         return self.sh([sys.executable, V, "doctor", "--run", run], root, log, 300) == 0
 
@@ -1136,6 +1249,11 @@ class Runner:
             return None, f"{ev / 'generation-smoke.log'} (exit {code}; no result)"
         return list(got.get("failed", [])), str(ev / "checks.json")
 
+    def client_result(self, tag, case, evidence, code):
+        bad = client_failed_parts(evidence, code)
+        if bad:
+            self.parts.setdefault((tag, case), []).extend(bad)
+
     def cleanup(self, root, run, log):
         return self.sh([sys.executable, V, "cleanup", "--run", run], root, log, 300)
 
@@ -1207,11 +1325,9 @@ class Runner:
         ev = Path(root) / ".local/living/verify" / run
         ev.mkdir(parents=True, exist_ok=True)
         log = ev / "gate.log"
-        seed = "world" if group in {"core", "mechanics", "client"} else "cullet" if group == "battle" else "island"
-        # Mechanics uses the raw CLI, so the gate process supervises its world instead of an inactivity lease.
-        launch_args = ("--driver-pid", str(os.getpid())) if group == "mechanics" else ()
+        seed = "world" if group in {"core", "mechanics", "client", "speech", "steering", "acting", "fight"} else "cullet" if group == "battle" else "island"
         try:
-            if not self.world(root, run, seed, log, *launch_args):
+            if not self.world(root, run, seed, log):
                 return {c: (False, f"{log} (launch or doctor failed)", time.time() - t0) for c in cases}
             if group == "mechanics":
                 report = ev / "mechanics.json"
@@ -1227,15 +1343,20 @@ class Runner:
                 if "cues" in cases:
                     code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/cues.py", "--run", run], root, ev / "cues.txt", 600)
                     tier = self.sh([sys.executable, ".agents/skills/verify-client/scripts/near_tier.py", "--run", run], root, ev / "near_tier.txt", 300)
+                    self.client_result(tag, "cues", ev / "cues.json", code)
+                    self.client_result(tag, "cues", ev / "near_tier.json", tier)
                     res["cues"] = (code == 0 and tier == 0, str(ev / "cues.json"), time.time() - t0)
                 if "motion_tables" in cases:
                     code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/motion_tables.py", "--run", run], root, ev / "motion_tables.txt", 300)
+                    self.client_result(tag, "motion_tables", ev / "motion_tables.json", code)
                     res["motion_tables"] = (code == 0, str(ev / "motion_tables.json"), time.time() - t0)
                 if "combat_feed" in cases:
                     code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/combat_feed.py", "--run", run], root, ev / "combat_feed.txt", 300)
+                    self.client_result(tag, "combat_feed", ev / "combat_feed.json", code)
                     res["combat_feed"] = (code == 0, str(ev / "combat_feed.json"), time.time() - t0)
                 if "lines_table" in cases:
                     code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/lines_table.py", "--run", run], root, ev / "lines_table.txt", 300)
+                    self.client_result(tag, "lines_table", ev / "lines_table.json", code)
                     res["lines_table"] = (code == 0, str(ev / "lines_table.json"), time.time() - t0)
                 return res
             if group == "privacy":
@@ -1255,6 +1376,17 @@ class Runner:
                         ", ".join(f"{s} ({sum(1 for r in bad if str(r.get('scene')) == s)})" for s in scenes)
                 return {"combat": (ok, str(ev / "combat.json"), time.time() - t0)}
             for c in cases:
+                if CASES[c]["skill"] == "verify-player":
+                    # a verify-player script (speak.py, told.py) on the group's world: it joins the
+                    # run's player itself and writes RUN/<case>.json (`checks` or `results`)
+                    code = self.sh([sys.executable, f".agents/skills/verify-player/scripts/{c}.py", "--run", run], root,
+                                   ev / f"{c}.txt", 900)
+                    res[c] = (code == 0, str(ev / f"{c}.json"), time.time() - t0)
+                    got = load_json(ev / f"{c}.json", {})
+                    failed = [k for k, v in (got.get("checks") or {}).items() if not (v or {}).get("passed")]
+                    failed += [r.get("check") for r in got.get("results") or [] if not r.get("ok")]
+                    self.parts[(tag, c)] = failed or (None if code == 0 else [f"exit {code}"])
+                    continue
                 code = self.sh([sys.executable, ".agents/skills/verify-core/scripts/scenes.py", c, "--run", run], root,
                                ev / f"{c}.txt", 900)
                 res[c] = (code == 0, str(ev / f"{c}-results.json"), time.time() - t0)
@@ -1437,10 +1569,19 @@ def run_part(name):
     return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]", "-", name.lower())).strip("-") or "case"
 
 
+SECOND_WAVE_GROUPS = frozenset({"speech", "steering", "acting", "fight", "outcomes"})
+
+
+# Apply the cap separately to each wave and to the retry pool.
+GROUP_CAP = int(os.environ.get("LIVING_GATE_GROUPS") or 10)
+
+
+def workers(n):
+    return max(1, min(n, GROUP_CAP) if GROUP_CAP > 0 else n)
+
+
 def run_cases(runner, root, cases, tag):
-    """All `cases` at once, one task per world group, then the render groups alone (they never run
-    beside another group: a client and its GPU work on top of the scenes would load the host past
-    what the scenes' timings allow); {case: (ok, evidence, seconds)}."""
+    """Run each wave in parallel, then the render groups serially; {case: (ok, evidence, seconds)}."""
     groups = {}
     for c in cases:
         groups.setdefault(spec(c)["group"], []).append(c)
@@ -1461,10 +1602,21 @@ def run_cases(runner, root, cases, tag):
         except Exception as e:  # a driver crash is the group's failure, never the gate's crash
             return {c: (False, f"gate error: {type(e).__name__}: {e}", 0.0) for c in groups[g]}
     scenes = [g for g in groups if g not in RENDER_GROUPS]
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(scenes))) as ex:
-        futs = {ex.submit(one, g): g for g in scenes}
-        for f in concurrent.futures.as_completed(futs):
-            report(futs[f], f.result())
+    for number, wave in enumerate((
+        [g for g in scenes if g not in SECOND_WAVE_GROUPS],
+        [g for g in scenes if g in SECOND_WAVE_GROUPS],
+    ), start=1):
+        if not wave:
+            continue
+        start = time.monotonic()
+        if tag == "a":
+            say(f"{tag}: wave {number} starting ({', '.join(wave)})")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers(len(wave))) as ex:
+            futs = {ex.submit(one, g): g for g in wave}
+            for f in concurrent.futures.as_completed(futs):
+                report(futs[f], f.result())
+        if tag == "a":
+            say(f"{tag}: wave {number} finished in {time.monotonic() - start:.0f} s")
     for g in RENDER_GROUPS:
         if g in groups:
             report(g, one(g))
@@ -1475,7 +1627,7 @@ def retry_each(runner, root, cases, tag):
     """Each case alone on its own fresh world, all at once; then each render case alone, one at a time."""
     out = {}
     scenes = [c for c in cases if spec(c)["group"] not in RENDER_GROUPS]
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(scenes))) as ex:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers(len(scenes))) as ex:
         futs = {ex.submit(run_cases, runner, root, [c], f"{tag}-{run_part(c)}"): c for c in scenes}
         for f in concurrent.futures.as_completed(futs):
             out.update(f.result())
@@ -1581,15 +1733,16 @@ def judge_on_main(a, runner, repo, base, cases, record):
 
 # ---------------------------------------------------------------- commands
 
-def plan_cases(a, paths, touched):
+def plan_cases(a, paths, touched, hunks=None):
     """(scene cases, render cases) a run needs. --cases names them exactly; otherwise the scene
-    cases when behaviour is touched (all with --force; a `paths` case only for its paths) and the
-    render cases of the halves the drawing paths select (all six with --render-only --force)."""
+    cases when behaviour is touched (all with --force; a `paths` case only for its paths, or for
+    its words in the changed hunks of its `hunks` files) and the render cases of the halves the
+    drawing paths select (all six with --render-only --force)."""
     if a.cases:
         cases = a.cases.split(",")
         return [c for c in cases if c not in RENDER_CASES], [c for c in cases if c in RENDER_CASES]
     scenes = [c for c in ORDER if CASES[c]["group"] not in RENDER_GROUPS]
-    unneeded = [c for c in scenes if CASES[c].get("paths") and not any(p.startswith(CASES[c]["paths"]) for p in paths)]
+    unneeded = [c for c in scenes if not selected(c, paths, hunks)]
     if unneeded:
         say(f"not needed (none of their paths touched): {', '.join(unneeded)}")
     scenes = [c for c in scenes if c not in unneeded]
@@ -1624,7 +1777,8 @@ def cmd_run(a):
     bad = [c for c in (a.cases.split(",") if a.cases else []) if c not in CASES]
     if bad:
         raise SystemExit(f"scene-gate: unknown case {bad}; cases: {ORDER}")
-    cases, render = plan_cases(a, paths, touched)
+    hunk_files = sorted({f for c in CASES.values() if c.get("hunks") for f in c["hunks"][0]})
+    cases, render = plan_cases(a, paths, touched, changed_hunks(base, head, [p for p in paths if p in hunk_files]))
     dirty = git("status", "--porcelain", "--untracked-files=no")
     if dirty:
         say(f"note: the tree has uncommitted changes; they are what is tested:\n{dirty}")

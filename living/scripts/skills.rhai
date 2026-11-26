@@ -120,7 +120,9 @@ fn laws() {
         // or a friendly word), then the community's stance; minds are told the order and may say
         // `fight` (enemy or spare); a person's own blow says enemy. Off: any personal relation
         // row decides alone and hides the community's stance, as before; nothing is said or told.
-        relation_fight_on: false,
+        // On since relation-fight-on (2026-11-26, after the paid island comparison,
+        // docs/RELATION_ISLAND_PAID.md); a world may set it false.
+        relation_fight_on: true,
         // Attention cues (docs/ATTENTION.md): a mind may write what in what it perceives should
         // bring it to think about one of its stances, goals or projects. Off: none is matched.
         // A cue fires once per thing it matched within `cue_cooldown_s`, and a character is
@@ -211,6 +213,7 @@ fn laws() {
         heed_on: false, heed_ceiling: 16.0, heed_contact_s: 4.0,
         heed_closing_s: 1.0,
         heed_trace: false,
+        heed_players: false,
         memory_test: 0.0,
         det_clock: false, det_stop: 0.0,
         // Fold onlookers’ combat lines (docs/BATTLE_SCALE.md).
@@ -3262,6 +3265,7 @@ fn law_about(l, name) {
         "heed_closing_s" => `whether someone is coming toward one is judged over ${short(l.heed_closing_s)} s, not a glance`,
         "heed_contact_s" => `someone whose blow reached one stays an individual to one for ${short(l.heed_contact_s)} s, whatever one heeds`,
         "heed_trace" => "A test switch that logs how each mind's character keeps track of others in a fight; it is off in play.",
+        "heed_players" => if l.heed_players { "a player keeps track of only so many others as individuals too; everyone else in sight is a throng" } else { "a player perceives everyone in sight as an individual" },
         "far_cap" => if l.far_cap > 0.0 { `a player sees at most ${short(l.far_cap)} others at once, the nearest` } else { "a player sees everyone in sight" },
         "crowd_sweep_n" => if l.crowd_sweep_n > 0.0 { `what a player sees is looked at again less often in a crowd of more than ${short(l.crowd_sweep_n)}` } else { "what a player sees is looked at again at the same pace in any crowd" },
         "crowd_frame_max_ms" => if l.crowd_frame_max_ms > 0.0 { `in a crowd, a player's view of others follows at least every ${short(l.crowd_frame_max_ms)} ms` } else { "in a crowd, a player's view of others follows at least every 100 ms" },

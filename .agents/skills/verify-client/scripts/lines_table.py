@@ -149,8 +149,16 @@ def main():
     state_ai = [x for x in sql(rid, "SELECT * FROM lines_state") if norm(x["viewer"]) == ident["a"]]
     copies_ai = [x for x in sql(rid, "SELECT id, viewer FROM experience_copy") if norm(x["viewer"]) == ident["a"]]
     # Return: A connects again (the character is handed back at the connection).
-    back_ev = read(db, tok["a"], out / "lines-table-a-back.jsonl")
-    held_back = [x for x in sql(rid, f"SELECT id, ai FROM character WHERE id = {a2}")]
+    back_path = out / "lines-table-a-back.jsonl"
+    back_stream = stream(db, tok["a"], [COPY, VIEW], 10, back_path)
+    held_back = []
+    while back_stream.is_alive():
+        held_back = sql(rid, f"SELECT id, ai FROM character WHERE id = {a2}")
+        if held_back and not held_back[0]["ai"]:
+            break
+        time.sleep(0.1)
+    back_stream.join()
+    back_ev = lines(back_path)
     back2_ev = read(db, tok["a"], out / "lines-table-a-back2.jsonl")
     # The kill switch, then on again (`takeover_s` above is an ordinary law: its change reinstalls
     # the script, so the revisions are taken around these two switches alone).

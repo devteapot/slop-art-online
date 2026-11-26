@@ -135,12 +135,16 @@ pub mod heard_sounds_table;
 pub mod heard_table;
 pub mod heard_type;
 pub mod hearer_type;
+pub mod heed_choice_table;
+pub mod heed_choice_type;
+pub mod heed_input_type;
 pub mod heed_policy_table;
 pub mod heed_policy_type;
 pub mod housekeeping_reducer;
 pub mod human_act_reducer;
 pub mod human_face_reducer;
 pub mod human_gaze_reducer;
+pub mod human_heed_reducer;
 pub mod human_move_reducer;
 pub mod human_say_reducer;
 pub mod human_speak_reducer;
@@ -352,6 +356,8 @@ pub mod seen_stock_table;
 pub mod seen_stock_type;
 pub mod seen_structures_table;
 pub mod seen_structures_type;
+pub mod seen_throng_table;
+pub mod seen_throng_type;
 pub mod seen_type;
 pub mod segment_type;
 pub mod set_background_reducer;
@@ -550,12 +556,16 @@ pub use heard_sounds_table::*;
 pub use heard_table::*;
 pub use heard_type::Heard;
 pub use hearer_type::Hearer;
+pub use heed_choice_table::*;
+pub use heed_choice_type::HeedChoice;
+pub use heed_input_type::HeedInput;
 pub use heed_policy_table::*;
 pub use heed_policy_type::HeedPolicy;
 pub use housekeeping_reducer::housekeeping;
 pub use human_act_reducer::human_act;
 pub use human_face_reducer::human_face;
 pub use human_gaze_reducer::human_gaze;
+pub use human_heed_reducer::human_heed;
 pub use human_move_reducer::human_move;
 pub use human_say_reducer::human_say;
 pub use human_speak_reducer::human_speak;
@@ -767,6 +777,8 @@ pub use seen_stock_table::*;
 pub use seen_stock_type::SeenStock;
 pub use seen_structures_table::*;
 pub use seen_structures_type::SeenStructures;
+pub use seen_throng_table::*;
+pub use seen_throng_type::SeenThrong;
 pub use seen_type::Seen;
 pub use segment_type::Segment;
 pub use set_background_reducer::set_background;
@@ -882,6 +894,9 @@ pub enum Reducer {
     },
     HumanGaze {
         band: u8,
+    },
+    HumanHeed {
+        input: HeedInput,
     },
     HumanMove {
         dx: f32,
@@ -1107,6 +1122,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::HumanAct { .. } => "human_act",
             Reducer::HumanFace { .. } => "human_face",
             Reducer::HumanGaze { .. } => "human_gaze",
+            Reducer::HumanHeed { .. } => "human_heed",
             Reducer::HumanMove { .. } => "human_move",
             Reducer::HumanSay { .. } => "human_say",
             Reducer::HumanSpeak { .. } => "human_speak",
@@ -1218,6 +1234,11 @@ impl __sdk::Reducer for Reducer {
             }
             Reducer::HumanGaze { band } => {
                 __sats::bsatn::to_vec(&human_gaze_reducer::HumanGazeArgs { band: band.clone() })
+            }
+            Reducer::HumanHeed { input } => {
+                __sats::bsatn::to_vec(&human_heed_reducer::HumanHeedArgs {
+                    input: input.clone(),
+                })
             }
             Reducer::HumanMove { dx, dy, run } => {
                 __sats::bsatn::to_vec(&human_move_reducer::HumanMoveArgs {
@@ -1604,6 +1625,7 @@ pub struct DbUpdate {
     heard: __sdk::TableUpdate<Heard>,
     heard_asleep: __sdk::TableUpdate<HeardAsleep>,
     heard_sounds: __sdk::TableUpdate<HeardSound>,
+    heed_choice: __sdk::TableUpdate<HeedChoice>,
     heed_policy: __sdk::TableUpdate<HeedPolicy>,
     infant_cry: __sdk::TableUpdate<InfantCry>,
     inventory: __sdk::TableUpdate<Inventory>,
@@ -1697,6 +1719,7 @@ pub struct DbUpdate {
     seen_fighters_near: __sdk::TableUpdate<Fighter>,
     seen_stock: __sdk::TableUpdate<SeenStock>,
     seen_structures: __sdk::TableUpdate<SeenStructures>,
+    seen_throng: __sdk::TableUpdate<SeenThrong>,
     settlement: __sdk::TableUpdate<Settlement>,
     sex: __sdk::TableUpdate<SexRow>,
     sex_seen: __sdk::TableUpdate<SexSeen>,
@@ -1897,6 +1920,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "heard_sounds" => db_update
                     .heard_sounds
                     .append(heard_sounds_table::parse_table_update(table_update)?),
+                "heed_choice" => db_update
+                    .heed_choice
+                    .append(heed_choice_table::parse_table_update(table_update)?),
                 "heed_policy" => db_update
                     .heed_policy
                     .append(heed_policy_table::parse_table_update(table_update)?),
@@ -2176,6 +2202,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "seen_structures" => db_update
                     .seen_structures
                     .append(seen_structures_table::parse_table_update(table_update)?),
+                "seen_throng" => db_update
+                    .seen_throng
+                    .append(seen_throng_table::parse_table_update(table_update)?),
                 "settlement" => db_update
                     .settlement
                     .append(settlement_table::parse_table_update(table_update)?),
@@ -2437,6 +2466,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.heard_asleep = cache
             .apply_diff_to_table::<HeardAsleep>("heard_asleep", &self.heard_asleep)
             .with_updates_by_pk(|row| &row.id);
+        diff.heed_choice = cache
+            .apply_diff_to_table::<HeedChoice>("heed_choice", &self.heed_choice)
+            .with_updates_by_pk(|row| &row.actor);
         diff.heed_policy = cache
             .apply_diff_to_table::<HeedPolicy>("heed_policy", &self.heed_policy)
             .with_updates_by_pk(|row| &row.actor);
@@ -2613,6 +2645,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.id);
         diff.seen_structures = cache
             .apply_diff_to_table::<SeenStructures>("seen_structures", &self.seen_structures)
+            .with_updates_by_pk(|row| &row.id);
+        diff.seen_throng = cache
+            .apply_diff_to_table::<SeenThrong>("seen_throng", &self.seen_throng)
             .with_updates_by_pk(|row| &row.id);
         diff.settlement = cache
             .apply_diff_to_table::<Settlement>("settlement", &self.settlement)
@@ -2953,6 +2988,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "heard_sounds" => db_update
                     .heard_sounds
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "heed_choice" => db_update
+                    .heed_choice
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "heed_policy" => db_update
                     .heed_policy
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -3231,6 +3269,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_structures" => db_update
                     .seen_structures
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_throng" => db_update
+                    .seen_throng
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "settlement" => db_update
                     .settlement
@@ -3485,6 +3526,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "heard_sounds" => db_update
                     .heard_sounds
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "heed_choice" => db_update
+                    .heed_choice
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "heed_policy" => db_update
                     .heed_policy
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3764,6 +3808,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_structures" => db_update
                     .seen_structures
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_throng" => db_update
+                    .seen_throng
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "settlement" => db_update
                     .settlement
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3907,6 +3954,7 @@ pub struct AppliedDiff<'r> {
     heard: __sdk::TableAppliedDiff<'r, Heard>,
     heard_asleep: __sdk::TableAppliedDiff<'r, HeardAsleep>,
     heard_sounds: __sdk::TableAppliedDiff<'r, HeardSound>,
+    heed_choice: __sdk::TableAppliedDiff<'r, HeedChoice>,
     heed_policy: __sdk::TableAppliedDiff<'r, HeedPolicy>,
     infant_cry: __sdk::TableAppliedDiff<'r, InfantCry>,
     inventory: __sdk::TableAppliedDiff<'r, Inventory>,
@@ -4000,6 +4048,7 @@ pub struct AppliedDiff<'r> {
     seen_fighters_near: __sdk::TableAppliedDiff<'r, Fighter>,
     seen_stock: __sdk::TableAppliedDiff<'r, SeenStock>,
     seen_structures: __sdk::TableAppliedDiff<'r, SeenStructures>,
+    seen_throng: __sdk::TableAppliedDiff<'r, SeenThrong>,
     settlement: __sdk::TableAppliedDiff<'r, Settlement>,
     sex: __sdk::TableAppliedDiff<'r, SexRow>,
     sex_seen: __sdk::TableAppliedDiff<'r, SexSeen>,
@@ -4149,6 +4198,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.heard_sounds,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<HeedChoice>("heed_choice", &self.heed_choice, event);
         callbacks.invoke_table_row_callbacks::<HeedPolicy>("heed_policy", &self.heed_policy, event);
         callbacks.invoke_table_row_callbacks::<InfantCry>("infant_cry", &self.infant_cry, event);
         callbacks.invoke_table_row_callbacks::<Inventory>("inventory", &self.inventory, event);
@@ -4390,6 +4440,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.seen_structures,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<SeenThrong>("seen_throng", &self.seen_throng, event);
         callbacks.invoke_table_row_callbacks::<Settlement>("settlement", &self.settlement, event);
         callbacks.invoke_table_row_callbacks::<SexRow>("sex", &self.sex, event);
         callbacks.invoke_table_row_callbacks::<SexSeen>("sex_seen", &self.sex_seen, event);
@@ -5134,6 +5185,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         heard_table::register_table(client_cache);
         heard_asleep_table::register_table(client_cache);
         heard_sounds_table::register_table(client_cache);
+        heed_choice_table::register_table(client_cache);
         heed_policy_table::register_table(client_cache);
         infant_cry_table::register_table(client_cache);
         inventory_table::register_table(client_cache);
@@ -5227,6 +5279,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         seen_fighters_near_table::register_table(client_cache);
         seen_stock_table::register_table(client_cache);
         seen_structures_table::register_table(client_cache);
+        seen_throng_table::register_table(client_cache);
         settlement_table::register_table(client_cache);
         sex_table::register_table(client_cache);
         sex_seen_table::register_table(client_cache);
@@ -5309,6 +5362,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "heard",
         "heard_asleep",
         "heard_sounds",
+        "heed_choice",
         "heed_policy",
         "infant_cry",
         "inventory",
@@ -5402,6 +5456,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "seen_fighters_near",
         "seen_stock",
         "seen_structures",
+        "seen_throng",
         "settlement",
         "sex",
         "sex_seen",

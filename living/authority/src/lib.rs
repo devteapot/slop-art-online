@@ -19,6 +19,7 @@ mod frame;
 mod frame_trace;
 mod island;
 mod look;
+mod marks;
 mod mind;
 mod motion;
 mod outcomes;
@@ -39,6 +40,7 @@ mod far;
 mod earshot;
 mod fold;
 mod heed;
+mod throng;
 mod fast;
 mod known;
 mod latency;
@@ -1010,6 +1012,42 @@ pub fn human_gaze(ctx: &ReducerContext, band: u8) -> Result<(), String> {
     crate::floor::ready(ctx)?;
     let me = my_character(ctx)?;
     attention::set(ctx, me.id, living_rules::sight::GazeBand::try_from(band)?, common::now_ms(ctx))
+}
+
+/// Whom the caller's character asks to keep track of (docs/ATTENTION_BUDGET.md, "The player's
+/// input"; read while the `heed_players` law holds): up to four pins and one focus, each a
+/// creature it perceives now; empty pins and no focus clear them. One call per change, at least
+/// `heed::CHOICE_FLOOR_MS` apart, each spending an input (`input_hz` / `input_burst`). A pin or a
+/// focus on someone it does not perceive is refused with the same words whether or not the id
+/// exists. Kept in the private `heed_choice` row, replaced by each accepted call.
+#[spacetimedb::reducer]
+pub fn human_heed(ctx: &ReducerContext, input: HeedInput) -> Result<(), String> {
+    crate::floor::ready(ctx)?;
+    let me = my_character(ctx)?;
+    let now = common::now_ms(ctx);
+    if let Some(why) = heed::refuse_choice(ctx, ctx.sender(), &input) {
+        return Err(why);
+    }
+    let was = ctx.db.heed_choice().actor().find(me.id);
+    if was.as_ref().is_some_and(|c| now.saturating_sub(c.at_ms) < heed::CHOICE_FLOOR_MS) {
+        return Err("too many inputs".into());
+    }
+    if !motion::spend_input(ctx, me.id, now) {
+        return Err("too many inputs".into());
+    }
+    let mut pins: Vec<u32> = Vec::with_capacity(input.pins.len());
+    for p in input.pins {
+        if !pins.contains(&p) {
+            pins.push(p);
+        }
+    }
+    let row = HeedChoice { actor: me.id, pins, focus: input.focus, at_ms: now };
+    if was.is_some() {
+        ctx.db.heed_choice().actor().update(row);
+    } else {
+        ctx.db.heed_choice().insert(row);
+    }
+    Ok(())
 }
 
 /// Move in a direction (screen axes: +x east, +y south; any length) or stop (`0, 0`), at a
