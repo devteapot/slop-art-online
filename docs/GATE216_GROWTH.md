@@ -328,14 +328,14 @@ The same-session idle reference had 64 residents, no load clients, 60.01 ticks/s
 was 18.409 ms. First two idle attempts were rejected for load rises of 2.34 and 1.40
 and outside activity on X925.
 
-| 5-min block | Recorded build §5: ticks/s, p99 ms, % over 25 ms | Earlier fixed build §5 | Relay 1, host-disturbed | Relay 2, host-disturbed |
-|---|---|---|---|---|
-| 0–5 | 59.47, 17.63, 0.88 | 59.80, 17.62, 0.34 | 56.26, 33.919, 6.606 | 56.72, 33.886, 5.760 |
-| 5–10 | 58.41, 17.68, 2.61 | 59.55, 17.60, 0.71 | 54.81, 34.235, 9.317 | 55.49, 34.216, 7.953 |
-| 10–15 | 57.60, 17.81, 4.15 | 59.06, 17.56, 1.55 | 54.41, 34.261, 10.012 | 55.07, 34.155, 8.771 |
-| 15–20 | 56.50, 17.82, 5.91 | 58.14, 17.74, 3.10 | 54.30, 34.272, 10.278 | 54.35, 34.315, 10.200 |
-| 20–25 | 47.27, 84.56, 17.28 | 58.03, 17.80, 3.31 | 54.72, 34.170, 9.468 | 53.88, 34.336, 11.106 |
-| 25–30 | 12.16, 118.35, 100 | 58.55, 17.67, 2.41 | 55.10, 34.103, 8.712 | 54.18, 34.296, 10.546 |
+| 5-min block | Recorded build §5: ticks/s, p99 ms, % over 25 ms | Earlier fixed build §5 | Relay 1, host-disturbed | Relay 2, host-disturbed | Relay 3, host-disturbed |
+|---|---|---|---|---|---|
+| 0–5 | 59.47, 17.63, 0.88 | 59.80, 17.62, 0.34 | 56.26, 33.919, 6.606 | 56.72, 33.886, 5.760 | 56.49, 33.939, 6.173 |
+| 5–10 | 58.41, 17.68, 2.61 | 59.55, 17.60, 0.71 | 54.81, 34.235, 9.317 | 55.49, 34.216, 7.953 | 54.91, 34.144, 9.040 |
+| 10–15 | 57.60, 17.81, 4.15 | 59.06, 17.56, 1.55 | 54.41, 34.261, 10.012 | 55.07, 34.155, 8.771 | 54.33, 34.326, 10.234 |
+| 15–20 | 56.50, 17.82, 5.91 | 58.14, 17.74, 3.10 | 54.30, 34.272, 10.278 | 54.35, 34.315, 10.200 | 53.73, 34.513, 11.292 |
+| 20–25 | 47.27, 84.56, 17.28 | 58.03, 17.80, 3.31 | 54.72, 34.170, 9.468 | 53.88, 34.336, 11.106 | 52.93, 34.571, 12.828 |
+| 25–30 | 12.16, 118.35, 100 | 58.55, 17.67, 2.41 | 55.10, 34.103, 8.712 | 54.18, 34.296, 10.546 | 53.93, 34.416, 10.935 |
 
 Relay 1 measured 54.93 ticks/s, 34.169 ms p99 and 9.051% of intervals over 25 ms.
 It missed all three cadence thresholds (59.9 ticks/s, 18.409 ms, 0.5%).
@@ -349,7 +349,15 @@ Relay 2 measured 54.95 ticks/s, 34.210 ms p99 and 9.025% over 25 ms. It also
 missed all three thresholds, with zero of 30 one-minute windows passing. Load
 started at 3.83 and ranged from 5.31 to 13.61 in the measured window. It ended
 at 7.35 with an 8.30 rise above its running minimum. The same outside PIDs
-showed X925 activity. Both relay runs are diagnostic evidence.
+showed X925 activity.
+
+Relay 3 measured 54.39 ticks/s, 34.339 ms p99 and 10.041% over 25 ms.
+It missed all three thresholds, with zero of 30 one-minute windows passing.
+Load started at 3.89, ranged from 6.32 to 16.65, and ended at 9.36.
+Its maximum rise was 10.33. The same outside PIDs showed X925 activity.
+All three relay runs are diagnostic evidence. The quiet-start deadline
+passed during Relay 3, and the battle lock was released at 18:01:13 CET.
+All six private server stops exited 0 after SIGINT. The optional memory-off arm was omitted.
 
 From first to last in-window sample, server RSS rose from 867.0 to 1,022.6 MiB,
 server cgroup memory from 968.1 to 3,158.8 MiB (3,340.4 MiB peak), and combined
@@ -362,9 +370,16 @@ and cgroup memory from 886.3 to 3,391.0 MiB (3,580.7 MiB peak). Table gauges
 showed `character` 280 → 3,752, `structure` 128 → 3,604, `line_seen` 3,620 → 6,878,
 `sex_seen` 4,572 → 97,277 and `skill_use` 1,837 → 82,564.
 
+In Relay 3, server RSS rose from 833.4 to 988.6 MiB (993.7 MiB peak)
+and cgroup memory from 944.9 to 3,363.7 MiB (3,597.2 MiB peak). Table gauges
+showed `character` 280 → 3,755, `structure` 132 → 3,617, `line_seen` 3,653 → 7,211,
+`sex_seen` 4,676 → 90,979 and `skill_use` 1,691 → 82,750.
+
 The 60-second and five-minute cuts and all changed gauges are in
-`relay-{1,2}.long_windows.json`. Both runs were entirely unprofiled, so
-`relay-{1,2}.unprof_marker.json` covers all 300 seconds of each block.
+`relay-{1,2,3}.long_windows.json`. All three runs were entirely unprofiled, so
+`relay-{1,2,3}.unprof_marker.json` covers all 300 seconds of each block.
+The raw runs, host samples, build and analysis are archived in
+`~/slop-evidence/gate216-growth-remeasure-20261126.tar.zst` with a SHA-256 file beside it.
 
 ## Evidence
 
