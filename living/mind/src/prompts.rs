@@ -261,6 +261,9 @@ pub fn body_section(scene: &str) -> String {
                 r["risk"].as_f64().unwrap_or(0.0),
                 r["style"].as_f64().unwrap_or(0.0)
             ));
+            if let Some(t) = r["traits"].as_array().filter(|t| !t.is_empty()) {
+                out.push_str(&format!("The traits you gave it: {}.\n", t.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", ")));
+            }
             if let Some(why) = r["rationale"].as_str().filter(|w| !w.is_empty()) {
                 out.push_str(&format!("Your reason then: {why}\n"));
             }

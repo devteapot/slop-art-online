@@ -5,6 +5,10 @@
 //! player input path, within the active leaf's skill scope. The mind's own rationale is kept as
 //! text for its next deliberation; the controller never receives it.
 //!
+//! Individuality travels here, not in per-character weights (docs/NEURAL_BODY.md, "Design input:
+//! one body net per role"): `traits`, a short vector of the mind's own conditioning values, is the
+//! character's identity as the shared net of its role reads it.
+//!
 //! Shared by the authority (`mind_body_brief`'s checks) and the mind service (the body worker reads
 //! the accepted values back as typed fields).
 
@@ -16,6 +20,8 @@ pub const STANCES: &[&str] = &["guarded", "even", "pressing"];
 pub const MAX_RATIONALE: usize = 400;
 /// A brief lives at least this long (seconds).
 pub const MIN_TTL_S: f32 = 1.0;
+/// At most this many trait values in a brief, each in -1 ..= 1.
+pub const MAX_TRAITS: usize = 8;
 
 /// A brief as a mind writes it (the authority's `BodyBriefIn` carries the same fields).
 #[derive(Clone, Debug, PartialEq)]
@@ -31,6 +37,10 @@ pub struct Brief<'a> {
     /// How long it holds (seconds), `MIN_TTL_S ..= max_ttl_s` (the `body_brief_max_s` law).
     pub ttl_s: f32,
     pub rationale: &'a str,
+    /// The character's individuality as its role's shared net reads it: at most [`MAX_TRAITS`]
+    /// values, each -1 ..= 1 (what each means is the mind's and the net's convention, never a
+    /// cue or a reaction).
+    pub traits: &'a [f32],
 }
 
 /// The schema and value checks of a brief, before anything about the world (who the caller is,
@@ -51,6 +61,12 @@ pub fn check(b: &Brief, max_ttl_s: f32) -> Result<(), String> {
     if !b.ttl_s.is_finite() || !(MIN_TTL_S..=max).contains(&b.ttl_s) {
         return Err(format!("a brief lasts from {MIN_TTL_S} to {max} seconds"));
     }
+    if b.traits.len() > MAX_TRAITS {
+        return Err(format!("a brief has at most {MAX_TRAITS} traits"));
+    }
+    if b.traits.iter().any(|t| !t.is_finite() || !(-1.0..=1.0).contains(t)) {
+        return Err("a brief's traits are numbers from -1 to 1".into());
+    }
     if b.rationale.len() > MAX_RATIONALE {
         return Err(format!("a brief's rationale is at most {MAX_RATIONALE} bytes"));
     }
@@ -68,7 +84,7 @@ mod tests {
     use super::*;
 
     fn ok() -> Brief<'static> {
-        Brief { goal: "engage", target: 0, stance: "even", risk: 0.5, style: 0.5, ttl_s: 30.0, rationale: "" }
+        Brief { goal: "engage", target: 0, stance: "even", risk: 0.5, style: 0.5, ttl_s: 30.0, rationale: "", traits: &[0.2, -0.4] }
     }
 
     #[test]
@@ -81,6 +97,9 @@ mod tests {
         assert!(check(&Brief { ttl_s: f32::INFINITY, ..ok() }, 300.0).unwrap_err().contains("seconds"));
         assert!(check(&Brief { ttl_s: 301.0, ..ok() }, 300.0).unwrap_err().contains("300"));
         assert!(check(&Brief { ttl_s: 0.5, ..ok() }, 300.0).is_err());
+        assert!(check(&Brief { traits: &[0.0; 9], ..ok() }, 300.0).unwrap_err().contains("at most 8 traits"));
+        assert!(check(&Brief { traits: &[1.5], ..ok() }, 300.0).unwrap_err().contains("traits"));
+        assert!(check(&Brief { traits: &[f32::NAN], ..ok() }, 300.0).unwrap_err().contains("traits"));
         let long = "x".repeat(MAX_RATIONALE + 1);
         assert!(check(&Brief { rationale: &long, ..ok() }, 300.0).unwrap_err().contains("rationale"));
     }

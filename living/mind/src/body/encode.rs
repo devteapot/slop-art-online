@@ -28,8 +28,9 @@ pub const SLOT: usize = 12;
 pub const OWN: usize = 6 + SKILLS;
 /// A cue's features.
 pub const CUE: usize = 6;
-/// The brief's features: goal (3), stance (3), risk, style, present.
-pub const BRIEF: usize = 9;
+/// The brief's features: goal (3), stance (3), risk, style, present, then its traits (the
+/// character's individuality; `living_rules::body::MAX_TRAITS`, zero-padded).
+pub const BRIEF: usize = 9 + living_rules::body::MAX_TRAITS;
 /// The vector's length.
 pub const LEN: usize = OWN + SLOT * (1 + OTHERS) + CUE * CUES + BRIEF;
 /// Distances are told in units of this many metres.
@@ -102,6 +103,8 @@ pub struct BriefView {
     pub stance: String,
     pub risk: f32,
     pub style: f32,
+    /// The individuality the role's shared net is conditioned on (at most `MAX_TRAITS`).
+    pub traits: Vec<f32>,
     pub expires_ms: u64,
 }
 
@@ -245,6 +248,9 @@ pub fn encode(o: &Observation, brief: Option<&BriefView>, slot: &SlotView) -> Ve
     out.push(b.map_or(0.5, |b| b.risk));
     out.push(b.map_or(0.5, |b| b.style));
     out.push(if b.is_some() { 1.0 } else { 0.0 });
+    for i in 0..living_rules::body::MAX_TRAITS {
+        out.push(b.and_then(|b| b.traits.get(i).copied()).unwrap_or(0.0).clamp(-1.0, 1.0));
+    }
     debug_assert_eq!(out.len(), LEN);
     for v in out.iter_mut() {
         if !v.is_finite() {
@@ -359,10 +365,10 @@ mod tests {
 
     #[test]
     fn the_brief_conditions_by_typed_values_and_an_expired_one_is_none() {
-        let b = BriefView { revision: 2, goal: "withdraw".into(), target: 0, stance: "guarded".into(), risk: 0.2, style: 0.9, expires_ms: 20_000 };
+        let b = BriefView { revision: 2, goal: "withdraw".into(), target: 0, stance: "guarded".into(), risk: 0.2, style: 0.9, traits: vec![0.5, -1.0], expires_ms: 20_000 };
         let with = encode(&base(), Some(&b), &slot());
         let tail = &with[LEN - BRIEF..];
-        assert_eq!(tail, &[0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.2, 0.9, 1.0]);
+        assert_eq!(tail, &[0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.2, 0.9, 1.0, 0.5, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
         let expired = BriefView { expires_ms: 9_000, ..b };
         assert_eq!(encode(&base(), Some(&expired), &slot()), encode(&base(), None, &slot()));
     }

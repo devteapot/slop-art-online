@@ -952,7 +952,7 @@ impl<'a> Ev<'a> {
             }
         }
         let label = graph::describe(n);
-        self.delegating = Some(crate::delegation::Delegated { node: id, goal: d.goal.clone(), target, skills: d.skills.clone(), label: label.clone() });
+        self.delegating = Some(crate::delegation::Delegated { node: id, role: self.me.kind.to_string(), goal: d.goal.clone(), target, skills: d.skills.clone(), label: label.clone() });
         self.running = Some(id);
         self.status = label;
         St::Run

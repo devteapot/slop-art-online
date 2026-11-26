@@ -10,7 +10,9 @@
 //! (`seen_body_copy`, `seen_character_copy`, `seen_fighter_copy`, or the views when those laws are
 //! off), the cue tables and its combat feed (`combat_feed`, `my_combat`). Each decision (15 Hz by
 //! default, `LIVING_BODY_HZ`) encodes those rows into bounded slots (`encode.rs`), runs the policy
-//! (`policy.rs`; the pilot ships the scripted `HoldDistance`, no trained net) and sends its typed
+//! (`policy.rs`: one shared policy per role, the character's kind, with the character's own small
+//! memory carried between decisions and reset on a new epoch or brief revision; the pilot ships the
+//! scripted `HoldDistance`, no trained net) and sends its typed
 //! intents through the player input reducers (`human_move`, `human_face`, `use_skill`,
 //! `release_skill`), whose checks, budgets and outcomes are a player's. It beats the session's lease
 //! (`body_beat`). It captures each decision, each reply and each resolved outcome (`capture.rs`).
@@ -29,7 +31,7 @@ pub mod policy;
 use anyhow::{anyhow, Context, Result};
 use encode::{BodyRow, BriefView, CueRow, FighterRow, Observation, SeenRow, SkillRow, SlotView};
 use living_bindings::*;
-use policy::{HoldDistance, Intent, Policy};
+use policy::{Intent, Memory, Policy};
 use serde_json::json;
 use spacetimedb_sdk::{DbContext, EventTable, Identity, Table};
 use std::collections::HashMap;
@@ -60,7 +62,8 @@ struct Session {
 struct Served {
     actor: u32,
     session: Option<Session>,
-    policy: Box<dyn Policy>,
+    /// Its own memory between decisions (the policy is its role's, shared).
+    memory: Memory,
     /// When its slot was last seen (a session is closed once it has been gone a while).
     slot_seen: Instant,
 }
@@ -115,6 +118,12 @@ pub async fn main(server: String, db: String, token: String) -> Result<()> {
     let mut lease_ms = lease_ms(&control);
     let period = Duration::from_secs_f32(1.0 / hz.clamp(1.0, 60.0));
     let mut served: HashMap<u32, Served> = HashMap::new();
+    // One policy per role (a character's kind), shared by every character of it.
+    let mut policies: HashMap<String, Box<dyn Policy>> = HashMap::new();
+    if let Some(c) = capture.as_mut() {
+        c.write("layout", json!({"encoded": encode::LEN, "memory": policy::MEMORY, "state": policy::STATE, "history": policy::HISTORY, "intent": policy::INTENT,
+                                 "flat": "encoded, then memory (state, then history newest first)", "traits": living_rules::body::MAX_TRAITS}));
+    }
     let mut last_loop = Instant::now();
     let mut tick = tokio::time::interval(period);
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -143,7 +152,7 @@ pub async fn main(server: String, db: String, token: String) -> Result<()> {
         }
         let slots: Vec<BodySlot> = control.db.body_slot().iter().filter(|s| only.as_ref().is_none_or(|o| o.contains(&s.actor))).collect();
         for slot in &slots {
-            let s = served.entry(slot.actor).or_insert_with(|| Served { actor: slot.actor, session: None, policy: Box::new(HoldDistance::new(hold)), slot_seen: Instant::now() });
+            let s = served.entry(slot.actor).or_insert_with(|| Served { actor: slot.actor, session: None, memory: Memory::new(0, 0), slot_seen: Instant::now() });
             s.slot_seen = Instant::now();
         }
         // A character whose leaf ended a while ago: its session is closed (it stands).
@@ -197,7 +206,12 @@ pub async fn main(server: String, db: String, token: String) -> Result<()> {
                     }
                 });
             }
-            decide(&control, slot.clone(), s.policy.as_mut(), sess, &records, capture.as_mut());
+            let policy = policies.entry(slot.role.clone()).or_insert_with(|| {
+                let p = policy::for_role(&slot.role, hold);
+                log::info!("body worker: role {:?} served by {} ({})", slot.role, p.name(), p.version());
+                p
+            });
+            decide(&control, slot.clone(), policy.as_ref(), &mut s.memory, sess, &records, capture.as_mut());
         }
         last_loop = Instant::now();
     }
@@ -382,14 +396,23 @@ fn observe(control: &DbConnection, actor: u32, s: &Session, now: u64) -> Observa
 
 /// One decision for a served character: observe, encode, decide, send through the player input
 /// reducers (movement and the look only on a change), capture.
-fn decide(control: &DbConnection, slot: BodySlot, policy: &mut dyn Policy, s: &mut Session, records: &Records, capture: Option<&mut capture::Capture>) {
+fn decide(control: &DbConnection, slot: BodySlot, policy: &dyn Policy, memory: &mut Memory, s: &mut Session, records: &Records, mut capture: Option<&mut capture::Capture>) {
     let now = crate::llm::now_ms();
     let actor = slot.actor;
     let o = observe(control, actor, s, now);
     let sv = SlotView { revision: slot.revision, node: slot.node, goal: slot.goal.clone(), target: slot.target, skills: slot.skills.clone() };
-    let brief = control.db.body_brief().actor().find(&actor).filter(|b| !b.goal.is_empty()).map(|b| BriefView { revision: b.revision, goal: b.goal, target: b.target, stance: b.stance, risk: b.risk, style: b.style, expires_ms: b.expires_ms });
+    let row = control.db.body_brief().actor().find(&actor);
+    let brief_rev = row.as_ref().map_or(0, |b| b.revision);
+    let brief = row.filter(|b| !b.goal.is_empty()).map(|b| BriefView { revision: b.revision, goal: b.goal, target: b.target, stance: b.stance, risk: b.risk, style: b.style, traits: b.traits, expires_ms: b.expires_ms });
+    // A new epoch or a new brief revision: the character's memory starts afresh.
+    if memory.follow(s.epoch, brief_rev) {
+        if let Some(c) = capture.as_mut() {
+            c.write("memory", json!({"actor": actor, "epoch": s.epoch, "brief": brief_rev, "event": "reset"}));
+        }
+    }
     let v = encode::encode(&o, brief.as_ref(), &sv);
-    let intent = policy.decide(&o, &v, brief.as_ref(), &sv);
+    let before = memory.flat();
+    let intent = policy.decide(&o, &v, memory, brief.as_ref(), &sv);
     s.seq += 1;
     let (seq, epoch) = (s.seq, s.epoch);
     let reply = |reducer: &'static str| {
@@ -423,12 +446,19 @@ fn decide(control: &DbConnection, slot: BodySlot, policy: &mut dyn Policy, s: &m
         sent.release = Some(k.clone());
         let _ = s.conn.reducers.release_skill_then(k, reply("release_skill"));
     }
+    // The history holds what was decided (the policy's own output), sent or coalesced.
+    let encoded_intent = intent.encode(&sv);
+    memory.remember(encoded_intent);
     if let Some(c) = capture {
+        // Everything a clone needs, flat: the encoded observation, then the memory the policy read.
+        let mut flat = v.clone();
+        flat.extend_from_slice(&before);
         c.write(
             "decision",
             json!({
-                "actor": actor, "epoch": epoch, "seq": seq, "now_ms": now, "policy": policy.name(),
-                "encoded": v, "len": encode::LEN,
+                "actor": actor, "role": slot.role, "epoch": epoch, "seq": seq, "now_ms": now, "policy": policy.name(), "policy_version": policy.version(),
+                "encoded": v, "len": encode::LEN, "memory": before, "memory_after": memory.flat(), "flat": flat,
+                "intent_encoded": encoded_intent,
                 "observation": {
                     "body": o.body.as_ref().map(|b| json!([b.x, b.y, b.t_ms, b.vx, b.vy, b.heading])),
                     "others": o.others.len(), "seen": o.seen.len(), "fighters": o.fighters.len(), "cues": o.cues.len(),
@@ -436,7 +466,7 @@ fn decide(control: &DbConnection, slot: BodySlot, policy: &mut dyn Policy, s: &m
                     "age_ms": o.others.iter().map(|b| now.saturating_sub(b.t_ms)).max(),
                 },
                 "slot": {"revision": sv.revision, "node": sv.node, "goal": sv.goal, "target": sv.target, "skills": sv.skills},
-                "brief": brief.as_ref().map(|b| json!({"revision": b.revision, "goal": b.goal, "target": b.target, "stance": b.stance, "risk": b.risk, "style": b.style, "expires_ms": b.expires_ms})),
+                "brief": brief.as_ref().map(|b| json!({"revision": b.revision, "goal": b.goal, "target": b.target, "stance": b.stance, "risk": b.risk, "style": b.style, "traits": b.traits, "expires_ms": b.expires_ms})),
                 "intent": intent, "sent": sent,
             }),
         );

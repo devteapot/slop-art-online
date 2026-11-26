@@ -71,6 +71,8 @@ pub fn refuse_delegate(ctx: &ReducerContext, actor: u32, root: &Node) -> Option<
 #[derive(Clone, Debug, PartialEq)]
 pub struct Delegated {
     pub node: u16,
+    /// The character's kind: the role whose shared policy serves it.
+    pub role: String,
     pub goal: String,
     pub target: u32,
     pub skills: Vec<String>,
@@ -86,13 +88,13 @@ pub fn sync_slot(ctx: &ReducerContext, actor: u32, revision: u32, running: Optio
     let row = ctx.db.body_slot().actor().find(actor);
     match (running, row) {
         (Some(d), Some(r)) => {
-            if r.revision != revision || r.node != d.node || r.goal != d.goal || r.target != d.target || r.skills != d.skills || r.label != d.label {
+            if r.revision != revision || r.node != d.node || r.role != d.role || r.goal != d.goal || r.target != d.target || r.skills != d.skills || r.label != d.label {
                 let since_ms = if r.revision == revision && r.node == d.node { r.since_ms } else { now };
-                ctx.db.body_slot().actor().update(BodySlot { actor, revision, node: d.node, goal: d.goal.clone(), target: d.target, skills: d.skills.clone(), label: d.label.clone(), since_ms });
+                ctx.db.body_slot().actor().update(BodySlot { actor, revision, node: d.node, role: d.role.clone(), goal: d.goal.clone(), target: d.target, skills: d.skills.clone(), label: d.label.clone(), since_ms });
             }
         }
         (Some(d), None) => {
-            ctx.db.body_slot().insert(BodySlot { actor, revision, node: d.node, goal: d.goal.clone(), target: d.target, skills: d.skills.clone(), label: d.label.clone(), since_ms: now });
+            ctx.db.body_slot().insert(BodySlot { actor, revision, node: d.node, role: d.role.clone(), goal: d.goal.clone(), target: d.target, skills: d.skills.clone(), label: d.label.clone(), since_ms: now });
         }
         (None, Some(_)) => {
             ctx.db.body_slot().actor().delete(actor);
@@ -359,10 +361,10 @@ pub fn mind_body_brief(ctx: &ReducerContext, actor: u32, expected: u32, brief: O
         return Err(format!("the brief is at revision {current}, not {expected}: read it again"));
     }
     let next = match brief {
-        None => BodyBrief { actor, revision: current + 1, goal: String::new(), target: 0, stance: String::new(), risk: 0.0, style: 0.0, rationale: String::new(), written_ms: now, expires_ms: now },
+        None => BodyBrief { actor, revision: current + 1, goal: String::new(), target: 0, stance: String::new(), risk: 0.0, style: 0.0, traits: Vec::new(), rationale: String::new(), written_ms: now, expires_ms: now },
         Some(b) => {
             let max = common::laws(ctx).body_brief_max_s;
-            living_rules::body::check(&living_rules::body::Brief { goal: &b.goal, target: b.target, stance: &b.stance, risk: b.risk, style: b.style, ttl_s: b.ttl_s, rationale: &b.rationale }, max)?;
+            living_rules::body::check(&living_rules::body::Brief { goal: &b.goal, target: b.target, stance: &b.stance, risk: b.risk, style: b.style, ttl_s: b.ttl_s, rationale: &b.rationale, traits: &b.traits }, max)?;
             if b.target != 0 {
                 if b.target == actor {
                     return Err("a brief's target is someone else".into());
@@ -372,7 +374,7 @@ pub fn mind_body_brief(ctx: &ReducerContext, actor: u32, expected: u32, brief: O
                     return Err(living_rules::body::unseen_target(b.target));
                 }
             }
-            BodyBrief { actor, revision: current + 1, goal: b.goal, target: b.target, stance: b.stance, risk: b.risk, style: b.style, rationale: b.rationale, written_ms: now, expires_ms: now + (b.ttl_s * 1000.0) as u64 }
+            BodyBrief { actor, revision: current + 1, goal: b.goal, target: b.target, stance: b.stance, risk: b.risk, style: b.style, traits: b.traits, rationale: b.rationale, written_ms: now, expires_ms: now + (b.ttl_s * 1000.0) as u64 }
         }
     };
     if row.is_some() {
@@ -406,6 +408,7 @@ pub fn scene_note(ctx: &ReducerContext, actor: u32, now: u64) -> Option<serde_js
             "stance": b.stance,
             "risk": b.risk,
             "style": b.style,
+            "traits": b.traits,
             "rationale": b.rationale,
             "left_s": (left as f64 / 1000.0).round(),
             "expired": left == 0,

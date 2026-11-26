@@ -4949,7 +4949,7 @@ def delegate_body_case(run):
         run.note(f'owner {reducer}{json.dumps(args)} -> {code} {text.strip()[:300]}')
         return Out(code, text)
     ident = lambda i: {'__identity__': i if i.startswith('0x') else '0x' + i}
-    brief = lambda **kw: {'some': {**{'goal': 'engage', 'target': 0, 'stance': 'even', 'risk': 0.5, 'style': 0.5, 'ttl_s': 120.0, 'rationale': 'keep the spear distance'}, **kw}}
+    brief = lambda **kw: {'some': {**{'goal': 'engage', 'target': 0, 'stance': 'even', 'risk': 0.5, 'style': 0.5, 'ttl_s': 120.0, 'rationale': 'keep the spear distance', 'traits': [0.3, -0.2]}, **kw}}
     graph = {'first': [{'delegate': {'goal': 'engage', 'target': {'id': f}, 'skills': ['strike', 'dodge'], 'exit': {'health': {'below': 15}}}}, {'wait': 5}]}
     law_words = 'the body_delegate_on law is off'
     checks = {}
@@ -4981,7 +4981,7 @@ def delegate_body_case(run):
         checks['law_on_graph_installed'] = out.returncode == 0
         run.wait(lambda: run.private(f'SELECT * FROM body_slot WHERE actor = {s}', 'slot-on'), 'the delegated leaf in body_slot', 20)
         slot = run.private(f'SELECT * FROM body_slot WHERE actor = {s}', 'slot-on')[0]
-        checks['slot_names_target_and_scope'] = slot['target'] == f and slot['skills'] == ['strike', 'dodge'] and slot['goal'] == 'engage'
+        checks['slot_names_target_and_scope'] = slot['target'] == f and slot['skills'] == ['strike', 'dodge'] and slot['goal'] == 'engage' and slot['role'] == 'person'
         # The brief's refusals, then one accepted.
         refusals = {}
         for name, args, words in [
@@ -4989,6 +4989,8 @@ def delegate_body_case(run):
             ('goal', (s, 0, brief(goal='dance')), "a brief's goal is one of engage, hold, withdraw"),
             ('risk', (s, 0, brief(risk=1.5)), "a brief's risk is a number from 0 to 1"),
             ('ttl', (s, 0, brief(ttl_s=99999.0)), 'a brief lasts from 1 to 300 seconds'),
+            ('traits_range', (s, 0, brief(traits=[1.5])), "a brief's traits are numbers from -1 to 1"),
+            ('traits_count', (s, 0, brief(traits=[0.0] * 9)), 'a brief has at most 8 traits'),
             ('nonexistent', (s, 0, brief(target=4_000_000)), '#4000000 is not someone you perceive now'),
         ]:
             out = stdb('mind_body_brief', *args)
@@ -5011,7 +5013,7 @@ def delegate_body_case(run):
         checks['brief_refusals_truthful'] = all(r['refused'] and r['words'] for r in refusals.values())
         out = stdb('mind_body_brief', s, 0, brief(target=f))
         row = run.private(f'SELECT * FROM body_brief WHERE actor = {s}', 'brief-accepted')
-        checks['brief_accepted'] = out.returncode == 0 and row and row[0]['revision'] == 1 and row[0]['target'] == f
+        checks['brief_accepted'] = out.returncode == 0 and row and row[0]['revision'] == 1 and row[0]['target'] == f and [round(t, 3) for t in row[0]['traits']] == [0.3, -0.2]
         # The player input path, by hand, with fresh identities.
         a_id, a_tok = _fresh_identity()
         call = lambda tok, reducer, args: _http(f'/v1/database/{run.db}/call/{reducer}', args, tok)
@@ -5126,6 +5128,16 @@ def delegate_body_case(run):
         result['capture'] = kinds
         checks['capture_has_decisions_replies_outcomes'] = all(kinds.get(k) for k in ('decision', 'reply', 'session'))
         checks['capture_encoded_fixed_length'] = all(len(r['encoded']) == r['len'] for r in recs if r['kind'] == 'decision')
+        # Cloning data: the flat input is the encoded observation and the memory read; the role and
+        # the policy's version; the traits in the brief; memory reset at each new epoch.
+        layout = next(r for r in recs if r['kind'] == 'layout')
+        decisions = [r for r in recs if r['kind'] == 'decision']
+        checks['capture_flat_is_encoded_and_memory'] = all(len(r['flat']) == layout['encoded'] + layout['memory'] and r['flat'][:r['len']] == r['encoded'] and r['flat'][r['len']:] == r['memory'] for r in decisions)
+        checks['capture_role_version_traits'] = all(r['role'] == 'person' and r['policy_version'] and (r['brief'] is None or len(r['brief']['traits']) == 2) for r in decisions)
+        resets = [r for r in recs if r['kind'] == 'memory']
+        epochs = sorted({r['epoch'] for r in decisions})
+        checks['memory_reset_per_epoch'] = {r['epoch'] for r in resets} >= set(epochs) and all(not any(d['memory'][16:]) for d in decisions if d['seq'] == 1)
+        result['capture_epochs'] = epochs
         stale = [r for r in recs if r['kind'] == 'reply' and r.get('epoch') == e3['epoch'] and r['wall_ms'] > resume_ms + 200 and r.get('ok')]
         checks['old_epoch_replies_after_resume_refused'] = not stale
         # Read-back: the owning mind's think prompt (the real mind with the fake model).

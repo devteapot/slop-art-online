@@ -7,7 +7,14 @@
 //!   input changes nothing), by the decision's sequence;
 //! - `outcome`: the authority's resolved outcome of each skill use (`my_skill_uses`: accepted,
 //!   released, what happened), as it is delivered;
-//! - `session`: an epoch opened, a stall, a lapse.
+//! - `session`: an epoch opened, a stall, a lapse;
+//! - `layout`: once per file set's start, the sizes of the flat vector's parts;
+//! - `memory`: a character's memory reset (a new epoch or brief revision).
+//!
+//! A `decision` holds what cloning needs: `flat` (the encoded observation, then the memory the policy
+//! read: its recurrent state and intent history), `memory_after`, the brief with its traits, the
+//! role and the policy's version, the intent (and `intent_encoded`) and what was sent; its replies
+//! and the use's outcome follow by actor, epoch, sequence and time.
 //!
 //! Files rotate at `LIVING_BODY_CAPTURE_FILE_MB` (default 16) and at most `LIVING_BODY_CAPTURE_FILES`
 //! (default 8) are kept, the oldest removed first, so the capture never holds more than their

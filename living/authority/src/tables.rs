@@ -2775,6 +2775,9 @@ pub struct BodyBrief {
     pub stance: String,
     pub risk: f32,
     pub style: f32,
+    /// The character's individuality for its role's shared body net (`living_rules::body::MAX_TRAITS`
+    /// values, -1 ..= 1): identity travels in the brief, never in per-character weights.
+    pub traits: Vec<f32>,
     pub rationale: String,
     pub written_ms: u64,
     pub expires_ms: u64,
@@ -2790,6 +2793,7 @@ pub struct BodyBriefIn {
     pub style: f32,
     pub ttl_s: f32,
     pub rationale: String,
+    pub traits: Vec<f32>,
 }
 
 /// The graph leaf delegated to the body now (a `delegate` node running; docs/NEURAL_BODY.md §3(c)):
@@ -2803,6 +2807,9 @@ pub struct BodySlot {
     /// The graph revision and preorder node of the leaf.
     pub revision: u32,
     pub node: u16,
+    /// Whose shared body net serves it: the character's kind (`person`, `wolf`, …), one policy per
+    /// role and none per individual.
+    pub role: String,
     pub goal: String,
     /// The creature its target resolved to when written (0: none or not a creature).
     pub target: u32,

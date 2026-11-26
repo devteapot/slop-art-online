@@ -14,6 +14,7 @@ pub struct BodyBriefIn {
     pub style: f32,
     pub ttl_s: f32,
     pub rationale: String,
+    pub traits: Vec<f32>,
 }
 
 impl __sdk::InModule for BodyBriefIn {

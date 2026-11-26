@@ -166,7 +166,7 @@ PLAYED_REFUSED = {'mind_fight': lambda actor: [actor, []]}
 # rule (another's character: "not your character"; one's own: nothing to close). With the law on,
 # verify-minds `delegate-body` drives them.
 BODY_LAW = 'the body_delegate_on law is off'
-BODY = {'mind_body_brief': lambda actor: [actor, 0, {'some': {'goal': 'engage', 'target': 0, 'stance': 'even', 'risk': 0.5, 'style': 0.5, 'ttl_s': 10.0, 'rationale': ''}}],
+BODY = {'mind_body_brief': lambda actor: [actor, 0, {'some': {'goal': 'engage', 'target': 0, 'stance': 'even', 'risk': 0.5, 'style': 0.5, 'ttl_s': 10.0, 'rationale': '', 'traits': []}}],
         'body_open': lambda actor: [actor, {'__identity__': '0x' + '11' * 32}],
         'body_beat': lambda actor: [1]}
 ADMIN = {
