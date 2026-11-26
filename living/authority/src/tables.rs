@@ -1076,6 +1076,9 @@ pub struct Familiar {
     pub id: u64,
     #[index(btree)]
     pub actor: u32,
+    /// Indexed (familiar-cap): everyone's rows about a dead creature go by it once its remains
+    /// are gone, under the `familiar_regard` law (`tick::expire_remains`).
+    #[index(btree)]
     pub thing: u64,
     pub first_ms: u64,
     pub last_ms: u64,

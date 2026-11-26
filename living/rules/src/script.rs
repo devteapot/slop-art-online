@@ -565,6 +565,17 @@ pub struct Laws {
     /// A diagnostic, off in play: each heed pass, windup and blow of a character with a mind is
     /// logged (`heed pass`, `heed windup`, `heed blow`; the verify-core heed scene reads them).
     pub heed_trace: bool,
+    /// Familiarity rows (`familiar`) a character keeps before the oldest it is not looking at are
+    /// forgotten (familiar-cap, docs/BOUNDED_RETENTION.md §3.1; the authority's
+    /// `brain::prune_familiar`, checked every `familiar_limit / 32` new rows, 8 to 64). Never what is
+    /// in view, so not a hard bound. 2,048 as before.
+    pub familiar_limit: f32,
+    /// What is forgotten first over `familiar_limit`. Off (as before): the oldest of anything. On:
+    /// unnamed strangers first (people and animals whose name one does not know and whom one's mind
+    /// has no feeling about), the oldest first, then places and things; never someone one knows by
+    /// name (family, community, an introduction) or has a relation with. And a dead creature is
+    /// forgotten by everyone once its remains are gone (or at its death when it leaves none).
+    pub familiar_regard: bool,
     /// Heed for players (docs/ATTENTION_BUDGET.md, "Player-side interface"): with `heed_on` too,
     /// a played character's `perceived` set is its individuals (`heed::split` in place of
     /// `far_cap`'s trim) and the rest of its sight is counted in `seen_throng`; its pins and
@@ -927,6 +938,8 @@ impl Default for Laws {
             heed_contact_s: crate::heed::DEFAULT_CONTACT_S,
             heed_closing_s: crate::heed::DEFAULT_CLOSING_S,
             heed_trace: false,
+            familiar_limit: 2_048.0,
+            familiar_regard: false,
             heed_players: false,
             cover_sight_on: false,
             ground_sight_m: 24.0,
@@ -3304,6 +3317,8 @@ impl Scripts {
             heed_contact_s: g("heed_contact_s", l.heed_contact_s).clamp(0.0, 60.0),
             heed_closing_s: g("heed_closing_s", l.heed_closing_s).clamp(0.0, 60.0),
             heed_trace: flag("heed_trace", l.heed_trace),
+            familiar_limit: g("familiar_limit", l.familiar_limit).clamp(16.0, 65_536.0),
+            familiar_regard: flag("familiar_regard", l.familiar_regard),
             heed_players: flag("heed_players", l.heed_players),
             cover_sight_on: flag("cover_sight_on", l.cover_sight_on),
             ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
@@ -3638,7 +3653,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 34] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 36] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3692,6 +3707,10 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 34] = [
     ("heed_trace", ValueOnly::Delivery),
     // heed for players: read at each player's sweep (perception::sweep_one).
     ("heed_players", ValueOnly::Delivery),
+    // familiar-cap (docs/BOUNDED_RETENTION.md §3.1): read by `brain::prune_familiar` at its next
+    // check and by the remains' expiry at its next pass.
+    ("familiar_limit", ValueOnly::Delivery),
+    ("familiar_regard", ValueOnly::Delivery),
 ];
 
 /// The functions a value-only law may be named in: the constants (`laws`, an overlay's

@@ -65,23 +65,17 @@ pub fn remember(ctx: &ReducerContext, observer: &Character, target: &Character, 
 
 /// What observers remembered of `known`'s body goes once their remains are gone (`tick::expire_remains`).
 pub fn forget_known(ctx: &ReducerContext, known: u32) {
-    for r in ctx.db.sex_seen().known().filter(known).map(|r| r.id).collect::<Vec<_>>() {
-        ctx.db.sex_seen().id().delete(r);
-    }
+    ctx.db.sex_seen().known().delete(known);
 }
 
 /// `observer`'s memory of `known`'s body fades with its familiarity with them (`brain::prune_familiar`).
 pub fn forget_pair(ctx: &ReducerContext, observer: u32, known: u32) {
-    for r in ctx.db.sex_seen().by_pair().filter((observer, known)).map(|r| r.id).collect::<Vec<_>>() {
-        ctx.db.sex_seen().id().delete(r);
-    }
+    ctx.db.sex_seen().by_pair().delete((observer, known));
 }
 
 /// What `id` remembered goes with it at death (`perception::gone`).
 pub fn forget(ctx: &ReducerContext, id: u32) {
-    for r in ctx.db.sex_seen().observer().filter(id).map(|r| r.id).collect::<Vec<_>>() {
-        ctx.db.sex_seen().id().delete(r);
-    }
+    ctx.db.sex_seen().observer().delete(id);
 }
 
 /// The sex a person's look shows: the `form` of the lines of their look's person entry

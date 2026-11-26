@@ -3133,6 +3133,9 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
         common::invalidate_remains_label(ctx, s.id);
         let last_ms = sc.remains_ms(&kind).max(0.0) as u64;
         ctx.db.rot().insert(Rot { structure: s.id, due_ms: now + last_ms });
+    } else if common::laws(ctx).familiar_regard {
+        // No remains to see: under `familiar_regard` it is forgotten by everyone now (familiar-cap).
+        ctx.db.familiar().thing().delete(FAM_CREATURE | id as u64);
     }
     if kind == "person" {
         common::chronicle(ctx, now, "death", id, killer, at, format!("{name} died ({cause})"));
