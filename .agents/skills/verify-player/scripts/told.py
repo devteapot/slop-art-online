@@ -27,6 +27,7 @@ Python standard library only.
 import argparse
 import importlib.util
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -35,6 +36,9 @@ HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("verify", HERE.parent.parent / "verify/scripts/verify.py")
 V = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(V)
+
+sys.path.insert(0, str(HERE.parent.parent / "verify-client/scripts"))
+from earshot import open_line  # noqa: E402
 
 
 def main():
@@ -130,16 +134,27 @@ def main():
     #    (`complete`: "they moved away"). The player's command, then the AI's graph.
     give = {"seq": [{"do": {"skill": "give", "target": {"id": other}, "item": "berries", "qty": 1}}]}
 
+    # The preceding speech scene leaves its player at an arbitrary quiet spot. A retreat
+    # there can take the receiver out of sight before the gift's timer fires. On this line,
+    # 5 m is past completion reach (2.8 m) and inside even the unlit night sight (6 m).
+    line = open_line(a.run, 34)
+    snaps["gift_world"] = sql("SELECT epoch_ms, day_ms FROM world", admin)
+    gift_spots = {me: (line[10], line[11], line[15]), ai: (line[22], line[23], line[27])}
+
     def break_off(actor, start):
+        at, beside, away = gift_spots[actor]
+        call("place_at", [actor, *at], as_admin=True)
         call("grant_items", [actor, "berries", 3], as_admin=True)
-        query = f"SELECT skill, phase, started_ms, ends_ms FROM activity WHERE id = {actor}"
+        query = f"SELECT skill, phase, node, revision, label, started_ms, ends_ms FROM activity WHERE id = {actor}"
         def performing():
             return next((r for r in sql(query, admin) if r["skill"] == "give" and r["phase"] == 1), None)
 
+        def bodies():
+            return sql(f"SELECT id, x, y, vx, vy, t_ms FROM body WHERE id = {actor} OR id = {other}", admin)
+
         for _ in range(3):
-            call("place_near", [other, actor], as_admin=True)
+            call("place_at", [other, *beside], as_admin=True)
             call("set_behavior", [other, json.dumps({"wait": 120})], as_admin=True)
-            b = sql(f"SELECT x, y FROM body WHERE id = {other}", admin)[0]
             start_ms = sql("SELECT last_ms FROM clock", admin)[0]["last_ms"]
             code, body = start()
             if code != 200:
@@ -153,7 +168,18 @@ def main():
                 call("set_paused", [True], as_admin=True)
                 try:
                     if performing() == seen:
-                        call("place_at", [other, b["x"] + (6.0 if b["x"] < 300 else -6.0), b["y"]], as_admin=True)
+                        before = bodies()
+                        call("place_at", [other, *away], as_admin=True)
+                        after = bodies()
+                        positions = {r["id"]: (r["x"], r["y"]) for r in after}
+                        if any(math.dist(positions[who], want) > 0.25 for who, want in ((actor, at), (other, away))):
+                            raise RuntimeError(f"gift positions missed the open line: {after}")
+                        snaps.setdefault("gift_placement", {})[str(actor)] = {
+                            "before": before, "after": after, "activity": seen,
+                            "mind_state": sql(f"SELECT marks, fails, status, last FROM mind_state WHERE id = {actor}", admin),
+                            "clock": sql("SELECT tick, last_ms FROM clock", admin),
+                            "sight": sql("SELECT sight FROM my_senses", st["token"]) if actor == me else [],
+                        }
                         return seen
                 finally:
                     call("set_paused", [False], as_admin=True)
@@ -164,15 +190,37 @@ def main():
                 return None
         return None
 
+    def gift_diagnostic(actor, started):
+        placement = snaps.get("gift_placement", {}).get(str(actor), {})
+        since = (started or {}).get("started_ms", 0)
+        return {
+            "placement": placement,
+            "clock": sql("SELECT tick, last_ms FROM clock", admin),
+            "mind_state": sql(f"SELECT revision, marks, fails, status, last FROM mind_state WHERE id = {actor}", admin),
+            "character": sql(f"SELECT id, controller, ai, alive, stage FROM character WHERE id = {actor}", admin),
+            "presence": sql(f"SELECT ai, present FROM presence WHERE id = {actor}", admin),
+            "activity": sql(f"SELECT * FROM activity WHERE id = {actor}", admin),
+            "brain": sql(f"SELECT * FROM brain WHERE id = {actor}", admin),
+            "experience": sql(f"SELECT id, at_ms, kind, text FROM experience WHERE observer = {actor} AND at_ms >= {since}", admin),
+            "line_seen": sql(f"SELECT id, shown FROM line_seen WHERE observer = {actor}", admin),
+            "act_outcomes": sql(f"SELECT * FROM act_outcome WHERE observer = {actor} AND at_ms >= {since}", admin),
+            "transfers": sql(f"SELECT * FROM chronicle WHERE kind = 'give' AND a = {actor} AND b = {other} AND at_ms >= {since}", admin),
+            "player_lines": mine("give") if actor == me else [],
+        }
+
     started = break_off(me, lambda: call("human_act", [json.dumps(give)]))
     check("the player's gift started (performing)", started, started)
     got = wait_for(lambda: mine("they moved away"), 6)
     snaps["broken_player"] = got
+    if len(got) != 1:
+        snaps["player_gift_diagnostic"] = gift_diagnostic(me, started)
     snaps["broken_played"] = played(me)
     snaps["broken_plan"] = sql(f"SELECT plan, source FROM brain WHERE id = {me}", admin)
     started = break_off(ai, lambda: call("set_behavior", [ai, json.dumps({"seq": [give["seq"][0], {"wait": 120}]})], as_admin=True))
     check("the AI's gift started (performing)", started, started)
     snaps["broken_ai"] = wait_for(lambda: theirs(ai, "they moved away"), 6)
+    if len(snaps["broken_ai"]) != 1:
+        snaps["ai_gift_diagnostic"] = gift_diagnostic(ai, started)
     check("the person still plays the character (no takeover)", not snaps["broken_played"]["character_ai"], snaps["broken_played"])
     check("failed after starting: exactly one line in the player's log", len(got) == 1, got)
     check("failed after starting: the same text as the AI's", len(got) == 1 and len(snaps["broken_ai"]) == 1 and got[0]["text"] == snaps["broken_ai"][0]["text"],

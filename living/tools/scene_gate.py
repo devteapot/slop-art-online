@@ -1071,6 +1071,25 @@ def case_status(case, first_ok, second_ok, parts, main_verdict=None):
     return status, status != "red-on-main", ""
 
 
+def client_failed_parts(evidence, code):
+    """A failed client script must account for its exit before a flake can be excused."""
+    if code == 0:
+        return []
+    path = Path(evidence)
+    report = load_json(path, None)
+    checks = report.get("checks") if isinstance(report, dict) else None
+    if isinstance(checks, dict):
+        checks = list(checks.items())
+    if code == 1 and isinstance(checks, list) and all(
+        isinstance(pair, (list, tuple)) and len(pair) == 2
+        and isinstance(pair[0], str) and type(pair[1]) is bool for pair in checks
+    ):
+        failed = [name for name, ok in checks if not ok]
+        if failed:
+            return failed
+    return [f"{path.stem}: exit {code} without failed checks"]
+
+
 def minds_parts(r, evidence_dir):
     """A failing minds case's parts: its error, and for a bare assert the failing source line."""
     err = (r or {}).get("error")
@@ -1230,6 +1249,11 @@ class Runner:
             return None, f"{ev / 'generation-smoke.log'} (exit {code}; no result)"
         return list(got.get("failed", [])), str(ev / "checks.json")
 
+    def client_result(self, tag, case, evidence, code):
+        bad = client_failed_parts(evidence, code)
+        if bad:
+            self.parts.setdefault((tag, case), []).extend(bad)
+
     def cleanup(self, root, run, log):
         return self.sh([sys.executable, V, "cleanup", "--run", run], root, log, 300)
 
@@ -1319,15 +1343,20 @@ class Runner:
                 if "cues" in cases:
                     code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/cues.py", "--run", run], root, ev / "cues.txt", 600)
                     tier = self.sh([sys.executable, ".agents/skills/verify-client/scripts/near_tier.py", "--run", run], root, ev / "near_tier.txt", 300)
+                    self.client_result(tag, "cues", ev / "cues.json", code)
+                    self.client_result(tag, "cues", ev / "near_tier.json", tier)
                     res["cues"] = (code == 0 and tier == 0, str(ev / "cues.json"), time.time() - t0)
                 if "motion_tables" in cases:
                     code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/motion_tables.py", "--run", run], root, ev / "motion_tables.txt", 300)
+                    self.client_result(tag, "motion_tables", ev / "motion_tables.json", code)
                     res["motion_tables"] = (code == 0, str(ev / "motion_tables.json"), time.time() - t0)
                 if "combat_feed" in cases:
                     code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/combat_feed.py", "--run", run], root, ev / "combat_feed.txt", 300)
+                    self.client_result(tag, "combat_feed", ev / "combat_feed.json", code)
                     res["combat_feed"] = (code == 0, str(ev / "combat_feed.json"), time.time() - t0)
                 if "lines_table" in cases:
                     code = self.sh([sys.executable, ".agents/skills/verify-client/scripts/lines_table.py", "--run", run], root, ev / "lines_table.txt", 300)
+                    self.client_result(tag, "lines_table", ev / "lines_table.json", code)
                     res["lines_table"] = (code == 0, str(ev / "lines_table.json"), time.time() - t0)
                 return res
             if group == "privacy":

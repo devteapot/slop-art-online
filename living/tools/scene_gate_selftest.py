@@ -1064,6 +1064,28 @@ def check_render_passes_cli(t, tools):
            and "--cases seat" in out, out)
 
 
+def check_client_parts():
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "cues.json"
+        for checks in ({"delivered": True, "windup": False}, [["delivered", True], ["windup", False]]):
+            path.write_text(json.dumps({"checks": checks}))
+            expect("client parts: extract the failed boolean check",
+                   scene_gate.client_failed_parts(path, 1) == ["windup"])
+        path.write_text(json.dumps({"checks": {"windup": True}}))
+        expect("client parts: a crash with green evidence remains an unknown failure",
+               scene_gate.client_failed_parts(path, 124) == ["cues: exit 124 without failed checks"])
+        path.write_text(json.dumps({"checks": {"windup": False}}))
+        expect("client parts: a timeout with a partial report cannot be excused",
+               scene_gate.client_failed_parts(path, 124) == ["cues: exit 124 without failed checks"])
+        tier = Path(td) / "near_tier.json"
+        runner = Runner("client-parts", {}, Path(td), None)
+        path.write_text(json.dumps({"checks": {"windup": False}}))
+        runner.client_result("a-client", "cues", path, 1)
+        runner.client_result("a-client", "cues", tier, 1)
+        expect("client parts: record both cues drivers and keep an unexplained failure",
+               runner.parts[("a-client", "cues")] == ["windup", "near_tier: exit 1 without failed checks"])
+
+
 def main():
     check_run_part()
     check_genesis()
@@ -1072,6 +1094,7 @@ def main():
     check_seed_fresh()
     check_generation_group()
     check_flake_scope()
+    check_client_parts()
     check_staged_genesis()
     check_render_selection()
     check_speech_selection()
