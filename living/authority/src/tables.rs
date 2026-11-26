@@ -2696,10 +2696,21 @@ pub struct HeedChoice {
 
 /// What `human_heed` takes (docs/ATTENTION_BUDGET.md, "The player's input"): up to four pins and
 /// one focus, each a creature its character perceives now; an empty list and `None` clear them.
+/// `pin_at`: a point in one of the caller's `seen_throng` cells, to pick out the throng member
+/// nearest it there (the pin it becomes counts among the four).
 #[derive(SpacetimeType, Clone, Debug, PartialEq)]
 pub struct HeedInput {
     pub pins: Vec<u32>,
     pub focus: Option<u32>,
+    pub pin_at: Option<PinAt>,
+}
+
+/// A point on the map (metres, as `seen_throng.cell` counts them) where a player picks someone
+/// out of its throng (`HeedInput::pin_at`).
+#[derive(SpacetimeType, Clone, Copy, Debug, PartialEq)]
+pub struct PinAt {
+    pub x: f32,
+    pub y: f32,
 }
 
 /// A player's throng, counted in cells (docs/ATTENTION_BUDGET.md, "`seen_throng`"; the
@@ -2714,6 +2725,16 @@ pub struct HeedInput {
 ///   widest extent, metres) to 2 m; `heading` the members' mean way of moving in eight sectors
 ///   (0 east, then clockwise in map coordinates: 2 south, 4 west, 6 north), 255 when most stand
 ///   or their ways cancel; `kinds` bits ([`crate::throng::PEOPLE`], `WOLVES`, `DEER`, `OTHERS`).
+/// - The colours worn, as far as one sees them: the three cloth colours most of the cell's members
+///   wear (`colour_a`, then `_b`, `_c`; most first, ties by index), each an index into
+///   `living_rules::look::CLOTH` (0 yellow, 1 black, 2 green, 3 tan, 4 blue, 5 red, 6 cream,
+///   7 navy, 8 purple, 9 grey) from the member's look words, with its count quantized as `count`
+///   is; 255 and 0 for a place no colour fills (animals and lookless people wear none).
+///   Appended after the first fields with defaults (an automatic migration).
+/// - How many of each kind (`people`, `wolves`, `deer`, `others`: `kinds`' bits), each quantized
+///   as `count` is; and where they stand: `centre_x`, `centre_y`, their mean position's whole metres
+///   east and south of the square's top-left corner (0 to side - 1; drawn at + 0.5 m). A one-member
+///   cell's centre is that member's position to the metre, still unnamed. Appended with defaults.
 /// - Written by the viewer's sweep when a cell's fields change, never rewritten unchanged; a
 ///   viewer's rows go when heed stops applying to it (the law off: all of them in one tick), when
 ///   its character dies or another is played.
@@ -2733,6 +2754,30 @@ pub struct SeenThrong {
     pub moving: u16,
     pub fighting: u16,
     pub kinds: u8,
+    #[default(255u8)]
+    pub colour_a: u8,
+    #[default(0u16)]
+    pub colour_a_count: u16,
+    #[default(255u8)]
+    pub colour_b: u8,
+    #[default(0u16)]
+    pub colour_b_count: u16,
+    #[default(255u8)]
+    pub colour_c: u8,
+    #[default(0u16)]
+    pub colour_c_count: u16,
+    #[default(0u16)]
+    pub people: u16,
+    #[default(0u16)]
+    pub wolves: u16,
+    #[default(0u16)]
+    pub deer: u16,
+    #[default(0u16)]
+    pub others: u16,
+    #[default(0u8)]
+    pub centre_x: u8,
+    #[default(0u8)]
+    pub centre_y: u8,
 }
 
 /// The tick's own time in microseconds, for measuring its cadence (the `tick_marker_on` law, a

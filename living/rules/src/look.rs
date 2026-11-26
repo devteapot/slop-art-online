@@ -304,6 +304,24 @@ pub fn phrase(words: &LookWords, seen: LookSeen, band: LookBand) -> String {
     s
 }
 
+/// The cloth colour words a look's `top` names (`living/tools/characters/look_lines.py`'s
+/// `CLOTH_WORDS` and its "grey" fallback), in their index order: the colour a player's throng
+/// cells count (`seen_throng`'s `colour_*`, docs/ATTENTION_BUDGET.md). The order is a protocol:
+/// clients draw index `i` as the mean of their book's outfit colours for word `CLOTH[i]`. Never
+/// reorder; a new word goes at the end.
+pub const CLOTH: [&str; 10] = ["yellow", "black", "green", "tan", "blue", "red", "cream", "navy", "purple", "grey"];
+/// No cloth colour: no look (an animal, a world without looks) or a word outside [`CLOTH`].
+pub const NO_CLOTH: u8 = 255;
+
+/// The [`CLOTH`] index of a look's `top` words ("a yellow coat", "an …"): its first word after
+/// the article, else [`NO_CLOTH`].
+pub fn cloth_index(top: &str) -> u8 {
+    let mut w = top.split_whitespace();
+    let first = w.next().unwrap_or("");
+    let word = if first == "a" || first == "an" { w.next().unwrap_or("") } else { first };
+    CLOTH.iter().position(|c| *c == word).map_or(NO_CLOTH, |i| i as u8)
+}
+
 /// Whether `key` is a line key: `lk_` and 16 lowercase hex digits.
 pub fn is_line_key(key: &str) -> bool {
     is_key(key, "lk_")
@@ -320,6 +338,37 @@ fn is_key(key: &str, prefix: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    /// Every line of the generated worlds' look data (Cullet, the island) names a cloth word in
+    /// `top` that maps to its index, and the counts per index are the counts of each word in the
+    /// data read independently (whole words of `top`); the plan-test fixture's own words that are
+    /// not cloth words read as none.
+    #[test]
+    fn cloth_index_maps_every_generated_line() {
+        use super::{cloth_index, CLOTH, NO_CLOTH};
+        for (name, src) in [("cullet", include_str!("../../seeds/worlds/cullet/looks.json")), ("island", include_str!("../../seeds/island.json"))] {
+            let v: serde_json::Value = serde_json::from_str(src).unwrap();
+            let words = v["looks"]["words"].as_object().unwrap();
+            assert!(words.len() > 100, "{name}: {} lines", words.len());
+            let mut by_index = [0usize; 10];
+            let mut by_word = [0usize; 10];
+            for (key, w) in words {
+                let top = w["top"].as_str().unwrap_or("");
+                let i = cloth_index(top);
+                assert_ne!(i, NO_CLOTH, "{name}: {key}'s top {top:?} names no cloth word");
+                by_index[i as usize] += 1;
+                let named: Vec<usize> = top.split_whitespace().filter_map(|t| CLOTH.iter().position(|c| *c == t)).collect();
+                assert_eq!(named.len(), 1, "{name}: {key}'s top {top:?}");
+                by_word[named[0]] += 1;
+            }
+            assert_eq!(by_index, by_word, "{name}");
+            assert_eq!(by_index.iter().sum::<usize>(), words.len(), "{name}");
+        }
+        assert_eq!(cloth_index("a navy smock with an apron"), 7);
+        assert_eq!(cloth_index("an oilskin coat"), NO_CLOTH);
+        assert_eq!(cloth_index(""), NO_CLOTH);
+        assert_eq!(CLOTH, ["yellow", "black", "green", "tan", "blue", "red", "cream", "navy", "purple", "grey"], "the order is a protocol");
+    }
+
     use super::*;
 
     fn person() -> Life {

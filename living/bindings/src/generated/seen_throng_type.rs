@@ -17,6 +17,18 @@ pub struct SeenThrong {
     pub moving: u16,
     pub fighting: u16,
     pub kinds: u8,
+    pub colour_a: u8,
+    pub colour_a_count: u16,
+    pub colour_b: u8,
+    pub colour_b_count: u16,
+    pub colour_c: u8,
+    pub colour_c_count: u16,
+    pub people: u16,
+    pub wolves: u16,
+    pub deer: u16,
+    pub others: u16,
+    pub centre_x: u8,
+    pub centre_y: u8,
 }
 
 impl __sdk::InModule for SeenThrong {
@@ -37,6 +49,18 @@ pub struct SeenThrongCols {
     pub moving: __sdk::__query_builder::Col<SeenThrong, u16>,
     pub fighting: __sdk::__query_builder::Col<SeenThrong, u16>,
     pub kinds: __sdk::__query_builder::Col<SeenThrong, u8>,
+    pub colour_a: __sdk::__query_builder::Col<SeenThrong, u8>,
+    pub colour_a_count: __sdk::__query_builder::Col<SeenThrong, u16>,
+    pub colour_b: __sdk::__query_builder::Col<SeenThrong, u8>,
+    pub colour_b_count: __sdk::__query_builder::Col<SeenThrong, u16>,
+    pub colour_c: __sdk::__query_builder::Col<SeenThrong, u8>,
+    pub colour_c_count: __sdk::__query_builder::Col<SeenThrong, u16>,
+    pub people: __sdk::__query_builder::Col<SeenThrong, u16>,
+    pub wolves: __sdk::__query_builder::Col<SeenThrong, u16>,
+    pub deer: __sdk::__query_builder::Col<SeenThrong, u16>,
+    pub others: __sdk::__query_builder::Col<SeenThrong, u16>,
+    pub centre_x: __sdk::__query_builder::Col<SeenThrong, u8>,
+    pub centre_y: __sdk::__query_builder::Col<SeenThrong, u8>,
 }
 
 impl __sdk::__query_builder::HasCols for SeenThrong {
@@ -53,6 +77,18 @@ impl __sdk::__query_builder::HasCols for SeenThrong {
             moving: __sdk::__query_builder::Col::new(table_name, "moving"),
             fighting: __sdk::__query_builder::Col::new(table_name, "fighting"),
             kinds: __sdk::__query_builder::Col::new(table_name, "kinds"),
+            colour_a: __sdk::__query_builder::Col::new(table_name, "colour_a"),
+            colour_a_count: __sdk::__query_builder::Col::new(table_name, "colour_a_count"),
+            colour_b: __sdk::__query_builder::Col::new(table_name, "colour_b"),
+            colour_b_count: __sdk::__query_builder::Col::new(table_name, "colour_b_count"),
+            colour_c: __sdk::__query_builder::Col::new(table_name, "colour_c"),
+            colour_c_count: __sdk::__query_builder::Col::new(table_name, "colour_c_count"),
+            people: __sdk::__query_builder::Col::new(table_name, "people"),
+            wolves: __sdk::__query_builder::Col::new(table_name, "wolves"),
+            deer: __sdk::__query_builder::Col::new(table_name, "deer"),
+            others: __sdk::__query_builder::Col::new(table_name, "others"),
+            centre_x: __sdk::__query_builder::Col::new(table_name, "centre_x"),
+            centre_y: __sdk::__query_builder::Col::new(table_name, "centre_y"),
         }
     }
 }
