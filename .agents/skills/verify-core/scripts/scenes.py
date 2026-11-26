@@ -7953,6 +7953,20 @@ def seen_remains_gaze(s):
 SCENES["seen_remains_gaze"] = seen_remains_gaze
 
 
+def deliberate_activity(s, actor):
+    rows = s.http_rows(f"SELECT skill, node, started_ms, target FROM activity WHERE id = {actor}")
+    return (rows or [None])[0]
+
+
+def is_deliberate_walk(activity, point):
+    return (activity is not None and activity["skill"] == "goto" and activity["node"] == 65534
+            and activity["target"] == [4, 0, *point])
+
+
+def act_experiences(s, actor):
+    return s.http_rows(f"SELECT id, kind, text, at_ms FROM experience WHERE observer = {actor}")
+
+
 def act_replace(s):
     """A mind's act under way and the next one it decides (docs/INPUT_LATENCY.md, "Mind acts
     replace"; features/acts.md). With `mind_act_replaces` off (the control; on as shipped since
@@ -7997,11 +8011,30 @@ def act_replace(s):
     s.expect("on: the next act replaces the walk at once and drops what waited", now and now["started_ms"] != first["started_ms"] and now["skill"] == "goto" and not queued(),
              {"first": first, "now": now, "queue": queued()})
     s.expect("on: the broken-off walks are told nothing (as a player's command is)", not any("did not work out: goto" in t for t in told()[before:]), told()[before:])
-    under_way = doing()
-    s.act(a, {"do": "gaze", "band": "middle"})
-    s.act(a, {"do": "no_such_skill"})
-    now = doing()
-    s.expect("on: a gaze change or an unreadable act replaces nothing", now and now["started_ms"] == under_way["started_ms"], {"under_way": under_way, "now": now})
+    # Stage the last check on a full-length walk with time for two separate calls.
+    s.call("place_at", a, *start)
+    pose, = s.http_rows(f"SELECT x, y FROM body WHERE id = {a}")
+    distance = math.dist((pose["x"], pose["y"]), far)
+    if distance < 28:
+        raise AssertionError(f"no-op walk staging: expected at least 28 m to {far}, got {distance:.2f} m from {pose}")
+    s.http_call("mind_act", [a, [json.dumps(goto(far))], "verify-core"])
+    try:
+        under_way = s.wait(lambda: is_deliberate_walk((d := deliberate_activity(s, a)), far) and d,
+                           10, 0.05)
+    except TimeoutError as exc:
+        raise TimeoutError(f"no-op walk staging: goto {far} never observed active from {pose}") from exc
+    observations = []
+    for command in ({"do": "gaze", "band": "middle"}, {"do": "no_such_skill"}):
+        s.http_call("mind_act", [a, [json.dumps(command)], "verify-core"])
+        now = deliberate_activity(s, a)
+        observations.append({"command": command, "activity": now})
+        if now != under_way:
+            observations[-1]["experiences"] = [r for r in act_experiences(s, a)
+                                               if r["at_ms"] >= under_way["started_ms"]]
+            break
+    s.expect("on: a gaze change or an unreadable act replaces nothing",
+             len(observations) == 2 and all(row["activity"] == under_way for row in observations),
+             {"pose": pose, "distance": distance, "under_way": under_way, "after_each_call": observations})
     set_law(s, "mind_act_replaces", True)
     s.graph(a, {"wait": 120})
 
@@ -8019,8 +8052,8 @@ def act_gaps(s):
     2. `act_input_cost`: a burst of 40 acts sent at once is cut at the input bucket (`input_burst`
        15 plus what `input_hz` 30/s refills during the burst), the rest refused "too many inputs"
        with nothing written; a second later acts go through again; off, all 40 go through.
-    3. `act_turned_back`: seven walks each given up within 3 s for another the other way are
-       noticed; the sixth in 20 s is told, "You keep turning back and forth"; off, nothing is told.
+    3. `act_turned_back`: seven alternating walks on a fresh actor give six replacements
+       within 3 s each. The sixth in 20 s is told, "You keep turning back and forth"; off, nothing is told.
     4. `act_same_continues` (on as shipped since 2026-11-22): the same walk again while it runs goes on (its start
        unchanged); off, it starts over.
 
@@ -8083,17 +8116,10 @@ def act_gaps(s):
                 s.expect("input cost off (control): all 40 go through", ok == 40 and not refused, detail)
         set_law(s, "act_input_cost", True)
 
-        # 3. Turning back and forth (off first: nothing is counted, so the window starts clean).
+        # 3. Isolate each arm from the turn that the bucket recovery may have started.
         for counted in (False, True):
             set_law(s, "act_turned_back", counted)
-            s.call("place_at", a, *line[14])
-            time.sleep(0.5)
-            n = len(told())
-            for i in range(7):
-                s.act(a, goto(far if i % 2 == 0 else start))
-                time.sleep(0.4)
-            time.sleep(0.5)
-            dither = [r["text"] for r in told()[n:] if r["kind"] == "self" and "turning back and forth" in r["text"]]
+            dither = stage_turns(s, line, counted)
             if counted:
                 s.expect("turned back on: seven walks given up for one the other way are noticed and told once", len(dither) == 1, dither)
             else:
@@ -8117,6 +8143,51 @@ def act_gaps(s):
 
 
 SCENES["act_gaps"] = act_gaps
+
+
+def stage_turns(s, line, counted):
+    """Drive six qualifying replacements and return the new turn notices from that actor."""
+    arm = "on" if counted else "off"
+    evidence = s.out / f"{s.name}-turns-{arm}.json"
+    attempts = []
+    deadline = time.monotonic() + 45
+    reason = "no time left to spawn a fresh walker"
+    while time.monotonic() < deadline:
+        walker, = s.people(1)
+        s.call("place_at", walker, *line[14])
+        before = {r["id"] for r in act_experiences(s, walker)}
+        walks = []
+        attempt = {"actor": walker, "walks": walks}
+        attempts.append(attempt)
+        try:
+            for i in range(7):
+                if time.monotonic() >= deadline:
+                    reason = f"deadline before walk {i + 1}/7"
+                    break
+                point = line[-1] if i % 2 == 0 else line[0]
+                command = {"do": "goto", "target": {"at": list(point)}}
+                s.http_call("mind_act", [walker, [json.dumps(command)], "verify-core"])
+                activity = deliberate_activity(s, walker)
+                walks.append({"point": point, "activity": activity})
+                if not is_deliberate_walk(activity, point):
+                    raise AssertionError(f"turn staging ({arm}): walk {i + 1}/7 to {point} did not start: {activity}")
+                if i:
+                    interval = activity["started_ms"] - walks[-2]["activity"]["started_ms"]
+                    elapsed = activity["started_ms"] - walks[1]["activity"]["started_ms"]
+                    if interval >= 3000 or elapsed > 20000:
+                        reason = f"walk {i + 1}/7 missed the turn window ({interval} ms since last start, {elapsed} ms since first turn)"
+                        break
+            else:
+                new = [r for r in act_experiences(s, walker) if r["id"] not in before]
+                attempt["experiences"] = new
+                if any(r["kind"] == "act" and "goto" in r["text"] and
+                       r["at_ms"] <= walks[-1]["activity"]["started_ms"] for r in new):
+                    raise AssertionError(f"turn staging ({arm}): a prior walk ended during the sequence; see {evidence}")
+                return [r for r in new if r["kind"] == "self" and "turning back and forth" in r["text"]]
+            attempt["restage"] = reason
+        finally:
+            evidence.write_text(json.dumps(attempts, indent=2) + "\n")
+    raise TimeoutError(f"turn staging ({arm}): six qualifying replacements not staged in 45 s: {reason}; see {evidence}")
 
 
 def far_spot(s, at, lo=40.0, hi=70.0):
