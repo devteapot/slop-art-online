@@ -5,7 +5,7 @@ sight a counted throng in `seen_throng`, its pins and focus taken through `human
 
     heed.py --run player-...      (a run launched with verify.py launch, any seed)
 
-On an open line the run's player P stands facing east with eight held walkers 3-14 m east of it.
+On an open line the run's player P stands facing east with eight held walkers 2-8 m east of it (within a night's 11 m sight).
 The heed ceiling (`heed_ceiling`) is set to 2, so P's capacity is 2. Checks, in order:
 
 - **off (as shipped):** P perceives all eight (`seen_characters`); no `seen_throng` row;
@@ -18,13 +18,15 @@ The heed ceiling (`heed_ceiling`) is set to 2, so P's capacity is 2. Checks, in 
 - **a pin keeps a creature:** P pins one of its individuals, which then walks to the far end of
   the walkers: it stays an individual (`heed_choice` holds the pin); unpinned, it goes back into
   the throng within its rule's hold and a pass;
-- **contact:** a throng member strikes P: it is in P's `perceived` set from the blow's own tick
-  (its row's `since_ms` is the feed row's `at_ms`);
+- **contact:** at capacity 0 for P alone (an installed `heed_capacity` that returns 0 for it; so no rule, the instinct's threat rule at the windup included, can
+  take it) a throng member strikes P: it is in P's `perceived` set from the blow's own tick (its
+  row's `since_ms` is the feed row's `at_ms`);
 - **the kill switch:** `heed_players` off: every `seen_throng` row is gone within a tick or two
   of the switch, and P perceives all eight again.
 
 The laws are put back as the world had them. Admin calls (`spawn_crowd`, `set_behavior`,
-`place_at`, `admin_set_vitals`, `set_world_law`) set the scene. Writes `RUN/heed-proof.jsonl`.
+`place_at`, `admin_set_vitals`, `set_world_law`, `install_script`) set the scene; the world's own script
+(the `script` row) is installed back after the contact check. Writes `RUN/heed-proof.jsonl`.
 Python standard library only.
 """
 import argparse
@@ -108,6 +110,8 @@ def hexid(v_):
 me = sql("SELECT id FROM my_characters", player)[0]["id"]
 ident = hexid(sql(f"SELECT controller FROM character WHERE id = {me}")[0]["controller"])
 was = own_laws(lambda q: sql(q))
+# The world's installed script, put back after the contact check (and at the end, whatever happened).
+shipped_src = sql("SELECT source FROM script WHERE name = 'skills'")[0]["source"]
 
 
 def seen():
@@ -136,7 +140,7 @@ try:
     do("place_at", [me, *line[0]])
     spots = {}
     for k, w in enumerate(walkers):
-        x, y = line[3 + (k // 2) * 3][0], line[0][1] + (1.0 if k % 2 else -1.0)
+        x, y = line[2 + (k // 2) * 2][0], line[0][1] + (1.0 if k % 2 else -1.0)
         spots[w] = (x, y)
         do("place_at", [w, x, y])
     do("human_face", [1, 0], player)
@@ -159,7 +163,9 @@ try:
     record("on: its individuals are among the nearest (the instinct's nearness rule)", all(dist[i] <= dist[nearest[-1]] for i in ind), {"ind": sorted(ind), "nearest": nearest})
     rows = until(throng_rows, 4)
     total = sum(r["count"] for r in rows)
-    record("on: seen_throng counts the rest", total == len(crowd - ind), {"rows": rows, "total": total})
+    # Counts are exact to 5, then to the nearest 5: each such row may be off by up to 2.
+    slack = 2 * sum(1 for r in rows if r["count"] >= 5)
+    record("on: seen_throng counts the rest (exact to 5, then to the nearest 5)", rows and abs(total - len(crowd - ind)) <= slack, {"rows": rows, "total": total, "rest": len(crowd - ind)})
     record("on: a throng row carries cells, counts and bits only",
            all(set(r) == {"id", "viewer", "cell", "size", "count", "spread", "heading", "moving", "fighting", "kinds"} for r in rows) and all(hexid(r["viewer"]) == ident for r in rows), rows[:2])
     record("on: perceived rows are the individuals only", {r["body"] for r in perceived_rows()} == ind, sorted(r["body"] for r in perceived_rows()))
@@ -180,7 +186,7 @@ try:
     record("heed_choice is private (refused to the player's SQL)", code != 200, code)
 
     # A pin keeps a creature.
-    far_end = max(x for x, _ in spots.values()) + 2.0
+    far_end = max(x for x, _ in spots.values()) + 1.5
     pick = sorted(seen() & crowd, key=lambda w: (dist[w], w))[0]
     do("human_heed", heed_input([pick]), player)
     code, body = call("human_heed", heed_input([pick], pick), player)
@@ -195,18 +201,28 @@ try:
     gone = until(lambda: pick not in seen(), 10, 0.25)
     record("unpinned, it goes back into the throng (within its hold and a pass)", gone, sorted(seen() & crowd))
 
-    # Contact.
+    # Contact, at capacity 0: no rule takes anyone, so its windup cannot make the striker an
+    # individual (the instinct's first rule would, at its windup); only the blow's contact can.
+    # The player's own capacity alone (the walker must still be able to aim at it by id).
+    capped_src = shipped_src.replace("fn heed_capacity(a) {", "fn heed_capacity(a) {" + f"\n    if a.actor.id == {me} {{ return 0.0; }}", 1)
+    assert capped_src != shipped_src
+    do("install_script", [capped_src])
+    # Its individuals go within their rules' holds (at most 5 s) and a pass.
+    until(lambda: not (seen() & crowd), 12, 0.25)
     striker = next(w for w in sorted(crowd - seen(), key=lambda w: dist[w]) if w != pick)
     do("place_at", [striker, line[0][0] + 1.2, line[0][1]])
     time.sleep(0.6)
-    in_throng = striker not in seen()
+    before_blow = seen() & crowd
+    in_throng = striker not in before_blow
     do("set_behavior", [striker, json.dumps({"seq": [{"do": {"skill": "strike", "target": {"id": me}}}, {"wait": 600}]})])
     row = until(lambda: next((r for r in perceived_rows() if r["body"] == striker), None), 8)
     fed = until(lambda: [r for r in sql(f"SELECT * FROM combat_seen WHERE viewer = 0x{ident}") if r["actor"] == striker], 8)
-    record("contact: the striker was in P's throng before its blow", in_throng, striker)
-    record("contact: the striker joins P's perceived set in the blow's tick (since_ms = the feed row's at_ms)",
+    record("contact (capacity 0): the striker was in P's throng before its blow", in_throng and not before_blow, {"striker": striker, "seen": sorted(before_blow)})
+    record("contact (capacity 0): the striker joins P's perceived set in the blow's tick (since_ms = the feed row's at_ms)",
            row is not None and fed and row["since_ms"] in {r["at_ms"] for r in fed}, {"perceived": row, "feed": fed[:2]})
 
+    do("install_script", [shipped_src])
+    time.sleep(1.0)
     # The kill switch.
     t0 = sql("SELECT tick FROM clock")[0]["tick"]
     law("heed_players", False)
@@ -216,6 +232,7 @@ try:
     back = until(lambda: crowd <= seen(), 4)
     record("off: P perceives all eight again", bool(back), sorted(seen() & crowd))
 finally:
+    call("install_script", [shipped_src])
     shipped = {"heed_on": "false", "heed_players": "false", "heed_ceiling": "16", "far_cap": "0"}
     for name in LAWS:
         call("set_world_law", [name, was.get(name) or shipped[name]])

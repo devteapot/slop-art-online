@@ -82,6 +82,7 @@ docs/ATTENTION_BUDGET.md, "Built: the player side": with `heed_on` and `heed_pla
 - every subscription accepted;
 - a walker P never had as an individual is named in none of P's rows (views, copies, cues, feed actor and target, earshot hearers, heard rows);
 - the feed's rule: a throng member's blow on another gives P no feed row; an individual's blow on a throng member names the individual with target 0;
+- earshot reads sight: `my_earshot`'s text counts the rest "in the throng", its hearers individuals only;
 - contact: the throng member that strikes P becomes an individual;
 - `seen_throng` reaches only its own viewer (P and Q receive their own, the anonymous connection and P's peek none);
 - change only: no `seen_throng` insert, update or delete while nobody moves.

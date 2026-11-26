@@ -6,7 +6,7 @@ any path, and `seen_throng` reaches only its own viewer.
     heed_rows.py --run client-...      (a run launched with verify.py launch, any seed; build the probe first)
 
 Two players join with fresh identities: P on an open line facing east with eight held walkers
-3-14 m east of it, and Q 30 m east of P facing west, both seeing the walkers. The heed laws go on
+2-8 m east of it, and Q 12 m east of P facing west (beyond P's night sight of 11 m), both seeing the walkers. The heed laws go on
 with `heed_ceiling` 2, with cues (`cue_transport_on`) and the feed's events (`combat_feed_on`).
 Rust SDK probes stream from their connections on: P every view and copy that names a creature
 (`seen_*`, the cue and copy tables, `combat_feed`, `my_combat`, `my_earshot`, `my_heard`,
@@ -20,6 +20,8 @@ of P's on another, one of P's individuals on a throng member, and a throng membe
 - **The feed's rule:** the throng-on-throng blow gives P no feed row; the individual's blow on a
   throng member gives P a row naming the individual, with target 0.
 - **Contact:** the throng member that strikes P is in P's `seen_characters` (an individual).
+- **Earshot reads sight:** P's `my_earshot` text counts the rest as "in the throng" (its hearers
+  are individuals only, by the first check).
 - **`seen_throng`:** P and Q receive rows, every one with their own identity as viewer; the
   anonymous connection none; P asking for Q's by identity none. Every probe's subscription must be
   accepted: an empty stream proves nothing.
@@ -120,10 +122,10 @@ def main():
         for who in (P, Q):
             call(rid, "admin_set_vitals", [who, 1000.0])
         call(rid, "place_at", [P, *line[0]])
-        call(rid, "place_at", [Q, *line[30]])
+        call(rid, "place_at", [Q, *line[12]])
         spots = {}
         for k, w in enumerate(walkers):
-            spots[w] = (line[3 + (k // 2) * 3][0], line[0][1] + (1.0 if k % 2 else -1.0))
+            spots[w] = (line[2 + (k // 2) * 2][0], line[0][1] + (1.0 if k % 2 else -1.0))
             call(rid, "place_at", [w, *spots[w]])
         hcall(db, tok["p"], "human_face", [1, 0])
         hcall(db, tok["q"], "human_face", [-1, 0])
@@ -186,10 +188,21 @@ def main():
                        and b0 <= e.get("ms", 0) < b1 and P not in (e["row"].get("actor"), e["row"].get("target"))]
         check("the feed's rule: a throng member's blow on another gives P no feed row", t1 in never and t2 in never and not throng_blow, {"t1": t1, "t2": t2, "rows": throng_blow[:4], "never": sorted(never)})
         if i1 is not None:
-            mixed = [r for r in feed if r.get("actor") == i1]
-            check("the feed's rule: an individual's blow on a throng member names the individual, not the target",
-                  mixed and all(r.get("target") == 0 for r in mixed) and t3 in never, {"i1": i1, "t3": t3, "rows": mixed[:4]})
+            # Each of i1's feed rows against P's individuals at that point of its stream.
+            now_ind, mixed = set(), []
+            for e in ev["p"]:
+                if e.get("event") == "initial":
+                    now_ind |= {r["id"] for r in (e.get("tables") or {}).get("seen_characters", [])}
+                elif e.get("table") == "seen_characters" and e.get("event") in ("insert", "delete"):
+                    (now_ind.add if e["event"] == "insert" else now_ind.discard)(e["row"]["id"])
+                elif e.get("table") in ("combat_feed", "my_combat") and e.get("event") == "insert" and e["row"].get("actor") == i1:
+                    mixed.append({"target": e["row"].get("target"), "t3_individual": t3 in now_ind, "kind": e["row"].get("kind")})
+            in_throng = [m for m in mixed if not m["t3_individual"]]
+            check("the feed's rule: an individual's blow on a throng member names the individual, target 0",
+                  in_throng and all(m["target"] == 0 for m in in_throng) and all(m["target"] in (0, t3) for m in mixed), {"i1": i1, "t3": t3, "rows": mixed[:6]})
         check("contact: the throng member that struck P is an individual to it after", t4_throng and t4 in ever, {"t4": t4, "was_throng": t4_throng})
+        ears = [r for t, r in rows_of(ev["p"]) if t == "my_earshot"]
+        check("earshot reads sight: its text counts the throng, its hearers are individuals (above)", any("in the throng" in r.get("text", "") for r in ears), [r.get("text") for r in ears][:3])
         mine = [r for t, r in rows_of(ev["p"]) if t == "seen_throng"]
         theirs = [r for t, r in rows_of(ev["q"]) if t == "seen_throng"]
         check("seen_throng: P receives its own rows only", mine and all(norm(r["viewer"]) == ident["p"] for r in mine), len(mine))
