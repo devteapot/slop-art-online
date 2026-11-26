@@ -1487,6 +1487,18 @@ pub struct Chronicle {
     pub text: String,
 }
 
+/// How many people have died in this world, kept as they die (private; one row, id 0): what
+/// `stats.deaths` reports, without housekeeping walking every dead character's row each second
+/// (the dead keep their rows; growth-fix, 2026-11-23). Written by `act::die_unseen` in the
+/// death's own transaction; made once by a walk of the table where it is missing (a new world,
+/// or a world from before this table), so it always equals the dead `person` rows.
+#[spacetimedb::table(accessor = census)]
+pub struct Census {
+    #[primary_key]
+    pub id: u8,
+    pub dead_people: u32,
+}
+
 /// Rolling counters for load measurement (one row, updated by housekeeping).
 #[spacetimedb::table(accessor = stats)]
 pub struct Stats {

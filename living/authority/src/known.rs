@@ -174,10 +174,9 @@ fn flush(ctx: &ReducerContext, id: u32, now: u64) {
 /// Gates in view are remembered open or shut, written when that changes.
 fn remember_gates(ctx: &ReducerContext, id: u32, at: (f32, f32), heading: f32, senses: &living_rules::script::Senses, map: &living_rules::map::Map, now: u64) -> bool {
     let mut changed = false;
-    for (s, d) in common::structures_near(ctx, at, senses.sight) {
-        if &*s.kind != "gate" {
-            continue;
-        }
+    // Only the gates in sight, nearest first as before (not every structure: a battle's remains
+    // pile up in the chunks round it).
+    for (s, d) in common::few_near(ctx, at, senses.sight, common::Few::Gates) {
         let p = (s.x, s.y);
         if !(living_rules::sight::within(at, heading, p, d, senses, 0.0, None) && map.sight_clear(at, p)) {
             continue;
