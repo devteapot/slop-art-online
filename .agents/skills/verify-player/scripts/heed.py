@@ -3,21 +3,27 @@
 `heed_on`, both off as shipped): the player's `perceived` set is its individuals, the rest of its
 sight a counted throng in `seen_throng`, its pins and focus taken through `human_heed`.
 
-    heed.py --run player-...      (a run launched with verify.py launch, any seed)
+    heed.py --run player-...      (a run launched with verify.py launch; a seed with looks, e.g. island)
 
 On an open line the run's player P stands facing east with eight held walkers 2-8 m east of it (within a night's 11 m sight).
 The heed ceiling (`heed_ceiling`) is set to 2, so P's capacity is 2. Checks, in order:
 
 - **off (as shipped):** P perceives all eight (`seen_characters`); no `seen_throng` row;
 - **on:** P perceives at most 2 of them, the nearest; its `seen_throng` rows count the other six
-  (counts exact under 6), none names anyone (cells, counts and bits only); with `far_cap` 1 too,
-  still 2 (heed replaces `far_cap`'s trim, never both);
+  (counts exact under 6), none names anyone (cells, counts, bits and colour indices only); each
+  cell's three colours are its members' most worn cloth colours from their looks (read as the
+  owner), counts quantized as `count`; with `far_cap` 1 too, still 2 (heed replaces `far_cap`'s
+  trim, never both);
 - **`human_heed`'s refusals:** five pins ("at most 4"); a pin on a throng member and one on an id
   no one has, refused with the same words; a second call within 250 ms ("too many inputs");
   `heed_choice` is refused to the player's SQL (private);
 - **a pin keeps a creature:** P pins one of its individuals, which then walks to the far end of
   the walkers: it stays an individual (`heed_choice` holds the pin); unpinned, it goes back into
   the throng within its rule's hold and a pass;
+- **pin_at:** a point where P has no throng is refused with `NO_ONE_THERE`; four pins and a
+  point, with the four-pin words; a point in a throng cell makes the member nearest it there an
+  individual and its pin; at capacity 0 for P (below) a point in a cell is refused with
+  `NO_PLACE` and no one is promoted. Both refusals are compared word for word: they name no one;
 - **contact:** at capacity 0 for P alone (an installed `heed_capacity` that returns 0 for it; so no rule, the instinct's threat rule at the windup included, can
   take it) a throng member strikes P: it is in P's `perceived` set from the blow's own tick (its
   row's `since_ms` is the feed row's `at_ms`);
@@ -53,6 +59,8 @@ player = st["token"]
 out = v.run_dir(a.run) / "heed-proof.jsonl"
 out.write_text("")
 UNSEEN = "You can only keep track of someone you can see now."
+NO_ONE_THERE = "There is no one in the throng there to pick out."
+NO_PLACE = "You are already keeping track of as many as you can."
 LAWS = ("heed_on", "heed_players", "heed_ceiling", "far_cap")
 failed = []
 
@@ -96,9 +104,51 @@ def law(name, value):
     do("set_world_law", [name, json.dumps(value)])
 
 
-def heed_input(pins, focus=None):
+def heed_input(pins, focus=None, at=None):
     """`HeedInput` as the HTTP API takes it: a product by field names, an Option as a sum."""
-    return [{"pins": pins, "focus": {"some": focus} if focus is not None else {"none": []}}]
+    opt = lambda x: {"some": x} if x is not None else {"none": []}
+    return [{"pins": pins, "focus": opt(focus), "pin_at": opt({"x": at[0], "y": at[1]} if at else None)}]
+
+
+CLOTH = ["yellow", "black", "green", "tan", "blue", "red", "cream", "navy", "purple", "grey"]
+CELL_M = 6.0
+
+
+def about(n):
+    return n if n <= 5 else (n + 2) // 5 * 5
+
+
+def cloth_of(top):
+    w = (top or "").split()
+    word = w[1] if len(w) > 1 and w[0] in ("a", "an") else (w[0] if w else "")
+    return CLOTH.index(word) if word in CLOTH else 255
+
+
+def square(r):
+    return (r["cell"] >> 16) * CELL_M, (r["cell"] & 0xFFFF) * CELL_M, max(1, r["size"]) * CELL_M
+
+
+def inside(r, p):
+    x0, y0, side = square(r)
+    return x0 <= p[0] < x0 + side and y0 <= p[1] < y0 + side
+
+
+def expected_colours(members):
+    """The authority's rule, from the members' look rows read as the owner: the three cloth colours
+    most worn (most first, ties by index), counts quantized; (255, 0) for an empty place."""
+    n = {}
+    for m in members:
+        look = sql(f"SELECT words FROM look WHERE id = {m}")
+        if not look:
+            continue
+        w = look[0]["words"]
+        top = w.get("top") if isinstance(w, dict) else w[4]
+        i = cloth_of(top)
+        if i != 255:
+            n[i] = n.get(i, 0) + 1
+    order = sorted(n.items(), key=lambda kv: (-kv[1], kv[0]))[:3]
+    order += [(255, 0)] * (3 - len(order))
+    return [(i, about(k)) for i, k in order]
 
 
 def hexid(v_):
@@ -166,8 +216,18 @@ try:
     # Counts are exact to 5, then to the nearest 5: each such row may be off by up to 2.
     slack = 2 * sum(1 for r in rows if r["count"] >= 5)
     record("on: seen_throng counts the rest (exact to 5, then to the nearest 5)", rows and abs(total - len(crowd - ind)) <= slack, {"rows": rows, "total": total, "rest": len(crowd - ind)})
-    record("on: a throng row carries cells, counts and bits only",
-           all(set(r) == {"id", "viewer", "cell", "size", "count", "spread", "heading", "moving", "fighting", "kinds"} for r in rows) and all(hexid(r["viewer"]) == ident for r in rows), rows[:2])
+    record("on: a throng row carries cells, counts, bits and colour indices only (no id of anyone)",
+           all(set(r) == {"id", "viewer", "cell", "size", "count", "spread", "heading", "moving", "fighting", "kinds",
+                          "colour_a", "colour_a_count", "colour_b", "colour_b_count", "colour_c", "colour_c_count"} for r in rows) and all(hexid(r["viewer"]) == ident for r in rows), rows[:2])
+    # The colours: each row's three, from its members' looks (positions and looks read as the owner).
+    pos = {b["id"]: (b["x"], b["y"]) for b in sql("SELECT id, x, y FROM body") if b["id"] in crowd - ind}
+    colours = []
+    for r in rows:
+        members = [m for m, p_ in pos.items() if inside(r, p_)]
+        got_c = [(r["colour_a"], r["colour_a_count"]), (r["colour_b"], r["colour_b_count"]), (r["colour_c"], r["colour_c_count"])]
+        colours.append({"cell": r["cell"], "members": len(members), "got": got_c, "want": expected_colours(members)})
+    record("on: each cell's colours are its members' most worn cloth colours, counts quantized as count",
+           colours and all(c["got"] == c["want"] for c in colours) and any(c["got"][0][0] != 255 for c in colours), colours)
     record("on: perceived rows are the individuals only", {r["body"] for r in perceived_rows()} == ind, sorted(r["body"] for r in perceived_rows()))
     law("far_cap", 1)
     time.sleep(1.5)
@@ -201,6 +261,33 @@ try:
     gone = until(lambda: pick not in seen(), 10, 0.25)
     record("unpinned, it goes back into the throng (within its hold and a pass)", gone, sorted(seen() & crowd))
 
+    # Picking someone out of the throng by a point (pin_at).
+    time.sleep(0.4)
+    behind = (line[0][0] - 9.0, line[0][1] + 7.0)
+    code, body = call("human_heed", heed_input([], at=behind), player)
+    record("pin_at where P has no throng is refused, naming no one", code != 200 and body.strip() == NO_ONE_THERE, [code, body[:200]])
+    code, body = call("human_heed", heed_input(walkers[:4], at=spots[walkers[-1]]), player)
+    record("pin_at with four pins is refused (the pick would be a fifth)", code != 200 and "at most 4" in body, [code, body[:200]])
+    rows = throng_rows()
+    thr_now = crowd - seen()
+    pos = {b["id"]: (b["x"], b["y"]) for b in sql("SELECT id, x, y FROM body") if b["id"] in thr_now}
+    cell = max(rows, key=lambda r: sum(1 for p_ in pos.values() if inside(r, p_)))
+    in_cell = {m: p_ for m, p_ in pos.items() if inside(cell, p_)}
+    x0, y0, side = square(cell)
+    point = (x0 + side * 0.25, y0 + side * 0.25)
+    want = min(in_cell, key=lambda m: (((in_cell[m][0] - point[0]) ** 2 + (in_cell[m][1] - point[1]) ** 2), m))
+    before_pick = seen() & crowd
+    code, body = call("human_heed", heed_input([], at=point), player)
+    after_pick = seen() & crowd
+    record("pin_at in a throng cell picks out the member nearest the point there (now an individual)",
+           code == 200 and want not in before_pick and want in after_pick, {"code": code, "body": body[:200], "want": want, "before": sorted(before_pick), "after": sorted(after_pick)})
+    choice = sql(f"SELECT * FROM heed_choice WHERE actor = {me}")
+    prow = next((r for r in perceived_rows() if r["body"] == want), None)
+    record("pin_at: the picked one is a pin, and in P's perceived set from that call", choice and choice[0]["pins"] == [want] and prow is not None, {"choice": choice, "perceived": prow})
+    time.sleep(0.3)
+    do("human_heed", heed_input([]), player)
+    until(lambda: want not in seen(), 10, 0.25)
+
     # Contact, at capacity 0: no rule takes anyone, so its windup cannot make the striker an
     # individual (the instinct's first rule would, at its windup); only the blow's contact can.
     # The player's own capacity alone (the walker must still be able to aim at it by id).
@@ -209,6 +296,10 @@ try:
     do("install_script", [capped_src])
     # Its individuals go within their rules' holds (at most 5 s) and a pass.
     until(lambda: not (seen() & crowd), 12, 0.25)
+    rows = throng_rows()
+    code, body = call("human_heed", heed_input([], at=spots[walkers[-1]]), player)
+    record("pin_at with no place for anyone (capacity 0) is refused truthfully, naming no one",
+           code != 200 and body.strip() == NO_PLACE and not (seen() & crowd), [code, body[:200], sorted(seen() & crowd)])
     striker = next(w for w in sorted(crowd - seen(), key=lambda w: dist[w]) if w != pick)
     do("place_at", [striker, line[0][0] + 1.2, line[0][1]])
     time.sleep(0.6)

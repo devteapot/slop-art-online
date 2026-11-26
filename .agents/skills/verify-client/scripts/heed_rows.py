@@ -26,6 +26,10 @@ of P's on another, one of P's individuals on a throng member, and a throng membe
   anonymous connection none; P asking for Q's by identity none. Every probe's subscription must be
   accepted: an empty stream proves nothing.
 - **Change only:** while nobody moves, P receives no `seen_throng` insert, update or delete.
+- **Colours carry no identity:** each row has only its cells, counts, bits and three cloth indices
+  (0-9, 255 none) with counts; an index of 255 has count 0.
+- **pin_at:** Q picks a walker out of its own throng by its position; it becomes Q's individual,
+  not P's, and P's rows never name it; an anonymous `pin_at` is refused as any `human_heed` is.
 
 The laws are put back as the world had them. Admin calls (`spawn_crowd`, `set_behavior`,
 `place_at`, `admin_set_vitals`, `set_world_law`) set the scene. Writes `RUN/heed-<who>.jsonl` and
@@ -158,6 +162,19 @@ def main():
             call(rid, "place_at", [t3, spots[i1][0], spots[i1][1] + (0.9 if spots[i1][1] < line[0][1] else -0.9)])
             call(rid, "set_behavior", [i1, json.dumps({"seq": [{"do": {"skill": "strike", "target": {"id": t3}}}, {"wait": 600}]})])
         time.sleep(3.0)
+        # Q picks someone out of its own throng by a point (pin_at): a walker neither P nor Q has as
+        # an individual, away from the blows.
+        perceived_q = lambda: {r["body"] for r in sql(rid, f"SELECT body FROM perceived WHERE viewer = 0x{ident['q']}")}
+        pos = {b["id"]: (b["x"], b["y"]) for b in sql(rid, "SELECT id, x, y FROM body") if b["id"] in walkers}
+        spare = [w for w in walkers if w not in perceived() | perceived_q() | {t1, t2, t3, t4}]
+        qp = spare[0] if spare else None
+        q_pick = None
+        if qp is not None:
+            code, body = V.http(f"/v1/database/{db}/call/human_heed", [{"pins": [], "focus": {"none": []}, "pin_at": {"some": {"x": pos[qp][0], "y": pos[qp][1]}}}], tok["q"])
+            q_pick = {"code": code, "body": body[:200], "q_has": qp in perceived_q(), "p_has": qp in perceived()}
+        code, body = V.http(f"/v1/database/{db}/call/human_heed", [{"pins": [], "focus": {"none": []}, "pin_at": {"some": {"x": pos[t2][0], "y": pos[t2][1]}}}], None)
+        anon_pick = {"code": code, "body": body[:200]}
+        time.sleep(1.0)
         # A throng member on P.
         call(rid, "place_at", [t4, line[0][0] + 1.2, line[0][1]])
         time.sleep(0.5)
@@ -201,11 +218,20 @@ def main():
             check("the feed's rule: an individual's blow on a throng member names the individual, target 0",
                   in_throng and all(m["target"] == 0 for m in in_throng) and all(m["target"] in (0, t3) for m in mixed), {"i1": i1, "t3": t3, "rows": mixed[:6]})
         check("contact: the throng member that struck P is an individual to it after", t4_throng and t4 in ever, {"t4": t4, "was_throng": t4_throng})
+        check("pin_at: Q picks a walker out of its throng (an individual to Q), and P is told nothing of it",
+              q_pick and q_pick["code"] == 200 and q_pick["q_has"] and not q_pick["p_has"] and qp in never, {"qp": qp, **(q_pick or {})})
+        check("pin_at from an anonymous connection is refused as any human_heed is", anon_pick["code"] != 200 and "no living character" in anon_pick["body"], anon_pick)
         ears = [r for t, r in rows_of(ev["p"]) if t == "my_earshot"]
         check("earshot reads sight: its text counts the throng, its hearers are individuals (above)", any("in the throng" in r.get("text", "") for r in ears), [r.get("text") for r in ears][:3])
         mine = [r for t, r in rows_of(ev["p"]) if t == "seen_throng"]
         theirs = [r for t, r in rows_of(ev["q"]) if t == "seen_throng"]
         check("seen_throng: P receives its own rows only", mine and all(norm(r["viewer"]) == ident["p"] for r in mine), len(mine))
+        fields = {"id", "viewer", "cell", "size", "count", "spread", "heading", "moving", "fighting", "kinds",
+                  "colour_a", "colour_a_count", "colour_b", "colour_b_count", "colour_c", "colour_c_count"}
+        colours_ok = all(set(r) == fields and all(r[f"colour_{k}"] in set(range(10)) | {255} for k in "abc")
+                         and all((r[f"colour_{k}"] == 255) == (r[f"colour_{k}_count"] == 0) for k in "abc") for r in mine)
+        check("seen_throng colours carry no identity: three cloth indices (0-9, 255 none) with counts, nothing else", mine and colours_ok,
+              [{k: r[k] for k in sorted(fields - {"viewer"})} for r in mine[:2]])
         check("seen_throng: Q receives its own rows only", theirs and all(norm(r["viewer"]) == ident["q"] for r in theirs), len(theirs))
         anon = [r for _, r in rows_of(ev["anon"])]
         peek = [r for _, r in rows_of(ev["peek"])]
