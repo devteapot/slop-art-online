@@ -223,3 +223,7 @@ living-pictures *args:
 # shingles, metal, leaves) that style.rs binds on scenery, `--set all` both.
 living-game-textures *args:
     uv run living/tools/textures/paint.py {{args}}
+
+# Shared look-dev shoot tool (Cullet lighting: characters, plaza, or both; see --help).
+living-lookdev-shoot *args:
+    python3 living/tools/lookdev_shoot.py {{args}}

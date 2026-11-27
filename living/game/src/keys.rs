@@ -402,11 +402,17 @@ pub struct Prefs {
     pub combat_timing: crate::combat::CombatTiming,
     /// Brief glint halfway through a visible hostile fighter's windup (`f >= 0.5`); off by default.
     pub windup_glint: bool,
+    /// Graphics quality tier (`graphics::Quality`: low, medium, high), once chosen in Settings;
+    /// none follows the default (high).
+    pub quality: Option<String>,
+    /// 3D render scale (`graphics::RenderScale`: 67, 75, 85, 100, auto), once chosen in Settings;
+    /// none follows the default (100%).
+    pub render_scale: Option<String>,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Self { camera: crate::camera::Mode::default(), camera_tuning: Default::default(), camera_rotate: true, camera_rotate_speed: 1.0, camera_rotate_invert: false, facing: None, cursor_facing: crate::twist::LookWalk::cursor(), control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, throng: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None, combat_timing: crate::combat::CombatTiming::default(), windup_glint: false }
+        Self { camera: crate::camera::Mode::default(), camera_tuning: Default::default(), camera_rotate: true, camera_rotate_speed: 1.0, camera_rotate_invert: false, facing: None, cursor_facing: crate::twist::LookWalk::cursor(), control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, throng: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None, combat_timing: crate::combat::CombatTiming::default(), windup_glint: false, quality: None, render_scale: None }
     }
 }
 
@@ -494,6 +500,8 @@ pub fn load() -> (Binds, Prefs) {
         hair_shine: v["hair_shine"].as_str().map(String::from),
         combat_timing: v["combat_timing"].as_str().and_then(crate::combat::CombatTiming::parse).unwrap_or(d.combat_timing),
         windup_glint: v["windup_glint"].as_bool().unwrap_or(d.windup_glint),
+        quality: v["quality"].as_str().map(String::from),
+        render_scale: v["render_scale"].as_str().map(String::from),
     };
     let prefs = apply_env(prefs);
     info!("settings: read {} ({} preset)", p.display(), binds.preset.name());
@@ -525,6 +533,8 @@ pub fn save(binds: &Binds, prefs: &Prefs) {
         "hair_shine": prefs.hair_shine,
         "combat_timing": prefs.combat_timing.name(),
         "windup_glint": prefs.windup_glint,
+        "quality": prefs.quality,
+        "render_scale": prefs.render_scale,
     });
     if let Some(dir) = p.parent() {
         let _ = std::fs::create_dir_all(dir);
