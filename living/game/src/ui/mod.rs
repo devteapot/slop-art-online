@@ -498,6 +498,7 @@ pub struct DumpExtra<'w, 's> {
     town: Option<Res<'w, crate::town::Town>>,
     loading: Option<Res<'w, crate::loading::Loading>>,
     combat: Option<Res<'w, crate::combat::Combat>>,
+    glints: Option<Res<'w, crate::vfx::Glints>>,
     heed: Option<Res<'w, crate::heed::Heed>>,
     throng: Option<Res<'w, crate::throng::Throng>>,
 }
@@ -543,7 +544,8 @@ impl DumpExtra<'_, '_> {
                 }
             }
         }
-        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(),
+        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "combat_timing": self.prefs.combat_timing.name(), "windup_glint": self.prefs.windup_glint, "theme": self.theme.name.key(),
+            "glints": self.glints.as_ref().map(|g| g.log.iter().map(|e| serde_json::json!({"actor": e.actor, "act_ms": e.act_ms, "release_ms": e.release_ms, "f": e.f, "clock_ms": e.clock_ms})).collect::<Vec<_>>()),
             "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
             "events": self.talks.events.iter().rev().take(12).rev().map(|(_, t)| t.clone()).collect::<Vec<_>>(),
             // The Log's last lines as the Log and the person windows show them (speech-detail-1).

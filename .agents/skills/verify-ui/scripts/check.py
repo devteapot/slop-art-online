@@ -3151,7 +3151,7 @@ def combat_switches_ui(run, c):
         t = log(os.path.dirname(p))
         if "playing character" not in t:
             continue
-        reads = re.findall(r"perception: on the \w+ set after \d+ ms \(tables: motion \w+ characters \w+ fighters (\w+) combat_feed (\w+);", t)
+        reads = re.findall(r"perception: on the \w+ set after \d+ ms \(tables: motion \w+ characters \w+ fighters (\w+) combat_feed (\w+)\b", t)
         on.append((os.path.basename(os.path.dirname(p)), reads))
     bad = [(n, r) for n, r in on if not r or any(x != ("true", "true") for x in r)]
     c.check(s, f"every client of the scenarios read the fighter table and the combat feed ({len(on)} clients)", on and not bad, json.dumps(bad or [n for n, _ in on]))
@@ -4575,8 +4575,11 @@ def committed(run, c):
     dist = lambda a, b: ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 if a and b else None
     still = [dist(pos("a0", w), pos(k, w)) for k in ("a1", "a2") for w in ("body", "drawn")]
     c.check(s, "W pressed in the windup: neither the authority's body nor the drawn one moves", all(x is not None and x < 0.1 for x in still), f"windup {wb:.2f} s; moved {still}")
-    after = dist(pos("a0", "body"), pos("a4", "body"))
-    c.check(s, "the walk follows once the windup ends (held, then resumed)", after is not None and after > 0.5, f"{after}")
+    # The authority row's x, y is the start of its motion segment, so a walk that starts as one long
+    # segment reads 0 m on it while W is still held: judge the drawn body at a4 and the authority's
+    # row at b0 (after W is let go, the stop segment starts where the walk ended).
+    after = [dist(pos("a0", "drawn"), pos("a4", "drawn")), dist(pos("a0", "body"), pos("b0", "body"))]
+    c.check(s, "the walk follows once the windup ends (held, then resumed)", all(x is not None and x > 0.5 for x in after), f"drawn at a4, authority at b0: {after}")
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
     me = sc.get("me")
     bolts = [r for r in (sql(run, f"SELECT id, kind, skill, why FROM act_outcome WHERE observer = {me}") if me else []) if r.get("skill") == "firebolt"]
@@ -5981,6 +5984,139 @@ def heed_refusal(run, c):
     c.check(s, "an id no one has: the same words", r2.count(HEED_UNSEEN) >= 2, str(r2))
     row = res.get("row")
     c.check(s, "the authority's row names neither", row is None or (far not in row.get("pins", []) and nobody not in row.get("pins", [])), str(row))
+
+
+@scenario("windup", explicit=True)
+def windup(run, c):
+    """Combat clip timing (B, default live) and hostile windup midpoint glint (A, default off;
+    features/bar.md):
+    1. Defaults (`combat_timing=live`, `windup_glint=false`): hostile strikes start their clip
+       during the windup before release; zero glints fire.
+    2. Old timing (`settings:combat_timing:old`): hostile strikes wait for the delayed display
+       clock `now_ms` (matching main); zero glints fire.
+    3. Live + glint on (`settings:combat_timing:live`, `settings:windup_glint`): one glint fires
+       per hostile windup at `f >= 0.5` (`extra.glints` and `client.log`), never for my own
+       character, and the clip starts before release."""
+    s = "windup"
+    attacker = residents(run, 1)[0]
+    spot = (360.5, 232.5)
+    att_at = (spot[0] - 1.2, spot[1] - 1.2)
+    dmg0 = own_laws(lambda q: sql(run, q)).get("dmg_strike", "5")
+    out_dir = os.path.join(ROOT, ".local/living/verify", run, "ui", f"{s}-{THEME}" if THEME else s)
+    feet_path = os.path.join(out_dir, "feet.jsonl")
+    # Remove any prior scratch settings.json so defaults are verified cleanly on re-runs.
+    prior_settings = os.path.join(out_dir, "settings.json")
+    if os.path.exists(prior_settings):
+        os.remove(prior_settings)
+    open_settings = "click:@menu;wait:0.4;click:@menu:Settings;wait:0.5;"
+    plan = (
+        "ready;sync:setup;wait:1.0;dump:def0;"
+        "sync:fight_live;wait:4.2;sync:hold1;dump:def1;"
+        + open_settings + "shot:01_settings;click:@settings:combat_timing:old;wait:0.4;dump:old0;key:Escape:tap;wait:0.6;"
+        "sync:fight_old;wait:4.2;sync:hold2;dump:old1;"
+        + open_settings + "click:@settings:combat_timing:live;wait:0.3;click:@settings:windup_glint;wait:0.4;dump:glint0;shot:02_settings_glint;key:Escape:tap;wait:0.6;"
+        "weapon:draw;wait:0.3;sync:fight_glint;wait:1.0;skill:strike:nearest;wait:3.6;sync:hold3;dump:glint1;shot:03_glint_done;quit"
+    )
+    idle_g = json.dumps({"wait": 600})
+    def strike_graph(me):
+        return json.dumps({"first": [{"do": {"skill": "strike", "target": {"id": me}}}, {"wait": 1}]})
+    handlers = {
+        "setup": lambda me, ident: [
+            call_admin(run, "set_world_law", ["dmg_strike", "1"], check=True),
+            verify_sql_noon(run),
+            call_admin(run, "place_at", [me, spot[0], spot[1]], check=True),
+            call_admin(run, "place_at", [attacker, att_at[0], att_at[1]], check=True),
+            call_admin(run, "set_behavior", [attacker, idle_g], check=True),
+        ],
+        "fight_live": lambda me, ident: [call_admin(run, "set_behavior", [attacker, strike_graph(me)], check=True)],
+        "fight_old": lambda me, ident: [call_admin(run, "set_behavior", [attacker, strike_graph(me)], check=True)],
+        "fight_glint": lambda me, ident: [call_admin(run, "set_behavior", [attacker, strike_graph(me)], check=True)],
+        "hold1": lambda me, ident: [call_admin(run, "set_behavior", [attacker, idle_g], check=True)],
+        "hold2": lambda me, ident: [call_admin(run, "set_behavior", [attacker, idle_g], check=True)],
+        "hold3": lambda me, ident: [call_admin(run, "set_behavior", [attacker, idle_g], check=True)],
+    }
+    env = {"LIVING_GAME_FEET": feet_path, "LIVING_GAME_FEET_ID": str(attacker)}
+    try:
+        with resident_fixture(run, [attacker]):
+            out, code, text, _ = staged_drive(run, s, plan, handlers, env=env)
+    finally:
+        call_admin(run, "set_world_law", ["dmg_strike", dmg0])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("def0", "def1", "old0", "old1", "glint0", "glint1")}
+    ex = lambda k: d[k].get("extra") or {}
+    c.check(s, "defaults: combat_timing is live and windup_glint is off",
+            ex("def0").get("combat_timing") == "live" and ex("def0").get("windup_glint") is False,
+            f"{ex('def0').get('combat_timing')}, {ex('def0').get('windup_glint')}")
+    c.check(s, "defaults: no glint fires while windup_glint is off",
+            (ex("def1").get("glints") or []) == [],
+            str(ex("def1").get("glints")))
+    c.check(s, "Settings switches combat_timing to old",
+            ex("old0").get("combat_timing") == "old" and ex("old0").get("windup_glint") is False,
+            f"{ex('old0').get('combat_timing')}, {ex('old0').get('windup_glint')}")
+    c.check(s, "old timing: no glint fires while windup_glint is off",
+            (ex("old1").get("glints") or []) == [],
+            str(ex("old1").get("glints")))
+    c.check(s, "Settings switches back to live and enables windup_glint",
+            ex("glint0").get("combat_timing") == "live" and ex("glint0").get("windup_glint") is True,
+            f"{ex('glint0').get('combat_timing')}, {ex('glint0').get('windup_glint')}")
+    glints = ex("glint1").get("glints") or []
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    keys = [(g.get("actor"), g.get("act_ms")) for g in glints]
+    fs = [g.get("f") for g in glints]
+    c.check(s, "windup_glint on: fires once per hostile windup at f >= 0.5, never for my own character",
+            len(glints) >= 2
+            and len(keys) == len(set(keys))
+            and all(g.get("actor") == attacker for g in glints)
+            and all(g.get("actor") != me for g in glints)
+            and all(f is not None and 0.5 <= f < 1.0 for f in fs),
+            f"me={me} attacker={attacker} glints={glints}")
+    # Check clip timing from feet.jsonl: group strikes by act_ms, split into live vs old phases
+    # using the client log's settings switch timestamps.
+    L = log(out)
+    glint_logs = re.findall(rf"combat: windup glint #{attacker} act_ms=(\d+) release_ms=(\d+) f=([0-9.]+)", L)
+    c.check(s, "windup glint lines logged in client.log match dump count",
+            len(glint_logs) == len(glints) and len(glint_logs) >= 2,
+            f"log={len(glint_logs)} dump={len(glints)}")
+    rows = []
+    if os.path.exists(feet_path):
+        with open(feet_path) as fh:
+            for line in fh:
+                if line.strip():
+                    r = json.loads(line)
+                    if r.get("id") == attacker:
+                        rows.append(r)
+    # Identify each distinct strike by action start_ms and find when the sword_* clip first dominates.
+    # Use the dumps' live-script log times (`t X.XXX s`) to partition live / old / glint phases.
+    t_def0 = re.search(r"live script: dump:def0 .* t ([0-9.]+) s", L)
+    t_def1 = re.search(r"live script: dump:def1 .* t ([0-9.]+) s", L)
+    t_old0 = re.search(r"live script: dump:old0 .* t ([0-9.]+) s", L)
+    t_old1 = re.search(r"live script: dump:old1 .* t ([0-9.]+) s", L)
+    def phase_onsets(t0, t1):
+        sub = [r for r in rows if t0 <= r.get("t", 0.0) <= t1]
+        by_act = {}
+        for r in sub:
+            act = r.get("action")
+            if isinstance(act, list) and len(act) == 2 and str(act[0]).startswith("sword"):
+                by_act.setdefault(int(act[1]), []).append(r)
+        out_ms = []
+        for act_ms, frames in sorted(by_act.items()):
+            want_clip = frames[0]["action"][0]
+            # Find first frame for this blow where its clip dominates (filter out previous blow's tail).
+            dom = next((r for r in frames if r.get("mine_ms") is not None and r.get("clip") == want_clip and r["mine_ms"] >= act_ms - 10), None)
+            if dom is not None:
+                lead = (dom["mine_ms"] - dom["now_ms"]) if dom.get("now_ms") is not None else 0.0
+                now_delta = round(dom["now_ms"] - act_ms, 1) if dom.get("now_ms") is not None else None
+                out_ms.append((act_ms, round(dom["mine_ms"] - act_ms, 1), round(lead, 1), now_delta, dom.get("clip")))
+        return out_ms
+    live_onsets = phase_onsets(float(t_def0.group(1)), float(t_def1.group(1))) if t_def0 and t_def1 else []
+    old_onsets = phase_onsets(float(t_old0.group(1)), float(t_old1.group(1))) if t_old0 and t_old1 else []
+    c.check(s, "live timing: combat clip dominates during the 350 ms windup (before release)",
+            len(live_onsets) >= 2 and all(d < 350.0 for _, d, _, _, _ in live_onsets),
+            f"live_onsets={live_onsets}")
+    c.check(s, "old timing: clip onset waits for delayed display clock now_ms >= act_ms",
+            len(old_onsets) >= 2 and all(nd is not None and nd >= -5.0 for _, _, _, nd, _ in old_onsets),
+            f"live={live_onsets} old={old_onsets}")
 
 
 def main():
