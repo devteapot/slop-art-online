@@ -23,6 +23,11 @@
 //!   `LookParams::of`), to time each part;
 //! - `nocutaway`: tall things between the camera and you stay drawn (photographing your
 //!   character behind a wall or a tree, as other people are seen);
+//! - `nokeepbodies`: a body that leaves sight is always let go after its fade out, and someone
+//!   coming back into sight is built anew from their recipe (before keep-bodies, `live.rs`
+//!   "Leaving and coming back into sight"); with `diag`, `bodies:` lines every 2 s count bodies
+//!   leaving sight, drawn new (and how many of those came back within the keep time) and shown
+//!   again;
 //! - `nobudget`: the island spawns a chunk's things as soon as their files have loaded, all in
 //!   one frame (island.rs `SPAWN_BUDGET`);
 //! - `hitch=MS`: every frame slower than MS milliseconds (default 30) is logged with what entered

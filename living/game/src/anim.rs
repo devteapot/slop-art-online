@@ -264,12 +264,23 @@ pub fn has_clips(file: &str) -> bool {
 }
 
 /// The name of a clip file's animation root: the first node of its scene (`Armature` in a
-/// generated person).
+/// generated person). Read once a file: the shared clip file's JSON is large, and reading and
+/// parsing it for each body [`bind`] took about 5 ms on the development Mac, so a perception
+/// sweep that brought ten people into sight made a 50 ms frame (the battle bench, 2026-11-27).
 fn clip_root(clips: &str) -> Option<String> {
-    let j = crate::lookdev::glb_json(clips)?;
-    let scene = j["scene"].as_u64().unwrap_or(0) as usize;
-    let root = j["scenes"][scene]["nodes"][0].as_u64()? as usize;
-    j["nodes"][root]["name"].as_str().map(String::from)
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(v) = cache.lock().unwrap().get(clips) {
+        return v.clone();
+    }
+    let v = crate::lookdev::glb_json(clips).and_then(|j| {
+        let scene = j["scene"].as_u64().unwrap_or(0) as usize;
+        let root = j["scenes"][scene]["nodes"][0].as_u64()? as usize;
+        j["nodes"][root]["name"].as_str().map(String::from)
+    });
+    cache.lock().unwrap().insert(clips.to_string(), v.clone());
+    v
 }
 
 /// A character checked by [`bind`] (given a player, needing none, or warned that it can't be).

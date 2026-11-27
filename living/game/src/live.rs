@@ -26,6 +26,14 @@
 //!   Drawn yaw eases toward that, so a stop or a new aim never snaps.
 //! - **Indoors.** A sleeper, or someone resting at their own door, is in the house: not drawn
 //!   (`town.rs`); they reappear at the door when they come out.
+//! - **Leaving and coming back into sight.** A body the authority stops sending fades out where
+//!   it was and is then kept hidden for [`KEEP_S`] (at most [`KEEP_MAX`] bodies, the oldest let
+//!   go first). Someone sent again while their body is fading out or kept, in the same kind and
+//!   look, has it shown again where they now are and fades back in, instead of a new body built
+//!   from their recipe: at the edge of a crowd's sight people come and go with every perception
+//!   sweep (200 ms), and each new body spawned, converted and rigged its scene in the same
+//!   frames (the battle bench's 25–60 ms frames, docs/TOOLING.md). `LIVING_GAME_PERF=nokeepbodies`
+//!   builds a new body every time, as before, to compare.
 //! - **You** join at the `land` row's arrival point (`join`); the camera, the island's
 //!   streaming and the atmosphere follow your displayed body. The cursor meets the island's
 //!   ground for facing and click-to-move.
@@ -94,6 +102,11 @@ fn law_split(sc: &living_rules::script::Scripts) -> Option<f32> {
 }
 /// A line counts as being spoken for this long (s).
 const TALKING_S: f64 = 4.0;
+/// A body gone from sight is kept hidden this long (s) after its fade out, to be shown again if
+/// its character comes back into sight ([`Kept`]).
+const KEEP_S: f32 = 6.0;
+/// At most this many bodies are kept hidden; past it the longest kept goes.
+const KEEP_MAX: usize = 48;
 
 pub struct LivePlugin;
 
@@ -237,6 +250,81 @@ struct Shown {
     look: String,
     /// Drawn from the look's line (else a VRoid recipe).
     composed: bool,
+    /// The life stage it was drawn at.
+    stage: u8,
+}
+
+/// A body that left sight and can be shown again for the same character ([`Live::kept`]): what
+/// it was drawn as, to check against the character when they are sent again.
+struct Kept {
+    id: u32,
+    kind: String,
+    look: String,
+    stage: u8,
+    person: bool,
+    beast: bool,
+    startles: bool,
+    composed: bool,
+    height: f32,
+}
+
+impl Shown {
+    /// A body coming into sight at `p` facing `h` (sim angle): (person, beast, startles), its
+    /// kind, its running weight and (look key, composed, life stage).
+    fn new(entity: Entity, p: Vec2, h: f32, (person, beast, startles): (bool, bool, bool), kind: String, run_w: f32, (look, composed, stage): (String, bool, u8)) -> Self {
+        Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, seat: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind, face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w, look, composed, stage }
+    }
+}
+
+/// The body kept for `id` ([`Live::kept`]), fading out or hidden, if it was drawn as the
+/// character is now (kind, look key and life stage): taken out of `leaving` or `parked` to be
+/// shown again. One drawn otherwise is no longer kept: a faint figure goes at once (a new body
+/// is drawn), a fading one fades out as before, a hidden one goes.
+fn take_kept(commands: &mut Commands, live: &mut Live, id: u32, kind: &str, look: &str, stage: u8) -> Option<(Entity, Kept)> {
+    let fading = live.leaving.iter().position(|(e, _, i, _)| *i == id && live.kept.contains_key(e));
+    let entity = match fading {
+        Some(i) => live.leaving[i].0,
+        None => live.parked.get(&id)?.0,
+    };
+    let k = live.kept.remove(&entity)?;
+    if k.id == id && k.kind == kind && k.look == look && k.stage == stage {
+        match fading {
+            Some(i) => {
+                live.leaving.remove(i);
+            }
+            None => {
+                live.parked.remove(&id);
+            }
+        }
+        return Some((entity, k));
+    }
+    match fading {
+        Some(i) if live.leaving[i].3 => {
+            live.leaving.remove(i);
+            commands.entity(entity).despawn();
+        }
+        Some(_) => {}
+        None => {
+            live.parked.remove(&id);
+            commands.entity(entity).despawn();
+        }
+    }
+    None
+}
+
+/// `LIVING_GAME_PERF=diag`: how often bodies come and go (`bodies: ` lines, every 2 s).
+#[derive(Default)]
+struct Churn {
+    /// When each character's body last left sight (`Time::elapsed_secs`).
+    left: HashMap<u32, f32>,
+    /// Since the last report: bodies that left sight; bodies drawn new, and how many of those for
+    /// someone whose body left sight within [`KEEP_S`]; bodies shown again; kept bodies let go.
+    gone: u32,
+    new: u32,
+    new_back: u32,
+    again: u32,
+    let_go: u32,
+    next: f32,
 }
 
 /// A person drawn, as the UI dump reports them (`ui::DumpExtra::looks_json`).
@@ -353,6 +441,13 @@ pub struct Live {
     /// People redrawn in place for a new look ([`swap_look`]): the old body, kept drawn and
     /// moving with the new until the new is fitted, then faded out as the new fades in.
     swaps: Vec<(Entity, Entity, u32)>,
+    /// Bodies that left sight and may be shown again for the same character, by entity: while
+    /// they fade out (in `leaving`) and once hidden (in `parked`).
+    kept: HashMap<Entity, Kept>,
+    /// Hidden bodies kept after their fade out, by character, and how long they have been (s).
+    parked: HashMap<u32, (Entity, f32)>,
+    /// `LIVING_GAME_PERF=diag`: bodies drawn new and shown again, since the last report.
+    churn: Churn,
     /// The world's look generation has been checked against the book (one warning at connect).
     looks_checked: bool,
 }
@@ -580,7 +675,7 @@ fn swap_look(commands: &mut Commands, assets: &AssetServer, live: &mut Live, q: 
     }
     let s = live.shown.get_mut(&id).unwrap();
     info!("looks: #{id} redrawn for a new look ({} → {})", if s.look.is_empty() { "none" } else { &s.look }, if now.look.is_empty() { "none" } else { &now.look });
-    (s.entity, s.look, s.composed) = (new, now.look, recipe.person.is_some());
+    (s.entity, s.look, s.composed, s.stage) = (new, now.look, recipe.person.is_some(), c.stage);
     if let Some(seat) = s.seat {
         commands.entity(new).try_insert(seat);
     }
@@ -649,6 +744,10 @@ fn bodies(
         for (old, ..) in live.swaps.drain(..) {
             commands.entity(old).despawn();
         }
+        for (_, (e, _)) in live.parked.drain() {
+            commands.entity(e).despawn();
+        }
+        live.kept.clear();
         live.heights.clear();
         live.looks_checked = false;
         crate::characters::book::set_world(None);
@@ -677,11 +776,16 @@ fn bodies(
         live.walk_run = Some((rules.laws_key, split));
     }
     let split = live.walk_run.and_then(|w| w.1);
-    // Bodies that left sight fade out where they were, then go.
-    // A faint figure goes at once when its body is sent again, else fades out after a moment.
-    live.leaving.retain_mut(|(e, t, id, ghost)| {
+    // Bodies that left sight fade out where they were, then go, or are kept hidden for a while
+    // in case their character comes back into sight ([`KEEP_S`]).
+    // A faint figure goes at once when its body is sent again (unless it is shown again, below),
+    // else fades out after a moment.
+    let now_s = time.elapsed_secs();
+    let diag = crate::perf::has("diag");
+    let Live { leaving, kept, parked, churn, shown, .. } = &mut *live;
+    leaving.retain_mut(|(e, t, id, ghost)| {
         *t += dt;
-        if *ghost && scene.shown.contains_key(id) {
+        if *ghost && scene.shown.contains_key(id) && !kept.contains_key(e) {
             commands.entity(*e).despawn();
             return false;
         }
@@ -693,10 +797,51 @@ fn bodies(
         }
         let keep = *t < hold + crate::fade::OUT_S + 0.05;
         if !keep {
-            commands.entity(*e).despawn();
+            if kept.contains_key(e) {
+                if let Some((old, _)) = parked.insert(*id, (*e, 0.0)) {
+                    kept.remove(&old);
+                    commands.entity(old).despawn();
+                }
+            } else {
+                commands.entity(*e).despawn();
+            }
         }
         keep
     });
+    // Kept bodies go after [`KEEP_S`], and the longest kept past [`KEEP_MAX`].
+    parked.retain(|_, (e, t)| {
+        *t += dt;
+        let keep = *t < KEEP_S;
+        if !keep {
+            kept.remove(e);
+            commands.entity(*e).despawn();
+            churn.let_go += 1;
+        }
+        keep
+    });
+    if parked.len() > KEEP_MAX {
+        let mut by_age: Vec<(f32, u32)> = parked.iter().map(|(id, (_, t))| (*t, *id)).collect();
+        by_age.sort_by(|a, b| b.0.total_cmp(&a.0));
+        for (_, id) in by_age.into_iter().take(parked.len() - KEEP_MAX) {
+            if let Some((e, _)) = parked.remove(&id) {
+                kept.remove(&e);
+                commands.entity(e).despawn();
+                churn.let_go += 1;
+            }
+        }
+    }
+    if diag {
+        churn.next -= dt;
+        if churn.next <= 0.0 {
+            churn.next = 2.0;
+            info!(
+                "bodies: in 2 s {} left sight, {} drawn new ({} of them back within {KEEP_S} s of leaving), {} shown again from kept bodies, {} kept let go; {} kept hidden, {} fading out, {} drawn",
+                churn.gone, churn.new, churn.new_back, churn.again, churn.let_go, parked.len(), leaving.len(), shown.len()
+            );
+            (churn.gone, churn.new, churn.new_back, churn.again, churn.let_go) = (0, 0, 0, 0, 0);
+            churn.left.retain(|_, t| now_s - *t < KEEP_S);
+        }
+    }
     // People redrawn for a new look: the old body moves with the new until the new is fitted,
     // then fades out as the new fades in (a crossfade in place, never a gap).
     for (old, new, id) in std::mem::take(&mut live.swaps) {
@@ -762,8 +907,16 @@ fn bodies(
                         motion.speed = 0.0;
                     }
                     live.leaving.push((s.entity, 0.0, id, ghost));
+                    if !crate::perf::has("nokeepbodies") {
+                        let k = Kept { id, kind: s.kind, look: s.look, stage: s.stage, person: s.person, beast: s.beast, startles: s.startles, composed: s.composed, height: live.heights.get(&id).copied().unwrap_or(1.75) };
+                        live.kept.insert(s.entity, k);
+                    }
                 }
                 Err(_) => commands.entity(s.entity).despawn(),
+            }
+            live.churn.gone += 1;
+            if diag {
+                live.churn.left.insert(id, now_s);
             }
         }
         live.heights.remove(&id);
@@ -810,6 +963,43 @@ fn bodies(
             }
             let h = h.unwrap_or(body.heading);
             let size = character.as_ref().map_or(1.0, |c| stage_scale(c.stage));
+            // Back in sight while their body is fading out or kept hidden: shown again.
+            let seen_look = character.as_ref().filter(|_| body.kind == "person").map(crate::characters::seen::of).unwrap_or_default().look;
+            let stage = character.as_ref().map_or(0, |c| c.stage);
+            if let Some((entity, k)) = take_kept(&mut commands, &mut live, id, &body.kind, &seen_look, stage) {
+                let dir = Vec2::new(h.cos(), h.sin());
+                if let Ok((mut tf, fitted, _, _, mut motion, _)) = q.get_mut(entity) {
+                    let y_off = fitted.map_or(0.0, |f| f.y_off * if k.beast { size } else { 1.0 });
+                    tf.translation = Vec3::new(p.x, ground + y_off, p.y);
+                    tf.rotation = if k.person {
+                        Quat::from_rotation_y(yaw_of(dir) + PI)
+                    } else if k.beast {
+                        Quat::from_rotation_y(yaw_of(dir))
+                    } else {
+                        Quat::from_rotation_y(-h)
+                    };
+                    *motion = Motion::default();
+                }
+                if let Ok(mut f) = fades.get_mut(entity) {
+                    f.target = 0.0;
+                }
+                // Its seat, if it left sight seated, went with it.
+                commands.entity(entity).try_remove::<crate::characters::SeatAnchor>();
+                if mine {
+                    commands.entity(entity).insert((crate::gait::Feet, crate::gait::Logged(id)));
+                } else if crate::gait::logged_other() == Some(id) {
+                    commands.entity(entity).insert(crate::gait::Logged(id));
+                }
+                let run_w = if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 };
+                live.shown.insert(id, Shown::new(entity, p, h, (k.person, k.beast, k.startles), body.kind.clone(), run_w, (k.look, k.composed, k.stage)));
+                live.heights.insert(id, k.height);
+                live.churn.again += 1;
+                continue;
+            }
+            live.churn.new += 1;
+            if live.churn.left.get(&id).is_some_and(|t| now_s - t < KEEP_S) {
+                live.churn.new_back += 1;
+            }
             let mut composed = false;
             let (entity, height, person, beast) = if body.kind == "person" {
                 let c = character.as_ref().unwrap();
@@ -836,8 +1026,8 @@ fn bodies(
             } else if crate::gait::logged_other() == Some(id) {
                 commands.entity(entity).insert(crate::gait::Logged(id));
             }
-            let look = character.as_ref().filter(|_| person).map(crate::characters::seen::of).unwrap_or_default();
-            live.shown.insert(id, Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, seat: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind: body.kind.clone(), face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w: if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 }, look: look.look, composed });
+            let run_w = if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 };
+            live.shown.insert(id, Shown::new(entity, p, h, (person, beast, startles), body.kind.clone(), run_w, (seen_look, composed, stage)));
             live.heights.insert(id, height);
             continue;
         }
@@ -1941,6 +2131,41 @@ mod tests {
 
     fn row(heading: f32, turn: f32, turn_s: f32, face_off: f32, face_turn: f32, face_turn_s: f32) -> living_bindings::Moving {
         living_bindings::Moving { id: 1, x: 0.0, y: 0.0, t_ms: 0, vx: 1.0, vy: 0.0, heading, turn, turn_s, next_ms: u64::MAX, speed: 1.0, face_off, face_turn, face_turn_s, running: false }
+    }
+
+    fn kept(id: u32, look: &str) -> Kept {
+        Kept { id, kind: "person".into(), look: look.into(), stage: 3, person: true, beast: false, startles: false, composed: true, height: 1.7 }
+    }
+
+    /// A body that left sight is shown again for the same character in the same look, from its
+    /// fade out or from hiding; one in another look is not, and a hidden or faint one then goes.
+    #[test]
+    fn a_kept_body_is_shown_again_only_in_the_same_look() {
+        let mut world = bevy::prelude::World::new();
+        let (fading, hidden, ghost, other) = (world.spawn_empty().id(), world.spawn_empty().id(), world.spawn_empty().id(), world.spawn_empty().id());
+        let mut live = Live::default();
+        live.leaving.push((fading, 0.1, 1, false));
+        live.kept.insert(fading, kept(1, "lk_a"));
+        live.parked.insert(2, (hidden, 1.0));
+        live.kept.insert(hidden, kept(2, "lk_b"));
+        live.leaving.push((ghost, 0.5, 3, true));
+        live.kept.insert(ghost, kept(3, "lk_c"));
+        // A look swap's old body leaves under its id but is never kept.
+        live.leaving.push((other, 0.0, 4, false));
+        {
+            let mut commands = world.commands();
+            let (e, k) = take_kept(&mut commands, &mut live, 1, "person", "lk_a", 3).expect("fading body shown again");
+            assert_eq!((e, k.id, k.height), (fading, 1, 1.7));
+            assert!(take_kept(&mut commands, &mut live, 2, "person", "lk_b", 4).is_none(), "another life stage draws anew");
+            assert!(take_kept(&mut commands, &mut live, 3, "person", "lk_new", 3).is_none(), "another look draws anew");
+            assert!(take_kept(&mut commands, &mut live, 4, "person", "", 3).is_none(), "a swap's old body is not kept");
+        }
+        world.flush();
+        assert!(live.leaving.iter().all(|l| l.0 != fading && l.0 != ghost), "shown again, or a faint figure gone at once");
+        assert!(live.leaving.iter().any(|l| l.0 == other), "the swap's old body still fades out");
+        assert!(live.parked.is_empty() && live.kept.is_empty());
+        assert!(world.get_entity(fading).is_ok() && world.get_entity(other).is_ok());
+        assert!(world.get_entity(hidden).is_err() && world.get_entity(ghost).is_err());
     }
 
     #[test]

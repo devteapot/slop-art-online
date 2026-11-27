@@ -55,7 +55,7 @@ This directory is the maintained source for verifying interface D in the game cl
 | `heard.rs`, `mouth.rs`, `pick.rs`, `talk.rs` | [talking.md](talking.md) |
 | `heed.rs` (pins, focus, `Sender`, `in_throng`, `ask`), `throng.rs` (the figures, rings), `ui/heed.rs` (the strip), `ui/settings.rs` (`HeedOnly`), `keys.rs` (`Act::Pin`, `Act::ClearPins`, `Prefs::throng`), `combat.rs` (`Combat::aimed`) | [heed.md](heed.md) |
 | `keys.rs` (Settings › Controls) | [camera.md](camera.md), [windows.md](windows.md), [bar.md](bar.md) |
-| `live.rs`: the live script every drive runs through (SKILL.md), and how a walking body's legs and upper body turn | the harness for every feature; [look-walk.md](look-walk.md); `recipe_for`, `swap_look`: [looks.md](looks.md) |
+| `live.rs`: the live script every drive runs through (SKILL.md), and how a walking body's legs and upper body turn | the harness for every feature; [look-walk.md](look-walk.md); `recipe_for`, `swap_look`: [looks.md](looks.md); `Kept`, `take_kept` (bodies kept after leaving sight): [battle-views.md](battle-views.md) |
 | `characters/book.rs`, `characters/seen.rs`, `loading.rs` (the prewarm), `island.rs` (`person_recipe`), `characters/compose.rs` (`hero_file`, `prepare`) | [looks.md](looks.md) |
 | `looks.rs` | [names.md](names.md), [looks.md](looks.md) (`clothes`, `place`) |
 | `view.rs` (`OrthoFrame`, `ortho`), `post.rs` and `edges.wesl` (an orthographic depth), `lookdev.rs` (`far_models` through an orthographic camera), `living/tools/characters/ortho_shape.py`, `ortho_selftest.py` | [measure-view.md](measure-view.md) |
