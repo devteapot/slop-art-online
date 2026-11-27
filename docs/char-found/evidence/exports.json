@@ -1,0 +1,112 @@
+[
+  {
+    "file": "base-l1.glb",
+    "height_m": 1.8,
+    "span_m": 1.9105,
+    "triangles": 8864,
+    "materials": 6,
+    "joints": 82,
+    "targets": 8,
+    "clips": 87,
+    "identical_clip_samples": true
+  },
+  {
+    "file": "base-l2.glb",
+    "height_m": 1.8,
+    "span_m": 1.9105,
+    "triangles": 35456,
+    "materials": 6,
+    "joints": 82,
+    "targets": 8,
+    "clips": 87,
+    "identical_clip_samples": true
+  },
+  {
+    "file": "child-l1.glb",
+    "height_m": 1.2,
+    "span_m": 1.1793,
+    "triangles": 8864,
+    "materials": 6,
+    "joints": 82,
+    "targets": 8,
+    "clips": 87,
+    "identical_clip_samples": true
+  },
+  {
+    "file": "child-l2.glb",
+    "height_m": 1.2,
+    "span_m": 1.1793,
+    "triangles": 35456,
+    "materials": 6,
+    "joints": 82,
+    "targets": 8,
+    "clips": 87,
+    "identical_clip_samples": true
+  },
+  {
+    "file": "elder-l1.glb",
+    "height_m": 1.7,
+    "span_m": 1.8416,
+    "triangles": 8864,
+    "materials": 6,
+    "joints": 82,
+    "targets": 8,
+    "clips": 87,
+    "identical_clip_samples": true
+  },
+  {
+    "file": "elder-l2.glb",
+    "height_m": 1.7,
+    "span_m": 1.8416,
+    "triangles": 35456,
+    "materials": 6,
+    "joints": 82,
+    "targets": 8,
+    "clips": 87,
+    "identical_clip_samples": true
+  },
+  {
+    "file": "man-l1.glb",
+    "height_m": 1.86,
+    "span_m": 2.0324,
+    "triangles": 8864,
+    "materials": 6,
+    "joints": 82,
+    "targets": 8,
+    "clips": 87,
+    "identical_clip_samples": true
+  },
+  {
+    "file": "man-l2.glb",
+    "height_m": 1.86,
+    "span_m": 2.0324,
+    "triangles": 35456,
+    "materials": 6,
+    "joints": 82,
+    "targets": 8,
+    "clips": 87,
+    "identical_clip_samples": true
+  },
+  {
+    "file": "woman-l1.glb",
+    "height_m": 1.67,
+    "span_m": 1.7725,
+    "triangles": 8864,
+    "materials": 6,
+    "joints": 82,
+    "targets": 8,
+    "clips": 87,
+    "identical_clip_samples": true
+  },
+  {
+    "file": "woman-l2.glb",
+    "height_m": 1.67,
+    "span_m": 1.7725,
+    "triangles": 35456,
+    "materials": 6,
+    "joints": 82,
+    "targets": 8,
+    "clips": 87,
+    "identical_clip_samples": true
+  }
+]

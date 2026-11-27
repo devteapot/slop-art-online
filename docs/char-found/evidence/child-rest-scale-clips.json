@@ -1,0 +1,83 @@
+{
+ "walk": {
+  "seconds": 1.0,
+  "lowest_m": -0.013,
+  "lowest_part": "Foundation",
+  "lowest_at_s": 0.13,
+  "below_share": 0.12,
+  "hand_speed": 0.458,
+  "active_share": 0.8,
+  "moved_m": 0.24,
+  "head_moved_m": 0.044,
+  "airborne": [],
+  "foot_travel_m": {
+   "L": 0.483,
+   "R": 0.575
+  },
+  "finger_joints_low_m": 0.409,
+  "foot_joints_low_m": 0.006
+ },
+ "run": {
+  "seconds": 0.6,
+  "lowest_m": -0.008,
+  "lowest_part": "Foundation",
+  "lowest_at_s": 0.2,
+  "below_share": 0.0,
+  "hand_speed": 1.005,
+  "active_share": 1.0,
+  "moved_m": 0.238,
+  "head_moved_m": 0.077,
+  "airborne": [
+   [
+    0.2,
+    0.27
+   ],
+   [
+    0.47,
+    0.6
+   ]
+  ],
+  "foot_travel_m": {
+   "L": 0.28,
+   "R": 0.285
+  },
+  "finger_joints_low_m": 0.573,
+  "foot_joints_low_m": 0.01
+ },
+ "sit_ground": {
+  "seconds": 7.97,
+  "lowest_m": -0.104,
+  "lowest_part": "Foundation",
+  "lowest_at_s": 0.0,
+  "below_share": 1.0,
+  "hand_speed": 0.031,
+  "active_share": 0.0,
+  "moved_m": 0.161,
+  "head_moved_m": 0.161,
+  "airborne": [],
+  "foot_travel_m": {
+   "L": 0.0,
+   "R": 0.0
+  },
+  "finger_joints_low_m": 0.089,
+  "foot_joints_low_m": -0.065
+ },
+ "sword_slash": {
+  "seconds": 2.47,
+  "lowest_m": -0.015,
+  "lowest_part": "Foundation",
+  "lowest_at_s": 0.87,
+  "below_share": 0.53,
+  "hand_speed": 0.54,
+  "active_share": 0.92,
+  "moved_m": 0.562,
+  "head_moved_m": 0.315,
+  "airborne": [],
+  "foot_travel_m": {
+   "L": 0.083,
+   "R": 0.58
+  },
+  "finger_joints_low_m": 0.405,
+  "foot_joints_low_m": -0.004
+ }
+}
