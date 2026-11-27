@@ -1007,6 +1007,22 @@ pub fn visibly(ctx: &ReducerContext, sc: &Scripts, id: u32, now: u64) -> Option<
     Some(Visibly { skill, phase, target: d.target, aim: (0.0, 0.0), combat: false })
 }
 
+/// Whether `maker`, a creature `me` perceives standing at `at`, visibly threatens `me` (standing at
+/// `me_at`) now: a hostile move of its still winding up and aimed at me (its target, or its drawn
+/// aim, as `seen_fighters` shows a player), or a menace at me under way (weapon raised, closing
+/// in: `act::threatened`, which has no row of its own and is told to its target). The
+/// `perceived_threat_on` law's `threatened` (graph condition, desire weight, heed): the caller
+/// passes only creatures in its scene, so an unseen attacker never counts.
+pub fn threat_seen(ctx: &ReducerContext, sc: &Scripts, maker: u32, at: (f32, f32), me: u32, me_at: (f32, f32), now: u64) -> bool {
+    use living_rules::doing::Phase;
+    if let Some(v) = visibly(ctx, sc, maker, now) {
+        if v.combat && matches!(v.phase, Phase::WindingUp | Phase::AboutToRelease) && sc.shapes().get(&v.skill).is_some_and(|s| s.hostile) && v.at(me, me_at, at) {
+            return true;
+        }
+    }
+    ctx.db.activity().id().find(maker).is_some_and(|a| a.victim == me && a.phase == 1 && a.ends_ms > now && sc.shapes().get(&a.skill).is_some_and(|s| s.menace))
+}
+
 impl Visibly {
     /// Whether it is aimed at `me` standing at `me_at`, the doer at `at`: at me as its target,
     /// or (a move aimed at a point) facing me within about 18°, as its drawn aim shows.

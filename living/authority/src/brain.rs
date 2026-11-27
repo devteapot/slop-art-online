@@ -389,6 +389,15 @@ impl<'a> Ev<'a> {
         self.scene.as_ref().and_then(|s| s.creatures.as_deref()).unwrap()
     }
 
+    /// Whether someone in the scene visibly threatens this character now (`perception::threat_seen`,
+    /// the `perceived_threat_on` law): under heed, only an individual (the throng's moves land
+    /// unforeseen, as before).
+    fn threat_perceived(&mut self) -> bool {
+        let (ctx, me, at, now) = (self.ctx, self.me.id, self.at, self.now);
+        let sc = common::scripts(ctx);
+        self.creatures().iter().any(|x| crate::perception::threat_seen(ctx, &sc, x.id, x.pos, me, at, now))
+    }
+
     /// The seen who are not individuals to this character (heed's throng; empty without heed).
     fn throng(&mut self) -> &[NearCreature] {
         self.creatures();
@@ -534,7 +543,14 @@ impl<'a> Ev<'a> {
         // An attack or a threat aimed at me right now.
         // Under heed, only a windup by an individual weighs: one from the throng is not seen coming.
         let (ctx, heed) = (self.ctx, self.heed);
-        let threatened = if ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now && (!heed || crate::heed::individual(ctx, me, a.id, now))) { 1.0 } else { 0.0 };
+        // Under `perceived_threat_on`, only a threat by someone in the scene (as a player sees it).
+        let threatened = if common::laws(ctx).perceived_threat_on {
+            if ds.iter().any(|d| d.weight.threatened != 0.0) && self.threat_perceived() { 1.0 } else { 0.0 }
+        } else if ctx.db.activity().victim().filter(me).any(|a| a.phase == 1 && a.ends_ms > now && (!heed || crate::heed::individual(ctx, me, a.id, now))) {
+            1.0
+        } else {
+            0.0
+        };
         // Company is one's own kind (people for a person, the herd or pack for an animal).
         let kind = self.me.kind.clone();
         let people = self.creatures().iter().filter(|c| *c.kind == *kind).count() as f32;
@@ -1405,6 +1421,7 @@ impl<'a> Ev<'a> {
                 moving == *b
             }
             Cond::Hour(x) => x.test(common::hour(&self.w, self.now)),
+            Cond::Threatened(b) if common::laws(self.ctx).perceived_threat_on => self.threat_perceived() == *b,
             Cond::Threatened(b) => {
                 let me = self.me.id;
                 let now = self.now;

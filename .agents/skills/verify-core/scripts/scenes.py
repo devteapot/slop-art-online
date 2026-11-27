@@ -4645,6 +4645,93 @@ def doing_seen(s):
         off_the_line(s, line, cast, dy=56)
 
 
+def perceived_threat(s):
+    """`threatened` under the `perceived_threat_on` law (perception parity,
+    docs/PERCEPTION_PARITY_AUDIT.md): read from what the character perceives (a hostile move
+    winding up at it, or a menace, by someone in its scene), never from the private
+    `activity.victim` of someone unseen. On an open line W faces east, A 2 m ahead, B 2 m behind,
+    with sight on a field (`fov_on`, near ring 0.5 m) so B is unseen. W's routine dodges when
+    `threatened`, as a graph condition (`cond`) or as a desire's weight (`weight`). Law off
+    (control): A's attack is dodged by both; B's attack from behind is not dodged by the condition
+    (its old fov gate) but is by the weight (the leak: the weight never checked sight). Law on: A's
+    attack and A's threat are dodged by both; B's attack and B's threat by neither. About 4
+    minutes."""
+    people = {c["id"] for c in s.rows("SELECT id, kind FROM character WHERE alive = true") if c["kind"] == "person"}
+    line = open_line(s, length=12, avoid=[(b["x"], b["y"]) for b in s.rows("SELECT id, x, y FROM body") if b["id"] in people])
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    w, a, b = cast = s.people(3)
+    e = line[4]
+    home = {w: e, a: line[6], b: line[2]}
+    (s.out / f"{s.name}-cast.json").write_text(json.dumps({"W": w, "A": a, "B": b}) + "\n")
+    rounds = iter(range(1000))
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    def place():
+        for c, at in home.items():
+            s.call("place_at", c, at[0], at[1])
+
+    def routine(how):
+        # A graph of its own each time (the same graph again would not start over); W faces east first.
+        face = {"first": [{"do": {"skill": "face", "target": {"at": [e[0] + 4.0, e[1]]}}}, {"wait": 0.1}]}
+        if how == "cond":
+            body = {"first": {"label": "threat", "children": [{"if": {"cond": {"threatened": True}, "then": {"do": "dodge"}}}, {"wait": 0.2 + 0.001 * next(rounds)}]}}
+        else:
+            body = {"desires": [{"want": "evade", "weight": {"base": 0.0, "threatened": 2.0}, "do": {"do": "dodge"}},
+                                {"want": "stand", "weight": {"base": 1.0}, "do": {"wait": 0.2 + 0.001 * next(rounds)}}]}
+        s.graph(w, {"seq": [face, body]})
+        time.sleep(2)
+
+    def case(law, how, who, skill):
+        place()
+        routine(how)
+        t0 = now()
+        at = home[w]
+        s.graph(who, {"seq": [{"first": [{"do": {"skill": "face", "target": {"at": [at[0], at[1]]}}}, {"wait": 0.1}]},
+                              {"do": {"skill": skill, "target": {"id": w}}}, {"wait": 60 + next(rounds)}]})
+        done = s.wait(lambda: [x for x in s.rows("SELECT * FROM skill_use") if x["at_ms"] >= t0 and x["actor"] == who and x["skill"] == skill and x["outcome"]] or None, seconds=30, every=1)
+        time.sleep(0.5 if skill == "attack" else 2.5)
+        uses = [x for x in s.rows("SELECT * FROM skill_use", f"uses-{law}-{how}-{skill}-{who}") if x["at_ms"] >= t0]
+        s.graph(who, {"wait": 60 + next(rounds)})
+        s.graph(w, {"wait": 60 + next(rounds)})
+        time.sleep(1.5)
+        return done[0], [x for x in uses if x["actor"] == w and x["skill"] == "dodge"]
+
+    try:
+        for c in cast:
+            s.graph(c, {"wait": 60 + next(rounds)})
+        set_law(s, "fov_on", True)
+        set_law(s, "fov_near_m", 0.5)
+        set_law(s, "fov_near_dark_m", 0.5)
+        set_law(s, "perceived_threat_on", False)
+        # A body is not second-guessed for 45 s after arrival (`brain.rs`).
+        time.sleep(46)
+        for how in ("cond", "weight"):
+            use, dodges = case("off", how, a, "attack")
+            s.expect(f"law off, {how}: A's attack in sight is dodged", use["accepted_ms"] > 0 and dodges, {"attack": use, "dodges": dodges})
+        use, dodges = case("off", "cond", b, "attack")
+        s.expect("law off, cond: B's attack from behind (unseen) is not dodged (the condition's fov gate)", use["accepted_ms"] > 0 and not dodges, {"attack": use, "dodges": dodges})
+        use, dodges = case("off", "weight", b, "attack")
+        s.expect("law off, weight: B's attack from behind (unseen) is dodged: the leak, the weight never checked sight", use["accepted_ms"] > 0 and dodges, {"attack": use, "dodges": dodges})
+
+        set_law(s, "perceived_threat_on", True)
+        s.wait(lambda: own_laws(s.rows).get("perceived_threat_on") == "true", 10)
+        for how in ("cond", "weight"):
+            for skill in ("attack", "threaten"):
+                use, dodges = case("on", how, a, skill)
+                s.expect(f"law on, {how}: A's {skill} in sight is dodged", use["accepted_ms"] > 0 and dodges, {skill: use, "dodges": dodges})
+                use, dodges = case("on", how, b, skill)
+                s.expect(f"law on, {how}: B's {skill} from behind (unseen) gives no threatened", use["accepted_ms"] > 0 and not dodges, {skill: use, "dodges": dodges})
+    finally:
+        set_law(s, "perceived_threat_on", False, check=False)
+        set_law(s, "fov_on", False, check=False)
+        set_law(s, "fov_near_m", 3.0, check=False)
+        set_law(s, "fov_near_dark_m", 2.0, check=False)
+        for c in cast:
+            s.graph(c, {"wait": 60 + next(rounds)})
+        off_the_line(s, line, cast, dy=60)
+
+
+
 def committed(s):
     """A committed move runs its whole course whoever controls the body (committed-moves; the
     `committed` trait of `<skill>_combat()`, `combat::committed`), and ends early only by
@@ -5834,6 +5921,7 @@ SCENES["stamina"] = stamina
 SCENES["fights"] = fights
 SCENES["chase"] = chase
 SCENES["doing_seen"] = doing_seen
+SCENES["perceived_threat"] = perceived_threat
 SCENES["committed"] = committed
 SCENES["doing_cost"] = doing_cost
 SCENES["owners"] = owners

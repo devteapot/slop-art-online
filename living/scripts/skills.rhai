@@ -114,6 +114,11 @@ fn laws() {
         // labelled "stranger". On: anyone whose name one does not know, the rule that names
         // people in scenes, percepts and memory (`perception::knows_name`).
         stranger_by_name: false,
+        // What `threatened` (a graph's condition and weight, heed's) reads (perception parity,
+        // docs/PERCEPTION_PARITY_AUDIT.md): on, a hostile move winding up at one, or a menace,
+        // by someone one perceives (sight, its line, its field), as a player sees it; off, any
+        // move aimed at one, seen or not (sight checked only under `fov_on`).
+        perceived_threat_on: false,
         // Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): a graph's
         // `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a
         // personal relation only when it is clear (trust -25 or less or a hostile word; 25 or more
@@ -3351,6 +3356,7 @@ fn law_about(l, name) {
         "fast_lane_stale_s" => `a reason for one that waits ${short(l.fast_lane_stale_s)} s is let go`,
         "force_outcomes" => if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         "alert_after_hit_s" => `a body struck within the last ${short(l.alert_after_hit_s)} s cannot fall asleep`,
+        "perceived_threat_on" => if l.perceived_threat_on { "one sees a blow or a threat coming only from someone one sees" } else { "one knows of every blow or threat aimed at one, seen or not" },
         "renew_in_place" => if l.renew_in_place { "a rest, a sleep or work is still seen while it is taken up again" } else { "between one rest, sleep or piece of work and the next, nothing is seen for a moment" },
         "alert_while_attacker_near" => if l.alert_while_attacker_near { "nor while the one who struck it is close and the fight is on" } else { "even with the one who struck it close by" },
         "gaze_on" => "whether creatures can change their gaze band",
