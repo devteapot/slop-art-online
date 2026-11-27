@@ -990,7 +990,10 @@ def light(run, c):
     seq = [("classic", "subtle"), ("lookdev", "subtle"), ("classic", "subtle"), ("lookdev", "strong"), ("lookdev", "off")]
     names = ["01_classic", "02_lookdev", "03_classic", "04_rim_strong", "05_rim_off"]
     shots = "".join(f"light:{l};rim:{r};wait:0.8;shot:{n};" for (l, r), n in zip(seq, names))
-    out2, code2, _ = drive(run, s, "ready;wait:2;dump:00;wait:2;" + shots + "dump:06;quit")
+    # A resident held still beside me, the cursor in the world (the dump's `seen`), the start's
+    # notes faded.
+    a, _ = residents(run)
+    out2, code2, _ = drive(run, s, "ready;wait:2;dump:00;sync:scene;cursor:0.70,0.55;wait:6;" + shots + "dump:06;quit", places=[f"{a}:-1.5:1.5"])
     c.check(s, "the next start reads them back", (x(out2, "00").get("light"), x(out2, "00").get("char_rim")) == ("lookdev", "strong"), str((x(out2, "00").get("light"), x(out2, "00").get("char_rim"))))
     try:
         import numpy as np
@@ -1008,9 +1011,11 @@ def light(run, c):
         near |= (np.abs(xx - (hx + fx) / 2) <= 0.4 * tall) & (yy >= min(hy, fy) - 0.15 * tall) & (yy <= max(hy, fy) + 0.1 * tall)
     changed = lambda p, q: (np.abs(shot[p] - shot[q]).max(2) > 6).mean() * 100
     base = changed("01_classic", "03_classic")
-    c.check(s, "Look-dev changes the picture", changed("01_classic", "02_lookdev") > base + 5, f"{changed('01_classic', '02_lookdev'):.2f}% against {base:.2f}% between the Classics")
-    # People idle and the sun moves meanwhile: Classic after Look-dev is Classic again.
-    c.check(s, "Classic after Look-dev changes no more than idle motion", base <= 5.0, f"{base:.2f}%")
+    look = changed("01_classic", "02_lookdev")
+    c.check(s, "Look-dev changes the picture", look > base + 5, f"{look:.2f}% against {base:.2f}% between the Classics")
+    # People walk and the sun moves meanwhile: Classic after Look-dev is Classic again, the two
+    # Classics far closer than either is to Look-dev.
+    c.check(s, "Classic after Look-dev is Classic again", base <= 0.35 * min(look, changed("02_lookdev", "03_classic")), f"{base:.2f}% between the Classics, {look:.2f}% to Look-dev")
     rim = np.abs(shot["04_rim_strong"] - shot["05_rim_off"]).max(2) > 6
     c.check(s, "the rim changes people, little else", (rim & near).sum() > 40 and (rim & ~near).mean() * 100 <= base * 1.25 + 0.5, f"{int((rim & near).sum())} px on people, {(rim & ~near).mean() * 100:.2f}% elsewhere")
 

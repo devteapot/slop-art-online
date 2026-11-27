@@ -18,7 +18,7 @@ The character rim (`style::CharRim`: Off, Subtle the default, Strong) is a taste
 - `keep`: the settings file's `light` and `char_rim`, read back at the next start.
 - `start`: `LIVING_GAME_LOOK=classic|lookdev` and `LIVING_GAME_CHAR_RIM=off|subtle|strong` start in one (captures), over the settings file; also in the asset view (`LIVING_GAME_VIEW`).
 - `switch`: the live script's `light:NAME` and `rim:NAME`, leaving open windows be.
-- `pixels`: Look-dev changes the picture; Classic after Look-dev is Classic again; the rim changes people only.
+- `pixels`: Look-dev changes the picture; Classic after Look-dev is Classic again (the two Classics far closer than either is to Look-dev); the rim changes people only.
 
 ## How to get to it (user POV)
 
@@ -28,7 +28,7 @@ The character rim (`style::CharRim`: Off, Subtle the default, Strong) is a taste
 
 Preconditions: baseline.
 
-- **Scenario.** `check.py --run $R light` (with `uv run --with pillow --with numpy python`, for the pixel checks): deletes the drive's settings file; `dump:01`: `extra.light == "classic"`, `extra.char_rim == "subtle"`, both `_saved` null; Settings › Light › Look-dev (`dump:02`), Character rim › Strong (`dump:03`); the drive's `settings.json` has `"light": "lookdev"`, `"char_rim": "strong"`; a second drive reads them back (`dump:00`) and photographs `01_classic`, `02_lookdev`, `03_classic`, `04_rim_strong` and `05_rim_off` from one view with `light:` and `rim:`. It refuses to run with `LIVING_GAME_LOOK` or `LIVING_GAME_CHAR_RIM` set.
+- **Scenario.** `check.py --run $R light` (with `uv run --with pillow --with numpy python`, for the pixel checks): deletes the drive's settings file; `dump:01`: `extra.light == "classic"`, `extra.char_rim == "subtle"`, both `_saved` null; Settings › Light › Look-dev (`dump:02`), Character rim › Strong (`dump:03`); the drive's `settings.json` has `"light": "lookdev"`, `"char_rim": "strong"`; a second drive reads them back (`dump:00`), holds a resident beside the player (`--place`), puts the cursor in the world and photographs `01_classic`, `02_lookdev`, `03_classic`, `04_rim_strong` and `05_rim_off` from one view with `light:` and `rim:`. It refuses to run with `LIVING_GAME_LOOK` or `LIVING_GAME_CHAR_RIM` set.
 - **Look-dev stills.** The look-dev scene (`.local/living/lookdev/survey/LOOKDEV_SCENE.md`): the asset view with `LIVING_GAME_LOOK=lookdev`, and the Cullet plaza with `light:` switching in one drive (`shot:plaza_middle_noon_classic;light:lookdev;wait:0.8;shot:plaza_middle_noon_lookdev;light:classic`).
 
 ## Classic is main
