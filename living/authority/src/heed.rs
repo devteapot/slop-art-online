@@ -730,8 +730,9 @@ impl<'a> Field<'a> {
         let closing = 0.0;
         let person = &*c.kind == "person";
         let made_out = !(person && self.reads.made_out) || ch.as_ref().map_or(true, |t| !crate::perception::regard(ctx, self.me, t, now).far);
+        let parity = common::laws(ctx).outsider_parity;
         let mut relations = 0u8;
-        if let Some(t) = &ch {
+        if let Some(t) = ch.as_ref().filter(|_| !parity || made_out) {
             let me = self.me;
             if t.parent_a == me.id || t.parent_b == me.id || me.parent_a == t.id || me.parent_b == t.id || (t.parent_a != 0 && (t.parent_a == me.parent_a || t.parent_b == me.parent_b) && me.parent_a != 0) {
                 relations |= h::rel::FAMILY;

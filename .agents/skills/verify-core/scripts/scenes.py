@@ -9436,5 +9436,146 @@ def ground_goto(s):
 
 SCENES["ground_goto"] = ground_goto
 
+
+def outsider(s):
+    """Perception parity for `outsider`, relation-filtered `count`, and `heed` candidate relations
+    under the `outsider_parity` world law (default off).
+
+    1. Law off: a community guard with a `relation: "outsider"` graph threatens an unknown stranger
+       of another community (or no community) by hidden membership, never its fellow member.
+    2. Law on: the same guard does NOT threaten unknown strangers (0 threats).
+    3. Law on after introduction (`mind_say` creating `acquaintance`): the guard now threatens the
+       known non-member, never the remaining unknown stranger or its fellow member.
+    4. Throng count restriction (`heed_on`, capacity 2, 7 people within 4 m all labelled `friend`):
+       plain `count` (`at_least: 7`) holds both off and on; relation-filtered `count`
+       (`relation: "friend"`, `at_least: 5`) holds with `outsider_parity` off (tests throng) and
+       fails with `outsider_parity` on (`at_most: 2` holds: only perceived individuals are tested).
+    """
+    line = clear_line(s)
+    g, m, u1, u2, *crowd = s.people(8)
+    names = {c["id"]: c["name"] for c in s.rows("SELECT id, name FROM character")}
+    s.act(g, {"do": "found", "text": f"Verify Guard {g}"})
+    s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {g}"))
+    s.call("place_near", m, g)
+    s.act(m, {"do": "join", "target": {"id": g}})
+    s.wait(lambda: s.rows(f"SELECT * FROM join_request WHERE asker = {m}"))
+    s.act(g, {"do": "welcome", "target": {"id": m}})
+    s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {m}"))
+    # u1 belongs to a different community (hidden membership); u2 belongs to none.
+    s.act(u1, {"do": "found", "text": f"Verify Other {u1}"})
+    s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {u1}"))
+
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    talk_thought = {"kind": "talk", "summary": "verify outsider", "detail": "", "latency_ms": 0, "tokens": 0, "model": "", "reference": ""}
+    guard_graph = {"first": [
+        {"if": {"cond": {"near": {"target": {"nearest": {"kind": "person", "relation": "outsider"}}, "within": 6}},
+                "then": {"do": {"skill": "threaten", "target": {"nearest": {"kind": "person", "relation": "outsider"}}}}}},
+        {"wait": 120},
+    ]}
+    rounds = iter(range(1000))
+
+    def place_guard_stage():
+        s.call("place_at", g, *line[0])
+        s.call("place_at", m, *line[1])
+        s.call("place_at", u1, *line[2])
+        s.call("place_at", u2, *line[3])
+        for k, c in enumerate(crowd):
+            s.call("place_at", c, line[0][0] + 45.0 + k, line[0][1])
+            s.graph(c, {"wait": 300})
+        for x in (m, u1, u2):
+            s.graph(x, {"wait": 300})
+
+    def threats_since(t0):
+        return [r for r in s.rows(f"SELECT * FROM chronicle WHERE kind = 'threat' AND a = {g}") if r["at_ms"] >= t0]
+
+    def probe_counts(label):
+        tag = f"oc-{label}-{next(rounds)}"
+        t0 = now()
+        tell = [
+            {"if": {"cond": {"count": {"of": {"kind": "person"}, "at_least": 7}}, "then": {"say": f"{tag} plain7"}, "else": {"say": f"{tag} plainlt7"}}},
+            {"wait": 2.2},
+            {"if": {"cond": {"count": {"of": {"kind": "person", "relation": "friend"}, "at_least": 5}}, "then": {"say": f"{tag} rel5"}, "else": {"say": f"{tag} rellt5"}}},
+            {"wait": 2.2},
+            {"if": {"cond": {"count": {"of": {"kind": "person", "relation": "friend"}, "at_most": 2}}, "then": {"say": f"{tag} relle2"}, "else": {"say": f"{tag} relgt2"}}},
+            {"wait": 2.2},
+        ]
+        s.graph(g, {"seq": [{"wait": 1.5}, *tell, {"wait": 300}]})
+        rows = s.wait(lambda: r if len(r := [x for x in s.rows(f"SELECT * FROM chronicle WHERE kind = 'speech' AND a = {g}") if x["at_ms"] >= t0 and tag in x["text"]]) >= 3 else None, seconds=40, every=1)
+        (s.out / f"{s.name}-counts-{tag}.json").write_text(json.dumps(rows, indent=2) + "\n")
+        txt = " | ".join(r["text"] for r in rows)
+        return {"plain7": f"{tag} plain7" in txt, "rel5": f"{tag} rel5" in txt, "relle2": f"{tag} relle2" in txt, "text": txt}
+
+    try:
+        place_guard_stage()
+        # 1. Law OFF: guard threatens unknown stranger u1 or u2 by hidden membership.
+        t0 = now()
+        s.graph(g, guard_graph)
+        off_uses = s.wait(lambda: threats_since(t0), seconds=20, every=0.5)
+        off_targets = {u["b"] for u in off_uses}
+        s.expect("law off: guard threatens unknown stranger by hidden membership (never fellow member)",
+                 bool(off_targets & {u1, u2}) and m not in off_targets, {"targets": sorted(off_targets), "u1": u1, "u2": u2, "m": m})
+
+        # 2. Law ON: guard does NOT threaten unknown strangers u1 or u2.
+        s.graph(g, {"wait": 120})
+        set_law(s, "outsider_parity", True)
+        s.wait(lambda: own_laws(s.rows).get("outsider_parity") == "true", 10)
+        place_guard_stage()
+        t1 = now()
+        s.graph(g, guard_graph)
+        time.sleep(8)
+        on_unknown_uses = threats_since(t1)
+        s.expect("law on: guard does not threaten unknown strangers by hidden membership",
+                 len(on_unknown_uses) == 0, on_unknown_uses)
+
+        # 3. Law ON after u1 introduces itself: guard threatens known non-member u1 only.
+        s.call("mind_say", u1, f"I am {names[u1]}, from across the river.", g, "say", 0, talk_thought)
+        s.wait(lambda: s.rows(f"SELECT * FROM acquaintance WHERE observer = {g} AND known = {u1}"), seconds=20)
+        t2 = now()
+        s.graph(g, {"first": [
+            {"if": {"cond": {"near": {"target": {"nearest": {"kind": "person", "relation": "outsider"}}, "within": 6}},
+                    "then": {"do": {"skill": "threaten", "target": {"nearest": {"kind": "person", "relation": "outsider"}}}}}},
+            {"wait": 121},
+        ]})
+        known_uses = s.wait(lambda: threats_since(t2), seconds=20, every=0.5)
+        known_targets = {u["b"] for u in known_uses}
+        s.expect("law on after introduction: guard threatens known outsider u1 (never u2 or fellow member)",
+                 u1 in known_targets and u2 not in known_targets and m not in known_targets,
+                 {"targets": sorted(known_targets), "u1": u1, "u2": u2, "m": m})
+
+        # 4. Throng count restriction: heed_on with g capacity 2, 7 friends within 4 m.
+        all_seven = [m, u1, u2, *crowd]
+        s.call("mind_update", g, {
+            "persona": None,
+            "relations": [{"other": x, "trust": 60, "affinity": 40, "label": "friend", "note": "verify outsider throng"} for x in all_seven],
+            "beliefs": None, "judgments": [], "places": [], "thought": None, "replace": False, "cues": None,
+        })
+        for k, x in enumerate(all_seven):
+            s.call("place_at", x, line[1 + k // 2][0] + 0.4 * (k % 2), line[1 + k // 2][1] + (0.8 if k % 2 else -0.8))
+            s.graph(x, {"wait": 300})
+        src = shipped.replace("fn heed_capacity(a) {", f"fn heed_capacity(a) {{\n    if a.actor.id == {g} {{ return 2.0; }}", 1)
+        assert src != shipped
+        s.call("install_script", src)
+        set_law(s, "heed_on", True)
+        set_law(s, "outsider_parity", False)
+        s.wait(lambda: own_laws(s.rows).get("heed_on") == "true" and own_laws(s.rows).get("outsider_parity") == "false", 10)
+        c_off = probe_counts("off")
+        s.expect("heed on, outsider_parity off: plain count sees 7 and relation count tests throng (>=5)",
+                 c_off["plain7"] and c_off["rel5"], c_off)
+
+        set_law(s, "outsider_parity", True)
+        s.wait(lambda: own_laws(s.rows).get("outsider_parity") == "true", 10)
+        c_on = probe_counts("on")
+        s.expect("heed on, outsider_parity on: plain count still sees 7, relation count tests individuals only (<=2)",
+                 c_on["plain7"] and not c_on["rel5"] and c_on["relle2"], c_on)
+    finally:
+        off_the_line(s, line, [g, m, u1, u2, *crowd])
+        s.call("install_script", shipped, check=False)
+        set_law(s, "outsider_parity", False, check=False)
+        set_law(s, "heed_on", False, check=False)
+
+
+SCENES["outsider"] = outsider
+
 if __name__ == "__main__":
     raise SystemExit(main())

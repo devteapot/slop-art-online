@@ -1383,12 +1383,17 @@ impl<'a> Ev<'a> {
                 let at = self.at;
                 self.creatures();
                 // A throng's numbers are perceived: individuals and throng alike (heed).
+                // Under `outsider_parity`, a relation filter tests only perceived individuals,
+                // never unidentified throng members.
                 let (ind, thr): (&[NearCreature], &[NearCreature]) = match self.scene.as_ref() {
                     Some(s) => (s.creatures.as_deref().unwrap_or(&[]), s.throng.as_slice()),
                     None => (&[], &[]),
                 };
+                let rel_filter = c.of.relation.as_deref().filter(|r| !r.is_empty() && *r != "any");
+                let skip_throng = rel_filter.is_some() && common::laws(self.ctx).outsider_parity;
                 let mut n = 0u32;
-                for x in ind.iter().chain(thr.iter()) {
+                let throng_slice: &[NearCreature] = if skip_throng { &[] } else { thr };
+                for x in ind.iter().chain(throng_slice.iter()) {
                     if c.within.is_some_and(|w| dist(at, x.pos) > w) || (c.of.kind != "creature" && *x.kind != *c.of.kind) {
                         continue;
                     }
@@ -2943,15 +2948,69 @@ pub(crate) fn relation_ok(ctx: &ReducerContext, me: u32, other: u32, want: &str)
         "enemy" => r.is_some() && (trust <= -25.0 || ["enemy", "rival", "threat", "thief"].iter().any(|l| label.contains(l))),
         "family" => ["family", "partner", "kin", "child", "parent", "sibling"].iter().any(|l| label.contains(l)),
         "stranger" => r.is_none() || label.contains("stranger"),
-        // Not of my community (everyone, when I belong to none).
-        "outsider" => match (ctx.db.membership().member().find(me), ctx.db.membership().member().find(other)) {
-            (Some(a), Some(b)) => a.community != b.community,
-            (Some(_), None) | (None, _) => true,
-        },
+        // Not of my community (everyone, when I belong to none). Under `outsider_parity`,
+        // hidden membership does not leak: an unknown stranger is not treated as an outsider
+        // unless visibly different in build/dress or known not to belong.
+        "outsider" => {
+            if common::laws(ctx).outsider_parity {
+                outsider_known_or_visible(ctx, me, other, &label)
+            } else {
+                match (ctx.db.membership().member().find(me), ctx.db.membership().member().find(other)) {
+                    (Some(a), Some(b)) => a.community != b.community,
+                    (Some(_), None) | (None, _) => true,
+                }
+            }
+        }
         "any" | "" => true,
         other => label.contains(&other.to_lowercase()),
     };
     fits || (r.is_none() && stance_fits(ctx, me, other, want))
+}
+
+/// Whether `other` counts as an `"outsider"` to `me` under `outsider_parity`: never an unmade-out
+/// far person, never a fellow member of `me`'s community; otherwise only by explicit `"outsider"`
+/// relation label, visibly differing build/dress (`folk`/`style`), or known non-membership (`me`
+/// belongs to a community and knows who `other` is via `perception::knows_name`).
+pub(crate) fn outsider_fits(
+    far: bool,
+    same_community: bool,
+    my_has_community: bool,
+    label_outsider: bool,
+    known_other: bool,
+    my_dress: (&str, &str),
+    other_dress: (&str, &str),
+) -> bool {
+    if far || same_community {
+        return false;
+    }
+    if label_outsider {
+        return true;
+    }
+    let visible_diff = (!other_dress.0.is_empty() && other_dress.0 != my_dress.0)
+        || (!other_dress.1.is_empty() && !my_dress.1.is_empty() && other_dress.1 != my_dress.1);
+    visible_diff || (my_has_community && known_other)
+}
+
+fn outsider_known_or_visible(ctx: &ReducerContext, me: u32, other: u32, label: &str) -> bool {
+    let (Some(me_ch), Some(other_ch)) = (ctx.db.character().id().find(me), ctx.db.character().id().find(other)) else {
+        return false;
+    };
+    let far = other_ch.kind == "person" && crate::perception::regard(ctx, &me_ch, &other_ch, common::now_ms(ctx)).far;
+    let my_comm = ctx.db.membership().member().find(me).map(|m| m.community);
+    let other_comm = ctx.db.membership().member().find(other).map(|m| m.community);
+    let same_community = my_comm.is_some() && my_comm == other_comm;
+    let known_other = !same_community && my_comm.is_some() && crate::perception::knows_name(ctx, &me_ch, &other_ch);
+    let my_dress = crate::perception::dress(ctx, &me_ch);
+    let other_dress = crate::perception::dress(ctx, &other_ch);
+    outsider_fits(
+        far,
+        same_community,
+        my_comm.is_some(),
+        label.contains("outsider"),
+        known_other,
+        (&my_dress.0, &my_dress.1),
+        (&other_dress.0, &other_dress.1),
+    )
 }
 
 /// How a personal relation decides a fight by its trust and label (relation-fight): clearly
@@ -3068,6 +3127,26 @@ mod tests {
         assert!(!fight_fits("enemy", None, Personal::Neutral, peace));
         // The stance is not asked when something before it decided.
         assert!(fight_fits("enemy", Some("enemy"), Personal::Neutral, || panic!("asked the stance")));
+    }
+
+    #[test]
+    fn outsider_parity_requires_known_or_visible_affiliation() {
+        use super::outsider_fits;
+        // Unknown stranger from another community with same/no dress is NOT an outsider.
+        assert!(!outsider_fits(false, false, true, false, false, ("", ""), ("", "")));
+        assert!(!outsider_fits(false, false, true, false, false, ("", "timber"), ("", "timber")));
+        assert!(!outsider_fits(false, false, false, false, false, ("", ""), ("", "")));
+        // Far unmade-out person is never an outsider even if known or different dress.
+        assert!(!outsider_fits(true, false, true, true, true, ("", "timber"), ("giants", "stone")));
+        // Fellow community member is never an outsider.
+        assert!(!outsider_fits(false, true, true, true, true, ("", "timber"), ("giants", "stone")));
+        // Known non-member of my community IS an outsider.
+        assert!(outsider_fits(false, false, true, false, true, ("", ""), ("", "")));
+        // Visibly different folk or dress style IS an outsider.
+        assert!(outsider_fits(false, false, true, false, false, ("", "timber"), ("", "stone")));
+        assert!(outsider_fits(false, false, true, false, false, ("", ""), ("giants", "")));
+        // Explicitly labelled outsider IS an outsider.
+        assert!(outsider_fits(false, false, false, true, false, ("", ""), ("", "")));
     }
 
     #[test]
