@@ -290,10 +290,10 @@ def shot_dummy(st, p, offsets):
     return d, body(st, d) or (p[0] + offsets[0][0], p[1] + offsets[0][1])
 
 
-def struck(st, cid, t0, d, before):
+def struck(st, cid, t0, d, before, ev=None):
     """The body a missile of mine struck since t0 (its impact's target; the dummy if none was
     seen) and its health before and now (0 once it died and its vitals went)."""
-    met = [e["target"] for e in seen(st) if e["kind"] == 11 and e["actor"] == cid and e["at_ms"] >= t0]
+    met = [e["target"] for e in (seen(st) if ev is None else ev) if e["kind"] == 11 and e["actor"] == cid and e["at_ms"] >= t0]
     hit = met[-1] if met else d
     alive = sql(st, f"SELECT alive FROM character WHERE id = {hit}")
     h1 = hp(st, hit)
@@ -459,20 +459,32 @@ def scene_bow(st):
     cid = me(st)
     p = body(st, cid)
     d, at = shot_dummy(st, p, [(0.0, -8.0), (0.0, 8.0), (-8.0, 0.0), (8.0, 0.0)])
-    before = {r["id"]: r["hp"] for r in sql(st, "SELECT id, hp FROM vitals")}
-    t0 = int(time.time() * 1000)
-    ready(st, "bowshot")
-    # After the strike and kill scenes in `--scene all` the shooter can be out of breath: wait
-    # for it to come back, as the later scenes do (a bowshot costs breath).
-    full_breath(st, 30.0)
-    arrows0 = sum(r["qty"] for r in sql(st, f"SELECT qty FROM inventory WHERE owner = {cid} AND item = 'arrow'"))
-    call(st, "use_skill", ["bowshot", 0, at[0], at[1]])
-    u = wait_outcome(st, "bowshot", 3)
-    hit, h0, h1 = struck(st, cid, t0, d, before)
+    # `combat_seen` (`my_combat`) keeps a player's own LAUNCH/IMPACT rows for SEEN_MS = 4_000 ms
+    # (`living/authority/src/combat.rs`). Read `my_combat` right after `wait_outcome` (before
+    # `struck`/`inventory` queries) and reuse it; retry only when authority timestamps prove the
+    # poll completed after SEEN_MS had elapsed since `u["released_ms"]`.
+    for attempt in range(1, 5):
+        if attempt > 1 and (hp(st, d) or 0) < 25:
+            d, at = shot_dummy(st, p, [(0.0, -8.0), (0.0, 8.0), (-8.0, 0.0), (8.0, 0.0)])
+        before = {r["id"]: r["hp"] for r in sql(st, "SELECT id, hp FROM vitals")}
+        ready(st, "bowshot")
+        # After the strike and kill scenes in `--scene all` the shooter can be out of breath: wait
+        # for it to come back, as the later scenes do (a bowshot costs breath).
+        full_breath(st, 30.0)
+        arrows0 = sum(r["qty"] for r in sql(st, f"SELECT qty FROM inventory WHERE owner = {cid} AND item = 'arrow'"))
+        t0 = int(time.time() * 1000)
+        call(st, "use_skill", ["bowshot", 0, at[0], at[1]])
+        u = wait_outcome(st, "bowshot", 3)
+        ev = seen(st)
+        poll_ms = int(time.time() * 1000)
+        launch = [e for e in ev if e["kind"] == 10 and e["actor"] == cid and e["at_ms"] >= t0]
+        impact = [e for e in ev if e["kind"] == 11 and e["actor"] == cid and e["at_ms"] >= t0]
+        expired = not (launch and impact) and u and u["released_ms"] > 0 and poll_ms - u["released_ms"] >= 3500
+        if not expired or attempt == 4:
+            break
+        V.log(st, f"bow attempt {attempt}: my_combat polled {poll_ms - u['released_ms']} ms after release (SEEN_MS=4000), re-staging")
+    hit, h0, h1 = struck(st, cid, t0, d, before, ev=ev)
     arrows1 = sum(r["qty"] for r in sql(st, f"SELECT qty FROM inventory WHERE owner = {cid} AND item = 'arrow'"))
-    ev = seen(st)
-    launch = [e for e in ev if e["kind"] == 10 and e["actor"] == cid]
-    impact = [e for e in ev if e["kind"] == 11 and e["actor"] == cid]
     check(st, "an arrow flies (launch and impact perceived) and strikes the first body in its path", launch and impact and h0 is not None and h1 is not None and h1 < h0, f"{u and u['outcome']} (#{hit}{', the dummy' if hit == d else ', in the path'}) hp {h0}->{h1} launch speed {launch and launch[-1]['amount']}")
     check(st, "the arrow is spent", arrows1 == arrows0 - 1, f"{arrows0}->{arrows1}")
     lines, rows, everyone, outcomes = told(st, cid, "bowshot", t0)
