@@ -437,13 +437,9 @@ fn plan(sc: &Scripts, me: &Me, aim: &Aim, target: Option<&TargetFacts>, spec: &S
 fn check_unit(sc: &Scripts, me: &Me, target: Option<&TargetFacts>, spec: &Skill, plan: &Plan, unit: usize, out: &mut Vec<Choice>) {
     let skill = spec.name.as_str();
     let ctx = |item: &str, text: &str, tgt_holds: Option<&str>| {
-        let mut t = target.cloned().unwrap_or_else(|| TargetFacts { class: "none".into(), ..Default::default() });
-        // What a target holds is not perceived: assume it has what is asked of it.
-        if let Some(i) = tgt_holds {
-            if !t.inv.iter().any(|(k, _)| k == i) {
-                t.inv.push((i.to_string(), 1));
-            }
-        }
+        // What a target holds is not perceived: assume it has what is asked of it (the rule the
+        // authority's `can` follows under `perceived_can_on`).
+        let t = target.cloned().unwrap_or_else(|| TargetFacts { class: "none".into(), ..Default::default() }).perceived(tgt_holds.unwrap_or(""), 1);
         // A skill that asks something in return is checked with something to ask for (each
         // thing there is becomes its own choice below).
         let want = if spec.args.iter().any(|a| a == "want") { catalog::item_names().into_iter().find(|w| w != item).unwrap_or_default() } else { String::new() };
@@ -844,18 +840,20 @@ fn workplace(rules: &Scripts, t: &mut TargetFacts, lit_until_ms: u64, now: u64, 
     (t.lit, t.fuel) = rules.structure(&t.kind).fire_state(lit_until_ms, now, day_ms);
 }
 
-/// A creature as I perceive it, for the rules' checks.
-fn creature_facts(conn: &crate::net::PlayerConnection, rules: &Scripts, id: u32, dist: f32) -> Option<TargetFacts> {
+/// A creature as I perceive it, for the rules' checks: its health as shown
+/// (`living_rules::combat::perceived_hp`), a yield only when I was told of it (my lines,
+/// `living_rules::script::yielded_seen`); the rest of what it is (what it carries and knows) is
+/// left to `TargetFacts::perceived`, the rule the authority's `can` follows too under the
+/// `perceived_can_on` law (the yield only under it).
+fn creature_facts(conn: &crate::net::PlayerConnection, rules: &Scripts, me: &Me, id: u32, dist: f32) -> Option<TargetFacts> {
     let c = crate::net::find_character(conn, id)?;
-    let max = if c.max_hp > 0.0 { c.max_hp } else { rules.num_of("max_hp", &c.kind, 100.0) as f32 };
-    let hp = if c.hp >= 0.0 {
-        c.hp
-    } else if c.band <= 4 {
-        living_rules::combat::band_fraction(c.band) * max
-    } else {
-        max
-    };
-    Some(TargetFacts { class: "creature".into(), id: id as u64, kind: c.kind, name: c.name, hp, max_hp: max, stage: stage_name(c.stage).into(), hurt_ago: 1e9, alive: true, dist, ..Default::default() })
+    let (hp, max_hp) = living_rules::combat::perceived_hp(c.band, c.hp, c.max_hp, rules.num_of("max_hp", &c.kind, 100.0) as f32);
+    // A yield I saw, under the law (off: none, as before it).
+    let yielded_ago = rules.laws().perceived_can_on.then(|| {
+        let lines = crate::net::my_lines(&conn.db).into_iter().filter(|e| e.observer == me.actor.id).map(|e| (e.kind, e.subject, e.at_ms));
+        living_rules::script::yielded_seen(lines, id, me.now_ms.max(0.0) as u64)
+    }).flatten();
+    Some(TargetFacts { class: "creature".into(), id: id as u64, kind: c.kind, name: c.name, hp, max_hp, stage: stage_name(c.stage).into(), hurt_ago: 1e9, alive: true, dist, yielded_ago, ..Default::default() })
 }
 
 fn thing_facts(class: &'static str, kind: &str, id: u64, amount: f32, dist: f32) -> TargetFacts {
@@ -919,7 +917,7 @@ fn toward(conn: &crate::net::PlayerConnection, rules: &Scripts, me: &Me, my_at: 
             fire_facts(conn, rules, &mut t, me);
             Toward { title: thing_title(conn, me.actor.id, class, kind, *id), target: Some(t), open: true, requests: false }
         }
-        Aim::Creature { id } => match creature_facts(conn, rules, *id, 0.0) {
+        Aim::Creature { id } => match creature_facts(conn, rules, me, *id, 0.0) {
             Some(t) => Toward { title: String::new(), requests: t.kind == me.actor.kind && t.kind == "person", target: Some(t), open: true },
             None => Toward { title: String::new(), target: None, open: false, requests: false },
         },

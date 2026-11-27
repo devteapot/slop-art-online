@@ -180,6 +180,33 @@ pub struct TargetFacts {
     pub sex: String,
 }
 
+impl TargetFacts {
+    /// Another creature or a thing as an actor perceives it when deciding what it can do
+    /// (perception parity: `can` under the `perceived_can_on` law, and the game client's
+    /// choices, the same rule for both): what it carries or holds is not seen, so it is assumed to
+    /// hold what is asked of it (`item` × `qty`, at least one) and the authority's own check
+    /// refuses truthfully when it does not; what it knows, its body's sex and when it was last
+    /// hurt are not perceived (none, unknown, long ago).
+    pub fn perceived(mut self, item: &str, qty: u32) -> TargetFacts {
+        self.inv.clear();
+        if !item.is_empty() {
+            self.inv.push((item.to_string(), qty.max(1)));
+        }
+        self.knows.clear();
+        self.sex.clear();
+        self.hurt_ago = 1e9;
+        self
+    }
+}
+
+/// How long ago `who` was seen to yield (ms), from the lines one was told (kind, subject, when):
+/// the newest `yield` line whose subject is `who` (a yield is seen by whoever watches, and told
+/// to the one yielded to). `None` when none was seen. The same rule for a mind's character (its
+/// `experience`) and a player's client (`my_experience`).
+pub fn yielded_seen(lines: impl IntoIterator<Item = (String, u32, u64)>, who: u32, now: u64) -> Option<f32> {
+    lines.into_iter().filter(|(k, s, _)| k == "yield" && *s == who).map(|(_, _, at)| at).max().map(|at| now.saturating_sub(at) as f32)
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct SkillCtx {
     pub gaze_band: crate::sight::GazeBand,
@@ -600,6 +627,11 @@ pub struct Laws {
     /// relation row (or one labelled "stranger"); on, someone whose name one does not know
     /// (`perception::knows_name`, the rule scenes and percepts name people by).
     pub stranger_by_name: bool,
+    /// What a graph's `can` decides on (perception parity): on, the context as the actor
+    /// perceives it (`act::can`: `TargetFacts::perceived`, the band of another's health, a yield
+    /// seen, whoever struck it only in sight; a predator's `dares` counts only the people it
+    /// sees); off, the truth, as `act::begin` reads it.
+    pub perceived_can_on: bool,
     /// Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): on, a graph's
     /// `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a clear
     /// personal relation, then the community's stance, and minds are told so; off, any personal
@@ -938,6 +970,7 @@ impl Default for Laws {
             alert_while_attacker_near: true,
             renew_in_place: true,
             stranger_by_name: false,
+            perceived_can_on: false,
             relation_fight_on: true,
             cues_on: false,
             cue_cooldown_s: 600.0,
@@ -3318,6 +3351,7 @@ impl Scripts {
             alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
             renew_in_place: flag("renew_in_place", l.renew_in_place),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
+            perceived_can_on: flag("perceived_can_on", l.perceived_can_on),
             relation_fight_on: flag("relation_fight_on", l.relation_fight_on),
             cues_on: flag("cues_on", l.cues_on),
             cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),
@@ -4163,6 +4197,28 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "witness" => Effect::Witness { text: s("text"), salience: m.get("salience").and_then(number).unwrap_or(0.4).clamp(0.0, 1.0) as f32 },
         other => return Err(format!("unknown effect op `{other}`")),
     })
+}
+
+#[cfg(test)]
+mod perceived_tests {
+    use super::{yielded_seen, TargetFacts};
+
+    #[test]
+    fn a_perceived_target_holds_what_is_asked_and_hides_what_it_knows() {
+        let t = TargetFacts { inv: vec![("meat".into(), 3), ("spear".into(), 1)], knows: vec!["fire".into()], sex: "female".into(), hurt_ago: 5.0, hp: 40.0, ..Default::default() };
+        let p = t.clone().perceived("berries", 2);
+        assert_eq!(p.inv, vec![("berries".to_string(), 2)]);
+        assert!(p.knows.is_empty() && p.sex.is_empty() && p.hurt_ago >= 1e9 && p.hp == 40.0);
+        assert_eq!(t.clone().perceived("meat", 0).inv, vec![("meat".to_string(), 1)]);
+        assert!(t.perceived("", 0).inv.is_empty());
+    }
+
+    #[test]
+    fn a_yield_is_seen_by_its_newest_line_about_that_one() {
+        let lines = vec![("yield".to_string(), 7, 1_000), ("attacked".to_string(), 7, 4_000), ("yield".to_string(), 7, 2_500), ("yield".to_string(), 8, 3_000)];
+        assert_eq!(yielded_seen(lines.clone(), 7, 5_000), Some(2_500.0));
+        assert_eq!(yielded_seen(lines, 9, 5_000), None);
+    }
 }
 
 #[cfg(test)]

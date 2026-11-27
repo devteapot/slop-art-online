@@ -313,6 +313,83 @@ def seize(s):
              {"cause": dead["cause"], "yield": renewed, "killing": killing, "news": news})
 
 
+def perceived_can(s):
+    """A graph's `can` under the `perceived_can_on` law (perception parity,
+    docs/PERCEPTION_PARITY_AUDIT.md): decided on what the actor perceives, as a player's client
+    decides (`TargetFacts::perceived`), while the act itself is still checked on the truth. On an
+    open line W stands beside T, who carries 3 meat and no berries and yields in W's sight. W's
+    probe asks `can seize` T's meat, then T's berries, and waves (yes) or nods (no). Law off
+    (control, the leak): meat yes, berries no, so `can` tells W what T carries. Law on: yes to
+    both (what T carries is not seen); W's seize of berries is then refused truthfully (T does
+    not have them) and T keeps its meat. Then U, carrying meat, yields while W stands 16 m off
+    (out of sight); W is brought beside U within the yield's 20 s: law on, `can seize` is no (the
+    yield was not seen, U is not hurt); law off, yes (the private yield). About 3 minutes."""
+    people = {c["id"] for c in s.rows("SELECT id, kind FROM character WHERE alive = true") if c["kind"] == "person"}
+    line = open_line(s, length=24, avoid=[(b["x"], b["y"]) for b in s.rows("SELECT id, x, y FROM body") if b["id"] in people])
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    w, t, u = cast = s.people(3)
+    (s.out / f"{s.name}-cast.json").write_text(json.dumps({"W": w, "T": t, "U": u}) + "\n")
+    rounds = iter(range(1000))
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    def probe(target, item, label):
+        """W's answer to `can seize` `item` from `target`: a wave for yes, a nod for no."""
+        t0 = now()
+        s.graph(w, {"seq": [{"if": {"cond": {"can": {"skill": "seize", "target": {"id": target}, "item": item}},
+                                    "then": {"do": {"skill": "wave", "target": {"id": target}}},
+                                    "else": {"do": {"skill": "nod", "target": {"id": target}}}}},
+                            {"wait": 60 + next(rounds)}]})
+        got = s.wait(lambda: [x for x in s.rows("SELECT * FROM skill_use") if x["at_ms"] >= t0 and x["actor"] == w and x["skill"] in ("wave", "nod")] or None, seconds=20)
+        s.rows(f"SELECT * FROM skill_use WHERE actor = {w}", f"probe-{label}")
+        return {"wave": True, "nod": False}[got[0]["skill"]]
+
+    try:
+        for c in cast:
+            s.graph(c, {"wait": 120 + next(rounds)})
+        set_law(s, "perceived_can_on", False)
+        s.call("place_at", w, line[10][0], line[10][1])
+        s.call("place_at", t, line[11][0], line[11][1])
+        s.call("place_at", u, line[23][0], line[23][1])
+        s.call("grant_items", t, "meat", 3)
+        s.call("grant_items", u, "meat", 3)
+        time.sleep(46)  # a body is not second-guessed for 45 s after arrival (`brain.rs`)
+        s.graph(t, {"seq": [{"do": "yield"}, {"wait": 120 + next(rounds)}]})
+        s.wait(lambda: s.story("yield", t))
+        s.expect("W saw T yield (a yield line in W's experience)", s.wait(lambda: s.told(w, "", "yield"), seconds=10), s.told(w, "", "yield"))
+        off = {i: probe(t, i, f"off-{i}") for i in ("meat", "berries")}
+        s.expect("law off: can seize T's meat yes, berries no (can reveals what T carries: the leak)", off == {"meat": True, "berries": False}, off)
+        set_law(s, "perceived_can_on", True)
+        s.wait(lambda: own_laws(s.rows).get("perceived_can_on") == "true", 10)
+        on = {i: probe(t, i, f"on-{i}") for i in ("meat", "berries")}
+        s.expect("law on: can seize yes for meat and for berries (what T carries is not seen)", on == {"meat": True, "berries": True}, on)
+        t0 = now()
+        s.act(w, {"do": "seize", "target": {"id": t}, "item": "berries"})
+        s.wait(lambda: s.told(w, "does not have"), seconds=20)
+        s.expect("law on: the seize of berries is refused truthfully, and T keeps its meat", s.inventory(t, "t-after").get("meat") == 3 and not s.inventory(w, "w-after").get("berries"),
+                 s.told(w, "does not have"))
+
+        # An unseen yield: U yields while W is 13 m off, beyond the day's sight.
+        s.graph(w, {"wait": 120 + next(rounds)})
+        s.graph(u, {"seq": [{"do": "yield"}, {"wait": 120 + next(rounds)}]})
+        s.wait(lambda: s.story("yield", u))
+        yielded = time.monotonic()
+        s.call("place_at", w, line[22][0], line[22][1])
+        time.sleep(1.5)
+        s.expect("W saw no yield by U", not [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {w} AND kind = 'yield'") if r["subject"] == u])
+        unseen_on = probe(u, "meat", "unseen-on")
+        set_law(s, "perceived_can_on", False)
+        s.wait(lambda: own_laws(s.rows).get("perceived_can_on") == "false", 10)
+        unseen_off = probe(u, "meat", "unseen-off")
+        inside = time.monotonic() - yielded < 19.0
+        s.expect("unseen yield: law on can seize no, law off yes (the private yield), within the yield's 20 s",
+                 inside and unseen_on is False and unseen_off is True, {"on": unseen_on, "off": unseen_off, "s_after_yield": round(time.monotonic() - yielded, 1)})
+    finally:
+        set_law(s, "perceived_can_on", False, check=False)
+        for c in cast:
+            s.graph(c, {"wait": 60 + next(rounds)})
+        off_the_line(s, line, cast, dy=64)
+
+
 def death_names(s):
     """A community member killed by an outsider in front of another member and a bystander.
 
@@ -5834,6 +5911,7 @@ SCENES["stamina"] = stamina
 SCENES["fights"] = fights
 SCENES["chase"] = chase
 SCENES["doing_seen"] = doing_seen
+SCENES["perceived_can"] = perceived_can
 SCENES["committed"] = committed
 SCENES["doing_cost"] = doing_cost
 SCENES["owners"] = owners

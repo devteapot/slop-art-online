@@ -56,6 +56,8 @@ python3 "$C/scenes.py" act_replace --run "$R" > "$E/act_replace.txt" 2>&1
 python3 "$C/scenes.py" act_gaps --run "$R" > "$E/act_gaps.txt" 2>&1
 # Truthful refusals: why a target did not resolve, not-acts named, each beside a control (features/acts.md#truthful-refusals, about 1.5 min).
 python3 "$C/scenes.py" truthful_refusals --run "$R" > "$E/truthful_refusals.txt" 2>&1
+# `can` from what one perceives under perceived_can_on: hidden holdings not revealed, an unseen yield not known, off as a control (features/perceived-can.md, about 3 min).
+python3 "$C/scenes.py" perceived_can --run "$R" > "$E/perceived_can.txt" 2>&1
 # A dodge over before the blow came, and a cooldown's refusals told once (features/combat.md, about 20 s).
 # The fast lane's triggers: the repeat at the law's N, never told; unseen moves not counted (features/fast.md, about 2 min).
 python3 "$C/scenes.py" seen_again --run "$R" > "$E/seen_again.txt" 2>&1
