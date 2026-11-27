@@ -1277,7 +1277,7 @@ impl<'a> Ev<'a> {
                 let (cx, cy) = (self.at.0.floor() as i32, self.at.1.floor() as i32);
                 let mut best: Option<((f32, f32), f32)> = None;
                 // Grazed-bare ground doesn't count as grass to go to (a chunk's grass is seen: a
-                // player reads the same rows of the chunks round its character, `seen_pasture`).
+                // player reads the same rows of the chunks within its sight, `seen_pasture`).
                 let mut bare: std::collections::HashMap<u32, bool> = std::collections::HashMap::new();
                 for dy in -r..=r {
                     for dx in -r..=r {
