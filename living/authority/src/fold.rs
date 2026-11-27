@@ -152,15 +152,21 @@ pub fn flush(ctx: &ReducerContext, prev: u64, now: u64) {
         common::diag(|| "fold:line_labels", who.len() as u64);
         let named = common::detail_span("fold.labels");
         let player = crate::combat::human(ctx, c.id).is_some();
+        let heed = crate::heed::applies(ctx, c.id);
         let labels: HashMap<u32, String> = who
             .iter()
             .copied()
             .zip(crate::perception::labels(ctx, &c, &who, now))
-            .map(|(x, label)| match ctx.db.character().id().find(x) {
-                // Under heed, someone in the onlooker's throng is no one in particular.
-                Some(_) if crate::heed::masked(ctx, &c, x, now) => (x, crate::heed::throng_label(ctx, c.id, x, now)),
-                Some(t) if !player && label != t.name => (x, format!("{label} (#{})", crate::far::id_for(ctx, &c, &t, now))),
-                _ => (x, label),
+            .map(|(x, label)| {
+                if !heed && player {
+                    return (x, label);
+                }
+                match ctx.db.character().id().find(x) {
+                    // Under heed, someone in the onlooker's throng is no one in particular.
+                    Some(_) if heed && crate::heed::masked(ctx, &c, x, now) => (x, crate::heed::throng_label(ctx, c.id, x, now)),
+                    Some(t) if !player && label != t.name => (x, format!("{label} (#{})", crate::far::id_for(ctx, &c, &t, now))),
+                    _ => (x, label),
+                }
             })
             .collect();
         drop(named);
