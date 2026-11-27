@@ -172,7 +172,7 @@ fn laws() {
         // A look checks only the structures new since the last look, or outside its sight then;
         // `notice_delta_check` (a diagnostic) checks that every one skipped was already familiar.
         notice_delta: true, notice_delta_check: false,
-        seen_ranges: true, seen_ranges_check: false,
+        seen_ranges: true, seen_ranges_check: false, seen_ranges_max_pairs: 128.0,
         // How what is near a player, or fighting it, reaches the player's client: as cues at once,
         // behind near copies that follow every 500 ms (on, since frame-views' acceptance), or at the
         // player's frames (off). Delivery only: the client ends on the same rows either way
@@ -3331,6 +3331,7 @@ fn law_about(l, name) {
         "notice_delta_check" => "a diagnostic: what a look passes over is checked to be already familiar",
         "seen_ranges" => "remember which structures were seen in ranges of ids by block",
         "seen_ranges_check" => "a diagnostic: compare structure newness with familiarity",
+        "seen_ranges_max_pairs" => `cap seen-structure pairs per block at ${short(l.seen_ranges_max_pairs)} (0: none)`,
         "latency_nav_from" => if l.latency_nav_from == 0 { "navigation latency logging is off" } else { "navigation latency logging starts at the chosen character id" },
         "latency_fast" => if l.latency_fast { "the fast lane's authority stages are logged" } else { "fast lane latency logging is off" },
         "latency_acts" => if l.latency_acts { "the course of each deliberate act is logged" } else { "deliberate act logging is off" },

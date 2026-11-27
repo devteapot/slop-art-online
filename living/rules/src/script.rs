@@ -829,6 +829,10 @@ pub struct Laws {
     pub notice_delta_check: bool,
     pub seen_ranges: bool,
     pub seen_ranges_check: bool,
+    /// Value-only cap on disjoint structure-id pairs per `(actor, block)` in `seen_structures`
+    /// when fragmented live remains defeat exact compaction (0: no cap; trimming keeps 3/4,
+    /// default 128 -> 96, sparing every interval holding a permanent structure).
+    pub seen_ranges_max_pairs: f32,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -998,6 +1002,7 @@ impl Default for Laws {
             notice_delta_check: false,
             seen_ranges: true,
             seen_ranges_check: false,
+            seen_ranges_max_pairs: 128.0,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -3375,6 +3380,7 @@ impl Scripts {
             notice_delta_check: flag("notice_delta_check", l.notice_delta_check),
             seen_ranges: flag("seen_ranges", l.seen_ranges),
             seen_ranges_check: flag("seen_ranges_check", l.seen_ranges_check),
+            seen_ranges_max_pairs: g("seen_ranges_max_pairs", l.seen_ranges_max_pairs).round().clamp(0.0, 4096.0),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -3638,7 +3644,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 34] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 35] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3692,6 +3698,8 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 34] = [
     ("heed_trace", ValueOnly::Delivery),
     // heed for players: read at each player's sweep (perception::sweep_one).
     ("heed_players", ValueOnly::Delivery),
+    // seen-structures-remains: per-block cap on fragmented remains ranges (seen_structures.rs).
+    ("seen_ranges_max_pairs", ValueOnly::Delivery),
 ];
 
 /// The functions a value-only law may be named in: the constants (`laws`, an overlay's

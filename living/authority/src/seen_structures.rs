@@ -6,22 +6,25 @@ use spacetimedb::{ReducerContext, Table};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-/// Run exact compaction once a block exceeds this many disjoint pairs.
+/// Run exact compaction once a block exceeds this many disjoint pairs (or `seen_ranges_max_pairs`
+/// when that world law is set lower).
 const COMPACT_AFTER: usize = 64;
-/// Hard ceiling on disjoint pairs kept in one 128 m block when live fragmented remains alone
-/// defeat exact compaction: above `MAX_PAIRS` (2 KiB of `ranges`), drop the oldest remains-only
-/// intervals down to `TRIM_TO` while sparing every interval that holds a permanent structure.
-/// Keeping `MAX_PAIRS` above `COMPACT_AFTER` lets transient partial views of a large field merge
-/// cleanly without losing live remains, while still bounding per-row bytes in long battles.
-const MAX_PAIRS: usize = 128;
-const TRIM_TO: usize = 96;
-/// While a block stays above `COMPACT_AFTER` after compaction (either under `MAX_PAIRS` or due
-/// to >`MAX_PAIRS` permanent intervals), wait for this many new pairs before walking the 64 chunks
-/// again instead of compacting on every look.
+/// While a block stays above the compaction trigger after compaction (either under the cap or due
+/// to permanent intervals), wait for this many new pairs before walking the 64 chunks again.
 const COMPACT_STEP: usize = 16;
 
+/// Target pair count when trimming fragmented remains-only intervals above `max_pairs`: 3/4 of
+/// the cap (default `128` -> `96`), buying at least a quarter of the cap before the next trim.
+fn trim_to(max_pairs: usize) -> usize {
+    ((max_pairs * 3) / 4).max(1).min(max_pairs)
+}
+
+fn compact_trigger(max_pairs: usize) -> usize {
+    if max_pairs == 0 { COMPACT_AFTER } else { COMPACT_AFTER.min(max_pairs) }
+}
+
 thread_local! {
-    /// Minimum pair count before a block that stayed above `COMPACT_AFTER` may compact again.
+    /// Minimum pair count before a block that stayed above `compact_trigger` may compact again.
     /// `BTreeMap` (no `RandomState`) so module-memory order cannot perturb `det_compare`.
     static NEXT_COMPACT: RefCell<BTreeMap<(u32, u32), usize>> = const { RefCell::new(BTreeMap::new()) };
 }
@@ -37,18 +40,18 @@ pub(crate) fn forget(actor: u32) {
     });
 }
 
-fn should_compact(actor: u32, block: u32, pairs: usize) -> bool {
-    if pairs <= COMPACT_AFTER {
+fn should_compact(actor: u32, block: u32, pairs: usize, trigger: usize) -> bool {
+    if pairs <= trigger {
         return false;
     }
     let floor = NEXT_COMPACT.with(|m| m.borrow().get(&(actor, block)).copied().unwrap_or(0));
     pairs >= floor
 }
 
-fn record_compacted(actor: u32, block: u32, pairs_after: usize) {
+fn record_compacted(actor: u32, block: u32, pairs_after: usize, trigger: usize) {
     NEXT_COMPACT.with(|m| {
         let mut m = m.borrow_mut();
-        if pairs_after <= COMPACT_AFTER {
+        if pairs_after <= trigger {
             m.remove(&(actor, block));
         } else {
             m.insert((actor, block), pairs_after.saturating_add(COMPACT_STEP));
@@ -97,12 +100,14 @@ impl Look {
     }
 
     pub(crate) fn write(self, ctx: &ReducerContext) {
+        let max_pairs = crate::common::laws(ctx).seen_ranges_max_pairs.round().max(0.0) as usize;
+        let trigger = compact_trigger(max_pairs);
         for (_, Block { mut row, added }) in self.0 {
             if added.is_empty() {
                 continue;
             }
             row.ranges = merge(&row.ranges, added);
-            if should_compact(row.actor, row.block, row.ranges.len() / 2) {
+            if should_compact(row.actor, row.block, row.ranges.len() / 2, trigger) {
                 let (bx, by) = map::chunk_xy(row.block);
                 let mut live = Vec::new();
                 for dy in 0..known::BLOCK {
@@ -112,8 +117,8 @@ impl Look {
                         live.extend(structures.iter().map(|s| (s.id, s.kind != "remains")));
                     }
                 }
-                row.ranges = compact_live(&row.ranges, live);
-                record_compacted(row.actor, row.block, row.ranges.len() / 2);
+                row.ranges = compact_live(&row.ranges, live, max_pairs);
+                record_compacted(row.actor, row.block, row.ranges.len() / 2, trigger);
                 crate::common::diag(|| "seen_structures:compacted", 1);
             }
             if row.ranges.is_empty() {
@@ -168,10 +173,10 @@ fn merge(ranges: &[u64], added: Vec<u64>) -> Vec<u64> {
 /// 1. Exact gap-bridging: drop expired ids and merge consecutive seen live ids whenever no
 ///    unseen live structure lies strictly between them (structure ids are `#[auto_inc]`, so no
 ///    future structure in this block can fall inside a bridged gap).
-/// 2. Bound fragmented remains: if the block still has more than `COMPACT_AFTER` disjoint pairs
-///    (from interleaved seen and unseen live remains), drop the oldest remains-only intervals down
-///    to `TRIM_TO` pairs while sparing every interval that holds a permanent structure.
-fn compact_live(ranges: &[u64], mut live: Vec<(u64, bool)>) -> Vec<u64> {
+/// 2. Bound fragmented remains: when `max_pairs > 0` (the `seen_ranges_max_pairs` law, default 128)
+///    and the block still exceeds `max_pairs`, drop the oldest remains-only intervals down to
+///    `trim_to(max_pairs)` (3/4, default 96) while sparing every interval holding a permanent structure.
+fn compact_live(ranges: &[u64], mut live: Vec<(u64, bool)>, max_pairs: usize) -> Vec<u64> {
     live.sort_unstable_by_key(|&(id, _)| id);
     let mut intervals: Vec<(u64, u64, bool)> = Vec::new();
     let mut open: Option<(u64, u64, bool)> = None;
@@ -191,8 +196,8 @@ fn compact_live(ranges: &[u64], mut live: Vec<(u64, bool)>) -> Vec<u64> {
     if let Some(iv) = open {
         intervals.push(iv);
     }
-    if intervals.len() > MAX_PAIRS {
-        let mut drop_n = intervals.len() - TRIM_TO;
+    if max_pairs > 0 && intervals.len() > max_pairs {
+        let mut drop_n = intervals.len() - trim_to(max_pairs);
         intervals.retain(|&(_, _, has_perm)| {
             if !has_perm && drop_n > 0 {
                 drop_n -= 1;
@@ -214,6 +219,8 @@ mod tests {
     use super::*;
     use std::collections::BTreeSet;
 
+    const DEFAULT_MAX: usize = 128;
+
     #[test]
     fn ranges_match_a_set_through_insertion_and_compaction() {
         let mut ranges = Vec::new();
@@ -226,7 +233,7 @@ mod tests {
                 // Every id is permanent here, so exact compaction must preserve exact membership
                 // for all live structures in the block.
                 let live: Vec<_> = (0..2048).filter(|id| id % 3 != round % 3).map(|id| (id, true)).collect();
-                ranges = compact_live(&ranges, live.clone());
+                ranges = compact_live(&ranges, live.clone(), DEFAULT_MAX);
                 set.retain(|id| id % 3 != round % 3);
                 for &(id, _) in &live {
                     assert_eq!(
@@ -263,7 +270,7 @@ mod tests {
             (105, false),
             (200, true),  // unseen live permanent
         ];
-        let compacted = compact_live(&ranges, live.clone());
+        let compacted = compact_live(&ranges, live.clone(), DEFAULT_MAX);
         assert_eq!(compacted, vec![10, 14, 100, 105]);
         for &(id, _) in &live {
             assert_eq!(contains(&compacted, id), contains(&ranges, id), "id {id}");
@@ -275,7 +282,7 @@ mod tests {
 
     #[test]
     fn compaction_caps_remains_intervals_and_protects_permanent_structures() {
-        // 5 permanent structures at low ids + 160 disjoint seen/unseen remains pairs (> MAX_PAIRS).
+        // 5 permanent structures at low ids + 160 disjoint seen/unseen remains pairs.
         let mut live = Vec::new();
         let mut seen = Vec::new();
         for i in 0..5u64 {
@@ -291,38 +298,46 @@ mod tests {
         }
         let ranges = merge(&[], seen);
         assert_eq!(ranges.len() / 2, 165);
-        let compacted = compact_live(&ranges, live.clone());
-        assert_eq!(compacted.len() / 2, TRIM_TO);
-        // Every permanent structure stays seen.
+        // Default law value (128 -> 96).
+        let compacted = compact_live(&ranges, live.clone(), DEFAULT_MAX);
+        assert_eq!(trim_to(DEFAULT_MAX), 96);
+        assert_eq!(compacted.len() / 2, 96);
         for i in 0..5u64 {
             assert!(contains(&compacted, i * 10 + 1), "permanent {i} kept");
             assert!(!contains(&compacted, i * 10 + 5), "unseen permanent {i} stays unseen");
         }
-        // Newest remains stay seen; no unseen remains becomes falsely seen.
-        for i in (160 - (TRIM_TO as u64 - 5))..160 {
+        for i in (160 - (96u64 - 5))..160 {
             assert!(contains(&compacted, 1000 + i * 2), "recent remains {i} kept");
         }
         for i in 0..160u64 {
             assert!(!contains(&compacted, 1000 + i * 2 + 1), "unseen remains {i} stays unseen");
         }
+        // Tuned law value (64 -> 48) and uncapped (0 -> keeps all 165).
+        assert_eq!(compact_live(&ranges, live.clone(), 64).len() / 2, 48);
+        assert_eq!(compact_live(&ranges, live, 0).len() / 2, 165);
     }
 
     #[test]
     fn compaction_rate_limit_prevents_repeated_walks_above_cap() {
         let (actor, block) = (999_001, 42);
+        let trigger = compact_trigger(DEFAULT_MAX);
+        assert_eq!(trigger, COMPACT_AFTER);
+        assert_eq!(compact_trigger(32), 32);
+        assert_eq!(compact_trigger(0), COMPACT_AFTER);
         forget(actor);
-        assert!(!should_compact(actor, block, COMPACT_AFTER));
-        assert!(should_compact(actor, block, COMPACT_AFTER + 1));
-        // Compaction back under COMPACT_AFTER clears the floor.
-        record_compacted(actor, block, 40);
-        assert!(!should_compact(actor, block, COMPACT_AFTER));
-        assert!(should_compact(actor, block, COMPACT_AFTER + 1));
-        // Staying above COMPACT_AFTER (e.g. 96 after trim or 140 permanent intervals) waits COMPACT_STEP.
-        record_compacted(actor, block, TRIM_TO);
-        assert!(!should_compact(actor, block, TRIM_TO + 1));
-        assert!(!should_compact(actor, block, TRIM_TO + COMPACT_STEP - 1));
-        assert!(should_compact(actor, block, TRIM_TO + COMPACT_STEP));
+        assert!(!should_compact(actor, block, trigger, trigger));
+        assert!(should_compact(actor, block, trigger + 1, trigger));
+        // Compaction back under trigger clears the floor.
+        record_compacted(actor, block, 40, trigger);
+        assert!(!should_compact(actor, block, trigger, trigger));
+        assert!(should_compact(actor, block, trigger + 1, trigger));
+        // Staying above trigger (e.g. 96 after trim) waits COMPACT_STEP.
+        let kept = trim_to(DEFAULT_MAX);
+        record_compacted(actor, block, kept, trigger);
+        assert!(!should_compact(actor, block, kept + 1, trigger));
+        assert!(!should_compact(actor, block, kept + COMPACT_STEP - 1, trigger));
+        assert!(should_compact(actor, block, kept + COMPACT_STEP, trigger));
         forget(actor);
-        assert!(should_compact(actor, block, TRIM_TO + 1));
+        assert!(should_compact(actor, block, kept + 1, trigger));
     }
 }
