@@ -741,6 +741,35 @@ fn answered_bond(ctx: &ReducerContext, me: u32, other: u32, named: u64, now: u64
     Ok(o)
 }
 
+/// Whether a `decline` call toward `target` is withdrawing `me`'s own outgoing bond offer (either
+/// naming that offer via `bond`, or unnamed with an outgoing bond offer to `other` and no open
+/// incoming terms/trade/bond offer from `other` ahead of it). Withdrawing one's own offer does
+/// not require sight or physical reach to the receiver.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn is_own_bond_withdraw(ctx: &ReducerContext, me: u32, skill: &str, target_class: u8, target_id: u64, offer_id: u64, record_id: u64, bond_id: u64, now: u64) -> bool {
+    if skill != "decline" || target_class != 3 || offer_id != 0 || record_id != 0 {
+        return false;
+    }
+    let other = target_id as u32;
+    if bond_id != 0 {
+        return ctx.db.bond_offer().id().find(bond_id).is_some_and(|o| o.from == me && o.to == other);
+    }
+    if !ctx.db.bond_offer().from().filter(me).any(|o| o.to == other) {
+        return false;
+    }
+    let laws = common::laws(ctx);
+    let bond_ms = (laws.bond_window_s * 1000.0) as u64;
+    if ctx.db.bond_offer().from().filter(other).any(|o| o.to == me && now.saturating_sub(o.at_ms) <= bond_ms) {
+        return false;
+    }
+    if ctx.db.trade_offer().from().filter(other).any(|o| o.to == me && now <= o.ends_ms(laws.trade_window_s)) {
+        return false;
+    }
+    !crate::records::of(ctx, me, now)
+        .iter()
+        .any(|r| r.open && r.kind == "agreement" && r.status == "offered" && r.me == "to" && r.parties.iter().any(|(role, p)| role == "from" && *p == other as u64))
+}
+
 /// The trade offer an answer (accept, decline) is to: `named` (0: the standing one) from `from`
 /// to `me`, while it can be accepted. Whatever a script names, only the addressee answers an
 /// offer, and only its maker's.
@@ -1135,8 +1164,10 @@ pub fn begin_with(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill
     }
     let r = reach(ctx, skill);
     let moving_skill = matches!(skill, "goto" | "wander" | "flee" | "follow" | "keep_distance" | "close_in" | "circle" | "back_off") || aim == Aim::Dash || aside;
+    let own_withdraw = is_own_bond_withdraw(ctx, id, skill, target.class, target.id, answers.0, answers.1, answers.2, now);
     // A skillshot at a point and a guard turn toward their point; they never walk to it.
-    let in_place = target.class == 4 && matches!(aim, Aim::Point | Aim::Facing);
+    // Withdrawing one's own outgoing bond offer happens in place (no reach or sight needed).
+    let in_place = (target.class == 4 && matches!(aim, Aim::Point | Aim::Facing)) || own_withdraw;
     let mut needs_approach = !in_place && target.class != 0 && target.class != 5 && (moving_skill || dist(here, target.at) > r);
     if node == PLAYER && needs_approach && !moving_skill {
         // A player's move does not walk into reach: a blow carries its lunge, no further.
@@ -1147,7 +1178,7 @@ pub fn begin_with(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill
         }
         needs_approach = false;
     }
-    if node == PLAYER && target.class == 3 && target.id as u32 != id {
+    if node == PLAYER && !own_withdraw && target.class == 3 && target.id as u32 != id {
         let w = common::world(ctx);
         let heading = ctx.db.body().id().find(id).map_or(0.0, |b| common::facing_at(&b, now));
         // Already in the player's sight (its perceived set): the keep margins hold, as on its screen.
@@ -1168,7 +1199,7 @@ pub fn begin_with(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill
         qty,
         started_ms: now,
         ends_ms: IDLE,
-        label: label(skill, &item, &target),
+        label: if own_withdraw { label("withdraw", &item, &target) } else { label(skill, &item, &target) },
         // A rework carries a whole graph; other texts are a sign's or tablet's words.
         text: text.chars().take(if skill == "rework" { 32_000 } else { 400 }).collect(),
         topic: if answers.2 != 0 { format!("{BOND_TOPIC_PREFIX}{}", answers.2) } else { topic.to_string() },
@@ -1929,14 +1960,16 @@ pub fn on_motion(ctx: &ReducerContext, id: u32, ev: Event, now: u64) {
     }
 }
 
-fn complete(ctx: &ReducerContext, a: Activity, now: u64) {
+fn complete(ctx: &ReducerContext, mut a: Activity, now: u64) {
     let _detail = common::detail_span("act.complete");
     let sc = common::scripts(ctx);
     let sctx = skill_ctx(ctx, a.id, &a, now);
+    let own_withdraw = is_own_bond_withdraw(ctx, a.id, &a.skill, a.target.class, a.target.id, a.offer, a.record, bond_id_of(&a), now);
     // Targets can change or leave while the action runs. One that got away by a dash that
     // evades (its `<skill>_combat()` shape) dodged the move, and everyone who sees it sees a
-    // dodge, as within reach; one that walked out of reach did not.
-    if a.target.class == 3 && sctx.target.dist > reach(ctx, &a.skill) + 1.0 {
+    // dodge, as within reach; one that walked out of reach did not. Withdrawing one's own
+    // outgoing bond offer needs no reach to the receiver.
+    if !own_withdraw && a.target.class == 3 && sctx.target.dist > reach(ctx, &a.skill) + 1.0 {
         if a.victim != 0 && evaded_since(ctx, a.victim, a.started_ms) {
             release(ctx, &sc, &a, now);
             let from = ctx.db.body().id().find(a.id).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
@@ -1969,7 +2002,7 @@ fn complete(ctx: &ReducerContext, a: Activity, now: u64) {
     };
     drop(done);
     release(ctx, &sc, &a, now);
-    match apply(ctx, &a, &sctx, effects, now) {
+    match apply(ctx, &mut a, &sctx, effects, now) {
         Ok(summary) => {
             // What the rules make of it having been done (`on_<skill>`).
             let after = common::detail_span("act.after_skill");
@@ -1981,7 +2014,7 @@ fn complete(ctx: &ReducerContext, a: Activity, now: u64) {
     }
 }
 
-fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effect>, now: u64) -> Result<String, String> {
+fn apply(ctx: &ReducerContext, a: &mut Activity, sctx: &SkillCtx, effects: Vec<Effect>, now: u64) -> Result<String, String> {
     let _detail = common::detail_span("act.apply");
     let me = a.id;
     let at = ctx.db.body().id().find(me).map(|b| pos(&b, now)).unwrap_or((0.0, 0.0));
@@ -2269,6 +2302,9 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 // onlookers (`tell`, `witness`).
                 if bond != 0 {
                     let o = answered_bond(ctx, me, a.target.id as u32, bond, now)?;
+                    if o.from == me && a.label.starts_with("decline") {
+                        a.label = a.label.replacen("decline", "withdraw", 1);
+                    }
                     ctx.db.bond_offer().id().delete(o.id);
                 } else {
                     let o = answered_offer(ctx, me, a.target.id as u32, offer, now)?;
@@ -3008,7 +3044,8 @@ fn dashed(ctx: &ReducerContext, act: &Activity, now: u64) {
     crate::combat::accepted(ctx, act, now);
     let sctx = skill_ctx(ctx, act.id, act, now);
     if let Ok(fx) = sc.done(skill, &sctx) {
-        let _ = apply(ctx, act, &sctx, fx, now);
+        let mut copy = act.clone();
+        let _ = apply(ctx, &mut copy, &sctx, fx, now);
     }
 }
 

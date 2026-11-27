@@ -8537,10 +8537,10 @@ def truthful_refusals(s):
     3. A place name A does not hold (code `unknown`, "you know no place called ..."), also one only
        B holds (own rows only); controls: A's own place, and `{"place": "home"}` with no "home"
        row walks to A's own home position.
-    4. Sight (code `unseen`, "no #C in sight") for C beyond sight; control: a wave at B beside A is
-       done.
-    5. B killed beside A: "#B is dead: their remains lie in sight" (code `refused`); C killed out of
-       sight stays "no #C in sight" (a death not seen is not told).
+    4. Sight (code `unseen`, "<label> is not in sight", no raw `#C`) for C beyond sight; control:
+       a wave at B beside A is done.
+    5. B killed beside A: "<Label> is dead: their remains lie in sight" (code `refused`); C killed
+       out of sight stays "<label> is not in sight" (a death not seen is not told).
     6. A bush beside A stripped bare: gathering the nearest berry bush is refused "every berry bush
        in sight is bare" (code `refused`); control: before, the same act starts.
     7. Graph leaves: a `goto` to an unknown place leaves A "stuck: goto: you know no place called
@@ -8611,7 +8611,19 @@ def truthful_refusals(s):
         refused(goto("verify b only"), "unknown", 'you know no place called "verify b only"', "another's place")
         refused(goto("2 berry bush around [432, 226]"), "unknown", 'you know no place called "2 berry bush around [432, 226]"', "a remembered resource line")
         # 4. Sight.
-        refused(wave({"id": c}), "unseen", f"no #{c} in sight", "beyond sight")
+        chars = {r["id"]: r for r in s.rows("SELECT id, name, stage, parent_a, parent_b FROM character")}
+        acqs = {(r["observer"], r["known"]) for r in s.rows("SELECT observer, known FROM acquaintance")}
+        mems = {r["member"]: r["community"] for r in s.rows("SELECT member, community FROM membership")}
+        def known_label(x):
+            ma, mx = chars[a], chars[x]
+            kin = x in (ma["parent_a"], ma["parent_b"]) or a in (mx["parent_a"], mx["parent_b"])
+            comm = a in mems and mems.get(a) == mems.get(x)
+            if (a, x) in acqs or kin or comm:
+                return mx["name"]
+            return {0: "a baby", 1: "a child", 3: "an old stranger"}.get(mx["stage"], "a stranger")
+        lbl_b, lbl_c = known_label(b), known_label(c)
+        lbl_b_cap = lbl_b[:1].upper() + lbl_b[1:]
+        refused(wave({"id": c}), "unseen", f"{lbl_c} is not in sight", "beyond sight")
         mark = last()
         s.act(a, wave({"id": b}))
         done = s.wait(lambda: [r for r in outs() if r["id"] > mark], 10)
@@ -8667,9 +8679,9 @@ def truthful_refusals(s):
         # 5. Dead.
         s.call("kill", b, "verify truthful refusals")
         s.wait(lambda: [r for r in s.rows("SELECT owner, kind FROM structure") if r["kind"] == "remains" and r["owner"] == b], 8)
-        refused(wave({"id": b}), "refused", f"#{b} is dead: their remains lie in sight", "dead in sight")
+        refused(wave({"id": b}), "refused", f"{lbl_b_cap} is dead: their remains lie in sight", "dead in sight")
         s.call("kill", c, "verify truthful refusals")
-        refused(wave({"id": c}), "unseen", f"no #{c} in sight", "dead out of sight")
+        refused(wave({"id": c}), "unseen", f"{lbl_c} is not in sight", "dead out of sight")
     finally:
         (s.out / f"{s.name}-evidence.json").write_text(json.dumps(evidence, indent=1, default=str) + "\n")
         s.graph(a, {"wait": 120})
@@ -9142,7 +9154,8 @@ def bond_decline(s):
     w_out = s.wait(lambda: told_since(a, "Withdrew your offer to start a family", t0, "act"), seconds=15)
     s.expect("withdraw by id deletes bond_offer and tells receiver",
              bond_of(a, b) is None and bool(withdrawn), withdrawn)
-    s.expect("maker receives withdraw act outcome", bool(w_out), w_out)
+    s.expect("maker receives withdraw act outcome labelled withdraw (not decline)",
+             bool(w_out) and "withdraw → person" in w_out[-1]["text"] and "decline →" not in w_out[-1]["text"], w_out)
 
     s.act(a, {"do": "conceive", "target": {"id": b}})
     bo4 = s.wait(lambda: bond_of(a, b), seconds=20)
@@ -9152,6 +9165,47 @@ def bond_decline(s):
     withdrawn2 = s.wait(lambda: told_since(b, "withdrew their offer to start a family.", t0, "record"), seconds=20)
     s.expect("unnamed decline by maker withdraws own bond_offer and tells receiver",
              bo4 is not None and bond_of(a, b) is None and bool(withdrawn2), withdrawn2)
+
+    # 3b. Out-of-sight withdraw (unnamed and by id) succeeds without sight or approach;
+    #     declining someone else's incoming offer out of sight is still refused without raw `#id`.
+    a_pos = [(r["x"], r["y"]) for r in s.http_rows(f"SELECT x, y FROM body WHERE id = {a}")][0]
+    far = far_spot(s, a_pos)
+    s.act(a, {"do": "conceive", "target": {"id": b}})
+    bo_far1 = s.wait(lambda: bond_of(a, b), seconds=20)
+    s.call("place_at", b, *far)
+    time.sleep(0.8)
+    t0 = now()
+    s.act(a, {"do": "decline", "target": {"id": b}})
+    s.wait(lambda: bond_of(a, b) is None, seconds=20)
+    w_far_b = s.wait(lambda: told_since(b, "withdrew their offer to start a family.", t0, "record"), seconds=20)
+    w_far_a = s.wait(lambda: told_since(a, "Withdrew your offer to start a family", t0, "act"), seconds=15)
+    a_pos_after = [(r["x"], r["y"]) for r in s.http_rows(f"SELECT x, y FROM body WHERE id = {a}")][0]
+    s.expect("out-of-sight unnamed withdraw deletes bond_offer, tells receiver, does not walk, labelled withdraw",
+             bo_far1 is not None and bond_of(a, b) is None and bool(w_far_b)
+             and bool(w_far_a) and "withdraw → person" in w_far_a[-1]["text"]
+             and math.dist(a_pos, a_pos_after) < 1.0,
+             {"a": w_far_a, "b": w_far_b, "moved": math.dist(a_pos, a_pos_after)})
+
+    s.call("place_near", b, a)
+    time.sleep(0.8)
+    s.act(a, {"do": "conceive", "target": {"id": b}})
+    bo_far2 = s.wait(lambda: bond_of(a, b), seconds=20)
+    s.call("place_at", b, *far)
+    time.sleep(0.8)
+    t0 = now()
+    s.act(b, {"do": "decline", "target": {"id": a}, "bond": bo_far2["id"]})
+    unseen_ref = s.wait(lambda: refused(b, "is not in sight", t0), seconds=20)
+    s.expect("out-of-sight incoming decline is refused without raw #id and keeps offer",
+             bool(unseen_ref) and f"#{a} " not in unseen_ref[-1]["text"].split(": ", 2)[-1]
+             and bond_of(a, b) is not None, unseen_ref)
+    t0 = now()
+    s.act(a, {"do": "decline", "target": {"id": b}, "bond": bo_far2["id"]})
+    s.wait(lambda: bond_of(a, b) is None, seconds=20)
+    w_far_b2 = s.wait(lambda: told_since(b, "withdrew their offer to start a family.", t0, "record"), seconds=20)
+    s.expect("out-of-sight withdraw by bond id deletes bond_offer and tells receiver",
+             bond_of(a, b) is None and bool(w_far_b2), w_far_b2)
+    s.call("place_near", b, a)
+    time.sleep(0.8)
 
     # 4. Expired bond offer (past bond_window_s, before 60 s row drop) is refused as expired.
     try:

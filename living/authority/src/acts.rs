@@ -203,7 +203,7 @@ fn next_reporting(ctx: &ReducerContext, actor: u32, now: u64, replacing: Option<
             continue;
         }
         let target = match &a.target {
-            Some(t) => match brain::resolve_for(ctx, actor, t, now) {
+            Some(t) => match brain::resolve_for(ctx, actor, &a, t, now) {
                 Ok(r) => r,
                 Err((refusal, why)) => {
                     crate::latency::acts(ctx, actor, "act_refused", p.id, format_args!("{} {refusal}", a.skill));

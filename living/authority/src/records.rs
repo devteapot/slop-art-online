@@ -307,8 +307,8 @@ fn words_for(ctx: &ReducerContext, told: &Character, text: &str, sctx: &SkillCtx
         };
         match id {
             Some(id) if id == told.id => out.push_str(if out.trim_end().is_empty() || out.trim_end().ends_with('.') { "You" } else { "you" }),
-            Some(id) if out.trim_end().is_empty() || out.trim_end().ends_with('.') => out.push_str(&common::label_cap(ctx, told, id)),
-            Some(id) => out.push_str(&common::label_for(ctx, told, id)),
+            Some(id) if out.trim_end().is_empty() || out.trim_end().ends_with('.') => out.push_str(&common::known_label_cap(ctx, told, id)),
+            Some(id) => out.push_str(&common::known_label(ctx, told, id)),
             None => out.push_str(&rest[i..i + j + 1]),
         }
         rest = &rest[i + j + 1..];

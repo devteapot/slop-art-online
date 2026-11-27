@@ -45,10 +45,10 @@ Since `truthful-refusals` (2026-11-22, [docs/TRUTHFUL_REFUSALS.md](../../../../d
 - Not acts: `{"say": …}` "`say` is speech, not an act: speak it instead"; `{"wait": 20}` "`wait` is a behavior-graph node, not a one-off act"; `{"do": "call"}` "`call` is not a skill, so not an act"; `{"act": {…}}` "`act`: neither a skill nor a behavior-graph node".
 - Roles nobody fills: a wave at `attacker`, `speaker`, `hailer`, `suitor`, `partner`, `parent` ("nobody has hurt you in the last minute", …, "you have no parent").
 - Places, own rows only: "verify nowhere", a place only B holds and a remembered-resource line as a name are each "you know no place called …"; controls: A's own place (`mind_update`) and `{"place": "home"}` with no "home" row start a walk whose `steer` goal is that place and A's own home position.
-- Sight: a wave at C (beyond sight) "no #C in sight"; control: a wave at B is done.
+- Sight: a wave at C (beyond sight) `"<label> is not in sight"` (known name, else stranger, no raw `#C`); control: a wave at B is done.
 - Graph leaves: a `goto` to an unknown place leaves A "stuck: goto: you know no place called …"; a `say` to the speaker is told "nobody has spoken to you in the last minute".
 - Bare: a bush placed by A (`place_resource`), gathered (control: the act starts), stripped by A's graph, then "every berry bush in sight is bare".
-- Dead: B killed beside A, "#B is dead: their remains lie in sight"; C killed out of sight stays "no #C in sight".
+- Dead: B killed beside A, `"<Label> is dead: their remains lie in sight"`; C killed out of sight stays `"<label> is not in sight"`.
 
 Evidence: `truthful_refusals-results.json`, `truthful_refusals-evidence.json`.
 

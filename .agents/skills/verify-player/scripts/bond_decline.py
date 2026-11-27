@@ -24,6 +24,7 @@ Needs `verify.py launch --run RUN` (any seed). Writes `RUN/bond_decline.json`.
 import argparse
 import importlib.util
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -150,7 +151,12 @@ def main():
     wren_out = wait_for(lambda: exp_as(p, p.st["token"], "withdrew your offer to start a family", since, "act"), 15)
     check(p, "player withdraw by bond id deletes offer for both sides", code == 200 and bool(gone_wren) and bool(gone_moss), f"{code} {body[:120]}")
     check(p, "receiver Moss is told in my_experience it was withdrawn", bool(moss_told), f"{moss_told}")
-    check(p, "maker Wren's my_experience records the withdraw outcome", bool(wren_out), f"{wren_out}")
+    wren_outs, _ = sql_as(p, "SELECT * FROM my_act_outcomes", p.st["token"])
+    wren_o = [o for o in (wren_outs or []) if o["at_ms"] >= since and o["ok"]]
+    check(p, "maker Wren's outcome carries withdraw label (not decline)",
+          bool(wren_out) and "withdraw → person" in wren_out[-1]["text"] and "decline →" not in wren_out[-1]["text"]
+          and bool(wren_o) and wren_o[-1]["what"].startswith("withdraw"),
+          f"line={wren_out} row={wren_o}")
 
     # 3. Wren offers bond to Moss again and withdraws unnamed.
     p.act({"do": "conceive", "target": {"id": moss}})
@@ -162,6 +168,43 @@ def main():
     moss_told2 = wait_for(lambda: exp_as(p, t2, "withdrew their offer to start a family.", since, "record"), 15)
     check(p, "unnamed decline withdraws player's own bond offer and tells Moss",
           code == 200 and bool(mine_bo2) and bool(gone_u) and bool(moss_told2), f"{moss_told2}")
+
+    # 4. Out-of-sight withdraw for a player (unnamed and by id) works without sight or approach;
+    #    declining an out-of-sight incoming offer is refused cleanly without raw `#id`.
+    wren_pos = [(r["x"], r["y"]) for r in p.sql(f"SELECT x, y FROM body WHERE id = {me}")][0]
+    bodies = [(r["x"], r["y"]) for r in p.sql("SELECT id, x, y FROM body") if r["id"] not in (me, moss, fern, walker)]
+    far_x, far_y = next((pt for pt in bodies if math.dist(pt, wren_pos) > 50.0), (wren_pos[0] + 60.0, wren_pos[1]))
+    p.act({"do": "conceive", "target": {"id": moss}})
+    mine_far = wait_for(lambda: [o for o in p.sql("SELECT * FROM my_bond_offers", "player") if not o["incoming"] and o["to"] == moss], 15)
+    bid_far = mine_far[0]["id"] if mine_far else 0
+    p.call("place_at", [moss, far_x, far_y], "admin")
+    time.sleep(1.0)
+    since = now_ms()
+    code, body = p.act({"do": "decline", "target": {"id": moss}})
+    gone_far = wait_for(lambda: not [o for o in p.sql("SELECT * FROM my_bond_offers", "player") if o["id"] == bid_far], 15)
+    moss_far_told = wait_for(lambda: exp_as(p, t2, "withdrew their offer to start a family.", since, "record"), 15)
+    wren_far_out = wait_for(lambda: exp_as(p, p.st["token"], "withdrew your offer to start a family", since, "act"), 15)
+    wren_pos_after = [(r["x"], r["y"]) for r in p.sql(f"SELECT x, y FROM body WHERE id = {me}")][0]
+    check(p, "player out-of-sight unnamed withdraw deletes offer, tells Moss, does not walk, labelled withdraw",
+          code == 200 and bool(mine_far) and bool(gone_far) and bool(moss_far_told)
+          and bool(wren_far_out) and "withdraw → person" in wren_far_out[-1]["text"]
+          and math.dist(wren_pos, wren_pos_after) < 1.0,
+          f"out={wren_far_out} moss={moss_far_told} moved={math.dist(wren_pos, wren_pos_after):.2f}")
+
+    p.call("place_near", [walker, me], "admin")
+    time.sleep(0.8)
+    p.call("mind_act", [walker, [json.dumps({"do": "conceive", "target": {"id": me}})], "verify-player"], "admin")
+    inc_far = wait_for(lambda: [o for o in p.sql("SELECT * FROM my_bond_offers", "player") if o["incoming"] and o["from"] == walker], 15)
+    p.call("place_at", [walker, far_x, far_y], "admin")
+    time.sleep(1.0)
+    since = now_ms()
+    p.act({"do": "decline", "target": {"id": walker}})
+    unseen_rows = wait_for(lambda: [o for o in (sql_as(p, "SELECT * FROM my_act_outcomes", p.st["token"])[0] or []) if o["at_ms"] >= since and not o["ok"]], 15)
+    unseen_row = unseen_rows[-1] if unseen_rows else None
+    check(p, "player declining out-of-sight incoming offer is refused as unseen without raw #id",
+          bool(inc_far) and unseen_row is not None and unseen_row["code"] == "unseen"
+          and unseen_row["why"] == "a stranger is not in sight" and "#" not in unseen_row["why"],
+          f"{unseen_row}")
 
     (V.run_dir(p.st["run"]) / "bond_decline.json").write_text(json.dumps(RESULTS, indent=1) + "\n")
     failed = [r for r in RESULTS if not r["ok"]]

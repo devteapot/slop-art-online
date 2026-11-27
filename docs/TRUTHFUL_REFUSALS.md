@@ -24,8 +24,8 @@ Heard-of and visited places are both `place` rows (a seed's `towns_known`, a bac
 | `suitor`, `partner`, `parent` with none | nobody has offered to start a family with you lately; you have no partner (the other parent of your youngest child); you have no parent | `unknown` |
 | `sound` with nothing heard | you hear nothing you cannot see | `unknown` |
 | the same roles, filled but out of sight | whoever hurt you / spoke to you / greeted you … is not in sight; your partner is not in sight | `unseen` |
-| `{"id": n}`, dead and its remains in sight | #n is dead: their remains lie in sight | `refused` |
-| `{"id": n}` otherwise (a death out of sight included) | no #n in sight | `unseen` |
+| `{"id": n}`, dead and its remains in sight | `<Label>` is dead: their remains lie in sight (known name, else stranger) | `refused` |
+| `{"id": n}` otherwise (a death out of sight included) | `<label>` is not in sight (known name, else stranger / someone; "that is not in sight" for a thing) | `unseen` |
 | `{"nearest": resource}`, some in sight but all bare | every berry bush in sight is bare | `refused` |
 | `{"named": name}` | you see no one you know as name | `unseen` |
 | anything else | no … in sight | `unseen` |

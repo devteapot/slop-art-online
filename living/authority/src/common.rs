@@ -1813,6 +1813,17 @@ pub fn label_for(ctx: &ReducerContext, observer: &Character, id: u32) -> String 
     crate::perception::label(ctx, observer, id, now_ms(ctx))
 }
 
+/// How `observer` refers to `id` without visual-distance `far` blur (for out-of-sight refusals
+/// and dealings whose other party walked away).
+pub fn known_label(ctx: &ReducerContext, observer: &Character, id: u32) -> String {
+    crate::perception::label_known(ctx, observer, id)
+}
+
+/// The same, to begin a sentence with.
+pub fn known_label_cap(ctx: &ReducerContext, observer: &Character, id: u32) -> String {
+    capitalized(&known_label(ctx, observer, id))
+}
+
 /// Whose a structure is, as `observer` is told it (owner-known): the owner's name when the
 /// world's `owner_shown` law says so (it knows the owner's name, `perception::knows_name`, the
 /// shared answer; or the structure shows its owner, its kind's `shows_owner`), else `None`, and

@@ -904,6 +904,18 @@ pub fn label(ctx: &ReducerContext, observer: &Character, id: u32, now: u64) -> S
     labels(ctx, observer, &[id], now).pop().unwrap_or_default()
 }
 
+/// How `observer` refers to `id` when `id` is not being seen at a distance (an out-of-sight
+/// refusal, or a dealing's `tell` when the other party walked off): by name when known
+/// (`knows_name`, or same non-person species), else as a stranger or by kind (`stranger`),
+/// else "someone". Never applies the visual-distance `far` blur.
+pub fn label_known(ctx: &ReducerContext, observer: &Character, id: u32) -> String {
+    match ctx.db.character().id().find(id) {
+        Some(t) if t.id == observer.id || knows_name(ctx, observer, &t) || (observer.kind != "person" && observer.kind == t.kind) => t.name,
+        Some(t) => stranger(&t.kind, t.stage),
+        None => "someone".into(),
+    }
+}
+
 /// How `observer` refers to each of `ids`, its know-how read once.
 pub fn labels(ctx: &ReducerContext, observer: &Character, ids: &[u32], now: u64) -> Vec<String> {
     ids.iter()

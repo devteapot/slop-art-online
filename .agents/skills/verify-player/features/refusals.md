@@ -17,10 +17,10 @@ The default seed (residents). Admin calls set the scene only: `set_behavior` (th
 
 1. `goto {"place": "verify nowhere"}`: code `unknown`, `why` "you know no place called "verify nowhere"", the same words in its `act` line, which says nothing of sight.
 2. `wave → attacker` with nobody hurting it: `unknown`, "nobody has hurt you in the last minute".
-3. `wave → {"id": far}` (a resident over 60 m off): `unseen`, "no #N in sight".
+3. `wave → {"id": far}` (a resident over 60 m off): `unseen`, `"<label> is not in sight"` (known name, else `"a stranger"` / `"someone"`, no raw `#N`).
 4. Control: `wave` at the resident beside it: ok, `done`.
 5. Control: `goto {"place": "home"}` with no "home" place row: a `goto` starts, nothing refused, its `steer` goal the character's own `home_x`/`home_y`.
-6. The resident beside it killed (`kill`): `refused`, "#N is dead: their remains lie in sight".
+6. The resident beside it killed (`kill`): `refused`, `"<Label> is dead: their remains lie in sight"`.
 
 ## Not covered
 

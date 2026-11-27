@@ -251,9 +251,10 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
 }
 
 /// Resolve a target for a deliberate act exactly as a graph leaf would (only what the
-/// character perceives, sight or smell, its own places and remembered people). Err: the
-/// outcome code and why, as a graph leaf is told it (`Ev::unresolved`).
-pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Result<Resolved, (&'static str, String)> {
+/// character perceives, sight or smell, its own places, remembered people and its own outgoing
+/// bond offers when withdrawing). Err: the outcome code and why, as a graph leaf is told it
+/// (`Ev::unresolved`).
+pub fn resolve_for(ctx: &ReducerContext, id: u32, a: &living_rules::graph::Action, t: &Target, now: u64) -> Result<Resolved, (&'static str, String)> {
     let gone = || (living_rules::outcome::act::REFUSED, "you cannot act now".to_string());
     let me = ctx.db.character().id().find(id).ok_or_else(gone)?;
     let st = ctx.db.mind_state().id().find(id).ok_or_else(gone)?;
@@ -264,9 +265,10 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Resul
     let needs = common::needs(&vit, now);
     let heed = crate::heed::applies(ctx, id);
     let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0, 0), run: None, spacing: Default::default(), latched: None, acting: false, done: None, heed };
-    match ev.sensed(t) {
+    let answers = (a.offer.unwrap_or(0), a.record.unwrap_or(0), a.bond.unwrap_or(0));
+    match ev.sensed_for(&a.skill, t, answers) {
         Some(r) => Ok(r),
-        None => Err(ev.unresolved(t)),
+        None => Err(ev.unresolved_for(t, &a.skill)),
     }
 }
 
@@ -736,9 +738,10 @@ impl<'a> Ev<'a> {
                 if let Some(done) = self.finished(id, &a.skill) {
                     return done;
                 }
+                let answers = (a.offer.unwrap_or(0), a.record.unwrap_or(0), a.bond.unwrap_or(0));
                 let sensed = a.target.as_ref().map(|t| {
                     let _span = common::detail_span("brain.target");
-                    self.sensed(t)
+                    self.sensed_for(&a.skill, t, answers)
                 });
                 let target = match &a.target {
                     Some(t) => match sensed.flatten() {
@@ -756,7 +759,7 @@ impl<'a> Ev<'a> {
                                     return St::Run;
                                 }
                             }
-                            let (code, why) = self.unresolved(t);
+                            let (code, why) = self.unresolved_for(t, &a.skill);
                             // This leaf's own activity under way (performing: an approach is
                             // held above) has lost its target: it is broken off now and told,
                             // in the leaf's own look, not left for `after` to drop unsaid
@@ -789,7 +792,7 @@ impl<'a> Ev<'a> {
                         Some(r) if r.class == 3 => r.id as u32,
                         Some(_) => return self.say_failed(id, n, &format!("{} is not someone to speak to", graph::describe_target(t))),
                         None => {
-                            let (_, why) = self.unresolved(t);
+                            let (_, why) = self.unresolved(t, true, true);
                             return self.say_failed(id, n, &why);
                         }
                     },
@@ -1076,6 +1079,26 @@ impl<'a> Ev<'a> {
         r
     }
 
+    /// Resolve a target for an act or graph `do` leaf: `sensed(t)`, plus withdrawing one's own
+    /// outgoing bond offer (`decline` naming or resolving to an outgoing `bond_offer` the actor
+    /// made), which is known from the actor's own offer row without needing the receiver in sight.
+    /// Keeps `at: self.at` so the unseen receiver's position is never leaked or approached.
+    fn sensed_for(&mut self, skill: &str, t: &Target, answers: (u64, u64, u64)) -> Option<Resolved> {
+        if let Some(r) = self.sensed(t) {
+            return Some(r);
+        }
+        if skill == "decline" {
+            if let Target::Id(raw) = t {
+                let other = crate::far::resolve(self.ctx, self.me.id, *raw);
+                if act::is_own_bond_withdraw(self.ctx, self.me.id, skill, 3, other as u64, answers.0, answers.1, answers.2, self.now) {
+                    let ch = self.ctx.db.character().id().find(other)?;
+                    return Some(Resolved { class: 3, id: other as u64, at: self.at, kind: ch.kind, name: ch.name });
+                }
+            }
+        }
+        None
+    }
+
     fn resolve(&mut self, t: &Target) -> Option<Resolved> {
         let now = self.now;
         match t {
@@ -1183,13 +1206,21 @@ impl<'a> Ev<'a> {
             .map(|p| Resolved { class: 4, id: p.id, at: (p.x, p.y), kind: "place".into(), name: p.name })
     }
 
+    fn unresolved_for(&mut self, t: &Target, skill: &str) -> (&'static str, String) {
+        let sc = common::scripts(self.ctx);
+        let spec = sc.skills().get(skill);
+        let takes_creature = spec.is_none_or(|k| k.takes_class("creature"));
+        let only_creature = spec.is_some_and(|k| !k.target_class.is_empty() && k.target_class.iter().all(|c| c == "creature"));
+        self.unresolved(t, takes_creature, only_creature)
+    }
+
     /// Why `t` did not resolve, in the character's own terms (docs/TRUTHFUL_REFUSALS.md):
     /// called only after `sensed`/`resolve` gave nothing, for an act's refusal and a graph leaf's
     /// failure alike. `unseen` only for a real not-in-sight; `unknown` for a target the character
     /// knows of no one or nothing by (a place name it does not hold, a role nobody fills for it
     /// now); `refused` for one it can tell is there and cannot be acted on (bare, dead).
     /// Reads only what the character holds or perceives, as `resolve` does.
-    fn unresolved(&mut self, t: &Target) -> (&'static str, String) {
+    fn unresolved(&mut self, t: &Target, takes_creature: bool, only_creature: bool) -> (&'static str, String) {
         use living_rules::outcome::act::{REFUSED, UNKNOWN, UNSEEN};
         let now = self.now;
         let recent = |id: u32, at: u64| id != 0 && now.saturating_sub(at) < 60_000;
@@ -1223,13 +1254,19 @@ impl<'a> Ev<'a> {
             Target::Commotion => (UNSEEN, "no fight or death in sight".into()),
             Target::Named(name) => (UNSEEN, format!("you see no one you know as {}", name.trim())),
             Target::Id(id) => {
+                if !takes_creature {
+                    return (UNSEEN, "that is not in sight".into());
+                }
                 // Dead, and its remains in sight: what one sees says so (a death out of sight is
                 // not known, so it stays "not in sight", as steering's "they are dead").
-                let dead = self.ctx.db.character().id().find(*id).is_some_and(|c| !c.alive);
-                if dead && self.structures().iter().any(|(s, _)| s.kind == "remains" && s.owner == *id) {
-                    return (REFUSED, format!("#{id} is dead: their remains lie in sight"));
+                let real = crate::far::resolve(self.ctx, self.me.id, *id);
+                if let Some(c) = self.ctx.db.character().id().find(real) {
+                    if !c.alive && self.structures().iter().any(|(s, _)| s.kind == "remains" && s.owner == real) {
+                        return (REFUSED, format!("{} is dead: their remains lie in sight", common::known_label_cap(self.ctx, &self.me, real)));
+                    }
+                    return (UNSEEN, format!("{} is not in sight", common::known_label(self.ctx, &self.me, real)));
                 }
-                (UNSEEN, format!("no #{id} in sight"))
+                (UNSEEN, if only_creature { "someone is not in sight" } else { "that is not in sight" }.into())
             }
             Target::Nearest(f) if living_rules::catalog::kind_class(&f.kind) == Some(living_rules::catalog::KindClass::Resource) => {
                 let kind = f.kind.clone();
@@ -2999,9 +3036,9 @@ mod tests {
     #[test]
     fn a_lost_target_is_told_what_happened() {
         use living_rules::outcome::act::{REFUSED, UNKNOWN, UNSEEN};
-        assert_eq!(lost_why(UNSEEN, "no #4 in sight", 3), "lost sight of them");
+        assert_eq!(lost_why(UNSEEN, "a stranger is not in sight", 3), "lost sight of them");
         assert_eq!(lost_why(UNSEEN, "no berry bush in sight", 1), "lost sight of it");
-        assert_eq!(lost_why(REFUSED, "#4 is dead: their remains lie in sight", 3), "#4 is dead: their remains lie in sight");
+        assert_eq!(lost_why(REFUSED, "A stranger is dead: their remains lie in sight", 3), "A stranger is dead: their remains lie in sight");
         assert_eq!(lost_why(UNKNOWN, "nobody has spoken to you in the last minute", 3), "nobody has spoken to you in the last minute");
     }
 

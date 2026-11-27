@@ -6,10 +6,10 @@ mind's act is (verify-core `scenes.py truthful_refusals` drives the same through
 1. A place name the character does not hold: code `unknown`, "you know no place called …".
 2. A role nobody fills for it now (`attacker`): code `unknown`, "nobody has hurt you in the last
    minute".
-3. A resident beyond sight by id: code `unseen`, "no #N in sight" (sight stays sight).
+3. A resident beyond sight by id: code `unseen`, "<label> is not in sight" (sight stays sight, no raw `#N`).
 4. Control: a wave at the resident beside the player is done.
 5. Control: `{"place": "home"}` with no "home" row walks to the player's own home position.
-6. The resident beside the player killed (admin `kill`): code `refused`, "#N is dead: their
+6. The resident beside the player killed (admin `kill`): code `refused`, "<Label> is dead: their
    remains lie in sight".
 
 Each refusal's line in `my_experience` carries the same words, and none says "in sight" unless
@@ -72,9 +72,14 @@ def main():
             time.sleep(0.5)
 
         wave = lambda t: {"do": "wave", "target": t}
+        stages = {c["id"]: c["stage"] for c in p.sql("SELECT id, stage FROM character")}
+        stranger_of = lambda cid: {0: "a baby", 1: "a child", 3: "an old stranger"}.get(stages.get(cid, 2), "a stranger")
+        far_lbl = stranger_of(far)
+        near_lbl = stranger_of(near["id"])
+        near_lbl_cap = near_lbl[:1].upper() + near_lbl[1:]
         refused({"do": "goto", "target": {"place": "verify nowhere"}}, "unknown", 'you know no place called "verify nowhere"', "unknown place")
         refused(wave("attacker"), "unknown", "nobody has hurt you in the last minute", "no attacker")
-        refused(wave({"id": far}), "unseen", f"no #{far} in sight", "beyond sight")
+        refused(wave({"id": far}), "unseen", f"{far_lbl} is not in sight", "beyond sight")
         # Control: a wave at the one beside me.
         mark = last()
         p.call("human_act", [json.dumps(wave({"id": near["id"]}))])
@@ -98,7 +103,7 @@ def main():
         # Dead in sight.
         p.call("kill", [near["id"], "verify truthful refusals"], "admin")
         A.wait_for(lambda: [r for r in p.sql("SELECT owner, kind FROM structure") if r["kind"] == "remains" and r["owner"] == near["id"]], 6)
-        refused(wave({"id": near["id"]}), "refused", f"#{near['id']} is dead: their remains lie in sight", "dead in sight")
+        refused(wave({"id": near["id"]}), "refused", f"{near_lbl_cap} is dead: their remains lie in sight", "dead in sight")
     finally:
         finish(p)
 

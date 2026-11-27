@@ -1448,7 +1448,7 @@ pub fn failed_at_thing(text: &str) -> Option<u64> {
     let (label, why) = rest.split_once(": ")?;
     let id: u64 = label.rsplit_once("→ #")?.1.trim().parse().ok()?;
     let why = why.trim_end_matches('.');
-    (why == format!("no #{id} in sight") || why.ends_with(" is depleted") || why == "it is gone").then_some(id)
+    (why == format!("no #{id} in sight") || why.ends_with(" is not in sight") || why.ends_with(" is depleted") || why == "it is gone").then_some(id)
 }
 
 /// Experiences one edge may cite: a reply's own `because`, and what a re-asserted belief keeps
@@ -1980,6 +1980,7 @@ mod tests {
     fn failures_at_remembered_things_are_read_from_feedback() {
         use super::failed_at_thing;
         assert_eq!(failed_at_thing("What you had decided did not work out: gather → #66219: no #66219 in sight."), Some(66219));
+        assert_eq!(failed_at_thing("What you had decided did not work out: gather → #66219: that is not in sight."), Some(66219));
         assert_eq!(failed_at_thing("What you had decided did not work out: gather → #66219: the berry_bush is depleted."), Some(66219));
         assert_eq!(failed_at_thing("What you had decided did not work out: goto → #115: it is gone."), Some(115));
         // A failure of the body, not of the remembered thing.

@@ -536,7 +536,7 @@ def basic_case(run, case):
                                      if 'decided: gather' in e['text'] or 'did not work out: gather' in e['text'] or f'#{rid}' in e['text']],
                               'outcome of the act at a resource id', 90)
             # A resolved target is labelled by its kind ("gather → boulder (+1 stone)").
-            assert not any(f'no #{rid} in sight' in e['text'] for e in told), [e['text'] for e in told]
+            assert not any(f'no #{rid} in sight' in e['text'] or 'not in sight' in e['text'] for e in told), [e['text'] for e in told]
             assert any('You did what you had decided: gather' in e['text'] for e in told), [e['text'] for e in told]
     elif case == 'prune':
         assert all('teleport' not in r['graph'] for r in routines)
