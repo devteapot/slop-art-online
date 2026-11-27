@@ -23,7 +23,10 @@
   that moment: the rows and the wall time go into scene.json under "snaps" by NAME. `{me}` is
   the player's character id, `{ident}` its identity (hex), and `{epoch_at:HOUR}` the world
   epoch that makes the world's hour HOUR now, keeping its day count (for a scratch fixture
-  `UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0`: the hour by day or night).
+  `UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0`: the hour by day or night);
+  `{epoch_at:HOUR:DAY}` makes it HOUR of the world's day DAY (from 1: a season by the world's
+  calendar), and `{now_ms}` is the authority's time now (`clock.last_ms`: a vitals row's
+  `at_ms`, `UPDATE vitals SET hunger = 62.0, at_ms = {now_ms}, rate_key = 0 WHERE id = {me}`).
 - `client_sql|QUERY` snapshots a view as the game client identity.
 - A `--sync` call `player|REDUCER|ARG|…` is made as verify.py's player identity (`$V player
   join`), not the admin: a second player's own acts (`player|human_face|0|-1`), beside mine.
@@ -71,13 +74,20 @@ def sql(run, q, *, required=False):
         return []
 
 
-def epoch_at(run, hour):
+def epoch_at(run, hour, on_day=None):
     """The world epoch (ms) under which `living_rules::hour_of` gives `hour` now, keeping the
-    world's day count (the world starts at 07:00)."""
+    world's day count (the world starts at 07:00), or on the world's day `on_day` (from 1,
+    `living_rules::day_of`)."""
     w = sql(run, "SELECT epoch_ms, day_ms FROM world")[0]
     day, now = int(w["day_ms"]), int(time.time() * 1000)
-    days = (now - int(w["epoch_ms"]) + day * 7 // 24) // day
+    days = (now - int(w["epoch_ms"]) + day * 7 // 24) // day if on_day is None else int(on_day) - 1
     return now + day * 7 // 24 - int(hour / 24.0 * day) - days * day
+
+
+def now_ms(run):
+    """The authority's time now (ms): its clock row."""
+    rows = sql(run, "SELECT last_ms FROM clock")
+    return int(rows[0]["last_ms"]) if rows else int(time.time() * 1000)
 
 
 WALK_BLOCKED = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low (`Terrain::walkable`)
@@ -335,8 +345,10 @@ def drive_client(a, db, out, client, p, log_path, places, syncs, token_path, fre
                         ident = str(ident[0] if isinstance(ident, list) and ident else ident)
                         ident = ident[2:] if ident.startswith("0x") else ident
                     q = "|".join(c[1:]).replace("{me}", str(me)).replace("{ident}", ident)
-                    for m in re.finditer(r"\{epoch_at:([\d.]+)\}", q):
-                        q = q.replace(m.group(0), str(epoch_at(a.run, float(m.group(1)))))
+                    for m in re.finditer(r"\{epoch_at:([\d.]+)(?::(\d+))?\}", q):
+                        q = q.replace(m.group(0), str(epoch_at(a.run, float(m.group(1)), m.group(2))))
+                    if "{now_ms}" in q:
+                        q = q.replace("{now_ms}", str(now_ms(a.run)))
                     wall_ms = int(time.time() * 1000)
                     if c[0] == "client_sql":
                         refresh_lease(st)

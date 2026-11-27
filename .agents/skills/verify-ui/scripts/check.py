@@ -4314,6 +4314,86 @@ def pools(run, c):
     c.check(s, "with its max restored, the mana bar is still shown", "focus" in ms("02"), str(list(ms("02"))))
 
 
+# perception-parity phase 0 (docs/PERCEPTION_PARITY_AUDIT.md, class A*): the cut points graphs
+# and the rules' statuses test hunger and energy at (seeds, instincts and trials; `brain.rs`
+# `starving` >= 90 and `exhausted` <= 10; `status_of`'s words).
+HUNGER_CUTS = [15, 40, 45, 50, 55, 60, 80, 88, 90, 97]
+ENERGY_CUTS = [10, 12, 20, 25, 30, 50, 60, 70, 85, 90]
+# (hunger, energy) set on my vitals, with the rules' words expected for each.
+BODY_STATES = [(10.0, 95.0, "Well fed", "Well rested"), (47.0, 40.0, "Peckish", "A little tired"), (62.0, 22.0, "Hungry", "Tired"),
+               (92.0, 8.0, "Very hungry", "Exhausted"), (98.0, 55.0, "Starving", "Rested")]
+
+
+@scenario("body-clock")
+def body_clock(run, c):
+    """Perception parity for my own hunger, energy, hour and season (class A*): graphs test the
+    exact hunger and energy (`{"hunger": {"above": 55}}`, `starving`, `exhausted`) and the world's
+    hour and season (`hour`, `winter`), which the HUD showed only as pills and a sky. Owner SQL
+    sets my vitals across each band (the pills' words and the graphs' cut points) and the world's
+    epoch to noon, 23:00, the last day of autumn and the first of winter; the cursor on the
+    meters (`@body`) shows the body's tooltip, on the clock (`@clock`) the day's. Each state: the
+    tooltip names every meter, hunger and energy as the whole number cut down (the number shown
+    puts the value on the right side of every cut point) with the rules' word; the clock's text
+    is the world's hour to the minute, a moon by the rules' night, the season and its day."""
+    s = "body-clock"
+    w = (sql(run, "SELECT epoch_ms, day_ms, year_days FROM world") or [{}])[0]
+    if not w:
+        c.check(s, "the world row", False, "no world row")
+        return
+    y = max(int(w["year_days"]), 4)
+    winter = next(k for k in range(y) if (k * 4) // y == 3) + 1  # the first day of winter (from 1)
+    vit = lambda h, e: f"sql|UPDATE vitals SET hunger = {h}, energy = {e}, at_ms = {{now_ms}}, rate_key = 0 WHERE id = {{me}}"
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0"]
+    plan = "ready;wait:2;sync:noon;wait:1.5;"
+    for i, (h, e, _, _) in enumerate(BODY_STATES):
+        syncs.append(f"v{i}={vit(h, e)}")
+        plan += f"sync:v{i};wait:2.5;cursor:@body;wait:0.6;dump:v{i};" + (f"shot:v{i}_body;" if i in (1, 3) else "") + "cursor:;wait:0.3;"
+    syncs += ["day=sql|UPDATE world SET epoch_ms = {epoch_at:12.25} WHERE id = 0", "night=sql|UPDATE world SET epoch_ms = {epoch_at:23.5} WHERE id = 0",
+              f"autumn=sql|UPDATE world SET epoch_ms = {{epoch_at:12:{winter - 1}}} WHERE id = 0", f"winter=sql|UPDATE world SET epoch_ms = {{epoch_at:12:{winter}}} WHERE id = 0",
+              f"back=sql|UPDATE world SET epoch_ms = {int(w['epoch_ms'])} WHERE id = 0;{vit(10.0, 95.0)}"]
+    plan += ("sync:day;wait:1.5;dump:day;shot:day;cursor:@clock;wait:0.6;dump:day_tip;shot:day_tip;cursor:;sync:night;wait:2.5;dump:night;shot:night;"
+             "sync:autumn;wait:1.5;dump:autumn;shot:autumn;sync:winter;wait:1.5;shot:winter;cursor:@clock;wait:0.6;dump:winter;shot:winter_tip;cursor:;sync:back;wait:1;quit")
+    out, code, text = drive(run, s, plan, syncs=syncs)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    c.check(s, "fixtures: every owner SQL call went in", all(sc.get("snaps", {}).get(k) for k in ["noon", "day", "night", "autumn", "winter", "back"] + [f"v{i}" for i in range(len(BODY_STATES))]), str(list(sc.get("snaps", {})))[:300])
+    import math
+    for i, (h, e, hw, ew) in enumerate(BODY_STATES):
+        d = dump(out, f"v{i}") or {}
+        me = d.get("me") or {}
+        body = {b["name"]: b for b in me.get("body") or []}
+        tip = (d.get("extra") or {}).get("tooltip") or {}
+        k = f"hunger {h:.0f}, energy {e:.0f}"
+        c.check(s, f"{k}: the cursor on the meters shows the body's tooltip, as built", tip.get("title") == "Body" and tip.get("text") == me.get("body_tip") and "body" in (d.get("tags") or {}), str(tip)[:200])
+        hb, eb = body.get("hunger") or {}, body.get("energy") or {}
+        c.check(s, f"{k}: hunger and energy are in it though no bar shows them", hb and eb and not hb.get("shown") and not eb.get("shown") and "hunger" not in [m["name"] for m in me.get("meters") or []], str(list(body)))
+        hn, en = math.floor(hb.get("value", -9) + 1e-3), math.floor(eb.get("value", -9) + 1e-3)
+        text = tip.get("text") or ""
+        c.check(s, f"{k}: the numbers shown are the vitals' whole numbers cut down (within the rates' drift)", f"Hunger  {hn} / 100" in text and f"Energy  {en} / 100" in text and abs(hn - h) <= 1.5 and abs(en - e) <= 1.5, text.replace("\n", " | "))
+        sides = [(cut, hn >= cut, h > cut) for cut in HUNGER_CUTS] + [(-cut, en < cut, e < cut) for cut in ENERGY_CUTS]
+        wrong = [cut for cut, shown, real in sides if shown != real]
+        c.check(s, f"{k}: the number shown puts it on the right side of every cut point (hunger above, energy below)", not wrong, str(wrong))
+        c.check(s, f"{k}: the rules' words: {hw}, {ew}", hb.get("word") == hw and eb.get("word") == ew and f"Hunger  {hn} / 100 · {hw}" in text, str((hb.get("word"), eb.get("word"))))
+        pills = [p["text"] for p in me.get("statuses") or []]
+        plain = {"Peckish", "Not hungry", "A little tired", "Rested"}
+        c.check(s, f"{k}: the pills unchanged (a word that is not plain is a pill; a plain one is not)", all((w in pills) == (w not in plain) for w in (hw, ew)), str(pills))
+    def clock_of(n):
+        return (dump(out, n) or {}).get("clock") or {}
+    def hour_ok(ck, want):
+        t = ck.get("text") or ""
+        m = int(math.floor(ck.get("hour", -1) * 60 + 1e-6))
+        return abs(ck.get("hour", -9) - want) < 0.3 and t == f"{m // 60:02d}:{m % 60:02d}"
+    day, tipd, night, aut, win = clock_of("day"), dump(out, "day_tip") or {}, clock_of("night"), clock_of("autumn"), clock_of("winter")
+    c.check(s, "by day: the clock reads the world's hour to the minute (12:15), no night", hour_ok(day, 12.25) and day.get("night") is False, str(day))
+    # The tooltip against the clock of the same dump (the world's minutes go on between dumps).
+    ttip, tc = (tipd.get("extra") or {}).get("tooltip") or {}, tipd.get("clock") or {}
+    c.check(s, "the cursor on the clock: its tooltip gives the day and the season's day", ttip.get("title") == f"Day {tc.get('day')} · {tc.get('text')}" and (ttip.get("text") or "").startswith(f"{tc.get('season_word')}, day {tc.get('season_day')} of {tc.get('season_days')}") and "clock" in (tipd.get("tags") or {}), str((ttip, tc)))
+    c.check(s, "at night: 23:30 and night by the rules' light", hour_ok(night, 23.5) and night.get("night") is True, str(night))
+    c.check(s, f"the last day of autumn (day {winter - 1} of a {y}-day year)", aut.get("season") == "autumn" and aut.get("season_day") == aut.get("season_days") and aut.get("day") == winter - 1, str(aut))
+    wtip = ((dump(out, "winter") or {}).get("extra") or {}).get("tooltip") or {}
+    c.check(s, "the next day is winter's first, on the clock and in its tooltip", win.get("season") == "winter" and win.get("season_word") == "Winter" and win.get("season_day") == 1 and win.get("day") == winter and (wtip.get("text") or "").startswith("Winter, day 1 of"), str((win, wtip))[:300])
+
+
 @scenario("own")
 def own(run, c):
     """mind-act-outcome-far (force_outcomes): my own strikes, shots and casts get an `own`

@@ -233,7 +233,11 @@ pub fn fill(
     }
     let meters = vec![MeterView { name: "health".into(), label: "Health".into(), value: hp, max: 200.0 }, MeterView { name: "energy".into(), label: "Energy".into(), value: energy, max: 100.0 }];
     let hurt = if s.lowhp { if still { 0.6 } else { (1.0 - ((t % 2.4) / 0.8) as f32).clamp(0.0, 1.0) } } else { 0.0 };
-    model.me = Some(Me { name: my_name, hp, max_hp: 200.0, energy, max_energy: 100.0, meters, statuses, pools: Vec::new(), hurt });
+    let line = |name: &str, label: &str, value: f32, max: f32, shown: bool, word: Option<&str>| BodyLine { name: name.into(), label: label.into(), value, max, shown, word: word.map(String::from) };
+    let body = vec![line("health", "Health", hp, 200.0, true, None), line("energy", "Energy", energy, 100.0, false, Some(if energy < 30.0 { "Tired" } else { "Rested" })), line("hunger", "Hunger", 62.0, 100.0, false, Some("Hungry"))];
+    model.me = Some(Me { name: my_name, hp, max_hp: 200.0, energy, max_energy: 100.0, meters, statuses, pools: Vec::new(), body, hurt });
+    // A sample day: 4 hours past the start, the first season.
+    model.time = Some(TimeView::at(4 * 3_600_000, 0, 24 * 3_600_000, 32, false));
 
     // Skills.
     let cd = |total: f32, phase: f32| {

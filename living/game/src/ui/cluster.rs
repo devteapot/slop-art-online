@@ -64,6 +64,27 @@ pub struct HpFlash;
 pub struct StatusPill(usize);
 #[derive(Component)]
 pub struct StatusText(usize);
+/// The meters' row and the pills' row: hovered, the body's tooltip.
+#[derive(Component)]
+pub struct BodyTip;
+
+/// The body's tooltip: every meter of the world's `meters()` (those that are no bar too) as a
+/// whole number over its max, with the rules' word for it ("Hunger 62 / 100 · Hungry"). Graphs
+/// test hunger and energy against any number (`{"hunger": {"above": 55}}`), so the player gets
+/// the number, not only the pills' bands. Cut down, not rounded: a graph compares the exact
+/// value, so "N" reads as at least N and under N + 1, and `below N` holds exactly when the
+/// number shown is under N (`above N` when it is N or more, but for exactly N). The words are
+/// the rules' own, which read whole numbers rounded (`BodyFacts`).
+pub fn body_tip(me: &Me) -> prim::Tip {
+    let lines: Vec<String> = me.body.iter().map(|l| {
+        let n = format!("{}  {:.0} / {:.0}", l.label, (l.value + 1e-3).floor().max(0.0), l.max.round());
+        match &l.word {
+            Some(w) if !w.is_empty() => format!("{n} · {w}"),
+            _ => n,
+        }
+    }).collect();
+    prim::Tip { title: "Body".into(), text: lines.join("\n") }
+}
 
 fn down(stops: &[(Color, f32)]) -> BackgroundGradient {
     BackgroundGradient::from(LinearGradient::to_bottom(stops.iter().map(|(c, p)| ColorStop::percent(*c, *p)).collect()))
@@ -97,14 +118,16 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
                 .with_children(|c| {
                     c.spawn(wood::rim(9.0));
                     // Status (hunger, tiredness, a fight), over the meters' left end.
-                    c.spawn((Node { position_type: PositionType::Absolute, left: Val::Px(12.0), top: Val::Px(-30.0), flex_direction: FlexDirection::Row, column_gap: Val::Px(5.0), ..default() }, Pickable::IGNORE)).with_children(|row| {
+                    c.spawn((BodyTip, prim::Tip::default(), Node { position_type: PositionType::Absolute, left: Val::Px(12.0), top: Val::Px(-30.0), flex_direction: FlexDirection::Row, column_gap: Val::Px(5.0), ..default() }, Pickable::IGNORE)).with_children(|row| {
                         // The rules' statuses (`status_of`), in their words, coloured by tone.
                         for i in 0..STATUS {
                             row.spawn((StatusPill(i), Node { height: Val::Px(22.0), padding: UiRect::axes(Val::Px(9.0), Val::Px(0.0)), justify_content: JustifyContent::Center, align_items: AlignItems::Center, border: wood::b(1.5), border_radius: BorderRadius::all(Val::Px(11.0)), display: Display::None, ..default() }, BackgroundColor(th.surface_hi), BorderColor::all(th.edge), Pickable::IGNORE))
                                 .with_child((StatusText(i), Text::new(""), f.body(10.5, 800), TextColor(th.text), Pickable::IGNORE));
                         }
                     });
-                    c.spawn((Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(10.0), align_self: AlignSelf::Stretch, ..default() }, Pickable::IGNORE)).with_children(|v| {
+                    // Hovered, the meters (and the pills) give every meter of the body exactly,
+                    // the ones that are no bar too (energy, hunger): `body_tip`.
+                    c.spawn((BodyTip, prim::Tip::default(), super::hit::Tag("body".into()), Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(10.0), align_self: AlignSelf::Stretch, ..default() }, Pickable::IGNORE)).with_children(|v| {
                         // The world's meters (`meters()`), as many as it shows.
                         for (i, (hi, mid, lo)) in METER_COLORS.iter().enumerate() {
                             meter(v, f, i, (MeterFill(i), Node { position_type: PositionType::Absolute, left: Val::Px(0.0), top: Val::Px(0.0), bottom: Val::Px(0.0), width: Val::Percent(100.0), border_radius: BorderRadius::all(Val::Px(7.0)), ..default() }, down(&[(*hi, 0.0), (*mid, 60.0), (*lo, 100.0)]), Pickable::IGNORE), MeterText(i), i == 0);
@@ -239,6 +262,7 @@ pub fn update(
     mut nodes: ParamSet<(Query<(&SlotKey, &mut Node), With<prim::SlotRoot>>, Query<&mut Node, With<ExtraRow>>, Query<(&MeterFill, &mut Node)>, Query<&mut Node, With<HpGhost>>, Query<(&MeterBox, &mut Node)>, Query<(&StatusPill, &mut Node)>)>,
     mut flash: Query<&mut BackgroundColor, (With<HpFlash>, Without<StatusPill>)>,
     mut pill_edges: Query<(&StatusPill, &mut BorderColor)>,
+    mut tips: Query<&mut prim::Tip, With<BodyTip>>,
 ) {
     let none = crate::combat::Roles::default();
     let roles = roles.as_deref().unwrap_or(&none);
@@ -253,6 +277,12 @@ pub fn update(
         show(&mut n, extras);
     }
     let Some(me) = &model.me else { return };
+    let tip = body_tip(me);
+    for mut t in &mut tips {
+        if *t != tip {
+            *t = tip.clone();
+        }
+    }
     let share = |m: &super::model::MeterView| (m.value / m.max.max(0.0001)).clamp(0.0, 1.0);
     // The first bar trails a ghost down after a blow, and flashes.
     let f = me.meters.first().map_or(0.0, share);
@@ -296,5 +326,30 @@ pub fn update(
                 *b = BorderColor::all(col);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn body_tip_gives_every_meter_as_a_whole_number() {
+        let line = |name: &str, label: &str, value: f32, shown: bool, word: Option<&str>| BodyLine { name: name.into(), label: label.into(), value, max: 100.0, shown, word: word.map(String::from) };
+        let me = Me {
+            name: "Me".into(),
+            hp: 100.0,
+            max_hp: 100.0,
+            energy: 29.6,
+            max_energy: 100.0,
+            meters: Vec::new(),
+            statuses: Vec::new(),
+            pools: Vec::new(),
+            body: vec![line("health", "Health", 100.0, true, Some("Unhurt")), line("energy", "Energy", 29.6, false, Some("Tired")), line("hunger", "Hunger", 55.4, false, Some("")), line("focus", "Mana", 40.0, true, None)],
+            hurt: 0.0,
+        };
+        let t = body_tip(&me);
+        assert_eq!(t.title, "Body");
+        assert_eq!(t.text, "Health  100 / 100 · Unhurt\nEnergy  29 / 100 · Tired\nHunger  55 / 100\nMana  40 / 100");
     }
 }
