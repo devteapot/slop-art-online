@@ -959,15 +959,16 @@ def film(run, c):
 
 @scenario("light")
 def light(run, c):
-    """The light (`style::Look`, Settings › Play › Light) and the character rim (`style::CharRim`,
-    Settings › Play › Character rim): a fresh settings file starts Classic with the rim Subtle and
-    saves neither; Settings sets Look-dev and Strong and the file keeps them; the next start reads
-    them back. Then the live script's `light:` and `rim:` switch them in one view: Look-dev
-    changes the picture, Classic between two Look-devs returns to it (no more change than between
-    two Classic shots), and the rim changes people only. Stills `01_classic` … `05_rim_off` for the
-    eye. `LIVING_GAME_LOOK` and `LIVING_GAME_CHAR_RIM` must not be set."""
+    """The light (`style::Look`, Settings › Play › Light), character rim (`style::CharRim`,
+    Settings › Play › Character rim), and outline weight (`style::OutlineWeight`, Settings › Play ›
+    Outline weight): a fresh settings file starts Classic with rim Subtle and outline weight
+    Standard and saves none; Settings sets Look-dev, Strong and Bold and the file keeps them; the
+    next start reads them back. Then the live script's `light:`, `rim:` and `outline:` switch them
+    in one view: Look-dev changes the picture, Classic between two Look-devs returns to it, and the
+    rim and outline weight change people only. Stills `01_classic` … `07_outline_fine` for the eye.
+    `LIVING_GAME_LOOK`, `LIVING_GAME_CHAR_RIM` and `LIVING_GAME_OUTLINE_WEIGHT` must not be set."""
     s = "light"
-    for k in ("LIVING_GAME_LOOK", "LIVING_GAME_CHAR_RIM"):
+    for k in ("LIVING_GAME_LOOK", "LIVING_GAME_CHAR_RIM", "LIVING_GAME_OUTLINE_WEIGHT"):
         if os.environ.get(k):
             c.check(s, f"{k} is unset (it overrides the settings file)", False, os.environ[k])
             return
@@ -977,24 +978,58 @@ def light(run, c):
         os.remove(st)
     open_settings = "click:@menu;wait:0.4;click:@menu:Settings;wait:0.6;"
     plan = ("ready;wait:2;dump:01;" + open_settings + "click:@settings:light:lookdev;wait:0.4;dump:02;shot:02_settings;"
-            "click:@settings:char_rim:strong;wait:0.4;dump:03;key:Escape:tap;wait:0.4;quit")
+            "click:@settings:char_rim:strong;wait:0.4;dump:03;"
+            "scroll:-200;wait:0.3;click:@settings:outline_weight:bold;wait:0.4;dump:04;key:Escape:tap;wait:0.4;quit")
     out, code, text = drive(run, s, plan)
     c.check(s, "client ran and joined", code == 0, text[-300:])
     x = lambda o, k: ((dump(o, k) or {}).get("extra") or {})
     first = x(out, "01")
-    c.check(s, "a fresh settings file starts Classic, rim Subtle, and saves no choice", (first.get("light"), first.get("char_rim"), first.get("light_saved"), first.get("char_rim_saved")) == ("classic", "subtle", None, None), str((first.get("light"), first.get("char_rim"), first.get("light_saved"), first.get("char_rim_saved"))))
-    c.check(s, "Settings › Play › Light sets Look-dev, Character rim sets Strong", x(out, "02").get("light") == "lookdev" and x(out, "03").get("char_rim") == "strong", str((x(out, "02").get("light"), x(out, "03").get("char_rim"))))
-    c.check(s, "the log names each choice", log(out).count("settings: light: ") == 1 and log(out).count("settings: character rim: ") == 1)
+    c.check(
+        s,
+        "a fresh settings file starts Classic, rim Subtle, outline Standard, and saves no choice",
+        (first.get("light"), first.get("char_rim"), first.get("outline_weight"), first.get("light_saved"), first.get("char_rim_saved"), first.get("outline_weight_saved"))
+        == ("classic", "subtle", "standard", None, None, None),
+        str((first.get("light"), first.get("char_rim"), first.get("outline_weight"), first.get("light_saved"), first.get("char_rim_saved"), first.get("outline_weight_saved"))),
+    )
+    c.check(
+        s,
+        "Settings › Play › Light sets Look-dev, Character rim sets Strong, Outline weight sets Bold",
+        x(out, "02").get("light") == "lookdev" and x(out, "03").get("char_rim") == "strong" and x(out, "04").get("outline_weight") == "bold",
+        str((x(out, "02").get("light"), x(out, "03").get("char_rim"), x(out, "04").get("outline_weight"))),
+    )
+    c.check(
+        s,
+        "the log names each choice",
+        log(out).count("settings: light: ") == 1 and log(out).count("settings: character rim: ") == 1 and log(out).count("settings: outline weight: ") == 1,
+    )
     saved = json.load(open(st)) if os.path.exists(st) else {}
-    c.check(s, "the settings file keeps both", (saved.get("light"), saved.get("char_rim")) == ("lookdev", "strong"), str((saved.get("light"), saved.get("char_rim"))))
-    seq = [("classic", "subtle"), ("lookdev", "subtle"), ("classic", "subtle"), ("lookdev", "strong"), ("lookdev", "off")]
-    names = ["01_classic", "02_lookdev", "03_classic", "04_rim_strong", "05_rim_off"]
-    shots = "".join(f"light:{l};rim:{r};wait:0.8;shot:{n};" for (l, r), n in zip(seq, names))
+    c.check(
+        s,
+        "the settings file keeps all three",
+        (saved.get("light"), saved.get("char_rim"), saved.get("outline_weight")) == ("lookdev", "strong", "bold"),
+        str((saved.get("light"), saved.get("char_rim"), saved.get("outline_weight"))),
+    )
+    seq = [
+        ("classic", "subtle", "standard"),
+        ("lookdev", "subtle", "standard"),
+        ("classic", "subtle", "standard"),
+        ("lookdev", "strong", "standard"),
+        ("lookdev", "off", "standard"),
+        ("lookdev", "subtle", "bold"),
+        ("lookdev", "subtle", "fine"),
+    ]
+    names = ["01_classic", "02_lookdev", "03_classic", "04_rim_strong", "05_rim_off", "06_outline_bold", "07_outline_fine"]
+    shots = "".join(f"light:{l};rim:{r};outline:{o};wait:0.8;shot:{n};" for (l, r, o), n in zip(seq, names))
     # A resident held still beside me, the cursor in the world (the dump's `seen`), the start's
     # notes faded.
     a, _ = residents(run)
     out2, code2, _ = drive(run, s, "ready;wait:2;dump:00;sync:scene;cursor:0.70,0.55;wait:6;" + shots + "dump:06;quit", places=[f"{a}:-1.5:1.5"])
-    c.check(s, "the next start reads them back", (x(out2, "00").get("light"), x(out2, "00").get("char_rim")) == ("lookdev", "strong"), str((x(out2, "00").get("light"), x(out2, "00").get("char_rim"))))
+    c.check(
+        s,
+        "the next start reads them back",
+        (x(out2, "00").get("light"), x(out2, "00").get("char_rim"), x(out2, "00").get("outline_weight")) == ("lookdev", "strong", "bold"),
+        str((x(out2, "00").get("light"), x(out2, "00").get("char_rim"), x(out2, "00").get("outline_weight"))),
+    )
     try:
         import numpy as np
         from PIL import Image
@@ -1018,6 +1053,8 @@ def light(run, c):
     c.check(s, "Classic after Look-dev is Classic again", base <= 0.35 * min(look, changed("02_lookdev", "03_classic")), f"{base:.2f}% between the Classics, {look:.2f}% to Look-dev")
     rim = np.abs(shot["04_rim_strong"] - shot["05_rim_off"]).max(2) > 6
     c.check(s, "the rim changes people, little else", (rim & near).sum() > 40 and (rim & ~near).mean() * 100 <= base * 1.25 + 0.5, f"{int((rim & near).sum())} px on people, {(rim & ~near).mean() * 100:.2f}% elsewhere")
+    outline = np.abs(shot["06_outline_bold"] - shot["07_outline_fine"]).max(2) > 6
+    c.check(s, "outline weight changes people, little else", (outline & near).sum() > 40 and (outline & ~near).mean() * 100 <= base * 1.25 + 0.5, f"{int((outline & near).sum())} px on people, {(outline & ~near).mean() * 100:.2f}% elsewhere")
 
 
 @scenario("hair")

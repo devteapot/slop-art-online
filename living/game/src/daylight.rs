@@ -565,10 +565,10 @@ const LD_LAMP_REACH: f32 = 40.0;
 /// off in Classic so Classic draws identically to main.
 fn lamps(atmo: Res<Atmo>, look: Res<crate::style::Look>, target: Res<crate::controls::Target>, mut q: Query<(Entity, &Lamp, &mut PointLight, &GlobalTransform, &mut Visibility)>, mut order: Local<Vec<(f32, Entity)>>) {
     let lookdev = *look == crate::style::Look::Lookdev;
-    // In Look-dev, dusk lamps start warming up around 17.3h (atmo.glow ~ 1.15 -> 2.0); Classic
-    // keeps its exact ramp.
+    // In Look-dev, dusk lamps warm up through golden hour (glow 1.06 -> 1.60, so 17.7h dusk
+    // glow=1.40 sits at ~0.63 while noon glow=1.00 stays 0.0); Classic keeps its exact ramp.
     let night = if lookdev {
-        ((atmo.glow - 1.08) / 0.92).clamp(0.0, 1.0)
+        ((atmo.glow - 1.06) / 0.54).clamp(0.0, 1.0)
     } else {
         ((atmo.glow - 1.0) / 1.0).clamp(0.0, 1.0)
     };

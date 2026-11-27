@@ -27,10 +27,10 @@ use std::collections::HashMap;
 /// Opacity buckets for shared multiply materials (index 7 = full grounded strength).
 const LEVELS: usize = 8;
 /// Lift above the ground (m) to clear sloped cobbles and flagstones without clipping toes.
-const LIFT_Y: f32 = 0.018;
+const LIFT_Y: f32 = 0.022;
 /// Base oval semi-axes (m) for a standing 1.75 m character: wider across the stance than front-to-back.
-const STAND_RX: f32 = 0.36;
-const STAND_RZ: f32 = 0.28;
+const STAND_RX: f32 = 0.54;
+const STAND_RZ: f32 = 0.42;
 /// Seat shift behind the character root while sitting on the ground (`live.rs` `SEAT_BEHIND`).
 const SEAT_SHIFT: f32 = 0.28;
 
@@ -47,9 +47,9 @@ impl Plugin for ContactShadowPlugin {
     }
 }
 
-/// Marker on each spawned contact shadow entity, pointing to its character.
+/// Marker on each spawned contact shadow entity.
 #[derive(Component, Clone, Copy)]
-struct ShadowOf(Entity);
+struct ShadowOf;
 
 /// Shared mesh, material buckets, and live character -> shadow map.
 #[derive(Resource, Default)]
@@ -72,10 +72,12 @@ fn blob_texture() -> Image {
             let u = (x as f32 + 0.5) / N as f32;
             let v = (y as f32 + 0.5) / N as f32;
             let r = (Vec2::new(u - 0.5, v - 0.5).length() * 2.0).clamp(0.0, 1.0);
-            let inv = 1.0 - r;
+            // Soft plateau directly under the boots (r <= 0.18), then smooth Hermite feather to 0.
+            let t = ((r - 0.18) / 0.82).clamp(0.0, 1.0);
+            let inv = 1.0 - t;
             let soft = inv * inv * (3.0 - 2.0 * inv);
-            let core = inv.powf(2.4);
-            let a = (0.62 * soft + 0.38 * core).clamp(0.0, 1.0);
+            let core = (1.0 - r).powf(1.8);
+            let a = (0.72 * soft + 0.28 * core).clamp(0.0, 1.0);
             px.extend_from_slice(&[255, 255, 255, (a * 255.0).round() as u8]);
         }
     }
@@ -94,18 +96,22 @@ fn blob_texture() -> Image {
 pub(crate) fn shadow_tint(atmo: Option<&Atmo>, style: &Style) -> ([f32; 3], f32) {
     let (hue, day) = match atmo.filter(|a| a.active) {
         Some(a) => {
-            let h = Color::LinearRgba(LinearRgba::new(a.fill.x, a.fill.y, a.fill.z, 1.0)).to_hsva().hue / 360.0;
+            let h = bevy::color::Hsva::from(Color::LinearRgba(LinearRgba::new(
+                a.fill.x, a.fill.y, a.fill.z, 1.0,
+            )))
+            .hue
+                / 360.0;
             let d = (a.lux / 9000.0).clamp(0.0, 1.0);
             (h, d)
         }
         None => (style.shadow_hue, 1.0),
     };
-    // Cool slate tinted softly toward the atmosphere's shadow hue.
-    let c = Color::hsv(hue * 360.0, 0.38, 0.34).to_srgba();
-    let tint = [c.red.clamp(0.16, 0.38), c.green.clamp(0.18, 0.38), c.blue.clamp(0.28, 0.48)];
-    // Noon ~0.54, dusk ~0.44, night ~0.34: multiply by mix(1, linear(tint), strength) gives
-    // ~0.50x under boots at noon, ~0.58x in dusk shade, ~0.68x under moonlight.
-    let strength = 0.30 + 0.24 * day;
+    // Cool slate-indigo tinted softly toward the atmosphere's shadow hue (operates in linear
+    // HDR space via AlphaMode::Multiply, so deeper sRGB values produce crisp sRGB anchoring).
+    let c = Color::hsv(hue * 360.0, 0.48, 0.24).to_srgba();
+    let tint = [c.red.clamp(0.08, 0.22), c.green.clamp(0.10, 0.24), c.blue.clamp(0.20, 0.38)];
+    // Noon ~0.78 (sRGB ~0.55x directly under boots), dusk ~0.68, night ~0.52 (gentle under moonlight).
+    let strength = 0.42 + 0.36 * day;
     (tint, strength)
 }
 
@@ -219,7 +225,7 @@ fn update(
         shadows.applied = Some((tint, strength));
         for (i, h) in shadows.mats.iter().enumerate() {
             let frac = (i + 1) as f32 / LEVELS as f32;
-            if let Some(m) = mats.get_mut(h) {
+            if let Some(mut m) = mats.get_mut(h) {
                 m.base_color = Color::srgba(tint[0], tint[1], tint[2], strength * frac);
             }
         }
@@ -300,7 +306,7 @@ fn update(
         } else {
             let se = commands
                 .spawn((
-                    ShadowOf(e),
+                    ShadowOf,
                     Mesh3d(mesh.clone()),
                     MeshMaterial3d(mat),
                     decal_tf,

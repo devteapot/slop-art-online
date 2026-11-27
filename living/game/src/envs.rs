@@ -601,9 +601,9 @@ pub(crate) fn local_light(kind: &str, glow: Option<[f32; 3]>, height: f32, k: us
 /// Gated by `Lamp::lookdev_only = true` in `daylight::lamps` so Classic stays identical to main.
 pub(crate) fn lookdev_local_light(kind: &str, height: f32) -> Option<((PointLight, crate::daylight::Lamp), Transform)> {
     let (color, lumens, range, y) = match kind {
-        "lamp" | "quay_lamp" => ([1.0, 0.70, 0.32], 240_000.0, 14.0, (height * 0.88).clamp(2.2, 3.6)),
-        "campfire" | "brazier" | "fire" | "smoking_fire" => ([1.0, 0.48, 0.16], 150_000.0, 10.5, 0.85),
-        "furnace" | "oven" => ([1.0, 0.46, 0.16], 170_000.0, 11.0, 1.15),
+        "lamp" | "quay_lamp" => ([1.0, 0.70, 0.32], 280_000.0, 15.0, (height * 0.88).clamp(2.2, 3.6)),
+        "campfire" | "brazier" | "fire" | "smoking_fire" => ([1.0, 0.48, 0.16], 195_000.0, 11.5, 0.85),
+        "furnace" | "oven" => ([1.0, 0.46, 0.16], 190_000.0, 11.5, 1.15),
         _ => return None,
     };
     let light = PointLight { color: Color::srgb(color[0], color[1], color[2]), intensity: 0.0, range, shadow_maps_enabled: false, ..default() };

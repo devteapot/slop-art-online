@@ -516,6 +516,7 @@ pub struct DumpExtra<'w, 's> {
     shine: Res<'w, crate::style::HairShine>,
     light: Res<'w, crate::style::Look>,
     char_rim: Res<'w, crate::style::CharRim>,
+    outline_weight: Res<'w, crate::style::OutlineWeight>,
     town: Option<Res<'w, crate::town::Town>>,
     loading: Option<Res<'w, crate::loading::Loading>>,
     combat: Option<Res<'w, crate::combat::Combat>>,
@@ -575,7 +576,7 @@ impl DumpExtra<'_, '_> {
             "lines": self.talks.lines.values().rev().take(12).rev().map(|l| serde_json::json!({"speaker": l.speaker, "to": l.to, "mine": l.mine, "how": l.how, "text": l.text, "head": people::line_head(l, false, self.net.my_id, &self.looks), "head_window": people::line_head(l, true, self.net.my_id, &self.looks)})).collect::<Vec<_>>(),
             "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
             "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": if self.cam.mode == crate::camera::Mode::TopDown { self.cam.top_zoom.shown } else { self.cam.zoom }, "mode": self.cam.mode.name(), "height": self.cam.eye_height, "ground_clearance": self.cam.ground_clearance, "pitch": self.cam.shown.pitch, "fov": self.cam.shown.fov}, "cursor_ground": ground, "lod": {"near": lod[0], "far": lod[1], "people": lod_people},
-            "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()), "film": self.film.name(), "film_saved": self.prefs.film, "hair_shine": self.shine.name(), "hair_shine_saved": self.prefs.hair_shine, "light": self.light.name(), "light_saved": self.prefs.light, "char_rim": self.char_rim.name(), "char_rim_saved": self.prefs.char_rim,
+            "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()), "film": self.film.name(), "film_saved": self.prefs.film, "hair_shine": self.shine.name(), "hair_shine_saved": self.prefs.hair_shine, "light": self.light.name(), "light_saved": self.prefs.light, "char_rim": self.char_rim.name(), "char_rim_saved": self.prefs.char_rim, "outline_weight": self.outline_weight.name(), "outline_weight_saved": self.prefs.outline_weight,
             "quality": self.quality.name(), "quality_saved": self.prefs.quality, "render_scale": self.render_scale.name(), "render_scale_saved": self.prefs.render_scale,
             "render_scale_px": self.lod_camera.single().ok().and_then(|c| c.physical_viewport_size()).map(|s| [s.x, s.y]),
             // The one-shot each body plays now over its walk or stand (a gesture: `town.rs`), by

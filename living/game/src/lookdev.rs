@@ -126,7 +126,7 @@ pub fn night_glow(
     let lookdev = *look == crate::style::Look::Lookdev;
     let dark = darkness(rules.as_deref(), clock.hour());
     let level = if lookdev {
-        let dusk = atmo.as_deref().filter(|a| a.active).map_or(0.0, |a| ((a.glow - 1.08) / 0.82).clamp(0.0, 1.0));
+        let dusk = atmo.as_deref().filter(|a| a.active).map_or(0.0, |a| ((a.glow - 1.06) / 0.54).clamp(0.0, 1.0));
         // Quantize to 20 steps so materials aren't rewritten every frame at dusk.
         let dusk = (dusk * 20.0).round() / 20.0;
         dark.max(dusk) * 3.2

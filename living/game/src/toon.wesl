@@ -13,7 +13,7 @@ import bevy_pbr::render::{
 import living_game::toon_light::{
     toon, is_kind, hash3, noise3, rgb_to_hsv, hsv_to_rgb, scene, wetted, view_depth, sun_shadow, sun_color,
     bands, banded, puddles, wet_sheen, fresnel, rim_light, point_lights, emission, has_sun, sun_direction, eye, metres_per_pixel,
-    ld_band_pair, ld_sun_warmth, ld_value, ld_banded, ld_specular, ld_char_rim,
+    ld_band_pair, ld_sun_warmth, ld_value, ld_banded, ld_specular, ld_char_rim, ld_point_lights,
 };
 
 @if(PREPASS_PIPELINE)

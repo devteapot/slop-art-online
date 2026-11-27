@@ -13,7 +13,7 @@ import bevy_pbr::render::{
 };
 import living_game::toon_light::{
     toon, hash3, scene, wetted, view_depth, sun_shadow, sun_color, bands, banded, puddles, wet_sheen, fresnel, rim_light,
-    point_lights, emission, has_sun, sun_direction, ld_sun_warmth, ld_value, ld_banded,
+    point_lights, emission, has_sun, sun_direction, ld_sun_warmth, ld_value, ld_banded, ld_point_lights,
 };
 
 // terrain.rs `GroundParams`.
