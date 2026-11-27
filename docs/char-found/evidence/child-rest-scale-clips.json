@@ -1,32 +1,32 @@
 {
  "walk": {
   "seconds": 1.0,
-  "lowest_m": -0.013,
+  "lowest_m": -0.007,
   "lowest_part": "Foundation",
   "lowest_at_s": 0.13,
-  "below_share": 0.12,
-  "hand_speed": 0.458,
+  "below_share": 0.0,
+  "hand_speed": 0.452,
   "active_share": 0.8,
-  "moved_m": 0.24,
-  "head_moved_m": 0.044,
+  "moved_m": 0.238,
+  "head_moved_m": 0.036,
   "airborne": [],
   "foot_travel_m": {
    "L": 0.483,
-   "R": 0.575
+   "R": 0.576
   },
-  "finger_joints_low_m": 0.409,
-  "foot_joints_low_m": 0.006
+  "finger_joints_low_m": 0.416,
+  "foot_joints_low_m": 0.012
  },
  "run": {
   "seconds": 0.6,
-  "lowest_m": -0.008,
+  "lowest_m": -0.006,
   "lowest_part": "Foundation",
   "lowest_at_s": 0.2,
   "below_share": 0.0,
-  "hand_speed": 1.005,
+  "hand_speed": 0.961,
   "active_share": 1.0,
-  "moved_m": 0.238,
-  "head_moved_m": 0.077,
+  "moved_m": 0.234,
+  "head_moved_m": 0.066,
   "airborne": [
    [
     0.2,
@@ -38,18 +38,18 @@
    ]
   ],
   "foot_travel_m": {
-   "L": 0.28,
-   "R": 0.285
+   "L": 0.277,
+   "R": 0.284
   },
-  "finger_joints_low_m": 0.573,
-  "foot_joints_low_m": 0.01
+  "finger_joints_low_m": 0.583,
+  "foot_joints_low_m": 0.018
  },
  "sit_ground": {
   "seconds": 7.97,
-  "lowest_m": -0.104,
+  "lowest_m": -0.002,
   "lowest_part": "Foundation",
   "lowest_at_s": 0.0,
-  "below_share": 1.0,
+  "below_share": 0.0,
   "hand_speed": 0.031,
   "active_share": 0.0,
   "moved_m": 0.161,
@@ -59,25 +59,25 @@
    "L": 0.0,
    "R": 0.0
   },
-  "finger_joints_low_m": 0.089,
-  "foot_joints_low_m": -0.065
+  "finger_joints_low_m": 0.19,
+  "foot_joints_low_m": 0.037
  },
  "sword_slash": {
   "seconds": 2.47,
-  "lowest_m": -0.015,
+  "lowest_m": -0.002,
   "lowest_part": "Foundation",
-  "lowest_at_s": 0.87,
-  "below_share": 0.53,
-  "hand_speed": 0.54,
-  "active_share": 0.92,
-  "moved_m": 0.562,
-  "head_moved_m": 0.315,
+  "lowest_at_s": 1.47,
+  "below_share": 0.0,
+  "hand_speed": 0.527,
+  "active_share": 0.86,
+  "moved_m": 0.536,
+  "head_moved_m": 0.283,
   "airborne": [],
   "foot_travel_m": {
-   "L": 0.083,
-   "R": 0.58
+   "L": 0.044,
+   "R": 0.549
   },
-  "finger_joints_low_m": 0.405,
-  "foot_joints_low_m": -0.004
+  "finger_joints_low_m": 0.419,
+  "foot_joints_low_m": 0.009
  }
 }

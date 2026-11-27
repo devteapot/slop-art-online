@@ -20,7 +20,7 @@ Choose `base`, `woman`, `man`, `elder`, or `child`. Use `--height` for final bin
 | Build_Heavy, Build_Slim | Girth at torso, limbs and neck |
 | Face_Round, Face_Long, Jaw_Square | Placeholder head proportions |
 
-The generator keeps joint names, parents, local rest translations, and source animation tracks. A scene parent sets height. The child mix also sets uniform scales at the upper legs and upper arms and lowers the armature to match the shortened limbs. Generate again when changing child proportions so the rest pivots follow the surface. Other body shape changes use standard glTF morph weights.
+The generator keeps joint names, parents, local rest translations, and source animation tracks. A scene parent sets height. The child mix also sets uniform scales at the upper legs and upper arms and scales hips travel by the leg-length ratio through the armature parent, with a reciprocal scale at the hips to preserve trunk size. Generate again when changing child proportions so the rest pivots follow the surface. Other body shape changes use standard glTF morph weights.
 
 ## Provenance
 
@@ -66,7 +66,7 @@ blender -b -t 3 --python-exit-code 1 -P living/tools/blender/found/strain.py -- 
 
 ![Base, woman, man, elder and child in the game renderer, with four motion samples](contact-sheet.jpg)
 
-The photographer uses the dev-box bake-off framing at 1600 × 900, game hour 11. It frames each model independently. The child's reported framing height is 1.281 m because the viewer fits the undeformed mesh bounding boxes. An independent Blender import of the GLB with animations stripped measured the morphed, skinned child bind surface at 1.200 m. The stock Blender clip probe resets local bone scales before playback. Repeating its four child clips with the authored bind transforms restored gives the [child playback measurements](evidence/child-rest-scale-clips.json). For the other four mixes those two heights agree to the shown precision.
+The photographer uses the dev-box bake-off framing at 1600 × 900, game hour 11. It frames each model independently. The child's reported framing height is 1.281 m because the viewer fits the undeformed mesh bounding boxes. An independent Blender import of the GLB with animations stripped measured the morphed, skinned child bind surface at 1.200 m. The stock Blender clip probe resets local bone scales before playback. Repeating its four child clips with the authored bind transforms restored gives the [child playback measurements](evidence/child-rest-scale-clips.json). Scaling the hips travel reduced the child’s ground-sit floor penetration from 104 mm to 2 mm. For the other four mixes those two heights agree to the shown precision.
 
 The shoulder outline and heavier ribcage distinguish the man from the base. The elder's stoop reads more clearly in profile than from the front. Sleeve roots still form abrupt dark wedges when the arms lower. The calf, ankle and foot volumes read in silhouette, while the front lighting gives little definition to the clavicle. The blank head and inherited B2 fingers are placeholders for later stages.
 

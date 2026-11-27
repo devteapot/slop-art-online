@@ -248,6 +248,13 @@ def generate(args):
     child = mix.get("Age_Child", 0)
     root = next(i for i, n in enumerate(doc["nodes"]) if n["name"] == "Armature")
     doc["nodes"][root]["translation"] = [0, -0.17 * joints["J_Bip_L_UpperLeg"][2] * child, 0]
+    if child:
+        # Scale animated hips translations by the leg-length ratio. The inverse
+        # scale on Hips preserves torso size and the authored joint-local rotations.
+        stride = 1 - 0.17 * child
+        doc["nodes"][root]["scale"] = [stride] * 3
+        doc["nodes"][root]["translation"][1] += (1 - stride) * joints["J_Bip_C_Hips"][2]
+        doc["nodes"][indices[names.index("J_Bip_C_Hips")]]["scale"] = [1 / stride] * 3
     for i in indices:
         node = doc["nodes"][i]
         n = node["name"].split("_")[-1]
