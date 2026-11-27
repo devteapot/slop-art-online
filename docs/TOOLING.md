@@ -236,6 +236,8 @@ Measured on the Spark (rustc 1.99.1, aarch64) on 2026-11-20, private `clockworkl
 
 TODO (Spark): record the island's baseline for rustc 1.99.1 from a `--genesis-only` run on main once the status-parts revert is on main. Until then, every gated merge on the Spark fails on the island. Dev-box records its own for its rustc.
 
+**Watch — script size.** The shipped script (`living/scripts/skills.rhai`) is about 236 KB, growing about 10 KB a week; the source cap (`MAX_SOURCE` in `living/rules/src/script.rs`) is 512 KiB (revisit comment-stripping around 400 KB composed, [script engines](SCRIPT_ENGINES.md#5-limits)); the genesis-fuel headroom rule above applies.
+
 #### Generation smoke
 
 The cases `generation-default` (`world`), `generation-island` (`island`) and `generation-cullet` (`cullet` and `cullet-laws`) run verify-generation's per-world checks (`generation.py --run RUN --smoke`): the world's day, **the seed's laws composed over the shipped script** (or the shipped script alone), dimensions and terrain chunks, settlements, residents and their sheets, bands, animals and resources, rhythms, land and plans, looks and body sex, and no sheet secret in a public table. The smoke pauses the world and reads its tables. It runs no native digest comparison, repeatability, floors or build: those stay in the full skill. In the first pass the smoke reads the genesis fuel worlds before they are deleted, so it publishes nothing of its own and adds seconds. A retry, or main's run of it, launches its own world. A passing world keeps `checks.json` and `smoke.json` (an island's table snapshots are about 60 MB). A failing one also keeps the snapshots.

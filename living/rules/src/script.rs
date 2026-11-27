@@ -1511,9 +1511,12 @@ impl StructureTraits {
     }
 }
 
-/// Largest script source accepted. `skills.rhai` is about 56 KB; compile time and memory grow
-/// about linearly (5 ms and 1.3 MB in the module for 55 KB, docs/SCRIPT_ENGINES.md).
-pub const MAX_SOURCE: usize = 256 * 1024;
+/// Largest script source accepted (our own cap; Rhai 1.27.0 has no source-size limit and
+/// SpacetimeDB 2.14.1's HTTP/WS limits are 2 MiB / 32 MiB). Raised from 256 KiB to 512 KiB on
+/// 2026-11-27 as `skills.rhai` (~236 KB) + Cullet's overlay (~25 KB) approached 256 KiB; compile
+/// time and memory grow about linearly (5 ms and 1.3 MB for 55 KB, docs/SCRIPT_ENGINES.md).
+/// The real ceiling is genesis-fuel headroom (the scene gate's 10% rule on 120 × 10⁹ fuel).
+pub const MAX_SOURCE: usize = 512 * 1024;
 /// Rhai operations one call may take: about 2× the heaviest function measured on the install
 /// samples (`skill_io`, 864; the heaviest law, `teach_check`, 635; docs/SCRIPT_ENGINES.md).
 /// At about 600 WASM instructions per operation, a call that runs into it costs about 1.2 M
@@ -6168,5 +6171,12 @@ fn rates(a) {
         assert_eq!(s.body_state(&c).unwrap().looks(), "warm, fed, badly wounded");
         c.actor.hp = 10.0;
         assert_eq!(s.body_state(&c).unwrap().looks(), "warm, fed, barely alive");
+    }
+
+    #[test]
+    fn source_cap_is_512_kib() {
+        assert_eq!(MAX_SOURCE, 512 * 1024);
+        let over = " ".repeat(MAX_SOURCE + 1);
+        assert_eq!(Scripts::new(&over).err().as_deref(), Some("script source exceeds 512 KiB"));
     }
 }
