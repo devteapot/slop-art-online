@@ -20,6 +20,7 @@ mod facing;
 mod frame;
 mod heed;
 pub mod hit;
+pub mod kin;
 pub mod icons;
 pub mod kit;
 mod link;
@@ -83,6 +84,7 @@ impl Plugin for UiPlugin {
             .init_resource::<people::Talks>()
             .init_resource::<people::LogPage>()
             .init_resource::<people::Hints>()
+            .init_resource::<kin::Kin>()
             .init_resource::<prompt::Tip>()
             .init_resource::<pack::Carrying>()
             .init_resource::<prim::Slots>()
@@ -94,13 +96,13 @@ impl Plugin for UiPlugin {
             .add_systems(Update, (default_camera, scale))
             .add_systems(PostUpdate, tips::update.before(UiSystems::Prepare));
         let widgets = ((cluster::extras, cluster::fill, prim::paint, prim::tooltip).chain(), cluster::update, top::clock, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
-        let windows = (people::update, people::hints, people::offers, prompt::update, say::update, pack::update, wheel::update, grid::update);
+        let windows = (kin::fill, people::update, kin::update, people::hints, people::offers, prompt::update, say::update, pack::update, wheel::update, grid::update);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, wood::shade_text.after(rebuilt).after(sample::fill).before(UiSystems::Prepare));
         } else {
             // Connected play: the game UI's input, its windows and the live source.
-            app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::camera_controls, settings::update, facing::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, grid::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
+            app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::camera_controls, settings::update, facing::update, settings::apply_prefs, people::clicks, kin::clicks, prompt::clicks, verbs::clicks, grid::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
                 .add_systems(Update, (people::ingest, say::follow).in_set(crate::phase::Phase::Present))
                 .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, settings::heed_only, facing::spawn, facing::pill_spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, dump.after(UiSystems::Layout))
@@ -335,6 +337,8 @@ fn dump(
             serde_json::json!({"win": o.win.name(), "anchor": format!("{:?}", o.anchor), "rect": r})
         })
         .collect();
+    // My community's name is given me too (`my_community`).
+    let given: Vec<String> = crate::looks::given_places(&extra.net).into_iter().chain(extra.kin.community.as_ref().map(|(n, _)| n.clone())).collect();
     let v = serde_json::json!({
         "windows": windows,
         "top": ws.top().map(|w| w.name()),
@@ -359,7 +363,7 @@ fn dump(
         "death": model.death.as_ref().map(|d| serde_json::json!({"cause": d.cause, "place": d.place, "lived": d.lived, "witnesses": d.witnesses,
             "killer_id": extra.combat.as_ref().and_then(|c| c.killer), "witness_ids": extra.combat.as_ref().map(|c| c.witnesses.clone())})),
         "known_names": crate::looks::known_names(&extra.net),
-        "given_places": crate::looks::given_places(&extra.net),
+        "given_places": given,
         "perceived": crate::looks::perceived_ids(&extra.net),
         // Where the notes and the F prompt are drawn (UI px: x, y, w, h), those showing.
         "rects": {
@@ -410,6 +414,9 @@ fn dump(
     // throng's rows with the figures drawn for each; null while the laws are off.
     let mut v = v;
     v["heed"] = extra.heed.as_ref().filter(|h| h.on).map_or(serde_json::Value::Null, |h| h.json());
+    // My family, community and courting offers as Log › People and the person windows show them
+    // (`kin.rs`).
+    v["kin"] = extra.kin.json();
     v["throng"] = extra.throng.as_ref().filter(|t| t.on).map_or(serde_json::Value::Null, |t| t.json());
     match std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap_or_default()) {
         Ok(()) => info!("ui: state written to {}", path.display()),
@@ -461,6 +468,7 @@ fn naming(model: &model::HudModel, verbs: &crate::verbs::Verbs, talk: Option<&cr
     // The authority's earshot sentence, shown in the box's hint line (the `earshot` law).
     out.extend(talk.and_then(|t| t.told.as_ref()).map(|t| ("earshot", t.text.clone())));
     out.extend(x.talks.cards.iter().map(|(_, _, t)| ("card", t.clone())));
+    out.extend(x.kin.naming());
     if let Some(d) = &model.death {
         out.push(("death", d.cause.clone()));
         out.extend(d.witnesses.iter().flatten().map(|w| ("death", w.clone())));
@@ -480,6 +488,7 @@ pub struct DumpExtra<'w, 's> {
     weapon: Res<'w, crate::weapon::Weapon>,
     slots: Res<'w, prim::Slots>,
     talks: Res<'w, people::Talks>,
+    kin: Res<'w, kin::Kin>,
     net: NonSend<'w, crate::net::Net>,
     scene: NonSend<'w, crate::world::Scene>,
     looks: Res<'w, crate::looks::Looks>,

@@ -4394,6 +4394,152 @@ def body_clock(run, c):
     c.check(s, "the next day is winter's first, on the clock and in its tooltip", win.get("season") == "winter" and win.get("season_word") == "Winter" and win.get("season_day") == 1 and win.get("day") == winter and (wtip.get("text") or "").startswith("Winter, day 1 of"), str((win, wtip))[:300])
 
 
+# The rules' words for each relation (`kin_terms()` in skills.rhai: sexed, then sex-neutral) and
+# the relation's own name, the client's last resort (`ui/kin.rs` `relation_word`).
+KIN_WORDS = {"parent": {"mother", "father", "parent"}, "child": {"daughter", "son", "child"}, "partner": {"wife", "husband", "partner"}}
+KIN_COMMUNITY = "Verifiers of the Square"
+KIN_IDS = 990001  # the fixture's community, membership and courting offer ids (far above any sequence)
+
+
+def kin_from_here(at, to):
+    """`living_rules::bearing::from_here`: "140 m northeast", or "here" within 4 m."""
+    dx, dy = to[0] - at[0], to[1] - at[1]
+    d = math.hypot(dx, dy)
+    if d <= 4.0:
+        return "here"
+    rough = round(d) if d < 30 else round(d / 10) * 10
+    a = math.degrees(math.atan2(dy, dx))
+    word = ("east" if -22.5 <= a < 22.5 else "southeast" if 22.5 <= a < 67.5 else "south" if 67.5 <= a < 112.5 else "southwest" if 112.5 <= a < 157.5
+            else "northeast" if -67.5 <= a < -22.5 else "north" if -112.5 <= a < -67.5 else "northwest" if -157.5 <= a < -112.5 else "west")
+    return f"{rough:.0f} m {word}"
+
+
+def kin_restore(run, me, child, child_parents, nameless, name):
+    """Put the world back as it was (each statement alone: idempotent after a failed drive)."""
+    quoted = name.replace("'", "''")
+    qs = [f"UPDATE character SET name = '{quoted}' WHERE id = {nameless}",
+          f"UPDATE character SET parent_a = {child_parents[0]}, parent_b = {child_parents[1]} WHERE id = {child}",
+          f"DELETE FROM membership WHERE id = {KIN_IDS}", f"DELETE FROM community WHERE id = {KIN_IDS}", f"DELETE FROM bond_offer WHERE id = {KIN_IDS}"]
+    if me:
+        qs += [f"UPDATE character SET parent_a = 0, parent_b = 0 WHERE id = {me}", f'DELETE FROM bond_offer WHERE "to" = {me}', f'DELETE FROM bond_offer WHERE "from" = {me}',
+               f"DELETE FROM expecting WHERE b = {me}", f"DELETE FROM expecting WHERE a = {me}"]
+    for q in qs:
+        sql(run, q)
+
+
+@scenario("kin")
+def kin(run, c):
+    """Perception parity, phase 0: my family, courting offers and community (`my_kin`,
+    `my_bond_offers`, `my_community`) in Log › People and the person windows (features/kin.md).
+    Owner SQL makes two residents my parents (one in sight; one far off whose name the fixture
+    blanks, so the rules give none), another my child (in sight) by a fourth, my partner (far off,
+    named), a community a parent founded with its home off to one side, and my own courting offer
+    to the partner; a fifth resident, beside me, offers to start a family as a mind decides
+    (admin `mind_act` conceive). Checks: names where the rules give one, the rules' relation
+    words, "Your parent" and "not in sight" for the nameless one far off, nothing of an unseen
+    relative's health, life or place; the community's founder, days and the home's way and
+    distance; the partner's window with my offer and no button; the suitor's window opened with
+    the card and the rules' act, which sends `conceive` toward them and is taken up; a reconnect
+    brings the rows back. The scene puts every row back."""
+    s = "kin"
+    rs = residents(run, n=8)
+    if len(rs) < 5:
+        c.check(s, "five adult residents to borrow", False, str(rs))
+        return
+    A, B, C, D, E = rs[:5]
+    chars = {r["id"]: r for r in sql(run, "SELECT id, name, parent_a, parent_b FROM character WHERE kind = 'person'")}
+    names = {i: chars[i]["name"] for i in (A, B, C, D, E)}
+    child_parents = (chars[C]["parent_a"], chars[C]["parent_b"])
+    arrive = (sql(run, "SELECT arrive_x, arrive_y FROM land") or [{}])[0]
+    home = (round(arrive.get("arrive_x", 0.0) + 60.0, 1), round(arrive.get("arrive_y", 0.0) - 60.0, 1))
+    if sql(run, "SELECT id FROM community WHERE id = %d" % KIN_IDS):
+        c.check(s, "no fixture community left by a failed run", False, "community %d stands" % KIN_IDS)
+        return
+    fed = lambda who: f"sql|UPDATE vitals SET hunger = 10.0, energy = 90.0, at_ms = {{now_ms}}, rate_key = 0 WHERE id = {who}"
+    kit = ";".join([
+        f"sql|UPDATE character SET parent_a = {A}, parent_b = {B} WHERE id = {{me}}",
+        f"sql|UPDATE character SET parent_a = {{me}}, parent_b = {D} WHERE id = {C}",
+        f"sql|UPDATE character SET name = '' WHERE id = {B}",
+        fed("{me}"), fed(E),
+        f"sql|INSERT INTO community (id, name, founder, founded_ms, home_x, home_y) VALUES ({KIN_IDS}, '{KIN_COMMUNITY}', {A}, {{now_ms}}, {home[0]}, {home[1]})",
+        f"sql|INSERT INTO membership (id, community, member, since_ms) VALUES ({KIN_IDS}, {KIN_IDS}, {{me}}, {{now_ms}})",
+        f'sql|INSERT INTO bond_offer (id, "from", "to", at_ms) VALUES ({KIN_IDS}, {{me}}, {D}, {{now_ms}})',
+        f"sql|SELECT * FROM community WHERE id = {KIN_IDS}",
+        "client_sql|SELECT * FROM my_kin", "client_sql|SELECT * FROM my_bond_offers", "client_sql|SELECT * FROM my_community"])
+    court = act(E, {"do": "conceive", "target": {"id": "{me}"}})
+    taken = "taken=sql|SELECT * FROM expecting WHERE b = {me};sql|SELECT * FROM bond_offer WHERE \"to\" = {me}"
+    plan = ("ready;sync:scene;sync:kit;wait:3;key:KeyL:tap;wait:0.6;click:@log:tab:1;wait:1;dump:people;shot:01_people;"
+            "click:@log:kin:2;wait:1;dump:partner;shot:02_partner_offer;click:@win:Person{D}:close;wait:0.5;"
+            "sync:court;wait:4;dump:court;shot:03_courted;click:@person:bond:{E}:accept;wait:4;dump:accepted;shot:04_taken_up;sync:taken;"
+            "reconnect;wait:10;dump:recon0;key:KeyL:tap;wait:0.6;click:@log:tab:1;wait:1;dump:recon;shot:05_after_reconnect;quit").replace("{D}", str(D)).replace("{E}", str(E))
+    # A, C and E in sight (E within the 2 m the rules give `conceive`); B and D far off, held still.
+    places = [f"{A}:-1.8:1.2", f"{C}:1.6:1.4", f"{E}:-0.6:1.3", f"{B}:0:-40", f"{D}:40:0"]
+    me = None
+    with resident_fixture(run, [A, B, C, D, E]):
+        try:
+            out, code, text = drive(run, s, plan, places=places, syncs=[f"kit={kit}", f"court={court}", taken])
+            sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+            me = sc.get("me")
+        finally:
+            if me is None:
+                p = os.path.join(ROOT, ".local/living/verify", run, "ui", s, "scene.json")
+                me = json.load(open(p)).get("me") if os.path.exists(p) else None
+            kin_restore(run, me, C, child_parents, B, names[B])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    snaps = sc.get("snaps", {})
+    c.check(s, "fixtures: every owner SQL call went in, the community and offer stand", bool((snaps.get("kit") or [{}])[0].get("query")) and any(s_.get("rows") for s_ in snaps.get("kit", []) if "FROM community" in s_["query"]), str([(x["query"][:60], len(x["rows"])) for x in snaps.get("kit", [])])[:600])
+    view_rows = [x for x in snaps.get("kit", []) if "FROM my_kin" in x["query"]]
+    cols = {k for r in (view_rows[0]["rows"] if view_rows else []) for k in r}
+    c.check(s, "the client's own my_kin rows carry ids and relations only (no alive, hp, name or place)", cols == {"id", "relation"}, str(view_rows[:1])[:300])
+    d = {k: dump(out, k) or {} for k in ["people", "partner", "court", "accepted", "recon"]}
+    kin_of = lambda k: d[k].get("kin") or {}
+    rows = kin_of("people").get("rows") or []
+    by = {r["id"]: r for r in rows}
+    perceived = set(d["people"].get("perceived") or [])
+    parents = sorted([A, B])
+    c.check(s, "Log › People: family in order (parents, partner, child) from my_kin", [r["id"] for r in rows] == parents + [D, C] and [r["relation"] for r in rows] == ["parent", "parent", "partner", "child"], str([(r["id"], r["relation"]) for r in rows]))
+    a, b, cc, dd = by.get(A, {}), by.get(B, {}), by.get(C, {}), by.get(D, {})
+    c.check(s, "fixture: the parent and child are in sight, the nameless parent and the partner are not", {A, C} <= perceived and not ({B, D} & perceived), f"perceived {sorted(perceived)}; A {A} B {B} C {C} D {D}")
+    c.check(s, "a parent in sight: the name the rules give, the rules' word, here now", a.get("title") == names[A] and a.get("word") in KIN_WORDS["parent"] and a.get("note") == f"your {a.get('word')} · here now" and a.get("here") is True, str(a))
+    c.check(s, "my child in sight: their name, the rules' word for a child, here now", cc.get("title") == names[C] and cc.get("word") in KIN_WORDS["child"] and cc.get("note") == f"your {cc.get('word')} · here now", str(cc))
+    c.check(s, "a parent the rules give no name, out of sight (seen earlier as a stranger): the relation alone (\"Your parent\", \"not in sight\")", b.get("title") == "Your parent" and b.get("note") == "not in sight" and b.get("word") == "parent" and b.get("named") is False, str(b))
+    c.check(s, "my partner, named, out of sight: the name, \"your partner · not in sight\"", dd.get("title") == names[D] and dd.get("note") == "your partner · not in sight" and dd.get("here") is False, str(dd))
+    leaks = [(k, t) for k in d for r in (kin_of(k).get("rows") or []) if r["id"] in (B, D) for t in (r["title"], r["note"])
+             if re.search(r"\d|\b(alive|dead|died|hp|health|wounded|hurt|north|south|east|west|here now|m away)\b", t, re.I)]
+    c.check(s, "nothing of an unseen relative's health, life or place on screen", not leaks, str(leaks))
+    c.check(s, "an unseen relative is in no plate, hover or target", not any(a_.get("id") in (B, D) for k in d for a_ in d[k].get("hovered") or []) and all(d[k].get("targeted") not in (B, D) for k in d), "")
+    com = kin_of("people").get("community") or {}
+    lines = com.get("lines") or []
+    founded = ((next((x for x in snaps.get("kit", []) if "FROM community" in x["query"]), {}).get("rows") or [{}])[0]).get("founded_ms")
+    w = (sql(run, "SELECT epoch_ms, day_ms FROM world") or [{}])[0]
+    day = (int(founded) - int(w["epoch_ms"]) + int(w["day_ms"]) * 7 // 24) // int(w["day_ms"]) + 1 if founded and w else None
+    c.check(s, "the community: its name, founded by a parent (named), on the clock's day, when I joined", com.get("name") == KIN_COMMUNITY and lines[:1] == [f"Founded by {names[A]} on day {day} · you joined on day {day}"], str(com))
+    at = ((d["people"].get("me_at") or {}).get("drawn")) or [0, 0]
+    c.check(s, "its home: the rules' way and distance from where I stand", lines[1:2] == [f"Home: {kin_from_here(at, home)}"], f"{lines}; me {at}; home {home}")
+    c.check(s, "the community is shown in Log › People and its name counts as given me", "log:community" in (d["people"].get("tags") or {}) and KIN_COMMUNITY in (d["people"].get("given_places") or []), str(sorted(t for t in d["people"].get("tags") or {} if t.startswith("log:"))))
+    bonds = lambda k: kin_of(k).get("bonds") or []
+    mine = [b_ for b_ in bonds("partner") if b_["with"] == D and not b_["incoming"]]
+    c.check(s, "a family row opens their window (Family › partner)", (f"Person{D}", "Left") in wins(d["partner"]), str(wins(d["partner"])))
+    c.check(s, "my courting offer: a card in their window, \"You asked … to start a family\", counting down, no button", mine and mine[0]["text"].startswith(f"You asked {names[D]} to start a family.") and re.search(r"\d+:\d\d left$", mine[0]["text"]) and f"person:bond:{D}:accept" not in (d["partner"].get("tags") or {}), str(mine))
+    inc = [b_ for b_ in bonds("court") if b_["with"] == E and b_["incoming"]]
+    tag = f"person:bond:{E}:accept"
+    c.check(s, "a courting offer to me opens the suitor's window with the card and the rules' act", (f"Person{E}", "Left") in wins(d["court"]) and inc and inc[0]["text"].endswith("left") and " wants to start a family with you." in inc[0]["text"] and tag in (d["court"].get("tags") or {}), str((wins(d["court"]), inc, kin_of("court").get("accept"))))
+    c.check(s, "the suitor is named as I see them (not known by name: no name)", inc and names[E] not in inc[0]["text"], str(inc))
+    c.check(s, "it is noted once, in the authority's words", len([n for n in d["court"].get("notes") or [] if "wants to start a family with you" in n]) == 1, str(d["court"].get("notes")))
+    L = log(out)
+    c.check(s, "the card's button sends the rules' act toward the suitor (human_act conceive)", re.search(rf'verbs: \S+ → \{{"do":"conceive","target":\{{"id":{E}\}}\}}', L) is not None, "")
+    t_ = snaps.get("taken") or []
+    expecting = t_[0]["rows"] if t_ else []
+    standing = t_[1]["rows"] if len(t_) > 1 else []
+    c.check(s, "the rules took it up: a child on the way, nothing left standing to me, the card gone", expecting and not standing and tag not in (d["accepted"].get("tags") or {}) and not [b_ for b_ in bonds("accepted") if b_["incoming"]], f"expecting {expecting}; standing {standing}")
+    c.check(s, "taking one up drops my own offer (the rules), and its card", not [b_ for b_ in bonds("accepted") if not b_["incoming"]], str(bonds("accepted")))
+    c.check(s, "a reconnect asks the views again, and the family and community are back", len(re.findall(rf"kin views applied for #{me}", L)) >= 2 and [r["id"] for r in kin_of("recon").get("rows") or []] == parents + [D, C] and (kin_of("recon").get("community") or {}).get("name") == KIN_COMMUNITY, str(len(re.findall("kin views applied", L))))
+    texts = [(f"{k}:{w_}", t) for k in d for w_, t in d[k].get("naming") or [] if w_ in ("kin", "community", "bond")]
+    given = set(d["people"].get("known_names") or []) | set(d["people"].get("given_places") or [])
+    c.check(s, "every name on these rows is one the authority gave me", not leaked(texts, [names[i] for i in (A, B, C, D, E) if names[i]], given), str(leaked(texts, [names[i] for i in (A, B, C, D, E) if names[i]], given))[:300])
+    c.check(s, "the scene put the world back", not sql(run, f"SELECT id FROM community WHERE id = {KIN_IDS}") and not (me and sql(run, f"SELECT id FROM expecting WHERE b = {me}")) and (sql(run, f"SELECT name FROM character WHERE id = {B}") or [{}])[0].get("name") == names[B], "")
+
+
 @scenario("own")
 def own(run, c):
     """mind-act-outcome-far (force_outcomes): my own strikes, shots and casts get an `own`
