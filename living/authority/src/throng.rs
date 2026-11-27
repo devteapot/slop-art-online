@@ -86,6 +86,9 @@ pub struct Cell6 {
     /// Where the members stand within the square: their mean position's whole metres east and
     /// south of its top-left corner (0 to side - 1; a client draws it at + 0.5 m).
     pub centre: [u8; 2],
+    /// How many wear each cloth colour, in [`CLOTH`] order, each quantized as `count` is and capped
+    /// at 255 (the whole histogram; `colours` is its deprecated top three).
+    pub cloths: [u8; CLOTH.len()],
 }
 
 /// One of a cell's colours: a cloth index and its quantized count.
@@ -113,6 +116,17 @@ fn top_colours(cloths: impl Iterator<Item = u8>) -> [Colour; 3] {
         *slot = Colour { index: i as u8, count: about(k) };
     }
     out
+}
+
+/// Each [`CLOTH`] colour's wearers among `cloths`, quantized as `count` is and capped at 255.
+fn cloth_histogram(cloths: impl Iterator<Item = u8>) -> [u8; CLOTH.len()] {
+    let mut n = [0usize; CLOTH.len()];
+    for c in cloths {
+        if let Some(k) = n.get_mut(c as usize) {
+            *k += 1;
+        }
+    }
+    n.map(|k| about(k).min(u8::MAX as u16) as u8)
 }
 
 /// The cells of `throng` seen from `here`: one per occupied 6 m square, the farthest merged 2 x 2
@@ -157,41 +171,8 @@ pub fn cells(here: (f32, f32), throng: &[NearCreature], moving: impl Fn(u32) -> 
     let mut out: Vec<(f32, Cell6)> = by
         .into_iter()
         .map(|((x, y, s), cs)| {
-            let n = cs.len();
-            let (cx, cy) = (cs.iter().map(|c| c.pos.0).sum::<f32>() / n as f32, cs.iter().map(|c| c.pos.1).sum::<f32>() / n as f32);
-            let spread = cs.iter().map(|c| (c.pos.0 - cx).hypot(c.pos.1 - cy)).fold(0.0f32, f32::max) * 2.0;
-            let (mut vx, mut vy, mut movers, mut fighters, mut kinds) = (0.0f32, 0.0f32, 0usize, 0usize, 0u8);
-            let mut of_kind = [0usize; 4];
-            for c in &cs {
-                if let Some((a, b)) = moving(c.id) {
-                    movers += 1;
-                    vx += a;
-                    vy += b;
-                }
-                if fighting(c.id) {
-                    fighters += 1;
-                }
-                let (bit, slot) = match &*c.kind {
-                    "person" => (PEOPLE, 0),
-                    "wolf" => (WOLVES, 1),
-                    "deer" => (DEER, 2),
-                    _ => (OTHERS, 3),
-                };
-                kinds |= bit;
-                of_kind[slot] += 1;
-            }
-            let heading = if movers * 2 >= n && movers > 0 && (vx / movers as f32).hypot(vy / movers as f32) >= HEADING_MIN_MPS {
-                ((vy.atan2(vx).to_degrees() / 45.0).round().rem_euclid(8.0)) as u8
-            } else {
-                STILL
-            };
-            let colours = top_colours(cs.iter().map(|c| cloth(c.id)));
-            let side = s as f32 * CELL_M;
-            let at = |v: f32, corner: f32| ((v - corner).floor().clamp(0.0, side - 1.0)) as u8;
-            let centre = [at(cx, x as f32 * CELL_M), at(cy, y as f32 * CELL_M)];
-            let by_kind = of_kind.map(about);
-            let row = Cell6 { cell: key(x, y), size: s as u8, count: about(n), spread: ((spread / 2.0).round() * 2.0).min(254.0) as u8, heading, moving: about(movers), fighting: about(fighters), kinds, colours, by_kind, centre };
-            (common::dist(here, (cx, cy)), row)
+            let (row, mean) = row_of(key(x, y), s as u8, &cs, &moving, &fighting, &cloth);
+            (common::dist(here, mean), row)
         })
         .collect();
     if out.len() > MAX_ROWS {
@@ -201,6 +182,110 @@ pub fn cells(here: (f32, f32), throng: &[NearCreature], moving: impl Fn(u32) -> 
     let mut rows: Vec<Cell6> = out.into_iter().map(|(_, r)| r).collect();
     rows.sort_by_key(|r| (r.cell, r.size));
     rows
+}
+
+/// One square's row from its members `cs` (at least one), and their mean position.
+fn row_of(cell: u32, size: u8, cs: &[&NearCreature], moving: &impl Fn(u32) -> Option<(f32, f32)>, fighting: &impl Fn(u32) -> bool, cloth: &impl Fn(u32) -> u8) -> (Cell6, (f32, f32)) {
+    let n = cs.len().max(1);
+    let (cx, cy) = (cs.iter().map(|c| c.pos.0).sum::<f32>() / n as f32, cs.iter().map(|c| c.pos.1).sum::<f32>() / n as f32);
+    let spread = cs.iter().map(|c| (c.pos.0 - cx).hypot(c.pos.1 - cy)).fold(0.0f32, f32::max) * 2.0;
+    let (mut vx, mut vy, mut movers, mut fighters, mut kinds) = (0.0f32, 0.0f32, 0usize, 0usize, 0u8);
+    let mut of_kind = [0usize; 4];
+    for c in cs {
+        if let Some((a, b)) = moving(c.id) {
+            movers += 1;
+            vx += a;
+            vy += b;
+        }
+        if fighting(c.id) {
+            fighters += 1;
+        }
+        let (bit, slot) = match &*c.kind {
+            "person" => (PEOPLE, 0),
+            "wolf" => (WOLVES, 1),
+            "deer" => (DEER, 2),
+            _ => (OTHERS, 3),
+        };
+        kinds |= bit;
+        of_kind[slot] += 1;
+    }
+    let heading = if movers * 2 >= cs.len() && movers > 0 && (vx / movers as f32).hypot(vy / movers as f32) >= HEADING_MIN_MPS {
+        ((vy.atan2(vx).to_degrees() / 45.0).round().rem_euclid(8.0)) as u8
+    } else {
+        STILL
+    };
+    let worn: Vec<u8> = cs.iter().map(|c| cloth(c.id)).collect();
+    let colours = top_colours(worn.iter().copied());
+    let cloths = cloth_histogram(worn.iter().copied());
+    let ((x0, y0), side) = square(cell, size);
+    let at = |v: f32, corner: f32| ((v - corner).floor().clamp(0.0, side - 1.0)) as u8;
+    let centre = [at(cx, x0), at(cy, y0)];
+    let by_kind = of_kind.map(about);
+    let row = Cell6 { cell, size, count: about(cs.len()), spread: ((spread / 2.0).round() * 2.0).min(254.0) as u8, heading, moving: about(movers), fighting: about(fighters), kinds, colours, by_kind, centre, cloths };
+    (row, (cx, cy))
+}
+
+/// The table row of cell `c` for `viewer` (its `id`, 0 to insert).
+fn fields(id: u64, viewer: Identity, c: &Cell6) -> SeenThrong {
+    let [a, b, k] = c.colours;
+    let h = c.cloths;
+    SeenThrong {
+        id,
+        viewer,
+        cell: c.cell,
+        size: c.size,
+        count: c.count,
+        spread: c.spread,
+        heading: c.heading,
+        moving: c.moving,
+        fighting: c.fighting,
+        kinds: c.kinds,
+        colour_a: a.index,
+        colour_a_count: a.count,
+        colour_b: b.index,
+        colour_b_count: b.count,
+        colour_c: k.index,
+        colour_c_count: k.count,
+        people: c.by_kind[0],
+        wolves: c.by_kind[1],
+        deer: c.by_kind[2],
+        others: c.by_kind[3],
+        centre_x: c.centre[0],
+        centre_y: c.centre[1],
+        cloth_yellow: h[0],
+        cloth_black: h[1],
+        cloth_green: h[2],
+        cloth_tan: h[3],
+        cloth_blue: h[4],
+        cloth_red: h[5],
+        cloth_cream: h[6],
+        cloth_navy: h[7],
+        cloth_purple: h[8],
+        cloth_grey: h[9],
+    }
+}
+
+/// `pin_at` took a member of `row`'s square out of `viewer`'s throng (`heed::pick_at`), in this
+/// transaction: the row becomes what the square's `rest` (its throng members still there) make,
+/// or goes when none is left, so the throng gives the person up at once. The next sweep works the
+/// cells out afresh and writes nothing where they agree.
+pub fn after_pick(ctx: &ReducerContext, viewer: Identity, row: &SeenThrong, rest: &[NearCreature], now: u64) {
+    if rest.is_empty() {
+        ctx.db.seen_throng().id().delete(row.id);
+        common::diag(|| "throng:pick_delete", 1);
+        return;
+    }
+    let sc = common::scripts(ctx);
+    let moving = |c: u32| ctx.db.body().id().find(c).filter(|b| now < b.next_ms && (b.vx != 0.0 || b.vy != 0.0)).map(|b| (b.vx, b.vy));
+    let fighting = |c: u32| crate::perception::visibly(ctx, &sc, c, now).is_some_and(|v| v.combat);
+    let cloth = |c: u32| ctx.db.look().id().find(c).map_or(NO_CLOTH, |l| cloth_index(&l.words.top));
+    let members: Vec<&NearCreature> = rest.iter().collect();
+    let (cell, _) = row_of(row.cell, row.size, &members, &moving, &fighting, &cloth);
+    let want = fields(row.id, viewer, &cell);
+    if want != *row {
+        ctx.db.seen_throng().id().update(want);
+        common::diag(|| "throng:pick_update", 1);
+    }
 }
 
 /// Bring `viewer`'s rows to its throng now (its character `id` at `here`), when its heed pass
@@ -236,41 +321,17 @@ fn write(ctx: &ReducerContext, viewer: Identity, new: &[Cell6]) {
     }
     let (mut ins, mut upd) = (0u64, 0u64);
     for c in new {
-        let [a, b, k] = c.colours;
-        let fields = |id: u64| SeenThrong {
-            id,
-            viewer,
-            cell: c.cell,
-            size: c.size,
-            count: c.count,
-            spread: c.spread,
-            heading: c.heading,
-            moving: c.moving,
-            fighting: c.fighting,
-            kinds: c.kinds,
-            colour_a: a.index,
-            colour_a_count: a.count,
-            colour_b: b.index,
-            colour_b_count: b.count,
-            colour_c: k.index,
-            colour_c_count: k.count,
-            people: c.by_kind[0],
-            wolves: c.by_kind[1],
-            deer: c.by_kind[2],
-            others: c.by_kind[3],
-            centre_x: c.centre[0],
-            centre_y: c.centre[1],
-        };
+        let row_for = |id: u64| fields(id, viewer, c);
         match kept.remove(&(c.cell, c.size)) {
             Some(r) => {
-                let want = fields(r.id);
+                let want = row_for(r.id);
                 if r != want {
                     ctx.db.seen_throng().id().update(want);
                     upd += 1;
                 }
             }
             None => {
-                ctx.db.seen_throng().insert(fields(0));
+                ctx.db.seen_throng().insert(row_for(0));
                 ins += 1;
             }
         }
@@ -374,9 +435,20 @@ mod tests {
         // is fourth and left out; the member with no look counts in `count` but wears no colour.
         assert_eq!(rows[0].colours, [Colour { index: 2, count: 5 }, Colour { index: 1, count: 2 }, Colour { index: 7, count: 2 }]);
         assert_eq!(rows[0].count, about(13));
+        // The whole histogram, in CLOTH order: yellow 0, black 2, green 7 (about 5), tan 0, blue 0,
+        // red 1, cream 0, navy 2, purple 0, grey 0.
+        assert_eq!(rows[0].cloths, [0, 2, 5, 0, 0, 1, 0, 2, 0, 0]);
         // No looks at all: no colours.
         let none = cells((0.0, 0.0), &t[..3], |_| None, |_| false, |_| NO_CLOTH);
         assert_eq!(none[0].colours, [NO_COLOUR; 3]);
+    }
+
+    #[test]
+    fn the_histogram_is_quantized_as_count_and_capped_at_255() {
+        let h = cloth_histogram([2u8; 252].into_iter().chain([7u8; 300]).chain([NO_CLOTH; 4]));
+        // 252 reads as about 250; 300 would read 300 and is capped at 255; no-look wearers count nowhere.
+        assert_eq!(h, [0, 0, 250, 0, 0, 0, 0, 255, 0, 0]);
+        assert_eq!(cloth_histogram([253u8, 0].into_iter()), [1, 0, 0, 0, 0, 0, 0, 0, 0, 0], "an index out of CLOTH counts nowhere");
     }
 
     #[test]

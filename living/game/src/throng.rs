@@ -1288,7 +1288,7 @@ mod tests {
     use spacetimedb_sdk::Identity;
 
     fn row(cell: u32, size: u8, count: u16, spread: u8, heading: u8, moving: u16, fighting: u16, kinds: u8) -> SeenThrong {
-        SeenThrong { id: 9, viewer: Identity::ZERO, cell, size, count, spread, heading, moving, fighting, kinds, colour_a: 255, colour_a_count: 0, colour_b: 255, colour_b_count: 0, colour_c: 255, colour_c_count: 0, people: 0, wolves: 0, deer: 0, others: 0, centre_x: 2, centre_y: 2 }
+        SeenThrong { id: 9, viewer: Identity::ZERO, cell, size, count, spread, heading, moving, fighting, kinds, colour_a: 255, colour_a_count: 0, colour_b: 255, colour_b_count: 0, colour_c: 255, colour_c_count: 0, people: 0, wolves: 0, deer: 0, others: 0, centre_x: 2, centre_y: 2, cloth_yellow: 0, cloth_black: 0, cloth_green: 0, cloth_tan: 0, cloth_blue: 0, cloth_red: 0, cloth_cream: 0, cloth_navy: 0, cloth_purple: 0, cloth_grey: 0 }
     }
 
     #[test]
