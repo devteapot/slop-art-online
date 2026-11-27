@@ -37,6 +37,32 @@ pub struct TipWeapon;
 
 /// The least gap between the F prompt and a note (UI px).
 const NOTE_GAP: f32 = 8.0;
+/// Viewport margin kept around the F prompt so it never clips off an edge (logical px).
+const VIEW_MARGIN: f32 = 8.0;
+/// Furthest a peaceful person shows the `F Talk` prompt (m): keeps the prompt off distant
+/// bystanders while F itself still walks into reach when pressed.
+const TALK_PROMPT_M: f32 = 8.0;
+/// Distance within which an unhovered nearby person still shows the prompt (m, matching `verbs::NEAR_M`).
+const NEAR_PROMPT_M: f32 = 3.5;
+
+/// Place the F prompt beside `anchor` (head or cursor), preferring right then left where it is
+/// both clear of `lane` (active notes) and fits inside `view` with [`VIEW_MARGIN`]; if neither
+/// side fits unclamped, clamp each side into the viewport and take the first still clear of notes.
+/// Returns `None` when the anchor itself is off-screen or no clear placement exists.
+pub fn place_prompt(anchor: Vec2, dy: f32, size: Vec2, view: Vec2, lane: &[Rect]) -> Option<Vec2> {
+    if anchor.x < 0.0 || anchor.y < 0.0 || anchor.x > view.x || anchor.y > view.y {
+        return None;
+    }
+    let lo = Vec2::splat(VIEW_MARGIN);
+    let hi = (view - size - Vec2::splat(VIEW_MARGIN)).max(lo);
+    let clear = |p: &Vec2| lane.iter().all(|r| r.intersect(Rect::from_corners(*p, *p + size)).is_empty());
+    let fits = |p: &Vec2| p.x >= lo.x && p.y >= lo.y && p.x <= hi.x && p.y <= hi.y;
+    let candidates = [anchor + Vec2::new(26.0, dy), anchor + Vec2::new(-26.0 - size.x, dy)];
+    candidates
+        .into_iter()
+        .find(|p| fits(p) && clear(p))
+        .or_else(|| candidates.into_iter().map(|p| p.clamp(lo, hi)).find(clear))
+}
 
 /// The weapon's line of the tip shows once sheathe and draw is built (step 4).
 pub const SHEATHE: bool = true;
@@ -163,32 +189,35 @@ pub fn update(
         crate::verbs::Aim::Creature { id } => model.actors.iter().find(|x| x.id == *id as u64),
         _ => None,
     });
-    let peaceful_person = person.filter(|a| a.stance == super::model::Stance::Neutral && a.kind_person);
+    // Suppress the floating `F Talk` prompt for distant or unhovered bystanders (combat's 3.5 m
+    // aim-assist can target someone 10+ m off); pressing F still walks into reach via `verbs.rs`.
+    let near_person = person.filter(|a| a.distance <= TALK_PROMPT_M && (a.hovered || a.distance <= NEAR_PROMPT_M));
+    let peaceful_person = near_person.filter(|a| a.stance == super::model::Stance::Neutral && a.kind_person);
     // "hold F · more" until the list has been opened with a hold a few times (always in a
     // dense theme).
     let more_hint = |s: String| if wood::t().help || tip.holds < 2 { s } else { String::new() };
-    let (text, more_text) = match (aimed, peaceful_person) {
-        (Some(_), Some(_)) => ("Talk".to_string(), more_hint(format!("hold {f} · more"))),
-        (Some(_), None) => match &verbs.likely {
+    let (text, more_text) = match (aimed, person, peaceful_person) {
+        (Some(_), _, Some(_)) => ("Talk".to_string(), more_hint(format!("hold {f} · more"))),
+        (Some(_), Some(a), None) if a.distance > TALK_PROMPT_M || (!a.hovered && a.distance > NEAR_PROMPT_M) => (String::new(), String::new()),
+        (Some(_), _, None) => match &verbs.likely {
             Some(c) => (super::label(&wood::readable(&c.label)), if verbs.has_options { more_hint(format!("hold {f} · more")) } else { String::new() }),
             None if verbs.has_options => (format!("{} · acts", super::label(&verbs.aim_name)), String::new()),
             None => (String::new(), String::new()),
         },
         _ => (String::new(), String::new()),
     };
-    // Beside their head (else beside the cursor), right of it, or left when a note is in the
-    // way: the prompt never covers a note (notes keep their lane above the bar). With neither
-    // side clear the note wins for its few seconds, and the prompt returns after.
+    // Beside their head (else beside the cursor), right of it, or left when a note or the viewport
+    // edge is in the way: the prompt never covers a note and never clips off-screen.
     let px = ui.scale.max(0.01);
+    let view = cams.iter().find_map(|(c, _)| c.logical_viewport_size()).unwrap_or(Vec2::new(1600.0, 900.0));
     let lane: Vec<Rect> = notes.iter().filter(|(n, c, _)| n.display != Display::None && c.size().x > 0.0).map(|(_, c, t)| Rect::from_center_size(t.affine().translation / px, c.size() / px).inflate(NOTE_GAP)).collect();
     // Its size as last drawn (a hidden node measures nothing; a guess could flicker beside a note).
     if let Some(z) = prompt.iter().map(|(_, c)| c.size() / px).find(|z| z.x > 0.0) {
         *last_size = z;
     }
     let size = if last_size.x > 0.0 { *last_size } else { Vec2::new(200.0, 34.0) };
-    let clear = |p: &Vec2| lane.iter().all(|r| r.intersect(Rect::from_corners(*p, *p + size)).is_empty());
     let beside = person.and_then(|a| cams.iter().find_map(|(c, t)| c.world_to_viewport(t, a.head).ok())).map(|p| (p, 6.0)).or_else(|| ui.pos.map(|p| (p, 10.0)));
-    let at = beside.and_then(|(p, dy)| [p + Vec2::new(26.0, dy), p + Vec2::new(-26.0 - size.x, dy)].into_iter().find(clear));
+    let at = beside.and_then(|(p, dy)| place_prompt(p, dy, size, view, &lane));
     let on = !text.is_empty() && at.is_some() && !ui.over_ui;
     for (mut n, _) in &mut prompt {
         show(&mut n, on);
@@ -216,5 +245,32 @@ pub fn update(
     let left_taken = ws.at(Anchor::Left).is_some() || ws.top().is_some_and(|w| w.wide());
     for mut n in &mut card {
         show(&mut n, tip.shown && !tip.dismissed && prefs.tips && !left_taken && model.death.is_none());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prompt_flips_or_clamps_inside_viewport_and_avoids_notes() {
+        let view = Vec2::new(1600.0, 900.0);
+        let size = Vec2::new(200.0, 34.0);
+        // Middle of screen: sits on the right.
+        let p = place_prompt(Vec2::new(800.0, 400.0), 6.0, size, view, &[]).unwrap();
+        assert_eq!(p, Vec2::new(826.0, 406.0));
+        // Near the right edge: flips to the left instead of clipping off-screen.
+        let p = place_prompt(Vec2::new(1500.0, 120.0), 6.0, size, view, &[]).unwrap();
+        assert!(p.x >= VIEW_MARGIN && p.x + size.x <= view.x - VIEW_MARGIN, "{p}");
+        assert!(p.x < 1500.0, "flipped left of anchor: {p}");
+        // Bottom corner: clamps vertically inside viewport.
+        let p = place_prompt(Vec2::new(1580.0, 885.0), 6.0, size, view, &[]).unwrap();
+        assert!(p.x >= VIEW_MARGIN && p.x + size.x <= view.x - VIEW_MARGIN && p.y >= VIEW_MARGIN && p.y + size.y <= view.y - VIEW_MARGIN, "{p}");
+        // Right side blocked by a note: flips left.
+        let note = Rect::from_corners(Vec2::new(810.0, 390.0), Vec2::new(1050.0, 460.0));
+        let p = place_prompt(Vec2::new(800.0, 400.0), 6.0, size, view, &[note]).unwrap();
+        assert!(note.intersect(Rect::from_corners(p, p + size)).is_empty(), "{p}");
+        // Anchor off-screen: hidden.
+        assert_eq!(place_prompt(Vec2::new(1650.0, 400.0), 6.0, size, view, &[]), None);
     }
 }

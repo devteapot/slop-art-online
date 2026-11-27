@@ -18,6 +18,7 @@ mod cluster;
 mod death;
 mod facing;
 mod frame;
+mod heed;
 pub mod hit;
 pub mod icons;
 pub mod kit;
@@ -92,7 +93,7 @@ impl Plugin for UiPlugin {
             .add_systems(PostUpdate, (theme, sweep.run_if(rebuilding), (frame::spawn, cluster::spawn, prim::spawn_tooltip, wheel::spawn, grid::spawn, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn).run_if(rebuilding), rebuilt).chain().before(UiSystems::Prepare).before(win::apply))
             .add_systems(Update, (default_camera, scale))
             .add_systems(PostUpdate, tips::update.before(UiSystems::Prepare));
-        let widgets = ((cluster::extras, cluster::fill, prim::paint, prim::tooltip).chain(), cluster::update, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
+        let widgets = ((cluster::extras, cluster::fill, prim::paint, prim::tooltip).chain(), cluster::update, top::clock, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
         let windows = (people::update, people::hints, people::offers, prompt::update, say::update, pack::update, wheel::update, grid::update);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare))
@@ -101,8 +102,10 @@ impl Plugin for UiPlugin {
             // Connected play: the game UI's input, its windows and the live source.
             app.add_systems(Update, ((hit::hit, win::esc, win::keys, win::pointer, top::clicks, settings::camera_controls, settings::update, facing::update, settings::apply_prefs, people::clicks, prompt::clicks, verbs::clicks, grid::clicks, pack::clicks, their_window).chain().in_set(UiInput), say::keys.in_set(crate::phase::Phase::Input).after(UiInput).before(crate::controls::movement)))
                 .add_systems(Update, (people::ingest, say::follow).in_set(crate::phase::Phase::Present))
-                .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, facing::spawn, facing::pill_spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
+                .add_systems(PostUpdate, (win::apply, win::place, settings::spawn, settings::heed_only, facing::spawn, facing::pill_spawn, people::spawn, pack::spawn, kit::paint).chain().before(UiSystems::Prepare))
                 .add_systems(PostUpdate, dump.after(UiSystems::Layout))
+                // Heed for players: the keeping-track strip (nothing while the laws are off).
+                .add_systems(PostUpdate, heed::strip.in_set(UiWork).before(UiSystems::Prepare))
                 .add_systems(PostUpdate, (live::fill, verbs::fill, widgets, windows, facing::pill).chain().in_set(UiWork).before(UiSystems::Prepare))
                 // Light text gets the theme's drop the frame it is spawned (Glass).
                 .add_systems(PostUpdate, wood::shade_text.after(rebuilt).after(kit::paint).after(UiWork).before(UiSystems::Prepare));
@@ -366,7 +369,11 @@ fn dump(
         // The pack's load and limit as its header shows them (while the pack is open).
         "pack": model.verbs.inventory.as_ref().map(|i| serde_json::json!({"carried": i.carried, "limit": i.limit, "items": i.rows.iter().map(|r| (r.0.clone(), r.1)).collect::<Vec<_>>()})),
         // My bars (`meters()`) and pills (`status_of`) as drawn.
-        "me": model.me.as_ref().map(|m| serde_json::json!({"meters": m.meters.iter().map(|x| serde_json::json!({"name": x.name, "label": x.label, "value": x.value, "max": x.max})).collect::<Vec<_>>(), "statuses": m.statuses.iter().map(|x| serde_json::json!({"name": x.name, "tone": format!("{:?}", x.tone), "text": x.text})).collect::<Vec<_>>()})),
+        "me": model.me.as_ref().map(|m| serde_json::json!({"meters": m.meters.iter().map(|x| serde_json::json!({"name": x.name, "label": x.label, "value": x.value, "max": x.max})).collect::<Vec<_>>(), "statuses": m.statuses.iter().map(|x| serde_json::json!({"name": x.name, "tone": format!("{:?}", x.tone), "text": x.text})).collect::<Vec<_>>(),
+            // Every meter in the body's tooltip (bars or not) and its words as drawn.
+            "body": m.body.iter().map(|x| serde_json::json!({"name": x.name, "label": x.label, "value": x.value, "max": x.max, "shown": x.shown, "word": x.word})).collect::<Vec<_>>(), "body_tip": cluster::body_tip(m).text})),
+        // The clock as drawn (`top.rs`): the hour, its text, night, the season and its days.
+        "clock": model.time.as_ref().map(|t| serde_json::json!({"hour": t.hour, "text": t.clock(), "night": t.night, "season": t.season, "season_word": t.season_word(), "day": t.day, "season_day": t.season_day, "season_days": t.season_days, "tip": top::clock_tip(t).text})),
         // Who is under the cursor (`pick.rs`), whose nameplates show as hovered, and the target plate.
         "under": pick.as_ref().and_then(|p| p.under),
         // `holds`: the cursor is inside its outline as `pick.rs` draws it (its own test).
@@ -399,6 +406,11 @@ fn dump(
             "errors": extra.net.errors.lock().unwrap().iter().rev().take(12).rev().cloned().collect::<Vec<_>>(),
         },
     });
+    // Heed for players (`heed.rs`, `throng.rs`): pins, focus, the calls and refusals, and the
+    // throng's rows with the figures drawn for each; null while the laws are off.
+    let mut v = v;
+    v["heed"] = extra.heed.as_ref().filter(|h| h.on).map_or(serde_json::Value::Null, |h| h.json());
+    v["throng"] = extra.throng.as_ref().filter(|t| t.on).map_or(serde_json::Value::Null, |t| t.json());
     match std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap_or_default()) {
         Ok(()) => info!("ui: state written to {}", path.display()),
         Err(e) => warn!("ui: could not write {}: {e}", path.display()),
@@ -486,6 +498,9 @@ pub struct DumpExtra<'w, 's> {
     town: Option<Res<'w, crate::town::Town>>,
     loading: Option<Res<'w, crate::loading::Loading>>,
     combat: Option<Res<'w, crate::combat::Combat>>,
+    glints: Option<Res<'w, crate::vfx::Glints>>,
+    heed: Option<Res<'w, crate::heed::Heed>>,
+    throng: Option<Res<'w, crate::throng::Throng>>,
 }
 
 impl DumpExtra<'_, '_> {
@@ -529,7 +544,8 @@ impl DumpExtra<'_, '_> {
                 }
             }
         }
-        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(),
+        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "combat_timing": self.prefs.combat_timing.name(), "windup_glint": self.prefs.windup_glint, "theme": self.theme.name.key(),
+            "glints": self.glints.as_ref().map(|g| g.log.iter().map(|e| serde_json::json!({"actor": e.actor, "act_ms": e.act_ms, "release_ms": e.release_ms, "f": e.f, "clock_ms": e.clock_ms})).collect::<Vec<_>>()),
             "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
             "events": self.talks.events.iter().rev().take(12).rev().map(|(_, t)| t.clone()).collect::<Vec<_>>(),
             // The Log's last lines as the Log and the person windows show them (speech-detail-1).

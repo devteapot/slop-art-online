@@ -3365,6 +3365,120 @@ def sex_seen_bound(s):
     s.call("install_script", (ROOT / "living/scripts/skills.rhai").read_text())
 
 
+FAM_CREATURE = 2 << 40
+
+
+def familiar_regard(s):
+    """What a character forgets first under the `familiar_regard` law, and the dead with their
+    remains (familiar-cap, docs/BOUNDED_RETENTION.md §3.1; `brain::prune_familiar`). Default seed.
+    The laws `familiar_limit` 16 (checked every 8 new rows) and `familiar_regard` on, set on the
+    running world. O founds a community and K1 joins it (O knows K1's name); O's mind writes a
+    relation about K2 (never named). K1, K2 and twelve strangers (batch 1) stand in O's sight on an
+    open line, then go far off; after 95 s (past `FAMILIAR_KEEP_MS` and `SEEN_MS`) twelve more
+    strangers (batch 2) come into sight, pushing O over the limit. Checks: O's rows about K1 and
+    K2, and their `sex_seen` rows, stay; batch 1 strangers are forgotten (rows and `sex_seen`),
+    batch 2 (in view) kept. A forgotten stranger X brought back is a first sight again (honest
+    forgetting: a "For the first time you see" line naming X) and K1 is not. A cue on a forgotten
+    stranger is refused "you do not remember seeing #N" (with the law off: "you have never seen
+    #N"), one on K2 accepted. Then a batch 2 stranger Y is killed: under the law, once its remains
+    are gone (`remains_h` 3 game hours, 90 s here) no one's `familiar` row about Y is left. The
+    laws, the shipped script and the line are restored at the end."""
+    line = clear_line(s)
+    o, k1, k2, *crowd = s.people(27)
+    batch1, batch2 = crowd[:12], crowd[12:]
+    shipped = (ROOT / "living/scripts/skills.rhai").read_text()
+    try:
+        familiar_regard_on(s, line, o, k1, k2, batch1, batch2)
+    finally:
+        set_law(s, "familiar_regard", False, check=False)
+        set_law(s, "familiar_limit", 2048, check=False)
+        s.call("install_script", shipped, check=False)
+        off_the_line(s, line, [o, k1, k2, *crowd], dy=46)
+
+
+def familiar_regard_on(s, line, o, k1, k2, batch1, batch2):
+    s.call("place_at", o, *line[0])
+    s.act(o, {"do": "found", "text": f"Verify Regard {o}"})
+    s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {o}"))
+    s.call("place_near", k1, o)
+    s.act(k1, {"do": "join", "target": {"id": o}})
+    s.wait(lambda: s.rows(f"SELECT * FROM join_request WHERE asker = {k1}"))
+    s.act(o, {"do": "welcome", "target": {"id": k1}})
+    s.wait(lambda: s.rows(f"SELECT * FROM membership WHERE member = {k1}"))
+    s.call("mind_update", o, {"persona": None, "relations": [{"other": k2, "trust": 5, "affinity": 5, "label": "kind face", "note": "verification fixture: seen, never named"}],
+                              "beliefs": None, "judgments": [], "places": [], "thought": None, "replace": False, "cues": None})
+    set_law(s, "familiar_limit", 16)
+    set_law(s, "familiar_regard", True)
+    laws = {r["name"]: r["value"] for r in s.rows("SELECT * FROM law_override", "laws")}
+    s.expect("the laws are set on the running world", str(laws.get("familiar_limit")).startswith("16") and str(laws.get("familiar_regard")) == "true", laws)
+    fam = lambda: {r["thing"] - FAM_CREATURE for r in s.rows(f"SELECT thing FROM familiar WHERE actor = {o}") if r["thing"] >> 40 == 2}
+    sex = lambda: {r["known"] for r in s.rows(f"SELECT known FROM sex_seen WHERE observer = {o}")}
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    spots = [(dx, dy) for dx in range(1, 8) for dy in (-1.5, 1.5)]
+    # Phase 1: K1, K2 and batch 1 in O's sight.
+    for who, (dx, dy) in zip([k1, k2, *batch1], spots):
+        s.call("place_at", who, line[dx][0], line[dx][1] + dy)
+    s.wait(lambda: {k1, k2, *batch1} <= fam(), seconds=40, every=2)
+    s.wait(lambda: {k1, k2} <= sex(), seconds=20, every=2)
+    seen1 = fam()
+    s.rows(f"SELECT * FROM familiar WHERE actor = {o}", "familiar-phase1")
+    s.expect("O made out K1, K2 and the twelve of batch 1 (familiar and sex_seen rows)", {k1, k2, *batch1} <= seen1 and {k1, k2} <= sex(), sorted(seen1))
+    off_the_line(s, line, [k1, k2, *batch1], dy=44)
+    time.sleep(95)
+    # Phase 2: batch 2 in sight; O goes over the limit.
+    for who, (dx, dy) in zip(batch2, spots):
+        s.call("place_at", who, line[dx][0], line[dx][1] + dy)
+    s.wait(lambda: set(batch2) <= fam(), seconds=40, every=2)
+    time.sleep(4)
+    after = fam()
+    rows = s.rows(f"SELECT * FROM familiar WHERE actor = {o}", "familiar-phase2")
+    forgotten = [x for x in batch1 if x not in after]
+    s.expect("O is held near its limit (16, checked every 8 new rows)", len(rows) <= 16 + 8, len(rows))
+    s.expect("K1 (its community: it knows the name) and K2 (a relation) are spared", {k1, k2} <= after, sorted(after))
+    s.expect("batch 1's strangers, out of sight 95 s, are forgotten first (at least half)", len(forgotten) >= 6, {"forgotten": forgotten})
+    s.expect("batch 2, in view, is kept", set(batch2) <= after, sorted(after))
+    sx = sex()
+    s.expect("what O saw of the forgotten strangers' bodies goes with them; K1's and K2's stays", not (set(forgotten) & sx) and {k1, k2} <= sx, sorted(sx))
+    # A forgotten stranger X back in sight: a first sight again; K1 back: none.
+    x = forgotten[0]
+    t3 = now()
+    s.call("place_at", x, line[8][0], line[8][1] - 1.5)
+    s.call("place_at", k1, line[8][0], line[8][1] + 1.5)
+    def firsts():
+        return [r for r in s.rows(f"SELECT at_ms, subject, object, text FROM experience WHERE observer = {o}") if r["at_ms"] >= t3 and "first time you see" in r["text"]]
+    again = s.wait(lambda: [r for r in firsts() if x in (r["subject"], r["object"])], seconds=30, every=2)
+    s.rows(f"SELECT * FROM experience WHERE observer = {o}", "experiences-after-return")
+    s.expect("the forgotten stranger X is a first sight again (honest forgetting)", bool(again), again)
+    time.sleep(4)
+    k1_lines = [r for r in s.rows(f"SELECT at_ms, subject, object, text FROM experience WHERE observer = {o}") if r["at_ms"] >= t3 and k1 in (r["subject"], r["object"])]
+    s.expect("K1, remembered, is no first sight and no 'again after a long time'", not any("first time" in r["text"] or "after a long time" in r["text"] for r in k1_lines), k1_lines)
+    # Cues: on a forgotten stranger refused in honest words, on K2 accepted.
+    gone = next((g for g in forgotten[1:] if g not in fam()), None)
+    s.expect("another forgotten stranger is still forgotten", gone is not None, forgotten)
+    set_cues(s, o, [cue("goal:verify_regard_gone", who_id=gone), cue("goal:verify_regard_k2", who_id=k2)])
+    refusals = {r["for_key"]: r["refused"] for r in s.rows(f"SELECT for_key, refused FROM cue WHERE actor = {o}", "cues-regard")}
+    s.expect("a cue on a forgotten stranger: 'you do not remember seeing'", refusals.get("goal:verify_regard_gone") == f"you do not remember seeing #{gone}", refusals)
+    s.expect("a cue on K2 (a relation) is accepted", refusals.get("goal:verify_regard_k2") == "", refusals)
+    set_law(s, "familiar_regard", False)
+    set_cues(s, o, [cue("goal:verify_regard_gone", who_id=gone), cue("goal:verify_regard_k2", who_id=k2)])
+    refusals = {r["for_key"]: r["refused"] for r in s.rows(f"SELECT for_key, refused FROM cue WHERE actor = {o}", "cues-plain")}
+    s.expect("with the law off the old words: 'you have never seen'", refusals.get("goal:verify_regard_gone") == f"you have never seen #{gone}", refusals)
+    set_law(s, "familiar_regard", True)
+    set_cues(s, o, [])
+    # The dead: Y of batch 2 is killed; with its remains gone, no one is familiar with it.
+    s.call("install_script", compose((ROOT / "living/scripts/skills.rhai").read_text(), {"remains_h": f"fn remains_h(kind) {{ {REMAINS_H}.0 }}"}))
+    y = batch2[0]
+    s.call("kill", y, "verify-core familiar_regard")
+    remains = lambda label=None: s.rows(f"SELECT * FROM structure WHERE kind = 'remains' AND owner = {y}", label)
+    r = s.wait(lambda: remains(), seconds=10)
+    about = lambda label=None: s.rows(f"SELECT * FROM familiar WHERE thing = {FAM_CREATURE | y}", label)
+    s.expect("while Y's remains lie, those who saw it are still familiar with it", bool(about("about-y-remains")), len(about()))
+    rot = s.rows(f"SELECT * FROM rot WHERE structure = {r[0]['id']}", "rot")
+    wait_s = max(0, rot[0]["due_ms"] - now()) / 1000 + 30
+    s.wait(lambda: not remains(), seconds=wait_s + 30, every=5)
+    s.expect("with Y's remains gone, no one's familiar row about Y is left", not about("about-y-after"), about())
+
+
 def family_laws(s):
     """The laws of starting a family and of the longing for a child (docs/TRIALS.md, "Births
     that keep a settlement's numbers"). An installed overlay sets `conceive_roof` true and
@@ -5824,6 +5938,7 @@ def workplace(s):
 
 
 SCENES["sex_seen_bound"] = sex_seen_bound
+SCENES["familiar_regard"] = familiar_regard
 SCENES["goods"] = goods
 SCENES["workplace"] = workplace
 SCENES["making"] = making

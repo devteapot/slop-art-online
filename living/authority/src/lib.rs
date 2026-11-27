@@ -454,9 +454,14 @@ pub fn grant_repertoires(ctx: &ReducerContext) -> Result<(), String> {
 pub fn purge_dead(ctx: &ReducerContext) -> Result<(), String> {
     require_admin(ctx)?;
     let dead: Vec<u32> = ctx.db.character().iter().filter(|c| !c.alive).map(|c| c.id).collect();
+    let now = common::now_ms(ctx);
     for id in &dead {
         act::forget_dead(ctx, *id);
         act::retire(ctx, *id);
+        // Their skill uses go after the grace, as a death's do now.
+        if ctx.db.dead_skill_use_due().actor().find(*id).is_none() {
+            combat::uses_died(ctx, *id, now);
+        }
     }
     log::info!("purged mind-serving rows of {} dead characters", dead.len());
     Ok(())
@@ -1016,7 +1021,8 @@ pub fn human_gaze(ctx: &ReducerContext, band: u8) -> Result<(), String> {
 
 /// Whom the caller's character asks to keep track of (docs/ATTENTION_BUDGET.md, "The player's
 /// input"; read while the `heed_players` law holds): up to four pins and one focus, each a
-/// creature it perceives now; empty pins and no focus clear them. One call per change, at least
+/// creature it perceives now, and a point in its throng to pick someone out at (`pin_at`, whose
+/// pick counts among the four); empty pins and no focus clear them. One call per change, at least
 /// `heed::CHOICE_FLOOR_MS` apart, each spending an input (`input_hz` / `input_burst`). A pin or a
 /// focus on someone it does not perceive is refused with the same words whether or not the id
 /// exists. Kept in the private `heed_choice` row, replaced by each accepted call.
@@ -1035,10 +1041,18 @@ pub fn human_heed(ctx: &ReducerContext, input: HeedInput) -> Result<(), String> 
     if !motion::spend_input(ctx, me.id, now) {
         return Err("too many inputs".into());
     }
-    let mut pins: Vec<u32> = Vec::with_capacity(input.pins.len());
+    let mut pins: Vec<u32> = Vec::with_capacity(input.pins.len() + 1);
     for p in input.pins {
         if !pins.contains(&p) {
             pins.push(p);
+        }
+    }
+    // A point in its throng: the member nearest it there, if its heed takes it, becomes an
+    // individual now and a pin (docs/ATTENTION_BUDGET.md, "Picking someone out of the throng").
+    if let Some(at) = input.pin_at {
+        let picked = heed::pick_at(ctx, &me, ctx.sender(), at, now)?;
+        if !pins.contains(&picked) {
+            pins.push(picked);
         }
     }
     let row = HeedChoice { actor: me.id, pins, focus: input.focus, at_ms: now };

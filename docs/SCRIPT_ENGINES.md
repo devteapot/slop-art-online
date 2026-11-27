@@ -125,11 +125,12 @@ The limits were set from the install samples (`measure_limits`): each function's
 | string size | 4,096 | 570 | 2,048 |
 | array size | 256 | 26 | 64 |
 | map size | 256 | 30 (`laws()` has 29 keys) | 64 |
-| source | 64 KiB | 57 KB | **256 KiB** |
+| source | 64 KiB | 57 KB | **512 KiB** (256 KiB on `rhai-1`; raised 2026-11-27) |
 
 - A call that runs into the operation limit now costs about 1.2 M instructions (about 0.1 ms) instead of 11–15 M.
 - The string limit bounds what a script builds, not what it is handed. A reworked routine reaches `rework_check` as up to 32,000 characters, and the samples include one.
 - Compile time and memory grow about linearly with the source, so the larger source cap costs only on install.
+- **Source cap raised to 512 KiB (2026-11-27, branch `script-size-512`).** `MAX_SOURCE` is our own cap (`living/rules/src/script.rs`); `skills.rhai` (~236 KB) composed with Cullet's overlay (~25 KB) had less than 2 KB left under 256 KiB. Underlying limits are far higher: Rhai 1.27.0 (`rhai-1.27.0/src/api/limits.rs`) has no source-size cap; SpacetimeDB 2.14.1 sets WebSocket `max_message_size` to 32 MiB (`crates/client-api/src/routes/subscribe.rs`, Rust SDK `spacetimedb-sdk-2.14.1/src/websocket.rs` unbounded), Axum's HTTP `DefaultBodyLimit` is 2 MiB (`install_script`), and table rows have no 256 KiB cap (`floor_seed` stores ~2 MiB seeds). The real ceiling is genesis-fuel headroom (the scene gate's 10% rule on SpacetimeDB's 120 × 10⁹ reducer budget, [tooling](TOOLING.md#genesis-fuel)). Revisit comment-stripping at install/build time (option c) around 400 KB of composed script, or if client connect payloads become measurable.
 
 ### 6. Install checks
 

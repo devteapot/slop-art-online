@@ -48,7 +48,7 @@ macro_rules! primary_tables {
             routine, routine_stat, cue, script, community, membership, join_request, genome,
             practice, land, settlement, lot, fighter, skill_card, act_card, speech_card, doing, weather, law_override,
             seen_bodies, seen_characters, seen_fighters, seen_doing, seen_bodies_near, seen_bodies_far, seen_fighters_near, seen_fighters_far, seen_doing_near, seen_doing_far, seen_character_copy, seen_fighter_copy, experience_copy, my_body, my_fighter, my_doing, my_characters, my_vitals,
-            my_experience, my_places, my_inventory, my_know_how, my_offers, my_heard, my_senses, my_senses_v_2, my_earshot, my_act_outcomes, my_known_names, my_sex, seen_throng);
+            my_experience, my_places, my_inventory, my_know_how, my_offers, my_kin, my_bond_offers, my_community, my_heard, my_senses, my_senses_v_2, my_earshot, my_act_outcomes, my_known_names, my_sex, seen_throng);
     };
 }
 
@@ -106,6 +106,8 @@ fn stream_callbacks(c: &DbConnection, signals: Arc<Mutex<Signals>>) {
     }
     // A player's combat feed as event rows (views step 2, `combat_feed`).
     events!(c, signals; seen_body_cue, seen_fighter_cue, seen_doing_cue, combat_feed);
+    // Each finished skill use for exporters (private, the owner's; `skill_use_events.py`).
+    events!(c, signals; skill_use_event);
 }
 
 fn stream_initial(c: &DbConnection, r: &Request, identity: &str) {
@@ -195,6 +197,9 @@ fn snapshot(c: &DbConnection) -> Value {
         my_inventory,
         my_know_how,
         my_offers,
+        my_kin,
+        my_bond_offers,
+        my_community,
         heard_sounds,
         my_heard,
         my_senses,
@@ -226,6 +231,9 @@ fn snapshot(c: &DbConnection) -> Value {
         "my_inventory": c.db.my_inventory().iter().map(|r| r.owner).collect::<Vec<_>>(),
         "my_know_how": ids(c.db.my_know_how().iter().map(|r| r.actor).collect()),
         "my_offers": c.db.my_offers().iter().map(|r| json!({"id":r.id,"incoming":r.incoming,"from":r.from,"to":r.to,"give_item":r.give_item,"want_item":r.want_item,"until_ms":r.until_ms})).collect::<Vec<_>>(),
+        "my_kin": c.db.my_kin().iter().map(|r| json!({"id":r.id,"relation":r.relation})).collect::<Vec<_>>(),
+        "my_bond_offers": c.db.my_bond_offers().iter().map(|r| json!({"id":r.id,"incoming":r.incoming,"from":r.from,"to":r.to,"at_ms":r.at_ms})).collect::<Vec<_>>(),
+        "my_community": c.db.my_community().iter().map(|r| json!({"id":r.id,"name":r.name,"founder":r.founder,"founded_ms":r.founded_ms,"home_x":r.home_x,"home_y":r.home_y,"since_ms":r.since_ms})).collect::<Vec<_>>(),
         // What my character senses (the `senses` law with all its facts), written on change.
         "my_senses_v_2": c.db.my_senses_v_2().iter().map(|r| row_json(&r)).collect::<Vec<_>>(),
         "my_senses": c.db.my_senses().iter().map(|r| json!({"id":r.id,"sight":r.sight,"hearing":r.hearing,"field":r.field,"near_m":r.near_m,"at_ms":r.at_ms})).collect::<Vec<_>>(),

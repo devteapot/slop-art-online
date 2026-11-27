@@ -705,7 +705,7 @@ def main():
 
         def familiar_sample(label):
             """Each character's `familiar` rows by role, and by what they are of (structures,
-            creatures, regions): the limit is 2,048 a character (brain.rs `FAMILIAR_LIMIT`)."""
+            creatures, regions): the limit is the `familiar_limit` law, 2,048 a character as shipped (brain.rs `prune_familiar`)."""
             rows = run.private("SELECT actor, thing FROM familiar", f"familiar-{label}")
             alive = {c["id"]: c["alive"] for c in run.sql("SELECT id, alive FROM character", f"familiar-alive-{label}")}
             per, kinds = {}, {}

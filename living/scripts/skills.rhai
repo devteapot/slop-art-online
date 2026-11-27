@@ -164,7 +164,7 @@ fn laws() {
         // Limit repeat and structure checks to recent or in-sight rows.
         chronicle_recent: true, chronicle_recent_check: false, notice_inplace: true, notice_inplace_check: false,
         notice_delta: true, notice_delta_check: false,
-        seen_ranges: true, seen_ranges_check: false,
+        seen_ranges: true, seen_ranges_check: false, seen_ranges_max_pairs: 128.0,
         // Deliver nearby changes immediately with cues (docs/PERCEPTION.md).
         cue_transport_on: true,
         near_tier_on: true,
@@ -213,6 +213,7 @@ fn laws() {
         heed_on: false, heed_ceiling: 16.0, heed_contact_s: 4.0,
         heed_closing_s: 1.0,
         heed_trace: false,
+        familiar_limit: 2048.0, familiar_regard: false,
         heed_players: false,
         memory_test: 0.0,
         det_clock: false, det_stop: 0.0,
@@ -3264,6 +3265,8 @@ fn law_about(l, name) {
         "heed_ceiling" => `no one keeps track of more than ${short(l.heed_ceiling)} others as individuals at once`,
         "heed_closing_s" => `whether someone is coming toward one is judged over ${short(l.heed_closing_s)} s, not a glance`,
         "heed_contact_s" => `someone whose blow reached one stays an individual to one for ${short(l.heed_contact_s)} s, whatever one heeds`,
+        "familiar_limit" => `one keeps about ${short(l.familiar_limit)} faces, places and things familiar`,
+        "familiar_regard" => if l.familiar_regard { "strangers are forgotten first, the known never" } else { "the oldest is forgotten first" },
         "heed_trace" => "A test switch that logs how each mind's character keeps track of others in a fight; it is off in play.",
         "heed_players" => if l.heed_players { "a player keeps track of only so many others as individuals too; everyone else in sight is a throng" } else { "a player perceives everyone in sight as an individual" },
         "far_cap" => if l.far_cap > 0.0 { `a player sees at most ${short(l.far_cap)} others at once, the nearest` } else { "a player sees everyone in sight" },
@@ -3306,6 +3309,7 @@ fn law_about(l, name) {
         "notice_delta_check" => "a diagnostic: what a look passes over is checked to be already familiar",
         "seen_ranges" => "remember which structures were seen in ranges of ids by block",
         "seen_ranges_check" => "a diagnostic: compare structure newness with familiarity",
+        "seen_ranges_max_pairs" => `cap seen-structure pairs per block at ${short(l.seen_ranges_max_pairs)} (0: none)`,
         "latency_nav_from" => if l.latency_nav_from == 0 { "navigation latency logging is off" } else { "navigation latency logging starts at the chosen character id" },
         "latency_fast" => if l.latency_fast { "the fast lane's authority stages are logged" } else { "fast lane latency logging is off" },
         "latency_acts" => if l.latency_acts { "the course of each deliberate act is logged" } else { "deliberate act logging is off" },

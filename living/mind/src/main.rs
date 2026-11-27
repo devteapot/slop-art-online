@@ -286,6 +286,18 @@ async fn main() -> Result<()> {
         });
     }
     {
+        // Whom each character said it fights, by actor (`Index::relation_fight_ids`).
+        let add = index.clone();
+        conn.db.relation_fight().on_insert(move |_, r| add.relation_fight_in(r));
+        let gone = index.clone();
+        conn.db.relation_fight().on_delete(move |_, r| gone.relation_fight_out(r));
+        let moved = index.clone();
+        conn.db.relation_fight().on_update(move |_, old, r| {
+            moved.relation_fight_out(old);
+            moved.relation_fight_in(r);
+        });
+    }
+    {
         let tx = tx.clone();
         let index = index.clone();
         let trace = std::env::var("LIVING_INPUT_LATENCY").is_ok_and(|v| v == "1");

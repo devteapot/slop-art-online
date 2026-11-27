@@ -73,6 +73,15 @@ pub struct Tooltip;
 pub struct TooltipTitle;
 #[derive(Component)]
 pub struct TooltipText;
+/// A node that shows the shared tooltip while the cursor is over it: a title and words the
+/// widget that owns it keeps current (the cluster's body, the clock). Slots have their own
+/// ([`Slots`]); a slot under the cursor wins. Placed above a node in the lower half of the
+/// picture, below one in the upper half, kept on screen.
+#[derive(Component, Default, Clone, PartialEq, Debug)]
+pub struct Tip {
+    pub title: String,
+    pub text: String,
+}
 
 /// A bar: a row of slots, `(key, size, width, gap before)`, in `node` (none: a plain row).
 /// A row of slots: (key, size, width, gap before it, whether it shows a caption).
@@ -245,37 +254,59 @@ pub fn paint(
 }
 
 /// Over the bar, the hovered slot's words: its label, then why it is greyed, or its description.
+/// Elsewhere, a hovered [`Tip`]'s words.
 #[allow(clippy::type_complexity)]
-pub fn tooltip(slots: Res<Slots>, ui: Res<UiPointer>, cams: Query<&Camera, With<Camera3d>>, roots: Query<(&SlotKey, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<SlotRoot>>, mut tip: Query<&mut Node, With<Tooltip>>, mut title: Query<&mut Text, (With<TooltipTitle>, Without<TooltipText>)>, mut text: Query<&mut Text, (With<TooltipText>, Without<TooltipTitle>)>) {
+pub fn tooltip(slots: Res<Slots>, ui: Res<UiPointer>, cams: Query<&Camera, With<Camera3d>>, roots: Query<(&SlotKey, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<SlotRoot>>, tips: Query<(&Tip, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform)>, mut tip: Query<&mut Node, With<Tooltip>>, mut title: Query<&mut Text, (With<TooltipTitle>, Without<TooltipText>)>, mut text: Query<&mut Text, (With<TooltipText>, Without<TooltipTitle>)>) {
     let screen = cams.iter().find_map(|c| c.logical_viewport_size()).unwrap_or(Vec2::new(1600.0, 900.0)) / ui.ui_scale.max(0.01);
     let hovered = ui.pos.and_then(|p| roots.iter().find(|(_, n, t)| n.contains_point(**t, p * ui.scale)).map(|(k, n, t)| (k.clone(), (t.affine().translation - n.size() / 2.0) * n.inverse_scale_factor())));
     let v = hovered.as_ref().and_then(|(k, _)| slots.0.get(k)).filter(|v| !v.label.is_empty());
+    // A hovered tip node: its words, and its rectangle (top left and size, UI px).
+    let other = if v.is_some() { None } else { ui.pos.and_then(|p| tips.iter().filter(|(w, _, _)| !w.title.is_empty()).find(|(_, n, t)| n.size().x > 0.0 && n.contains_point(**t, p * ui.scale)).map(|(w, n, t)| (w.clone(), (t.affine().translation - n.size() / 2.0) * n.inverse_scale_factor(), n.size() * n.inverse_scale_factor()))) };
     for mut n in &mut tip {
-        show(&mut n, v.is_some());
-        // Over the cluster: its bottom above the meters over the hovered slot, whatever its height.
-        if let (Some((_, at)), Some(_)) = (&hovered, v) {
-            let l = Val::Px((at.x - 40.0).max(8.0));
-            let b = Val::Px((screen.y - at.y + 62.0).max(8.0));
-            if n.left != l {
-                n.left = l;
+        show(&mut n, v.is_some() || other.is_some());
+        let (l, top, b) = if let (Some((_, at)), Some(_)) = (&hovered, v) {
+            // Over the cluster: its bottom above the meters over the hovered slot, whatever its height.
+            (Val::Px((at.x - 40.0).max(8.0)), Val::Auto, Val::Px((screen.y - at.y + 62.0).max(8.0)))
+        } else if let Some((_, at, size)) = &other {
+            // Under a node in the upper half, its right edge on the node's on the right half
+            // (clear of the compass); over one in the lower half, clear of the pills above the
+            // cluster's meters.
+            let x = if at.x + size.x / 2.0 > screen.x / 2.0 { at.x + size.x - 300.0 } else { at.x };
+            let l = Val::Px(x.clamp(8.0, (screen.x - 308.0).max(8.0)));
+            if at.y + size.y / 2.0 < screen.y / 2.0 {
+                (l, Val::Px(at.y + size.y + 8.0), Val::Auto)
+            } else {
+                (l, Val::Auto, Val::Px((screen.y - at.y + 40.0).max(8.0)))
             }
-            n.top = Val::Auto;
-            if n.bottom != b {
-                n.bottom = b;
-            }
+        } else {
+            continue;
+        };
+        if n.left != l {
+            n.left = l;
+        }
+        if n.top != top {
+            n.top = top;
+        }
+        if n.bottom != b {
+            n.bottom = b;
         }
     }
-    if let Some(v) = v {
-        for mut t in &mut title {
-            set_text(&mut t, &v.label);
-        }
+    let (head, words) = if let Some(v) = v {
         let words = match &v.off {
             Some(why) if !v.about.is_empty() => format!("{why}\n{}", v.about),
             Some(why) => why.clone(),
             None => v.about.clone(),
         };
-        for mut t in &mut text {
-            set_text(&mut t, &words);
-        }
+        (v.label.clone(), words)
+    } else if let Some((w, _, _)) = other {
+        (w.title, w.text)
+    } else {
+        return;
+    };
+    for mut t in &mut title {
+        set_text(&mut t, &head);
+    }
+    for mut t in &mut text {
+        set_text(&mut t, &words);
     }
 }

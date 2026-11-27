@@ -78,6 +78,8 @@ pub mod cue_in_type;
 pub mod cue_table;
 pub mod cue_type;
 pub mod cursor_type;
+pub mod dead_skill_use_due_table;
+pub mod dead_skill_use_due_type;
 pub mod deliberation_table;
 pub mod deliberation_type;
 pub mod doing_near_table;
@@ -232,8 +234,12 @@ pub mod motion_type;
 pub mod moving_type;
 pub mod my_act_outcomes_table;
 pub mod my_body_table;
+pub mod my_bond_offer_type;
+pub mod my_bond_offers_table;
 pub mod my_characters_table;
 pub mod my_combat_table;
+pub mod my_community_table;
+pub mod my_community_type;
 pub mod my_deliberations_table;
 pub mod my_doing_table;
 pub mod my_earshot_table;
@@ -241,6 +247,8 @@ pub mod my_experience_table;
 pub mod my_fighter_table;
 pub mod my_heard_table;
 pub mod my_inventory_table;
+pub mod my_kin_table;
+pub mod my_kin_type;
 pub mod my_know_how_table;
 pub mod my_known_names_table;
 pub mod my_offer_type;
@@ -270,6 +278,7 @@ pub mod perceived_type;
 pub mod persona_in_type;
 pub mod persona_table;
 pub mod persona_type;
+pub mod pin_at_type;
 pub mod place_at_reducer;
 pub mod place_in_type;
 pub mod place_near_reducer;
@@ -376,6 +385,8 @@ pub mod skill_card_table;
 pub mod skill_card_type;
 pub mod skill_code_table;
 pub mod skill_code_type;
+pub mod skill_use_event_table;
+pub mod skill_use_event_type;
 pub mod skill_use_table;
 pub mod skill_use_type;
 pub mod slow_timer_table;
@@ -499,6 +510,8 @@ pub use cue_in_type::CueIn;
 pub use cue_table::*;
 pub use cue_type::Cue;
 pub use cursor_type::Cursor;
+pub use dead_skill_use_due_table::*;
+pub use dead_skill_use_due_type::DeadSkillUseDue;
 pub use deliberation_table::*;
 pub use deliberation_type::Deliberation;
 pub use doing_near_table::*;
@@ -653,8 +666,12 @@ pub use motion_type::Motion;
 pub use moving_type::Moving;
 pub use my_act_outcomes_table::*;
 pub use my_body_table::*;
+pub use my_bond_offer_type::MyBondOffer;
+pub use my_bond_offers_table::*;
 pub use my_characters_table::*;
 pub use my_combat_table::*;
+pub use my_community_table::*;
+pub use my_community_type::MyCommunity;
 pub use my_deliberations_table::*;
 pub use my_doing_table::*;
 pub use my_earshot_table::*;
@@ -662,6 +679,8 @@ pub use my_experience_table::*;
 pub use my_fighter_table::*;
 pub use my_heard_table::*;
 pub use my_inventory_table::*;
+pub use my_kin_table::*;
+pub use my_kin_type::MyKin;
 pub use my_know_how_table::*;
 pub use my_known_names_table::*;
 pub use my_offer_type::MyOffer;
@@ -691,6 +710,7 @@ pub use perceived_type::Perceived;
 pub use persona_in_type::PersonaIn;
 pub use persona_table::*;
 pub use persona_type::Persona;
+pub use pin_at_type::PinAt;
 pub use place_at_reducer::place_at;
 pub use place_in_type::PlaceIn;
 pub use place_near_reducer::place_near;
@@ -797,6 +817,8 @@ pub use skill_card_table::*;
 pub use skill_card_type::SkillCard;
 pub use skill_code_table::*;
 pub use skill_code_type::SkillCode;
+pub use skill_use_event_table::*;
+pub use skill_use_event_type::SkillUseEvent;
 pub use skill_use_table::*;
 pub use skill_use_type::SkillUse;
 pub use slow_timer_table::*;
@@ -1600,6 +1622,7 @@ pub struct DbUpdate {
     cover_source: __sdk::TableUpdate<CoverSource>,
     cover_timer: __sdk::TableUpdate<CoverTimer>,
     cue: __sdk::TableUpdate<Cue>,
+    dead_skill_use_due: __sdk::TableUpdate<DeadSkillUseDue>,
     deliberation: __sdk::TableUpdate<Deliberation>,
     doing: __sdk::TableUpdate<Doing>,
     doing_near: __sdk::TableUpdate<DoingNear>,
@@ -1655,8 +1678,10 @@ pub struct DbUpdate {
     motion_seen: __sdk::TableUpdate<MotionSeen>,
     my_act_outcomes: __sdk::TableUpdate<ActOutcome>,
     my_body: __sdk::TableUpdate<Moving>,
+    my_bond_offers: __sdk::TableUpdate<MyBondOffer>,
     my_characters: __sdk::TableUpdate<Character>,
     my_combat: __sdk::TableUpdate<CombatSeen>,
+    my_community: __sdk::TableUpdate<MyCommunity>,
     my_deliberations: __sdk::TableUpdate<Deliberation>,
     my_doing: __sdk::TableUpdate<Doing>,
     my_earshot: __sdk::TableUpdate<CharacterEarshot>,
@@ -1664,6 +1689,7 @@ pub struct DbUpdate {
     my_fighter: __sdk::TableUpdate<Fighter>,
     my_heard: __sdk::TableUpdate<LineHeard>,
     my_inventory: __sdk::TableUpdate<Inventory>,
+    my_kin: __sdk::TableUpdate<MyKin>,
     my_know_how: __sdk::TableUpdate<KnowHow>,
     my_known_names: __sdk::TableUpdate<KnownName>,
     my_offers: __sdk::TableUpdate<MyOffer>,
@@ -1726,6 +1752,7 @@ pub struct DbUpdate {
     skill_card: __sdk::TableUpdate<SkillCard>,
     skill_code: __sdk::TableUpdate<SkillCode>,
     skill_use: __sdk::TableUpdate<SkillUse>,
+    skill_use_event: __sdk::TableUpdate<SkillUseEvent>,
     slow_timer: __sdk::TableUpdate<SlowTimer>,
     slumber: __sdk::TableUpdate<Slumber>,
     speech_card: __sdk::TableUpdate<SpeechCard>,
@@ -1845,6 +1872,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "cue" => db_update
                     .cue
                     .append(cue_table::parse_table_update(table_update)?),
+                "dead_skill_use_due" => db_update
+                    .dead_skill_use_due
+                    .append(dead_skill_use_due_table::parse_table_update(table_update)?),
                 "deliberation" => db_update
                     .deliberation
                     .append(deliberation_table::parse_table_update(table_update)?),
@@ -2010,12 +2040,18 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_body" => db_update
                     .my_body
                     .append(my_body_table::parse_table_update(table_update)?),
+                "my_bond_offers" => db_update
+                    .my_bond_offers
+                    .append(my_bond_offers_table::parse_table_update(table_update)?),
                 "my_characters" => db_update
                     .my_characters
                     .append(my_characters_table::parse_table_update(table_update)?),
                 "my_combat" => db_update
                     .my_combat
                     .append(my_combat_table::parse_table_update(table_update)?),
+                "my_community" => db_update
+                    .my_community
+                    .append(my_community_table::parse_table_update(table_update)?),
                 "my_deliberations" => db_update
                     .my_deliberations
                     .append(my_deliberations_table::parse_table_update(table_update)?),
@@ -2037,6 +2073,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_inventory" => db_update
                     .my_inventory
                     .append(my_inventory_table::parse_table_update(table_update)?),
+                "my_kin" => db_update
+                    .my_kin
+                    .append(my_kin_table::parse_table_update(table_update)?),
                 "my_know_how" => db_update
                     .my_know_how
                     .append(my_know_how_table::parse_table_update(table_update)?),
@@ -2223,6 +2262,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "skill_use" => db_update
                     .skill_use
                     .append(skill_use_table::parse_table_update(table_update)?),
+                "skill_use_event" => db_update
+                    .skill_use_event
+                    .append(skill_use_event_table::parse_table_update(table_update)?),
                 "slow_timer" => db_update
                     .slow_timer
                     .append(slow_timer_table::parse_table_update(table_update)?),
@@ -2394,6 +2436,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.cue = cache
             .apply_diff_to_table::<Cue>("cue", &self.cue)
             .with_updates_by_pk(|row| &row.id);
+        diff.dead_skill_use_due = cache
+            .apply_diff_to_table::<DeadSkillUseDue>("dead_skill_use_due", &self.dead_skill_use_due)
+            .with_updates_by_pk(|row| &row.actor);
         diff.deliberation = cache
             .apply_diff_to_table::<Deliberation>("deliberation", &self.deliberation)
             .with_updates_by_pk(|row| &row.actor);
@@ -2667,6 +2712,7 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.skill_use = cache
             .apply_diff_to_table::<SkillUse>("skill_use", &self.skill_use)
             .with_updates_by_pk(|row| &row.id);
+        diff.skill_use_event = self.skill_use_event.into_event_diff();
         diff.slow_timer = cache
             .apply_diff_to_table::<SlowTimer>("slow_timer", &self.slow_timer)
             .with_updates_by_pk(|row| &row.scheduled_id);
@@ -2730,10 +2776,16 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.my_body = cache
             .apply_diff_to_table::<Moving>("my_body", &self.my_body)
             .with_updates_by_pk(|row| &row.id);
+        diff.my_bond_offers = cache
+            .apply_diff_to_table::<MyBondOffer>("my_bond_offers", &self.my_bond_offers)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_characters = cache
             .apply_diff_to_table::<Character>("my_characters", &self.my_characters)
             .with_updates_by_pk(|row| &row.id);
         diff.my_combat = cache.apply_diff_to_table::<CombatSeen>("my_combat", &self.my_combat);
+        diff.my_community = cache
+            .apply_diff_to_table::<MyCommunity>("my_community", &self.my_community)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_deliberations =
             cache.apply_diff_to_table::<Deliberation>("my_deliberations", &self.my_deliberations);
         diff.my_doing = cache
@@ -2753,6 +2805,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.line);
         diff.my_inventory = cache
             .apply_diff_to_table::<Inventory>("my_inventory", &self.my_inventory)
+            .with_updates_by_pk(|row| &row.id);
+        diff.my_kin = cache
+            .apply_diff_to_table::<MyKin>("my_kin", &self.my_kin)
             .with_updates_by_pk(|row| &row.id);
         diff.my_know_how = cache
             .apply_diff_to_table::<KnowHow>("my_know_how", &self.my_know_how)
@@ -2912,6 +2967,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "cue" => db_update
                     .cue
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "dead_skill_use_due" => db_update
+                    .dead_skill_use_due
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "deliberation" => db_update
                     .deliberation
@@ -3078,11 +3136,17 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_body" => db_update
                     .my_body
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_bond_offers" => db_update
+                    .my_bond_offers
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_characters" => db_update
                     .my_characters
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_combat" => db_update
                     .my_combat
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_community" => db_update
+                    .my_community
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_deliberations" => db_update
                     .my_deliberations
@@ -3104,6 +3168,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_inventory" => db_update
                     .my_inventory
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_kin" => db_update
+                    .my_kin
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_know_how" => db_update
                     .my_know_how
@@ -3290,6 +3357,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "skill_use" => db_update
                     .skill_use
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "skill_use_event" => db_update
+                    .skill_use_event
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "slow_timer" => db_update
                     .slow_timer
@@ -3451,6 +3521,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "cue" => db_update
                     .cue
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "dead_skill_use_due" => db_update
+                    .dead_skill_use_due
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "deliberation" => db_update
                     .deliberation
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3616,11 +3689,17 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_body" => db_update
                     .my_body
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_bond_offers" => db_update
+                    .my_bond_offers
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_characters" => db_update
                     .my_characters
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_combat" => db_update
                     .my_combat
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_community" => db_update
+                    .my_community
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_deliberations" => db_update
                     .my_deliberations
@@ -3642,6 +3721,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_inventory" => db_update
                     .my_inventory
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_kin" => db_update
+                    .my_kin
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_know_how" => db_update
                     .my_know_how
@@ -3829,6 +3911,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "skill_use" => db_update
                     .skill_use
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "skill_use_event" => db_update
+                    .skill_use_event
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "slow_timer" => db_update
                     .slow_timer
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3929,6 +4014,7 @@ pub struct AppliedDiff<'r> {
     cover_source: __sdk::TableAppliedDiff<'r, CoverSource>,
     cover_timer: __sdk::TableAppliedDiff<'r, CoverTimer>,
     cue: __sdk::TableAppliedDiff<'r, Cue>,
+    dead_skill_use_due: __sdk::TableAppliedDiff<'r, DeadSkillUseDue>,
     deliberation: __sdk::TableAppliedDiff<'r, Deliberation>,
     doing: __sdk::TableAppliedDiff<'r, Doing>,
     doing_near: __sdk::TableAppliedDiff<'r, DoingNear>,
@@ -3984,8 +4070,10 @@ pub struct AppliedDiff<'r> {
     motion_seen: __sdk::TableAppliedDiff<'r, MotionSeen>,
     my_act_outcomes: __sdk::TableAppliedDiff<'r, ActOutcome>,
     my_body: __sdk::TableAppliedDiff<'r, Moving>,
+    my_bond_offers: __sdk::TableAppliedDiff<'r, MyBondOffer>,
     my_characters: __sdk::TableAppliedDiff<'r, Character>,
     my_combat: __sdk::TableAppliedDiff<'r, CombatSeen>,
+    my_community: __sdk::TableAppliedDiff<'r, MyCommunity>,
     my_deliberations: __sdk::TableAppliedDiff<'r, Deliberation>,
     my_doing: __sdk::TableAppliedDiff<'r, Doing>,
     my_earshot: __sdk::TableAppliedDiff<'r, CharacterEarshot>,
@@ -3993,6 +4081,7 @@ pub struct AppliedDiff<'r> {
     my_fighter: __sdk::TableAppliedDiff<'r, Fighter>,
     my_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
     my_inventory: __sdk::TableAppliedDiff<'r, Inventory>,
+    my_kin: __sdk::TableAppliedDiff<'r, MyKin>,
     my_know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
     my_known_names: __sdk::TableAppliedDiff<'r, KnownName>,
     my_offers: __sdk::TableAppliedDiff<'r, MyOffer>,
@@ -4055,6 +4144,7 @@ pub struct AppliedDiff<'r> {
     skill_card: __sdk::TableAppliedDiff<'r, SkillCard>,
     skill_code: __sdk::TableAppliedDiff<'r, SkillCode>,
     skill_use: __sdk::TableAppliedDiff<'r, SkillUse>,
+    skill_use_event: __sdk::TableAppliedDiff<'r, SkillUseEvent>,
     slow_timer: __sdk::TableAppliedDiff<'r, SlowTimer>,
     slumber: __sdk::TableAppliedDiff<'r, Slumber>,
     speech_card: __sdk::TableAppliedDiff<'r, SpeechCard>,
@@ -4145,6 +4235,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<CoverTimer>("cover_timer", &self.cover_timer, event);
         callbacks.invoke_table_row_callbacks::<Cue>("cue", &self.cue, event);
+        callbacks.invoke_table_row_callbacks::<DeadSkillUseDue>(
+            "dead_skill_use_due",
+            &self.dead_skill_use_due,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Deliberation>(
             "deliberation",
             &self.deliberation,
@@ -4252,12 +4347,22 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Moving>("my_body", &self.my_body, event);
+        callbacks.invoke_table_row_callbacks::<MyBondOffer>(
+            "my_bond_offers",
+            &self.my_bond_offers,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Character>(
             "my_characters",
             &self.my_characters,
             event,
         );
         callbacks.invoke_table_row_callbacks::<CombatSeen>("my_combat", &self.my_combat, event);
+        callbacks.invoke_table_row_callbacks::<MyCommunity>(
+            "my_community",
+            &self.my_community,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Deliberation>(
             "my_deliberations",
             &self.my_deliberations,
@@ -4281,6 +4386,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.my_inventory,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<MyKin>("my_kin", &self.my_kin, event);
         callbacks.invoke_table_row_callbacks::<KnowHow>("my_know_how", &self.my_know_how, event);
         callbacks.invoke_table_row_callbacks::<KnownName>(
             "my_known_names",
@@ -4447,6 +4553,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<SkillCard>("skill_card", &self.skill_card, event);
         callbacks.invoke_table_row_callbacks::<SkillCode>("skill_code", &self.skill_code, event);
         callbacks.invoke_table_row_callbacks::<SkillUse>("skill_use", &self.skill_use, event);
+        callbacks.invoke_table_row_callbacks::<SkillUseEvent>(
+            "skill_use_event",
+            &self.skill_use_event,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<SlowTimer>("slow_timer", &self.slow_timer, event);
         callbacks.invoke_table_row_callbacks::<Slumber>("slumber", &self.slumber, event);
         callbacks.invoke_table_row_callbacks::<SpeechCard>("speech_card", &self.speech_card, event);
@@ -5160,6 +5271,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         cover_source_table::register_table(client_cache);
         cover_timer_table::register_table(client_cache);
         cue_table::register_table(client_cache);
+        dead_skill_use_due_table::register_table(client_cache);
         deliberation_table::register_table(client_cache);
         doing_table::register_table(client_cache);
         doing_near_table::register_table(client_cache);
@@ -5215,8 +5327,10 @@ impl __sdk::SpacetimeModule for RemoteModule {
         motion_seen_table::register_table(client_cache);
         my_act_outcomes_table::register_table(client_cache);
         my_body_table::register_table(client_cache);
+        my_bond_offers_table::register_table(client_cache);
         my_characters_table::register_table(client_cache);
         my_combat_table::register_table(client_cache);
+        my_community_table::register_table(client_cache);
         my_deliberations_table::register_table(client_cache);
         my_doing_table::register_table(client_cache);
         my_earshot_table::register_table(client_cache);
@@ -5224,6 +5338,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_fighter_table::register_table(client_cache);
         my_heard_table::register_table(client_cache);
         my_inventory_table::register_table(client_cache);
+        my_kin_table::register_table(client_cache);
         my_know_how_table::register_table(client_cache);
         my_known_names_table::register_table(client_cache);
         my_offers_table::register_table(client_cache);
@@ -5286,6 +5401,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         skill_card_table::register_table(client_cache);
         skill_code_table::register_table(client_cache);
         skill_use_table::register_table(client_cache);
+        skill_use_event_table::register_table(client_cache);
         slow_timer_table::register_table(client_cache);
         slumber_table::register_table(client_cache);
         speech_card_table::register_table(client_cache);
@@ -5337,6 +5453,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "cover_source",
         "cover_timer",
         "cue",
+        "dead_skill_use_due",
         "deliberation",
         "doing",
         "doing_near",
@@ -5392,8 +5509,10 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "motion_seen",
         "my_act_outcomes",
         "my_body",
+        "my_bond_offers",
         "my_characters",
         "my_combat",
+        "my_community",
         "my_deliberations",
         "my_doing",
         "my_earshot",
@@ -5401,6 +5520,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_fighter",
         "my_heard",
         "my_inventory",
+        "my_kin",
         "my_know_how",
         "my_known_names",
         "my_offers",
@@ -5463,6 +5583,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "skill_card",
         "skill_code",
         "skill_use",
+        "skill_use_event",
         "slow_timer",
         "slumber",
         "speech_card",

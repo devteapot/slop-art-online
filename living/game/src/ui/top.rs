@@ -6,6 +6,11 @@
 //!   character knows, and the place's name under it is the nearest of those within
 //!   [`PLACE_M`] (`my_places`: the rules' own record of what my character knows). With none,
 //!   no name shows: the client never names a place the rules have not given.
+//! - **The clock**, small, left of the compass: a sun or a moon (night as the rules' `daylight`
+//!   law says), the world's hour to the minute and the season, from the `world` row at the
+//!   displayed server time. Graphs test the hour against any number (`{"hour": {"above": 17.5}}`)
+//!   and the season (`winter`); the sky alone does not tell them. Hovered: the day, the season's
+//!   day and length ([`clock`]).
 //! - Character opens the list of acts on oneself until the character window is built (step 6).
 //! - Leave the world asks once ("Leave? Click again"), then quits; the character stays in the
 //!   world and is taken over by its mind after the takeover delay (docs/LIVING_CORE.md).
@@ -56,6 +61,14 @@ pub enum Row {
 pub struct MenuRow(Row);
 #[derive(Component)]
 pub struct LeaveText;
+#[derive(Component)]
+pub struct ClockChip;
+#[derive(Component)]
+pub struct ClockGlyph;
+#[derive(Component)]
+pub struct ClockText;
+#[derive(Component)]
+pub struct SeasonText;
 
 pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
     let f = fonts.clone();
@@ -98,6 +111,25 @@ pub fn spawn(mut commands: Commands, fonts: Res<Fonts>, icons: Res<Icons>) {
             });
             c.spawn((North, Node { position_type: PositionType::Absolute, width: Val::Px(16.0), height: Val::Px(16.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }, Pickable::IGNORE))
                 .with_child((Text::new("N"), wood::tface(&f, 13.0), TextColor(wood::text()), Pickable::IGNORE));
+        });
+    // The clock: left of the compass, level with its top.
+    commands
+        .spawn((
+            HudRoot,
+            ClockChip,
+            Block,
+            super::hit::Tag("clock".into()),
+            super::prim::Tip::default(),
+            Node { position_type: PositionType::Absolute, right: Val::Px(26.0 + SIZE + 10.0), top: Val::Px(24.0), flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(6.0), padding: UiRect::new(Val::Px(7.0), Val::Px(9.0), Val::Px(3.0), Val::Px(4.0)), border: wood::b(2.0), border_radius: wood::r(8.0), display: Display::None, ..default() },
+            BackgroundColor(wood::surface()),
+            BorderColor::all(wood::edge()),
+            wood::hard_shadow(3.0, 0.4),
+            GlobalZIndex(20),
+        ))
+        .with_children(|c| {
+            c.spawn((ClockGlyph, Node { width: Val::Px(14.0), height: Val::Px(14.0), ..default() }, ImageNode::new(icons.get(Glyph::Ui(Mark::Sun))).with_color(wood::muted()), Pickable::IGNORE));
+            c.spawn((ClockText, Text::new(""), wood::ink(&f, 14.0, 800), Pickable::IGNORE));
+            c.spawn((SeasonText, Text::new(""), f.body(12.0, 700), TextColor(wood::muted()), Pickable::IGNORE));
         });
     // The place's name.
     commands
@@ -289,4 +321,44 @@ pub fn update(
     for mut t in &mut leave {
         set_text(&mut t, if ws.leaving { "Leave? Click again" } else { "Leave the world" });
     }
+}
+
+/// The clock: the hour to the minute, a sun or a moon, the season; hovered, the day and the
+/// season's day.
+#[allow(clippy::type_complexity)]
+pub fn clock(
+    model: Res<HudModel>,
+    icons: Res<Icons>,
+    mut chip: Query<(&mut Node, &mut super::prim::Tip), With<ClockChip>>,
+    mut glyph: Query<&mut ImageNode, With<ClockGlyph>>,
+    mut texts: ParamSet<(Query<&mut Text, With<ClockText>>, Query<&mut Text, With<SeasonText>>)>,
+) {
+    let t = model.time.as_ref();
+    for (mut n, mut tip) in &mut chip {
+        show(&mut n, t.is_some());
+        if let Some(t) = t {
+            let want = clock_tip(t);
+            if *tip != want {
+                *tip = want;
+            }
+        }
+    }
+    let Some(t) = t else { return };
+    let img = icons.get(Glyph::Ui(if t.night { Mark::Moon } else { Mark::Sun }));
+    for mut g in &mut glyph {
+        if g.image != img {
+            g.image = img.clone();
+        }
+    }
+    for mut x in &mut texts.p0() {
+        set_text(&mut x, &t.clock());
+    }
+    for mut x in &mut texts.p1() {
+        set_text(&mut x, &t.season_word());
+    }
+}
+
+/// The clock's tooltip: "Day 12 · 14:32", then "Summer, day 3 of 8. It is day."
+pub fn clock_tip(t: &super::model::TimeView) -> super::prim::Tip {
+    super::prim::Tip { title: format!("Day {} · {}", t.day, t.clock()), text: format!("{}, day {} of {}. It is {}.", t.season_word(), t.season_day, t.season_days, if t.night { "night" } else { "day" }) }
 }

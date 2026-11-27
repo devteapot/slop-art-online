@@ -565,6 +565,17 @@ pub struct Laws {
     /// A diagnostic, off in play: each heed pass, windup and blow of a character with a mind is
     /// logged (`heed pass`, `heed windup`, `heed blow`; the verify-core heed scene reads them).
     pub heed_trace: bool,
+    /// Familiarity rows (`familiar`) a character keeps before the oldest it is not looking at are
+    /// forgotten (familiar-cap, docs/BOUNDED_RETENTION.md §3.1; the authority's
+    /// `brain::prune_familiar`, checked every `familiar_limit / 32` new rows, 8 to 64). Never what is
+    /// in view, so not a hard bound. 2,048 as before.
+    pub familiar_limit: f32,
+    /// What is forgotten first over `familiar_limit`. Off (as before): the oldest of anything. On:
+    /// unnamed strangers first (people and animals whose name one does not know and whom one's mind
+    /// has no feeling about), the oldest first, then places and things; never someone one knows by
+    /// name (family, community, an introduction) or has a relation with. And a dead creature is
+    /// forgotten by everyone once its remains are gone (or at its death when it leaves none).
+    pub familiar_regard: bool,
     /// Heed for players (docs/ATTENTION_BUDGET.md, "Player-side interface"): with `heed_on` too,
     /// a played character's `perceived` set is its individuals (`heed::split` in place of
     /// `far_cap`'s trim) and the rest of its sight is counted in `seen_throng`; its pins and
@@ -884,6 +895,10 @@ pub struct Laws {
     pub notice_delta_check: bool,
     pub seen_ranges: bool,
     pub seen_ranges_check: bool,
+    /// Value-only cap on disjoint structure-id pairs per `(actor, block)` in `seen_structures`
+    /// when fragmented live remains defeat exact compaction (0: no cap; trimming keeps 3/4,
+    /// default 128 -> 96, sparing every interval holding a permanent structure).
+    pub seen_ranges_max_pairs: f32,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -982,6 +997,8 @@ impl Default for Laws {
             heed_contact_s: crate::heed::DEFAULT_CONTACT_S,
             heed_closing_s: crate::heed::DEFAULT_CLOSING_S,
             heed_trace: false,
+            familiar_limit: 2_048.0,
+            familiar_regard: false,
             heed_players: false,
             cover_sight_on: false,
             ground_sight_m: 24.0,
@@ -1072,6 +1089,7 @@ impl Default for Laws {
             notice_delta_check: false,
             seen_ranges: true,
             seen_ranges_check: false,
+            seen_ranges_max_pairs: 128.0,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -1585,9 +1603,12 @@ impl StructureTraits {
     }
 }
 
-/// Largest script source accepted. `skills.rhai` is about 56 KB; compile time and memory grow
-/// about linearly (5 ms and 1.3 MB in the module for 55 KB, docs/SCRIPT_ENGINES.md).
-pub const MAX_SOURCE: usize = 256 * 1024;
+/// Largest script source accepted (our own cap; Rhai 1.27.0 has no source-size limit and
+/// SpacetimeDB 2.14.1's HTTP/WS limits are 2 MiB / 32 MiB). Raised from 256 KiB to 512 KiB on
+/// 2026-11-27 as `skills.rhai` (~236 KB) + Cullet's overlay (~25 KB) approached 256 KiB; compile
+/// time and memory grow about linearly (5 ms and 1.3 MB for 55 KB, docs/SCRIPT_ENGINES.md).
+/// The real ceiling is genesis-fuel headroom (the scene gate's 10% rule on 120 × 10⁹ fuel).
+pub const MAX_SOURCE: usize = 512 * 1024;
 /// Rhai operations one call may take: about 2× the heaviest function measured on the install
 /// samples (`skill_io`, 864; the heaviest law, `teach_check`, 635; docs/SCRIPT_ENGINES.md).
 /// At about 600 WASM instructions per operation, a call that runs into it costs about 1.2 M
@@ -3378,6 +3399,8 @@ impl Scripts {
             heed_contact_s: g("heed_contact_s", l.heed_contact_s).clamp(0.0, 60.0),
             heed_closing_s: g("heed_closing_s", l.heed_closing_s).clamp(0.0, 60.0),
             heed_trace: flag("heed_trace", l.heed_trace),
+            familiar_limit: g("familiar_limit", l.familiar_limit).clamp(16.0, 65_536.0),
+            familiar_regard: flag("familiar_regard", l.familiar_regard),
             heed_players: flag("heed_players", l.heed_players),
             cover_sight_on: flag("cover_sight_on", l.cover_sight_on),
             ground_sight_m: g("ground_sight_m", l.ground_sight_m).clamp(0.0, 256.0),
@@ -3468,6 +3491,7 @@ impl Scripts {
             notice_delta_check: flag("notice_delta_check", l.notice_delta_check),
             seen_ranges: flag("seen_ranges", l.seen_ranges),
             seen_ranges_check: flag("seen_ranges_check", l.seen_ranges_check),
+            seen_ranges_max_pairs: g("seen_ranges_max_pairs", l.seen_ranges_max_pairs).round().clamp(0.0, 4096.0),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -3731,7 +3755,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 53] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 56] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3809,6 +3833,12 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 53] = [
     ("heed_trace", ValueOnly::Delivery),
     // heed for players: read at each player's sweep (perception::sweep_one).
     ("heed_players", ValueOnly::Delivery),
+    // familiar-cap (docs/BOUNDED_RETENTION.md §3.1): read by `brain::prune_familiar` at its next
+    // check and by the remains' expiry at its next pass.
+    ("familiar_limit", ValueOnly::Delivery),
+    ("familiar_regard", ValueOnly::Delivery),
+    // seen-structures-remains: per-block cap on fragmented remains ranges (seen_structures.rs).
+    ("seen_ranges_max_pairs", ValueOnly::Delivery),
 ];
 
 /// The functions a value-only law may be named in: the constants (`laws`, an overlay's
@@ -6285,5 +6315,12 @@ fn rates(a) {
         assert_eq!(s.body_state(&c).unwrap().looks(), "warm, fed, badly wounded");
         c.actor.hp = 10.0;
         assert_eq!(s.body_state(&c).unwrap().looks(), "warm, fed, barely alive");
+    }
+
+    #[test]
+    fn source_cap_is_512_kib() {
+        assert_eq!(MAX_SOURCE, 512 * 1024);
+        let over = " ".repeat(MAX_SOURCE + 1);
+        assert_eq!(Scripts::new(&over).err().as_deref(), Some("script source exceeds 512 KiB"));
     }
 }

@@ -63,6 +63,11 @@ pub enum Act {
     Log,
     Glance,
     NorthUp,
+    /// Heed for players (docs/ATTENTION_BUDGET.md): keep track of whoever is under the cursor, or
+    /// stop (a toggle); and stop keeping track of everyone. Offered only while the world's laws
+    /// let players heed (`heed.rs`).
+    Pin,
+    ClearPins,
 }
 
 pub const EXTRA: u8 = 6;
@@ -71,7 +76,7 @@ impl Act {
     pub fn all() -> Vec<Act> {
         let mut v = vec![Act::Forward, Act::Back, Act::Left, Act::Right, Act::Run, Act::Jump, Act::Dodge, Act::Weapon, Act::Primary, Act::Secondary, Act::Skill1, Act::Skill2, Act::Skill3];
         v.extend((0..EXTRA).map(Act::Extra));
-        v.extend([Act::Interact, Act::Talk, Act::Address, Act::Way, Act::Wave, Act::Nod, Act::LookOver, Act::Pack, Act::Character, Act::Skills, Act::Log, Act::Glance, Act::NorthUp]);
+        v.extend([Act::Interact, Act::Talk, Act::Address, Act::Way, Act::Wave, Act::Nod, Act::LookOver, Act::Pack, Act::Character, Act::Skills, Act::Log, Act::Glance, Act::NorthUp, Act::Pin, Act::ClearPins]);
         v
     }
 
@@ -172,6 +177,8 @@ impl Binds {
         set(Act::Log, vec![K(KeyL)]);
         set(Act::Glance, vec![K(AltLeft), K(AltRight)]);
         set(Act::NorthUp, vec![K(KeyN)]);
+        set(Act::Pin, vec![K(KeyT)]);
+        set(Act::ClearPins, vec![K(KeyY)]);
         Binds { map, preset: p }
     }
 
@@ -374,6 +381,8 @@ pub struct Prefs {
     pub tips: bool,
     /// The weapon draws itself when something attacks you.
     pub auto_draw: bool,
+    /// The throng drawn as figures (`throng.rs`) while the world's laws let players heed.
+    pub throng: bool,
     /// Changed by a shortcut (F2, F3, F4): saved by Settings' update.
     pub dirty: bool,
     /// The interface's theme (`ui::wood::Name`: glass, clear, night, linen, walnut; none: the default, glass).
@@ -388,11 +397,16 @@ pub struct Prefs {
     /// The hair shine (`style::HAIR_SHINES`: crown, soft, today), once chosen in Settings; none
     /// follows the default (crown since hair-ring-2).
     pub hair_shine: Option<String>,
+    /// Combat clip timing: `Live` (default, plays windup clips on `scene.mine_ms` and scales wolf
+    /// bite to its windup) or `Old` (legacy delayed `scene.now_ms`, fixed-rate animal clips).
+    pub combat_timing: crate::combat::CombatTiming,
+    /// Brief glint halfway through a visible hostile fighter's windup (`f >= 0.5`); off by default.
+    pub windup_glint: bool,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Self { camera: crate::camera::Mode::default(), camera_tuning: Default::default(), camera_rotate: true, camera_rotate_speed: 1.0, camera_rotate_invert: false, facing: None, cursor_facing: crate::twist::LookWalk::cursor(), control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None }
+        Self { camera: crate::camera::Mode::default(), camera_tuning: Default::default(), camera_rotate: true, camera_rotate_speed: 1.0, camera_rotate_invert: false, facing: None, cursor_facing: crate::twist::LookWalk::cursor(), control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, throng: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None, combat_timing: crate::combat::CombatTiming::default(), windup_glint: false }
     }
 }
 
@@ -415,10 +429,19 @@ pub fn path() -> std::path::PathBuf {
 
 pub fn load() -> (Binds, Prefs) {
     let p = path();
-    let Ok(text) = std::fs::read_to_string(&p) else { return (Binds::default(), Prefs::default()) };
+    let apply_env = |mut prefs: Prefs| {
+        if let Some(t) = crate::combat::CombatTiming::from_env() {
+            prefs.combat_timing = t;
+        }
+        if let Some(g) = crate::combat::windup_glint_from_env() {
+            prefs.windup_glint = g;
+        }
+        prefs
+    };
+    let Ok(text) = std::fs::read_to_string(&p) else { return (Binds::default(), apply_env(Prefs::default())) };
     let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
         warn!("settings: {} is not JSON; using the defaults", p.display());
-        return (Binds::default(), Prefs::default());
+        return (Binds::default(), apply_env(Prefs::default()));
     };
     let preset = match v["preset"].as_str() {
         Some("numbers") => Preset::Numbers,
@@ -426,6 +449,7 @@ pub fn load() -> (Binds, Prefs) {
         _ => Preset::Letters,
     };
     let has_north_up = v["binds"].get("NorthUp").is_some();
+    let (has_pin, has_clear) = (v["binds"].get("Pin").is_some(), v["binds"].get("ClearPins").is_some());
     let mut binds = Binds::preset(if preset == Preset::Own { Preset::Letters } else { preset });
     if let Some(m) = v["binds"].as_object() {
         for (k, list) in m {
@@ -436,6 +460,12 @@ pub fn load() -> (Binds, Prefs) {
     // A profile written before NorthUp may already use N for another action.
     if !has_north_up && binds.map.iter().any(|(&a, slots)| a != Act::NorthUp && slots.contains(&Bind::Key(KeyCode::KeyN))) {
         binds.map.insert(Act::NorthUp, Vec::new());
+    }
+    // Likewise T and Y for a profile written before keeping track.
+    for (act, has, key) in [(Act::Pin, has_pin, KeyCode::KeyT), (Act::ClearPins, has_clear, KeyCode::KeyY)] {
+        if !has && binds.map.iter().any(|(&a, slots)| a != act && slots.contains(&Bind::Key(key))) {
+            binds.map.insert(act, Vec::new());
+        }
     }
     binds.preset = [Preset::Letters, Preset::Numbers].into_iter().find(|p| Binds::preset(*p).map == binds.map).unwrap_or(Preset::Own);
     let d = Prefs::default();
@@ -455,13 +485,17 @@ pub fn load() -> (Binds, Prefs) {
         sight_edge: v["sight_edge"].as_str().map(String::from),
         tips: v["tips"].as_bool().unwrap_or(d.tips),
         auto_draw: v["auto_draw"].as_bool().unwrap_or(d.auto_draw),
+        throng: v["throng"].as_bool().unwrap_or(d.throng),
         dirty: false,
         theme: v["theme"].as_str().map(String::from),
         look_walk: v["look_walk"].as_str().map(String::from),
         sight_look: v["sight_look"].as_str().map(String::from),
         film: v["film"].as_str().map(String::from),
         hair_shine: v["hair_shine"].as_str().map(String::from),
+        combat_timing: v["combat_timing"].as_str().and_then(crate::combat::CombatTiming::parse).unwrap_or(d.combat_timing),
+        windup_glint: v["windup_glint"].as_bool().unwrap_or(d.windup_glint),
     };
+    let prefs = apply_env(prefs);
     info!("settings: read {} ({} preset)", p.display(), binds.preset.name());
     (binds, prefs)
 }
@@ -483,11 +517,14 @@ pub fn save(binds: &Binds, prefs: &Prefs) {
         "sight_edge": prefs.sight_edge,
         "tips": prefs.tips,
         "auto_draw": prefs.auto_draw,
+        "throng": prefs.throng,
         "theme": prefs.theme,
         "look_walk": prefs.look_walk,
         "sight_look": prefs.sight_look,
         "film": prefs.film,
         "hair_shine": prefs.hair_shine,
+        "combat_timing": prefs.combat_timing.name(),
+        "windup_glint": prefs.windup_glint,
     });
     if let Some(dir) = p.parent() {
         let _ = std::fs::create_dir_all(dir);

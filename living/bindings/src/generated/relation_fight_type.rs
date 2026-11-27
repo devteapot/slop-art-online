@@ -50,6 +50,7 @@ impl __sdk::__query_builder::HasCols for RelationFight {
 /// Provides typed access to indexed columns for query building.
 pub struct RelationFightIxCols {
     pub id: __sdk::__query_builder::IxCol<RelationFight, u64>,
+    pub other: __sdk::__query_builder::IxCol<RelationFight, u32>,
 }
 
 impl __sdk::__query_builder::HasIxCols for RelationFight {
@@ -57,6 +58,7 @@ impl __sdk::__query_builder::HasIxCols for RelationFight {
     fn ix_cols(table_name: &'static str) -> Self::IxCols {
         RelationFightIxCols {
             id: __sdk::__query_builder::IxCol::new(table_name, "id"),
+            other: __sdk::__query_builder::IxCol::new(table_name, "other"),
         }
     }
 }
