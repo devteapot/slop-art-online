@@ -2201,17 +2201,19 @@ impl Minds {
             let town = bg["town"].as_str().map(|t| format!(" in {t}")).unwrap_or_default();
             out.push_str(&format!("\nYour work: {occ}{town}"));
         }
-        if let Some(r) = self.conn.db.rhythm().id().find(&actor) {
-            let hm = |h: f32| {
-                let m = (h.rem_euclid(24.0) * 60.0).round() as u32;
-                format!("{:02}:{:02}", m / 60 % 24, m % 60)
-            };
-            out.push_str(&format!("\nYour days: you usually rise about {} and go to bed about {}; the last {:.0} hours before bed are your evening.", hm(r.rise_h), hm(r.bed_h), r.evening_h));
-            if r.work_to_h > r.work_from_h {
-                out.push_str(&format!(" You usually work {} to {}.", hm(r.work_from_h), hm(r.work_to_h)));
-            }
-            if r.nap_to_h > r.nap_from_h {
-                out.push_str(&format!(" You sleep again from {} to {}.", hm(r.nap_from_h), hm(r.nap_to_h)));
+        if !prompts::prompt_parity() {
+            if let Some(r) = self.conn.db.rhythm().id().find(&actor) {
+                let hm = |h: f32| {
+                    let m = (h.rem_euclid(24.0) * 60.0).round() as u32;
+                    format!("{:02}:{:02}", m / 60 % 24, m % 60)
+                };
+                out.push_str(&format!("\nYour days: you usually rise about {} and go to bed about {}; the last {:.0} hours before bed are your evening.", hm(r.rise_h), hm(r.bed_h), r.evening_h));
+                if r.work_to_h > r.work_from_h {
+                    out.push_str(&format!(" You usually work {} to {}.", hm(r.work_from_h), hm(r.work_to_h)));
+                }
+                if r.nap_to_h > r.nap_from_h {
+                    out.push_str(&format!(" You sleep again from {} to {}.", hm(r.nap_from_h), hm(r.nap_to_h)));
+                }
             }
         }
         out

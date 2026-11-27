@@ -1520,12 +1520,16 @@ impl Minds {
         }
         let earlier = ctx.reopened.map(|(s, why)| format!("Earlier you two settled{} ({}). Now {why}.", if s.outcome.is_empty() { " nothing in particular and parted".to_string() } else { format!(": “{}”", s.outcome) }, fmt(s.at_ms)));
         // What stands between them now: proposals either way (answerable with an act).
+        // Under `prompt_parity`, private `bond_offer` (no player view) is omitted; `trade_offer`
+        // stays (players have `my_offers`).
         let mut between = Vec::new();
-        for o in self.conn.db.bond_offer().iter().filter(|o| now.saturating_sub(o.at_ms) <= 120_000) {
-            if o.from == other && o.to == me {
-                between.push(format!("{other_name} has asked to start a family with you ({}s ago); it happens if you also choose it (the act conceive toward them) within two minutes of their asking.", now.saturating_sub(o.at_ms) / 1000));
-            } else if o.from == me && o.to == other {
-                between.push(format!("You asked {other_name} to start a family ({}s ago); they have not chosen it yet.", now.saturating_sub(o.at_ms) / 1000));
+        if !prompts::prompt_parity() {
+            for o in self.conn.db.bond_offer().iter().filter(|o| now.saturating_sub(o.at_ms) <= 120_000) {
+                if o.from == other && o.to == me {
+                    between.push(format!("{other_name} has asked to start a family with you ({}s ago); it happens if you also choose it (the act conceive toward them) within two minutes of their asking.", now.saturating_sub(o.at_ms) / 1000));
+                } else if o.from == me && o.to == other {
+                    between.push(format!("You asked {other_name} to start a family ({}s ago); they have not chosen it yet.", now.saturating_sub(o.at_ms) / 1000));
+                }
             }
         }
         for o in self.conn.db.trade_offer().iter().filter(|o| now.saturating_sub(o.at_ms) <= 180_000) {

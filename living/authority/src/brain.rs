@@ -1572,10 +1572,12 @@ impl<'a> Ev<'a> {
         // (checked about once a minute): it dies with them unless they pass it on. Under
         // `perceived_private_on` (perception parity) not at all: whether anyone else alive knows
         // it is a scan of everyone's know-how, which no one perceives; what one taught and was
-        // taught is the mind's own memory to weigh.
+        // taught is the mind's own memory to weigh. Under `prompt_parity`, likewise skip the
+        // world-wide `know_how` scan (no player gets global omniscience).
+        let prompt_parity = common::laws(self.ctx).prompt_parity;
         let mut sole = String::new();
         let (checked, felt) = LEGACY.with(|l| l.borrow().get(&self.me.id).copied().unwrap_or((0, 0)));
-        if self.me.kind == "person" && self.me.stage >= 2 && calm && self.now.saturating_sub(checked) >= 60_000 && !common::laws(self.ctx).perceived_private_on {
+        if !prompt_parity && self.me.kind == "person" && self.me.stage >= 2 && calm && self.now.saturating_sub(checked) >= 60_000 && !common::laws(self.ctx).perceived_private_on {
             LEGACY.with(|l| l.borrow_mut().insert(self.me.id, (self.now, felt)));
             let me = self.me.id;
             let db = &self.ctx.db;
@@ -1596,8 +1598,9 @@ impl<'a> Ev<'a> {
             self.deliberate(&format!("You feel something: {sole}"));
         }
         // A person's new day begins at its own rising (its rhythm), once a day: its mind is
-        // asked to think about the day ahead, each at their own hour.
-        if self.me.kind == "person" && self.me.stage >= 1 {
+        // asked to think about the day ahead, each at their own hour. Under `prompt_parity`,
+        // private `rhythm` is not read.
+        if !prompt_parity && self.me.kind == "person" && self.me.stage >= 1 {
             if let Some(mut r) = self.ctx.db.rhythm().id().find(self.me.id) {
                 let hour = common::hour(&self.w, self.now);
                 let since = (hour - r.rise_h).rem_euclid(24.0);

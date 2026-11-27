@@ -932,28 +932,37 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         you.insert("decided, not yet done".into(), json!(waiting));
     }
     // Standing proposals between you and others (social facts both sides know).
-    let ago = |t: u64| format!("{}s ago", now.saturating_sub(t) / 1000);
-    let window = (common::laws(ctx).bond_window_s * 1000.0) as u64;
-    let mut asked = Vec::new();
-    for o in ctx.db.bond_offer().to().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
-        asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": "to start a family with you (it happens if you also choose conceive toward them in time)", "when": ago(o.at_ms)}));
-    }
+    // Under `prompt_parity`, private `bond_offer` and `join_request` tables (which have no player
+    // view) are omitted from the scene; `trade_offer` stays (players have `my_offers`).
     let laws = common::laws(ctx);
+    let parity = laws.prompt_parity;
+    let ago = |t: u64| format!("{}s ago", now.saturating_sub(t) / 1000);
+    let window = (laws.bond_window_s * 1000.0) as u64;
+    let mut asked = Vec::new();
+    if !parity {
+        for o in ctx.db.bond_offer().to().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
+            asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": "to start a family with you (it happens if you also choose conceive toward them in time)", "when": ago(o.at_ms)}));
+        }
+    }
     let join_ms = (laws.join_window_s * 1000.0) as u64;
     for o in ctx.db.trade_offer().to().filter(id).filter(|o| now <= o.ends_ms(laws.trade_window_s)) {
         asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": format!("a trade: their {} {} for your {} {} (accept to exchange, or decline)", o.give_qty, o.give_item, o.want_qty, o.want_item), "offer": o.id, "when": ago(o.at_ms)}));
     }
-    if let Some(m) = ctx.db.membership().member().find(id) {
-        for r in ctx.db.join_request().iter().filter(|r| r.community == m.community && now.saturating_sub(r.at_ms) <= join_ms) {
-            asked.push(json!({"from": r.asker, "name": common::label_for(ctx, &me, r.asker), "asks": "to join your community (welcome them to let them in)", "when": ago(r.at_ms)}));
+    if !parity {
+        if let Some(m) = ctx.db.membership().member().find(id) {
+            for r in ctx.db.join_request().iter().filter(|r| r.community == m.community && now.saturating_sub(r.at_ms) <= join_ms) {
+                asked.push(json!({"from": r.asker, "name": common::label_for(ctx, &me, r.asker), "asks": "to join your community (welcome them to let them in)", "when": ago(r.at_ms)}));
+            }
         }
     }
     if !asked.is_empty() {
         you.insert("asked of you".into(), Value::Array(asked));
     }
     let mut mine = Vec::new();
-    for o in ctx.db.bond_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
-        mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": "to start a family", "when": ago(o.at_ms)}));
+    if !parity {
+        for o in ctx.db.bond_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
+            mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": "to start a family", "when": ago(o.at_ms)}));
+        }
     }
     for o in ctx.db.trade_offer().from().filter(id).filter(|o| now <= o.ends_ms(laws.trade_window_s)) {
         mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": format!("a trade: your {} {} for their {} {}", o.give_qty, o.give_item, o.want_qty, o.want_item), "offer": o.id, "when": ago(o.at_ms)}));
@@ -1027,12 +1036,14 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             }
             _ => {}
         }
-        if ch.parent_a == id || ch.parent_b == id {
-            o.insert("family".into(), json!("your child"));
-        } else if me.parent_a == ch.id || me.parent_b == ch.id {
-            o.insert("family".into(), json!("your parent"));
-        } else if partner == Some(ch.id) {
-            o.insert("family".into(), json!("your partner (you have children together)"));
+        if !parity || !far {
+            if ch.parent_a == id || ch.parent_b == id {
+                o.insert("family".into(), json!("your child"));
+            } else if me.parent_a == ch.id || me.parent_b == ch.id {
+                o.insert("family".into(), json!("your parent"));
+            } else if partner == Some(ch.id) {
+                o.insert("family".into(), json!("your partner (you have children together)"));
+            }
         }
         o.insert("dist".into(), json!(round(c.dist)));
         o.insert("dir".into(), json!(direction(at, c.pos)));
@@ -1041,11 +1052,17 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         }
         // What their body visibly shows, and how far into it (docs/PERCEPTION.md, "What someone is
         // visibly doing"): the move or act a player sees drawn, its phase, and whom it is aimed
-        // at when that is me or someone I see.
+        // at when that is me or someone I see. Under `prompt_parity`, `about to release` degrades
+        // to the visible `winding up` phase a player sees.
         if let Some(v) = crate::perception::visibly(ctx, &sc, c.id, now) {
             let mut m = JMap::new();
             m.insert("is".into(), json!(v.skill));
-            m.insert("phase".into(), json!(v.phase.word()));
+            let phase = if parity && v.phase == living_rules::doing::Phase::AboutToRelease {
+                living_rules::doing::Phase::WindingUp
+            } else {
+                v.phase
+            };
+            m.insert("phase".into(), json!(phase.word()));
             if v.at(id, at, c.pos) {
                 m.insert("at".into(), json!("you"));
             } else if v.target != 0 && in_sight.iter().any(|x| x.id == v.target) {
@@ -1053,7 +1070,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             }
             o.insert("visibly".into(), Value::Object(m));
         }
-        if ch.kind == "person" {
+        if !parity && ch.kind == "person" {
             if let Some(s) = gave_in(c.id) {
                 o.insert("yielded".into(), json!(format!("gave in {s:.0}s ago")));
             }
@@ -1070,14 +1087,22 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
                 2 => "hurt",
                 _ => "",
             };
-            // Hunger shows too: anyone looks starved near the end, and a baby or child cries
-            // and fusses when hungry.
-            let hunger = if n.hunger >= 85.0 { "starving" } else if n.hunger >= 60.0 && ch.stage <= 1 { "hungry" } else { "" };
+            // Hunger shows too when `prompt_parity` is off; under `prompt_parity`, players see
+            // only wounds on `seen_characters` (no hunger or cold on other bodies).
+            let hunger = if parity {
+                ""
+            } else if n.hunger >= 85.0 {
+                "starving"
+            } else if n.hunger >= 60.0 && ch.stage <= 1 {
+                "hungry"
+            } else {
+                ""
+            };
             let looks = [wound, hunger].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(", ");
             if !looks.is_empty() {
                 o.insert("looks".into(), json!(looks));
             }
-            if ch.kind == "person" && ch.stage == 0 {
+            if !parity && ch.kind == "person" && ch.stage == 0 {
                 if let Ok(state) = crate::act::body_state(ctx, ch.id, now) {
                     o.insert("looks".into(), json!(state.looks()));
                 }
@@ -1174,7 +1199,10 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
         }
         if s.kind == "remains" || t.holds.is_some() {
             // Under `perceived_holds_on`, beyond arm's length only what one saw inside it, and when.
-            if common::laws(ctx).perceived_holds_on && d > crate::stores::LOOK_M {
+            // Under `prompt_parity` alone, a store's contents are omitted; with `perceived_holds_on`
+            // too, what one saw inside it is what a player's `my_seen_stores` shows, so it stays.
+            let holds_law = common::laws(ctx).perceived_holds_on;
+            if holds_law && d > crate::stores::LOOK_M {
                 match crate::stores::remembered(ctx, id, s.id) {
                     Some(r) => {
                         o["contents"] = Value::Object(r.items.into_iter().zip(r.qty).map(|(k, q)| (k, json!(q))).collect());
@@ -1182,7 +1210,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
                     }
                     None => o["contents"] = json!("not looked into"),
                 }
-            } else {
+            } else if holds_law || !parity {
                 let inv: JMap<String, Value> = common::inv_list(ctx, STRUCTURE_BIT | s.id).into_iter().map(|(k, q)| (k, json!(q))).collect();
                 o["contents"] = Value::Object(inv);
             }

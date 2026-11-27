@@ -4873,6 +4873,130 @@ def seen_remains_case(run):
             'field_ids': sorted(field.values()), 'scene_structures': structures}
 
 
+@case('prompts')
+def prompts_case(run):
+    """Under `prompt_parity`, minds' prompts omit or degrade what a player cannot perceive:
+    others' hunger (seen or unseen), private rhythm, private bond_offer, structure contents,
+    and sub-windup `about to release` timing — while keeping the mind's own state."""
+    import difflib
+
+    run.harness('launch')
+    run.harness('doctor')
+    spots = wall_spots(run)
+    rhythm_ids = {r['id'] for r in run.private('SELECT id FROM rhythm', 'rhythm-ids')}
+    sex_map = {r['id']: r['sex'] for r in run.private('SELECT id, sex FROM sex', 'sex-rows')}
+    people = sorted(run.sql("SELECT * FROM character WHERE kind = 'person'", 'people'), key=lambda p: p['id'])
+    adults = [p for p in people if p['ai'] and p['alive'] and p['stage'] == 2]
+    actor = next((p['id'] for p in adults if p['id'] in rhythm_ids), adults[0]['id'])
+    actor_sex = sex_map.get(actor)
+    suitor = next((p['id'] for p in adults if p['id'] != actor and sex_map.get(p['id']) != actor_sex),
+                  next(p['id'] for p in adults if p['id'] != actor))
+    for who in (actor, suitor):
+        run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    run.admin('place_at', actor, *spots['eye'])
+    run.admin('place_at', suitor, *spots['open'])
+    # Spawn two starving strangers while paused so their forager graph never eats their starting berries.
+    before = {r['id'] for r in run.sql('SELECT id FROM character', 'before-starve')}
+    run.admin('set_paused', True)
+    try:
+        run.admin('set_world_law', 'spawn_hunger', '95.0')
+        try:
+            run.admin('spawn_crowd', 2, True)
+        finally:
+            run.admin('set_world_law', 'spawn_hunger', '25.0')
+        starving_seen, starving_unseen = sorted(r['id'] for r in run.sql('SELECT id FROM character', 'after-starve') if r['id'] not in before)
+        for who in (starving_seen, starving_unseen):
+            run.admin('set_behavior', who, json.dumps({'wait': 300}))
+    finally:
+        run.admin('set_paused', False)
+    run.admin('place_at', starving_seen, *spots['open'])
+    run.admin('place_at', starving_unseen, *spots['hidden'])
+    # Place a storage structure and a shelter in sight and stage a private bond_offer toward actor.
+    run.admin('place_structure', actor, 'storage')
+    run.admin('place_structure', suitor, 'shelter')
+    run.admin('grant_items', suitor, 'cooked_meat', 4)
+    run.admin('mind_act', suitor, [json.dumps({'do': 'conceive', 'target': {'id': actor}})], 'verify-prompts')
+    run.wait(lambda: run.private(f'SELECT * FROM bond_offer WHERE to = {actor}', 'bond-offer'), 'bond_offer row', 30)
+
+    script = {'replies': {
+        'think': {'thought': 'I take in what is around me.', 'intend': [], 'say': None},
+        'deliberate': basic_reply({'wait': 300}),
+    }}
+    run.start(model(run, script), [actor])
+
+    requests = lambda: shared.rows(run.directory / 'fake-requests.jsonl')
+    msgs_of = lambda e: [(m.get('role', ''), str(m.get('content', ''))) for m in e['body'].get('messages', [])]
+    find_pair = lambda marker: [
+        (next((c for r, c in msgs_of(e) if r == 'system'), ''),
+         next((c for r, c in msgs_of(e) if r == 'user'), ''))
+        for e in requests()
+        if any(marker in c for _, c in msgs_of(e))
+    ]
+
+    # Phase 1: prompt_parity OFF (shipped default)
+    run.request(actor, 'parity-off')
+    off_pairs = run.wait(lambda: p if len(p := find_pair('verify parity-off')) >= 2 else None, 'parity-off think+deliberate', 75)
+    think_off_sys, think_off_user = off_pairs[0]
+    delib_off_sys, delib_off_user = off_pairs[1]
+    scene_off = json.loads(scene_part(think_off_user))
+
+    # Phase 2: turn prompt_parity ON and wait for the mind to compile the new script revision.
+    rev_before = run.sql("SELECT revision FROM script WHERE name = 'skills'", 'rev-before')[0]['revision']
+    run.admin('set_world_law', 'prompt_parity', 'true')
+    rev_after = run.wait(lambda: r if (r := run.sql("SELECT revision FROM script WHERE name = 'skills'", 'rev-after')[0]['revision']) > rev_before else None, 'script revision bump', 20)
+    run.wait(lambda: f'rules revision {rev_after}:' in (run.directory / 'mind.log').read_text(errors='replace'), 'mind observed new script revision', 20)
+    run.admin('mind_act', suitor, [json.dumps({'do': 'conceive', 'target': {'id': actor}})], 'verify-prompts-on')
+    run.request(actor, 'parity-on')
+    on_pairs = run.wait(lambda: p if len(p := find_pair('verify parity-on')) >= 2 else None, 'parity-on think+deliberate', 75)
+    think_on_sys, think_on_user = on_pairs[0]
+    delib_on_sys, delib_on_user = on_pairs[1]
+    scene_on = json.loads(scene_part(think_on_user))
+
+    # Confirm both starving characters are genuinely starving in authority vitals.
+    v_seen = run.private(f'SELECT hunger FROM vitals WHERE id = {starving_seen}', 'v-seen')[0]['hunger']
+    v_unseen = run.private(f'SELECT hunger FROM vitals WHERE id = {starving_unseen}', 'v-unseen')[0]['hunger']
+    seen_off = next((c for c in scene_off.get('creatures', []) if c.get('id') == starving_seen), None)
+    seen_on = next((c for c in scene_on.get('creatures', []) if c.get('id') == starving_seen), None)
+    storage_off = [s for s in scene_off.get('structures', []) if s.get('kind') == 'storage']
+    storage_on = [s for s in scene_on.get('structures', []) if s.get('kind') == 'storage']
+
+    diff_text = ''.join(difflib.unified_diff(
+        (think_off_user + '\n---DELIB-SYS---\n' + delib_off_sys).splitlines(keepends=True),
+        (think_on_user + '\n---DELIB-SYS---\n' + delib_on_sys).splitlines(keepends=True),
+        fromfile='prompt_parity=false', tofile='prompt_parity=true', n=2,
+    ))
+    (run.directory / 'prompts-diff.txt').write_text(diff_text)
+    (run.directory / 'prompts-before-after.json').write_text(json.dumps({
+        'off': {'scene': scene_off, 'think_user': think_off_user, 'delib_sys': delib_off_sys},
+        'on': {'scene': scene_on, 'think_user': think_on_user, 'delib_sys': delib_on_sys},
+    }, indent=2))
+
+    checks = {
+        'both staged targets are starving in vitals': v_seen >= 85.0 and v_unseen >= 85.0,
+        'law off: seen starving character leaks starving in looks': bool(seen_off and 'starving' in seen_off.get('looks', '')),
+        'law off: rhythm appears in persona': 'Your days: you usually rise about' in think_off_user,
+        'law off: bond_offer appears in scene': 'to start a family' in json.dumps(scene_off.get('you', {})),
+        'law off: storage exposes contents in scene': bool(storage_off) and any('contents' in s for s in storage_off),
+        'law off: deliberate grammar mentions about to release, bedtime, suitor':
+            all(w in delib_off_sys for w in ('about to release', '"bedtime"', '"suitor"', '"courted"')),
+        'law on: seen starving character omits hunger/starving from looks':
+            bool(seen_on) and 'starving' not in seen_on.get('looks', '') and 'hungry' not in seen_on.get('looks', ''),
+        'law on: unseen starving character absent from scene and prompt':
+            all(c.get('id') != starving_unseen for c in scene_on.get('creatures', []))
+            and f'#{starving_unseen}' not in think_on_user,
+        'law on: mind keeps its own hunger and felt body':
+            'hunger' in scene_on.get('you', {}) and 'How your body feels:' in think_on_user,
+        'law on: private rhythm omitted from persona': 'Your days: you usually rise about' not in think_on_user,
+        'law on: private bond_offer omitted from scene': 'to start a family' not in json.dumps(scene_on.get('you', {})),
+        'law on: storage contents omitted from scene': bool(storage_on) and all('contents' not in s for s in storage_on),
+        'law on: deliberate grammar degrades about to release and omits private rhythm/bond terms':
+            'winding up' in delib_on_sys
+            and all(w not in delib_on_sys for w in ('about to release', '"bedtime"', '"evening"', '"work_hours"', '"suitor"', '"courted"')),
+    }
+    return {'status': 'pass' if all(checks.values()) else 'fail', 'checks': checks,
+            'actor': actor, 'starving_seen': starving_seen, 'starving_unseen': starving_unseen}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run', help='new suite name starting with minds- (gate- for the merge scene gate)')

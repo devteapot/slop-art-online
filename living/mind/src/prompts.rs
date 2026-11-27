@@ -174,14 +174,33 @@ pub fn heed_on() -> bool {
     compiled().is_some_and(|s| s.laws().heed_on)
 }
 
+/// Whether the world's `prompt_parity` law holds: minds' prompts omit or degrade facts a player
+/// of the same character cannot perceive (no others' hunger, no sub-windup "about to release",
+/// no private `rhythm`/`bond_offer`/`join_request`, no structure contents, no global `sole`).
+pub fn prompt_parity() -> bool {
+    compiled().is_some_and(|s| s.laws().prompt_parity)
+}
+
 /// The think reply's `heed` field while `heed_on` holds; empty otherwise.
 fn heed_reply_field() -> &'static str {
     if heed_on() { HEED_REPLY_FIELD } else { "" }
 }
 
 /// The heed grammar after the reply's form while `heed_on` holds; empty otherwise.
-fn heed_grammar() -> &'static str {
-    if heed_on() { HEED_GRAMMAR } else { "" }
+fn heed_grammar() -> std::borrow::Cow<'static, str> {
+    if !heed_on() {
+        std::borrow::Cow::Borrowed("")
+    } else {
+        heed_grammar_for(prompt_parity())
+    }
+}
+
+fn heed_grammar_for(parity: bool) -> std::borrow::Cow<'static, str> {
+    if parity {
+        std::borrow::Cow::Owned(HEED_GRAMMAR.replace("about to release|", ""))
+    } else {
+        std::borrow::Cow::Borrowed(HEED_GRAMMAR)
+    }
 }
 
 const HEED_REPLY_FIELD: &str = ", \"heed\": [rules] (optional: only when you mean to change whom you keep track of; \"instinct\" goes back to your instinct)";
@@ -532,6 +551,10 @@ pub fn grammar() -> String {
 
 /// Graph grammar for a body with the given skills (and whether it can speak).
 pub fn grammar_with(skills: &str, speaks: bool) -> String {
+    grammar_with_parity(skills, speaks, prompt_parity())
+}
+
+fn grammar_with_parity(skills: &str, speaks: bool, parity: bool) -> String {
     // People and animals get examples of their own kind of life (an animal shown a person's
     // example, like seeking the campfire when wolves are near, copies it).
     let (making, examples) = if speaks {
@@ -558,6 +581,29 @@ Deliberate one-off interactions (starting a family, trading, giving, teaching, w
     } else {
         ""
     };
+    let doing_phases = if parity {
+        "winding up | releasing | recovering | holding (a guard held up) | under way (a gesture or work)"
+    } else {
+        "winding up (all of a windup) | about to release (its second half) | releasing | recovering | holding (a guard held up) | under way (a gesture or work)"
+    };
+    let rhythm_conds = if parity {
+        ""
+    } else {
+        " {\"bedtime\": true} (your own hours for sleep) {\"evening\": true} (your own evening) {\"work_hours\": true} (your own working hours)"
+    };
+    let suitor_target = if parity {
+        ""
+    } else {
+        " \"suitor\" (who just offered to start a family with you)"
+    };
+    let courted_key = if parity { "" } else { " \"courted\"," };
+    let courted_desc = if parity { "" } else { " courted = someone in sight just offered to start a family with you;" };
+    let rhythm_keys = if parity { "" } else { ", \"bedtime\", \"evening\", \"work_hours\"" };
+    let rhythm_desc = if parity {
+        ""
+    } else {
+        " bedtime = your own hours for sleep (when you go to bed until you rise); evening = your own evening, the hours before your bedtime; work_hours = your own working hours (with none set, waking hours outside your evening);"
+    };
     let g = format!(
         "\
 BEHAVIOR GRAPH (JSON) — it runs continuously (~1 check per second, instantly on events) while you think slowly, so encode how to react, not just one action.
@@ -573,11 +619,11 @@ Several conditions in one object mean all of them: {{\"if\": {{\"hunger\": {{\"a
 Conditions C: {{\"hunger\": {{\"above\": 60}}}} {{\"energy\": {{\"below\": 25}}}} {{\"health\": {{\"below\": 40}}}} (0-100) {{\"stamina\": {{\"below\": 30}}}} (breath, 0-100)
   {{\"has\": {{\"item\": \"berries\", \"at_least\": 2}}}} (item \"food\" = any food) {{\"sees\": T}} {{\"near\": {{\"target\": T, \"within\": 3}}}}
   {{\"count\": {{\"of\": \"wolf\" or {{\"kind\": \"person\", \"relation\": \"friend\"}}, \"within\": 8, \"at_least\": 3}}}} (or \"at_most\") how many are in sight; {{\"health_of\": {{\"target\": T, \"below\": 30}}}} how healthy a creature in sight looks (% of full: exact for yourself or one you appraised, else as its wound looks)
-  {{\"doing\": {{\"who\": \"person\", \"is\": \"hostile\", \"phase\": \"winding up\", \"at_me\": true, \"within\": 5}}}} someone in sight is visibly doing that now, as a creature's \"visibly\" in your scene shows it (every field optional; who as in count): is = what a creature's \"visibly\".is shows in your scene, or a skill's name, or how it looks (hostile, melee, missile, guard, dash, gesture, work, eat, rest); phase = winding up (all of a windup) | about to release (its second half) | releasing | recovering | holding (a guard held up) | under way (a gesture or work); at_me = aimed at you
-  {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}} {{\"bedtime\": true}} (your own hours for sleep) {{\"evening\": true}} (your own evening) {{\"work_hours\": true}} (your own working hours) {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
+  {{\"doing\": {{\"who\": \"person\", \"is\": \"hostile\", \"phase\": \"winding up\", \"at_me\": true, \"within\": 5}}}} someone in sight is visibly doing that now, as a creature's \"visibly\" in your scene shows it (every field optional; who as in count): is = what a creature's \"visibly\".is shows in your scene, or a skill's name, or how it looks (hostile, melee, missile, guard, dash, gesture, work, eat, rest); phase = {doing_phases}; at_me = aimed at you
+  {{\"hurt_within\": 10}} {{\"heard_within\": 20}} {{\"threatened\": true}} {{\"night\": true}}{rhythm_conds} {{\"raining\": true}} {{\"hailed\": 6}} (someone greeted you with a gesture in the last 6 s) {{\"moving\": false}} (you stand still) {{\"believes\": \"judgment_key\"}} or {{\"believes\": {{\"key\": \"k\", \"above\": 0.7}}}}{judged}
   {{\"can\": {{\"do\": \"eat\", \"item\": \"food\"}}}} whether a skill could go ahead now by the world's rules (what it takes is at hand; its target in sight), e.g. {{\"can\": {{\"do\": \"cook\", \"target\": {{\"nearest\": \"campfire\"}}, \"item\": \"fish\"}}}}
   {{\"chance\": 0.2}} {{\"all\": [C, ...]}} {{\"any\": [C, ...]}} {{\"not\": C}}
-Targets T: \"self\" \"attacker\" \"speaker\" \"suitor\" (who just offered to start a family with you) \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"sound\" (toward what you hear and cannot see, when sight depends on facing) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|family, stranger {stranger}, or any label you gave a relationship, e.g. partner{fight})
+Targets T: \"self\" \"attacker\" \"speaker\"{suitor_target} \"partner\" (the other parent of your youngest child) \"hailer\" (who just greeted you with a gesture) \"commotion\" (where a fight or a death is, in sight) \"sound\" (toward what you hear and cannot see, when sight depends on facing) \"home\" {{\"nearest\": \"berry_bush\"}} {{\"nearest\": {{\"kind\": \"person\", \"relation\": \"friend\"}}}} (relation: friend|enemy|family, stranger {stranger}, or any label you gave a relationship, e.g. partner{fight})
   {{\"nearest\": {{\"kind\": \"storage\", \"mine\": true}}}} {{\"nearest\": {{\"kind\": \"remains\", \"holds\": \"meat\"}}}} {{\"id\": 6}} {{\"named\": \"Oren\"}} {{\"place\": \"a quoted name under Places you remember\"}} {{\"at\": [x, y]}}
   Kinds: berry_bush tree boulder reeds fishing_spot clay_bank | campfire shelter house storage sign gate remains | person deer wolf | grass forest (the nearest tile of that ground in sight).
   People/creature/resource targets resolve only when currently in sight. A place resolves only by a quoted name under Places you remember (\"home\" is your own home); coordinates always resolve: reach a resource listed under Resources you have seen, or any spot, with {{\"at\": [x, y]}}. A do-node whose target is missing fails, so \"first\" moves on.
@@ -585,9 +631,9 @@ Skills:
 {}
 - {{\"routine\": \"name\"}} runs one of your routines (named graphs you keep and can rewrite; see below).
 - {{\"desires\": [{{\"want\": \"what it is for\", \"weight\": W, \"do\": N}}, ...]}} every check, the strongest desire that can act now wins (a desire whose node fails lets the next one act). \
-W = {{\"base\": number, and any of: \"hunger\", \"tired\", \"hurt\", \"night\", \"day\", \"threatened\", \"alone\", \"company\", \"winter\", \"longing\", \"courted\", \"starving\", \"exhausted\", \"rain\", \"hailed\", \"commotion\", \"bedtime\", \"evening\", \"work_hours\": factor, \"believes\": {{\"stance_key\": factor}}}}: \
+W = {{\"base\": number, and any of: \"hunger\", \"tired\", \"hurt\", \"night\", \"day\", \"threatened\", \"alone\", \"company\", \"winter\", \"longing\",{courted_key} \"starving\", \"exhausted\", \"rain\", \"hailed\", \"commotion\"{rhythm_keys}: factor, \"believes\": {{\"stance_key\": factor}}}}: \
 strength = base + Σ factor × signal, each signal 0..1 (hunger 0 fed..1 starving; tired 0 rested..1 exhausted; hurt; night/day; threatened = an attack or a threat is coming at you; \
-alone = no one in sight; company = people in sight; winter; longing = time since this desire last acted, up to an hour; courted = someone in sight just offered to start a family with you; starving = hunger 90+; exhausted = energy 10 or less; rain = it is raining; hailed = someone just greeted you with a gesture; commotion = a fight or a death in sight; bedtime = your own hours for sleep (when you go to bed until you rise); evening = your own evening, the hours before your bedtime; work_hours = your own working hours (with none set, waking hours outside your evening); believes = your stance's value). A desire at or below 0 does not act.
+alone = no one in sight; company = people in sight; winter; longing = time since this desire last acted, up to an hour;{courted_desc} starving = hunger 90+; exhausted = energy 10 or less; rain = it is raining; hailed = someone just greeted you with a gesture; commotion = a fight or a death in sight;{rhythm_desc} believes = your stance's value). A desire at or below 0 does not act.
 Limits: each graph (your top level, or one routine) at most 64 nodes, depth 10, 12 children per composite. The root restarts whenever it finishes, so a root \"first\" loops forever.
 REPERTOIRE: your behavior is a repertoire you build over your life: routines (named graphs) for the things you do, called from a top level, usually desires weighed by what you want. \
 Routines are built from skills, and each skill takes something and gives something (see takes/gives above): a routine works only if its earlier steps get what its later steps take, \
@@ -777,21 +823,31 @@ meet Mira (#3) at the ford at dawn; from now on keep watch at night)\"] (may be 
 fn notice_field() -> String {
     let Some(s) = compiled().filter(|s| s.laws().cues_on) else { return String::new() };
     let l = s.laws();
-    notice_field_for(l.cue_cooldown_s, l.cue_gap_s)
+    notice_field_for_parity(l.cue_cooldown_s, l.cue_gap_s, l.prompt_parity)
 }
 
 /// The placeholder examples of the cue field.
 const CUE_EXAMPLES: &str = "e.g. {\"for\": \"<stance key>\", \"who\": \"wolf\", \"near_me\": 30, \"why\": \"...\"}, \
 {\"for\": \"project:<key>\", \"who\": 12, \"doing\": \"<skill>\", \"why\": \"...\"}, {\"for\": \"goal:<its words>\", \"thing\": \"<kind>\", \"at\": \"<one of your places>\", \"why\": \"...\"}";
 
+#[cfg(test)]
 fn notice_field_for(cooldown_s: f32, gap_s: f32) -> String {
+    notice_field_for_parity(cooldown_s, gap_s, false)
+}
+
+fn notice_field_for_parity(cooldown_s: f32, gap_s: f32, parity: bool) -> String {
     let span = |s: f32| if s >= 120.0 { format!("{:.0} minutes", s / 60.0) } else { format!("{s:.0} seconds") };
+    let phases: Vec<&str> = living_rules::doing::Phase::ALL
+        .iter()
+        .filter(|p| !(parity && **p == living_rules::doing::Phase::AboutToRelease))
+        .map(|p| p.word())
+        .collect();
     format!(
         ", \"notice\": [{{\"for\": \"the stance key, project:<key> or goal:<its words> this is about\", \"who\": a person's id, \"unknown\" (anyone whose name you do not know) or a kind of creature, \
 \"doing\": \"what they are visibly doing (a skill)\", \"phase\": \"{}\", \"thing\": \"a kind of resource or structure\", \"at\": \"one of your places\", \"within\": metres of it, \"near_me\": metres, \"why\": \"your own words\"}}] \
 (optional: what, when you perceive it, should make you think about this again; every field given must hold for the same thing; {CUE_EXAMPLES}. \
 You are brought to think by it once per thing per {} and by all of them at most once in {}; you keep at most {}; listing only \"for\" stops watching for it. See # What you watch for)",
-        living_rules::doing::Phase::ALL.iter().map(|p| p.word()).collect::<Vec<_>>().join("|"),
+        phases.join("|"),
         span(cooldown_s),
         span(gap_s),
         crate::memory::CUES
@@ -1273,9 +1329,23 @@ pub const FAST_WAYS: [(&str, &str); 6] = [
 
 /// The balanced fast frame's own text (`LIVING_FAST_FRAME=balanced`): the first frame's text with keeping
 /// listed first, the triggering event set apart from what else is perceived, the fight one has
-/// kept beneath an added line, and the six ways of [`FAST_WAYS`].
+/// kept beneath an added line, and the six ways of [`FAST_WAYS`]. Under `prompt_parity`,
+/// `"about to release"` degrades to the visible `"winding up"` phase a player sees.
 fn fast_balanced_frame(frame: Frame) -> String {
-    let ways: Vec<String> = FAST_WAYS.iter().map(|(name, line)| format!("- {name}: {line}")).collect();
+    fast_balanced_frame_for(frame, prompt_parity())
+}
+
+fn fast_balanced_frame_for(frame: Frame, parity: bool) -> String {
+    let ways: Vec<String> = FAST_WAYS
+        .iter()
+        .map(|(name, line)| {
+            if parity {
+                format!("- {name}: {}", line.replace("\"about to release\"", "\"winding up\""))
+            } else {
+                format!("- {name}: {line}")
+            }
+        })
+        .collect();
     shared(format!(
         "{} Stay in character: your personality, values, relationships and memories are yours. \
 Something has just happened to you (see Why now). Why now is that one event as you perceived it; What has just happened, and How you are now when it is given, are what else you perceive. \
@@ -1641,7 +1711,7 @@ mod tests {
     /// the minds on its old value until the next install.
     #[test]
     fn the_laws_minds_read_change_by_an_install() {
-        let read = ["cues_on", "cue_cooldown_s", "cue_gap_s", "speech_truth", "stranger_by_name", "relation_fight_on", "think_framing", "fast_lane_inflight", "heed_on"];
+        let read = ["cues_on", "cue_cooldown_s", "cue_gap_s", "speech_truth", "stranger_by_name", "relation_fight_on", "think_framing", "prompt_parity", "fast_lane_inflight", "heed_on"];
         for l in read {
             assert!(living_rules::script::VALUE_ONLY.iter().all(|(n, _)| *n != l), "{l} is value-only: the mind service must lay `law_override` over its script first");
         }
@@ -2194,6 +2264,31 @@ mod tests {
         assert!(living_rules::script::Scripts::new(include_str!("../../scripts/skills.rhai")).unwrap().laws().relation_fight_on);
         let off = living_rules::script::with_world_laws(include_str!("../../scripts/skills.rhai"), &[("relation_fight_on".into(), serde_json::json!(false))]);
         assert!(!living_rules::script::Scripts::new(&off).unwrap().laws().relation_fight_on);
+    }
+
+    #[test]
+    fn prompt_parity_degrades_about_to_release_and_omits_private_table_terms() {
+        let off_g = grammar_with_parity("", true, false);
+        let on_g = grammar_with_parity("", true, true);
+        assert!(off_g.contains("about to release") && off_g.contains("\"bedtime\"") && off_g.contains("\"suitor\"") && off_g.contains("\"courted\""));
+        assert!(!on_g.contains("about to release") && !on_g.contains("\"bedtime\"") && !on_g.contains("\"evening\"") && !on_g.contains("\"work_hours\"") && !on_g.contains("\"suitor\"") && !on_g.contains("\"courted\""));
+        assert!(on_g.contains("winding up | releasing | recovering"));
+
+        let off_fast = fast_balanced_frame_for(Frame::Character, false);
+        let on_fast = fast_balanced_frame_for(Frame::Character, true);
+        assert!(off_fast.contains("\"about to release\""));
+        assert!(!on_fast.contains("about to release"));
+        assert!(on_fast.contains("- adjust your timing: {\"if\": {\"doing\": {\"is\": \"hostile\", \"phase\": \"winding up\", \"at_me\": true}}, \"then\": {\"do\": \"block\"}}"));
+
+        let off_heed = heed_grammar_for(false);
+        let on_heed = heed_grammar_for(true);
+        assert!(off_heed.contains("about to release|"));
+        assert!(!on_heed.contains("about to release") && on_heed.contains("winding up|releasing"));
+
+        let off_notice = notice_field_for_parity(600.0, 60.0, false);
+        let on_notice = notice_field_for_parity(600.0, 60.0, true);
+        assert!(off_notice.contains("about to release"));
+        assert!(!on_notice.contains("about to release") && on_notice.contains("winding up|releasing"));
     }
 
     #[test]
