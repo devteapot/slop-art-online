@@ -136,7 +136,9 @@ impl Wardrobe {
         if let Some(h) = self.toons.get(key).and_then(|id| toons.get_strong_handle(*id)) {
             return h;
         }
-        let h = toons.add(style.toon(base.clone()));
+        let mut toon = style.toon(base.clone());
+        toon.extension.params.character.x = 1.0;
+        let h = toons.add(toon);
         self.toons.insert(key.to_string(), h.id());
         h
     }

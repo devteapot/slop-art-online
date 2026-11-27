@@ -13,6 +13,7 @@ import bevy_pbr::render::{
 import living_game::toon_light::{
     toon, is_kind, hash3, noise3, rgb_to_hsv, hsv_to_rgb, scene, wetted, view_depth, sun_shadow, sun_color,
     bands, banded, puddles, wet_sheen, fresnel, rim_light, point_lights, emission, has_sun, sun_direction, eye, metres_per_pixel,
+    ld_band_pair, ld_value, ld_banded, ld_specular, ld_char_rim,
 };
 
 @if(PREPASS_PIPELINE)
@@ -489,6 +490,12 @@ fn fragment(
         let lift = select(0.0, 0.12, is_kind(2.0));
         let shadow = sun_shadow(vec4<f32>(p.xyz + N * lift, p.w), pbr_input.world_normal, view_z, in.position.xy);
         let sun = sun_color();
+        // The look-dev light (style.rs `Look`, shader def LOOKDEV; `toon_light.wesl` `ld_*`):
+        // characters' own ramp, its shadow depth and hemisphere fill, the character rim, less rim
+        // on scenery and a cel-stepped specular. Without it, every line is as before.
+@if(LOOKDEV)
+        let b = ld_band_pair(dot(N, L), relief, p.xyz);
+@else
         let b = bands(dot(N, L) + relief, p.xyz);
         var band = b.x;
         // Faces take their shadow from their map; eyes, brows, lashes and mouth only from what
@@ -512,6 +519,9 @@ fn fragment(
         depth = select(depth, depth * toon.face.y, face);
         depth = select(depth, toon.shadow.a * toon.face.z, part);
         let value = (1.0 - depth) * select(away, 1.0, skin || part);
+@if(LOOKDEV)
+        var color = ld_banded(albedo.rgb, sun, lit, ld_value(depth, away, skin || part), sc, N);
+@else
         var color = banded(albedo.rgb, sun, lit, value, sc);
         // A hand-made hair profile replaces the hair's colour and its banding.
         let hand = is_kind(5.0);
@@ -543,6 +553,9 @@ fn fragment(
             if (toon.palette.y > 0.5 && is_palette(tag)) {
                 ink = palette_row(tag, 4, grey_v);
             }
+@if(LOOKDEV)
+            let ink_lit = select(ld_banded(ink, sun, lit, ld_value(depth, away, skin || part), sc, N), ink * sun + ink * sc.fill, hand);
+@else
             let ink_lit = select(banded(ink, sun, lit, value, sc), ink * sun + ink * sc.fill, hand);
             let a = albedo.a;
             out_a = ink_cov + a * (1.0 - ink_cov);
@@ -559,6 +572,42 @@ fn fragment(
         // Hair takes no general rim: its pale cream, added, is several times dark hair's own
         // colour and washes it out. Its one rim is `hair_light`'s, in its own hue (toon.hair.w).
         let rim_strength = select(select(toon.rim.a, toon.face.w, face), 0.0, part || is_kind(4.0) || hand);
+@if(LOOKDEV) {
+        if (toon.character.x > 0.5) {
+            // A character's rim (Settings › Character rim) replaces the classic one, hair too.
+            if (!part) {
+                color = color + ld_char_rim(N, V, L, sun, shadow, lit_albedo, sc, hand || is_kind(4.0)) * (1.0 - ink_cov);
+            }
+        } else {
+            // Scenery keeps a little of the classic rim, so characters part from it.
+            color = color + rim_light(fr, lit, rim_strength * toon.look.w) * sun * (1.0 - ink_cov);
+        }
+        if (!part && !hand && !is_kind(4.0)) {
+            // A cel-stepped highlight by metallic and roughness; scenery's painted metal, copper
+            // and glass (style.rs `Surface`) take their own.
+            var rough = pbr_input.material.perceptual_roughness;
+            var metal = pbr_input.material.metallic;
+            var spec_k = 1.0;
+@if(VERTEX_COLORS) {
+            if (toon.detail.x > 0.5) {
+                let sk = surface_of(in.color.a);
+                if (sk == 11) {
+                    rough = 0.3;
+                    metal = 0.85;
+                } else if (sk == 12) {
+                    rough = 0.34;
+                    metal = 0.9;
+                } else if (sk == 15) {
+                    rough = 0.12;
+                    metal = 0.0;
+                    spec_k = 1.8;
+                }
+            }
+}
+            color = color + ld_specular(N, V, L, sun, lit, lit_albedo, rough, metal, spec_k) * (1.0 - ink_cov);
+        }
+}
+@else
         color = color + rim_light(fr, lit, rim_strength) * sun * (1.0 - ink_cov);
         if (is_kind(4.0)) {
             color = color + hair_light(albedo.rgb, N, V, L, lit, fr, strand_light(in, duv), facing(in), in) * sun * (1.0 - ink_cov);

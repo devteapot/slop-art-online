@@ -34,7 +34,7 @@
 //!
 //! `LIVING_GAME_PERF=noterrain` draws the ground with the plain toon material instead (A/B).
 
-use crate::style::{Toon, ToonParams};
+use crate::style::{Toon, ToonKey, ToonParams};
 use bevy::asset::{embedded_asset, RenderAssetUsages};
 use bevy::image::{CompressedImageFormats, ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor, ImageType};
 use bevy::mesh::{MeshVertexAttribute, MeshVertexBufferLayoutRef, VertexAttributeValues, VertexFormat};
@@ -269,6 +269,7 @@ impl Default for GroundParams {
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+#[bind_group_data(ToonKey)]
 pub struct GroundExt {
     /// The toon parameters, copied from the toon materials (`sync`).
     #[uniform(100)]
@@ -279,6 +280,12 @@ pub struct GroundExt {
     #[texture(102, dimension = "2d_array")]
     #[sampler(103)]
     pub layers: Handle<Image>,
+}
+
+impl From<&GroundExt> for ToonKey {
+    fn from(g: &GroundExt) -> Self {
+        ToonKey { lookdev: g.toon.look.x > 0.5 }
+    }
 }
 
 const SHADER: &str = "embedded://living_game/terrain.wesl";
@@ -293,7 +300,9 @@ impl MaterialExtension for GroundExt {
     }
 
     /// The main pass reads the blend weights; the prepass and shadow pipelines keep Bevy's layout.
-    fn specialize(_: &MaterialExtensionPipeline, descriptor: &mut RenderPipelineDescriptor, layout: &MeshVertexBufferLayoutRef, _: MaterialExtensionKey<Self>) -> Result<(), SpecializedMeshPipelineError> {
+    /// The look-dev light compiles its own fragment shader (`style::ToonKey`).
+    fn specialize(_: &MaterialExtensionPipeline, descriptor: &mut RenderPipelineDescriptor, layout: &MeshVertexBufferLayoutRef, key: MaterialExtensionKey<Self>) -> Result<(), SpecializedMeshPipelineError> {
+        crate::style::lookdev_def(descriptor, key.bind_group_data.lookdev);
         if descriptor.vertex.shader_defs.iter().any(|d| matches!(d, ShaderDefVal::Bool(name, true) if name == "PREPASS_PIPELINE")) {
             return Ok(());
         }
@@ -450,7 +459,7 @@ fn with_mips(base: &[u8], size: u32, layers: usize) -> Vec<u8> {
 fn sync(style: Res<crate::style::Style>, palette: Res<crate::world::Palette>, toons: Res<Assets<Toon>>, ground: Option<Res<GroundMat>>, mut mats: ResMut<Assets<Ground>>) {
     let Some(ground) = ground else { return };
     let Some(src) = toons.get(&palette.vertex) else { return };
-    let key = |t: &ToonParams| [t.shadow, t.rim, t.band, t.extra, t.shade, t.recolor, t.recolor_from, t.atmo, t.face, t.hair, t.detail];
+    let key = |t: &ToonParams| [t.shadow, t.rim, t.band, t.extra, t.shade, t.recolor, t.recolor_from, t.atmo, t.face, t.hair, t.detail, t.look, t.look_light, t.look_ramp];
     let on = if style.enabled { 1.0 } else { 0.0 };
     let Some(m) = mats.get(&ground.0) else { return };
     if key(&m.extension.toon) == key(&src.extension.params) && m.extension.params.fade.w == on {

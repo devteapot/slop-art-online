@@ -18,6 +18,9 @@
 //! - `people=K`: K times the island's people per settlement;
 //! - `nodetail`: no painted detail on scenery models (style.rs); `detailonly=bark+leaves` keeps
 //!   it on only the surfaces named;
+//! - `ldsteps=N`: with the look-dev light (`style::Look`), only its first N parts (1 the
+//!   hemisphere fill and warm/cool split, 2 the ramp, 3 the specular, 4 the rims; style.rs
+//!   `LookParams::of`), to time each part;
 //! - `nocutaway`: tall things between the camera and you stay drawn (photographing your
 //!   character behind a wall or a tree, as other people are seen);
 //! - `nobudget`: the island spawns a chunk's things as soon as their files have loaded, all in
