@@ -1,89 +1,67 @@
-# Stage 1 body
+# Character foundation · Stage 1 body
 
-The foundation is derived from our B2 ring cage. The generator reads rest landmarks from the pinned game's joint-only clip GLB and writes a skinned body with its 87 takes. The head is a blank volume for judging proportions. The underlayer colours label regions of the same surface.
+![Five body mixes in the game at inspection and play distances](contact-sheet.png)
 
-From the repository root, with the dev-box build tools on PATH:
+Each column is one body. The upper rows use the shared daylight framing for front and back, with an extra profile for posture. Near and Middle use the same native-pixel center crop for every character. The viewer frames inspection shots individually.
+
+## Generator
+
+From the repository root on the dev-box:
 
 ```bash
 export PATH="$HOME/.local/share/slop-tools/build-bin:$PATH" JOBS=3
 blender -b -t 3 --python-exit-code 1 -P living/tools/blender/found/body.py -- \
-  living/game/assets/view/char-found/man-l1.glb --preset man --level 1
+  living/game/assets/view/char-found/woman-l2.glb --preset woman --level 2
 ```
 
-Choose `base`, `woman`, `man`, `elder`, or `child`. Use `--height` for final bind height in metres, `--build` from −1 to 1 for slim/heavy, and repeat `--weight Name=0.5` to override a preset target. `--level 1` and `--level 2` apply Catmull–Clark subdivision to the same cage, weights and target shapes. `--rig` selects another copy of the shared library.
+Choose `base`, `woman`, `man`, `elder` or `child`. Supply `--height` in metres, `--build` from −1 to 1, and repeat `--weight Name=value` to override a preset. Both subdivision levels come from the same cage. Each export carries 82 joints, six material regions and nine morph targets. The targets are Sex_Female, Sex_Male, Age_Child, Age_Elder, Build_Heavy, Build_Slim, Face_Round, Face_Long and Jaw_Square. Regenerate when changing shoulder span, age or posture so the skin weights and bind pivots follow the surface.
 
-| Target | Change |
-|---|---|
-| Sex_Male | Wider shoulder caps, deeper ribcage, thicker neck and upper arms, narrower hips |
-| Age_Child | Shorter upper/lower limbs relative to trunk, larger cranium, softer jaw, reduced chest |
-| Age_Elder | Upper back depth, chest, muscle volume and waist |
-| Build_Heavy, Build_Slim | Girth at torso, limbs and neck |
-| Face_Round, Face_Long, Jaw_Square | Placeholder head proportions |
+The female target widens the pelvis and glutes, narrows the clavicles, and shapes the ribcage through the bust and underbust rings. The elder target carries the forward curve from chest to ears, settles the shoulder girdle, and rounds the upper back. The elder preset uses 0.22 Sex_Male. Relative scales on existing joints move the pivots while preserving the library's channels and joint-local translations and rotations. The child has a larger head, narrower clavicles and a softer waist; its shortened long bones and scaled hips travel carry over from the first pass.
 
-The generator keeps joint names, parents, local rest translations, and source animation tracks. A scene parent sets height. The child mix also sets uniform scales at the upper legs and upper arms and scales hips travel by the leg-length ratio through the armature parent, with a reciprocal scale at the hips to preserve trunk size. Generate again when changing child proportions so the rest pivots follow the surface. Other body shape changes use standard glTF morph weights.
+The lateral chest wall now reaches the axilla and the first arm ring begins 9 mm beyond the shoulder pivot, measured along the upper arm. A continuous weight transition reaches from the upper chest across the clavicle into the deltoid. The upper collar follows the clavicle further than the axilla does. The wrist and palm dimensions increase by 11%, and the bare foot and ankle volume by approximately 9% through the two horizontal dimensions. The front collar adds a 5 mm central notch and a 6 mm ridge on the cage before subdivision.
 
-## Provenance
+Blended skinning changes the slope between vertices with different joint weights. The generator derives local shoulder lighting normals from the actual lowered-arm surface, rounds the normal field at the axilla, and carries the adjustment into each shape's normal deltas. The strain measurement uses posed vertex positions.
 
-The geometry is project-generated from parameters. The B2 cage was authored on `bakeoff-B2` at `2fd3cc1249e8a6d5e1d6b4c8464ec6aa9c6b425a`. The only rig and animation input is the project's pinned `lookdev/anim/own-clips.glb`. The six flat material regions require no texture files.
+## Measurements
 
-## Export and playback evidence
+L2 measurements at the exported morph weights. Height is sole to crown. Head, neck and hip landmarks use the dominant joint region. Waist width is the narrowest transverse section between the waistband and lower ribs. Bust is forward projection from the waist front. Head-forward compares the front/back midpoints of head and pelvis; positive points forward. Outer shoulder/hip compares the posed widths of the deltoids and pelvis, measured across the body in the 1-second idle used for the photos. The height bands extend 3.5% of body height above and below the shoulder pivots and 4.6% above and below the hip pivots. The other measurements use the bind surface. [Measurements at both levels](evidence/fixes/proportions.json) · [Measurement implementation](../../living/tools/blender/found/proportions.py)
 
-All ten files contain six materials, 82 skin joints and eight morph targets. Counts and height below come from the written GLBs, after applying the default morph mix and scene scale. The child's arm span is 0.98 times its height. The base's ratio is 1.06.
+| Mix | Height (m) | Heads | Hip / height | Waist / hip | Bust (cm) | Head forward (cm) | Neck width / height | Outer shoulder / hip |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Base | 1.80 | 6.88 | 17.47% | 0.739 | +2.54 | -0.03 | 5.41% | 1.607 |
+| Woman | 1.67 | 6.89 | 19.97% | 0.648 | +4.70 | +0.99 | 5.29% | 1.089 |
+| Man | 1.86 | 6.98 | 17.56% | 0.924 | +2.25 | -0.79 | 7.01% | 1.797 |
+| Elder | 1.70 | 6.98 | 17.84% | 0.812 | 0.00 | +3.83 | 5.56% | 1.353 |
+| Child | 1.20 | 5.28 | 18.75% | 0.863 | -0.12 | -1.22 | 5.20% | 1.414 |
 
-| Mix | Height (m) | L1 triangles | L2 triangles |
-|---|---:|---:|---:|
-| Base | 1.80 | 8,864 | 35,456 |
-| Woman | 1.67 | 8,864 | 35,456 |
-| Man | 1.86 | 8,864 | 35,456 |
-| Elder | 1.70 | 8,864 | 35,456 |
-| Child | 1.20 | 8,864 | 35,456 |
+The woman's waist measures 12.95% of height. The elder's upper back projects 5.89 cm behind the waist, with approximately 3.3 cm of upper-body settle. The child's upper-arm pivot span measures 19.78% of height.
 
-- All ten exports preserve the library's animation channels and sampler bytes. The project's `skeleton_check.py` found zero local joint translation differences across the ten exports and the source library. [Export measurements](evidence/exports.json)
-- Track A's joint hierarchy, local TRS and animation sampler assertions passed on base L1. Its Blender mesh probe played each of 87 actions. `clips_compare.py` found 0.00° rotation and 0.0 cm translation difference across the 87 takes. `clip_check.py` sampled base L1 every other frame in all 87 clips and child L2 in the four poses below. The lowest surface on base L1 relative to its bind floor was +2 mm in walk, +11 mm in run, +18 mm in sit_ground and −5 mm in sword_slash. [Base report](evidence/clips.json) · [Child report](evidence/child-clips.json)
-- The custom parameter entry point was exercised at 1.53 m with `Age_Child=0.4` and build −0.35.
+## Deformation and clip verification
 
-### Deformation
+Shoulder edge length divided by bind length, fifth to 95th percentile across both sides at every frame. The target interval is 0.70–1.25. The regional JSON also gives global extrema and the ground-sit and slash results for the shoulders, hips, knees, hands and saddle.
 
-Base L1, posed edge length divided by rest length, fifth through 95th percentile. The measurement covers both sides at every frame, 30 fps. Edges are selected by rest midpoint distance to the joint, as specified in `living/tools/blender/found/strain.py`. A ratio of 1 preserves edge length. [Counts, frames and extrema](evidence/strain.json)
-
-| Clip | Shoulders | Hips | Knees | Hands |
+| Mix | L1 walk | L2 walk | L1 run | L2 run |
 |---|---:|---:|---:|---:|
-| walk | 0.68–1.24 | 0.90–1.10 | 0.81–1.29 | 0.94–1.07 |
-| run | 0.68–1.24 | 0.86–1.13 | 0.69–1.42 | 0.93–1.08 |
-| sit_ground | 0.65–1.25 | 0.50–1.40 | 0.50–1.61 | 0.91–1.11 |
-| sword_slash | 0.71–1.21 | 0.87–1.18 | 0.82–1.26 | 0.82–1.29 |
+| Base | 0.7259–1.1117 | 0.7196–1.1129 | 0.7201–1.1019 | 0.7123–1.1002 |
+| Woman | 0.7355–1.1867 | 0.7233–1.2209 | 0.7308–1.1414 | 0.7236–1.1636 |
+| Man | 0.7396–1.1504 | 0.7418–1.1620 | 0.7251–1.1355 | 0.7229–1.1413 |
+| Elder | 0.7621–1.1003 | 0.7561–1.0971 | 0.7538–1.1026 | 0.7457–1.0995 |
+| Child | 0.7012–1.2388 | 0.7065–1.2464 | 0.7238–1.2178 | 0.7201–1.2239 |
 
-A four-corner saddle between the thighs shares the pelvis and femur weights across the centerline. In a seated frame-20 probe the most stretched edge near the crotch fell from 6.23× to 2.24×. Across the full ground sit the saddle still reaches 0.23× compression and 2.24× stretch, and the knees reach 1.98× stretch. The sword slash has a hand-region outlier at 2.99×. These measurements describe surface distortion. Collision testing and visual acceptance remain separate checks.
+Across the ten meshes, child L2 has the largest saddle stretch in ground sit (2.42× on one edge). The largest hand stretch in sword slash is 7.29× on one man L2 edge, with a hand-region p95 of 1.56× or less across all meshes. The lowest point on child L2 reaches 1.2 cm below its bind floor during walk.
 
-To reproduce the regional measurements:
+The source library has 87 takes. The base passed Track A's joint hierarchy, rest-transform, sampler-byte and Blender playback assertions. Each of the ten exports was compared with the pinned library using `skeleton_check.py` and `clips_compare.py`, then played through Blender. Base L1 was also played with the default `clip_check.py` options. All ten were played with `--bind-scales`, which restores each bone's authored bind transform from a copy with the animation tracks stripped. The regional strain probe uses this procedure directly. This preserves the authored shoulder, thorax and limb scales in Blender. [Playback and structure by export](evidence/fixes/playback.json) · [Regional edge measurements](evidence/fixes/strain.json)
+
+To reproduce a regional check:
 
 ```bash
 blender -b -t 3 --python-exit-code 1 -P living/tools/blender/found/strain.py -- \
-  "$PWD/living/game/assets/view/char-found/base-l1.glb" /tmp/foundation-strain.json
+  "$PWD/living/game/assets/view/char-found/woman-l2.glb" /tmp/woman-strain.json
+blender -b -t 3 --python-exit-code 1 -P living/tools/blender/clip_check.py -- \
+  --bind-scales --in "$PWD/living/game/assets/view/char-found/woman-l2.glb" --out /tmp/woman-clips.json
+python3 living/tools/blender/found/proportions.py living/game/assets/view/char-found/*-l2.glb
 ```
 
-### Game photographs
+Both levels of every mix were photographed with the dev-box `~/.local/state/bakeoff/shoot.sh`, `shots.env`, a worktree-local Cargo target and eight build jobs under the shared build gate. The shared run produced 170 stills; five additional L2 profiles show the chest, back and head position. The head and hands remain placeholders. The viewer's unskinned framing box for the child is larger than the child's morphed height. At Near, the woman’s hip flare, the man’s broad shoulder caps, the elder’s forward head and the child’s short limbs are visible. At Middle, the elder and base are the closest pair. The profile gives the clearest view of the stoop. Small flank shadows remain in front daylight, especially beside the woman’s bust.
 
-![Base, woman, man, elder and child in the game renderer, with four motion samples](contact-sheet.jpg)
-
-The photographer uses the dev-box bake-off framing at 1600 × 900, game hour 11. It frames each model independently. The child's reported framing height is 1.281 m because the viewer fits the undeformed mesh bounding boxes. An independent Blender import of the GLB with animations stripped measured the morphed, skinned child bind surface at 1.200 m. The stock Blender clip probe resets local bone scales before playback. Repeating its four child clips with the authored bind transforms restored gives the [child playback measurements](evidence/child-rest-scale-clips.json). Scaling the hips travel reduced the child’s ground-sit floor penetration from 104 mm to 2 mm. For the other four mixes those two heights agree to the shown precision.
-
-The shoulder outline and heavier ribcage distinguish the man from the base. The elder's stoop reads more clearly in profile than from the front. Sleeve roots still form abrupt dark wedges when the arms lower. The calf, ankle and foot volumes read in silhouette, while the front lighting gives little definition to the clavicle. The blank head and inherited B2 fingers are placeholders for later stages.
-
-To reproduce the shared photographs from a fresh output directory on the dev-box:
-
-```bash
-export PATH="$HOME/.local/share/slop-tools/build-bin:$PATH" JOBS=3
-export CARGO_TARGET_DIR="$PWD/.local/target-char-found" CARGO_BUILD_JOBS=8
-models=()
-for level in 1 2; do
-  for preset in base woman man elder child; do
-    model="view/char-found/$preset-l$level.glb"
-    blender -b -t 3 --python-exit-code 1 -P living/tools/blender/found/body.py -- \
-      "living/game/assets/$model" --preset "$preset" --level "$level" || exit 1
-    models+=("$model")
-  done
-done
-# shoot.sh takes the shared build gate around both game invocations.
-~/.local/state/bakeoff/shoot.sh "$PWD/.local/tmp/char-found/photos" "${models[@]}"
-```
+A second generation of woman L2 produced an identical GLB. The geometry and materials are project-generated. The source cage derives from our B2 at `2fd3cc1249e8a6d5e1d6b4c8464ec6aa9c6b425a`. The pinned `lookdev/anim/own-clips.glb` supplies the joint landmarks and animation. [Original Stage 1 measurements and photographs](stage1-initial.md)

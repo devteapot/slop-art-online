@@ -44,14 +44,26 @@ BASE = {
     "butt": 1.0,
 }
 MORPHS = {
+    "Sex_Female": {
+        "underarm": 0.008,
+        "underbust": 0.015,
+        "hip": 1.15,
+        "waist": 1.005,
+        "bust": 2.05,
+        "chest_d": 1.08,
+        "butt": 1.18,
+        "sh_w": -0.052,
+        "chest": 0.93,
+        "arm": 0.83,
+    },
     "Sex_Male": {
-        "sh_w": 0.042,
+        "sh_w": 0.016,
         "chest": 1.27,
         "chest_d": 1.18,
         "bust": 0.0,
         "waist": 1.19,
         "hip": 0.93,
-        "neck": 1.40,
+        "neck": 1.27,
         "arm": 1.29,
         "leg": 1.09,
         "hand": 1.13,
@@ -60,16 +72,17 @@ MORPHS = {
         "chin": 0.008,
         "brow": 0.004,
         "cheek": -0.002,
-        "head": 1.0,
+        "head": 0.954,
         "butt": 0.9,
     },
     "Age_Child": {
         "child": True,
-        "head": 1.21,
-        "sh_w": -0.012,
+        "underarm": 0.012,
+        "head": 1.32,
+        "sh_w": -0.030,
         "chest": 0.95,
         "bust": 0.0,
-        "waist": 1.14,
+        "waist": 1.33,
         "hip": 0.90,
         "belly": 0.008,
         "neck": 0.92,
@@ -83,17 +96,20 @@ MORPHS = {
         "butt": 0.9,
     },
     "Age_Elder": {
-        "stoop": 0.030,
+        "stoop": 0.044,
+        "head": 0.94,
+        "chest": 0.90,
+        "chest_d": 0.91,
         "bust": 0.45,
         "waist": 1.13,
-        "belly": 0.012,
+        "belly": 0.024,
         "neck": 0.95,
-        "arm": 0.92,
-        "leg": 0.93,
+        "arm": 0.80,
+        "leg": 0.84,
         "cheek": -0.004,
         "chin": 0.003,
         "jaw": 1.02,
-        "sh_w": -0.008,
+        "sh_w": -0.025,
         "butt": 0.92,
     },
     "Build_Heavy": {
@@ -157,7 +173,7 @@ HEAD = [
     (0.178, 0.184, 0.054, 0.060, 0.066, 2.0, "cr"),
     (0.194, 0.196, 0.030, 0.032, 0.036, 2.0, "cr"),
 ]
-HS = 1.06
+HS = 1.185
 YS = 0.010
 LEGPHI = [306, 342, 18, 54, 90, 126, 162, 198, 234, 270]
 ARMALPHA = [-72, -36, 0, 36, 72, 108, 144, 180, 216, 252]
@@ -180,6 +196,8 @@ FOOT = [  # centre s, centre z, axis (ds, dz), lateral radius
     (0.185, 0.018, (0.0, 0.012), 0.027),
 ]
 NLEG = len(LEG) + len(FOOT)
+# Grow the two horizontal dimensions together; preserve sole and ankle elevations.
+FOOT_PLAN_SCALE = math.sqrt(1.09)
 
 
 def sup(theta, rx, f, b, cy, n):
@@ -224,19 +242,26 @@ def positions(P, joints):
             f *= P["chest_d"]
             b *= P["chest_d"]
         if g in ("nb", "neck"):
-            rx *= P["neck"]
-            f *= P["neck"]
-            b *= P["neck"]
-        st = 0.0
+            rx *= 1.26 * P["neck"]
+            f *= 1.15 * P["neck"]
+            b *= 1.15 * P["neck"]
+        # Ease the rib cage forward and settle the shoulder girdle into the back curve.
+        bend = {"chest": 0.35, "sh": 0.75, "nb": 0.95, "neck": 1.10}.get(g, 0.0)
+        st = -P["stoop"] * bend
         if g in ("chest", "sh"):
-            st = -P["stoop"] * (0.35 if g == "chest" else 0.6)
-            b += P["stoop"] * (0.5 if g == "chest" else 0.9)
-            f -= P["stoop"] * 0.3
-        if g == "nb":
-            st = -P["stoop"] * 0.3
+            b += P["stoop"] * (1.58 if g == "chest" else 2.08)
+            f -= P["stoop"] * 0.32
         for j in range(NT):
             th = j * 2 * math.pi / NT
             x, y = sup(th, rx, f, b, cy, 2.5)
+            if 7 <= k <= 10:
+                # Widen only the lateral wall; keep the pectoral plane separate.
+                wall = SJ[0] + P["sh_w"] - (0.043, 0.029, 0.022, 0.034)[k - 7]
+                x += np.sign(x) * abs(math.sin(th)) ** 4 * (wall - rx)
+            if k in (10, 11) and math.cos(th) > 0:
+                y += 0.005 * math.cos(th) ** 12 - 0.006 * math.sin(2 * th) ** 2
+            if 5 <= k <= 10:
+                y += P["stoop"] * (0.12, 0.37, 0.54, 0.54, 0.41, 0.19)[k - 5] * max(0.0, -math.cos(th)) ** 2
             zz = z + dzb * (1 - math.cos(th)) / 2
             # Taper the deltoid into the acromion and raise the outer clavicle.
             if k in (9, 10) and math.cos(th) > 0:
@@ -250,11 +275,18 @@ def positions(P, joints):
                 y -= P["bust"] * {1: 0.022, 2: 0.030, 3: 0.007}[jj] * {5: 0.35, 6: 1.0, 7: 0.5}[k]
                 if k == 5:
                     zz -= 0.006 * P["bust"]
+                    fold = P.get("underbust", 0.0) * {1: 0.85, 2: 1.0, 3: 0.45}[jj]
+                    y += fold
+                    zz += fold
+                if k == 7:
+                    y -= 0.28 * P.get("underbust", 0.0)
+            zz -= P["stoop"] * min(0.78, bend)
             V[("T", k, j)] = np.array([x, y + st, zz])
     V[("C",)] = np.array([0.020, 0.008, HIP[2] - 0.111])
     # ---- head (rings NTOR .. NTOR+len(HEAD)-1, then the pole)
-    hs = HS * P["head"]
-    st = 0.0
+    hs = (1.139 if P.get("child") else HS) * P["head"]
+    st = -1.25 * P["stoop"]
+    head_offset = np.array([0, st, -0.78 * P["stoop"]])
     for i, (zf, zb, w, f, b, n, g) in enumerate(HEAD):
         if g in ("chin", "jaw"):
             w *= P["jaw"]
@@ -273,8 +305,8 @@ def positions(P, joints):
             th = j * 2 * math.pi / NT
             x, y = sup(th, w, f, b, 0.0, n)
             z = zf * (1 + math.cos(th)) / 2 + zb * (1 - math.cos(th)) / 2
-            V[("T", NTOR + i, j)] = HJ + hs * np.array([x, y + YS, z]) + np.array([0, st, 0])
-    V[("HP",)] = HJ + hs * np.array([0, YS + 0.002, 0.202]) + np.array([0, st, 0])
+            V[("T", NTOR + i, j)] = HJ + hs * np.array([x, y + YS, z]) + head_offset
+    V[("HP",)] = HJ + hs * np.array([0, YS + 0.002, 0.202]) + head_offset
     # ---- left arm: rings 1..11 (ring 0 is the armhole in the torso)
     au = nrm(EJ - SJ)
     al = nrm(WJ - EJ)
@@ -289,7 +321,7 @@ def positions(P, joints):
         hn = -hn
     X = np.array([0.0, 0.0, 1.0])
     arm_spec = [  # centre, tangent, radius n, radius u, twist toward the hand's frame
-        (SJ + au * 0.028 + [P["sh_w"] * 0.35, 0, -0.003], au, 0.058, 0.054, 0.0, X),
+        (SJ + au * 0.009 + [0, 0, -0.009], au, 0.058, 0.054, 0.0, X),
         (lerp(SJ, EJ, 0.31), au, 0.053, 0.047, 0.0, None),
         (lerp(SJ, EJ, 0.61), au, 0.044, 0.044, 0.1, None),
         (lerp(SJ, EJ, 0.89), au, 0.033, 0.034, 0.2, None),
@@ -299,16 +331,25 @@ def positions(P, joints):
         (lerp(EJ, WJ, 0.78), al, 0.024, 0.028, 0.9, None),
     ]
     for r, (c, t, rn, ru, tw, nfix) in enumerate(arm_spec, start=1):
+        if r == 8:
+            rn *= 1.11
+            ru *= 1.11
         n = nfix if nfix is not None else lerp(X, hn, tw)
         n = nrm(n - n.dot(t) * t)
         u = nrm(np.cross(n, t))
         for i, a in enumerate(ARMALPHA):
             a = math.radians(a)
+            # A shallower inner deltoid preserves clearance on the narrower
+            # shoulder girdles when the arm lowers across the flank.
+            relief = P.get("underarm", 0.0) * max(0.0, -math.cos(a)) ** 2 * max(0.0, (3 - r) / 2)
             V[("A", r, i)] = (
-                c + (rn * P["arm"] / 0.936) * math.cos(a) * n + (ru * P["arm"] / 0.936) * math.sin(a) * u
+                c
+                + (rn * P["arm"] / 0.936) * math.cos(a) * n
+                + (ru * P["arm"] / 0.936) * math.sin(a) * u
+                + relief * X
             )
     # the hand: wrist ring 9, mid palm 10, web ring 11, in the hand's frame (hd down, hu index->little, hn back)
-    hsz = P["hand"]
+    hsz = 1.11 * P["hand"]
 
     def hp(d, s, n):
         return WJ + hsz * (hd * d + hu * s + hn * n)
@@ -381,7 +422,7 @@ def positions(P, joints):
         m = P["leg"] * (0.5 + 0.5 * P["hip"] if r == 1 else 1.0) / 0.936
         cx = c[0]
         if g == "ankle":
-            m = (0.5 + 0.5 * P["leg"]) / 0.936
+            m = FOOT_PLAN_SCALE * (0.5 + 0.5 * P["leg"]) / 0.936
         for i, ph in enumerate(LEGPHI):
             ph = math.radians(ph)
             x = cx + rx * m * math.sin(ph)
@@ -400,7 +441,7 @@ def positions(P, joints):
     toe = joints["J_Bip_L_ToeBase"] - AJ
     ff = nrm([toe[0], toe[1], 0])
     fp = np.array([-ff[1], ff[0], 0])
-    fs = P["foot"]
+    fs = FOOT_PLAN_SCALE * P["foot"]
     for q, (s, zc, (ads, adz), rl) in enumerate(FOOT):
         r = len(LEG) + 1 + q
         for i, ph in enumerate(LEGPHI):
@@ -412,7 +453,7 @@ def positions(P, joints):
             )
     V[("LP",)] = np.array([AJ[0], AJ[1], 0]) + ff * 0.203 * fs + [0, 0, 0.016]
     # ---- ear (left): a small closed lobe, four rings of four and a tip
-    ec = HJ + hs * np.array([0.0775, YS + 0.014, 0.052]) + [0, st, 0]
+    ec = HJ + hs * np.array([0.0775, YS + 0.014, 0.052]) + head_offset
     for r, (out, back, hh, ww) in enumerate(
         [(-0.006, 0, 0.013, 0.007), (0.003, 0.003, 0.017, 0.009), (0.007, 0.007, 0.015, 0.008)]
     ):
@@ -423,6 +464,11 @@ def positions(P, joints):
         for v in V.values():
             v[0] -= 0.18 * max(v[0] - SJ[0], 0.0)
             v[2] -= 0.17 * min(v[2], HIP[2])
+    # Translate the upper limb as a unit with its narrower clavicle, preserving
+    # elbow and wrist placement in the character-specific bind.
+    for key, point in V.items():
+        if key[0] in ("A", "F", "TH"):
+            point += [P["sh_w"], -0.75 * P["stoop"], -0.78 * P["stoop"]]
     return V
 
 

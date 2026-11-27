@@ -26,6 +26,7 @@ It measures; it does not judge. docs/CHARACTERS.md and the check pages say what 
 import argparse
 import json
 import sys
+from pathlib import Path
 
 import bpy
 import numpy as np
@@ -40,7 +41,14 @@ def main():
     ap.add_argument("--clips", default="")
     ap.add_argument("--out")
     ap.add_argument("--step", type=int, default=2, help="sample every Nth frame")
+    ap.add_argument("--bind-scales", action="store_true", help="restore authored joint scales for the resting pose")
     a = ap.parse_args(argv)
+    bind_basis = {}
+    if a.bind_scales:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from bind_pose import read_bind_basis
+
+        bind_basis = read_bind_basis(a.inp, bone_heuristic="BLENDER", guess_original_bind_pose=False, disable_bone_shape=True)
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene
     scene.render.fps = FPS  # before the import: it places keys by the scene's rate
@@ -73,7 +81,10 @@ def main():
     scene.frame_set(0)
     ad.action = None
     for pb in arm.pose.bones:
-        pb.matrix_basis.identity()
+        if a.bind_scales:
+            pb.matrix_basis = bind_basis[pb.name]
+        else:
+            pb.matrix_basis.identity()
     dg = bpy.context.evaluated_depsgraph_get()
     dg.update()
     floor = min(float(world(o.evaluated_get(dg))[:, 2].min()) for o in meshes)

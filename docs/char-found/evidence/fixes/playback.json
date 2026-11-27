@@ -1,0 +1,172 @@
+{
+  "base-l1": {
+    "sha256": "e8be3ffd2cb747c3a7b2ab80191d4f6170a5b6222f1675bf5e445d4ccaf85093",
+    "triangles": 8864,
+    "materials": 6,
+    "joints": 82,
+    "morphs": 9,
+    "played": 87,
+    "identical_source_clips": true,
+    "worst_rotation_deg": 0.0,
+    "worst_translation_cm": 0.0,
+    "minimum_surface_vs_bind_floor_cm": {
+      "walk": 0.2,
+      "run": 1.1,
+      "sit_ground": 1.4,
+      "sword_slash": -0.5
+    }
+  },
+  "base-l2": {
+    "sha256": "4be96b6f371231ede9ad1b475d408069e654b590b23f46ec1922112eee4cb687",
+    "triangles": 35456,
+    "materials": 6,
+    "joints": 82,
+    "morphs": 9,
+    "played": 87,
+    "identical_source_clips": true,
+    "worst_rotation_deg": 0.0,
+    "worst_translation_cm": 0.0,
+    "minimum_surface_vs_bind_floor_cm": {
+      "walk": 0.2,
+      "run": 1.1,
+      "sit_ground": 1.4,
+      "sword_slash": -0.5
+    }
+  },
+  "child-l1": {
+    "sha256": "f66f414e461da255f03dd7c0efcefece960de1200de4724e5740f3cd920ffbc6",
+    "triangles": 8864,
+    "materials": 6,
+    "joints": 82,
+    "morphs": 9,
+    "played": 87,
+    "identical_source_clips": true,
+    "worst_rotation_deg": 0.0,
+    "worst_translation_cm": 0.0,
+    "minimum_surface_vs_bind_floor_cm": {
+      "walk": -1.2,
+      "run": -1.0,
+      "sit_ground": -0.5,
+      "sword_slash": -0.2
+    }
+  },
+  "child-l2": {
+    "sha256": "8c4c7c3f1a23a3295e789b851d60f83fd19b65a72be024c448169b73824309ea",
+    "triangles": 35456,
+    "materials": 6,
+    "joints": 82,
+    "morphs": 9,
+    "played": 87,
+    "identical_source_clips": true,
+    "worst_rotation_deg": 0.0,
+    "worst_translation_cm": 0.0,
+    "minimum_surface_vs_bind_floor_cm": {
+      "walk": -1.2,
+      "run": -1.0,
+      "sit_ground": -0.5,
+      "sword_slash": -0.2
+    }
+  },
+  "elder-l1": {
+    "sha256": "723cf8550c09dfdd16a0698f1ed735f0409a9ebb9f52e53cb726b207b27f281b",
+    "triangles": 8864,
+    "materials": 6,
+    "joints": 82,
+    "morphs": 9,
+    "played": 87,
+    "identical_source_clips": true,
+    "worst_rotation_deg": 0.0,
+    "worst_translation_cm": 0.0,
+    "minimum_surface_vs_bind_floor_cm": {
+      "walk": 0.2,
+      "run": 1.0,
+      "sit_ground": 1.2,
+      "sword_slash": -0.5
+    }
+  },
+  "elder-l2": {
+    "sha256": "c5468dc120e833a633ab20df080ff27c54ed3a59d6c0303a708ef552a238395c",
+    "triangles": 35456,
+    "materials": 6,
+    "joints": 82,
+    "morphs": 9,
+    "played": 87,
+    "identical_source_clips": true,
+    "worst_rotation_deg": 0.0,
+    "worst_translation_cm": 0.0,
+    "minimum_surface_vs_bind_floor_cm": {
+      "walk": 0.2,
+      "run": 1.0,
+      "sit_ground": 1.2,
+      "sword_slash": -0.5
+    }
+  },
+  "man-l1": {
+    "sha256": "13245d831163e12f8379dea9e2c2aa88ee389ada1467e98c6868b6032c80df74",
+    "triangles": 8864,
+    "materials": 6,
+    "joints": 82,
+    "morphs": 9,
+    "played": 87,
+    "identical_source_clips": true,
+    "worst_rotation_deg": 0.0,
+    "worst_translation_cm": 0.0,
+    "minimum_surface_vs_bind_floor_cm": {
+      "walk": 0.2,
+      "run": 0.3,
+      "sit_ground": 0.5,
+      "sword_slash": -0.5
+    }
+  },
+  "man-l2": {
+    "sha256": "3e684d60c141c4f2b6f5a330e80a557c00c52054e4314afa7860b57cdb6099d5",
+    "triangles": 35456,
+    "materials": 6,
+    "joints": 82,
+    "morphs": 9,
+    "played": 87,
+    "identical_source_clips": true,
+    "worst_rotation_deg": 0.0,
+    "worst_translation_cm": 0.0,
+    "minimum_surface_vs_bind_floor_cm": {
+      "walk": 0.2,
+      "run": 0.2,
+      "sit_ground": 0.5,
+      "sword_slash": -0.5
+    }
+  },
+  "woman-l1": {
+    "sha256": "55e2a80587c60ad0c9f788237b0baedfa190aee0ebef2c6398b9971a0beb1fcd",
+    "triangles": 8864,
+    "materials": 6,
+    "joints": 82,
+    "morphs": 9,
+    "played": 87,
+    "identical_source_clips": true,
+    "worst_rotation_deg": 0.0,
+    "worst_translation_cm": 0.0,
+    "minimum_surface_vs_bind_floor_cm": {
+      "walk": 0.2,
+      "run": 1.0,
+      "sit_ground": 1.3,
+      "sword_slash": -0.4
+    }
+  },
+  "woman-l2": {
+    "sha256": "1d5459f63f573f8123ab29d36ae54ee1d9b4dd6e01e94fd760b5fbd459fc5e35",
+    "triangles": 35456,
+    "materials": 6,
+    "joints": 82,
+    "morphs": 9,
+    "played": 87,
+    "identical_source_clips": true,
+    "worst_rotation_deg": 0.0,
+    "worst_translation_cm": 0.0,
+    "minimum_surface_vs_bind_floor_cm": {
+      "walk": 0.2,
+      "run": 1.0,
+      "sit_ground": 1.3,
+      "sword_slash": -0.4
+    }
+  }
+}

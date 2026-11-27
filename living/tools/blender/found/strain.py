@@ -7,7 +7,11 @@ from pathlib import Path
 import bpy
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from bind_pose import read_bind_basis
+
 source, output = sys.argv[sys.argv.index("--") + 1 :]
+bind = read_bind_basis(source, disable_bone_shape=True, guess_original_bind_pose=False)
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
 scene.render.fps = 30
@@ -19,7 +23,7 @@ for tr in ad.nla_tracks:
     tr.mute = True
 ad.action = None
 for bone in arm.pose.bones:
-    bone.matrix_basis.identity()
+    bone.matrix_basis = bind[bone.name]
 bpy.context.view_layer.update()
 edges = np.asarray([tuple(e.vertices) for e in body.data.edges])
 
@@ -84,4 +88,34 @@ for clip in ["walk", "run", "sit_ground", "sword_slash"]:
         }
         for k, v in samples.items()
     }
+# At the lowered-arm idle used in the photo, measure the outer deltoid and
+# pelvis envelopes transverse to the body's facing. Exclude hands beside hips.
+idle = next(track.strips[0] for track in ad.nla_tracks if track.name == "idle")
+ad.action, ad.action_slot = idle.action, idle.action_slot
+scene.frame_set(scene.render.fps)
+posed = coords()
+height = np.ptp(p[:, 2])
+
+
+def pivots(bone):
+    return np.array([tuple(arm.matrix_world @ arm.pose.bones[f"J_Bip_{side}_{bone}"].head) for side in "LR"])
+
+
+shoulders = pivots("UpperArm")
+transverse = shoulders[0] - shoulders[1]
+transverse[2] = 0
+transverse /= np.linalg.norm(transverse)
+cap = abs(posed[:, 2] - shoulders[:, 2].mean()) < 0.035 * height
+pelvis = abs(posed[:, 2] - pivots("UpperLeg")[:, 2].mean()) < 0.046 * height
+for vertex in body.data.vertices:
+    group = max(vertex.groups, key=lambda g: g.weight)
+    bone = body.vertex_groups[group.group].name.split("_")[-1]
+    pelvis[vertex.index] &= bone in ("Hips", "Spine", "UpperLeg")
+cap_width = np.ptp(posed[cap] @ transverse)
+hip_width = np.ptp(posed[pelvis] @ transverse)
+report["idle_silhouette"] = {
+    "outer_shoulder_m": round(float(cap_width), 4),
+    "outer_hip_m": round(float(hip_width), 4),
+    "shoulder_hip": round(float(cap_width / hip_width), 4),
+}
 Path(output).write_text(json.dumps(report, indent=2) + "\n")

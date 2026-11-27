@@ -12,14 +12,14 @@ from mathutils import Matrix, Quaternion, Vector
 
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE.parents[1])]
-from cage import BASE, FN, MORPHS, NTOR, full, srgb, topology
-from merge_primitives import append_accessor, read_glb, write_glb
+from cage import ARMALPHA, BASE, FN, MORPHS, NT, NTOR, full, srgb, topology
+from merge_primitives import append_accessor, read_accessor, read_glb, write_glb
 
 PRESETS = {
     "base": (1.80, {}),
-    "woman": (1.67, {"Build_Slim": 0.23, "Face_Round": 0.16}),
+    "woman": (1.67, {"Sex_Female": 1.0, "Face_Round": 0.16}),
     "man": (1.86, {"Sex_Male": 1.0, "Jaw_Square": 0.65, "Build_Heavy": 0.20}),
-    "elder": (1.70, {"Sex_Male": 0.7, "Age_Elder": 1.0, "Face_Long": 0.5}),
+    "elder": (1.70, {"Sex_Male": 0.22, "Age_Elder": 1.0, "Face_Long": 0.5}),
     "child": (1.20, {"Age_Child": 1.0, "Face_Round": 0.65}),
 }
 MATERIALS = {
@@ -32,11 +32,13 @@ MATERIALS = {
 }
 
 
-def rest(doc):
+def joint_frames(doc, overrides=None):
     matrices = {}
 
     def visit(i, parent):
         node = doc["nodes"][i]
+        if overrides and i in overrides:
+            node = node | overrides[i]
         x, y, z, w = node.get("rotation", [0, 0, 0, 1])
         local = Matrix.LocRotScale(
             Vector(node.get("translation", [0, 0, 0])),
@@ -55,7 +57,9 @@ def axes(points):
     return np.asarray(points)[..., [0, 2, 1]] * [-1, 1, 1]
 
 
-def weights(key, point):
+def weights(key, point, mix):
+    child = mix.get("Age_Child", 0)
+    collar_influence = 1 - 0.57 * mix.get("Sex_Female", 0)
     tag, *idx = key
     side = "R" if tag.startswith("R") else "L"
     tag = tag.removeprefix("R")
@@ -71,10 +75,41 @@ def weights(key, point):
     if tag in ("F", "TH"):
         finger, r = (FN[idx[0]], idx[1]) if tag == "F" else ("Thumb", idx[0])
         return along([limb + finger + str(i) for i in (1, 2, 3)], [1, 2.8, 4], r)
+    if tag == "A" and idx[0] <= 3 or tag == "T" and 5 <= idx[0] <= 10:
+        x = abs(point[0])
+        side = "L" if point[0] >= 0 else "R"
+        # Spread the change in rotation from sternum to upper arm. A sharp
+        # transition at the sleeve seam bunches the underside as the arm drops.
+        cuff = np.clip((x - 0.045) / 0.12, 0.0, 1.0)
+        upper = np.interp(x, [0.045, 0.168, 0.235, 0.37], [0.0, 0.82, 0.85, 1.0])
+        if tag == "T":
+            fade = np.clip((idx[0] - 4) / 3, 0.0, 1.0)
+            cuff *= fade
+            upper *= fade
+            # Near the collar, head movement and arm lowering diverge.
+            # Keep the upper acromion with the clavicle; the axilla follows the arm.
+            upper *= 1 - collar_influence * np.interp(idx[0], [8, 9, 10], [0.0, 0.28, 0.68])
+        else:
+            cap_length = 3 - child
+            upper *= 1.0 - 0.42 * collar_influence * max(0.0, np.cos(np.radians(ARMALPHA[idx[1]]))) * max(
+                0.0, (cap_length - idx[0]) / (cap_length - 1)
+            )
+        if child:
+            # The juvenile neck occupies more of the shoulder span. Anchor the
+            # medial chest to the clavicle and finish the blend on the deltoid.
+            if tag == "T":
+                lateral = abs(np.sin(idx[1] * 2 * np.pi / NT))
+                transfer = 0.10 + 0.52 * lateral**4
+            else:
+                transfer = np.interp(idx[0], [1, 2, 3], [0.86, 1.0, 1.0])
+            upper *= 1 - child * (1 - transfer)
+        return {
+            center + "UpperChest": 1 - cuff,
+            f"J_Bip_{side}_Shoulder": cuff - upper,
+            f"J_Bip_{side}_UpperArm": upper,
+        }
     if tag == "A":
         r = idx[0]
-        if r <= 3:
-            return along([limb + "Shoulder", limb + "UpperArm"], [-0.8, 2], r)
         if r <= 7:
             return along([limb + "UpperArm", limb + "LowerArm"], [3.7, 6.3], r)
         return along([limb + "LowerArm", limb + "Hand"], [8, 10], r)
@@ -104,15 +139,6 @@ def weights(key, point):
     if tag in ("HP", "E") or idx[0] >= NTOR:
         return {center + "Head": 1}
     r = idx[0]
-    if 7 <= r <= 10:
-        cuff = np.clip((abs(point[0]) - 0.063) / 0.074, 0, 1)
-        side = "L" if point[0] >= 0 else "R"
-        upper = cuff * (0.27 if r <= 8 else 0.14)
-        return {
-            center + "UpperChest": 1 - cuff,
-            f"J_Bip_{side}_Shoulder": cuff - upper,
-            f"J_Bip_{side}_UpperArm": upper,
-        }
     return along(
         [center + n for n in ["Hips", "Spine", "Chest", "UpperChest", "Neck", "Head"]],
         [1, 3, 6, 10, 12.5, 14],
@@ -150,9 +176,26 @@ def subdivide(points, faces, skin, level):
     return ob, evaluate
 
 
+def lowered_arm_transforms(doc, buf, indices, mats, js, ws):
+    """Actual skin matrices from the shared standing idle, used for lighting only."""
+    take = next(a for a in doc["animations"] if a["name"] == "idle")
+    pose = {}
+    for channel in take["channels"]:
+        sampler = take["samplers"][channel["sampler"]]
+        times, _ = read_accessor(doc, buf, sampler["input"])
+        values, _ = read_accessor(doc, buf, sampler["output"])
+        frame = int(np.argmin(abs(np.array(times) - 1.0)))
+        target = channel["target"]
+        width = 4 if target["path"] == "rotation" else 3
+        pose.setdefault(target["node"], {})[target["path"]] = values[frame * width : (frame + 1) * width]
+    posed = joint_frames(doc, pose)
+    palette = np.array([np.array(posed[i] @ mats[i].inverted()) for i in indices])
+    return np.einsum("vi,vijk->vjk", ws, palette[js])
+
+
 def generate(args):
     doc, buf = read_glb(args.rig)
-    mats = rest(doc)
+    mats = joint_frames(doc)
     indices = [i for i in mats if doc["nodes"][i]["name"] != "Armature"]
     assert len(indices) == 82
     names = [doc["nodes"][i]["name"] for i in indices]
@@ -166,8 +209,18 @@ def generate(args):
         verts = full(params, joints)
         return np.array([verts[k] for k in keys])
 
+    height, mix = PRESETS[args.preset]
+    mix = dict(mix)
+    for expression in args.weight:
+        name, val = expression.split("=")
+        if name not in MORPHS or not 0 <= float(val) <= 1:
+            raise ValueError(expression)
+        mix[name] = float(val)
+    if args.build is not None:
+        mix["Build_Heavy"] = max(args.build, 0)
+        mix["Build_Slim"] = max(-args.build, 0)
     points = coords(BASE)
-    skin = [weights(k, p) for k, p in zip(keys, points)]
+    skin = [weights(k, p, mix) for k, p in zip(keys, points)]
     ob, evaluate = subdivide(points, faces, skin, args.level)
 
     def surface(coords):
@@ -191,22 +244,87 @@ def generate(args):
         code = {5126: "f", 5123: "H"}[ct]
         return append_accessor(doc, buf, array(code, np.asarray(values).ravel()), ct, typ, False)
 
-    height, mix = PRESETS[args.preset]
-    mix = dict(mix)
-    for expression in args.weight:
-        name, val = expression.split("=")
-        if name not in MORPHS or not 0 <= float(val) <= 1:
-            raise ValueError(expression)
-        mix[name] = float(val)
-    if args.build is not None:
-        mix["Build_Heavy"] = max(args.build, 0)
-        mix["Build_Slim"] = max(-args.build, 0)
+    # The child's rest offsets follow its shorter limbs. Hips motion is shared;
+    # a constant armature offset keeps the soles at ground level.
+    child = mix.get("Age_Child", 0)
+    root = next(i for i, n in enumerate(doc["nodes"]) if n["name"] == "Armature")
+    doc["nodes"][root]["translation"] = [0, -0.17 * joints["J_Bip_L_UpperLeg"][2] * child, 0]
+    if child:
+        # Scale animated hips translations by the leg-length ratio. The inverse
+        # scale on Hips preserves torso size and the authored joint-local rotations.
+        stride = 1 - 0.17 * child
+        doc["nodes"][root]["scale"] = [stride] * 3
+        doc["nodes"][root]["translation"][1] += (1 - stride) * joints["J_Bip_C_Hips"][2]
+        doc["nodes"][indices[names.index("J_Bip_C_Hips")]]["scale"] = [1 / stride] * 3
+    for i in indices:
+        node = doc["nodes"][i]
+        n = node["name"].split("_")[-1]
+        if child and n in ("UpperArm", "UpperLeg"):
+            factor = 1 - (0.18 if n == "UpperArm" else 0.17) * child
+            node["scale"] = [factor] * 3
+    elder = mix.get("Age_Elder", 0)
+    if elder:
+        # Shorten the thoracic segment to put the shoulder and head pivots
+        # inside the settled upper body; undo its scale above that segment.
+        chest = names.index("J_Bip_C_Chest")
+        upper_chest = names.index("J_Bip_C_UpperChest")
+        length = joints["J_Bip_C_UpperChest"][2] - joints["J_Bip_C_Chest"][2]
+        settle = 1 - 0.78 * MORPHS["Age_Elder"]["stoop"] * elder / length
+        doc["nodes"][indices[chest]]["scale"] = [settle] * 3
+        doc["nodes"][indices[upper_chest]]["scale"] = [1 / settle] * 3
+    # Reciprocal scales narrow the clavicle without shortening the upper arm.
+    shoulder_delta = sum(mix.get(k, 0) * v.get("sh_w", 0) for k, v in MORPHS.items())
+    if shoulder_delta:
+        for side in "LR":
+            clav = "J_Bip_" + side + "_Shoulder"
+            humerus = "J_Bip_" + side + "_UpperArm"
+            span = abs(joints[humerus][0] - joints[clav][0])
+            factor = 1 + shoulder_delta / span
+            doc["nodes"][indices[names.index(clav)]]["scale"] = [factor] * 3
+            node = doc["nodes"][indices[names.index(humerus)]]
+            node["scale"] = [v / factor for v in node.get("scale", [1] * 3)]
+    mats = joint_frames(doc)
+    # Skinning transforms normals by one local matrix per vertex. Across
+    # a rapidly changing weight field that matrix misses the slope between
+    # adjacent vertices. Fit the shoulder normals to the lowered-arm surface.
+    transform = lowered_arm_transforms(doc, buf, indices, mats, js, ws)
+    tri_ids = np.asarray([tri for tri, _ in triangles])
+    upper = [i for i, name in enumerate(names) if name.endswith(("Shoulder", "UpperArm"))]
+    influence = np.clip(influences[:, upper].sum(axis=1) * 4, 0.0, 1.0)[:, None]
+
+    def unit(v):
+        return v / np.maximum(np.linalg.norm(v, axis=1, keepdims=True), 1e-12)
+
+    def shoulder_normals(points, original):
+        deformed = np.einsum("vij,vj->vi", transform[:, :3, :3], points) + transform[:, :3, 3]
+        a, b, c = deformed[tri_ids].transpose(1, 0, 2)
+        face = np.cross(b - a, c - a)
+        field = np.zeros_like(points)
+        for ids in tri_ids.T:
+            np.add.at(field, ids, face)
+        # Roll the cel terminator around the deltoid. Its underside faces
+        # the flank in a lowered pose; a softly rounded side plane keeps that
+        # concavity from casting a triangular normal shade down the shirt.
+        field = unit(field)
+        side = np.sign(deformed[:, 0])
+        lateral = side * field[:, 0]
+        proxy = field.copy()
+        proxy[:, 0] = side * np.maximum(lateral, 0.35)
+        proxy[:, 1] = np.maximum(field[:, 1], 0.20)
+        blend = np.clip((abs(base[:, 0]) - 0.065) / 0.07, 0.0, 1.0) * np.clip(
+            (0.36 - abs(base[:, 0])) / 0.10, 0.0, 1.0
+        )
+        field = unit(field + blend[:, None] * (unit(proxy) - field))
+        surface_normal = unit(np.einsum("vji,vj->vi", transform[:, :3, :3], field))
+        return unit(original + 0.90 * influence * (surface_normal - original))
+
+    normals = shoulder_normals(base, normals)
     shaped = base.copy()
     targets = []
     for name, over in MORPHS.items():
         v, n = surface(coords(BASE | over))
         delta = v - base
-        targets.append((delta, n - normals))
+        targets.append((delta, shoulder_normals(v, n) - normals))
         shaped += mix.get(name, 0) * delta
     primitives = []
     for m in range(len(MATERIALS)):
@@ -243,25 +361,6 @@ def generate(args):
             "extras": {"targetNames": list(MORPHS)},
         }
     ]
-    # The child's rest offsets follow its shorter limbs. Hips motion is shared;
-    # a constant armature offset keeps the soles at ground level.
-    child = mix.get("Age_Child", 0)
-    root = next(i for i, n in enumerate(doc["nodes"]) if n["name"] == "Armature")
-    doc["nodes"][root]["translation"] = [0, -0.17 * joints["J_Bip_L_UpperLeg"][2] * child, 0]
-    if child:
-        # Scale animated hips translations by the leg-length ratio. The inverse
-        # scale on Hips preserves torso size and the authored joint-local rotations.
-        stride = 1 - 0.17 * child
-        doc["nodes"][root]["scale"] = [stride] * 3
-        doc["nodes"][root]["translation"][1] += (1 - stride) * joints["J_Bip_C_Hips"][2]
-        doc["nodes"][indices[names.index("J_Bip_C_Hips")]]["scale"] = [1 / stride] * 3
-    for i in indices:
-        node = doc["nodes"][i]
-        n = node["name"].split("_")[-1]
-        if child and n in ("UpperArm", "UpperLeg"):
-            factor = 1 - (0.18 if n == "UpperArm" else 0.17) * child
-            node["scale"] = [factor] * 3
-    mats = rest(doc)
     doc["skins"] = [
         {
             "joints": indices,
