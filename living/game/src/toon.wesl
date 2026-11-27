@@ -13,7 +13,7 @@ import bevy_pbr::render::{
 import living_game::toon_light::{
     toon, is_kind, hash3, noise3, rgb_to_hsv, hsv_to_rgb, scene, wetted, view_depth, sun_shadow, sun_color,
     bands, banded, puddles, wet_sheen, fresnel, rim_light, point_lights, emission, has_sun, sun_direction, eye, metres_per_pixel,
-    ld_band_pair, ld_value, ld_banded, ld_specular, ld_char_rim,
+    ld_band_pair, ld_sun_warmth, ld_value, ld_banded, ld_specular, ld_char_rim,
 };
 
 @if(PREPASS_PIPELINE)
@@ -272,11 +272,16 @@ fn hair_light(albedo: vec3<f32>, N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, lit: 
     // A little paler than the hair, so a ring on brown or orange hair reads as light, not as a
     // more saturated stain.
     let light = mix(lifted, vec3<f32>(dot(lifted, vec3<f32>(0.3, 0.59, 0.11))), 0.35);
-    // The rim stays off surfaces facing down (bang undersides), which it lit like plastic.
-    let rim = pow(fr, 3.0) * toon.hair.w * (0.3 + 0.7 * lit) * smoothstep(-0.25, 0.15, N.y);
     // Pale hair needs less added light to show a ring (and would clip).
     let room = clamp(1.1 - dot(albedo, vec3<f32>(0.3, 0.59, 0.11)) * 1.2, 0.25, 1.0);
+@if(LOOKDEV) {
+    // Under Look-dev, ld_char_rim owns the hair rim so hair is never double-rimmed.
+    return light * ring * toon.hair.x * room;
+} @else {
+    // The rim stays off surfaces facing down (bang undersides), which it lit like plastic.
+    let rim = pow(fr, 3.0) * toon.hair.w * (0.3 + 0.7 * lit) * smoothstep(-0.25, 0.15, N.y);
     return light * ring * toon.hair.x * room + (albedo + vec3<f32>(0.04)) * rim;
+}
 }
 
 // The character's forward, level: the mesh's world frame turned by the character's root (its
@@ -520,7 +525,7 @@ fn fragment(
         depth = select(depth, toon.shadow.a * toon.face.z, part);
         let value = (1.0 - depth) * select(away, 1.0, skin || part);
 @if(LOOKDEV)
-        var color = ld_banded(albedo.rgb, sun, lit, ld_value(depth, away, skin || part), sc, N);
+        var color = ld_banded(albedo.rgb, sun, lit, ld_value(depth, away, skin, part, ld_sun_warmth(sun)), sc, N);
 @else
         var color = banded(albedo.rgb, sun, lit, value, sc);
         // A hand-made hair profile replaces the hair's colour and its banding.
@@ -554,7 +559,7 @@ fn fragment(
                 ink = palette_row(tag, 4, grey_v);
             }
 @if(LOOKDEV)
-            let ink_lit = select(ld_banded(ink, sun, lit, ld_value(depth, away, skin || part), sc, N), ink * sun + ink * sc.fill, hand);
+            let ink_lit = select(ld_banded(ink, sun, lit, ld_value(depth, away, skin, part, ld_sun_warmth(sun)), sc, N), ink * sun + ink * sc.fill, hand);
 @else
             let ink_lit = select(banded(ink, sun, lit, value, sc), ink * sun + ink * sc.fill, hand);
             let a = albedo.a;
@@ -576,7 +581,8 @@ fn fragment(
         if (toon.character.x > 0.5) {
             // A character's rim (Settings › Character rim) replaces the classic one, hair too.
             if (!part) {
-                color = color + ld_char_rim(N, V, L, sun, shadow, lit_albedo, sc, hand || is_kind(4.0)) * (1.0 - ink_cov);
+                let rim_scale = select(1.0, 0.4, face);
+                color = color + ld_char_rim(N, V, L, sun, shadow, lit_albedo, sc, hand || is_kind(4.0)) * rim_scale * (1.0 - ink_cov);
             }
         } else {
             // Scenery keeps a little of the classic rim, so characters part from it.

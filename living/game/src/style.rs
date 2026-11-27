@@ -693,8 +693,8 @@ impl CharRim {
     fn strength(self) -> f32 {
         match self {
             CharRim::Off => 0.0,
-            CharRim::Subtle => 0.55,
-            CharRim::Strong => 1.0,
+            CharRim::Subtle => 0.62,
+            CharRim::Strong => 1.05,
         }
     }
 }
@@ -704,7 +704,7 @@ impl LookParams {
     /// keeps its first N parts (1 the hemisphere and warm/cool split, 2 the ramp, 3 the specular,
     /// 4 the rims), the rest as classic, to time each part.
     pub fn of(look: Look, rim: CharRim) -> LookParams {
-        let full = LookParams { on: true, char_rim: rim.strength(), specular: 1.0, scenery_rim: 0.25, sky: 0.1, bounce: 0.06, shadow_depth: 0.56, skin_saturation: 1.12, char_threshold: -0.08, char_brush: 0.35, shadow_sun: 0.35 };
+        let full = LookParams { on: true, char_rim: rim.strength(), specular: 1.0, scenery_rim: 0.25, sky: 0.075, bounce: 0.06, shadow_depth: 0.56, skin_saturation: 1.14, char_threshold: -0.08, char_brush: 0.35, shadow_sun: 0.35 };
         match look {
             Look::Classic => LookParams::default(),
             Look::Lookdev => match crate::perf::value("ldsteps") {

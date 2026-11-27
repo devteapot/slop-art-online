@@ -13,7 +13,7 @@ import bevy_pbr::render::{
 };
 import living_game::toon_light::{
     toon, hash3, scene, wetted, view_depth, sun_shadow, sun_color, bands, banded, puddles, wet_sheen, fresnel, rim_light,
-    point_lights, emission, has_sun, sun_direction, ld_banded,
+    point_lights, emission, has_sun, sun_direction, ld_sun_warmth, ld_value, ld_banded,
 };
 
 // terrain.rs `GroundParams`.
@@ -286,7 +286,7 @@ fn fragment(g: GroundOut, @builtin(front_facing) is_front: bool) -> FragmentOutp
         // The look-dev light (style.rs `Look`, shader def LOOKDEV): its shadow depth and the
         // hemisphere fill, and a quarter of the rim.
 @if(LOOKDEV)
-        var color = ld_banded(albedo, sun, lit, (1.0 - toon.look_light.z) * away, sc, N);
+        var color = ld_banded(albedo, sun, lit, ld_value(toon.shadow.a, away, false, false, ld_sun_warmth(sun)), sc, N);
 @else
         var color = banded(albedo, sun, lit, (1.0 - toon.shadow.a) * away, sc);
         // Puddles gather in the detail's low places: gaps between stones, ruts.
