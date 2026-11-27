@@ -14,12 +14,13 @@
 //! cards across person cards and animal stand-ins. The fallen are no row: they stay the game's
 //! own remains.
 //!
-//! **Colours.** Each row carries its three most-worn cloth colour indices (`living_rules::look::CLOTH`)
-//! and their quantized counts (`colour_a/b/c`). One swatch per word is derived as the mean of the
-//! look book's outfit RGBs for that word (`swatches_of`); a word with no outfit in the book uses
-//! the neutral placeholder (logged once). Person cards take those swatches in proportion to the
-//! row's counts (the rest neutral), with skin and dark trousers; animal cards keep their neutral
-//! stand-in tint.
+//! **Colours.** Each row carries the full per-cell cloth colour histogram (`cloth_yellow`..`cloth_grey`,
+//! in `living_rules::look::CLOTH` order, quantized as `count` and capped at 255). One swatch per word
+//! is derived as the mean of the look book's outfit RGBs for that word (`swatches_of`, calibrated via
+//! `calibrate_swatch`); a word with no outfit in the book (`grey`) uses the neutral placeholder
+//! (logged once). Person cards take those swatches in proportion to the histogram counts (scaling by
+//! largest remainder when the histogram sum exceeds the person-card count, and leaving only any
+//! lookless remainder neutral), with skin and dark trousers; animal cards never take cloth colours.
 //!
 //! **No pops.** Cards are kept per square (`(cell, size)`, as the authority writes a row in place
 //! when a field changes): a changed row moves its cards to their new places, a new card fades in
@@ -139,9 +140,9 @@ pub struct Row {
     pub moving: u16,
     pub fighting: u16,
     pub kinds: u8,
-    /// The three cloth colours most worn (most first): `(index into living_rules::look::CLOTH, count)`.
-    /// `(NO_CLOTH, 0)` where none.
-    pub colours: [(u8, u16); 3],
+    /// Wearers of each [`living_rules::look::CLOTH`] word, in `CLOTH` order, quantized as `count`
+    /// and capped at 255.
+    pub cloths: [u8; living_rules::look::CLOTH.len()],
     /// Quantized counts by kind (people, wolves, deer, others).
     pub people: u16,
     pub wolves: u16,
@@ -165,7 +166,18 @@ impl Row {
             moving: r.moving,
             fighting: r.fighting,
             kinds: r.kinds,
-            colours: [(r.colour_a, r.colour_a_count), (r.colour_b, r.colour_b_count), (r.colour_c, r.colour_c_count)],
+            cloths: [
+                r.cloth_yellow,
+                r.cloth_black,
+                r.cloth_green,
+                r.cloth_tan,
+                r.cloth_blue,
+                r.cloth_red,
+                r.cloth_cream,
+                r.cloth_navy,
+                r.cloth_purple,
+                r.cloth_grey,
+            ],
             people: r.people,
             wolves: r.wolves,
             deer: r.deer,
@@ -615,20 +627,22 @@ pub fn swatches() -> &'static Swatches {
     })
 }
 
-/// Each card's top colour, from the row's colour summary (`colour_a/b/c`) using `palette`.
-/// Person cards take the three top colours in proportion to their counts (the rest neutral `None`,
-/// as is any colour word with no swatch in `palette`); animal cards always stay `None`.
+/// Each card's top colour, from the row's full cloth colour histogram (`cloth_*`) using `palette`.
+/// Person cards take the ten `CLOTH` words in proportion to their histogram counts (largest-remainder
+/// scaling when the histogram sum exceeds the person-card count; any word with no swatch in `palette`,
+/// such as `grey`, stays neutral `None`, as does a remainder of person cards with no word left —
+/// lookless people). Animal cards always stay `None`.
 pub fn tops_with(row: &Row, kinds: &[Kind], palette: &Swatches) -> Vec<Option<[u8; 3]>> {
-    use living_rules::look::NO_CLOTH;
     let n_people = kinds.iter().filter(|k| **k == Kind::Person).count();
     if n_people == 0 {
         return vec![None; kinds.len()];
     }
     let slots: Vec<(Option<[u8; 3]>, usize)> = row
-        .colours
+        .cloths
         .iter()
-        .filter(|&&(idx, cnt)| idx != NO_CLOTH && cnt > 0)
-        .map(|&(idx, cnt)| (palette.get(idx as usize).copied().flatten(), cnt as usize))
+        .enumerate()
+        .filter(|&(_, &cnt)| cnt > 0)
+        .map(|(idx, &cnt)| (palette.get(idx).copied().flatten(), cnt as usize))
         .collect();
     let total_c: usize = slots.iter().map(|(_, c)| *c).sum();
     let mut items: Vec<(Option<[u8; 3]>, usize)> = if total_c <= n_people {
@@ -650,7 +664,8 @@ pub fn tops_with(row: &Row, kinds: &[Kind], palette: &Swatches) -> Vec<Option<[u
     kinds.iter().map(|k| if *k == Kind::Person { person_tops.next().flatten() } else { None }).collect()
 }
 
-/// Each card's top colour, from the row's colour summary and the look book's derived swatches.
+/// Each card's top colour, from the row's cloth colour histogram and the look book's derived swatches.
+#[allow(dead_code)]
 pub fn tops(row: &Row, kinds: &[Kind]) -> Vec<Option<[u8; 3]>> {
     tops_with(row, kinds, swatches())
 }
@@ -785,7 +800,7 @@ impl Throng {
                     "id": r.id, "cell": [r.cx, r.cy], "size": r.size, "count": r.count, "spread": r.spread, "heading": r.heading,
                     "moving": r.moving, "fighting": r.fighting, "kinds": r.kinds,
                     "by_kind": [r.people, r.wolves, r.deer, r.others],
-                    "colours": [[r.colours[0].0, r.colours[0].1], [r.colours[1].0, r.colours[1].1], [r.colours[2].0, r.colours[2].1]],
+                    "cloths": r.cloths,
                     "centre": [r.centre_x, r.centre_y],
                     "centroid": [centroid.x, centroid.y],
                     "mean_card": mean_card,
@@ -1085,164 +1100,232 @@ fn draw(
         }
     }
     let t = &mut *t;
-    // Rows to squares: a row's square keeps its cards; its count, poses and kinds are dealt
-    // to them in a fixed order, so an unchanged row moves nothing.
-    let mut seen: Vec<(u32, u8)> = Vec::with_capacity(t.rows.len());
-    for row in t.rows.clone() {
-        let key = row.key();
-        seen.push(key);
-        let sq = t.squares.entry(key).or_insert_with(|| Square { row, cards: Vec::new() });
-        sq.row = row;
-        let n = row.count as usize;
-        let mut to = places(&row, n);
-        if n > 0 {
-            let lo = row.origin() + Vec2::splat(0.25);
-            let hi = row.origin() + Vec2::splat(row.side() - 0.25);
-            let near = |src: &[Vec2], clear: f32| -> Vec<Vec2> {
-                src.iter()
-                    .copied()
-                    .filter(|r| r.x >= lo.x - clear && r.x <= hi.x + clear && r.y >= lo.y - clear && r.y <= hi.y + clear)
-                    .collect()
-            };
-            if !remains.is_empty() {
-                avoid_obstacles(&mut to, &near(&remains, MOUND_CLEAR_M), MOUND_CLEAR_M, lo, hi);
+    let lit = shade(atmo.as_deref());
+    let isl = island.as_deref();
+    t.step_frame(
+        &mut commands,
+        &mut kit,
+        &mut images,
+        &mut mats,
+        &mut tfs,
+        swatches(),
+        &remains,
+        &perceived_pts,
+        &marked_pts,
+        cam.pose,
+        lit,
+        dt,
+        now,
+        |p| ground(isl, &scene, p),
+    );
+}
+
+impl Throng {
+    /// Reconcile `self.squares` and `self.leaving` against `self.rows` for one frame, advance
+    /// fades/glides and orient cards to `cam_pose`. Separated from [`draw`] so same-transaction
+    /// `pin_at` updates (row shrink/delete arriving together with a newly perceived/marked person)
+    /// can be driven directly frame by frame in unit tests.
+    #[allow(clippy::too_many_arguments)]
+    fn step_frame(
+        &mut self,
+        commands: &mut Commands,
+        kit: &mut Kit,
+        images: &mut Assets<Image>,
+        mats: &mut Assets<StandardMaterial>,
+        tfs: &mut Query<&mut Transform>,
+        palette: &Swatches,
+        remains: &[Vec2],
+        perceived_pts: &[Vec2],
+        marked_pts: &[Vec2],
+        cam_pose: GlobalTransform,
+        lit: Vec3,
+        dt: f32,
+        now: f32,
+        ground_at: impl Fn(Vec2) -> Vec3,
+    ) {
+        // Rows to squares: a row's square keeps its cards; its count, poses and kinds are dealt
+        // to them in a fixed order, so an unchanged row moves nothing.
+        let mut seen: Vec<(u32, u8)> = Vec::with_capacity(self.rows.len());
+        for row in self.rows.clone() {
+            let key = row.key();
+            seen.push(key);
+            let sq = self.squares.entry(key).or_insert_with(|| Square { row, cards: Vec::new() });
+            sq.row = row;
+            let n = row.count as usize;
+            let mut to = places(&row, n);
+            if n > 0 {
+                let lo = row.origin() + Vec2::splat(0.25);
+                let hi = row.origin() + Vec2::splat(row.side() - 0.25);
+                let near = |src: &[Vec2], clear: f32| -> Vec<Vec2> {
+                    src.iter()
+                        .copied()
+                        .filter(|r| r.x >= lo.x - clear && r.x <= hi.x + clear && r.y >= lo.y - clear && r.y <= hi.y + clear)
+                        .collect()
+                };
+                if !remains.is_empty() {
+                    avoid_obstacles(&mut to, &near(remains, MOUND_CLEAR_M), MOUND_CLEAR_M, lo, hi);
+                }
+                if !perceived_pts.is_empty() {
+                    avoid_obstacles(&mut to, &near(perceived_pts, PERCEIVED_CLEAR_M), PERCEIVED_CLEAR_M, lo, hi);
+                }
+                if !marked_pts.is_empty() {
+                    avoid_obstacles(&mut to, &near(marked_pts, RING_CLEAR_M), RING_CLEAR_M, lo, hi);
+                }
             }
-            if !perceived_pts.is_empty() {
-                avoid_obstacles(&mut to, &near(&perceived_pts, PERCEIVED_CLEAR_M), PERCEIVED_CLEAR_M, lo, hi);
-            }
-            if !marked_pts.is_empty() {
-                avoid_obstacles(&mut to, &near(&marked_pts, RING_CLEAR_M), RING_CLEAR_M, lo, hi);
-            }
-        }
-        let poses = row.poses();
-        let kinds = row.card_kinds();
-        let top = tops(&row, &kinds);
-        // Cards past the count fade out (in place); the rest are dealt their place and pose.
-        for (k, c) in sq.cards.iter_mut().enumerate() {
-            if k >= n {
-                c.target = 0.0;
-            }
-        }
-        for k in 0..n {
-            let (pose, kind) = (poses[k], kinds[k]);
-            if k < sq.cards.len() {
-                let c = &mut sq.cards[k];
-                c.to = to[k];
-                c.target = 1.0;
-                if (c.pose, c.kind, c.top) != (pose, kind, top[k]) {
-                    let mesh_changed = (c.kind == Kind::Person) != (kind == Kind::Person);
-                    c.pose = pose;
-                    c.kind = kind;
-                    c.top = top[k];
-                    let tex = kit.tex.entry((kind, pose, top[k])).or_insert_with(|| images.add(card_image(kind, pose, top[k]))).clone();
-                    if let Some(mut m) = mats.get_mut(&c.mat) {
-                        m.base_color_texture = Some(tex);
-                    }
-                    if mesh_changed {
-                        let mesh = if kind == Kind::Person { kit.card.clone() } else { kit.beast.clone() };
-                        commands.entity(c.entity).insert(Mesh3d(mesh));
+            let poses = row.poses();
+            let kinds = row.card_kinds();
+            let top = tops_with(&row, &kinds, palette);
+            // When a square shrinks (such as a `pin_at` pick promoting someone out of it in the
+            // same transaction), prefer fading out the live card closest to any marked/perceived
+            // individual inside the square so it crossfades in place with the appearing 3D person.
+            let live_before = sq.cards.iter().take_while(|c| c.target > 0.5).count();
+            if n < live_before {
+                let mut anchors: Vec<Vec2> = marked_pts.iter().copied().filter(|p| row.holds(*p)).collect();
+                if anchors.is_empty() {
+                    anchors.extend(perceived_pts.iter().copied().filter(|p| row.holds(*p)));
+                }
+                if !anchors.is_empty() {
+                    let mut live_end = live_before;
+                    while live_end > n {
+                        let best = (0..live_end)
+                            .min_by(|&a, &b| {
+                                let da = anchors.iter().map(|p| sq.cards[a].at.distance_squared(*p)).fold(f32::MAX, f32::min);
+                                let db = anchors.iter().map(|p| sq.cards[b].at.distance_squared(*p)).fold(f32::MAX, f32::min);
+                                da.total_cmp(&db).then(b.cmp(&a))
+                            })
+                            .unwrap();
+                        live_end -= 1;
+                        sq.cards.swap(best, live_end);
                     }
                 }
-                continue;
             }
-            let tex = kit.tex.entry((kind, pose, top[k])).or_insert_with(|| images.add(card_image(kind, pose, top[k]))).clone();
-            let mat = mats.add(StandardMaterial { base_color: Color::srgba(1.0, 1.0, 1.0, 0.0), base_color_texture: Some(tex), unlit: true, alpha_mode: AlphaMode::Blend, cull_mode: None, ..default() });
-            let mesh = if kind == Kind::Person { kit.card.clone() } else { kit.beast.clone() };
-            let base = ground(island.as_deref(), &scene, to[k]);
-            let entity = commands.spawn((Mesh3d(mesh), MeshMaterial3d(mat.clone()), Transform::from_translation(base), Visibility::Visible, bevy::light::NotShadowCaster, Name::new("throng card"))).id();
-            let blob = commands
-                .spawn((Mesh3d(kit.blob.clone()), MeshMaterial3d(kit.blob_mat.clone()), Transform::from_translation(base + Vec3::Y * 0.05).with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)).with_scale(Vec3::ZERO), Visibility::Visible, bevy::light::NotShadowCaster))
-                .id();
-            let seed = (row.cx.wrapping_mul(31) ^ row.cy.wrapping_mul(17)).wrapping_add(k as u32 * 7) as f32 * 0.618;
-            sq.cards.push(Card { entity, blob, mat, pose, kind, top: top[k], at: to[k], to: to[k], alpha: 0.0, target: 1.0, masked: false, seed });
+            // Cards past the count fade out in place; the rest are dealt their place and pose.
+            for (k, c) in sq.cards.iter_mut().enumerate() {
+                if k >= n {
+                    c.target = 0.0;
+                    c.to = c.at;
+                }
+            }
+            for k in 0..n {
+                let (pose, kind) = (poses[k], kinds[k]);
+                if k < sq.cards.len() {
+                    let c = &mut sq.cards[k];
+                    c.to = to[k];
+                    c.target = 1.0;
+                    if (c.pose, c.kind, c.top) != (pose, kind, top[k]) {
+                        let mesh_changed = (c.kind == Kind::Person) != (kind == Kind::Person);
+                        c.pose = pose;
+                        c.kind = kind;
+                        c.top = top[k];
+                        let tex = kit.tex.entry((kind, pose, top[k])).or_insert_with(|| images.add(card_image(kind, pose, top[k]))).clone();
+                        if let Some(mut m) = mats.get_mut(&c.mat) {
+                            m.base_color_texture = Some(tex);
+                        }
+                        if mesh_changed {
+                            let mesh = if kind == Kind::Person { kit.card.clone() } else { kit.beast.clone() };
+                            commands.entity(c.entity).insert(Mesh3d(mesh));
+                        }
+                    }
+                    continue;
+                }
+                let tex = kit.tex.entry((kind, pose, top[k])).or_insert_with(|| images.add(card_image(kind, pose, top[k]))).clone();
+                let mat = mats.add(StandardMaterial { base_color: Color::srgba(1.0, 1.0, 1.0, 0.0), base_color_texture: Some(tex), unlit: true, alpha_mode: AlphaMode::Blend, cull_mode: None, ..default() });
+                let mesh = if kind == Kind::Person { kit.card.clone() } else { kit.beast.clone() };
+                let base = ground_at(to[k]);
+                let entity = commands.spawn((Mesh3d(mesh), MeshMaterial3d(mat.clone()), Transform::from_translation(base), Visibility::Visible, bevy::light::NotShadowCaster, Name::new("throng card"))).id();
+                let blob = commands
+                    .spawn((Mesh3d(kit.blob.clone()), MeshMaterial3d(kit.blob_mat.clone()), Transform::from_translation(base + Vec3::Y * 0.05).with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)).with_scale(Vec3::ZERO), Visibility::Visible, bevy::light::NotShadowCaster))
+                    .id();
+                let seed = (row.cx.wrapping_mul(31) ^ row.cy.wrapping_mul(17)).wrapping_add(k as u32 * 7) as f32 * 0.618;
+                sq.cards.push(Card { entity, blob, mat, pose, kind, top: top[k], at: to[k], to: to[k], alpha: 0.0, target: 1.0, masked: false, seed });
+            }
         }
-    }
-    // Squares no longer in the rows: their cards fade out.
-    let gone: Vec<(u32, u8)> = t.squares.keys().filter(|k| !seen.contains(k)).copied().collect();
-    for k in gone {
-        if let Some(sq) = t.squares.remove(&k) {
-            t.leaving.extend(sq.cards.into_iter().map(|mut c| {
-                c.target = 0.0;
-                c.to = c.at;
-                c
-            }));
+        // Squares no longer in the rows: their cards fade out.
+        let gone: Vec<(u32, u8)> = self.squares.keys().filter(|k| !seen.contains(k)).copied().collect();
+        for k in gone {
+            if let Some(sq) = self.squares.remove(&k) {
+                self.leaving.extend(sq.cards.into_iter().map(|mut c| {
+                    c.target = 0.0;
+                    c.to = c.at;
+                    c
+                }));
+            }
         }
-    }
-    let lit = shade(atmo.as_deref());
-    let cam_rot = cam.pose.rotation();
-    let cam_up = cam.pose.up().as_vec3();
-    let right = cam.pose.right().as_vec3();
-    let scale = billboard_scale(cam.pose.forward().as_vec3());
-    let mut step = |c: &mut Card, heading: Option<Vec2>| -> bool {
-        // Fade toward its target.
-        let rate = if c.target > c.alpha { dt / IN_S } else { dt / OUT_S };
-        c.alpha = if c.target > c.alpha { (c.alpha + rate).min(c.target) } else { (c.alpha - rate).max(c.target) };
-        c.at = c.at.move_towards(c.to, GLIDE_MPS * dt);
-        // Walking steps along the way; fighting lunges a little; standing keeps still.
-        let (sway, lift) = match (c.pose, heading) {
-            (Pose::Walk, Some(h)) => (h * 0.25 * (now * 1.7 + c.seed).sin(), 0.04 * (now * 7.0 + c.seed).sin().abs()),
-            (Pose::Fight, _) => (heading.unwrap_or(Vec2::X) * 0.08 * (now * 3.1 + c.seed).sin(), 0.0),
-            _ => (Vec2::ZERO, 0.0),
+        let cam_rot = cam_pose.rotation();
+        let cam_up = cam_pose.up().as_vec3();
+        let right = cam_pose.right().as_vec3();
+        let scale = billboard_scale(cam_pose.forward().as_vec3());
+        let mut step = |c: &mut Card, heading: Option<Vec2>| -> bool {
+            // Fade toward its target.
+            let rate = if c.target > c.alpha { dt / IN_S } else { dt / OUT_S };
+            c.alpha = if c.target > c.alpha { (c.alpha + rate).min(c.target) } else { (c.alpha - rate).max(c.target) };
+            c.at = c.at.move_towards(c.to, GLIDE_MPS * dt);
+            // Walking steps along the way; fighting lunges a little; standing keeps still.
+            let (sway, lift) = match (c.pose, heading) {
+                (Pose::Walk, Some(h)) => (h * 0.25 * (now * 1.7 + c.seed).sin(), 0.04 * (now * 7.0 + c.seed).sin().abs()),
+                (Pose::Fight, _) => (heading.unwrap_or(Vec2::X) * 0.08 * (now * 3.1 + c.seed).sin(), 0.0),
+                _ => (Vec2::ZERO, 0.0),
+            };
+            let p = c.at + sway;
+            let base = ground_at(p);
+            let half = if c.kind == Kind::Person { CARD.1 * 0.5 } else { BEAST.1 * 0.5 };
+            // Mirrored to face the way it walks, as the camera sees it.
+            let face = heading.map(|h| Vec3::new(h.x, 0.0, h.y)).filter(|_| c.pose != Pose::Stand);
+            let flip = if face.is_some_and(|f| f.dot(right) < 0.0) { -1.0 } else { 1.0 };
+            if let Ok(mut tf) = tfs.get_mut(c.entity) {
+                *tf = Transform::from_translation(base + cam_up * (half * scale + lift))
+                    .with_rotation(cam_rot)
+                    .with_scale(Vec3::new(flip * scale, scale, 1.0));
+            }
+            if let Ok(mut tf) = tfs.get_mut(c.blob) {
+                tf.translation = base + Vec3::Y * 0.03;
+                let (rx, ry) = if c.kind == Kind::Person { (0.76, 0.52) } else { (1.15, 0.75) };
+                tf.scale = Vec3::new(c.alpha * rx, c.alpha * ry, 1.0);
+            }
+            // Steady-state cards use opaque `AlphaMode::Mask(0.5)` so they write depth cleanly (no
+            // translucent ghosting, no remains-mound outlines drawing over cards); `AlphaMode::Blend`
+            // is used only during spawn/despawn crossfades.
+            let want_masked = c.alpha >= 0.99 && c.target >= 0.99;
+            if let Some(mut m) = mats.get_mut(&c.mat) {
+                if want_masked != c.masked {
+                    c.masked = want_masked;
+                    m.alpha_mode = if want_masked { AlphaMode::Mask(0.5) } else { AlphaMode::Blend };
+                }
+                let alpha = if want_masked { 1.0 } else { c.alpha };
+                let want = Color::srgba(lit.x, lit.y, lit.z, alpha);
+                let (h, w) = (m.base_color.to_srgba(), want.to_srgba());
+                if (h.alpha - w.alpha).abs() > 0.004 || (h.red - w.red).abs() > 0.01 || (h.green - w.green).abs() > 0.01 || (h.blue - w.blue).abs() > 0.01 {
+                    m.base_color = want;
+                }
+            }
+            // Gone: fully faded out.
+            c.target <= 0.0 && c.alpha <= 0.0
         };
-        let p = c.at + sway;
-        let base = ground(island.as_deref(), &scene, p);
-        let half = if c.kind == Kind::Person { CARD.1 * 0.5 } else { BEAST.1 * 0.5 };
-        // Mirrored to face the way it walks, as the camera sees it.
-        let face = heading.map(|h| Vec3::new(h.x, 0.0, h.y)).filter(|_| c.pose != Pose::Stand);
-        let flip = if face.is_some_and(|f| f.dot(right) < 0.0) { -1.0 } else { 1.0 };
-        if let Ok(mut tf) = tfs.get_mut(c.entity) {
-            *tf = Transform::from_translation(base + cam_up * (half * scale + lift))
-                .with_rotation(cam_rot)
-                .with_scale(Vec3::new(flip * scale, scale, 1.0));
-        }
-        if let Ok(mut tf) = tfs.get_mut(c.blob) {
-            tf.translation = base + Vec3::Y * 0.03;
-            let (rx, ry) = if c.kind == Kind::Person { (0.76, 0.52) } else { (1.15, 0.75) };
-            tf.scale = Vec3::new(c.alpha * rx, c.alpha * ry, 1.0);
-        }
-        // Steady-state cards use opaque `AlphaMode::Mask(0.5)` so they write depth cleanly (no
-        // translucent ghosting, no remains-mound outlines drawing over cards); `AlphaMode::Blend`
-        // is used only during spawn/despawn crossfades.
-        let want_masked = c.alpha >= 0.99 && c.target >= 0.99;
-        if let Some(mut m) = mats.get_mut(&c.mat) {
-            if want_masked != c.masked {
-                c.masked = want_masked;
-                m.alpha_mode = if want_masked { AlphaMode::Mask(0.5) } else { AlphaMode::Blend };
-            }
-            let alpha = if want_masked { 1.0 } else { c.alpha };
-            let want = Color::srgba(lit.x, lit.y, lit.z, alpha);
-            let (h, w) = (m.base_color.to_srgba(), want.to_srgba());
-            if (h.alpha - w.alpha).abs() > 0.004 || (h.red - w.red).abs() > 0.01 || (h.green - w.green).abs() > 0.01 || (h.blue - w.blue).abs() > 0.01 {
-                m.base_color = want;
+        let mut dead: Vec<Card> = Vec::new();
+        for sq in self.squares.values_mut() {
+            let h = sq.row.heading_dir();
+            let mut k = 0;
+            while k < sq.cards.len() {
+                if step(&mut sq.cards[k], h) && k >= sq.row.count as usize {
+                    dead.push(sq.cards.remove(k));
+                } else {
+                    k += 1;
+                }
             }
         }
-        // Gone: fully faded out.
-        c.target <= 0.0 && c.alpha <= 0.0
-    };
-    let mut dead: Vec<Card> = Vec::new();
-    for sq in t.squares.values_mut() {
-        let h = sq.row.heading_dir();
         let mut k = 0;
-        while k < sq.cards.len() {
-            if step(&mut sq.cards[k], h) && k >= sq.row.count as usize {
-                dead.push(sq.cards.remove(k));
+        while k < self.leaving.len() {
+            if step(&mut self.leaving[k], None) {
+                dead.push(self.leaving.swap_remove(k));
             } else {
                 k += 1;
             }
         }
-    }
-    let mut k = 0;
-    while k < t.leaving.len() {
-        if step(&mut t.leaving[k], None) {
-            dead.push(t.leaving.swap_remove(k));
-        } else {
-            k += 1;
+        for c in dead {
+            commands.entity(c.entity).despawn();
+            commands.entity(c.blob).despawn();
+            mats.remove(&c.mat);
         }
-    }
-    for c in dead {
-        commands.entity(c.entity).despawn();
-        commands.entity(c.blob).despawn();
-        mats.remove(&c.mat);
     }
 }
 
@@ -1534,22 +1617,59 @@ mod tests {
     }
 
     #[test]
-    fn tops_proportion_colours_leave_the_rest_neutral_and_never_tint_animals() {
+    fn tops_apportion_the_full_ten_word_histogram_and_never_tint_animals() {
         let mut pal: Swatches = [None; living_rules::look::CLOTH.len()];
-        let yellow = [172, 141, 76];
-        let red = [86, 39, 34];
-        let blue = [90, 106, 122];
+        let yellow = [235, 198, 92];
+        let black = [78, 76, 82];
+        let green = [90, 178, 128];
+        let tan = [194, 158, 114];
+        let blue = [110, 152, 212];
+        let red = [196, 84, 72];
+        let cream = [242, 238, 219];
+        let navy = [76, 98, 160];
+        let purple = [148, 98, 172];
         pal[0] = Some(yellow);
-        pal[5] = Some(red);
+        pal[1] = Some(black);
+        pal[2] = Some(green);
+        pal[3] = Some(tan);
         pal[4] = Some(blue);
+        pal[5] = Some(red);
+        pal[6] = Some(cream);
+        pal[7] = Some(navy);
+        pal[8] = Some(purple);
         // pal[9] (grey) stays None.
 
-        // Exact fit with remainder neutral: 10 people, 4 yellow, 3 red, 1 blue -> 2 neutral.
+        // Full >3-word histogram fitting exact person count (20 people across 8 words -> 0 neutral).
+        let mut big = row(0, 1, 20, 6, STILL, 0, 0, PEOPLE);
+        big.people = 20;
+        big.cloth_yellow = 4;
+        big.cloth_black = 3;
+        big.cloth_green = 3;
+        big.cloth_tan = 2;
+        big.cloth_blue = 3;
+        big.cloth_red = 2;
+        big.cloth_cream = 2;
+        big.cloth_navy = 1;
+        let rb = Row::of(&big);
+        let kb = rb.card_kinds();
+        let tb = tops_with(&rb, &kb, &pal);
+        assert_eq!(tb.len(), 20);
+        assert_eq!(tb.iter().filter(|t| t.is_none()).count(), 0);
+        assert_eq!(tb.iter().filter(|t| **t == Some(yellow)).count(), 4);
+        assert_eq!(tb.iter().filter(|t| **t == Some(black)).count(), 3);
+        assert_eq!(tb.iter().filter(|t| **t == Some(green)).count(), 3);
+        assert_eq!(tb.iter().filter(|t| **t == Some(tan)).count(), 2);
+        assert_eq!(tb.iter().filter(|t| **t == Some(blue)).count(), 3);
+        assert_eq!(tb.iter().filter(|t| **t == Some(red)).count(), 2);
+        assert_eq!(tb.iter().filter(|t| **t == Some(cream)).count(), 2);
+        assert_eq!(tb.iter().filter(|t| **t == Some(navy)).count(), 1);
+
+        // Sum below person count (lookless remainder): 10 people, 4 yellow + 3 red + 1 blue = 8 -> 2 neutral.
         let mut st = row(0, 1, 10, 4, STILL, 0, 0, PEOPLE);
         st.people = 10;
-        st.colour_a = 0; st.colour_a_count = 4;
-        st.colour_b = 5; st.colour_b_count = 3;
-        st.colour_c = 4; st.colour_c_count = 1;
+        st.cloth_yellow = 4;
+        st.cloth_red = 3;
+        st.cloth_blue = 1;
         let r = Row::of(&st);
         let kinds = r.card_kinds();
         let ts = tops_with(&r, &kinds, &pal);
@@ -1559,43 +1679,222 @@ mod tests {
         assert_eq!(ts.iter().filter(|t| **t == Some(blue)).count(), 1);
         assert_eq!(ts.iter().filter(|t| t.is_none()).count(), 2);
 
-        // Quantized colour counts past n_people scale proportionally (e.g. 5 + 5 + 5 for 10 people).
-        st.colour_a_count = 5; st.colour_b_count = 5; st.colour_c_count = 5;
-        let r2 = Row::of(&st);
+        // Sum above person count: 10 people, 5 yellow + 5 green + 5 blue + 3 red = 18 ->
+        // largest-remainder scaling: 50/18=2.78, 50/18=2.78, 50/18=2.78, 30/18=1.67 -> 3, 3, 3, 1.
+        let mut over = row(0, 1, 10, 4, STILL, 0, 0, PEOPLE);
+        over.people = 10;
+        over.cloth_yellow = 5;
+        over.cloth_green = 5;
+        over.cloth_blue = 5;
+        over.cloth_red = 3;
+        let r2 = Row::of(&over);
         let ts2 = tops_with(&r2, &kinds, &pal);
         assert_eq!(ts2.len(), 10);
         assert_eq!(ts2.iter().filter(|t| t.is_none()).count(), 0);
-        assert_eq!(ts2.iter().filter(|t| **t == Some(yellow)).count(), 4);
-        assert_eq!(ts2.iter().filter(|t| **t == Some(red)).count(), 3);
+        assert_eq!(ts2.iter().filter(|t| **t == Some(yellow)).count(), 3);
+        assert_eq!(ts2.iter().filter(|t| **t == Some(green)).count(), 3);
         assert_eq!(ts2.iter().filter(|t| **t == Some(blue)).count(), 3);
+        assert_eq!(ts2.iter().filter(|t| **t == Some(red)).count(), 1);
 
-        // A word with no swatch in the book (grey, index 9) produces neutral cards, never steals into B.
-        st.colour_a = 9; st.colour_a_count = 5; st.colour_b = 5; st.colour_b_count = 3; st.colour_c = 255; st.colour_c_count = 0;
-        let r3 = Row::of(&st);
+        // A word with no swatch in the book (grey, index 9) produces neutral cards, never steals into others.
+        let mut with_grey = row(0, 1, 10, 4, STILL, 0, 0, PEOPLE);
+        with_grey.people = 10;
+        with_grey.cloth_grey = 5;
+        with_grey.cloth_red = 3;
+        let r3 = Row::of(&with_grey);
         let ts3 = tops_with(&r3, &kinds, &pal);
         assert_eq!(ts3.iter().filter(|t| **t == Some(red)).count(), 3);
         assert_eq!(ts3.iter().filter(|t| t.is_none()).count(), 7);
+        // Same under scaling down: 5 yellow + 5 red + 5 grey for 10 people -> 4 yellow, 3 red, 3 neutral.
+        with_grey.cloth_yellow = 5;
+        with_grey.cloth_red = 5;
+        with_grey.cloth_grey = 5;
+        let r3s = Row::of(&with_grey);
+        let ts3s = tops_with(&r3s, &kinds, &pal);
+        assert_eq!(ts3s.iter().filter(|t| **t == Some(yellow)).count(), 4);
+        assert_eq!(ts3s.iter().filter(|t| **t == Some(red)).count(), 3);
+        assert_eq!(ts3s.iter().filter(|t| t.is_none()).count(), 3);
 
-        // Mixed people and wolves: only people get cloth colours; every wolf stays None.
-        let mut mix = row(0, 1, 7, 4, STILL, 0, 0, PEOPLE | WOLVES);
-        mix.people = 5; mix.wolves = 2;
-        mix.colour_a = 0; mix.colour_a_count = 3;
-        mix.colour_b = 5; mix.colour_b_count = 2;
+        // Mixed people and animals: only people take cloth colours; every wolf and deer stays None.
+        let mut mix = row(0, 1, 8, 4, STILL, 0, 0, PEOPLE | WOLVES | DEER);
+        mix.people = 5;
+        mix.wolves = 2;
+        mix.deer = 1;
+        mix.cloth_yellow = 2;
+        mix.cloth_green = 1;
+        mix.cloth_blue = 1;
+        mix.cloth_purple = 1;
         let rm = Row::of(&mix);
         let km = rm.card_kinds();
         let tm = tops_with(&rm, &km, &pal);
-        assert_eq!(tm.len(), 7);
+        assert_eq!(tm.len(), 8);
         for (k, t) in km.iter().zip(&tm) {
             if *k != Kind::Person {
                 assert_eq!(*t, None, "animals never take cloth colours");
             }
         }
-        assert_eq!(tm.iter().filter(|t| **t == Some(yellow)).count(), 3);
-        assert_eq!(tm.iter().filter(|t| **t == Some(red)).count(), 2);
+        assert_eq!(tm.iter().filter(|t| **t == Some(yellow)).count(), 2);
+        assert_eq!(tm.iter().filter(|t| **t == Some(green)).count(), 1);
+        assert_eq!(tm.iter().filter(|t| **t == Some(blue)).count(), 1);
+        assert_eq!(tm.iter().filter(|t| **t == Some(purple)).count(), 1);
+        assert_eq!(tm.iter().filter(|t| t.is_none()).count(), 3);
 
-        // No colours at all: every card is neutral.
+        // All-lookless row (all cloth_* zero): every card stays neutral.
         let none = Row::of(&row(0, 1, 5, 4, STILL, 0, 0, PEOPLE));
         assert!(tops_with(&none, &none.card_kinds(), &pal).iter().all(Option::is_none));
+    }
+
+    #[test]
+    fn tops_interleave_deterministically_and_ignore_deprecated_colour_a_b_c() {
+        let mut pal: Swatches = [None; living_rules::look::CLOTH.len()];
+        let yellow = [235, 198, 92];
+        let green = [90, 178, 128];
+        let blue = [110, 152, 212];
+        let red = [196, 84, 72];
+        pal[0] = Some(yellow);
+        pal[2] = Some(green);
+        pal[4] = Some(blue);
+        pal[5] = Some(red);
+
+        // Populate deprecated colour_a/b/c with conflicting values; only cloth_* may be read.
+        let mut st = row(0, 1, 12, 6, STILL, 0, 0, PEOPLE);
+        st.people = 12;
+        st.colour_a = 0; st.colour_a_count = 10;
+        st.colour_b = 5; st.colour_b_count = 2;
+        st.colour_c = 1; st.colour_c_count = 5;
+        st.cloth_green = 4;
+        st.cloth_blue = 4;
+        st.cloth_red = 4;
+        let r = Row::of(&st);
+        assert_eq!(r.cloths, [0, 0, 4, 0, 4, 4, 0, 0, 0, 0]);
+        let kinds = r.card_kinds();
+        let first = tops_with(&r, &kinds, &pal);
+        let second = tops_with(&r, &kinds, &pal);
+        assert_eq!(first, second, "same row must always produce the exact same tint sequence");
+        assert_eq!(first.iter().filter(|t| **t == Some(yellow)).count(), 0, "deprecated colour_a must be ignored");
+        assert_eq!(first.iter().filter(|t| **t == Some(green)).count(), 4);
+        assert_eq!(first.iter().filter(|t| **t == Some(blue)).count(), 4);
+        assert_eq!(first.iter().filter(|t| **t == Some(red)).count(), 4);
+        // Smooth interleaving: no colour clumps into two adjacent slots when three equal shares exist.
+        assert!(first.windows(2).all(|w| w[0] != w[1]), "expected interleaved colours, got {first:?}");
+
+        // Deprecated colour_a/b/c populated on an all-lookless histogram (all cloth_* == 0): stays all neutral.
+        let mut only_deprecated = row(0, 1, 6, 4, STILL, 0, 0, PEOPLE);
+        only_deprecated.people = 6;
+        only_deprecated.colour_a = 0; only_deprecated.colour_a_count = 6;
+        let r_dep = Row::of(&only_deprecated);
+        assert!(tops_with(&r_dep, &r_dep.card_kinds(), &pal).iter().all(Option::is_none));
+    }
+
+    #[test]
+    fn pin_at_same_transaction_drops_card_on_arrival_frame_without_pop() {
+        let mut app = App::new();
+        app.init_resource::<Assets<Mesh>>();
+        app.init_resource::<Assets<Image>>();
+        app.init_resource::<Assets<StandardMaterial>>();
+        app.init_resource::<Throng>();
+        let k = {
+            let w = app.world_mut();
+            w.resource_scope(|w, mut meshes: Mut<Assets<Mesh>>| {
+                w.resource_scope(|w, mut images: Mut<Assets<Image>>| {
+                    w.resource_scope(|_, mut mats: Mut<Assets<StandardMaterial>>| kit(&mut meshes, &mut images, &mut mats))
+                })
+            })
+        };
+        app.insert_resource(k);
+
+        let pal: Swatches = [None; living_rules::look::CLOTH.len()];
+        let cam_pose = GlobalTransform::from(Transform::from_xyz(63.0, 20.0, 80.0).looking_at(Vec3::new(63.0, 0.0, 63.0), Vec3::Y));
+        let run_step = |app: &mut App, rows: Vec<Row>, marked: &[Vec2], dt: f32, now: f32| {
+            let w = app.world_mut();
+            w.resource_mut::<Throng>().rows = rows;
+            let mut state: bevy::ecs::system::SystemState<(
+                Commands,
+                ResMut<Throng>,
+                ResMut<Kit>,
+                ResMut<Assets<Image>>,
+                ResMut<Assets<StandardMaterial>>,
+                Query<&mut Transform>,
+            )> = bevy::ecs::system::SystemState::new(w);
+            {
+                let (mut commands, mut t, mut kit, mut images, mut mats, mut tfs) = state.get_mut(w).unwrap();
+                t.step_frame(&mut commands, &mut kit, &mut images, &mut mats, &mut tfs, &pal, &[], &[], marked, cam_pose, Vec3::ONE, dt, now, |p| Vec3::new(p.x, 0.0, p.y));
+            }
+            state.apply(w);
+        };
+
+        // Case 1: 1-member cell deleted in the same transaction as the picked person arrives.
+        let mut one = row((10 << 16) | 10, 1, 1, 0, STILL, 0, 0, PEOPLE);
+        one.people = 1;
+        let r1 = Row::of(&one);
+        let mut t_s = 0.0f32;
+        for _ in 0..30 {
+            t_s += 1.0 / 60.0;
+            run_step(&mut app, vec![r1], &[], 1.0 / 60.0, t_s);
+        }
+        {
+            let t = app.world().resource::<Throng>();
+            let sq = &t.squares[&r1.key()];
+            assert_eq!(sq.cards.len(), 1);
+            assert!(sq.cards[0].alpha >= 0.99 && sq.cards[0].masked);
+        }
+        // Arrival frame: row is deleted AND picked person is in `marked_pts`.
+        t_s += 1.0 / 60.0;
+        run_step(&mut app, vec![], &[r1.centre()], 1.0 / 60.0, t_s);
+        {
+            let t = app.world().resource::<Throng>();
+            let mats = app.world().resource::<Assets<StandardMaterial>>();
+            assert!(t.squares.is_empty(), "square must drop on the arrival frame (no live card alongside individual)");
+            assert_eq!(t.leaving.len(), 1, "dropped card must fade out smoothly, not pop");
+            let c = &t.leaving[0];
+            assert_eq!(c.target, 0.0);
+            assert!(c.alpha > 0.0 && c.alpha < 1.0, "expected smooth fade alpha, got {}", c.alpha);
+            assert!(!c.masked);
+            assert!(matches!(mats.get(&c.mat).unwrap().alpha_mode, AlphaMode::Blend));
+        }
+        for _ in 0..20 {
+            t_s += 1.0 / 60.0;
+            run_step(&mut app, vec![], &[r1.centre()], 1.0 / 60.0, t_s);
+        }
+        assert!(app.world().resource::<Throng>().leaving.is_empty(), "fading card must despawn once faded out");
+
+        // Case 2: 4-member cell updated in place (count 4 -> 3) in the same transaction as the picked
+        // person arrives at card 0's spot: live cards immediately drop to 3, and card 0 crossfades
+        // out in place (no pop, no opaque card sitting on the promoted person).
+        let mut four = row((10 << 16) | 10, 1, 4, 4, STILL, 0, 0, PEOPLE);
+        four.people = 4;
+        let r4 = Row::of(&four);
+        for _ in 0..30 {
+            t_s += 1.0 / 60.0;
+            run_step(&mut app, vec![r4], &[], 1.0 / 60.0, t_s);
+        }
+        let picked_pos = app.world().resource::<Throng>().squares[&r4.key()].cards[0].at;
+        let mut three = four.clone();
+        three.count = 3;
+        three.people = 3;
+        let r3 = Row::of(&three);
+        t_s += 1.0 / 60.0;
+        run_step(&mut app, vec![r3], &[picked_pos], 1.0 / 60.0, t_s);
+        {
+            let t = app.world().resource::<Throng>();
+            let sq = &t.squares[&r3.key()];
+            let live = sq.cards.iter().filter(|c| c.target > 0.5).count();
+            let fading: Vec<&Card> = sq.cards.iter().filter(|c| c.target < 0.5).collect();
+            assert_eq!(live, 3, "live cards must drop 4 -> 3 on the arrival frame");
+            assert_eq!(fading.len(), 1, "one card must crossfade out instead of popping");
+            assert!(fading[0].at.distance(picked_pos) < 1e-3, "the card nearest the promoted person must be the one fading out");
+            assert!(fading[0].alpha > 0.0 && fading[0].alpha < 1.0 && !fading[0].masked);
+        }
+        for _ in 0..20 {
+            t_s += 1.0 / 60.0;
+            run_step(&mut app, vec![r3], &[picked_pos], 1.0 / 60.0, t_s);
+        }
+        {
+            let t = app.world().resource::<Throng>();
+            let sq = &t.squares[&r3.key()];
+            assert_eq!(sq.cards.len(), 3, "faded card must be despawned");
+            assert!(sq.cards.iter().all(|c| c.target > 0.5 && c.to.distance(picked_pos) >= RING_CLEAR_M - 0.05));
+        }
     }
 
     #[test]
