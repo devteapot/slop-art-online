@@ -1404,6 +1404,28 @@ pub struct SeenStock {
     pub gone_ms: u64,
 }
 
+/// What a character saw inside a store (a storage, remains, a trap), and when (perception
+/// parity, the `perceived_holds_on` law): written only under the law, by its own looks into a
+/// store beside it (`stores::look`, the same rule for every controller), so what was taken or
+/// put there since out of its sight is not known until it looks again. Private; its player reads
+/// it through `my_seen_stores`. At most `stores::PER_ACTOR` rows a character; gone at death.
+#[derive(Clone, Debug, PartialEq)]
+#[spacetimedb::table(accessor = seen_store,
+    index(accessor = by_actor_structure, btree(columns = [actor, structure])))]
+pub struct SeenStore {
+    #[primary_key]
+    #[auto_inc]
+    pub id: u64,
+    #[index(btree)]
+    pub actor: u32,
+    pub structure: u64,
+    /// The things seen in it and how many of each (the same order), none when it was empty.
+    pub items: Vec<String>,
+    pub qty: Vec<u32>,
+    /// When last looked into.
+    pub seen_ms: u64,
+}
+
 /// Where a character stands, written when its mind asks (`mind_where`) for a talk turn's
 /// places (talk-places). Private: the mind service reads it. One row a character; gone at death.
 #[spacetimedb::table(accessor = standing)]

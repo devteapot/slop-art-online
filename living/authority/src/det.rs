@@ -340,6 +340,16 @@ pub fn trace(ctx: &ReducerContext, tick: u64) {
         i.owner = r.structure_key(i.owner, STRUCTURE_BIT);
         i
     }))));
+    // Written only under `perceived_holds_on`: hashed once it has rows, so a trace with the law
+    // off is the trace before the table.
+    if ctx.db.seen_store().count() > 0 {
+        out.push(("seen_store", table_hash(r, ctx.db.seen_store().iter().map(|mut x| {
+            x.id = 0;
+            x.actor = r.of("character", x.actor as u64) as u32;
+            x.structure = r.of("structure", x.structure);
+            x
+        }))));
+    }
     out.push(("rot", table_hash(r, ctx.db.rot().iter().map(|mut x| {
         x.structure = r.of("structure", x.structure);
         x

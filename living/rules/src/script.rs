@@ -611,6 +611,10 @@ pub struct Laws {
     /// relation row (or one labelled "stranger"); on, someone whose name one does not know
     /// (`perception::knows_name`, the rule scenes and percepts name people by).
     pub stranger_by_name: bool,
+    /// What a graph's `holds` (and a mind's scene) knows of a store's contents (perception
+    /// parity): on, only what the character saw inside it, beside it now or on a visit
+    /// (`seen_store`; never looked into: it may hold anything); off, the store's true contents.
+    pub perceived_holds_on: bool,
     /// Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): on, a graph's
     /// `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a clear
     /// personal relation, then the community's stance, and minds are told so; off, any personal
@@ -951,6 +955,7 @@ impl Default for Laws {
             alert_while_attacker_near: true,
             renew_in_place: true,
             stranger_by_name: false,
+            perceived_holds_on: false,
             relation_fight_on: true,
             cues_on: false,
             cue_cooldown_s: 600.0,
@@ -3333,6 +3338,7 @@ impl Scripts {
             alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
             renew_in_place: flag("renew_in_place", l.renew_in_place),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
+            perceived_holds_on: flag("perceived_holds_on", l.perceived_holds_on),
             relation_fight_on: flag("relation_fight_on", l.relation_fight_on),
             cues_on: flag("cues_on", l.cues_on),
             cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),
