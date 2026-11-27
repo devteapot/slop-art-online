@@ -72,11 +72,14 @@ pub struct Memory {
     /// What it was last reset for: the controller epoch and the brief revision (0: none).
     pub epoch: u32,
     pub brief: u32,
+    /// The observation clock at the first decision since the reset (ms; 0: none yet): times in the
+    /// state are seconds since it, small enough for an f32 to hold exactly.
+    pub t0_ms: u64,
 }
 
 impl Memory {
     pub fn new(epoch: u32, brief: u32) -> Self {
-        Self { state: [0.0; STATE], history: VecDeque::with_capacity(HISTORY), epoch, brief }
+        Self { state: [0.0; STATE], history: VecDeque::with_capacity(HISTORY), epoch, brief, t0_ms: 0 }
     }
 
     /// A new epoch or a new brief revision starts it afresh; returns whether it was reset.
@@ -144,8 +147,7 @@ impl HoldDistance {
     }
 }
 
-/// Times in the state are milliseconds of the observation clock as f32 seconds since this base
-/// (an f32 holds whole milliseconds of a few hours exactly enough for a fight).
+/// Seconds since the memory's clock base (`Memory::t0_ms`).
 fn secs(ms: u64, base: u64) -> f32 {
     ms.saturating_sub(base) as f32 / 1000.0
 }
@@ -163,12 +165,10 @@ impl Policy for HoldDistance {
         let mut out = Intent::default();
         let Some(here) = o.here() else { return out };
         // The memory's clock: the decision's own, relative to the first decision since its reset.
-        if m.state[15] == 0.0 {
-            m.state[15] = 1.0;
-            m.state[14] = (o.now_ms / 1000) as f32;
+        if m.t0_ms == 0 {
+            m.t0_ms = o.now_ms;
         }
-        let base = m.state[14] as u64 * 1000;
-        let now = secs(o.now_ms, base);
+        let now = secs(o.now_ms, m.t0_ms);
         let goal = brief.filter(|b| !b.goal.is_empty() && b.expires_ms > o.now_ms).map_or(slot.goal.as_str(), |b| b.goal.as_str());
         let target = if slot.target != 0 { slot.target } else { brief.map_or(0, |b| b.target) };
         let first = slot.skills.iter().find_map(|s| o.skills.iter().find(|k| &k.skill == s));
@@ -278,6 +278,17 @@ mod tests {
         let mut fresh = Memory::new(1, 0);
         gone.now_ms = 6_000;
         assert_eq!(p.decide(&gone, &[], &mut fresh, None, &slot()).moving, Some((0.0, 0.0, false)));
+    }
+
+    #[test]
+    fn the_memory_clock_holds_at_the_real_clock_s_size() {
+        // Milliseconds since 1970 (about 1.8e12): the press gap still counts in milliseconds.
+        let p = HoldDistance::new(None);
+        let mut m = Memory::new(1, 0);
+        let t = 1_795_735_000_123;
+        assert!(p.decide(&obs(1.2, t), &[], &mut m, None, &slot()).press.is_some());
+        assert!(p.decide(&obs(1.2, t + 100), &[], &mut m, None, &slot()).press.is_none());
+        assert!(p.decide(&obs(1.2, t + 450), &[], &mut m, None, &slot()).press.is_some());
     }
 
     #[test]
