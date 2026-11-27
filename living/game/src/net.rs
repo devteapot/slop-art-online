@@ -132,6 +132,12 @@ const PERCEIVED: &[&str] = &[
     "SELECT * FROM law_override",
 ];
 
+/// My character's own family, courting offers and community (perception parity, phase 0: the
+/// facts its graphs read of itself): identity-scoped views of a few rows, shown in Log › People
+/// and the person windows (`ui/people.rs`, `ui/kin.rs`). A set of their own, so a world from
+/// before the views still plays (the error is logged, the windows show none).
+pub const KIN_VIEWS: &[&str] = &["SELECT * FROM my_kin", "SELECT * FROM my_bond_offers", "SELECT * FROM my_community"];
+
 /// Bumped by every `law_override` insert, update and delete this process's connections see, and
 /// once when a connection's base set is applied (a world whose rows all went while I was away
 /// sends no delete): `verbs::Rules` lays the rows over again when it moves.
@@ -316,6 +322,9 @@ pub struct Net {
     last_call: std::cell::Cell<Option<crate::actions::Sent>>,
     base: Option<SubscriptionHandle>,
     gaze_view: Option<SubscriptionHandle>,
+    /// My character's kin, courting offers and community ([`KIN_VIEWS`]), and the character they
+    /// were asked for: asked again for each new character and after every reconnect.
+    kin_views: Option<(u32, SubscriptionHandle)>,
     gaze: GazeInput,
     near: Window,
     far: Window,
@@ -473,6 +482,7 @@ impl Default for Net {
             last_call: Default::default(),
             base: None,
             gaze_view: None,
+            kin_views: None,
             gaze: GazeInput::default(),
             near: Window::default(),
             far: Window::default(),
@@ -1777,6 +1787,7 @@ impl Net {
                 }
             }
         }
+        self.keep_kin_views();
         let Some(body) = self.my_body() else { return };
         let (near, far) = match self.mode {
             Mode::Land => (self.land_window(&body, Which::Near), self.land_window(&body, Which::Lots)),
@@ -1793,6 +1804,33 @@ impl Net {
         }
         self.near.settle();
         self.far.settle();
+    }
+
+    /// [`KIN_VIEWS`] for the character I play: asked once it is known, and again when it changes
+    /// (a new character after a death) or after a reconnect (`Disconnected` drops the handle).
+    /// The views follow the authority's own change of character too; asking again makes the
+    /// first rows this character's for certain.
+    fn keep_kin_views(&mut self) {
+        let Some(me) = self.my_id else {
+            self.kin_views = None;
+            return;
+        };
+        if self.kin_views.as_ref().is_some_and(|(id, _)| *id == me) {
+            return;
+        }
+        let Some(conn) = self.conn.as_ref() else { return };
+        if let Some((_, old)) = self.kin_views.take() {
+            if old.is_active() {
+                let _ = old.unsubscribe();
+            }
+        }
+        debug!("kin views asked for #{me}");
+        let h = conn
+            .subscription_builder()
+            .on_applied(move |_| info!("kin views applied for #{me}"))
+            .on_error(|_, e| warn!("kin views unavailable: {e}"))
+            .subscribe(KIN_VIEWS);
+        self.kin_views = Some((me, h));
     }
 
     /// Tile worlds: one query per chunk and table, when the set of chunks changes.
@@ -1975,6 +2013,7 @@ pub fn pump(mut net: NonSendMut<Net>, time: Res<Time>) {
                 }
                 net.base = None;
                 net.gaze_view = None;
+                net.kin_views = None;
                 net.gaze.reset_owner();
                 net.near = Window::default();
                 net.far = Window::default();

@@ -381,7 +381,7 @@ fn sample(
 }
 
 /// The camera the HUD is drawn on is the one recorded.
-fn mark_camera(mut commands: Commands, cams: Query<(Entity, Has<IsDefaultUiCamera>), (With<Camera3d>, Without<frames::Recorded>)>, marked: Query<(), With<frames::Recorded>>) {
+fn mark_camera(mut commands: Commands, cams: Query<(Entity, Has<IsDefaultUiCamera>), (With<Camera>, Without<frames::Recorded>)>, marked: Query<(), With<frames::Recorded>>) {
     if !marked.is_empty() {
         return;
     }

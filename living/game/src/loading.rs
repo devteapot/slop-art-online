@@ -315,8 +315,8 @@ fn lift(
     island: Option<Res<crate::island::Island>>,
     me: Query<(), (With<crate::lookdev::Fitted>, Or<(With<crate::envs::Player>, With<crate::gait::Feet>)>)>,
     fitted: Query<(), (With<crate::lookdev::Fitted>, With<crate::characters::outfit::Dressed>)>,
-    cams: Query<Entity, With<Camera3d>>,
-    mut covers: Query<(Entity, &mut BackgroundColor, Has<UiTargetCamera>), With<Cover>>,
+    cams: Query<(Entity, Has<bevy::ui::IsDefaultUiCamera>), Or<(With<bevy::ui::IsDefaultUiCamera>, With<Camera3d>)>>,
+    mut covers: Query<(Entity, &mut BackgroundColor, Option<&UiTargetCamera>), With<Cover>>,
     mut texts: Query<&mut TextColor>,
     children: Query<&Children>,
     net: Option<NonSend<crate::net::Net>>,
@@ -329,10 +329,11 @@ fn lift(
     if n != loading.pipelines.0 {
         loading.pipelines = (n, now);
     }
-    // Headless captures render the camera into an image: the cover targets that camera.
-    if let Some(cam) = cams.iter().next() {
+    // Headless captures and scaled 3D render into an image: the cover targets the active UI camera.
+    let target_cam = cams.iter().find_map(|(e, def)| def.then_some(e)).or_else(|| cams.iter().next().map(|(e, _)| e));
+    if let Some(cam) = target_cam {
         for (e, _, targeted) in &covers {
-            if !targeted {
+            if targeted.is_none_or(|t| t.0 != cam) {
                 commands.entity(e).insert(UiTargetCamera(cam));
             }
         }

@@ -259,6 +259,7 @@ The client keeps a fixed vocabulary. The rules choose names from it, and only th
 | `item` | Clicking an item in the pack | as for `self`, with that item |
 | `box` | The ways chips in the text box | `human_speak(text, to, way)` |
 | `offer` | An incoming offer or proposal | `human_act` toward its sender, `target: {"id": sender}`, with the offer it answers, `"offer": id` (docs/WORLD_RULES.md, "Answering") |
+| `bond` | An incoming courting offer (`my_bond_offers`), a card in its maker's person window | `human_act` toward its maker, `target: {"id": maker}`. Shipped: `conceive` (`conceive_ui` adds `bond` to its default places), which takes the offer up within `bond_window_s`. A world that adds another skill here gets another button, with no client change |
 
 Declarations can add rows to two fixed window kinds: `person` (pinned acts) and `skills` (descriptions). A new window kind is a client change (section 4).
 
@@ -578,7 +579,7 @@ Each step leaves the game playable. A step that ships no declarations changes no
 - `bar_act()` returns `Option`: the leaf a press means, resolved as `use_skill` resolves it, and `None` where the authority refuses. The equivalence covers intent and target only: a press is used where the body stands, while a leaf with `{"id": n}` walks into reach first.
 
 **`Scripts`.** Methods `ui(name)`, `ui_specs()`, `ui_default(name)` and `ui_errors()`. `validate()` refuses any `ui_errors`, listing up to 12. The read keeps the default per field, so the rest of a declaration holds. Checks against the rules:
-- `self` with a target spec, `ground` without a point aim, an empty `on` (hide a skill with `listed: false`), and `offer` without a target are refused.
+- `self` with a target spec, `ground` without a point aim, an empty `on` (hide a skill with `listed: false`), and `offer` or `bond` without a target are refused.
 - Inputs must pair: `toggle` with `toggles`, `hold` with a held shape, `aim_dir` with facing or dash, each `pick_*` with its pick, `drag_onto` with `drag`.
 - `unready` is refused until a stance exists.
 - `order` must be 0..12.
@@ -851,7 +852,7 @@ Read leniently into `ui_errors` and refused by `validate()` at install, as for `
 - a direction not in `DIRS`, or a section named twice;
 - a skill whose `on` does not include the row's place. For example: `menus: person wheel names eat, but eat is not on person`;
 - `talk`, `window` or `introduce` on a row that is not `person`;
-- a row on `bar`, `box`, `offer`, `item` or `ground`;
+- a row on `bar`, `box`, `offer`, `bond`, `item` or `ground`;
 - a kind that is no structure, resource or species;
 - two rows with the same `on` and `kinds`;
 - a full wheel (eight pinned) without `more`;
@@ -920,7 +921,7 @@ The owner's only pointer is a laptop trackpad. On a trackpad, one finger moves t
 | An item in the pack | No | A click in a window; a wheel would cover the neighbouring cells. The list beside the cell stays. |
 | The skill bar | No | One key per skill, answered in the same frame (section 4); a wheel adds a step and covers the fight. |
 | Talking, ways of speaking | No | You are typing; the ways are chips in the box. The person wheel's Talk opens the box. |
-| An incoming offer | No | Two buttons on the offer card (`ui-1-step4`). |
+| An incoming offer | No | Two buttons on the offer card (`ui-1-step4`). A courting offer's card is the same: a button per skill on `bond`. |
 | The ground (build at a point) | No | `aim_point` already picks the point. Build's kinds could later be a `choose: "wheel"` sub-choice. |
 
 ### 8.4 Refusals, grey hints and progress
