@@ -1453,7 +1453,7 @@ const SCENT_MOVE: f32 = 4.0;
 /// body reads afresh at most `scent_hz` times a second, or when it has moved `SCENT_MOVE`
 /// tiles; in between, distances are taken from where it is now to where the creatures were.
 pub fn smelled_near(ctx: &ReducerContext, who: u32, kind: &str, at: (f32, f32), sight: f32, now: u64) -> Vec<NearCreature> {
-    let Some(scent) = scent_of(kind).filter(|s| s.radius > sight) else { return Vec::new() };
+    let Some(scent) = scent_for(ctx, kind).filter(|s| s.radius > sight) else { return Vec::new() };
     let _t = span("scent.query");
     let every_ms = (1000.0 / laws(ctx).scent_hz) as u64;
     let kept = SMELLED.with(|m| {
@@ -1896,6 +1896,14 @@ pub fn species(kind: &str) -> Option<living_rules::species::Species> {
 /// A species' scent, if it has one (without cloning the whole profile).
 pub fn scent_of(kind: &str) -> Option<living_rules::species::Scent> {
     SPECIES.with(|s| s.get(kind).and_then(|sp| sp.scent.clone()))
+}
+
+/// A body's scent in this world: its species' (`scent_of`), except that under the
+/// `perceived_private_on` law (perception parity) a person has none, whatever a seed's species
+/// say: smell stays an animal's sense, and no player has a view of what it smells. The law is
+/// read only for a person with a scent (none in the shipped species).
+pub fn scent_for(ctx: &ReducerContext, kind: &str) -> Option<living_rules::species::Scent> {
+    scent_of(kind).filter(|_| kind != "person" || !laws(ctx).perceived_private_on)
 }
 
 /// The people who have died in this world (`census`, what `stats.deaths` reports), made by one

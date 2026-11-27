@@ -552,7 +552,7 @@ fn held(ctx: &ReducerContext, b: &Body, st: &mut Steer, p: (f32, f32), now: u64,
     if let Some(tb) = &tb {
         let tp = common::pos(tb, now);
         let d = dist(p, tp);
-        let seen = crate::perception::in_sight(ctx, &map, b.id, p, common::facing_at(b, now), tb.id, tp, d, &w, now, true) || common::scent_of(&b.kind).is_some_and(|s| s.reaches(&tb.kind, d));
+        let seen = crate::perception::in_sight(ctx, &map, b.id, p, common::facing_at(b, now), tb.id, tp, d, &w, now, true) || common::scent_for(ctx, &b.kind).is_some_and(|s| s.reaches(&tb.kind, d));
         if seen {
             if dist((st.gx, st.gy), tp) > SEEN_MOVED_M || st.unseen_ms != 0 {
                 st.gx = tp.0;
