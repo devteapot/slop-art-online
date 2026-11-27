@@ -27,4 +27,7 @@ Evidence: `perceived_can-probe-*.json`, `perceived_can-t-after.json`, `perceived
 
 - A body is not second-guessed for 45 s after it arrives; the scene sleeps until then.
 - The unseen-yield probes must both finish inside the 20 s yield; the scene checks the time and fails otherwise.
+- The probe reads a 3 m walk from `activity`, never a gesture (a cooldown refuses a second one silently) or a turn (one to where the body already faces is refused, and told only once).
+- What T lacks is chosen when the probes start (residents gather berries meanwhile): an arrow, else salve, obsidian, hide or flint.
+- T yields again before the law-on probes: the first yield has lapsed by then.
 - The scene restores `perceived_can_on` in a `finally`.
