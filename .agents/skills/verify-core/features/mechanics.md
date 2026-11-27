@@ -18,7 +18,7 @@ Since 2026-11-09 (`rhai-1`, docs/SCRIPT_ENGINES.md "What changed"):
 - Each law is called with only the context fields it reads, found in its AST when the script compiles (`living/rules/src/script/fields.rs`, `context.rs`).
 - Numbers looked up by a name (`combat_cooldown`, `lunge`, `max_hp`, …) are read when the script compiles and served from a table (`script.rs:872`, `num_of`).
 - `install_script` (`living/authority/src/lib.rs:100`) and `init` run `Scripts::validate` (`script.rs:573`, `living/rules/src/script/check.rs:86`) before writing anything. It calls every law and skill function on sample states, the way the engine calls it, and logs the operations each took.
-- The engine limits are `LIMITS` (`script.rs:488`): 2,000 operations, call depth 8, expression depth 40, strings 2,048, arrays and maps 64. The source cap is 256 KiB.
+- The engine limits are `LIMITS` (`script.rs:488`): 2,000 operations, call depth 8, expression depth 40, strings 2,048, arrays and maps 64. The source cap is 512 KiB.
 
 ## Driving it with verify_mechanics.py, codes.py and Cargo
 
