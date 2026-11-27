@@ -1122,6 +1122,11 @@ impl<'a> Ev<'a> {
             Target::Sound => self.heard_list().first().map(|c| Resolved::point(c.pos)),
             Target::Commotion => {
                 let sight = common::sight_for(self.ctx, self.me.id, &self.w, now);
+                // Under `perceived_commotion_on`, only a fight or death the character perceives.
+                if common::laws(self.ctx).perceived_commotion_on {
+                    let (ctx, me, at) = (self.ctx, self.me.id, self.at);
+                    return crate::town::commotion_seen(ctx, me, at, sight, self.creatures(), now).map(Resolved::point);
+                }
                 crate::town::commotion(self.ctx, self.at, sight, now).map(Resolved::point)
             }
             Target::Home => {
