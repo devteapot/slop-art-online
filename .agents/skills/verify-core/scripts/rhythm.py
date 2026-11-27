@@ -6,7 +6,7 @@
 
 The seed is `living/seeds/cullet.json` (its plan, laws, starting ways and town life) with thirteen of
 its residents as `author_world.py` compiled them (their sheets, and the rhythm and places of
-`cast.json`; without residents in the seed, `compile_residents` without sheets), on a 12-minute day (Cullet's own is 48)
+`cast.json`; without residents in the seed, `compile_residents` without sheets), on an 18-minute day (Cullet's own is 48)
 so one game day passes in the scene. A few goods are added to their packs, the scene's own and
 not the cast's: peat for the stokers, ash and sand for the blower, roots for the baker, and food
 for everyone (so hunger does not send them to the stores or foraging in the middle of a trade's
@@ -55,13 +55,14 @@ V = T.V
 PEOPLE = ["Thessaly Marl", "Fenn Brandt", "Corvin Hollin", "Pieter Achterberg", "Anselm Faro", "Tobiah Dunmore", "Col Roon", "Halvard Dunmore",
           "Otto Brandt", "Benedikt Orme", "Edda Hollin", "Greta Dunmore", "Bram Calloway"]
 # A trade's hours at a named place (ways.json, layout-2): who, the place, the part of those hours
-# in which they must be there on this 12-minute day (a game hour is 30 s, so the walk takes one
-# or two of them), and within how many metres.
+# in which they must be there on this 18-minute day (a game hour is 45 s, so even a slow-gene
+# founder reaches their lot inside the window, as they do on Cullet's 48-minute day), and within
+# how many metres.
 HABITS = {
     "Otto Brandt": ("the clay pit", 9.2, 9.95, 8.0),
     "Benedikt Orme": ("the Readers' yard", 9.4, 11.9, 7.0),
     # Edda follows her father down to the Cone before 09:00 and sets out from there: 230 m of
-    # wynds, about three of this day's 30 s hours. So she is checked on the way and at the end
+    # wynds, about two of this day's 45 s hours. So she is checked on the way and at the end
     # (`child_at_lessons`), not by a share of the lesson hours.
     "Edda Hollin": ("the Readers' yard", 9.2, 12.75, 7.0),
     "Greta Dunmore": ("the Bleach", 12.4, 12.95, 9.0),
@@ -100,8 +101,11 @@ def make_seed(run):
     for p in seed["map"]["params"]["plans"]:
         p["structures"] = [st for st in p.get("structures", []) if not st.get("owner") or st["owner"].removeprefix("household:") in houses]
     seed["run"] = "cullet-rhythm"
-    seed["day_minutes"] = 12
-    seed["setting"] = "A scene world: Cullet's plan, laws and ways with thirteen of its cast on a 12-minute day (verify-core rhythm.py)."
+    # 18-minute day (45 s/game-hour, vs Cullet's 48-minute day): on a 12-minute day (30 s/h), a
+    # founder who draws a 4% large negative speed mutation (genes::founder, clamped to 0.4x ->
+    # ~1.1 m/s) takes ~2.7-3.0 compressed hours to walk ~105 m to the clay pit, missing 07:00-10:00.
+    seed["day_minutes"] = 18
+    seed["setting"] = "A scene world: Cullet's plan, laws and ways with thirteen of its cast on an 18-minute day (verify-core rhythm.py)."
     out = V.run_dir(run) / "cullet-rhythm.json"
     out.write_text(json.dumps(seed, indent=1, ensure_ascii=False) + "\n")
     print(out)
@@ -205,26 +209,33 @@ def household_things(s, ids):
         s.call("grant_items", [cid, "peat", 2])
         before = {"hearth": structures[hearth["id"]]["lit_until_ms"], "store": held(store["id"]), "pack": pack(cid)}
         t0 = s.now_ms()
-        acts = [{"do": "feed", "item": "peat", "qty": 1, "target": {"nearest": "hearth"}}, {"do": "cook", "item": "fish", "target": {"nearest": "hearth"}},
-                {"do": "take", "item": "food", "target": {"nearest": "storage"}}, {"do": "store", "item": "peat", "qty": 1, "target": {"nearest": "storage"}}]
-        s.call("mind_act", [cid, [json.dumps(a) for a in acts], "verify-core rhythm"])
-        done = wait(lambda: pack(cid).get("cooked_fish", 0) >= 1 and pack(cid).get("peat", 0) == 0, 60)
+        # Queue feed+cook+eat together (<= MAX_QUEUED=4) so the resident's own `find food and eat`
+        # desire cannot resume in the gap after `cook` and eat `cooked_fish` before `eat` runs;
+        # then take+store in a second deliberate batch.
+        acts1 = [{"do": "feed", "item": "peat", "qty": 1, "target": {"nearest": "hearth"}},
+                 {"do": "cook", "item": "fish", "target": {"nearest": "hearth"}},
+                 {"do": "eat", "item": "cooked_fish"}]
+        s.call("mind_act", [cid, [json.dumps(a) for a in acts1], "verify-core rhythm"])
+        done1 = wait(lambda: any("You did what you had decided: eat cooked_fish" in t for t in heard(cid, t0)), 60)
+        acts2 = [{"do": "take", "item": "food", "target": {"nearest": "storage"}},
+                 {"do": "store", "item": "peat", "qty": 1, "target": {"nearest": "storage"}}]
+        s.call("mind_act", [cid, [json.dumps(a) for a in acts2], "verify-core rhythm"])
+        done2 = wait(lambda: any("You did what you had decided: store peat" in t for t in heard(cid, t0)), 60)
+        lines = heard(cid, t0)
         after_store = held(store["id"])
         lit = s.sql(f"SELECT lit_until_ms FROM structure WHERE id = {hearth['id']}")[0]["lit_until_ms"]
         body = s.people().get(cid, {}).get("at")
-        failed = [t for t in heard(cid, t0) if any(w in t for w in ("did not work out", "could not get there", "never got to"))]
+        failed = [t for t in lines if any(w in t for w in ("did not work out", "could not get there", "never got to"))]
+        cooked = any("You did what you had decided: cook fish" in t for t in lines)
+        ate = any("You did what you had decided: eat cooked_fish" in t for t in lines)
         took = {k: before["store"].get(k, 0) - after_store.get(k, 0) for k in before["store"] if after_store.get(k, 0) < before["store"].get(k, 0)}
         s.check(f"{name} feeds and cooks at his own hearth inside the house, from the street",
-                done and lit > before["hearth"] and pack(cid).get("cooked_fish", 0) >= 1 and not failed,
+                done1 and lit > before["hearth"] and cooked and not failed,
                 {"lit_until_ms": [before["hearth"], lit], "pack": pack(cid), "stood_at": body, "hearth_m": body and round(dist(body, (hearth["x"], hearth["y"])), 2), "failed": failed})
         s.check(f"{name} takes food from and stores peat in his household's own store",
-                sum(took.values()) >= 1 and after_store.get("peat", 0) == before["store"].get("peat", 0) + 1 and not failed,
+                done2 and sum(took.values()) >= 1 and after_store.get("peat", 0) == before["store"].get("peat", 0) + 1 and not failed,
                 {"store_before": before["store"], "store_after": after_store, "took": took, "store_m": body and round(dist(body, (store["x"], store["y"])), 2)})
-        t1 = s.now_ms()
-        food = sum(v for k, v in pack(cid).items() if k in ("cooked_fish", "smoked_fish", "roots", "baked_roots"))
-        s.call("mind_act", [cid, [json.dumps({"do": "eat", "item": "cooked_fish"})], "verify-core rhythm"])
-        ate = wait(lambda: sum(v for k, v in pack(cid).items() if k in ("cooked_fish", "smoked_fish", "roots", "baked_roots")) < food, 30)
-        s.check(f"{name} eats what he cooked at home", ate and not [t for t in heard(cid, t1) if "did not work out" in t], {"pack": pack(cid)})
+        s.check(f"{name} eats what he cooked at home", done1 and ate and pack(cid).get("cooked_fish", 0) == 0 and not failed, {"pack": pack(cid), "failed": failed})
 
 
 def drive(run):

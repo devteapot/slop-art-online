@@ -131,6 +131,17 @@ class Town:
     def room(self, p):
         return sum(self.walkable(p[0] + dx, p[1] + dy) for dx in range(-2, 3) for dy in range(-2, 3))
 
+    def minds_manners(self, cid):
+        """Whether this resident's varied desire weights let `manners` preempt `work` (whose
+        active hysteresis is +0.1 in brain::desires; vary_ways gives ~20% of residents
+        manners.base <= work.base + 0.1)."""
+        if not hasattr(self, "_manners_ok"):
+            self._manners_ok = {}
+            for row in self.sql("SELECT id, graph FROM brain"):
+                ds = {d.get("want"): d.get("weight", {}).get("base", 0.0) for d in json.loads(row["graph"]).get("desires", [])}
+                self._manners_ok[row["id"]] = ds.get("manners", 0.0) > ds.get("work", 0.0) + 0.105
+        return self._manners_ok.get(cid, False)
+
     def lanes(self, p, length=6):
         """Unit directions d from which a straight walkable way of `length` tiles leads to p."""
         out = []
@@ -279,20 +290,32 @@ def scene_greet(t, state):
     t.check("the player perceives the answer", bool(told), f"{told}")
 
 
+def clear_of_others(ppl, p, radius=2.8):
+    """True when no other living resident stands within `radius` tiles of `p` (so an approaching
+    player within 2.5 m is unambiguously `nearest: person`, not shadowed by a coworker)."""
+    return all(dist(p["at"], q["at"]) >= radius for q in ppl.values() if q["id"] != p["id"])
+
+
 def scene_approach(t, state):
     """Someone who comes up to a standing resident from behind is faced."""
     t.wait_hour(8.0, 16.0)
     me = ensure_player(t)
     pick = None
     for _ in range(6):
-        for p in adults(t.people()):
-            if p["skill"] in ("keep", "gather", "rest") and p["phase"] == 1 and not p["moving"]:
-                h = t.sql(f"SELECT heading FROM body WHERE id = {p['id']}")[0]["heading"]
-                # A clear way in from behind (against the way they face) or from the side.
-                behind = [d for d in t.lanes(p["at"]) if d[0] * math.cos(h) + d[1] * math.sin(h) < 0.3]
-                if behind:
-                    pick = (p, min(behind, key=lambda d: d[0] * math.cos(h) + d[1] * math.sin(h)))
-                    break
+        ppl = t.people()
+        # Prefer residents standing at a post (`keep`, as `scene_greet` does): foragers doing
+        # `gather` walk away to the store or the next bush between placement and arrival.
+        for skills in (("keep",), ("gather", "rest")):
+            for p in adults(ppl):
+                if p["skill"] in skills and p["phase"] == 1 and not p["moving"] and t.minds_manners(p["id"]) and clear_of_others(ppl, p, 3.0):
+                    h = t.sql(f"SELECT heading FROM body WHERE id = {p['id']}")[0]["heading"]
+                    # A clear way in from behind (against the way they face) or from the side.
+                    behind = [d for d in t.lanes(p["at"]) if d[0] * math.cos(h) + d[1] * math.sin(h) < 0.3]
+                    if behind:
+                        pick = (p, min(behind, key=lambda d: d[0] * math.cos(h) + d[1] * math.sin(h)))
+                        break
+            if pick:
+                break
         if pick:
             break
         time.sleep(5)
@@ -303,7 +326,7 @@ def scene_approach(t, state):
     t.call("place_at", [me, x + 6 * d[0], y + 6 * d[1]])
     time.sleep(1.0)
     since = t.now_ms()
-    stopped = t.walk_to(me, (x, y), 1.8)
+    stopped = t.walk_to(me, (x, y), 1.6)
     faced = None
     for _ in range(16):
         time.sleep(0.5)
@@ -318,13 +341,29 @@ def scene_speak(t, state):
     """Someone who speaks to a standing resident from behind is faced."""
     t.wait_hour(8.0, 16.0)
     me = ensure_player(t)
-    r = standing_resident(t, t.people(), skills=("keep", "gather", "rest"))
-    if not r:
-        return t.check("a resident faces someone who speaks to them", False, "no standing resident")
-    b = t.sql(f"SELECT heading FROM body WHERE id = {r['id']}")[0]
+    pick = None
+    for _ in range(6):
+        ppl = t.people()
+        for skills in (("keep",), ("gather", "rest")):
+            for p in adults(ppl):
+                if p["skill"] in skills and p["phase"] == 1 and not p["moving"] and t.minds_manners(p["id"]) and clear_of_others(ppl, p, 3.0):
+                    h = t.sql(f"SELECT heading FROM body WHERE id = {p['id']}")[0]["heading"]
+                    # Place on a clear walkable lane behind the resident, outside the 2.5 m proximity-face
+                    # zone (so place_at never snaps behind a wall and no bystander turns them before speech).
+                    behind = [d for d in t.lanes(p["at"], length=4) if d[0] * math.cos(h) + d[1] * math.sin(h) < -0.3]
+                    if behind:
+                        pick = (p, min(behind, key=lambda d: d[0] * math.cos(h) + d[1] * math.sin(h)))
+                        break
+            if pick:
+                break
+        if pick:
+            break
+        time.sleep(5)
+    if not pick:
+        return t.check("a resident faces someone who speaks to them", False, "no standing resident with clear ground behind them")
+    r, d = pick
     x, y = r["at"]
-    t.call("place_at", [me, x - 3 * math.cos(b["heading"]), y - 3 * math.sin(b["heading"])])
-    time.sleep(1.5)
+    t.call("place_at", [me, x + 3.5 * d[0], y + 3.5 * d[1]])
     since = t.now_ms()
     t.call("human_say", ["Good day to you.", r["id"]], "player")
     faced = None
@@ -333,26 +372,32 @@ def scene_speak(t, state):
         faced = next((u for u in t.uses(r["id"], since) if u["skill"] == "face" and u["target"] == me and u["accepted_ms"]), None)
         if faced:
             break
-    t.save("speak", {"player": me, "resident": r, "face": faced})
+    t.save("speak", {"player": me, "resident": r, "from": d, "face": faced})
     t.check("a resident faces someone who speaks to them", faced is not None, f"{r['name']} (#{r['id']}) -> {faced}")
 
 
 def scene_aside(t, state):
     """Where the way is narrow (a lane between buildings, a gateway), a resident standing in it
-    steps aside for someone walking at them. Residents look once a second and a walker crosses
-    the 2.5 tiles in about one, so the scene makes up to three approaches and says which worked."""
+    steps aside for someone walking at them. Residents look once a second and a road walker
+    crosses the 2.5 tiles in ~0.7 s, so each eligible resident gets up to two passes shifted by
+    0.5 s in the 1 Hz evaluation cycle, across up to three residents."""
     t.wait_hour(8.0, 16.0)
     me = ensure_player(t)
     tried, result = [], None
     for attempt in range(3):
         pick = None
         for _ in range(6):
-            for p in adults(t.people()):
-                if p["id"] not in tried and p["skill"] in ("keep", "gather", "rest") and p["phase"] == 1 and not p["moving"] and t.room(p["at"]) <= 17:
-                    ways = t.lanes(p["at"])
-                    if ways:
-                        pick = (p, ways[0], t.room(p["at"]))
-                        break
+            ppl = t.people()
+            for skills in (("keep",), ("gather", "rest")):
+                for p in adults(ppl):
+                    if p["id"] not in tried and p["skill"] in skills and p["phase"] == 1 and not p["moving"] and t.minds_manners(p["id"]) and clear_of_others(ppl, p, 2.8) and t.room(p["at"]) <= 18:
+                        px, py = p["at"]
+                        ways = [d for d in t.lanes(p["at"]) if t.walkable(px - d[1] * 1.2, py + d[0] * 1.2) or t.walkable(px + d[1] * 1.2, py - d[0] * 1.2)]
+                        if ways:
+                            pick = (p, ways[0], t.room(p["at"]))
+                            break
+                if pick:
+                    break
             if pick:
                 break
             time.sleep(5)
@@ -361,28 +406,40 @@ def scene_aside(t, state):
         r, d, space = pick
         tried.append(r["id"])
         x, y = r["at"]
-        t.call("place_at", [me, x + 6 * d[0], y + 6 * d[1]])
-        time.sleep(1.0)
-        since = t.now_ms()
-        t.call("human_move", [-d[0], -d[1], False], "player")
-        stepped = None
-        for _ in range(12):
-            time.sleep(0.5)
-            stepped = next((u for u in t.uses(r["id"], since) if u["skill"] == "step_aside"), None)
-            if stepped and stepped["outcome"]:
+        stepped, moved, rb, walk_t0 = None, 0.0, [], None
+        for pass_idx in range(2):
+            if pass_idx:
+                now_at = t.people().get(r["id"], {}).get("at")
+                if not now_at or dist(now_at, r["at"]) >= 0.5:
+                    break
+            t.call("place_at", [me, x + 6 * d[0], y + 6 * d[1]])
+            time.sleep(0.6)
+            if pass_idx and walk_t0 is not None:
+                rem = (time.monotonic() - walk_t0) % 1.0
+                time.sleep((0.5 - rem) % 1.0)
+            walk_t0 = time.monotonic()
+            since = t.now_ms()
+            t.call("human_move", [-d[0], -d[1], False], "player")
+            stepped = None
+            for _ in range(10):
+                time.sleep(0.4)
+                stepped = next((u for u in t.uses(r["id"], since) if u["skill"] == "step_aside"), None)
+                if stepped and stepped["outcome"]:
+                    break
+            t.call("human_move", [0.0, 0.0, False], "player")
+            rb = t.sql(f"SELECT * FROM body WHERE id = {r['id']}")
+            moved = dist(pose(rb[0], t.now_ms()), r["at"]) if rb else 0.0
+            result = {"attempt": attempt + 1, "pass": pass_idx + 1, "resident": r, "room": space, "approach": d, "use": stepped, "resident_after": rb, "moved": moved}
+            t.save(f"aside-{attempt + 1}", result)
+            if stepped and stepped["accepted_ms"] and stepped["outcome"] == "made way" and moved >= 0.6:
                 break
-        t.call("human_move", [0.0, 0.0, False], "player")
-        rb = t.sql(f"SELECT * FROM body WHERE id = {r['id']}")
-        moved = dist(pose(rb[0], t.now_ms()), r["at"]) if rb else 0.0
-        result = {"attempt": attempt + 1, "resident": r, "room": space, "approach": d, "use": stepped, "resident_after": rb, "moved": moved}
-        t.save(f"aside-{attempt + 1}", result)
         if stepped and stepped["accepted_ms"] and stepped["outcome"] == "made way" and moved >= 0.6:
             break
         time.sleep(2)
     if not result:
         return t.check("a resident in a narrow way steps aside", False, "no resident standing in a narrow spot with a clear approach")
     r, stepped, moved = result["resident"], result["use"], result["moved"]
-    t.check("a resident standing in a narrow way steps aside for someone walking at them", stepped is not None and stepped["accepted_ms"] and stepped["outcome"] == "made way" and moved >= 0.6, f"approach {result['attempt']} of up to 3: {r['name']} (#{r['id']}), {result['room']} open tiles of 25 around, doing {r['skill']}, moved {moved:.2f} tiles -> {stepped}")
+    t.check("a resident standing in a narrow way steps aside for someone walking at them", stepped is not None and stepped["accepted_ms"] and stepped["outcome"] == "made way" and moved >= 0.6, f"approach {result['attempt']} (pass {result['pass']}) of up to 3: {r['name']} (#{r['id']}), {result['room']} open tiles of 25 around, doing {r['skill']}, moved {moved:.2f} tiles -> {stepped}")
 
 
 def scene_rain(t, state):
