@@ -86,7 +86,7 @@ def plan_entries():
                "chronicle_recent", "notice_inplace", "notice_delta", "seen_remains", "regard_check", "moves",
                "known_ground", "nav_belief", "stamina", "death-names", "intents", "fov", "placement", "answers",
                "admin_vitals", "alert_after_hit", "apart", "howl_reach", "fast_diag", "ground_goto", "relation_fight",
-               "heed", "sex_seen_bound"]
+               "heed", "sex_seen_bound", "familiar_regard"]
     for s in default:
         e.append({"id": s, "seed": W, "area": "core", "cmds": SCENE(s), "scene": s})
     for s in ("seen_remains_gaze", "sweep_kept", "sweep_rollback", "sweep_marks"):

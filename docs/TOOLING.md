@@ -288,7 +288,7 @@ The render group needs the game client's git-ignored assets. The gate does not g
 
 ### The nightly suite
 
-The scene gate runs only what a merge's paths select. [`nightly_suite.py`](../living/tools/nightly_suite.py) runs, once a night on the Spark, against the current `origin/main`, every verify-core scene and driver that no gate case reaches: 82 entries on main as of 2026-11-26, each on a fresh world of its own seed on a private server (`slop-nightly-<date>`, port 3690, CPUs 0-4 and 10-14). They include:
+The scene gate runs only what a merge's paths select. [`nightly_suite.py`](../living/tools/nightly_suite.py) runs, once a night on the Spark, against the current `origin/main`, every verify-core scene and driver that no gate case reaches: 83 entries on main as of 2026-11-27, each on a fresh world of its own seed on a private server (`slop-nightly-<date>`, port 3690, CPUs 0-4 and 10-14). They include:
 - the body and life (needs, alarms, sleeper, infant, lifecycle, family laws, sex);
 - wildlife (wildlife, grazing, remains, flee, pack reflex on and off);
 - laws and the clock (laws, decay, winter, law_override, look bands);
