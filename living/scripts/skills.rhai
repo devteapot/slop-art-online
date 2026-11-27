@@ -114,8 +114,8 @@ fn laws() {
         // labelled "stranger". On: anyone whose name one does not know, the rule that names
         // people in scenes, percepts and memory (`perception::knows_name`).
         stranger_by_name: false,
-        // Perception parity: no fact a player has no view of (grass grazed bare out of reach,
-        // being the only one alive who knows a technique, a person's scent).
+        // Perception parity: no fact a player has no view of (being the only one alive who
+        // knows a technique, a person's scent).
         perceived_private_on: false,
         // Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): a graph's
         // `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a
@@ -3279,7 +3279,7 @@ fn law_about(l, name) {
         "longing_after_min" => `a grown person longs for a child ${short(l.longing_after_min)} minutes after its own birth or its youngest child's (the most nurturing sooner)`,
         "longing_food" => if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
         "relation_fight_on" => if l.relation_fight_on { "whom one fights: what one said (enemy or spare) first, then a clear feeling about them, then how one's people stand with theirs" } else { "whom one fights: how one feels about someone, if one has any feeling about them, else how one's people stand with theirs" },
-        "perceived_private_on" => if l.perceived_private_on { "one knows grass is grazed bare only where one stands, never that one alone knows a technique, and people do not smell" } else { "one knows which grass in sight is grazed bare and whether anyone else alive knows what one knows" },
+        "perceived_private_on" => if l.perceived_private_on { "no one knows whether anyone else alive knows what they know, and people do not smell" } else { "one knows whether anyone else alive knows what one knows" },
         "stranger_by_name" => if l.stranger_by_name { "in a routine, a stranger is someone whose name one does not know" } else { "in a routine, a stranger is someone one has no feelings about yet" },
         "cues_on" => if l.cues_on { "what one wrote one would watch for brings one to think when one perceives it" } else { "one thinks when something happens to one, not because one watches for it" },
         "cue_cooldown_s" => `the same thing seen again brings no new thought from what one watches for within ${short(l.cue_cooldown_s)} s`,

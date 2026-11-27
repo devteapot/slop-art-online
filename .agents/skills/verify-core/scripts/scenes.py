@@ -1210,6 +1210,48 @@ def sight(s):
 
 
 
+def perceived_private(s):
+    """Facts no player has a view of, under the `perceived_private_on` law (perception parity,
+    docs/PERCEPTION_PARITY_AUDIT.md, the `brain::alerts` `sole` row): "you alone know how to …"
+    came from a scan of everyone's know-how. A grown person P, calm, is given a technique no one
+    alive knows (`grant_know_how`). Law on: in 75 s P is told nothing of it (the check runs about
+    once a minute). Law off (the leak, the control on the same person): within 75 s P feels "You
+    alone know how to <it>". About 3 minutes."""
+    rounds = iter(range(1000))
+    (p,) = cast = s.people(1)
+    known = {r["technique"] for r in s.rows("SELECT technique FROM know_how")}
+    tech = None
+    for t in ("pottery", "weaving", "smoking", "planting", "writing", "cloak", "spear", "fire", "cooking", "tanning", "net", "bow"):
+        if t in known:
+            continue
+        if s.call("grant_know_how", p, t, check=False).returncode == 0:
+            tech = t
+            break
+    (s.out / f"{s.name}-cast.json").write_text(json.dumps({"P": p, "technique": tech, "known_before": sorted(known)}) + "\n")
+    s.expect("P was given a technique no one alive knows", tech is not None, sorted(known))
+    s.call("admin_set_vitals", p, 100.0)
+    alone = lambda: [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {p}") if r["kind"] == "feeling" and "You alone know how to" in r["text"]]
+    try:
+        s.graph(p, {"wait": 120 + next(rounds)})
+        set_law(s, "perceived_private_on", True)
+        s.wait(lambda: own_laws(s.rows).get("perceived_private_on") == "true", 10)
+        s.needs(p, "needs-on")
+        time.sleep(75)
+        told = alone()
+        (s.out / f"{s.name}-feelings-on.json").write_text(json.dumps(told, indent=2) + "\n")
+        s.expect(f"law on: in 75 s P, alone knowing {tech}, is told nothing of it", not told, told)
+        set_law(s, "perceived_private_on", False)
+        s.wait(lambda: own_laws(s.rows).get("perceived_private_on") == "false", 10)
+        s.needs(p, "needs-off")
+        told = s.wait(lambda: alone() or None, seconds=75, every=2)
+        (s.out / f"{s.name}-feelings-off.json").write_text(json.dumps(told, indent=2) + "\n")
+        s.expect(f"law off (the leak): P feels it alone knows {tech}, from everyone's know-how", any(tech in r["text"] for r in told), told)
+    finally:
+        set_law(s, "perceived_private_on", False, check=False)
+        for c in cast:
+            s.graph(c, {"wait": 60 + next(rounds)})
+
+
 def drop_geometry(s, cls=8):
     """On this world's own map: an `eye` tile and an `across` one on one axis with only tiles of
     class `cls` (8 a drop, 9 a low thing; 1 to 3 of them) between and walkable ground behind each
@@ -5940,6 +5982,7 @@ def workplace(s):
 SCENES["sex_seen_bound"] = sex_seen_bound
 SCENES["familiar_regard"] = familiar_regard
 SCENES["goods"] = goods
+SCENES["perceived_private"] = perceived_private
 SCENES["workplace"] = workplace
 SCENES["making"] = making
 SCENES["stock"] = stock

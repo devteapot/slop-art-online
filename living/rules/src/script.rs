@@ -612,10 +612,9 @@ pub struct Laws {
     /// (`perception::knows_name`, the rule scenes and percepts name people by).
     pub stranger_by_name: bool,
     /// Facts a player has no view of (perception parity, docs/PERCEPTION_PARITY_AUDIT.md, the
-    /// private tables): on, a graph's nearest grass skips grazed-bare ground only in the chunk
-    /// the character stands in (the patch at its feet), not every chunk in its sight; no one is
-    /// told "you alone know how to …" from a scan of everyone's know-how; and a person never
-    /// smells (scent stays an animal's sense, whatever a seed's species say). Off, as before.
+    /// private tables): on, no one is told "you alone know how to …" from a scan of everyone's
+    /// know-how, and a person never smells (scent stays an animal's sense, whatever a seed's
+    /// species say). Off, as before.
     pub perceived_private_on: bool,
     /// Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): on, a graph's
     /// `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a clear

@@ -131,7 +131,7 @@ SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'plac
 RLS_TABLES = ['seen_body_cue', 'seen_fighter_cue', 'seen_doing_cue', 'seen_body_copy', 'seen_character_copy', 'seen_fighter_copy', 'combat_feed', 'experience_copy', 'seen_throng']
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'my_kin', 'my_bond_offers', 'my_community', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex',
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'my_kin', 'my_bond_offers', 'my_community', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex', 'seen_pasture',
          # The near and far tiers of the three copy-backed views (frame-views; scripts/cues.py proves them).
          'seen_bodies_near', 'seen_bodies_far', 'seen_fighters_near', 'seen_fighters_far', 'seen_doing_near', 'seen_doing_far']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
@@ -929,6 +929,7 @@ class Run:
                    and theirs['name'] == '' and theirs['label'] and theirs['hp'] < 0, 'seen-characters.json', f"columns {cols}; other {theirs and theirs['label']}")
         self.offers(identities, admin_token, me, other, t1, t2)
         self.bond_offers_and_community(identities, admin_token, me, other, t1, t2)
+        self.seen_pasture(identities, admin_token, me)
         far = scene('beyond-sight', spots['open'][0], spots['far'])
         gone = lambda s, a, b: not any(b in s[a][t] for t in SEEN)
         self.check('beyond sight: no body, character, fighter or doing row', gone(far, me, other) and gone(far, other, me), 'sight.json',
@@ -1001,6 +1002,54 @@ class Run:
                    len(c1) == 1 and c1[0]['name'] == 'VerifyClan' and c1[0]['founder'] == me and c1[0]['since_ms'] > 0
                    and crows['player-2'] == [] and crows['anonymous-connected'] == [] and crows['anonymous'] == [],
                    'community.json', f"player-1 {c1}, player-2 {crows['player-2']}, ClientAnon {crows['anonymous-connected']}, anonymous {crows['anonymous']}")
+
+    def seen_pasture(self, identities, admin_token, me):
+        """`seen_pasture` (perception parity): each player's rows are exactly the private `pasture`
+        rows of the map chunks within its sight of its body (`living_rules::map::chunks_around` with
+        its `my_senses` sight), what a graph's `nearest grass` reads from there; anonymous gets none;
+        `pasture` stays private. A deer grazes on grass beside player-1 first, so a row exists in
+        its sight."""
+        w, h, tiles = self.terrain()
+        b = self.sql_admin(f'SELECT x, y FROM body WHERE id = {me}')[0]
+        grass = sorted(((x + .5, y + .5) for y in range(max(0, int(b['y']) - 8), min(h, int(b['y']) + 9))
+                        for x in range(max(0, int(b['x']) - 8), min(w, int(b['x']) + 9)) if tiles[y * w + x] in (0, 1)),
+                       key=lambda p: math.dist(p, (b['x'], b['y'])))
+        deer = next((c['id'] for c in self.sql_admin("SELECT id, alive FROM character WHERE kind = 'deer'") if c['alive']), None)
+        grazed = None
+        if grass and deer is not None:
+            self.call('admin-place', admin_token, 'place_at', [deer, grass[0][0], grass[0][1]])
+            self.call('admin-graph', admin_token, 'set_behavior', [deer, json.dumps({'first': [{'do': 'graze'}, {'wait': 1}]})])
+            d = self.sql_admin(f'SELECT x, y FROM body WHERE id = {deer}')[0]
+            grazed = (int(d['y']) // 16) << 16 | (int(d['x']) // 16)
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline and not self.sql_admin(f'SELECT chunk FROM pasture WHERE chunk = {grazed}'):
+                time.sleep(0.5)
+            self.call('admin-graph', admin_token, 'set_behavior', [deer, json.dumps({'wait': 120})])
+
+        def around(x, y, r):
+            lo_x, hi_x = int(max(x - r, 0.0)) // 16, int(max(x + r, 0.0)) // 16
+            lo_y, hi_y = int(max(y - r, 0.0)) // 16, int(max(y + r, 0.0)) // 16
+            return {cy << 16 | cx for cy in range(lo_y, hi_y + 1) for cx in range(lo_x, hi_x + 1)}
+
+        rows = {}
+        for label, token, own in identities:
+            v = self.probe('seen-pasture-' + label, ['SELECT * FROM seen_pasture'], token, seconds=1)
+            rows[label] = v['final']['perception']['seen_pasture'] if v['status'] == 'applied' else None
+        v = self.probe('seen-pasture-anonymous', ['SELECT * FROM seen_pasture'])
+        rows['anonymous'] = v['final']['perception']['seen_pasture'] if v['status'] == 'applied' else None
+        truth = {r['chunk']: r for r in self.sql_admin('SELECT * FROM pasture')}
+        want = {}
+        for label, token, own in identities:
+            body = self.sql_admin(f'SELECT x, y FROM body WHERE id = {own}')[0]
+            senses = self.sql_admin(f'SELECT sight FROM character_senses WHERE id = {own}')
+            want[label] = sorted(c for c in around(body['x'], body['y'], senses[0]['sight'] if senses else 16.0) if c in truth)
+        got = {l: sorted(r['chunk'] for r in v or []) for l, v in rows.items()}
+        same = lambda r: abs(r['amount'] - truth[r['chunk']]['amount']) < 1e-3 and abs(r['max'] - truth[r['chunk']]['max']) < 1e-3 and r['at_ms'] == truth[r['chunk']]['at_ms']
+        write(self.directory / 'seen-pasture.json', {'grazed': grazed, 'rows': rows, 'want': want, 'pasture_rows': len(truth)})
+        self.check('seen_pasture: each player reads exactly the pasture rows of the chunks within its sight, as they are; anonymous none',
+                   all(got[l] == want[l] for l in want) and grazed in got['player-1'] and rows['anonymous'] == []
+                   and all(same(r) for l in want for r in rows[l] or []),
+                   'seen-pasture.json', f"grazed chunk {grazed}; got {got}; want {want}")
 
     def field_of_view(self, spots, admin_token, mine, theirs):
         """Sight that depends on facing (docs/PERCEPTION.md, "The field of view"), switched on by

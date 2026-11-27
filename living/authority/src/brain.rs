@@ -1276,12 +1276,9 @@ impl<'a> Ev<'a> {
                 let r = sight as i32;
                 let (cx, cy) = (self.at.0.floor() as i32, self.at.1.floor() as i32);
                 let mut best: Option<((f32, f32), f32)> = None;
-                // Grazed-bare ground doesn't count as grass to go to. Under `perceived_private_on`
-                // (perception parity: no player has a view of how grazed a chunk is) only the
-                // patch at one's feet, the chunk one stands in, is known to be bare; grass farther
-                // off is worth the walk until one stands in it (and a graze there says the truth).
+                // Grazed-bare ground doesn't count as grass to go to (a chunk's grass is seen: a
+                // player reads the same rows of the chunks round its character, `seen_pasture`).
                 let mut bare: std::collections::HashMap<u32, bool> = std::collections::HashMap::new();
-                let feet = common::laws(self.ctx).perceived_private_on.then(|| living_rules::map::chunk_of(self.at.0, self.at.1));
                 for dy in -r..=r {
                     for dx in -r..=r {
                         if map.get(cx + dx, cy + dy).name() != f.kind {
@@ -1289,7 +1286,7 @@ impl<'a> Ev<'a> {
                         }
                         let chunk = living_rules::map::chunk_of((cx + dx) as f32, (cy + dy) as f32);
                         let (ctx, now) = (self.ctx, self.now);
-                        if feet.is_none_or(|f| f == chunk) && *bare.entry(chunk).or_insert_with(|| common::pasture_now(ctx, chunk, now) < 1.0) {
+                        if *bare.entry(chunk).or_insert_with(|| common::pasture_now(ctx, chunk, now) < 1.0) {
                             continue;
                         }
                         let p = ((cx + dx) as f32 + 0.5, (cy + dy) as f32 + 0.5);
