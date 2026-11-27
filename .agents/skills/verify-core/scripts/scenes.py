@@ -317,10 +317,10 @@ def perceived_can(s):
     """A graph's `can` under the `perceived_can_on` law (perception parity,
     docs/PERCEPTION_PARITY_AUDIT.md): decided on what the actor perceives, as a player's client
     decides (`TargetFacts::perceived`), while the act itself is still checked on the truth. On an
-    open line W stands beside T, who carries 3 meat and no berries and yields in W's sight. W's
-    probe asks `can seize` T's meat, then T's berries, and waves (yes) or nods (no). Law off
-    (control, the leak): meat yes, berries no, so `can` tells W what T carries. Law on: yes to
-    both (what T carries is not seen); W's seize of berries is then refused truthfully (T does
+    open line W stands beside T, who carries 3 meat and lacks something no one gathers (an arrow) and yields in W's sight. W's
+    probe asks `can seize` T's meat, then that thing, and walks north (yes) or south (no). Law off
+    (control, the leak): meat yes, the other no, so `can` tells W what T carries. Law on: yes to
+    both (what T carries is not seen); W's seize of it is then refused truthfully (T does
     not have them) and T keeps its meat. Then U, carrying meat, yields while W stands 16 m off
     (out of sight); W is brought beside U within the yield's 20 s: law on, `can seize` is no (the
     yield was not seen, U is not hurt); law off, yes (the private yield). About 3 minutes."""
@@ -333,15 +333,40 @@ def perceived_can(s):
     now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
 
     def probe(target, item, label):
-        """W's answer to `can seize` `item` from `target`: a wave for yes, a nod for no."""
-        t0 = now()
+        """W's answer to `can seize` `item` from `target`: a walk 3 m north for yes, 3 m south for
+        no, read from W's `activity` row (a walk has no cooldown and is never "already" done);
+        W is put back where it stood afterwards."""
+        b = s.rows(f"SELECT x, y FROM body WHERE id = {w}")[0]
+        x, y = b["x"], b["y"]
+        yes, no = [x, y + 3.0], [x, y - 3.0]
         s.graph(w, {"seq": [{"if": {"cond": {"can": {"skill": "seize", "target": {"id": target}, "item": item}},
-                                    "then": {"do": {"skill": "wave", "target": {"id": target}}},
-                                    "else": {"do": {"skill": "nod", "target": {"id": target}}}}},
+                                    "then": {"do": {"skill": "goto", "target": {"at": yes}}},
+                                    "else": {"do": {"skill": "goto", "target": {"at": no}}}}},
                             {"wait": 60 + next(rounds)}]})
-        got = s.wait(lambda: [x for x in s.rows("SELECT * FROM skill_use") if x["at_ms"] >= t0 and x["actor"] == w and x["skill"] in ("wave", "nod")] or None, seconds=20)
-        s.rows(f"SELECT * FROM skill_use WHERE actor = {w}", f"probe-{label}")
-        return {"wave": True, "nod": False}[got[0]["skill"]]
+
+        def answer():
+            for r in s.http_rows(f"SELECT * FROM activity WHERE id = {w}"):
+                t = r["target"]
+                tx, ty = (t["x"], t["y"]) if isinstance(t, dict) else (t[2], t[3])
+                if r["skill"] == "goto" and math.dist((tx, ty), yes) < 0.6:
+                    return True
+                if r["skill"] == "goto" and math.dist((tx, ty), no) < 0.6:
+                    return False
+            return None
+
+        got = s.wait(lambda: (answer(),) if answer() is not None else None, seconds=20, every=0.2)[0]
+        s.rows(f"SELECT * FROM activity WHERE id = {w}", f"probe-{label}")
+        s.graph(w, {"wait": 60 + next(rounds)})
+        s.call("place_at", w, x, y)
+        time.sleep(0.5)
+        return got
+
+    def yield_now(who):
+        """`who` yields (no one hurt it, so to no one): seen by whoever watches."""
+        before = max([r["at_ms"] for r in s.story("yield", who)] or [0])
+        s.graph(who, {"seq": [{"do": "yield"}, {"wait": 120 + next(rounds)}]})
+        s.wait(lambda: [r for r in s.story("yield", who) if r["at_ms"] > before])
+        return time.monotonic()
 
     try:
         for c in cast:
@@ -353,26 +378,29 @@ def perceived_can(s):
         s.call("grant_items", t, "meat", 3)
         s.call("grant_items", u, "meat", 3)
         time.sleep(46)  # a body is not second-guessed for 45 s after arrival (`brain.rs`)
-        s.graph(t, {"seq": [{"do": "yield"}, {"wait": 120 + next(rounds)}]})
-        s.wait(lambda: s.story("yield", t))
+        first = yield_now(t)
         s.expect("W saw T yield (a yield line in W's experience)", s.wait(lambda: s.told(w, "", "yield"), seconds=10), s.told(w, "", "yield"))
-        off = {i: probe(t, i, f"off-{i}") for i in ("meat", "berries")}
-        s.expect("law off: can seize T's meat yes, berries no (can reveals what T carries: the leak)", off == {"meat": True, "berries": False}, off)
+        # What T lacks: something no one gathers in a minute (T may have picked some food meanwhile).
+        held = s.inventory(t, "t-before")
+        lack = next(i for i in ("arrow", "salve", "obsidian", "hide", "flint") if not held.get(i))
+        off = {i: probe(t, i, f"off-{i}") for i in ("meat", lack)}
+        s.expect(f"law off: can seize T's meat yes, {lack} no (can reveals what T carries: the leak)", off == {"meat": True, lack: False}, {"answers": off, "held": held})
         set_law(s, "perceived_can_on", True)
         s.wait(lambda: own_laws(s.rows).get("perceived_can_on") == "true", 10)
-        on = {i: probe(t, i, f"on-{i}") for i in ("meat", "berries")}
-        s.expect("law on: can seize yes for meat and for berries (what T carries is not seen)", on == {"meat": True, "berries": True}, on)
+        # A fresh yield in W's sight (the first is past its 20 s; a yield is not renewed while it holds).
+        time.sleep(max(0.0, 21.0 - (time.monotonic() - first)))
+        yield_now(t)
+        on = {i: probe(t, i, f"on-{i}") for i in ("meat", lack)}
+        s.expect(f"law on: can seize yes for meat and for {lack} (what T carries is not seen)", on == {"meat": True, lack: True}, on)
         t0 = now()
-        s.act(w, {"do": "seize", "target": {"id": t}, "item": "berries"})
+        s.act(w, {"do": "seize", "target": {"id": t}, "item": lack})
         s.wait(lambda: s.told(w, "does not have"), seconds=20)
-        s.expect("law on: the seize of berries is refused truthfully, and T keeps its meat", s.inventory(t, "t-after").get("meat") == 3 and not s.inventory(w, "w-after").get("berries"),
+        s.expect(f"law on: the seize of {lack} is refused truthfully, and T keeps its meat", s.inventory(t, "t-after").get("meat") == held.get("meat") and not s.inventory(w, "w-after").get(lack),
                  s.told(w, "does not have"))
 
         # An unseen yield: U yields while W is 13 m off, beyond the day's sight.
         s.graph(w, {"wait": 120 + next(rounds)})
-        s.graph(u, {"seq": [{"do": "yield"}, {"wait": 120 + next(rounds)}]})
-        s.wait(lambda: s.story("yield", u))
-        yielded = time.monotonic()
+        yielded = yield_now(u)
         s.call("place_at", w, line[22][0], line[22][1])
         time.sleep(1.5)
         s.expect("W saw no yield by U", not [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {w} AND kind = 'yield'") if r["subject"] == u])

@@ -8,7 +8,7 @@ Perception parity phase 1 ([audit](../../../../docs/PERCEPTION_PARITY_AUDIT.md),
   - a yield only when the actor saw it (its own `yield` lines, `living_rules::script::yielded_seen`; the client reads its `my_experience` lines the same way, under the law only);
   - whoever struck the actor counts as close (`hurt_by_near`) only while the actor sees them;
   - a store's food is "food" (`take food`), not the food it holds.
-- **Acting** (`act::begin`) is unchanged: the check runs on the truth and refuses truthfully when the guess was wrong ("… does not have 1 berries").
+- **Acting** (`act::begin`) is unchanged: the check runs on the truth and refuses truthfully when the guess was wrong ("… does not have 1 arrow").
 - **A predator's `dares`** (in `attack_check`, deciding and acting alike, since it is the predator's own judgment): under the law, the people it counts near its prey (`target.company`) are those it sees or smells, and its prey's `activity` is what it is visibly doing (`perception::visibly`: a sleep seen), not its private activity.
 
 Off, every path is as before (one law read added per `can` and per predator check). Players' choices are the same rule; a structure's contents in `Filter.holds` targets are not covered (the audit's separate row).
@@ -19,7 +19,7 @@ Off, every path is as before (one law read added per `can` and per predator chec
 python3 .agents/skills/verify-core/scripts/scenes.py perceived_can --run "$R" > ".local/living/verify/$R/perceived_can.txt" 2>&1
 ```
 
-`scenes.py perceived_can` (any seed, about 3 minutes): W beside T, who carries 3 meat and no berries and yields in W's sight; W's probe asks `can seize` meat and berries (a wave for yes, a nod for no). Law off: meat yes, berries no (the leak). Law on: both yes; W's seize of berries is refused truthfully and T keeps its meat. Then U yields with W 13 m off (unseen) and W is brought beside U: law on no, law off yes (the private yield).
+`scenes.py perceived_can` (any seed, about 3 minutes): W beside T, who carries 3 meat and lacks an arrow and yields in W's sight; W's probe asks `can seize` meat and the arrow (a walk 3 m north for yes, south for no). Law off: meat yes, arrow no (the leak). Law on: both yes; W's seize of the arrow is refused truthfully and T keeps its meat. Then U yields with W 13 m off (unseen) and W is brought beside U: law on no, law off yes (the private yield).
 
 Evidence: `perceived_can-probe-*.json`, `perceived_can-t-after.json`, `perceived_can-cast.json`, `perceived_can-actions.jsonl`.
 
