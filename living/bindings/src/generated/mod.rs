@@ -78,6 +78,8 @@ pub mod cue_in_type;
 pub mod cue_table;
 pub mod cue_type;
 pub mod cursor_type;
+pub mod dead_skill_use_due_table;
+pub mod dead_skill_use_due_type;
 pub mod deliberation_table;
 pub mod deliberation_type;
 pub mod doing_near_table;
@@ -366,6 +368,8 @@ pub mod skill_card_table;
 pub mod skill_card_type;
 pub mod skill_code_table;
 pub mod skill_code_type;
+pub mod skill_use_event_table;
+pub mod skill_use_event_type;
 pub mod skill_use_table;
 pub mod skill_use_type;
 pub mod slow_timer_table;
@@ -489,6 +493,8 @@ pub use cue_in_type::CueIn;
 pub use cue_table::*;
 pub use cue_type::Cue;
 pub use cursor_type::Cursor;
+pub use dead_skill_use_due_table::*;
+pub use dead_skill_use_due_type::DeadSkillUseDue;
 pub use deliberation_table::*;
 pub use deliberation_type::Deliberation;
 pub use doing_near_table::*;
@@ -777,6 +783,8 @@ pub use skill_card_table::*;
 pub use skill_card_type::SkillCard;
 pub use skill_code_table::*;
 pub use skill_code_type::SkillCode;
+pub use skill_use_event_table::*;
+pub use skill_use_event_type::SkillUseEvent;
 pub use skill_use_table::*;
 pub use skill_use_type::SkillUse;
 pub use slow_timer_table::*;
@@ -1551,6 +1559,7 @@ pub struct DbUpdate {
     cover_source: __sdk::TableUpdate<CoverSource>,
     cover_timer: __sdk::TableUpdate<CoverTimer>,
     cue: __sdk::TableUpdate<Cue>,
+    dead_skill_use_due: __sdk::TableUpdate<DeadSkillUseDue>,
     deliberation: __sdk::TableUpdate<Deliberation>,
     doing: __sdk::TableUpdate<Doing>,
     doing_near: __sdk::TableUpdate<DoingNear>,
@@ -1674,6 +1683,7 @@ pub struct DbUpdate {
     skill_card: __sdk::TableUpdate<SkillCard>,
     skill_code: __sdk::TableUpdate<SkillCode>,
     skill_use: __sdk::TableUpdate<SkillUse>,
+    skill_use_event: __sdk::TableUpdate<SkillUseEvent>,
     slow_timer: __sdk::TableUpdate<SlowTimer>,
     slumber: __sdk::TableUpdate<Slumber>,
     speech_card: __sdk::TableUpdate<SpeechCard>,
@@ -1793,6 +1803,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "cue" => db_update
                     .cue
                     .append(cue_table::parse_table_update(table_update)?),
+                "dead_skill_use_due" => db_update
+                    .dead_skill_use_due
+                    .append(dead_skill_use_due_table::parse_table_update(table_update)?),
                 "deliberation" => db_update
                     .deliberation
                     .append(deliberation_table::parse_table_update(table_update)?),
@@ -2162,6 +2175,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "skill_use" => db_update
                     .skill_use
                     .append(skill_use_table::parse_table_update(table_update)?),
+                "skill_use_event" => db_update
+                    .skill_use_event
+                    .append(skill_use_event_table::parse_table_update(table_update)?),
                 "slow_timer" => db_update
                     .slow_timer
                     .append(slow_timer_table::parse_table_update(table_update)?),
@@ -2333,6 +2349,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.cue = cache
             .apply_diff_to_table::<Cue>("cue", &self.cue)
             .with_updates_by_pk(|row| &row.id);
+        diff.dead_skill_use_due = cache
+            .apply_diff_to_table::<DeadSkillUseDue>("dead_skill_use_due", &self.dead_skill_use_due)
+            .with_updates_by_pk(|row| &row.actor);
         diff.deliberation = cache
             .apply_diff_to_table::<Deliberation>("deliberation", &self.deliberation)
             .with_updates_by_pk(|row| &row.actor);
@@ -2599,6 +2618,7 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.skill_use = cache
             .apply_diff_to_table::<SkillUse>("skill_use", &self.skill_use)
             .with_updates_by_pk(|row| &row.id);
+        diff.skill_use_event = self.skill_use_event.into_event_diff();
         diff.slow_timer = cache
             .apply_diff_to_table::<SlowTimer>("slow_timer", &self.slow_timer)
             .with_updates_by_pk(|row| &row.scheduled_id);
@@ -2845,6 +2865,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "cue" => db_update
                     .cue
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "dead_skill_use_due" => db_update
+                    .dead_skill_use_due
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "deliberation" => db_update
                     .deliberation
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -3213,6 +3236,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "skill_use" => db_update
                     .skill_use
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "skill_use_event" => db_update
+                    .skill_use_event
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "slow_timer" => db_update
                     .slow_timer
@@ -3374,6 +3400,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "cue" => db_update
                     .cue
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "dead_skill_use_due" => db_update
+                    .dead_skill_use_due
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "deliberation" => db_update
                     .deliberation
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3743,6 +3772,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "skill_use" => db_update
                     .skill_use
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "skill_use_event" => db_update
+                    .skill_use_event
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "slow_timer" => db_update
                     .slow_timer
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3843,6 +3875,7 @@ pub struct AppliedDiff<'r> {
     cover_source: __sdk::TableAppliedDiff<'r, CoverSource>,
     cover_timer: __sdk::TableAppliedDiff<'r, CoverTimer>,
     cue: __sdk::TableAppliedDiff<'r, Cue>,
+    dead_skill_use_due: __sdk::TableAppliedDiff<'r, DeadSkillUseDue>,
     deliberation: __sdk::TableAppliedDiff<'r, Deliberation>,
     doing: __sdk::TableAppliedDiff<'r, Doing>,
     doing_near: __sdk::TableAppliedDiff<'r, DoingNear>,
@@ -3966,6 +3999,7 @@ pub struct AppliedDiff<'r> {
     skill_card: __sdk::TableAppliedDiff<'r, SkillCard>,
     skill_code: __sdk::TableAppliedDiff<'r, SkillCode>,
     skill_use: __sdk::TableAppliedDiff<'r, SkillUse>,
+    skill_use_event: __sdk::TableAppliedDiff<'r, SkillUseEvent>,
     slow_timer: __sdk::TableAppliedDiff<'r, SlowTimer>,
     slumber: __sdk::TableAppliedDiff<'r, Slumber>,
     speech_card: __sdk::TableAppliedDiff<'r, SpeechCard>,
@@ -4056,6 +4090,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         );
         callbacks.invoke_table_row_callbacks::<CoverTimer>("cover_timer", &self.cover_timer, event);
         callbacks.invoke_table_row_callbacks::<Cue>("cue", &self.cue, event);
+        callbacks.invoke_table_row_callbacks::<DeadSkillUseDue>(
+            "dead_skill_use_due",
+            &self.dead_skill_use_due,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Deliberation>(
             "deliberation",
             &self.deliberation,
@@ -4351,6 +4390,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<SkillCard>("skill_card", &self.skill_card, event);
         callbacks.invoke_table_row_callbacks::<SkillCode>("skill_code", &self.skill_code, event);
         callbacks.invoke_table_row_callbacks::<SkillUse>("skill_use", &self.skill_use, event);
+        callbacks.invoke_table_row_callbacks::<SkillUseEvent>(
+            "skill_use_event",
+            &self.skill_use_event,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<SlowTimer>("slow_timer", &self.slow_timer, event);
         callbacks.invoke_table_row_callbacks::<Slumber>("slumber", &self.slumber, event);
         callbacks.invoke_table_row_callbacks::<SpeechCard>("speech_card", &self.speech_card, event);
@@ -5064,6 +5108,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         cover_source_table::register_table(client_cache);
         cover_timer_table::register_table(client_cache);
         cue_table::register_table(client_cache);
+        dead_skill_use_due_table::register_table(client_cache);
         deliberation_table::register_table(client_cache);
         doing_table::register_table(client_cache);
         doing_near_table::register_table(client_cache);
@@ -5187,6 +5232,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         skill_card_table::register_table(client_cache);
         skill_code_table::register_table(client_cache);
         skill_use_table::register_table(client_cache);
+        skill_use_event_table::register_table(client_cache);
         slow_timer_table::register_table(client_cache);
         slumber_table::register_table(client_cache);
         speech_card_table::register_table(client_cache);
@@ -5238,6 +5284,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "cover_source",
         "cover_timer",
         "cue",
+        "dead_skill_use_due",
         "deliberation",
         "doing",
         "doing_near",
@@ -5361,6 +5408,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "skill_card",
         "skill_code",
         "skill_use",
+        "skill_use_event",
         "slow_timer",
         "slumber",
         "speech_card",

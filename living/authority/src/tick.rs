@@ -540,6 +540,7 @@ fn housekeeping_body(ctx: &ReducerContext) -> Result<(), String> {
     spoil(ctx, now);
     expire_remains(ctx, now);
     crate::combat::housekeeping(ctx, now);
+    crate::combat::drain_dead_uses(ctx, now);
     crate::fast::pump(ctx, now);
 
     // One pass over the living: population counts for the stats row. The dead keep their rows

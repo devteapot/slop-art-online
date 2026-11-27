@@ -1884,8 +1884,10 @@ pub struct Missile {
 }
 
 /// One use of a combat skill, from the intention to what actually happened (private; kept
-/// for the last [`crate::combat::USES_KEPT`] uses per character). `accepted_ms` is 0 for an
-/// attempt the rules refused, with `outcome` saying why.
+/// for the last [`crate::combat::USES_KEPT`] uses per living character, and a dead one's for
+/// [`crate::combat::DEAD_USES_GRACE_MS`] after its death; each finished row also goes out as a
+/// [`SkillUseEvent`]). `accepted_ms` is 0 for an attempt the rules refused, with `outcome`
+/// saying why.
 #[derive(Clone, Debug)]
 #[spacetimedb::table(accessor = skill_use)]
 pub struct SkillUse {
@@ -1906,6 +1908,33 @@ pub struct SkillUse {
     pub released_ms: u64,
     pub outcome: String,
     pub outcome_ms: u64,
+}
+
+/// A `skill_use` row as it stood when it was finished, for exporters (private event table: no
+/// row stays after its transaction; the owner's subscription receives each insert, and the
+/// commitlog keeps it). Sent when an outcome is written or amended (`why` "outcome"), and when a
+/// row that never had one leaves the table: trimmed past [`crate::combat::USES_KEPT`]
+/// ("trimmed") or drained after its actor's death ("drained", [`DeadSkillUseDue`]). The last
+/// event per `skill_use.id` is the row's final state. docs/COMBAT.md, "Skill uses".
+#[derive(Clone, Debug)]
+#[spacetimedb::table(accessor = skill_use_event, event)]
+pub struct SkillUseEvent {
+    /// "outcome", "trimmed" or "drained".
+    pub why: String,
+    /// When it was sent (ms).
+    pub sent_ms: u64,
+    pub skill_use: SkillUse,
+}
+
+/// A dead character whose `skill_use` rows go at `due_ms` (private): death plus
+/// [`crate::combat::DEAD_USES_GRACE_MS`], so tools that read a fight's uses at its end (trials'
+/// `final.json`) still find them. Drained once a second by housekeeping, by index.
+#[spacetimedb::table(accessor = dead_skill_use_due)]
+pub struct DeadSkillUseDue {
+    #[primary_key]
+    pub actor: u32,
+    #[index(btree)]
+    pub due_ms: u64,
 }
 
 #[derive(SpacetimeType, Clone, Debug, PartialEq)]
