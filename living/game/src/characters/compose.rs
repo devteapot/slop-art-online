@@ -547,6 +547,7 @@ impl Composer<'_> {
                 // The face's shadow map, or a profile hair's mask, in the same binding (101).
                 let aux = face_map.as_deref().or(hair_map.as_deref()).map(|f| linear(&self.assets, f));
                 let mut toon = self.style.kind(base, kind, aux);
+                toon.extension.params.character.x = 1.0;
                 if let Some((recolor, from)) = source.map(super::recolor_source) {
                     toon.extension.params.recolor = recolor;
                     toon.extension.params.recolor_from = from;

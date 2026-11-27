@@ -16,15 +16,17 @@
 //! `LIVING_GAME_PERF=nodetail` turns it off for A/B.
 
 use bevy::asset::embedded_asset;
-use bevy::pbr::{ExtendedMaterial, MaterialExtension};
+use bevy::mesh::MeshVertexBufferLayoutRef;
+use bevy::pbr::{ExtendedMaterial, MaterialExtension, MaterialExtensionKey, MaterialExtensionPipeline};
 use bevy::prelude::*;
-use bevy::render::render_resource::AsBindGroup;
+use bevy::render::render_resource::{AsBindGroup, RenderPipelineDescriptor, SpecializedMeshPipelineError};
 use bevy::shader::ShaderRef;
 use bevy_mod_outline::{OutlineMode, OutlineStencil, OutlineVolume};
 
 pub type Toon = ExtendedMaterial<StandardMaterial, ToonExt>;
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone, Default)]
+#[bind_group_data(ToonKey)]
 pub struct ToonExt {
     #[uniform(100)]
     pub params: ToonParams,
@@ -280,11 +282,51 @@ pub struct ToonParams {
     /// plane's upward normal, w its offset, a margin up; the vertex shaders keep every vertex
     /// where `dot(xyz, p) >= w` (`toon_light.wesl` `seat_clamp`). Zero (every shared toon): none.
     pub seat: Vec4,
+    /// The look-dev light ([`Look::Lookdev`], `toon_light.wesl` `ld_*`): x 1 on, y the character
+    /// rim's strength ([`CharRim`]), z the specular's strength, w how much of the classic rim
+    /// scenery keeps. All zero in the classic look, which then draws exactly as before.
+    pub look: Vec4,
+    /// The look-dev light's numbers: x the sky's fill (times the sun's brightness), y the ground's
+    /// warm bounce (times the sun), z how dark cloth and scenery shadows get (replaces
+    /// `shadow.a`), w skin shadows' saturation.
+    pub look_light: Vec4,
+    /// x 1 on a character's material (lookdev.rs, compose.rs, outfit.rs: the character rim and
+    /// skin-aware light); the material's own.
+    pub character: Vec4,
+    /// The look-dev ramp: x characters' band threshold (N·L), y their brush breakup's share, z
+    /// how much of the sun's colour shadows keep.
+    pub look_ramp: Vec4,
+}
+
+/// A toon material's pipeline key: whether its shaders are compiled with the look-dev light
+/// (`ToonParams::look.x`; the shader def LOOKDEV). The classic look's pipelines compile the shaders
+/// exactly as before, so it draws exactly as before.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub struct ToonKey {
+    pub lookdev: bool,
+}
+
+impl From<&ToonExt> for ToonKey {
+    fn from(t: &ToonExt) -> Self {
+        ToonKey { lookdev: t.params.look.x > 0.5 }
+    }
+}
+
+/// The look-dev light's shader def on a pipeline's fragment shader (`ToonKey`; terrain.rs too).
+pub fn lookdev_def(descriptor: &mut RenderPipelineDescriptor, lookdev: bool) {
+    if let (true, Some(f)) = (lookdev, descriptor.fragment.as_mut()) {
+        f.shader_defs.push("LOOKDEV".into());
+    }
 }
 
 impl MaterialExtension for ToonExt {
     fn fragment_shader() -> ShaderRef {
         "embedded://living_game/toon.wesl".into()
+    }
+
+    fn specialize(_: &MaterialExtensionPipeline, descriptor: &mut RenderPipelineDescriptor, _: &MeshVertexBufferLayoutRef, key: MaterialExtensionKey<Self>) -> Result<(), SpecializedMeshPipelineError> {
+        lookdev_def(descriptor, key.bind_group_data.lookdev);
+        Ok(())
     }
 
     // Wind sways plants in every pass alike (main, depth/normal prepass and shadows), so their
@@ -399,6 +441,35 @@ pub struct Style {
     pub detail: f32,
     pub detail_relief: f32,
     pub detail_fade: [f32; 2],
+    /// The look-dev light ([`Look`], [`CharRim`]; `with_look`). Classic leaves it off.
+    pub look: LookParams,
+}
+
+/// The look-dev light's values in the style profile (`ToonParams::look`, `look_light`).
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct LookParams {
+    pub on: bool,
+    /// The character rim (0 off).
+    pub char_rim: f32,
+    /// Cel-stepped specular, by the material's metallic and roughness (and scenery's painted
+    /// metal, copper and glass).
+    pub specular: f32,
+    /// The share of the classic Fresnel rim scenery and ground keep.
+    pub scenery_rim: f32,
+    /// The sky's fill from above, as a share of the sun's brightness, in the shadows' hue.
+    pub sky: f32,
+    /// The ground's warm bounce from below, as a share of the sun.
+    pub bounce: f32,
+    /// How dark cloth and scenery shadows get (the classic `shadow_depth` is 0.42).
+    pub shadow_depth: f32,
+    /// Skin shadows' saturation (times the lit skin's).
+    pub skin_saturation: f32,
+    /// Characters' band threshold (N·L; the classic is -0.2) and their brush breakup's share.
+    pub char_threshold: f32,
+    pub char_brush: f32,
+    /// How much of the sun's colour shadows keep (1 as classic; 0: shadows are lit by the sky
+    /// alone, the warm/cool split at dusk).
+    pub shadow_sun: f32,
 }
 
 impl Default for Style {
@@ -464,6 +535,7 @@ impl Default for Style {
             detail: 1.0,
             detail_relief: 0.0,
             detail_fade: [20.0, 55.0],
+            look: LookParams::default(),
         }
         .with_shine(HairShine::default())
     }
@@ -549,6 +621,122 @@ fn hair_ring_env() -> Option<[Option<f32>; RING_N]> {
     })
 }
 
+/// The light and shading (Settings › Play › Light): Classic, the look until look-dev step 1, or
+/// Look-dev (docs: `.local/living/lookdev/survey/PLAN.md` step 1): a sky/ground hemisphere fill
+/// with warm sun against cool shadow, deeper cloth and scenery shadows with warm skin shadows, a
+/// cel-stepped specular, a character rim and less rim on scenery. Classic is the default until
+/// the owner has seen it; it draws exactly as before (every look-dev term is behind `look.x`).
+/// Kept in the settings file only once chosen. `LIVING_GAME_LOOK=classic|lookdev` starts in one.
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Look {
+    #[default]
+    Classic,
+    Lookdev,
+}
+
+impl Look {
+    pub const ALL: [Look; 2] = [Look::Classic, Look::Lookdev];
+    pub fn name(self) -> &'static str {
+        match self {
+            Look::Classic => "classic",
+            Look::Lookdev => "lookdev",
+        }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            Look::Classic => "Classic",
+            Look::Lookdev => "Look-dev",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Look> {
+        Look::ALL.into_iter().find(|l| l.name() == s)
+    }
+    pub fn from_env() -> Option<Look> {
+        std::env::var("LIVING_GAME_LOOK").ok().and_then(|v| Look::parse(v.trim()))
+    }
+}
+
+/// The character rim with the look-dev light (Settings › Play › Character rim, a taste): a
+/// cel-stepped Fresnel rim on characters' sun side (hair too), with a faint cool rim from the sky
+/// on the other. Without the look-dev light it does nothing. `LIVING_GAME_CHAR_RIM=off|subtle|
+/// strong` starts in one.
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum CharRim {
+    Off,
+    #[default]
+    Subtle,
+    Strong,
+}
+
+impl CharRim {
+    pub const ALL: [CharRim; 3] = [CharRim::Off, CharRim::Subtle, CharRim::Strong];
+    pub fn name(self) -> &'static str {
+        match self {
+            CharRim::Off => "off",
+            CharRim::Subtle => "subtle",
+            CharRim::Strong => "strong",
+        }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            CharRim::Off => "Off",
+            CharRim::Subtle => "Subtle",
+            CharRim::Strong => "Strong",
+        }
+    }
+    pub fn parse(s: &str) -> Option<CharRim> {
+        CharRim::ALL.into_iter().find(|l| l.name() == s)
+    }
+    pub fn from_env() -> Option<CharRim> {
+        std::env::var("LIVING_GAME_CHAR_RIM").ok().and_then(|v| CharRim::parse(v.trim()))
+    }
+    fn strength(self) -> f32 {
+        match self {
+            CharRim::Off => 0.0,
+            CharRim::Subtle => 0.62,
+            CharRim::Strong => 1.05,
+        }
+    }
+}
+
+impl LookParams {
+    /// The look-dev light's values (look-dev step 1's tuning), or off. `LIVING_GAME_PERF=ldsteps=N`
+    /// keeps its first N parts (1 the hemisphere and warm/cool split, 2 the ramp, 3 the specular,
+    /// 4 the rims), the rest as classic, to time each part.
+    pub fn of(look: Look, rim: CharRim) -> LookParams {
+        let full = LookParams { on: true, char_rim: rim.strength(), specular: 1.0, scenery_rim: 0.25, sky: 0.075, bounce: 0.06, shadow_depth: 0.56, skin_saturation: 1.14, char_threshold: -0.08, char_brush: 0.35, shadow_sun: 0.35 };
+        match look {
+            Look::Classic => LookParams::default(),
+            Look::Lookdev => match crate::perf::value("ldsteps") {
+                None => full,
+                Some(n) => {
+                    let classic = Style::default();
+                    let mut p = full;
+                    if n < 2.0 {
+                        (p.shadow_depth, p.skin_saturation, p.char_threshold, p.char_brush) = (classic.shadow_depth, classic.shadow_saturation, classic.threshold, 1.0);
+                    }
+                    if n < 3.0 {
+                        p.specular = 0.0;
+                    }
+                    if n < 4.0 {
+                        (p.char_rim, p.scenery_rim) = (0.0, 1.0);
+                    }
+                    p
+                }
+            },
+        }
+    }
+}
+
+/// Keep the style profile on the chosen light (an environment's switch rebuilds the profile from
+/// its defaults); written only when it differs.
+fn apply_look(look: Res<Look>, rim: Res<CharRim>, mut style: ResMut<Style>) {
+    let want = LookParams::of(*look, *rim);
+    if style.look != want {
+        style.look = want;
+    }
+}
+
 impl Style {
     /// The profile with a shine's ring values, then `LIVING_GAME_HAIR_RING`'s over them.
     pub fn with_shine(mut self, shine: HairShine) -> Self {
@@ -597,6 +785,10 @@ impl Style {
             palette: Vec4::ZERO,
             layers: surface_layers(),
             seat: Vec4::ZERO,
+            look: if self.look.on { Vec4::new(1.0, self.look.char_rim, self.look.specular, self.look.scenery_rim) } else { Vec4::ZERO },
+            look_light: if self.look.on { Vec4::new(self.look.sky, self.look.bounce, self.look.shadow_depth, self.look.skin_saturation) } else { Vec4::ZERO },
+            character: Vec4::ZERO,
+            look_ramp: if self.look.on { Vec4::new(self.look.char_threshold, self.look.char_brush, self.look.shadow_sun, 0.0) } else { Vec4::ZERO },
         }
     }
 
@@ -658,8 +850,10 @@ impl Plugin for StylePlugin {
             .add_plugins(bevy_mod_outline::OutlinePlugin::EXTRUDE_VERTEX)
             .init_resource::<Style>()
             .insert_resource(HairShine::from_env().unwrap_or_default())
+            .insert_resource(Look::from_env().unwrap_or_default())
+            .insert_resource(CharRim::from_env().unwrap_or_default())
             .add_systems(Startup, load_detail)
-            .add_systems(Update, (apply_shine, apply, fog_outlines).chain());
+            .add_systems(Update, (apply_shine, apply_look, apply, fog_outlines).chain());
     }
 }
 
@@ -721,7 +915,7 @@ fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query
         style.params()
     } else {
         // Plain look: no bands, no tint, no rim, no painted detail (for comparison).
-        ToonParams { shadow: Vec4::new(1.0, 1.0, 1.0, 0.45), rim: Vec4::ZERO, band: Vec4::new(-0.2, 0.6, 0.0, 1.0), extra: Vec4::new(1.0, 0.0, 1.0, 1.0), shade: Vec4::new(0.0, 0.0, 1.0, 0.0), recolor: Vec4::ZERO, recolor_from: Vec4::ZERO, atmo: Vec4::new(style.wind, style.wet, 0.0, 0.0), face: Vec4::new(0.3, 1.0, 1.0, 0.0), hair: Vec4::new(0.0, 0.1, 0.0, 0.0), ..style.params() }
+        ToonParams { shadow: Vec4::new(1.0, 1.0, 1.0, 0.45), rim: Vec4::ZERO, band: Vec4::new(-0.2, 0.6, 0.0, 1.0), extra: Vec4::new(1.0, 0.0, 1.0, 1.0), shade: Vec4::new(0.0, 0.0, 1.0, 0.0), recolor: Vec4::ZERO, recolor_from: Vec4::ZERO, atmo: Vec4::new(style.wind, style.wet, 0.0, 0.0), face: Vec4::new(0.3, 1.0, 1.0, 0.0), hair: Vec4::new(0.0, 0.1, 0.0, 0.0), look: Vec4::ZERO, look_light: Vec4::ZERO, look_ramp: Vec4::ZERO, ..style.params() }
     };
     for (_, m) in toons.iter_mut() {
         // Keep each material's own kind (skin, face, hair), recolouring, detail and hand-made
@@ -741,6 +935,7 @@ fn apply(style: Res<Style>, mut toons: ResMut<Assets<Toon>>, mut outlines: Query
         m.extension.params.recolor_from = old.recolor_from;
         m.extension.params.detail.x = old.detail.x;
         m.extension.params.seat = old.seat;
+        m.extension.params.character = old.character;
     }
     let [r, g, b] = style.outline_color;
     for (kind, mut o) in &mut outlines {

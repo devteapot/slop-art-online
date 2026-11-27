@@ -1312,6 +1312,9 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 ///   (`sightedge::Look`; `LIVING_SIGHT_LOOK` sets the first);
 /// - `shine:NAME`: the hair shine (`style::HAIR_SHINES`: crown, soft, today), as Settings › Play ›
 ///   Hair shine sets it, but leaving the open windows be (captures);
+/// - `light:NAME`, `rim:NAME`: the light (`style::Look`: classic, lookdev) and the character rim
+///   (`style::CharRim`: off, subtle, strong), as Settings › Play sets them, leaving the open
+///   windows be (before/after stills from one moment);
 /// - `skill:NAME[:AIM]`: use a skill-bar skill through `use_skill` (`combat.rs`); AIM is
 ///   `nearest`, a creature kind (`wolf`) or `DX,DY` metres from me; `release:NAME` lets go of
 ///   a held one; `aim:NAME[:AIM]` shows its indicator (until `aim:`);
@@ -1427,7 +1430,7 @@ fn script(
     mut out: ResMut<crate::ui::model::Outbox>,
     (mut skills, mut gestures, mut verbs, mut talk): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>, ResMut<crate::talk::Talk>),
     (hud, loading, mut pointer): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>, ResMut<crate::pointer::Pointer>),
-    (target, mut sight, mut shine): (Option<Res<crate::capture::Target>>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<crate::style::HairShine>),
+    (target, mut sight, mut shine, mut light, mut rim): (Option<Res<crate::capture::Target>>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<crate::style::HairShine>, ResMut<crate::style::Look>, ResMut<crate::style::CharRim>),
     (mut keys, mut buttons, mut motion, mut rotation): (
         ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>,
         ResMut<bevy::input::mouse::AccumulatedMouseMotion>, MessageWriter<bevy::input::gestures::RotationGesture>,
@@ -1757,6 +1760,26 @@ fn script(
                     info!("hair shine: {arg}");
                 }
                 None => warn!("live script: no hair shine {arg:?}"),
+            }
+            true
+        }
+        "light" => {
+            match crate::style::Look::parse(arg) {
+                Some(x) => {
+                    *light = x;
+                    info!("light: {arg}");
+                }
+                None => warn!("live script: no light {arg:?}"),
+            }
+            true
+        }
+        "rim" => {
+            match crate::style::CharRim::parse(arg) {
+                Some(x) => {
+                    *rim = x;
+                    info!("character rim: {arg}");
+                }
+                None => warn!("live script: no character rim {arg:?}"),
             }
             true
         }

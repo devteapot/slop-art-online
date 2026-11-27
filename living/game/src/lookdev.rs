@@ -677,6 +677,10 @@ pub fn convert(
                     // A face's shadow map, or a profile hair's mask texture, in the same slot.
                     let map = face_map.as_ref().or(hair_map.as_ref()).map(|f| assets.load_builder().with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = false).load(f.clone()));
                     let mut toon = style.kind(b, kind, map);
+                    // A character's material (the look-dev light's character rim).
+                    if character {
+                        toon.extension.params.character.x = 1.0;
+                    }
                     if let Some(p) = profile {
                         p.apply(&mut toon.extension.params, hair_map.as_deref());
                         // The ink's fade reads the hair's texel density: declared (v1.3), else
