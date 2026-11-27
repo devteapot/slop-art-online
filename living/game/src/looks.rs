@@ -45,6 +45,10 @@ pub struct Looks {
     /// When a name first arrived for someone (they were a stranger to me before).
     pub named: Vec<(u32, String)>,
     known: HashMap<u32, bool>,
+    /// The body's sex as drawn, for someone drawn from a line whose `form` shows it
+    /// (`living_rules::sex::of_form`: "woman", "boy"…): what the eye sees of them, kept like their
+    /// label once they are out of sight. None for a VRoid recipe, an animal or a baby.
+    sexes: HashMap<u32, living_rules::sex::Sex>,
 }
 
 impl Looks {
@@ -77,6 +81,11 @@ impl Looks {
     /// The look key a person's colours/phrase were read from (empty for VRoid fallbacks or animals).
     pub fn look_key(&self, id: u32) -> &str {
         self.drawn_from.get(&id).map(String::as_str).unwrap_or("")
+    }
+
+    /// The sex I have seen their body to be (a person drawn from a line), if any.
+    pub fn sex_seen(&self, id: u32) -> Option<living_rules::sex::Sex> {
+        self.sexes.get(&id).copied()
     }
 
     /// Whether I know this character's real name.
@@ -303,6 +312,14 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
                 let k = clothes(&recipe);
                 // Drawn from the line: its words, as `phrase` says them.
                 let words = recipe.person.as_ref().and_then(|_| crate::characters::book::book()?.words(&key));
+                match words.as_ref().and_then(|(w, _)| living_rules::sex::of_form(&w.form)) {
+                    Some(sex) => {
+                        looks.sexes.insert(c.id, sex);
+                    }
+                    None => {
+                        looks.sexes.remove(&c.id);
+                    }
+                }
                 let ph = words.map(|(w, band)| {
                     use living_rules::look::{phrase, LookSeen, LookWords};
                     let short = LookWords {
@@ -371,6 +388,7 @@ pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut
         let live: std::collections::HashSet<u32> = seen.iter().map(|c| c.id).collect();
         looks.labels.retain(|id, _| live.contains(id));
         looks.plates.retain(|id, _| live.contains(id));
+        looks.sexes.retain(|id, _| live.contains(id));
     }
 }
 
