@@ -232,6 +232,15 @@ pub fn node(v: Value, path: &str) -> Result<Value, String> {
             if let Some(v) = m.get("desires").or_else(|| m.get("wants")) {
                 return desires(v.clone(), path);
             }
+            // A delegated leaf (docs/NEURAL_BODY.md §3(c)) passes as written, its target read as
+            // any target: whether the world allows it is the authority's to say at install.
+            if let Some(v) = m.get("delegate") {
+                let mut d = v.clone();
+                if let Some(t) = d.get("target").cloned().filter(|t| !t.is_null()) {
+                    d["target"] = target(t, &format!("{path}.delegate.target"))?;
+                }
+                return Ok(json!({"delegate": d}));
+            }
             if let Some(v) = m.get("think") {
                 let reason = match v {
                     Value::String(s) => s.clone(),

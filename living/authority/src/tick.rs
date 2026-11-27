@@ -134,6 +134,9 @@ pub fn tick(ctx: &ReducerContext, _t: TickTimer) -> Result<(), String> {
         }
     }
     drop(phase);
+    // Body controller sessions whose lease ran out lapse before the sweep (docs/NEURAL_BODY.md;
+    // nothing read while the `body_delegate_on` law is off and no row is left).
+    crate::delegation::tick(ctx, now);
     // What each player's character perceives (docs/PERCEPTION.md), each every 200 ms.
     let phase = common::span("tick.perception");
     let swept = crate::perception::sweep(ctx, now, k_tick);

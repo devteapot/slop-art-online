@@ -2854,3 +2854,94 @@ pub struct TickMark {
     pub tick: u64,
     pub start_us: i64,
 }
+
+// ---- the learned-body pilot's plumbing (docs/NEURAL_BODY.md, "Built (pilot plumbing)") ----------
+// Three new private tables (only reducers and the database owner read them; docs: tables, access
+// permissions), each keyed by the character, so every read is a primary-key lookup. Nothing writes
+// them while the `body_delegate_on` law is off. New tables, never columns appended to old ones
+// (2.14.1 rewrites a table to append a column and disconnects every client).
+
+/// What a mind asks of its character's body controller (`mind_body_brief`; docs/NEURAL_BODY.md §2):
+/// one row per character whose mind wrote one, its one active revision. Typed values only; the
+/// rationale is the mind's own words for its next deliberation, never given to the controller.
+/// Expired rows are inert (the controller and the mind read `expires_ms`); deleted at death.
+#[spacetimedb::table(accessor = body_brief)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct BodyBrief {
+    #[primary_key]
+    pub actor: u32,
+    /// Raised by every accepted replace or clear; a writer names the revision it read.
+    pub revision: u32,
+    /// One of `living_rules::graph::DELEGATE_GOALS`; empty: cleared.
+    pub goal: String,
+    /// A creature it perceived when the brief was accepted (0: none).
+    pub target: u32,
+    /// One of `living_rules::body::STANCES`.
+    pub stance: String,
+    pub risk: f32,
+    pub style: f32,
+    /// The character's individuality for its role's shared body net (`living_rules::body::MAX_TRAITS`
+    /// values, -1 ..= 1): identity travels in the brief, never in per-character weights.
+    pub traits: Vec<f32>,
+    pub rationale: String,
+    pub written_ms: u64,
+    pub expires_ms: u64,
+}
+
+/// A brief as a mind sends it (`mind_body_brief`): `ttl_s` from now.
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct BodyBriefIn {
+    pub goal: String,
+    pub target: u32,
+    pub stance: String,
+    pub risk: f32,
+    pub style: f32,
+    pub ttl_s: f32,
+    pub rationale: String,
+    pub traits: Vec<f32>,
+}
+
+/// The graph leaf delegated to the body now (a `delegate` node running; docs/NEURAL_BODY.md §3(c)):
+/// written by the character's evaluation when the leaf starts or its terms change, deleted when it
+/// ends. The body controller's inputs are admitted only while it stands, within `skills`.
+#[spacetimedb::table(accessor = body_slot)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct BodySlot {
+    #[primary_key]
+    pub actor: u32,
+    /// The graph revision and preorder node of the leaf.
+    pub revision: u32,
+    pub node: u16,
+    /// Whose shared body net serves it: the character's kind (`person`, `wolf`, …), one policy per
+    /// role and none per individual.
+    pub role: String,
+    pub goal: String,
+    /// The creature its target resolved to when written (0: none or not a creature).
+    pub target: u32,
+    pub skills: Vec<String>,
+    /// The leaf as the plan describes it (`graph::describe`).
+    pub label: String,
+    pub since_ms: u64,
+}
+
+/// A body controller session (docs/NEURAL_BODY.md §5, "Service stall and return"): the identity its
+/// controller connects with, perceives as and sends player inputs as, one writer per character. A
+/// new `body_open` raises the epoch and replaces the identity, so the old one's packets are fenced.
+/// Lapses after `body_lease_ms` without a beat or an accepted input.
+#[spacetimedb::table(accessor = body_session)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct BodySession {
+    #[primary_key]
+    pub actor: u32,
+    #[unique]
+    pub identity: Identity,
+    /// Who opened it: the character's controller then.
+    pub controller: Identity,
+    pub epoch: u32,
+    pub live: bool,
+    /// When it lapses unless renewed.
+    #[index(btree)]
+    pub lease_ms: u64,
+    pub opened_ms: u64,
+    pub beat_ms: u64,
+}

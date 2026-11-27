@@ -1180,7 +1180,8 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Swept {
     // Heed for players off: every `seen_throng` row goes, in this tick (nothing read while none
     // can exist).
     crate::throng::off_tick(ctx);
-    let humans = crate::combat::humans(ctx);
+    // The people's characters and live body controller sessions (docs/NEURAL_BODY.md).
+    let humans = crate::combat::viewers(ctx);
     if humans.is_empty() {
         return Swept { ids: Vec::new(), health: HashMap::new() };
     }
@@ -1255,6 +1256,17 @@ pub fn sweep(ctx: &ReducerContext, now: u64, tick: u64) -> Swept {
 fn turn_before(id: u32, now: u64) -> u64 {
     let phase = (id as u64).wrapping_mul(37) % SWEEP_GROUPS * SWEEP_MS / SWEEP_GROUPS;
     now - (now + SWEEP_MS - phase) % SWEEP_MS
+}
+
+/// Work out a body controller session's perceived set now, as `sweep_now` does for a player
+/// (docs/NEURAL_BODY.md): its first frame has what its character perceives. No lines are staged for
+/// it (a body controller reads perceptions, not the character's lines).
+pub fn sweep_viewer_now(ctx: &ReducerContext, id: u32, viewer: Identity, now: u64) {
+    crate::combat::clear_feed(ctx, viewer);
+    LAST.with(|l| l.borrow_mut().insert(id, turn_before(id, now)));
+    PROJECTED.with(|p| p.borrow_mut().remove(&id));
+    KEPT.with(|k| k.borrow_mut().remove(&id));
+    sweep_one(ctx, id, viewer, &common::world(ctx), &common::map(ctx), now, None);
 }
 
 /// Work out one player's perceived set now (also right after a join or a return).
@@ -2343,7 +2355,7 @@ pub fn gone(ctx: &ReducerContext, id: u32) {
     if rows.is_empty() {
         return;
     }
-    let players: HashMap<Identity, u32> = crate::combat::humans(ctx).into_iter().map(|(c, who)| (who, c)).collect();
+    let players: HashMap<Identity, u32> = crate::combat::viewers(ctx).into_iter().map(|(c, who)| (who, c)).collect();
     for p in rows {
         if let Some(viewer) = players.get(&p.viewer) {
             crate::frame::drop_copies(ctx, *viewer, p.viewer, id);
@@ -2410,7 +2422,12 @@ pub(crate) fn current(ctx: &ViewContext) -> Option<Character> {
     let me = ctx.sender();
     match ctx.db.player().identity().find(me) {
         Some(p) => ctx.db.character().id().find(p.character).filter(|c| c.controller == me && !c.ai),
-        None => ctx.db.character().controller().filter(me).filter(|c| !c.ai).max_by_key(|c| (c.alive, c.id)),
+        None => match ctx.db.body_session().identity().find(me).filter(|s| s.live) {
+            // A live body controller session perceives as its character (docs/NEURAL_BODY.md):
+            // the same views a player reads answer it with that character.
+            Some(s) => ctx.db.character().id().find(s.actor).filter(|c| c.ai && c.controller == s.controller),
+            None => ctx.db.character().controller().filter(me).filter(|c| !c.ai).max_by_key(|c| (c.alive, c.id)),
+        },
     }
 }
 

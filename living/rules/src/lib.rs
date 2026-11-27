@@ -4,6 +4,7 @@
 pub mod acts;
 pub mod heed;
 pub mod bearing;
+pub mod body;
 mod bin;
 pub mod catalog;
 pub mod combat;

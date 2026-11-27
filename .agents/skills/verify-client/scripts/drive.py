@@ -98,6 +98,10 @@ PRIVATE = ['attention', 'copy_state', 'lines_state', 'applied_gaze', 'cover_grou
            'heed_policy',
            # A player's pins and focus (heed for players, `human_heed`): the authority's only.
            'heed_choice',
+           # The learned-body pilot (docs/NEURAL_BODY.md "Built (pilot plumbing)"): a mind's brief, the
+           # delegated leaf and body sessions; the mind service reads them as the owner, a body
+           # controller perceives through the player views.
+           'body_brief', 'body_slot', 'body_session',
            # Who heard each line (docs/COMMUNICATION.md §6); a speaker's person reads its own through my_heard.
            'line_heard',
            # What each player's character senses (the `senses` law), read through my_senses.
@@ -160,6 +164,14 @@ FAST = ['mind_patch', 'mind_fast_done']
 # a character a person plays, so the player's own call is refused too ("a person plays this
 # character"); an empty list writes nothing.
 PLAYED_REFUSED = {'mind_fight': lambda actor: [actor, []]}
+# The learned-body pilot's reducers (docs/NEURAL_BODY.md "Built (pilot plumbing)"). With its law off
+# (as shipped) each is refused to everyone in the law's words; `body_close` follows the controller
+# rule (another's character: "not your character"; one's own: nothing to close). With the law on,
+# verify-minds `delegate-body` drives them.
+BODY_LAW = 'the body_delegate_on law is off'
+BODY = {'mind_body_brief': lambda actor: [actor, 0, {'some': {'goal': 'engage', 'target': 0, 'stance': 'even', 'risk': 0.5, 'style': 0.5, 'ttl_s': 10.0, 'rationale': '', 'traits': []}}],
+        'body_open': lambda actor: [actor, {'__identity__': '0x' + '11' * 32}],
+        'body_beat': lambda actor: [1]}
 ADMIN = {
     'set_paused': [False], 'install_script': [''], 'set_profile': [False],
     'spawn_crowd': [0, False], 'grant_know_how': [0, 'gather'], 'own_habits': [],
@@ -463,7 +475,7 @@ class Run:
             text = path.read_text()
             for match in re.finditer(r'#\[spacetimedb::reducer\]\s*pub fn (\w+)\(', text):
                 reducers[match[1]] = f'{path.relative_to(ROOT)}:{text[:match.start()].count(chr(10)) + 2}'
-        expected = set(ADMIN) | set(MIND) | set(FAST) | set(PLAYED_REFUSED) | set(PLAYER) | {'join', 'join_as', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step', 'cover_step'}
+        expected = set(ADMIN) | set(MIND) | set(FAST) | set(PLAYED_REFUSED) | set(PLAYER) | set(BODY) | {'body_close'} | {'join', 'join_as', 'human_move', 'human_act', 'human_say', 'human_speak', 'tick', 'housekeeping', 'genesis_step', 'cover_step'}
         if set(reducers) != expected:
             raise RuntimeError(f'reducer inventory changed: {set(reducers) ^ expected}')
         procedures = {m[1] for path in (ROOT / 'living/authority/src').glob('*.rs')
@@ -492,8 +504,17 @@ class Run:
                       and str(p.relative_to(ROOT)) not in on_purpose]
         if everything:
             raise RuntimeError(f'a program subscribes every table (cue tables included, RLS bypassed for the owner): {everything}')
+        # The body controller worker (docs/NEURAL_BODY.md) names them on its session connections,
+        # each with a fresh identity of its own (no token), never on the owner's: exempt by path, and
+        # the owner's subscription list in that file is checked to name none.
+        body_worker = ROOT / 'living/mind/src/body/mod.rs'
+        if body_worker.exists():
+            text = body_worker.read_text()
+            control = text[text.index('let control = DbConnection::builder()'):text.index('control.run_threaded()')]
+            if re.search(r'seen_(body|fighter|doing)_cue|seen_body_copy|seen_character_copy|seen_fighter_copy|combat_feed|experience_copy|seen_throng', control) or 'with_token(None::<String>)' not in text:
+                raise RuntimeError('the body worker names a row-level-security table on the owner connection, or its sessions use a token')
         owners = [str(p.relative_to(ROOT)) for d in ('living/mind', 'living/viewer') for p in (ROOT / d).rglob('*.rs')
-                  if '/target' not in str(p) and re.search(r'seen_(body|fighter|doing)_cue|seen_body_copy|seen_character_copy|seen_fighter_copy|combat_feed|experience_copy|seen_throng', p.read_text(errors='replace'))]
+                  if '/target' not in str(p) and p != body_worker and re.search(r'seen_(body|fighter|doing)_cue|seen_body_copy|seen_character_copy|seen_fighter_copy|combat_feed|experience_copy|seen_throng', p.read_text(errors='replace'))]
         if owners:
             raise RuntimeError(f'an owner program names a row-level-security table: {owners}')
         # Every row-level-security rule, by table (docs/TICK_RATE.md, "Every RLS-filtered table",
@@ -565,6 +586,12 @@ class Run:
                 for actor in [ai['id'], other]:
                     self.call(label, token, reducer, args(actor), 'not your character')
                 self.call(label, token, reducer, args(own), 'a person plays this character')
+            for reducer, args in BODY.items():
+                for actor in [ai['id'], other, own]:
+                    self.call(label, token, reducer, args(actor), BODY_LAW)
+            for actor in [ai['id'], other]:
+                self.call(label, token, 'body_close', [actor], 'not your character')
+            self.call(label, token, 'body_close', [own])
             for procedure, args in PROCEDURES.items():
                 for actor in [ai['id'], other]:
                     self.call_procedure(label, token, procedure, args(actor, own), 'not your character')
@@ -589,6 +616,9 @@ class Run:
             self.call('anonymous-http-no-token', None, reducer, mind_args(reducer, ai['id'], 'anonymous'), 'not your character')
         for reducer, args in PLAYED_REFUSED.items():
             self.call('anonymous-http-no-token', None, reducer, args(ai['id']), 'not your character')
+        for reducer, args in BODY.items():
+            self.call('anonymous-http-no-token', None, reducer, args(ai['id']), BODY_LAW)
+        self.call('anonymous-http-no-token', None, 'body_close', [ai['id']], 'not your character')
         for procedure, args in PROCEDURES.items():
             self.call_procedure('anonymous-http-no-token', None, procedure, args(ai['id'], 0), 'not your character')
         for reducer in ['tick', 'housekeeping']:

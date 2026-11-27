@@ -1232,6 +1232,12 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             scene["_heed"] = n;
         }
     }
+    // What the character's mind reads of its body (`_body`: the accepted brief and its time left, the
+    // delegated step, whether a body controller holds it; docs/NEURAL_BODY.md), rendered by the mind
+    // service as its own prompt section and stripped from the scene. Never while the law is off.
+    if let Some(n) = crate::delegation::scene_note(ctx, id, now) {
+        scene["_body"] = n;
+    }
     // Whom a line said now would reach, at each way, among the people listed above (earshot;
     // the rule speech gives the words by), each as the scene shows them. Under heed it reads
     // sight (speech consent): someone in the throng counts, told as someone in the throng.

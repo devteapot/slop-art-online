@@ -30,6 +30,16 @@ pub mod background_type;
 pub mod belief_in_type;
 pub mod belief_table;
 pub mod belief_type;
+pub mod body_beat_reducer;
+pub mod body_brief_in_type;
+pub mod body_brief_table;
+pub mod body_brief_type;
+pub mod body_close_reducer;
+pub mod body_open_reducer;
+pub mod body_session_table;
+pub mod body_session_type;
+pub mod body_slot_table;
+pub mod body_slot_type;
 pub mod body_table;
 pub mod body_type;
 pub mod bond_offer_table;
@@ -205,6 +215,7 @@ pub mod membership_table;
 pub mod membership_type;
 pub mod mind_act_checked_procedure;
 pub mod mind_act_reducer;
+pub mod mind_body_brief_reducer;
 pub mod mind_consolidated_reducer;
 pub mod mind_cursor_table;
 pub mod mind_cursor_type;
@@ -451,6 +462,16 @@ pub use background_type::Background;
 pub use belief_in_type::BeliefIn;
 pub use belief_table::*;
 pub use belief_type::Belief;
+pub use body_beat_reducer::body_beat;
+pub use body_brief_in_type::BodyBriefIn;
+pub use body_brief_table::*;
+pub use body_brief_type::BodyBrief;
+pub use body_close_reducer::body_close;
+pub use body_open_reducer::body_open;
+pub use body_session_table::*;
+pub use body_session_type::BodySession;
+pub use body_slot_table::*;
+pub use body_slot_type::BodySlot;
 pub use body_table::*;
 pub use body_type::Body;
 pub use bond_offer_table::*;
@@ -626,6 +647,7 @@ pub use membership_table::*;
 pub use membership_type::Membership;
 pub use mind_act_checked_procedure::mind_act_checked;
 pub use mind_act_reducer::mind_act;
+pub use mind_body_brief_reducer::mind_body_brief;
 pub use mind_consolidated_reducer::mind_consolidated;
 pub use mind_cursor_table::*;
 pub use mind_cursor_type::MindCursor;
@@ -861,6 +883,16 @@ pub enum Reducer {
         hp: f32,
     },
     BackfillSex,
+    BodyBeat {
+        epoch: u32,
+    },
+    BodyClose {
+        actor: u32,
+    },
+    BodyOpen {
+        actor: u32,
+        body: __sdk::Identity,
+    },
     ClientConnected,
     ClientDisconnected,
     CoverStep {
@@ -930,6 +962,11 @@ pub enum Reducer {
         actor: u32,
         acts: Vec<String>,
         source: String,
+    },
+    MindBodyBrief {
+        actor: u32,
+        expected: u32,
+        brief: Option<BodyBriefIn>,
     },
     MindConsolidated {
         actor: u32,
@@ -1100,6 +1137,9 @@ impl __sdk::Reducer for Reducer {
         match self {
             Reducer::AdminSetVitals { .. } => "admin_set_vitals",
             Reducer::BackfillSex => "backfill_sex",
+            Reducer::BodyBeat { .. } => "body_beat",
+            Reducer::BodyClose { .. } => "body_close",
+            Reducer::BodyOpen { .. } => "body_open",
             Reducer::ClientConnected => "client_connected",
             Reducer::ClientDisconnected => "client_disconnected",
             Reducer::CoverStep { .. } => "cover_step",
@@ -1121,6 +1161,7 @@ impl __sdk::Reducer for Reducer {
             Reducer::JoinAs { .. } => "join_as",
             Reducer::Kill { .. } => "kill",
             Reducer::MindAct { .. } => "mind_act",
+            Reducer::MindBodyBrief { .. } => "mind_body_brief",
             Reducer::MindConsolidated { .. } => "mind_consolidated",
             Reducer::MindFastDone { .. } => "mind_fast_done",
             Reducer::MindFight { .. } => "mind_fight",
@@ -1173,6 +1214,22 @@ impl __sdk::Reducer for Reducer {
             }
             Reducer::BackfillSex => {
                 __sats::bsatn::to_vec(&backfill_sex_reducer::BackfillSexArgs {})
+            }
+            Reducer::BodyBeat { epoch } => {
+                __sats::bsatn::to_vec(&body_beat_reducer::BodyBeatArgs {
+                    epoch: epoch.clone(),
+                })
+            }
+            Reducer::BodyClose { actor } => {
+                __sats::bsatn::to_vec(&body_close_reducer::BodyCloseArgs {
+                    actor: actor.clone(),
+                })
+            }
+            Reducer::BodyOpen { actor, body } => {
+                __sats::bsatn::to_vec(&body_open_reducer::BodyOpenArgs {
+                    actor: actor.clone(),
+                    body: body.clone(),
+                })
             }
             Reducer::ClientConnected => {
                 __sats::bsatn::to_vec(&client_connected_reducer::ClientConnectedArgs {})
@@ -1271,6 +1328,15 @@ impl __sdk::Reducer for Reducer {
                 actor: actor.clone(),
                 acts: acts.clone(),
                 source: source.clone(),
+            }),
+            Reducer::MindBodyBrief {
+                actor,
+                expected,
+                brief,
+            } => __sats::bsatn::to_vec(&mind_body_brief_reducer::MindBodyBriefArgs {
+                actor: actor.clone(),
+                expected: expected.clone(),
+                brief: brief.clone(),
             }),
             Reducer::MindConsolidated { actor, upto } => {
                 __sats::bsatn::to_vec(&mind_consolidated_reducer::MindConsolidatedArgs {
@@ -1552,6 +1618,9 @@ pub struct DbUpdate {
     background: __sdk::TableUpdate<Background>,
     belief: __sdk::TableUpdate<Belief>,
     body: __sdk::TableUpdate<Body>,
+    body_brief: __sdk::TableUpdate<BodyBrief>,
+    body_session: __sdk::TableUpdate<BodySession>,
+    body_slot: __sdk::TableUpdate<BodySlot>,
     bond_offer: __sdk::TableUpdate<BondOffer>,
     brain: __sdk::TableUpdate<Brain>,
     census: __sdk::TableUpdate<Census>,
@@ -1761,6 +1830,15 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "body" => db_update
                     .body
                     .append(body_table::parse_table_update(table_update)?),
+                "body_brief" => db_update
+                    .body_brief
+                    .append(body_brief_table::parse_table_update(table_update)?),
+                "body_session" => db_update
+                    .body_session
+                    .append(body_session_table::parse_table_update(table_update)?),
+                "body_slot" => db_update
+                    .body_slot
+                    .append(body_slot_table::parse_table_update(table_update)?),
                 "bond_offer" => db_update
                     .bond_offer
                     .append(bond_offer_table::parse_table_update(table_update)?),
@@ -2318,6 +2396,15 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.body = cache
             .apply_diff_to_table::<Body>("body", &self.body)
             .with_updates_by_pk(|row| &row.id);
+        diff.body_brief = cache
+            .apply_diff_to_table::<BodyBrief>("body_brief", &self.body_brief)
+            .with_updates_by_pk(|row| &row.actor);
+        diff.body_session = cache
+            .apply_diff_to_table::<BodySession>("body_session", &self.body_session)
+            .with_updates_by_pk(|row| &row.actor);
+        diff.body_slot = cache
+            .apply_diff_to_table::<BodySlot>("body_slot", &self.body_slot)
+            .with_updates_by_pk(|row| &row.actor);
         diff.bond_offer = cache
             .apply_diff_to_table::<BondOffer>("bond_offer", &self.bond_offer)
             .with_updates_by_pk(|row| &row.id);
@@ -2840,6 +2927,15 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "body" => db_update
                     .body
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "body_brief" => db_update
+                    .body_brief
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "body_session" => db_update
+                    .body_session
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "body_slot" => db_update
+                    .body_slot
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "bond_offer" => db_update
                     .bond_offer
@@ -3385,6 +3481,15 @@ impl __sdk::DbUpdate for DbUpdate {
                 "body" => db_update
                     .body
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "body_brief" => db_update
+                    .body_brief
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "body_session" => db_update
+                    .body_session
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "body_slot" => db_update
+                    .body_slot
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "bond_offer" => db_update
                     .bond_offer
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3907,6 +4012,9 @@ pub struct AppliedDiff<'r> {
     background: __sdk::TableAppliedDiff<'r, Background>,
     belief: __sdk::TableAppliedDiff<'r, Belief>,
     body: __sdk::TableAppliedDiff<'r, Body>,
+    body_brief: __sdk::TableAppliedDiff<'r, BodyBrief>,
+    body_session: __sdk::TableAppliedDiff<'r, BodySession>,
+    body_slot: __sdk::TableAppliedDiff<'r, BodySlot>,
     bond_offer: __sdk::TableAppliedDiff<'r, BondOffer>,
     brain: __sdk::TableAppliedDiff<'r, Brain>,
     census: __sdk::TableAppliedDiff<'r, Census>,
@@ -4105,6 +4213,13 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
         callbacks.invoke_table_row_callbacks::<Background>("background", &self.background, event);
         callbacks.invoke_table_row_callbacks::<Belief>("belief", &self.belief, event);
         callbacks.invoke_table_row_callbacks::<Body>("body", &self.body, event);
+        callbacks.invoke_table_row_callbacks::<BodyBrief>("body_brief", &self.body_brief, event);
+        callbacks.invoke_table_row_callbacks::<BodySession>(
+            "body_session",
+            &self.body_session,
+            event,
+        );
+        callbacks.invoke_table_row_callbacks::<BodySlot>("body_slot", &self.body_slot, event);
         callbacks.invoke_table_row_callbacks::<BondOffer>("bond_offer", &self.bond_offer, event);
         callbacks.invoke_table_row_callbacks::<Brain>("brain", &self.brain, event);
         callbacks.invoke_table_row_callbacks::<Census>("census", &self.census, event);
@@ -5154,6 +5269,9 @@ impl __sdk::SpacetimeModule for RemoteModule {
         background_table::register_table(client_cache);
         belief_table::register_table(client_cache);
         body_table::register_table(client_cache);
+        body_brief_table::register_table(client_cache);
+        body_session_table::register_table(client_cache);
+        body_slot_table::register_table(client_cache);
         bond_offer_table::register_table(client_cache);
         brain_table::register_table(client_cache);
         census_table::register_table(client_cache);
@@ -5333,6 +5451,9 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "background",
         "belief",
         "body",
+        "body_brief",
+        "body_session",
+        "body_slot",
         "bond_offer",
         "brain",
         "census",

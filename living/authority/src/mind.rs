@@ -209,6 +209,10 @@ pub fn set_routines(ctx: &ReducerContext, actor: u32, routines: &[RoutineIn], so
                 continue;
             }
         };
+        if let Some(why) = crate::delegation::refuse_delegate(ctx, actor, &g.root) {
+            notes.push(format!("{name}: {why}"));
+            continue;
+        }
         if let Some(sp) = &sp {
             if let Some(bad) = living_rules::graph::skills_used(&g.root).into_iter().find(|s| if s == "say" { !sp.speaks } else { !sp.allows(s) }) {
                 notes.push(format!("{name}: a {kind} cannot {bad}"));
@@ -370,6 +374,10 @@ pub fn mind_routines(ctx: &ReducerContext, actor: u32, routines: Vec<RoutineIn>)
 
 pub fn set_graph(ctx: &ReducerContext, actor: u32, graph: &str, plan: &str, source: &str, now: u64) -> Result<u32, String> {
     let g = living_rules::graph::parse(graph)?;
+    // A delegated leaf only where its law holds, and never for a character a person plays.
+    if let Some(why) = crate::delegation::refuse_delegate(ctx, actor, &g.root) {
+        return Err(why);
+    }
     let kind = ctx.db.character().id().find(actor).map(|c| c.kind).unwrap_or_default();
     // The body decides what a graph may ask of it.
     if let Some(sp) = common::species(&kind) {
@@ -509,6 +517,9 @@ pub fn mind_patch(ctx: &ReducerContext, actor: u32, target: String, graph: Strin
             Ok(g) => g,
             Err(e) => return refuse(format!("rejected routine {name}: {e}")),
         };
+        if let Some(why) = crate::delegation::refuse_delegate(ctx, actor, &g.root) {
+            return refuse(format!("rejected routine {name}: {why}"));
+        }
         if let Some(sp) = common::species(&c.kind) {
             if let Some(bad) = living_rules::graph::skills_used(&g.root).into_iter().find(|s| if s == "say" { !sp.speaks } else { !sp.allows(s) }) {
                 return refuse(format!("a {} cannot {bad}", c.kind));

@@ -170,6 +170,8 @@ struct Ev<'a> {
     /// Whether this character perceives through heed (`heed::applies`): its individual queries
     /// read its heeded set, its counts the individuals and the throng.
     heed: bool,
+    /// The `delegate` leaf running in this evaluation, if one is (docs/NEURAL_BODY.md §3(c)).
+    delegating: Option<crate::delegation::Delegated>,
 }
 
 /// Work that, once begun under an `if`, is finished even after the `if`'s condition stops
@@ -212,7 +214,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     let part = common::detail_span("load.ev");
     let acting = cur.as_ref().map_or(false, |a| act::held(a.node));
     let heed = crate::heed::applies(ctx, id);
-    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting, done: None, heed };
+    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting, done: None, heed, delegating: None };
     // A pace aside (an `aside` skill in the script) is a short walk that finishes on its own too.
     let sc = common::scripts(ctx);
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && (sc.skills().get(&a.skill).is_some_and(|k| k.latch) || sc.shows().aside(&a.skill))).map(|a| a.node);
@@ -263,7 +265,7 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Resul
     let at = pos(&body, now);
     let needs = common::needs(&vit, now);
     let heed = crate::heed::applies(ctx, id);
-    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false, done: None, heed };
+    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false, done: None, heed, delegating: None };
     match ev.sensed(t) {
         Some(r) => Ok(r),
         None => Err(ev.unresolved(t)),
@@ -854,6 +856,7 @@ impl<'a> Ev<'a> {
                     Err(why) => self.say_failed(id, n, &why),
                 }
             }
+            Node::Delegate(d) => self.delegate(d, id, n),
             Node::Think(reason) => {
                 // A fresh decision is not immediately second-guessed.
                 let settled = self.now.saturating_sub(self.st.deliberated_ms) > 45_000;
@@ -937,6 +940,49 @@ impl<'a> Ev<'a> {
         }
         self.last_fail = format!("say: {why}");
         St::Fail
+    }
+
+    /// A `delegate` leaf (docs/NEURAL_BODY.md §3(c)): while it runs, the body controller has the
+    /// character's movement and combat inputs within its skills (`delegation::input_for`); the leaf itself
+    /// starts nothing. It fails while its law is off, for a played character, when its target is
+    /// not perceived, or (before it runs) while its entry does not hold; it is done when its exit
+    /// holds. Its conditions and target read the character's own perception, as any leaf's.
+    fn delegate(&mut self, d: &living_rules::graph::DelegateNode, id: u16, n: &Node) -> St {
+        if !crate::delegation::on(self.ctx) {
+            return self.leaf_fail(id, "delegate: in this world a plan carries out its own steps");
+        }
+        if !self.me.ai {
+            return self.leaf_fail(id, "delegate: a person's movement and fighting are their own");
+        }
+        let target = match &d.target {
+            Some(t) => match self.sensed(t) {
+                Some(r) => if r.class == 3 { r.id as u32 } else { 0 },
+                None => {
+                    let (_, why) = self.unresolved(t);
+                    return self.leaf_fail(id, &format!("delegate: {why}"));
+                }
+            },
+            None => 0,
+        };
+        let rev = self.st.revision;
+        let running = self.ctx.db.body_slot().actor().find(self.me.id).is_some_and(|s| s.revision == rev && s.node == id);
+        if !running {
+            if let Some(c) = &d.enter {
+                if !self.cond(c) {
+                    return self.leaf_fail(id, &format!("delegate: not while {}", graph::describe_cond(c)));
+                }
+            }
+        }
+        if let Some(c) = &d.exit {
+            if self.cond(c) {
+                return St::Ok;
+            }
+        }
+        let label = graph::describe(n);
+        self.delegating = Some(crate::delegation::Delegated { node: id, role: self.me.kind.to_string(), goal: d.goal.clone(), target, skills: d.skills.clone(), label: label.clone() });
+        self.running = Some(id);
+        self.status = label;
+        St::Run
     }
 
     fn leaf_fail(&mut self, id: u16, why: &str) -> St {
@@ -2604,7 +2650,10 @@ impl<'a> Ev<'a> {
         // graph's to interrupt (only a reflex does, in `leaf`). A leaf whose own activity lost
         // its target has broken it off and told why already (`act::lost`, in `Node::Do`).
         if let Some(a) = ctx.db.activity().id().find(id) {
-            if act::held(a.node) {
+            if a.node == act::PLAYER && self.delegating.is_some() {
+                // The body controller's own input under the delegated leaf: the leaf stays the
+                // plan's running step (docs/NEURAL_BODY.md).
+            } else if act::held(a.node) {
                 self.running = Some(a.node);
                 self.status = format!("{} (decided)", a.label);
                 self.path.clear();
@@ -2615,6 +2664,10 @@ impl<'a> Ev<'a> {
             }
         }
         drop(cancel);
+        // The delegated leaf's slot follows this evaluation (written only on a change; nothing read
+        // while the `body_delegate_on` law is off).
+        let delegated = self.delegating.take();
+        crate::delegation::sync_slot(ctx, id, self.st.revision, delegated.as_ref(), self.now);
         let mind = common::detail_span("after.mind");
         if self.me.ai {
             match result {

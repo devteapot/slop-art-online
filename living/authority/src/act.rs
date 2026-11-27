@@ -2681,6 +2681,7 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     crate::attention::forget(ctx, id);
     crate::heed::forget(id);
     ctx.db.heed_policy().actor().delete(id);
+    crate::delegation::forget(ctx, id, crate::common::now_ms(ctx));
     ctx.db.character_earshot().id().delete(id);
     ctx.db.experience().observer().delete(id);
     ctx.db.line_heard().speaker().delete(id);

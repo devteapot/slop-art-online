@@ -75,6 +75,20 @@ pub fn human(ctx: &ReducerContext, id: u32) -> Option<Identity> {
     })
 }
 
+/// Who perceives as a player for character `id`: its person, else the identity of a live body
+/// controller session (docs/NEURAL_BODY.md; never while the `body_delegate_on` law is off). The
+/// sweep, the combat feed and frames serve these; `human` keeps meaning a person.
+pub fn viewer(ctx: &ReducerContext, id: u32) -> Option<Identity> {
+    human(ctx, id).or_else(|| crate::delegation::viewer(ctx, id))
+}
+
+/// Every player-equivalent viewer: the people's characters (`humans`), then live body sessions.
+pub fn viewers(ctx: &ReducerContext) -> Vec<(u32, Identity)> {
+    let mut v = humans(ctx);
+    v.extend(crate::delegation::viewers(ctx));
+    v
+}
+
 /// The living characters people control, with their players' identities.
 pub fn humans(ctx: &ReducerContext) -> Vec<(u32, Identity)> {
     human(ctx, 0);
@@ -83,7 +97,7 @@ pub fn humans(ctx: &ReducerContext) -> Vec<(u32, Identity)> {
 
 fn any_humans(ctx: &ReducerContext) -> bool {
     human(ctx, 0);
-    HUMANS.with(|h| h.borrow().as_ref().is_some_and(|(_, m)| !m.is_empty()))
+    HUMANS.with(|h| h.borrow().as_ref().is_some_and(|(_, m)| !m.is_empty())) || !crate::delegation::viewers(ctx).is_empty()
 }
 
 // ---- what players perceive ------------------------------------------------------------
@@ -164,7 +178,7 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
     let mut told: Vec<u32> = Vec::new();
     for id in [ev.actor, ev.target] {
         if id != 0 && !told.contains(&id) {
-            if let Some(viewer) = human(ctx, id) {
+            if let Some(viewer) = viewer(ctx, id) {
                 // The one who died keeps its death for the death screen; everyone else needs a
                 // death only as it happens (the corpse).
                 let keep = if ev.kind == seen::DEATH && id == ev.actor { DEATH_SEEN_MS } else { SEEN_MS };
@@ -179,7 +193,7 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
         if told.contains(&c.id) {
             continue;
         }
-        let Some(viewer) = human(ctx, c.id) else { continue };
+        let Some(viewer) = viewer(ctx, c.id) else { continue };
         // The onlooker's own sight, and a clear sight line to where it happened.
         if !crate::perception::in_sight(ctx, &map, c.id, c.pos, c.facing, ev.actor, ev.at, c.dist, &w, now, false) {
             continue;
@@ -214,7 +228,7 @@ pub fn show(ctx: &ReducerContext, now: u64, ev: Seen) {
 
 /// Tell one character's player only (a refusal, a witness of their own death).
 pub fn show_to(ctx: &ReducerContext, id: u32, now: u64, ev: Seen) {
-    if let Some(viewer) = human(ctx, id) {
+    if let Some(viewer) = viewer(ctx, id) {
         let keep = match ev.kind {
             seen::WITNESS => DEATH_SEEN_MS,
             seen::REFUSED => REFUSED_MS,
@@ -344,8 +358,9 @@ pub fn resume_move(ctx: &ReducerContext, id: u32, now: u64) {
     r.move_pending = false;
     let (dx, dy, run) = (r.move_dx, r.move_dy, r.move_run);
     ctx.db.readiness().id().update(r);
-    // Only for a body a person plays now (one handed back to its mind meanwhile drops it).
-    if ctx.db.character().id().find(id).is_none_or(|c| c.ai) {
+    // Only for a body a person plays now (one handed back to its mind meanwhile drops it), or one a
+    // body controller drives under a delegated leaf (docs/NEURAL_BODY.md).
+    if ctx.db.character().id().find(id).is_none_or(|c| c.ai && !crate::delegation::driving(ctx, id)) {
         return;
     }
     let dir = (dx != 0.0 || dy != 0.0).then_some((dx, dy));
@@ -504,11 +519,21 @@ fn open_use(ctx: &ReducerContext, actor: u32, skill: &str) -> Option<SkillUse> {
     ctx.db.skill_use().actor().filter(actor).filter(|u| u.skill == skill && u.outcome.is_empty()).max_by_key(|u| u.id)
 }
 
+fn open_accepted(ctx: &ReducerContext, actor: u32, skill: &str) -> Option<SkillUse> {
+    ctx.db.skill_use().actor().filter(actor).filter(|u| u.skill == skill && u.accepted_ms != 0 && u.outcome.is_empty()).max_by_key(|u| u.id)
+}
+
 /// The rules accepted it: the windup (or dash) starts. A graph's or act's use is recorded
 /// from here (its refusals go back to its graph leaf or act, as before).
 pub fn accepted(ctx: &ReducerContext, a: &Activity, now: u64) {
     let source = match a.node {
-        act::PLAYER => "player",
+        act::PLAYER => {
+            if crate::delegation::viewer(ctx, a.id).is_some() {
+                crate::delegation::SOURCE
+            } else {
+                "player"
+            }
+        }
         act::ACT => "act",
         _ => "graph",
     };
@@ -531,7 +556,7 @@ pub fn accepted(ctx: &ReducerContext, a: &Activity, now: u64) {
 
 pub fn released(ctx: &ReducerContext, actor: u32, skill: &str, now: u64) {
     let _detail = common::detail_span("combat.released");
-    if let Some(mut u) = open_use(ctx, actor, skill) {
+    if let Some(mut u) = open_accepted(ctx, actor, skill) {
         u.released_ms = now;
         ctx.db.skill_use().id().update(u);
     }
@@ -540,7 +565,7 @@ pub fn released(ctx: &ReducerContext, actor: u32, skill: &str, now: u64) {
 /// What happened (or why it was refused or broken off).
 pub fn outcome(ctx: &ReducerContext, actor: u32, skill: &str, text: &str, now: u64) {
     let _detail = common::detail_span("combat.outcome");
-    if let Some(mut u) = open_use(ctx, actor, skill) {
+    if let Some(mut u) = open_accepted(ctx, actor, skill) {
         u.outcome = if text.is_empty() { "done".into() } else { text.chars().take(200).collect() };
         u.outcome_ms = now;
         let u = ctx.db.skill_use().id().update(u);
@@ -568,7 +593,7 @@ const SWEEP_MS: u64 = 16;
 
 /// Loose a missile from `from` along `dir` (unit).
 pub fn launch(ctx: &ReducerContext, owner: u32, skill: &str, from: (f32, f32), dir: (f32, f32), spec: rules::MissileSpec, now: u64) {
-    let use_id = open_use(ctx, owner, skill).map_or(0, |u| u.id);
+    let use_id = open_accepted(ctx, owner, skill).map_or(0, |u| u.id);
     // It leaves from just in front of the body, so it does not strike its owner.
     let start = (from.0 + dir.0 * 0.5, from.1 + dir.1 * 0.5);
     ctx.db.missile().insert(Missile { id: 0, owner, skill: skill.into(), x: start.0, y: start.1, t_ms: now, dx: dir.0, dy: dir.1, speed: spec.speed, left: spec.range - 0.5, radius: spec.radius, next_ms: now + SWEEP_MS, use_id });
@@ -773,10 +798,6 @@ pub const NOT_ON_BAR: u8 = u8::MAX;
 
 // ---- the player's skill input ------------------------------------------------------------
 
-fn my_character(ctx: &ReducerContext) -> Result<Character, String> {
-    crate::perception::player_character(ctx).ok_or_else(|| "you have no living character".into())
-}
-
 /// Use a skill on the bar (the rules' `skill_bar()`; `skill_card.slot`): `target` is the creature
 /// aimed at (0 for none: a heal then means yourself), `(x, y)` the ground point aimed at
 /// (tiles; skillshots fly that way, a dodge dashes that way, a guard faces it). The attempt,
@@ -785,7 +806,9 @@ fn my_character(ctx: &ReducerContext) -> Result<Character, String> {
 #[spacetimedb::reducer]
 pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f32) -> Result<(), String> {
     crate::floor::ready(ctx)?;
-    let me = my_character(ctx)?;
+    // A person's character, or one a body controller drives under a delegated leaf, the skill within
+    // the leaf's scope (docs/NEURAL_BODY.md): the same checks, budget, costs and outcomes.
+    let (me, driver) = crate::delegation::input_for(ctx, Some(&skill))?;
     let sc = common::scripts(ctx);
     let Some(shape) = sc.combat(&skill).filter(|_| sc.shapes().on_bar(&skill)) else {
         return Err(format!("{skill} is not on the skill bar"));
@@ -797,7 +820,8 @@ pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f3
     if !crate::motion::spend_input(ctx, me.id, now) {
         return Err("too many inputs".into());
     }
-    let use_id = attempt(ctx, me.id, &skill, "player", target, (x, y), now);
+    let source = if driver == crate::delegation::Driver::Body { crate::delegation::SOURCE } else { "player" };
+    let use_id = attempt(ctx, me.id, &skill, source, target, (x, y), now);
     let refuse = |why: String| {
         outcome_of(ctx, use_id, &format!("refused: {why}"), now);
         let at = ctx.db.body().id().find(me.id).map(|b| pos(&b, now)).unwrap_or((x, y));
@@ -829,9 +853,11 @@ pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f3
         // A dash goes the way it is aimed, else away from what is coming.
         Aim::Dash | Aim::None => aim.map_or_else(Resolved::none, |d| Resolved::point((here.0 + d.0, here.1 + d.1))),
     };
-    // Taking the controls: the plan becomes waiting, as for movement. A walk under way
-    // resumes once a rooting move or a dash is over.
-    crate::player_controls(ctx, me.id, now)?;
+    // Taking the controls: the plan becomes waiting, as for movement (a body controller acts within
+    // the plan's delegated step instead). A walk under way resumes once a rooting move or a dash is over.
+    if driver == crate::delegation::Driver::Player {
+        crate::player_controls(ctx, me.id, now)?;
+    }
     let mut deferred = false;
     if (shape.rooted || shape.aim == Aim::Dash) && !rooted_now(ctx, me.id) {
         if let Some(st) = ctx.db.steer().id().find(me.id).filter(|st| st.goal == crate::motion::GOAL_DIRECTION) {
@@ -858,7 +884,8 @@ pub fn use_skill(ctx: &ReducerContext, skill: String, target: u32, x: f32, y: f3
 #[spacetimedb::reducer]
 pub fn release_skill(ctx: &ReducerContext, skill: String) -> Result<(), String> {
     crate::floor::ready(ctx)?;
-    let me = my_character(ctx)?;
+    // Letting go is always within scope (docs/NEURAL_BODY.md).
+    let (me, _) = crate::delegation::input_for(ctx, None)?;
     let now = common::now_ms(ctx);
     if let Some(a) = ctx.db.activity().id().find(me.id).filter(|a| a.skill == skill && a.node == act::PLAYER) {
         act::let_go(ctx, a, now);
