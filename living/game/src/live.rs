@@ -1430,7 +1430,7 @@ fn script(
     mut out: ResMut<crate::ui::model::Outbox>,
     (mut skills, mut gestures, mut verbs, mut talk): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>, ResMut<crate::talk::Talk>),
     (hud, loading, mut pointer): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>, ResMut<crate::pointer::Pointer>),
-    (target, mut sight, mut shine, mut light, mut rim): (Option<Res<crate::capture::Target>>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<crate::style::HairShine>, ResMut<crate::style::Look>, ResMut<crate::style::CharRim>),
+    (target, mut sight, mut shine, mut light, mut rim, mut outline_weight): (Option<Res<crate::capture::Target>>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<crate::style::HairShine>, ResMut<crate::style::Look>, ResMut<crate::style::CharRim>, ResMut<crate::style::OutlineWeight>),
     (mut keys, mut buttons, mut motion, mut rotation): (
         ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>,
         ResMut<bevy::input::mouse::AccumulatedMouseMotion>, MessageWriter<bevy::input::gestures::RotationGesture>,
@@ -1780,6 +1780,16 @@ fn script(
                     info!("character rim: {arg}");
                 }
                 None => warn!("live script: no character rim {arg:?}"),
+            }
+            true
+        }
+        "outline" => {
+            match crate::style::OutlineWeight::parse(arg) {
+                Some(x) => {
+                    *outline_weight = x;
+                    info!("outline weight: {arg}");
+                }
+                None => warn!("live script: no outline weight {arg:?}"),
             }
             true
         }

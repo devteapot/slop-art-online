@@ -18,6 +18,7 @@ mod camera;
 mod capture;
 mod characters;
 mod combat;
+mod contact_shadow;
 mod controls;
 mod daylight;
 mod demo;
@@ -149,6 +150,7 @@ fn main() {
             .before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate));
     app.insert_resource(ClearColor(camera::SKY))
         .add_plugins(style::StylePlugin)
+        .add_plugins(contact_shadow::ContactShadowPlugin)
         .add_plugins(post::PostPlugin)
         .add_plugins(graphics::GraphicsPlugin)
         .add_plugins(characters::CharactersPlugin)

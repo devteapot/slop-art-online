@@ -592,8 +592,23 @@ pub(crate) fn local_light(kind: &str, glow: Option<[f32; 3]>, height: f32, k: us
         _ => return None,
     };
     let light = PointLight { color: Color::srgb(r, g, b), intensity: lumens, range, shadow_maps_enabled: false, ..default() };
-    let lamp = crate::daylight::Lamp { lumens, lit_at_night: matches!(kind, "lamp" | "neon_sign") };
+    let lamp = crate::daylight::Lamp { lumens, lit_at_night: matches!(kind, "lamp" | "neon_sign"), lookdev_only: false };
     Some(((light, lamp), Transform::from_xyz(0.0, height * 0.9, 0.0)))
+}
+
+/// Look-dev-only warm point lights for town street lamps, braziers/campfires, furnaces, and ovens
+/// whose environment slots omit `"glow"` (Cullet street lamps and plaza firepits, step 2.2).
+/// Gated by `Lamp::lookdev_only = true` in `daylight::lamps` so Classic stays identical to main.
+pub(crate) fn lookdev_local_light(kind: &str, height: f32) -> Option<((PointLight, crate::daylight::Lamp), Transform)> {
+    let (color, lumens, range, y) = match kind {
+        "lamp" | "quay_lamp" => ([1.0, 0.77, 0.30], 280_000.0, 15.0, (height * 0.88).clamp(2.2, 3.6)),
+        "campfire" | "brazier" | "fire" | "smoking_fire" => ([1.0, 0.48, 0.16], 195_000.0, 11.5, 0.85),
+        "furnace" | "oven" => ([1.0, 0.46, 0.16], 190_000.0, 11.5, 1.15),
+        _ => return None,
+    };
+    let light = PointLight { color: Color::srgb(color[0], color[1], color[2]), intensity: 0.0, range, shadow_maps_enabled: false, ..default() };
+    let lamp = crate::daylight::Lamp { lumens, lit_at_night: true, lookdev_only: true };
+    Some(((light, lamp), Transform::from_xyz(0.0, y, 0.0)))
 }
 
 /// Fade out tall things that stand between the camera and you, or around the camera (`fade.rs`;

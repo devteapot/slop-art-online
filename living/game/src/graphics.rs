@@ -279,6 +279,8 @@ pub struct Upscale {
     pub sharpness: f32,
     /// Whether a scaled picture is being composited now (false at 100%: no extra pass).
     pub active: bool,
+    /// Effective 3D render-scale factor (`1.0` at native 100%; `scaled_h / output_h` when scaled).
+    pub factor: f32,
 }
 
 /// The composite's filter. All but `Bilinear` filter in gamma 2 (sqrt of linear) and clamp to the
@@ -311,7 +313,7 @@ impl Upscale {
             _ => UpscaleFilter::CasClamped,
         };
         let sharpness = crate::perf::value("sharpen").map_or(Self::SHARPNESS, |v| v.clamp(0.0, 1.0));
-        Upscale { filter, sharpness, active: false }
+        Upscale { filter, sharpness, active: false, factor: 1.0 }
     }
 
     pub fn method(self) -> &'static str {
@@ -446,6 +448,7 @@ fn sync_render_scale(
             images.remove(&rig.image);
             materials.remove(&rig.material);
             upscale.active = false;
+            upscale.factor = 1.0;
             *cam_target = output_target;
             cam.order = 0;
             if !crate::view::enabled() {
@@ -481,6 +484,7 @@ fn sync_render_scale(
     commands.entity(cam_e).remove::<IsDefaultUiCamera>();
 
     upscale.active = true;
+    upscale.factor = actual_scale;
     if let Some(rig) = state.rig.as_mut() {
         let old = std::mem::replace(&mut rig.image, handle.clone());
         images.remove(&old);

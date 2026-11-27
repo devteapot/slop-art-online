@@ -13,7 +13,7 @@ import bevy_pbr::render::{
 };
 import living_game::toon_light::{
     toon, hash3, scene, wetted, view_depth, sun_shadow, sun_color, bands, banded, puddles, wet_sheen, fresnel, rim_light,
-    point_lights, emission, has_sun, sun_direction, ld_sun_warmth, ld_value, ld_banded,
+    point_lights, emission, has_sun, sun_direction, ld_sun_warmth, ld_value, ld_banded, ld_point_lights,
 };
 
 // terrain.rs `GroundParams`.
@@ -300,6 +300,9 @@ fn fragment(g: GroundOut, @builtin(front_facing) is_front: bool) -> FragmentOutp
         color = color + rim_light(fresnel(N, V), lit, toon.rim.a * toon.look.w) * sun;
 @else
         color = color + rim_light(fresnel(N, V), lit, toon.rim.a) * sun;
+@if(LOOKDEV)
+        color = color + ld_point_lights(albedo, p.xyz, N, view_z, pbr_input.frag_coord.xy, pbr_input.is_orthographic);
+@else
         color = color + point_lights(albedo, p.xyz, N, view_z, pbr_input.frag_coord.xy, pbr_input.is_orthographic);
         color = color + emission(pbr_input.material.emissive.rgb, sc);
         out.color = vec4<f32>(color, 1.0);

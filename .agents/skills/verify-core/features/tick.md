@@ -20,6 +20,7 @@ Run the `tick` command in [SKILL.md](../SKILL.md). Two actors check private `clo
 ## Gotchas
 
 - `stats.ticks` lags behind the clock. Sample `clock.tick` and `last_ms` with the admin CLI.
-- The five-second cadence check has a 52 to 65 Hz tolerance. It is not performance acceptance.
+- The cadence check samples across a 20-second wait and requires at least 18 seconds of
+  authority clock progress at 50–65 Hz. This smoke check catches stalled or half-rate ticking.
 - Pause skips scheduled work. It does not freeze wall time, aging, analytic needs or pending deadlines.
 - Disable profiling and unpause in `finally`. Delete the scratch database through shared cleanup.

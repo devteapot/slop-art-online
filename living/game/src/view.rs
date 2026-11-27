@@ -444,7 +444,10 @@ pub fn setup(
             clock.day_minutes = 0.0;
         }
     }
-    // A 1 m checker, as an outline stencil.
+    // A 1 m flat checker floor at y = 0. Do not attach `ground_stencil()` here: its flat outline
+    // stencil plane at z = 0 sits in front of front-facing characters placed at `z = -c.z` (below)
+    // and masks every shell outline below the horizon in front/3-4/play-camera views. Models stand
+    // on y = 0, so a flat floor viewed from above never legitimately occludes their outlines.
     let mut g = MeshBuf::default();
     let r: i32 = 40;
     for j in -r..r {
@@ -458,7 +461,7 @@ pub fn setup(
             g.quad([Vec3::new(x, 0.0, z), Vec3::new(x, 0.0, z + 1.0), Vec3::new(x + 1.0, 0.0, z + 1.0), Vec3::new(x + 1.0, 0.0, z)], c);
         }
     }
-    commands.spawn((Mesh3d(meshes.add(g.build())), MeshMaterial3d(palette.vertex.clone()), Transform::default(), crate::style::ground_stencil()));
+    commands.spawn((Mesh3d(meshes.add(g.build())), MeshMaterial3d(palette.vertex.clone()), Transform::default()));
     for (index, token) in files.iter().enumerate() {
         let recipe = token.strip_prefix("recipe:").map(|r| {
             crate::characters::Recipe::parse(r).unwrap_or_else(|| {

@@ -803,6 +803,9 @@ pub fn attach(c: &mut Composer, commands: &mut Commands, e: Entity, type_file: &
                 if wear.overlay {
                     ec.insert((bevy::light::NotShadowCaster, crate::lookdev::FacePart));
                 }
+                if let Some(scale) = c.meshes.get(mesh).and_then(crate::style::mesh_outline_scale) {
+                    ec.insert(crate::style::OutlineScale(scale));
+                }
                 if let Some((count, face)) = m.morphs {
                     let id = ec.id();
                     let owner = *weights.get_or_insert(id);
