@@ -2,27 +2,34 @@
 //!
 //! - **Render scale ([`RenderScale`]):** renders the 3D scene (`Camera3d`, depth/normal prepass,
 //!   shell outlines, `Edges`, `Bloom`, tonemapping, `Smaa`) into a scaled offscreen sRGB target and
-//!   composites it onto the native output via a `Camera2d` + fullscreen linear-filtered `ImageNode`,
-//!   keeping Bevy UI and HUD text razor-sharp at native resolution. At the default `100%` (or
+//!   composites it onto the native output via a `Camera2d` + fullscreen [`UpscaleMaterial`] node
+//!   (`upscale.wesl`: Catmull-Rom resampling plus light contrast-adaptive sharpening, so ink lines
+//!   and eyes survive the non-integer stretch), keeping Bevy UI and HUD text razor-sharp at native
+//!   resolution. At the default `100%` (or
 //!   `Auto` at ≤1440 px height), no offscreen image or extra pass is created — `Camera3d` renders
 //!   directly to the window or headless capture target, bit-for-bit identical to pre-Step-4 output.
 //! - **Quality tier ([`Quality`]):** `Low`, `Medium`, or `High` (default). Controls bloom tier
-//!   (`Full` / `Half` / `Off`), directional shadow filtering (`Gaussian` vs `Hardware2x2`),
-//!   shadow-map resolution and cascade count, and carries the `crevice_ao` hook for Step 3.
+//!   (`Full` / `Half` / `Off`), shadow-map resolution and cascade count, and carries the
+//!   `crevice_ao` hook for Step 3. Every tier filters shadows `Gaussian` (look-dev 4b);
+//!   `Hardware2x2` remains as a `LIVING_GAME_PERF=shadowfilter=hw` override.
 //!
 //! Environment overrides (for headless captures and `lookdev_shoot.py`):
 //! - `LIVING_GAME_RENDER_SCALE=67|75|85|100|auto`
 //! - `LIVING_GAME_QUALITY=low|medium|high`
 //! - `LIVING_GAME_PERF` flags (`nobloom`, `bloom=full|half|quarter|off`,
 //!   `shadowfilter=hw|gaussian`, `shadowmap=N`, `cascades=N`, `firstcascade=M`, `shadowfar=M`)
-//!   always override [`Quality`] for isolated pass benchmarking.
+//!   always override [`Quality`] for isolated pass benchmarking; `upscale=bilinear` composites a
+//!   scaled picture with plain bilinear filtering and `sharpen=S` sets the CAS sharpness (0–1,
+//!   default [`Upscale::SHARPNESS`]), for A/B stills and cost measurement.
 
+use bevy::asset::embedded_asset;
 use bevy::camera::{ImageRenderTarget, RenderTarget};
 use bevy::image::ImageSampler;
 use bevy::light::{CascadeShadowConfig, CascadeShadowConfigBuilder, DirectionalLightShadowMap, ShadowFilteringMethod};
 use bevy::post_process::bloom::Bloom;
 use bevy::prelude::*;
-use bevy::render::render_resource::{TextureFormat, TextureUsages};
+use bevy::render::render_resource::{AsBindGroup, TextureFormat, TextureUsages};
+use bevy::shader::ShaderRef;
 use bevy::ui::{GlobalZIndex, IsDefaultUiCamera, UiSystems, UiTargetCamera};
 use bevy::window::{PrimaryWindow, WindowRef};
 
@@ -222,9 +229,12 @@ impl Quality {
                 shadow_far: s.far,
                 crevice_ao: true,
             },
+            // Gaussian on every tier (look-dev 4b): Hardware2x2 stair-stepped limb and building
+            // shadows at noon and dusk (and blotched Low's 1024 px self-shadowing) to save 0.16 ms
+            // at Medium + Auto and 0.41 ms at Low at 3024x1964; half-res bloom is visually free.
             Quality::Medium => QualityProfile {
                 bloom: BloomTier::Half,
-                shadow_filter: ShadowFilteringMethod::Hardware2x2,
+                shadow_filter: ShadowFilteringMethod::Gaussian,
                 shadow_map_size: 2048,
                 cascades: 2,
                 first_cascade_far: s.first_far,
@@ -233,7 +243,7 @@ impl Quality {
             },
             Quality::Low => QualityProfile {
                 bloom: BloomTier::Off,
-                shadow_filter: ShadowFilteringMethod::Hardware2x2,
+                shadow_filter: ShadowFilteringMethod::Gaussian,
                 shadow_map_size: 1024,
                 cascades: 2,
                 first_cascade_far: 16.0,
@@ -254,9 +264,57 @@ impl Quality {
 #[derive(Component)]
 pub struct ScaledCompositeCamera;
 
-/// Marker for the fullscreen UI `ImageNode` that displays the scaled 3D render target.
+/// Marker for the fullscreen UI node that displays the scaled 3D render target.
 #[derive(Component)]
 struct ScaledBackdrop;
+
+/// How a scaled 3D picture is drawn onto the native output (`upscale.wesl`).
+#[derive(Resource, Clone, Copy, PartialEq, Debug)]
+pub struct Upscale {
+    /// Catmull-Rom + CAS (true), or plain bilinear (`LIVING_GAME_PERF=upscale=bilinear`, A/B only).
+    pub sharpen: bool,
+    /// CAS sharpness, 0 (least) to 1 (most).
+    pub sharpness: f32,
+    /// Whether a scaled picture is being composited now (false at 100%: no extra pass).
+    pub active: bool,
+}
+
+impl Upscale {
+    /// Default CAS sharpness: AMD's lightest (0 still sharpens, a peak of -1/8). On live 2x
+    /// captures (look-dev 4b) Catmull-Rom with it brought Auto's line and eye detail back to 100%
+    /// (Laplacian 0.99-1.15x of 100%, bilinear 0.53-0.65x); 0.3 overshot (up to 1.32x, beading).
+    pub const SHARPNESS: f32 = 0.0;
+
+    fn from_env() -> Upscale {
+        let bilinear = crate::perf::string("upscale").is_some_and(|v| v.eq_ignore_ascii_case("bilinear"));
+        let sharpness = crate::perf::value("sharpen").map_or(Self::SHARPNESS, |v| v.clamp(0.0, 1.0));
+        Upscale { sharpen: !bilinear, sharpness, active: false }
+    }
+
+    pub fn method(self) -> &'static str {
+        if self.sharpen { "catmull-rom+cas" } else { "bilinear" }
+    }
+
+    fn params(self) -> Vec4 {
+        Vec4::new(self.sharpness, if self.sharpen { 1.0 } else { 0.0 }, 0.0, 0.0)
+    }
+}
+
+/// The compositing material: the scaled 3D image, resampled and sharpened (`upscale.wesl`).
+#[derive(Asset, TypePath, AsBindGroup, Clone)]
+pub struct UpscaleMaterial {
+    #[uniform(0)]
+    params: Vec4,
+    #[texture(1)]
+    #[sampler(2)]
+    source: Handle<Image>,
+}
+
+impl UiMaterial for UpscaleMaterial {
+    fn fragment_shader() -> ShaderRef {
+        "embedded://living_game/upscale.wesl".into()
+    }
+}
 
 #[derive(Resource, Default)]
 struct ScaleState {
@@ -265,6 +323,7 @@ struct ScaleState {
 
 struct ScaledRig {
     image: Handle<Image>,
+    material: Handle<UpscaleMaterial>,
     scaled_px: UVec2,
     output_px: UVec2,
     output_scale_bits: u32,
@@ -292,9 +351,13 @@ impl Plugin for GraphicsPlugin {
     fn build(&self, app: &mut App) {
         let quality = Quality::from_env().unwrap_or_default();
         let render_scale = RenderScale::from_env().unwrap_or_default();
-        info!("graphics: quality {}, render scale {}", quality.name(), render_scale.name());
-        app.insert_resource(quality)
+        let upscale = Upscale::from_env();
+        info!("graphics: quality {}, render scale {}, upscale {} {:.2}", quality.name(), render_scale.name(), upscale.method(), upscale.sharpness);
+        embedded_asset!(app, "upscale.wesl");
+        app.add_plugins(UiMaterialPlugin::<UpscaleMaterial>::default())
+            .insert_resource(quality)
             .insert_resource(render_scale)
+            .insert_resource(upscale)
             .init_resource::<ScaleState>()
             .add_systems(
                 PostUpdate,
@@ -319,10 +382,11 @@ fn sync_render_scale(
     render_scale: Res<RenderScale>,
     mut state: ResMut<ScaleState>,
     mut images: ResMut<Assets<Image>>,
+    mut materials: ResMut<Assets<UpscaleMaterial>>,
+    mut upscale: ResMut<Upscale>,
     capture: Option<Res<crate::capture::Target>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut cam3d: Query<(Entity, &mut Camera, &mut RenderTarget), (With<Camera3d>, Without<ScaledCompositeCamera>)>,
-    mut backdrops: Query<&mut ImageNode, With<ScaledBackdrop>>,
 ) {
     let Ok((cam_e, mut cam, mut cam_target)) = cam3d.single_mut() else { return };
 
@@ -346,6 +410,8 @@ fn sync_render_scale(
             commands.entity(rig.backdrop).despawn();
             commands.entity(rig.composite_cam).despawn();
             images.remove(&rig.image);
+            materials.remove(&rig.material);
+            upscale.active = false;
             *cam_target = output_target;
             cam.order = 0;
             if !crate::view::enabled() {
@@ -380,16 +446,18 @@ fn sync_render_scale(
     cam.order = 0;
     commands.entity(cam_e).remove::<IsDefaultUiCamera>();
 
+    upscale.active = true;
     if let Some(rig) = state.rig.as_mut() {
         let old = std::mem::replace(&mut rig.image, handle.clone());
         images.remove(&old);
         rig.scaled_px = scaled_px;
         rig.output_px = output_px;
         rig.output_scale_bits = output_scale_bits;
-        if let Ok(mut node) = backdrops.get_mut(rig.backdrop) {
-            node.image = handle;
+        if let Some(mut m) = materials.get_mut(&rig.material) {
+            m.source = handle;
         }
     } else {
+        let material = materials.add(UpscaleMaterial { params: upscale.params(), source: handle.clone() });
         let composite_cam = commands
             .spawn((
                 ScaledCompositeCamera,
@@ -416,13 +484,14 @@ fn sync_render_scale(
                     height: Val::Percent(100.0),
                     ..default()
                 },
-                ImageNode::new(handle.clone()),
+                MaterialNode(material.clone()),
                 GlobalZIndex(-10_000),
                 Pickable::IGNORE,
             ))
             .id();
         state.rig = Some(ScaledRig {
             image: handle,
+            material,
             scaled_px,
             output_px,
             output_scale_bits,
@@ -431,13 +500,15 @@ fn sync_render_scale(
         });
     }
     info!(
-        "graphics: render scale {} ({}x{} -> {}x{}, factor {:.3})",
+        "graphics: render scale {} ({}x{} -> {}x{}, factor {:.3}, upscale {} {:.2})",
         render_scale.name(),
         scaled_px.x,
         scaled_px.y,
         output_px.x,
         output_px.y,
         actual_scale,
+        upscale.method(),
+        upscale.sharpness,
     );
 }
 
@@ -591,14 +662,14 @@ mod tests {
         let med = Quality::Medium.profile();
         assert_eq!(med.bloom, BloomTier::Half);
         assert_eq!(med.bloom.max_mip_dimension(), Some(256));
-        assert_eq!(med.shadow_filter, ShadowFilteringMethod::Hardware2x2);
+        assert_eq!(med.shadow_filter, ShadowFilteringMethod::Gaussian);
         assert_eq!(med.cascades, 2);
         assert!(!med.crevice_ao);
 
         let low = Quality::Low.profile();
         assert_eq!(low.bloom, BloomTier::Off);
         assert_eq!(low.bloom.max_mip_dimension(), None);
-        assert_eq!(low.shadow_filter, ShadowFilteringMethod::Hardware2x2);
+        assert_eq!(low.shadow_filter, ShadowFilteringMethod::Gaussian);
         assert_eq!(low.shadow_map_size, 1024);
         assert_eq!(low.cascades, 2);
         assert!(!low.crevice_ao);

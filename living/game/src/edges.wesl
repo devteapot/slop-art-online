@@ -433,13 +433,9 @@ fn rain_layer(px: vec2<f32>, scale: f32, speed: f32, seed: f32) -> f32 {
     return line * step(r2, edges.rain.x * 0.75 + 0.1);
 }
 
-@fragment
-fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
-    var color = textureSample(screen_texture, screen_sampler, in.uv).rgb;
-    let px = vec2<i32>(in.position.xy);
-    let w = max(1, i32(round(edges.params.z)));
-    let d0 = dist(px);
-    let n0 = normal(px);
+// Lines from the ring of four neighbours `w` pixels away: x the line (1 a silhouette, 0.7 a
+// crease, 0 none), y the nearest distance behind which this pixel draws a silhouette line.
+fn edge_ring(px: vec2<i32>, w: i32, d0: f32, n0: vec3<f32>) -> vec2<f32> {
     let offsets = array<vec2<i32>, 4>(vec2(w, 0), vec2(-w, 0), vec2(0, w), vec2(0, -w));
     var edge = 0.0;
     var near_d = d0;
@@ -470,6 +466,31 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
                 }
             }
         }
+    }
+    return vec2<f32>(edge, near_d);
+}
+
+@fragment
+fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
+    var color = textureSample(screen_texture, screen_sampler, in.uv).rgb;
+    let px = vec2<i32>(in.position.xy);
+    // The line's width in pixels of this picture (`post.rs`: the style's width times the pixels
+    // per logical pixel, so 2 on a 2x display, 1.47 there at a 73% render scale). A whole width is
+    // one ring of neighbours, as before; between two whole widths the outer ring is mixed in by
+    // the fraction, so the drawn line keeps one physical width across render scales (rounding
+    // jumped between 1 and 2 pixels, from 1.36 to 2.67 physical, between Auto and 75%).
+    let z = max(1.0, edges.params.z);
+    let lo = floor(z + 0.02);
+    let part = select(z - lo, 0.0, z - lo < 0.02);
+    let d0 = dist(px);
+    let n0 = normal(px);
+    let inner = edge_ring(px, i32(lo), d0, n0);
+    var edge = inner.x;
+    var near_d = inner.y;
+    if (part > 0.0) {
+        let outer = edge_ring(px, i32(lo) + 1, d0, n0);
+        edge = mix(edge, max(edge, outer.x), part);
+        near_d = min(near_d, outer.y);
     }
     let fade = 1.0 - smoothstep(edges.fade.x, edges.fade.y, near_d);
     color = mix(color, color * edges.line.rgb, edge * edges.line.a * fade);

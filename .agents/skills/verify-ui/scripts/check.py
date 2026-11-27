@@ -957,6 +957,54 @@ def film(run, c):
     c.check(s, "the next start reads it back", (((dump(out2, "05") or {}).get("extra") or {}).get("film")) == "screen", str(((dump(out2, "05") or {}).get("extra") or {}).get("film")))
 
 
+@scenario("graphics")
+def graphics(run, c):
+    """Quality and 3D render scale (`graphics.rs`, Settings › Play): a fresh settings file starts
+    at High and 100% with no composite (the 3D camera at the whole 1600x900 picture, `upscale`
+    null) and Gaussian shadows, which Low and Medium keep (look-dev 4b); 75% renders
+    1200x675 and composites it through the Catmull-Rom + CAS material; 100% tears that down; the
+    file keeps the last choices and the next start reads them back. `LIVING_GAME_QUALITY`,
+    `LIVING_GAME_RENDER_SCALE` and `LIVING_GAME_PERF` must not be set."""
+    s = "graphics"
+    for k in ("LIVING_GAME_QUALITY", "LIVING_GAME_RENDER_SCALE", "LIVING_GAME_PERF"):
+        if os.environ.get(k):
+            c.check(s, f"{k} is unset (it overrides the settings file)", False, os.environ[k])
+            return
+    out0 = os.path.join(ROOT, ".local/living/verify", run, "ui", f"graphics-{THEME}" if THEME else "graphics")
+    st = os.path.join(out0, "settings.json")
+    if os.path.exists(st):
+        os.remove(st)
+    open_settings = "click:@menu;wait:0.4;click:@menu:Settings;wait:0.6;cursor:0.55,0.5;scroll:-400;wait:0.3;"
+    plan = ("ready;wait:2;dump:01;shot:01_high_100;" + open_settings
+            + "click:@settings:quality:low;wait:0.5;dump:02;"
+            + "click:@settings:quality:medium;wait:0.3;click:@settings:render_scale:75;wait:1.0;dump:03;key:Escape:tap;wait:0.8;dump:04;shot:04_medium_75;"
+            + open_settings + "click:@settings:render_scale:100;wait:1.0;dump:05;click:@settings:render_scale:75;wait:1.0;key:Escape:tap;wait:0.5;dump:06;quit")
+    out, code, text = drive(run, s, plan)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    x = lambda o, k: ((dump(o, k) or {}).get("extra") or {})
+    d = {k: x(out, k) for k in ("01", "02", "03", "04", "05", "06")}
+    g = lambda e: (e.get("quality"), e.get("render_scale"), e.get("render_scale_px"), e.get("upscale"), e.get("shadow_filter"))
+    c.check(s, "a fresh settings file starts at High and 100%, saving no choice", d["01"].get("quality") == "high" and d["01"].get("render_scale") == "100"
+            and d["01"].get("quality_saved") is None and d["01"].get("render_scale_saved") is None, str(g(d["01"])))
+    c.check(s, "at 100% the 3D camera draws the whole picture with no composite", d["01"].get("render_scale_px") == [W, H] and d["01"].get("upscale") is None, str(g(d["01"])))
+    c.check(s, "High filters shadows Gaussian", d["01"].get("shadow_filter") == "Gaussian", str(g(d["01"])))
+    c.check(s, "Low keeps Gaussian shadows", d["02"].get("quality") == "low" and d["02"].get("shadow_filter") == "Gaussian", str(g(d["02"])))
+    c.check(s, "Medium keeps Gaussian shadows", d["03"].get("quality") == "medium" and d["03"].get("shadow_filter") == "Gaussian", str(g(d["03"])))
+    up = d["04"].get("upscale") or {}
+    c.check(s, "75% renders the 3D at 1200x675", d["03"].get("render_scale_px") == [1200, 675] and d["04"].get("render_scale_px") == [1200, 675], str(g(d["04"])))
+    c.check(s, "a scaled picture is composited with Catmull-Rom + CAS", up.get("method") == "catmull-rom+cas" and 0.0 <= (up.get("sharpness") if up.get("sharpness") is not None else -1) <= 1.0, str(up))
+    c.check(s, "back to 100%: no composite, the whole picture again", d["05"].get("render_scale_px") == [W, H] and d["05"].get("upscale") is None, str(g(d["05"])))
+    t = log(out)
+    c.check(s, "the log names the scaled composite and its teardown", "graphics: render scale 75 (1200x675 -> 1600x900" in t and "graphics: render scale native (1600x900)" in t)
+    c.check(s, "the log names each choice", t.count("settings: quality: ") == 2 and t.count("settings: render scale: ") == 3, f"{t.count('settings: quality: ')} quality, {t.count('settings: render scale: ')} scale")
+    saved = json.load(open(st)) if os.path.exists(st) else {}
+    c.check(s, "the settings file keeps the last choices", (saved.get("quality"), saved.get("render_scale")) == ("medium", "75"), str((saved.get("quality"), saved.get("render_scale"))))
+    out2, code2, _ = drive(run, s, "ready;wait:2;dump:07;quit")
+    e = x(out2, "07")
+    c.check(s, "the next start reads them back", e.get("quality") == "medium" and e.get("render_scale") == "75" and e.get("render_scale_px") == [1200, 675]
+            and (e.get("upscale") or {}).get("method") == "catmull-rom+cas" and e.get("shadow_filter") == "Gaussian", str(g(e)))
+
+
 @scenario("light")
 def light(run, c):
     """The light (`style::Look`, Settings › Play › Light), character rim (`style::CharRim`,
