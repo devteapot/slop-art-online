@@ -5,9 +5,11 @@ What lets a dense battle of minded characters keep its tick (docs/BATTLE_SCALE.m
 ## What it does (user POV)
 
 - **Familiarity forgets by age only, never what is in view** (fix 1; `brain.rs`):
-  - `FAMILIAR_LIMIT` is 2,048 rows a character, not 256. Over it, `prune_familiar` removes the oldest rows by `last_ms`.
+  - The limit is the `familiar_limit` law (familiar-cap, value-only; 2,048 rows a character as shipped, not 256). Over it, `prune_familiar` removes the oldest rows by `last_ms`.
   - It never removes a row touched within `FAMILIAR_KEEP_MS` (60 s), nor one whose thing is in the character's seen set within `SEEN_MS` (90 s).
-  - The check runs every 64 new rows of that character.
+  - The check runs every `familiar_limit / 32` new rows of that character (8 to 64; 64 as shipped).
+  - With the `familiar_regard` law (off as shipped): unnamed strangers go first, the oldest first, then places and things; never someone the character knows by name (family, community, an introduction) or has a `relation` or `relation_fight` row about. Their `sex_seen` pairs go with them. A forgotten stranger seen again is a first sight again; a cue on one is refused "you do not remember seeing #N" (law off: "you have never seen #N"). A dead creature's `familiar` rows go for everyone when its remains are gone, by the index on `familiar.thing` (at its death when it leaves none). `scenes.py familiar_regard` (default seed, about 5 min).
+  - What a minded observer remembers of a person's body (`sex_seen`) goes with the remains (growth-fix-2): `scenes.py sex_seen_bound` (default seed, about 3 min).
   - The recently-seen fast path is a per-character set (`SEEN`, thread-local) sized to what it saw. It used to be a 96-entry list on `mind_state`, which thrashed and was rewritten at every evaluation; the row's `seen` stays empty now.
 - **Novelty once a second** (fix 2): `noticed()` runs at most once per `NOTICE_MS` (900 ms, a little under the 1 Hz slot) per character, not at every woken or combat-cadence evaluation. Cues keep their own interval (`cue_check_s`). A crowd's first sights are told a few to a line (`FIRST_SIGHTS_PER_LINE`) at each look.
 - **Bystanders' wakes** (fix 3; the `witness_wake_ms` law, default 500; 0 means woken by each sight, as before):

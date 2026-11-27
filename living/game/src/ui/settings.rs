@@ -115,7 +115,7 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
         if b.0 != Win::Settings {
             continue;
         }
-        commands.entity(e).insert(Node { margin: wood::body_frame().0, border: wood::body_frame().1, border_radius: wood::r(8.0), padding: UiRect::all(Val::Px(14.0)), flex_direction: FlexDirection::Row, column_gap: Val::Px(18.0), overflow: Overflow::clip(), ..default() });
+        commands.entity(e).insert(Node { margin: wood::body_frame().0, border: wood::body_frame().1, border_radius: wood::r(8.0), padding: UiRect::all(Val::Px(14.0)), flex_direction: FlexDirection::Row, column_gap: Val::Px(18.0), overflow: Overflow::clip(), flex_shrink: 1.0, min_height: Val::Px(0.0), ..default() });
         commands.entity(e).with_children(|body| {
             // Pages.
             body.spawn((Node { width: Val::Px(150.0), flex_direction: FlexDirection::Column, row_gap: Val::Px(6.0), flex_shrink: 0.0, ..default() }, Pickable::IGNORE)).with_children(|tabs| {
@@ -126,7 +126,7 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                 tabs.spawn((Text::new("Opened from Menu, or Esc with no window open. That also frees the cursor; click the world to take it back."), f.body(12.5, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Node { margin: UiRect::top(Val::Px(14.0)), ..default() }, Pickable::IGNORE));
             });
             // Play.
-            body.spawn((PageBody(Page::Play), Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, ..default() }, Pickable::IGNORE)).with_children(|pg| {
+            body.spawn((PageBody(Page::Play), Node { flex_grow: 1.0, flex_shrink: 1.0, min_height: Val::Px(0.0), flex_direction: FlexDirection::Column, overflow: Overflow::scroll_y(), ..default() }, bevy::ui::ScrollPosition::default(), super::hit::Block)).with_children(|pg| {
                 row(pg, f, "Look", "The interface's theme (F4)", |c| kit::seg(c, f, "settings:theme", &super::wood::Name::ALL.map(|n| (n.label(), n.key()))));
                 row(pg, f, "Camera", "Choose how the camera follows your character", |c| kit::seg(c, f, "settings:camera", &[("Top-down (default)", "top-down"), ("Orbit (old)", "orbit")]));
                 row(pg, f, "Facing", "", |c| kit::seg(c, f, "settings:facing", &crate::controls::Facing::CHOICES));
@@ -137,6 +137,8 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                 row(pg, f, "Film", "The warm haze from the top of the screen. Soft keeps dark colours; Full lifts them too", |c| kit::seg(c, f, "settings:film", &crate::post::Film::ALL.map(|m| (m.label(), m.name()))));
                 row(pg, f, "Hair shine", "The highlight on hair. Crown lies over the crown and stays off a fringe", |c| kit::seg(c, f, "settings:hair", &crate::style::HairShine::choices()));
                 row(pg, f, "Weapon", "Draw it by itself when something attacks you", |c| kit::toggle(c, "settings:auto_draw"));
+                row(pg, f, "Combat timing", "Play attack animations live during the windup, or on the old delayed clock", |c| kit::seg(c, f, "settings:combat_timing", &[("Live (default)", "live"), ("Old (delayed)", "old")]));
+                row(pg, f, "Windup glint", "Brief flash halfway through a hostile windup", |c| kit::toggle(c, "settings:windup_glint"));
                 // Heed for players (`heed.rs`): shown only while the world's laws let players
                 // heed, so a world without it shows the page as before.
                 let r = row_entity(pg, f, "The throng", "Those you see but don't keep track of, drawn as simple figures", |c| kit::toggle(c, "settings:throng"));
@@ -211,11 +213,11 @@ pub(super) fn row(p: &mut ChildSpawnerCommands, f: &Fonts, label: &str, help: &s
 }
 
 fn row_entity(p: &mut ChildSpawnerCommands, f: &Fonts, label: &str, help: &str, control: impl FnOnce(&mut ChildSpawnerCommands)) -> Entity {
-    p.spawn((Node { display: Display::Grid, grid_template_columns: vec![GridTrack::px(220.0), GridTrack::fr(1.0)], column_gap: Val::Px(12.0), align_items: AlignItems::Center, padding: UiRect::vertical(Val::Px(9.0)), border: UiRect::bottom(Val::Px(1.5)), ..default() }, BorderColor::all(wood::line()), Pickable::IGNORE)).with_children(|r| {
+    p.spawn((Node { display: Display::Grid, grid_template_columns: vec![GridTrack::px(220.0), GridTrack::fr(1.0)], column_gap: Val::Px(12.0), align_items: AlignItems::Center, padding: UiRect::vertical(Val::Px(4.5)), border: UiRect::bottom(Val::Px(1.5)), ..default() }, BorderColor::all(wood::line()), Pickable::IGNORE)).with_children(|r| {
         r.spawn((Node { flex_direction: FlexDirection::Column, ..default() }, Pickable::IGNORE)).with_children(|l| {
-            l.spawn((Text::new(label), wood::ink(f, 14.0, 800), Pickable::IGNORE));
+            l.spawn((Text::new(label), wood::ink(f, 13.5, 800), Pickable::IGNORE));
             if !help.is_empty() {
-                l.spawn((Text::new(help), f.body(12.0, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
+                l.spawn((Text::new(help), f.body(11.5, 600), TextColor(wood::muted()), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
             }
         });
         r.spawn((Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(10.0), ..default() }, Pickable::IGNORE)).with_children(control);
@@ -229,14 +231,14 @@ pub fn update(
     tags: Query<&Tag>,
     mut lit: Query<(&Tag, &mut Lit)>,
     mut page: ResMut<Page>,
-    mut pages: Query<(&PageBody, &mut Node), Without<BindChip>>,
+    mut pages: Query<(&PageBody, &mut Node, Option<&mut bevy::ui::ScrollPosition>, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), Without<BindChip>>,
     mut chips: Query<(&BindChip, &mut Node, &mut BackgroundColor), Without<PageBody>>,
     mut texts: Query<(&BindText, &mut Text), Without<BindName>>,
     mut names_q: Query<(&BindName, &mut Text), Without<BindText>>,
     names: Res<SkillNames>,
     (mut binds, mut prefs, mut cap): (ResMut<Binds>, ResMut<Prefs>, ResMut<Capture>),
     (mut input, mut edge, mut tips, mut lw): (ResMut<crate::controls::Input>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<super::tips::Tips>, ResMut<crate::twist::LookWalk>),
-    (keys, mouse, time): (Res<ButtonInput<KeyCode>>, Res<ButtonInput<MouseButton>>, Res<Time>),
+    (keys, mouse, time, pointer): (Res<ButtonInput<KeyCode>>, Res<ButtonInput<MouseButton>>, Res<Time>, Res<crate::pointer::Pointer>),
     open: Res<super::win::Windows>,
     (mut theme, mut film, mut shine): (ResMut<super::ThemeState>, ResMut<crate::post::Film>, ResMut<crate::style::HairShine>),
 ) {
@@ -357,6 +359,13 @@ pub fn update(
                     changed = true;
                 }
             }
+            "settings:combat_timing" => {
+                if let Some(m) = crate::combat::CombatTiming::parse(value) {
+                    info!("settings: combat timing: {}", m.name());
+                    prefs.combat_timing = m;
+                    changed = true;
+                }
+            }
             "settings:preset" if value != "own" => {
                 *binds = Binds::preset(if value == "numbers" { Preset::Numbers } else { Preset::Letters });
                 changed = true;
@@ -372,6 +381,11 @@ pub fn update(
                 }
                 "settings:auto_draw" => {
                     prefs.auto_draw = !prefs.auto_draw;
+                    changed = true;
+                }
+                "settings:windup_glint" => {
+                    prefs.windup_glint = !prefs.windup_glint;
+                    info!("settings: windup glint {}", prefs.windup_glint);
                     changed = true;
                 }
                 "settings:throng" => {
@@ -434,18 +448,30 @@ pub fn update(
             "settings:look_walk" => Some(value == look_walk),
             "settings:film" => Some(value == film_now),
             "settings:hair" => Some(value == shine_now),
+            "settings:combat_timing" => Some(value == prefs.combat_timing.name()),
             _ => match t {
                 "settings:camera_rotate" => Some(prefs.camera_rotate),
                 "settings:camera_rotate_invert" => Some(prefs.camera_rotate_invert),
                 "settings:auto_draw" => Some(prefs.auto_draw),
+                "settings:windup_glint" => Some(prefs.windup_glint),
                 "settings:throng" => Some(prefs.throng),
                 "settings:tips" => Some(prefs.tips),
                 _ => None,
             },
         }
     });
-    for (p, mut n) in &mut pages {
-        show(&mut n, p.0 == *page);
+    let phys = ui.pos.map(|p| p * ui.scale);
+    for (p, mut n, sp, cn, tf) in &mut pages {
+        let shown = p.0 == *page;
+        show(&mut n, shown);
+        if shown && pointer.scroll_px != 0.0 {
+            if let (Some(mut sp), Some(pos)) = (sp, phys) {
+                if cn.contains_point(*tf, pos) {
+                    let max_y = (cn.content_size().y - cn.size().y).max(0.0);
+                    sp.0.y = (sp.0.y - pointer.scroll_px).clamp(0.0, max_y);
+                }
+            }
+        }
     }
     for (c, mut n, mut bg) in &mut chips {
         let have = binds.get(c.0).len();

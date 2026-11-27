@@ -28,9 +28,11 @@ of P's on another, one of P's individuals on a throng member, and a throng membe
 - **Change only:** while nobody moves, P receives no `seen_throng` insert, update or delete.
 - **Colours carry no identity:** each row has only its cells, counts, bits and three cloth indices
   (0-9, 255 none) with counts; an index of 255 has count 0; its counts by kind are no larger than
-  its count allows and its centre lies within its square.
+  its count allows and its centre lies within its square; its histogram is one quantized count per
+  CLOTH word, no more wearers than its count allows.
 - **pin_at:** Q picks a walker out of its own throng by its position; it becomes Q's individual,
-  not P's, and P's rows never name it; an anonymous `pin_at` is refused as any `human_heed` is.
+  not P's, and P's rows never name it; Q's throng row changes in the pick's own update (within
+  50 ms of the picked one's `seen_characters` insert); an anonymous `pin_at` is refused as any `human_heed` is.
 
 The laws are put back as the world had them. Admin calls (`spawn_crowd`, `set_behavior`,
 `place_at`, `admin_set_vitals`, `set_world_law`) set the scene. Writes `RUN/heed-<who>.jsonl` and
@@ -50,6 +52,7 @@ sys.path.insert(0, str(ROOT / "living/tools"))
 from law_values import own_laws  # noqa: E402
 
 RESULTS = []
+CLOTH = ["yellow", "black", "green", "tan", "blue", "red", "cream", "navy", "purple", "grey"]
 LAWS = {"heed_on": "true", "heed_players": "true", "heed_ceiling": "2", "cue_transport_on": "true", "combat_feed_on": "true"}
 SHIPPED = {"heed_on": "false", "heed_players": "false", "heed_ceiling": "16", "cue_transport_on": "false", "combat_feed_on": "false"}
 P_QUERIES = ["SELECT * FROM seen_bodies", "SELECT * FROM seen_characters", "SELECT * FROM seen_fighters", "SELECT * FROM seen_doing",
@@ -140,7 +143,7 @@ def main():
         seconds = 34
         paths = {w: out / f"heed-{w}.jsonl" for w in ("p", "q", "anon", "peek")}
         threads = [stream(db, tok["p"], P_QUERIES, seconds, paths["p"]),
-                   stream(db, tok["q"], ["SELECT * FROM seen_throng"], seconds, paths["q"]),
+                   stream(db, tok["q"], ["SELECT * FROM seen_throng", "SELECT * FROM seen_characters"], seconds, paths["q"]),
                    stream(db, None, ["SELECT * FROM seen_throng"], seconds, paths["anon"]),
                    stream(db, tok["p"], [f"SELECT * FROM seen_throng WHERE viewer = 0x{ident['q']}"], seconds, paths["peek"])]
         time.sleep(4.0)
@@ -231,10 +234,16 @@ def main():
         check("earshot reads sight: its text counts the throng, its hearers are individuals (above)", any("in the throng" in r.get("text", "") for r in ears), [r.get("text") for r in ears][:3])
         mine = [r for t, r in rows_of(ev["p"]) if t == "seen_throng"]
         theirs = [r for t, r in rows_of(ev["q"]) if t == "seen_throng"]
+        # pin_at's row change reaches Q with the pick itself: a seen_throng update or delete in the
+        # same update as the picked one's seen_characters insert (received within 50 ms of it).
+        ins = [e.get("ms", 0) for e in ev["q"] if qp is not None and e.get("table") == "seen_characters" and e.get("event") == "insert" and e["row"].get("id") == qp and q_pick and e.get("ms", 0) >= q_pick["at"]]
+        with_pick = [e for e in ev["q"] if ins and e.get("table") == "seen_throng" and e.get("event") in ("update", "delete") and abs(e.get("ms", 0) - ins[0]) <= 50]
+        check("pin_at: Q's throng row gives the person up in the pick's own update", ins and with_pick, {"insert_ms": ins[:1], "rows": [{"event": e["event"], "ms": e.get("ms")} for e in with_pick[:3]]})
         check("seen_throng: P receives its own rows only", mine and all(norm(r["viewer"]) == ident["p"] for r in mine), len(mine))
         fields = {"id", "viewer", "cell", "size", "count", "spread", "heading", "moving", "fighting", "kinds",
                   "colour_a", "colour_a_count", "colour_b", "colour_b_count", "colour_c", "colour_c_count",
-                          "people", "wolves", "deer", "others", "centre_x", "centre_y"}
+                          "people", "wolves", "deer", "others", "centre_x", "centre_y",
+                          *(f"cloth_{w}" for w in CLOTH)}
         colours_ok = all(set(r) == fields and all(r[f"colour_{k}"] in set(range(10)) | {255} for k in "abc")
                          and all((r[f"colour_{k}"] == 255) == (r[f"colour_{k}_count"] == 0) for k in "abc") for r in mine)
         shape_ok = all(sum(r[k] for k in ("people", "wolves", "deer", "others")) >= (1 if r["count"] else 0)
@@ -242,6 +251,9 @@ def main():
                        and r["centre_x"] < 6 * max(1, r["size"]) and r["centre_y"] < 6 * max(1, r["size"]) for r in mine)
         check("seen_throng kinds and centre carry no identity: counts by kind no larger than the row's, a centre within its square", mine and shape_ok,
               [{k: r[k] for k in ("cell", "size", "count", "people", "wolves", "deer", "others", "centre_x", "centre_y")} for r in mine[:3]])
+        hist_ok = all(all(0 <= r[f"cloth_{w}"] <= 255 for w in CLOTH) and sum(r[f"cloth_{w}"] for w in CLOTH) <= r["count"] + 2 * len(CLOTH) for r in mine)
+        check("seen_throng's histogram carries no identity: one quantized count per CLOTH word, no more wearers than the row's count allows", mine and hist_ok,
+              [{w: r[f"cloth_{w}"] for w in CLOTH} for r in mine[:2]])
         check("seen_throng colours carry no identity: three cloth indices (0-9, 255 none) with counts, nothing else", mine and colours_ok,
               [{k: r[k] for k in sorted(fields - {"viewer"})} for r in mine[:2]])
         check("seen_throng: Q receives its own rows only", theirs and all(norm(r["viewer"]) == ident["q"] for r in theirs), len(theirs))

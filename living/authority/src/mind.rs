@@ -1135,7 +1135,9 @@ fn cue_refusal(ctx: &ReducerContext, actor: u32, c: &Cue) -> String {
             || ctx.db.relation().by_pair().filter((actor, c.who_id)).next().is_some()
             || ctx.db.character().id().find(actor).is_some_and(|me| crate::perception::knows_name(ctx, &me, &other));
         if !met {
-            return format!("you have never seen #{}", c.who_id);
+            // Under `familiar_regard` a stranger seen long ago can be forgotten (familiar-cap):
+            // what is true then is that one does not remember them, not that one never saw them.
+            return if common::laws(ctx).familiar_regard { format!("you do not remember seeing #{}", c.who_id) } else { format!("you have never seen #{}", c.who_id) };
         }
     }
     if !c.who.is_empty() && c.who != "unknown" && !living_rules::catalog::CREATURES.iter().any(|k| *k == c.who) {

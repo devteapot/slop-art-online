@@ -3151,7 +3151,7 @@ def combat_switches_ui(run, c):
         t = log(os.path.dirname(p))
         if "playing character" not in t:
             continue
-        reads = re.findall(r"perception: on the \w+ set after \d+ ms \(tables: motion \w+ characters \w+ fighters (\w+) combat_feed (\w+);", t)
+        reads = re.findall(r"perception: on the \w+ set after \d+ ms \(tables: motion \w+ characters \w+ fighters (\w+) combat_feed (\w+)\b", t)
         on.append((os.path.basename(os.path.dirname(p)), reads))
     bad = [(n, r) for n, r in on if not r or any(x != ("true", "true") for x in r)]
     c.check(s, f"every client of the scenarios read the fighter table and the combat feed ({len(on)} clients)", on and not bad, json.dumps(bad or [n for n, _ in on]))
@@ -4314,6 +4314,86 @@ def pools(run, c):
     c.check(s, "with its max restored, the mana bar is still shown", "focus" in ms("02"), str(list(ms("02"))))
 
 
+# perception-parity phase 0 (docs/PERCEPTION_PARITY_AUDIT.md, class A*): the cut points graphs
+# and the rules' statuses test hunger and energy at (seeds, instincts and trials; `brain.rs`
+# `starving` >= 90 and `exhausted` <= 10; `status_of`'s words).
+HUNGER_CUTS = [15, 40, 45, 50, 55, 60, 80, 88, 90, 97]
+ENERGY_CUTS = [10, 12, 20, 25, 30, 50, 60, 70, 85, 90]
+# (hunger, energy) set on my vitals, with the rules' words expected for each.
+BODY_STATES = [(10.0, 95.0, "Well fed", "Well rested"), (47.0, 40.0, "Peckish", "A little tired"), (62.0, 22.0, "Hungry", "Tired"),
+               (92.0, 8.0, "Very hungry", "Exhausted"), (98.0, 55.0, "Starving", "Rested")]
+
+
+@scenario("body-clock")
+def body_clock(run, c):
+    """Perception parity for my own hunger, energy, hour and season (class A*): graphs test the
+    exact hunger and energy (`{"hunger": {"above": 55}}`, `starving`, `exhausted`) and the world's
+    hour and season (`hour`, `winter`), which the HUD showed only as pills and a sky. Owner SQL
+    sets my vitals across each band (the pills' words and the graphs' cut points) and the world's
+    epoch to noon, 23:00, the last day of autumn and the first of winter; the cursor on the
+    meters (`@body`) shows the body's tooltip, on the clock (`@clock`) the day's. Each state: the
+    tooltip names every meter, hunger and energy as the whole number cut down (the number shown
+    puts the value on the right side of every cut point) with the rules' word; the clock's text
+    is the world's hour to the minute, a moon by the rules' night, the season and its day."""
+    s = "body-clock"
+    w = (sql(run, "SELECT epoch_ms, day_ms, year_days FROM world") or [{}])[0]
+    if not w:
+        c.check(s, "the world row", False, "no world row")
+        return
+    y = max(int(w["year_days"]), 4)
+    winter = next(k for k in range(y) if (k * 4) // y == 3) + 1  # the first day of winter (from 1)
+    vit = lambda h, e: f"sql|UPDATE vitals SET hunger = {h}, energy = {e}, at_ms = {{now_ms}}, rate_key = 0 WHERE id = {{me}}"
+    syncs = ["noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0"]
+    plan = "ready;wait:2;sync:noon;wait:1.5;"
+    for i, (h, e, _, _) in enumerate(BODY_STATES):
+        syncs.append(f"v{i}={vit(h, e)}")
+        plan += f"sync:v{i};wait:2.5;cursor:@body;wait:0.6;dump:v{i};" + (f"shot:v{i}_body;" if i in (1, 3) else "") + "cursor:;wait:0.3;"
+    syncs += ["day=sql|UPDATE world SET epoch_ms = {epoch_at:12.25} WHERE id = 0", "night=sql|UPDATE world SET epoch_ms = {epoch_at:23.5} WHERE id = 0",
+              f"autumn=sql|UPDATE world SET epoch_ms = {{epoch_at:12:{winter - 1}}} WHERE id = 0", f"winter=sql|UPDATE world SET epoch_ms = {{epoch_at:12:{winter}}} WHERE id = 0",
+              f"back=sql|UPDATE world SET epoch_ms = {int(w['epoch_ms'])} WHERE id = 0;{vit(10.0, 95.0)}"]
+    plan += ("sync:day;wait:1.5;dump:day;shot:day;cursor:@clock;wait:0.6;dump:day_tip;shot:day_tip;cursor:;sync:night;wait:2.5;dump:night;shot:night;"
+             "sync:autumn;wait:1.5;dump:autumn;shot:autumn;sync:winter;wait:1.5;shot:winter;cursor:@clock;wait:0.6;dump:winter;shot:winter_tip;cursor:;sync:back;wait:1;quit")
+    out, code, text = drive(run, s, plan, syncs=syncs)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    c.check(s, "fixtures: every owner SQL call went in", all(sc.get("snaps", {}).get(k) for k in ["noon", "day", "night", "autumn", "winter", "back"] + [f"v{i}" for i in range(len(BODY_STATES))]), str(list(sc.get("snaps", {})))[:300])
+    import math
+    for i, (h, e, hw, ew) in enumerate(BODY_STATES):
+        d = dump(out, f"v{i}") or {}
+        me = d.get("me") or {}
+        body = {b["name"]: b for b in me.get("body") or []}
+        tip = (d.get("extra") or {}).get("tooltip") or {}
+        k = f"hunger {h:.0f}, energy {e:.0f}"
+        c.check(s, f"{k}: the cursor on the meters shows the body's tooltip, as built", tip.get("title") == "Body" and tip.get("text") == me.get("body_tip") and "body" in (d.get("tags") or {}), str(tip)[:200])
+        hb, eb = body.get("hunger") or {}, body.get("energy") or {}
+        c.check(s, f"{k}: hunger and energy are in it though no bar shows them", hb and eb and not hb.get("shown") and not eb.get("shown") and "hunger" not in [m["name"] for m in me.get("meters") or []], str(list(body)))
+        hn, en = math.floor(hb.get("value", -9) + 1e-3), math.floor(eb.get("value", -9) + 1e-3)
+        text = tip.get("text") or ""
+        c.check(s, f"{k}: the numbers shown are the vitals' whole numbers cut down (within the rates' drift)", f"Hunger  {hn} / 100" in text and f"Energy  {en} / 100" in text and abs(hn - h) <= 1.5 and abs(en - e) <= 1.5, text.replace("\n", " | "))
+        sides = [(cut, hn >= cut, h > cut) for cut in HUNGER_CUTS] + [(-cut, en < cut, e < cut) for cut in ENERGY_CUTS]
+        wrong = [cut for cut, shown, real in sides if shown != real]
+        c.check(s, f"{k}: the number shown puts it on the right side of every cut point (hunger above, energy below)", not wrong, str(wrong))
+        c.check(s, f"{k}: the rules' words: {hw}, {ew}", hb.get("word") == hw and eb.get("word") == ew and f"Hunger  {hn} / 100 · {hw}" in text, str((hb.get("word"), eb.get("word"))))
+        pills = [p["text"] for p in me.get("statuses") or []]
+        plain = {"Peckish", "Not hungry", "A little tired", "Rested"}
+        c.check(s, f"{k}: the pills unchanged (a word that is not plain is a pill; a plain one is not)", all((w in pills) == (w not in plain) for w in (hw, ew)), str(pills))
+    def clock_of(n):
+        return (dump(out, n) or {}).get("clock") or {}
+    def hour_ok(ck, want):
+        t = ck.get("text") or ""
+        m = int(math.floor(ck.get("hour", -1) * 60 + 1e-6))
+        return abs(ck.get("hour", -9) - want) < 0.3 and t == f"{m // 60:02d}:{m % 60:02d}"
+    day, tipd, night, aut, win = clock_of("day"), dump(out, "day_tip") or {}, clock_of("night"), clock_of("autumn"), clock_of("winter")
+    c.check(s, "by day: the clock reads the world's hour to the minute (12:15), no night", hour_ok(day, 12.25) and day.get("night") is False, str(day))
+    # The tooltip against the clock of the same dump (the world's minutes go on between dumps).
+    ttip, tc = (tipd.get("extra") or {}).get("tooltip") or {}, tipd.get("clock") or {}
+    c.check(s, "the cursor on the clock: its tooltip gives the day and the season's day", ttip.get("title") == f"Day {tc.get('day')} · {tc.get('text')}" and (ttip.get("text") or "").startswith(f"{tc.get('season_word')}, day {tc.get('season_day')} of {tc.get('season_days')}") and "clock" in (tipd.get("tags") or {}), str((ttip, tc)))
+    c.check(s, "at night: 23:30 and night by the rules' light", hour_ok(night, 23.5) and night.get("night") is True, str(night))
+    c.check(s, f"the last day of autumn (day {winter - 1} of a {y}-day year)", aut.get("season") == "autumn" and aut.get("season_day") == aut.get("season_days") and aut.get("day") == winter - 1, str(aut))
+    wtip = ((dump(out, "winter") or {}).get("extra") or {}).get("tooltip") or {}
+    c.check(s, "the next day is winter's first, on the clock and in its tooltip", win.get("season") == "winter" and win.get("season_word") == "Winter" and win.get("season_day") == 1 and win.get("day") == winter and (wtip.get("text") or "").startswith("Winter, day 1 of"), str((win, wtip))[:300])
+
+
 @scenario("own")
 def own(run, c):
     """mind-act-outcome-far (force_outcomes): my own strikes, shots and casts get an `own`
@@ -4495,8 +4575,11 @@ def committed(run, c):
     dist = lambda a, b: ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 if a and b else None
     still = [dist(pos("a0", w), pos(k, w)) for k in ("a1", "a2") for w in ("body", "drawn")]
     c.check(s, "W pressed in the windup: neither the authority's body nor the drawn one moves", all(x is not None and x < 0.1 for x in still), f"windup {wb:.2f} s; moved {still}")
-    after = dist(pos("a0", "body"), pos("a4", "body"))
-    c.check(s, "the walk follows once the windup ends (held, then resumed)", after is not None and after > 0.5, f"{after}")
+    # The authority row's x, y is the start of its motion segment, so a walk that starts as one long
+    # segment reads 0 m on it while W is still held: judge the drawn body at a4 and the authority's
+    # row at b0 (after W is let go, the stop segment starts where the walk ended).
+    after = [dist(pos("a0", "drawn"), pos("a4", "drawn")), dist(pos("a0", "body"), pos("b0", "body"))]
+    c.check(s, "the walk follows once the windup ends (held, then resumed)", all(x is not None and x > 0.5 for x in after), f"drawn at a4, authority at b0: {after}")
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
     me = sc.get("me")
     bolts = [r for r in (sql(run, f"SELECT id, kind, skill, why FROM act_outcome WHERE observer = {me}") if me else []) if r.get("skill") == "firebolt"]
@@ -5478,20 +5561,22 @@ def reply_pace(run, c):
 
 # ---- heed for players (docs/ATTENTION_BUDGET.md "Built: the player side"; features/heed.md) ----
 
-HEED_LAWS = ("heed_on", "heed_players")
+HEED_LAWS = ("heed_on", "heed_players", "heed_ceiling")
 HEED_MAX = "You can keep at most 4 others pinned at once."
 HEED_UNSEEN = "You can only keep track of someone you can see now."
+HEED_EMPTY = "There is no one in the throng there to pick out."
 
 
 @contextmanager
 def heed_fixture(run):
-    """Both heed laws back to the world's own values (else off, as shipped) when the scene ends."""
+    """Heed laws back to the world's own values (else shipped defaults) when the scene ends."""
     original = own_laws(lambda q: sql(run, q))
     try:
         yield
     finally:
         for law in HEED_LAWS:
-            call_admin(run, "set_world_law", [law, original.get(law, shipped_law(law) or "false")], check=True)
+            default = "16" if law == "heed_ceiling" else "false"
+            call_admin(run, "set_world_law", [law, original.get(law, shipped_law(law) or default)], check=True)
 
 
 def heed_on_calls():
@@ -5545,10 +5630,18 @@ def verify_sql_noon(run):
     return q
 
 
+CLOTH_COLS = (
+    "cloth_yellow", "cloth_black", "cloth_green", "cloth_tan", "cloth_blue",
+    "cloth_red", "cloth_cream", "cloth_navy", "cloth_purple", "cloth_grey",
+)
+
+
 def throng_rows(run, ident):
-    """My throng as the authority holds it (owner SQL): (cell, size, count, moving, fighting) rows."""
-    rows = owner_rows(run, f"SELECT cell, size, count, spread, heading, moving, fighting, kinds FROM seen_throng WHERE viewer = 0x{ident}") or []
-    return [{k: r[k] for k in ("cell", "size", "count", "spread", "heading", "moving", "fighting", "kinds")} for r in rows]
+    """My throng as the authority holds it (owner SQL)."""
+    cols = ("cell", "size", "count", "spread", "heading", "moving", "fighting", "kinds",
+            "people", "wolves", "deer", "others", "centre_x", "centre_y") + CLOTH_COLS
+    rows = owner_rows(run, f"SELECT {', '.join(cols)} FROM seen_throng WHERE viewer = 0x{ident}") or []
+    return [{k: r[k] for k in cols} for r in rows]
 
 
 def heed_choice(run, me):
@@ -5570,24 +5663,74 @@ def perception_sets(text):
     return re.findall(r"perception: subscribing the \w+ set \((\d+) queries; (tables: [^;)]*)", text)
 
 
+def _expected_cloth_alloc(q, has_book):
+    """Per-word card counts for square `q`'s person cards from its 10-word `cloths` histogram
+    (mirrors `throng::tops_with`). Returns `(want_tinted, active_book_words)` where
+    `active_book_words` is the number of distinct non-`grey` words allocated >= 1 card."""
+    if not has_book:
+        return 0, 0
+    n_people = q.get("people", 0)
+    cloths = q.get("cloths") or []
+    if n_people == 0 or len(cloths) != 10:
+        return 0, 0
+    # Index 9 ("grey") has no outfit in the shipped look book, so it stays neutral.
+    slots = [(idx, cnt) for idx, cnt in enumerate(cloths) if cnt > 0]
+    total_c = sum(cnt for _, cnt in slots)
+    if total_c == 0:
+        return 0, 0
+    if total_c <= n_people:
+        alloc = [cnt for _, cnt in slots]
+    else:
+        # Proportional largest-remainder apportionment across active slots.
+        exacts = [cnt * n_people / total_c for _, cnt in slots]
+        floors = [int(math.floor(e)) for e in exacts]
+        rem = n_people - sum(floors)
+        order = sorted(range(len(slots)), key=lambda i: (-(exacts[i] - floors[i]), i))
+        for i in order[:rem]:
+            floors[i] += 1
+        alloc = floors
+    want_tinted = sum(alloc[i] for i, (idx, _) in enumerate(slots) if idx != 9)
+    active_book = sum(1 for i, (idx, _) in enumerate(slots) if idx != 9 and alloc[i] > 0)
+    return want_tinted, active_book
+
+
 def squares_ok(t):
     """Each square of a dump's throng drawn as its row says: `count` cards, the poses by its
-    shares, and every card inside the square."""
+    shares, per-kind counts, cards tinted per its 10-word `cloths` histogram, centred on its
+    centroid and inside the square."""
     bad = []
+    has_book = (t or {}).get("tint") == "book"
     for q in (t or {}).get("squares") or []:
         n, f, m = q["count"], q["fighting"], q["moving"]
         want_f = min(f, n)
         want_w = min(m, n - want_f)
-        if q["cards"] != n or q["fight"] != want_f or q["walk"] != want_w or q["stand"] != n - want_f - want_w or not q["inside"] or q["tinted"]:
+        side = max(1, q["size"]) * 6.0
+        cx, cy = q["cell"]
+        ox, oy = cx * 6.0, cy * 6.0
+        ce = q.get("centre") or [0, 0]
+        want_centroid = [ox + min(ce[0], side - 1.0) + 0.5, oy + min(ce[1], side - 1.0) + 0.5]
+        cent = q.get("centroid") or [0.0, 0.0]
+        cent_ok = abs(cent[0] - want_centroid[0]) < 1e-3 and abs(cent[1] - want_centroid[1]) < 1e-3
+        mc = q.get("mean_card")
+        reach = max(q["spread"] * 0.5, 0.55 * math.sqrt(max(n, 1)), 0.75) + 0.70
+        mean_ok = True if n == 0 else (mc is not None and (math.hypot(mc[0] - cent[0], mc[1] - cent[1]) <= (0.70 if n == 1 else reach)))
+        cloths = q.get("cloths") or []
+        want_tinted, active_book = _expected_cloth_alloc(q, has_book)
+        rgb_map = q.get("rgb") or {}
+        rgb_sum = sum(rgb_map.values())
+        if (q["cards"] != n or q["fight"] != want_f or q["walk"] != want_w or q["stand"] != n - want_f - want_w
+                or not q["inside"] or len(cloths) != 10
+                or q["tinted"] != want_tinted or rgb_sum != q["tinted"] or len(rgb_map) != active_book
+                or not cent_ok or not mean_ok):
             bad.append(q)
     return bad
 
 
 def rows_match(t, auth):
     """How many of the authority's rows the client holds alike (cell, size, count, moving,
-    fighting), of how many."""
-    mine = {((q["cell"][0] << 16) | q["cell"][1], q["size"], q["count"], q["moving"], q["fighting"]) for q in (t or {}).get("squares") or []}
-    theirs = {(r["cell"], r["size"], r["count"], r["moving"], r["fighting"]) for r in auth or []}
+    fighting, cloths), of how many."""
+    mine = {((q["cell"][0] << 16) | q["cell"][1], q["size"], q["count"], q["moving"], q["fighting"], tuple(q.get("cloths") or ())) for q in (t or {}).get("squares") or []}
+    theirs = {(r["cell"], r["size"], r["count"], r["moving"], r["fighting"], tuple(r[k] for k in CLOTH_COLS)) for r in auth or []}
     return len(mine & theirs), len(theirs), len(mine)
 
 
@@ -5598,9 +5741,10 @@ def heed_throng(run, c):
     the drawing as before heed: no `seen_throng`, no throng, no keeping-track rows in Settings),
     then both laws on (`set_world_law`, admin): the client subscribes `seen_throng` beside the
     rest, make-before-break, and draws each row as `count` figure cards in its square with the
-    poses its shares give, at the play camera and zoomed out; Settings' switch hides them; then
-    `heed_players` off: the rows go and the set is the first one again. The laws go back to the
-    world's own values after."""
+    poses its shares give, cloth colours derived from the look book in proportion to the 10-word
+    `cloth_*` histogram, and cards centred on `(cell corner + centre_x/y + 0.5 m)`, at the play
+    camera and zoomed out; Settings' switch hides them; then `heed_players` off: the rows go and
+    the set is the first one again. The laws go back to the world's own values after."""
     s = "heed-throng"
     plan = ("ready;wait:2;sync:battle;wait:5;dump:off;shot:off;"
             "click:@menu;wait:0.5;click:@menu:Settings;wait:0.8;dump:settings_off;click:@settings:page:controls;wait:0.6;dump:controls_off;click:@settings:page:play;wait:0.4;click:@win:Settings:close;wait:0.5;"
@@ -5610,7 +5754,6 @@ def heed_throng(run, c):
             "click:@settings:throng;wait:1.2;dump:hidden;shot:hidden;"
             "click:@settings:throng;wait:1.2;dump:shown;click:@win:Settings:close;wait:0.5;"
             "sync:off;wait:4;dump:after;sync:rows_after;shot:after;quit")
-    st = verify.load(run)
 
     def battle(me, ident):
         # Noon, so the player sees the whole battle (the island's night sight is short); the
@@ -5650,8 +5793,17 @@ def heed_throng(run, c):
     c.check(s, "laws on: the log names heed for players", "rules: heed for players true" in L and "heed: players heed true" in L)
     for k, rows_k in (("on", "rows_on_a"), ("far", "rows_far_a")):
         t = d[k].get("throng") or {}
+        sqs = t.get("squares") or []
         bad = squares_ok(t)
-        c.check(s, f"{k}: the throng has rows and every square is drawn as its row says (count cards, poses by shares, inside, placeholder tint)", t.get("rows", 0) > 0 and not bad and t.get("tint") == "placeholder", f"rows {t.get('rows')} cards {t.get('cards')}; bad {bad[:2]}")
+        c.check(s, f"{k}: the throng has rows and every square is drawn as its row says (count cards, poses, colours, centroids, inside)", t.get("rows", 0) > 0 and not bad and t.get("tint") == "book", f"rows {t.get('rows')} cards {t.get('cards')} tint {t.get('tint')}; bad {bad[:2]}")
+        distinct_rgbs = {rgb for q in sqs for rgb in (q.get("rgb") or {})}
+        tinted_total = sum(q.get("tinted", 0) for q in sqs)
+        non_origin_centres = any(q.get("centre") != [0, 0] for q in sqs)
+        wide_sqs = [q for q in sqs if _expected_cloth_alloc(q, True)[1] > 3]
+        wide_ok = all(len(q.get("rgb") or {}) > 3 for q in wide_sqs)
+        c.check(s, f"{k}: cards carry real look-book cloth colours from the full histogram (>3 words in dense cells) and non-trivial centroids",
+                tinted_total > 0 and len(distinct_rgbs) >= 2 and non_origin_centres and wide_ok,
+                f"tinted {tinted_total}, rgbs {sorted(distinct_rgbs)}, wide {[(q.get('cell'), len(q.get('rgb') or {}), q.get('cloths')) for q in wide_sqs[:3]]}, centres {[q.get('centre') for q in sqs[:4]]}")
         # The authority's rows just before and just after the dump: a row the battle changed
         # in between counts as alike when it matches either.
         both = (res.get(rows_k) or []) + (res.get(rows_k[:-1] + "b") or [])
@@ -5666,42 +5818,98 @@ def heed_throng(run, c):
     c.check(s, "the switch on again: drawn", ts.get("drawn") is True and ts.get("cards", 0) > 0, json.dumps({k: ts.get(k) for k in ("on", "drawn", "cards")}))
     c.check(s, "heed_players off: the dump has no throng or heed, the authority no rows of mine", d["after"].get("throng") is None and d["after"].get("heed") is None and res.get("rows_after") == [], f"{len(res.get('rows_after') or [])} rows")
     c.check(s, "heed_players off: the set is the first one again", bool(sets) and sets[-1] == first, f"{first} ... {sets[-1] if sets else None}")
-    c.check(s, "the heed laws are back to the world's own values", all(own_laws(lambda q: sql(run, q)).get(l, "false") == "false" for l in HEED_LAWS))
+    c.check(s, "the heed laws are back to the world's own values", all(own_laws(lambda q: sql(run, q)).get(l, "false") == "false" for l in ("heed_on", "heed_players")))
 
 
 @scenario("heed-pins", explicit=True)
 def heed_pins(run, c):
-    """Pins and focus (heed for players; features/heed.md): the player at a quiet open spot
-    (`UNHEARD_SPOT`, admin `place_at`), five residents held beside them,
-    both heed laws on (admin). The Pin key (T) on four of them pins them (the authority's
-    `heed_choice` row holds the four, owner SQL), on a fifth warns first, and a second press asks:
-    the authority refuses it in its own words, shown in the notes. T on a pinned one unpins it.
-    Focus follows whom the open text box speaks to, and goes when it closes. Y clears every pin.
-    Calls are at least 250 ms apart."""
+    """Pins, focus, throng-card click (`pin_at`), refused `pin_at` and a mixed people-and-wolf
+    cell (heed for players; features/heed.md): the player at a quiet open spot (`UNHEARD_SPOT`,
+    admin `place_at`), five residents held beside them, both heed laws on (admin). The Pin key (T)
+    on four of them pins them (the authority's `heed_choice` row holds the four, owner SQL), on a
+    fifth warns first, and a second press asks: the authority refuses it in its own words, shown in
+    the notes. T on a pinned one unpins it. Focus follows whom the open text box speaks to, and
+    goes when it closes. Y clears every pin. Then `heed_ceiling` is lowered to 2 and E placed in
+    its own 6 m cell 6.5 m east so E enters `seen_throng`: left-clicking (`tap`) E's throng card
+    sends `pin_at` and promotes + pins E; asking for `pin_at` at an empty point (`heed:at:…`) is
+    refused with `There is no one in the throng there to pick out.`. Finally, if the world has
+    living wolves, three residents and two wolves are placed in that same 6 m cell while two close
+    residents stay pinned, verifying per-kind card counts (`people: 3, wolf: 2`) and that only
+    people take cloth tints."""
     s = "heed-pins"
     ids = residents(run, 5)
     c.check(s, "five residents to pin", len(ids) == 5, str(ids))
     if len(ids) < 5:
         return
+    wolves = sorted(r["id"] for r in sql(run, "SELECT id, alive, kind FROM character WHERE kind = 'wolf'") if r.get("alive"))[:2]
     A, B, C, D, E = ids
     offsets = [(1.6, 0.0), (-1.6, 0.0), (0.0, 1.6), (1.2, 1.4), (-1.2, 1.4)]
     places = [f"{i}:{dx}:{dy}" for i, (dx, dy) in zip(ids, offsets)]
     pin = lambda i: f"point:{i}:1.0;wait:0.3;key:KeyT:tap;wait:0.7;"
-    # A quiet open spot first (`unheard`'s): a fight nearby would take the player's places
-    # (heed at work), so the residents would not all be individuals.
+    ax, ay = UNHEARD_SPOT
+    # Cell (51, 55): origin (306.0, 330.0); E stands at (306.5, 330.5) so its 1-member centroid is exact.
+    ex, ey = math.floor(ax / 6.0) * 6.0 + 6.5, math.floor(ay / 6.0) * 6.0 + 0.5
+    mix_plan = ""
+    if len(wolves) == 2:
+        mix_plan = "sync:mix_setup;wait:2.5;dump:mixed;shot:mixed;"
     plan = ("ready;wait:2;sync:spot;wait:3;sync:scene;wait:1;sync:heed;wait:4;dump:p0;"
             + pin(A) + pin(B) + pin(C) + pin(D) + "wait:0.6;dump:p4;sync:row4;"
             + f"point:{E}:1.0;wait:0.3;key:KeyT:tap;wait:0.6;dump:warn;key:KeyT:tap;wait:1.5;dump:five;shot:five;sync:row5;"
             + pin(B) + "wait:0.6;dump:unpin;sync:row_unpin;"
             + f"point:{C}:1.0;wait:0.6;key:Enter:tap;wait:1.5;dump:focus;sync:row_focus;shot:focus;key:Escape:tap;wait:1.5;dump:nofocus;sync:row_nofocus;"
-            + "cursor:;key:KeyY:tap;wait:1.2;dump:clear;sync:row_clear;quit")
+            + "cursor:;key:KeyY:tap;wait:1.2;dump:clear;sync:row_clear;"
+            + f"sync:throng_setup;wait:3.8;dump:throng_before;"
+            + f"pointat:{ex},{ey}:0.6;wait:0.4;tap;wait:1.5;dump:pin_at;sync:row_pin_at;shot:pin_at;"
+            + f"cursor:;heed:at:{ax - 30.0},{ay - 30.0};wait:1.2;dump:pin_at_empty;sync:row_pin_at_empty;"
+            + mix_plan
+            + "quit")
     row = lambda me, ident: heed_choice(run, me)
-    handlers = {"spot": lambda me, ident: call_admin(run, "place_at", [me, UNHEARD_SPOT[0], UNHEARD_SPOT[1]], check=True),
-                "heed": lambda me, ident: [call_admin(run, r, a, check=True) for r, a in heed_on_calls()], "row4": row, "row5": row, "row_unpin": row, "row_focus": row, "row_nofocus": row, "row_clear": row}
-    with resident_fixture(run, ids), heed_fixture(run):
+
+    def spot(me, ident):
+        return [verify_sql_noon(run), call_admin(run, "place_at", [me, ax, ay], check=True)]
+
+    def throng_setup(me, ident):
+        return [
+            call_admin(run, "set_world_law", ["heed_ceiling", "2"], check=True),
+            call_admin(run, "place_at", [B, ax + 3.5, ay], check=True),
+            call_admin(run, "place_at", [C, ax - 3.5, ay], check=True),
+            call_admin(run, "place_at", [D, ax, ay + 3.5], check=True),
+            call_admin(run, "place_at", [E, ex, ey], check=True),
+        ]
+
+    def mix_setup(me, ident):
+        idle = json.dumps({"wait": 60})
+        # Keep A (at 1.6 m) and E (pinned, moved to 1.6 m) as the 2 individuals (heed_ceiling = 2),
+        # and place B, C, D + 2 idle wolves together in cell (51, 55) so they form one mixed cell.
+        calls = [
+            call_admin(run, "place_at", [E, ax - 1.6, ay], check=True),
+            call_admin(run, "place_at", [B, ex + 0.8, ey + 0.5], check=True),
+            call_admin(run, "place_at", [C, ex + 1.6, ey + 0.5], check=True),
+            call_admin(run, "place_at", [D, ex + 2.4, ey + 0.5], check=True),
+        ]
+        for idx, wid in enumerate(wolves):
+            calls.append(call_admin(run, "set_behavior", [wid, idle], check=True))
+            calls.append(call_admin(run, "place_at", [wid, ex + 1.0 + idx * 1.4, ey + 2.2], check=True))
+        return calls
+
+    handlers = {
+        "spot": spot,
+        "heed": lambda me, ident: [call_admin(run, r, a, check=True) for r, a in heed_on_calls()],
+        "row4": row, "row5": row, "row_unpin": row, "row_focus": row, "row_nofocus": row, "row_clear": row,
+        "throng_setup": throng_setup,
+        "row_pin_at": lambda me, ident: {"choice": heed_choice(run, me), "throng": throng_rows(run, ident)},
+        "row_pin_at_empty": row,
+    }
+    if len(wolves) == 2:
+        handlers["mix_setup"] = mix_setup
+    borrow = ids + wolves
+    with resident_fixture(run, borrow), heed_fixture(run), sight_fixture(run, {}):
         out, code, text, res = staged_drive(run, s, plan, handlers, extra=[x for p in places for x in ("--place", p)])
     c.check(s, "client ran and joined", code == 0, text[-300:])
-    d = {k: dump(out, k) or {} for k in ("p0", "p4", "warn", "five", "unpin", "focus", "nofocus", "clear")}
+    keys_d = ["p0", "p4", "warn", "five", "unpin", "focus", "nofocus", "clear", "throng_before", "pin_at", "pin_at_empty"]
+    if len(wolves) == 2:
+        keys_d.append("mixed")
+    d = {k: dump(out, k) or {} for k in keys_d}
     h = {k: d[k].get("heed") or {} for k in d}
     c.check(s, "heed for players is on and the five are individuals", h["p0"].get("on") is True and set(ids) <= set(d["p0"].get("perceived") or []), f"perceived {d['p0'].get('perceived')}")
     c.check(s, "four pinned, and the authority holds the four", h["p4"].get("pins") == [A, B, C, D] and (res.get("row4") or {}).get("pins") == [A, B, C, D], f"client {h['p4'].get('pins')}; authority {res.get('row4')}")
@@ -5714,12 +5922,41 @@ def heed_pins(run, c):
     c.check(s, "the box closed: no focus, here and on the authority", h["nofocus"].get("focus") is None and (res.get("row_nofocus") or {}).get("focus") is None, f"{h['nofocus'].get('focus')}; {res.get('row_nofocus')}")
     rc = res.get("row_clear")
     c.check(s, "Y clears every pin (the authority's row empty or gone)", h["clear"].get("pins") == [] and (rc is None or (rc.get("pins") == [] and rc.get("focus") is None)), f"{h['clear'].get('pins')}; {rc}")
+    # pin_at: E is in seen_throng before the click, promoted to perceived and pinned after clicking its card.
+    tb = d["throng_before"].get("throng") or {}
+    cell_e = [int(ex // 6), int(ey // 6)]
+    sq_e = next((q for q in (tb.get("squares") or []) if q.get("cell") == cell_e), None)
+    c.check(s, "pin_at setup: E is in the throng square and not perceived", E not in (d["throng_before"].get("perceived") or []) and sq_e is not None and sq_e.get("count") == 1, f"perceived {d['throng_before'].get('perceived')}; sq {sq_e}")
+    row_pin_at_choice = (res.get("row_pin_at") or {}).get("choice") or {}
+    row_pin_at_throng = (res.get("row_pin_at") or {}).get("throng") or []
+    c.check(s, "clicking E's throng card promotes E to perceived and pins E here and on the authority",
+            E in (d["pin_at"].get("perceived") or []) and E in (h["pin_at"].get("pins") or []) and h["pin_at"].get("last_picked") == E and E in (row_pin_at_choice.get("pins") or []),
+            f"perceived {d['pin_at'].get('perceived')}; heed {h['pin_at']}; authority {row_pin_at_choice}")
+    tp = d["pin_at"].get("throng") or {}
+    sq_e_after = next((q for q in (tp.get("squares") or []) if q.get("cell") == cell_e), None)
+    cell_e_key = (cell_e[0] << 16) | cell_e[1]
+    auth_e_after = [r for r in row_pin_at_throng if r.get("cell") == cell_e_key]
+    pick_cell = h["pin_at"].get("last_pick_cell")
+    c.check(s, "pin_at removes E from its throng cell in the same update",
+            pick_cell == {"cell": cell_e, "before": 1, "after": 0} and sq_e_after is None and not auth_e_after,
+            f"last_pick_cell {pick_cell}; sq_after {sq_e_after}; auth_after {auth_e_after}")
+    # Refused pin_at at an empty point: exact authority words, existing pin kept.
+    c.check(s, "pin_at at an empty point: refused with exact words in notes, existing pin kept",
+            HEED_EMPTY in (h["pin_at_empty"].get("refusals") or []) and HEED_EMPTY in (d["pin_at_empty"].get("notes") or []) and E in ((res.get("row_pin_at_empty") or {}).get("pins") or []),
+            f"refusals {h['pin_at_empty'].get('refusals')}; notes {d['pin_at_empty'].get('notes')}; authority {res.get('row_pin_at_empty')}")
+    if len(wolves) == 2:
+        tm = d["mixed"].get("throng") or {}
+        sq_m = next((q for q in (tm.get("squares") or []) if q.get("cell") == cell_e), None)
+        ck = (sq_m or {}).get("card_kinds") or {}
+        c.check(s, "mixed people-and-wolf cell draws 3 people and 2 wolves by per-kind counts, only people tinted",
+                sq_m is not None and sq_m.get("by_kind") == [3, 2, 0, 0] and ck.get("person") == 3 and ck.get("wolf") == 2 and sq_m.get("animals") == 2 and 0 < sq_m.get("tinted", 0) <= 3 and not squares_ok(tm),
+                f"sq {sq_m}")
     L = log(out)
     stamps = [x for x in re.findall(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+)Z[^\n]*heed: sent", L)]
     import datetime
     ts = [datetime.datetime.fromisoformat(x).timestamp() for x in stamps]
     gaps = [round(b - a, 3) for a, b in zip(ts, ts[1:])]
-    c.check(s, "calls at least 250 ms apart, none refused as too many inputs", len(ts) >= 6 and all(g >= 0.25 for g in gaps) and "refused (paced)" not in L, f"{len(ts)} calls; gaps {gaps}")
+    c.check(s, "calls at least 250 ms apart, none refused as too many inputs", len(ts) >= 8 and all(g >= 0.25 for g in gaps) and "refused (paced)" not in L, f"{len(ts)} calls; gaps {gaps}")
     notes_clear(c, s, out)
 
 
@@ -5747,6 +5984,139 @@ def heed_refusal(run, c):
     c.check(s, "an id no one has: the same words", r2.count(HEED_UNSEEN) >= 2, str(r2))
     row = res.get("row")
     c.check(s, "the authority's row names neither", row is None or (far not in row.get("pins", []) and nobody not in row.get("pins", [])), str(row))
+
+
+@scenario("windup", explicit=True)
+def windup(run, c):
+    """Combat clip timing (B, default live) and hostile windup midpoint glint (A, default off;
+    features/bar.md):
+    1. Defaults (`combat_timing=live`, `windup_glint=false`): hostile strikes start their clip
+       during the windup before release; zero glints fire.
+    2. Old timing (`settings:combat_timing:old`): hostile strikes wait for the delayed display
+       clock `now_ms` (matching main); zero glints fire.
+    3. Live + glint on (`settings:combat_timing:live`, `settings:windup_glint`): one glint fires
+       per hostile windup at `f >= 0.5` (`extra.glints` and `client.log`), never for my own
+       character, and the clip starts before release."""
+    s = "windup"
+    attacker = residents(run, 1)[0]
+    spot = (360.5, 232.5)
+    att_at = (spot[0] - 1.2, spot[1] - 1.2)
+    dmg0 = own_laws(lambda q: sql(run, q)).get("dmg_strike", "5")
+    out_dir = os.path.join(ROOT, ".local/living/verify", run, "ui", f"{s}-{THEME}" if THEME else s)
+    feet_path = os.path.join(out_dir, "feet.jsonl")
+    # Remove any prior scratch settings.json so defaults are verified cleanly on re-runs.
+    prior_settings = os.path.join(out_dir, "settings.json")
+    if os.path.exists(prior_settings):
+        os.remove(prior_settings)
+    open_settings = "click:@menu;wait:0.4;click:@menu:Settings;wait:0.5;"
+    plan = (
+        "ready;sync:setup;wait:1.0;dump:def0;"
+        "sync:fight_live;wait:4.2;sync:hold1;dump:def1;"
+        + open_settings + "shot:01_settings;click:@settings:combat_timing:old;wait:0.4;dump:old0;key:Escape:tap;wait:0.6;"
+        "sync:fight_old;wait:4.2;sync:hold2;dump:old1;"
+        + open_settings + "click:@settings:combat_timing:live;wait:0.3;click:@settings:windup_glint;wait:0.4;dump:glint0;shot:02_settings_glint;key:Escape:tap;wait:0.6;"
+        "weapon:draw;wait:0.3;sync:fight_glint;wait:1.0;skill:strike:nearest;wait:3.6;sync:hold3;dump:glint1;shot:03_glint_done;quit"
+    )
+    idle_g = json.dumps({"wait": 600})
+    def strike_graph(me):
+        return json.dumps({"first": [{"do": {"skill": "strike", "target": {"id": me}}}, {"wait": 1}]})
+    handlers = {
+        "setup": lambda me, ident: [
+            call_admin(run, "set_world_law", ["dmg_strike", "1"], check=True),
+            verify_sql_noon(run),
+            call_admin(run, "place_at", [me, spot[0], spot[1]], check=True),
+            call_admin(run, "place_at", [attacker, att_at[0], att_at[1]], check=True),
+            call_admin(run, "set_behavior", [attacker, idle_g], check=True),
+        ],
+        "fight_live": lambda me, ident: [call_admin(run, "set_behavior", [attacker, strike_graph(me)], check=True)],
+        "fight_old": lambda me, ident: [call_admin(run, "set_behavior", [attacker, strike_graph(me)], check=True)],
+        "fight_glint": lambda me, ident: [call_admin(run, "set_behavior", [attacker, strike_graph(me)], check=True)],
+        "hold1": lambda me, ident: [call_admin(run, "set_behavior", [attacker, idle_g], check=True)],
+        "hold2": lambda me, ident: [call_admin(run, "set_behavior", [attacker, idle_g], check=True)],
+        "hold3": lambda me, ident: [call_admin(run, "set_behavior", [attacker, idle_g], check=True)],
+    }
+    env = {"LIVING_GAME_FEET": feet_path, "LIVING_GAME_FEET_ID": str(attacker)}
+    try:
+        with resident_fixture(run, [attacker]):
+            out, code, text, _ = staged_drive(run, s, plan, handlers, env=env)
+    finally:
+        call_admin(run, "set_world_law", ["dmg_strike", dmg0])
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    d = {k: dump(out, k) or {} for k in ("def0", "def1", "old0", "old1", "glint0", "glint1")}
+    ex = lambda k: d[k].get("extra") or {}
+    c.check(s, "defaults: combat_timing is live and windup_glint is off",
+            ex("def0").get("combat_timing") == "live" and ex("def0").get("windup_glint") is False,
+            f"{ex('def0').get('combat_timing')}, {ex('def0').get('windup_glint')}")
+    c.check(s, "defaults: no glint fires while windup_glint is off",
+            (ex("def1").get("glints") or []) == [],
+            str(ex("def1").get("glints")))
+    c.check(s, "Settings switches combat_timing to old",
+            ex("old0").get("combat_timing") == "old" and ex("old0").get("windup_glint") is False,
+            f"{ex('old0').get('combat_timing')}, {ex('old0').get('windup_glint')}")
+    c.check(s, "old timing: no glint fires while windup_glint is off",
+            (ex("old1").get("glints") or []) == [],
+            str(ex("old1").get("glints")))
+    c.check(s, "Settings switches back to live and enables windup_glint",
+            ex("glint0").get("combat_timing") == "live" and ex("glint0").get("windup_glint") is True,
+            f"{ex('glint0').get('combat_timing')}, {ex('glint0').get('windup_glint')}")
+    glints = ex("glint1").get("glints") or []
+    sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+    me = sc.get("me")
+    keys = [(g.get("actor"), g.get("act_ms")) for g in glints]
+    fs = [g.get("f") for g in glints]
+    c.check(s, "windup_glint on: fires once per hostile windup at f >= 0.5, never for my own character",
+            len(glints) >= 2
+            and len(keys) == len(set(keys))
+            and all(g.get("actor") == attacker for g in glints)
+            and all(g.get("actor") != me for g in glints)
+            and all(f is not None and 0.5 <= f < 1.0 for f in fs),
+            f"me={me} attacker={attacker} glints={glints}")
+    # Check clip timing from feet.jsonl: group strikes by act_ms, split into live vs old phases
+    # using the client log's settings switch timestamps.
+    L = log(out)
+    glint_logs = re.findall(rf"combat: windup glint #{attacker} act_ms=(\d+) release_ms=(\d+) f=([0-9.]+)", L)
+    c.check(s, "windup glint lines logged in client.log match dump count",
+            len(glint_logs) == len(glints) and len(glint_logs) >= 2,
+            f"log={len(glint_logs)} dump={len(glints)}")
+    rows = []
+    if os.path.exists(feet_path):
+        with open(feet_path) as fh:
+            for line in fh:
+                if line.strip():
+                    r = json.loads(line)
+                    if r.get("id") == attacker:
+                        rows.append(r)
+    # Identify each distinct strike by action start_ms and find when the sword_* clip first dominates.
+    # Use the dumps' live-script log times (`t X.XXX s`) to partition live / old / glint phases.
+    t_def0 = re.search(r"live script: dump:def0 .* t ([0-9.]+) s", L)
+    t_def1 = re.search(r"live script: dump:def1 .* t ([0-9.]+) s", L)
+    t_old0 = re.search(r"live script: dump:old0 .* t ([0-9.]+) s", L)
+    t_old1 = re.search(r"live script: dump:old1 .* t ([0-9.]+) s", L)
+    def phase_onsets(t0, t1):
+        sub = [r for r in rows if t0 <= r.get("t", 0.0) <= t1]
+        by_act = {}
+        for r in sub:
+            act = r.get("action")
+            if isinstance(act, list) and len(act) == 2 and str(act[0]).startswith("sword"):
+                by_act.setdefault(int(act[1]), []).append(r)
+        out_ms = []
+        for act_ms, frames in sorted(by_act.items()):
+            want_clip = frames[0]["action"][0]
+            # Find first frame for this blow where its clip dominates (filter out previous blow's tail).
+            dom = next((r for r in frames if r.get("mine_ms") is not None and r.get("clip") == want_clip and r["mine_ms"] >= act_ms - 10), None)
+            if dom is not None:
+                lead = (dom["mine_ms"] - dom["now_ms"]) if dom.get("now_ms") is not None else 0.0
+                now_delta = round(dom["now_ms"] - act_ms, 1) if dom.get("now_ms") is not None else None
+                out_ms.append((act_ms, round(dom["mine_ms"] - act_ms, 1), round(lead, 1), now_delta, dom.get("clip")))
+        return out_ms
+    live_onsets = phase_onsets(float(t_def0.group(1)), float(t_def1.group(1))) if t_def0 and t_def1 else []
+    old_onsets = phase_onsets(float(t_old0.group(1)), float(t_old1.group(1))) if t_old0 and t_old1 else []
+    c.check(s, "live timing: combat clip dominates during the 350 ms windup (before release)",
+            len(live_onsets) >= 2 and all(d < 350.0 for _, d, _, _, _ in live_onsets),
+            f"live_onsets={live_onsets}")
+    c.check(s, "old timing: clip onset waits for delayed display clock now_ms >= act_ms",
+            len(old_onsets) >= 2 and all(nd is not None and nd >= -5.0 for _, _, _, nd, _ in old_onsets),
+            f"live={live_onsets} old={old_onsets}")
 
 
 def main():

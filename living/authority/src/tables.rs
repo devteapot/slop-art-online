@@ -993,7 +993,8 @@ pub const FAM_ARTIFACT: u64 = 4 << 40;
 /// is a new sighting). Acts, graph targets and speech that name the handle reach the person.
 /// When the observer can make them out, `made_out_ms` is set and the observer is told whom the
 /// handle was (an experience with subject the person and object the handle), so its memory joins
-/// the two. Private; read by the authority only. A few rows per observer, bounded (`far::prune`).
+/// the two. Private; read by the authority only. A few rows per observer, bounded (`far::prune`),
+/// gone at death (`act::forget_dead`).
 #[spacetimedb::table(accessor = far_handle,
     index(accessor = by_observer_target, btree(columns = [observer, target])))]
 #[derive(Clone, Debug)]
@@ -1076,6 +1077,9 @@ pub struct Familiar {
     pub id: u64,
     #[index(btree)]
     pub actor: u32,
+    /// Indexed (familiar-cap): everyone's rows about a dead creature go by it once its remains
+    /// are gone, under the `familiar_regard` law (`tick::expire_remains`).
+    #[index(btree)]
     pub thing: u64,
     pub first_ms: u64,
     pub last_ms: u64,
@@ -1257,6 +1261,7 @@ pub struct RelationFight {
     #[auto_inc]
     pub id: u64,
     pub actor: u32,
+    #[index(btree)]
     pub other: u32,
     /// `enemy` or `spare`.
     pub fight: String,
@@ -1884,8 +1889,10 @@ pub struct Missile {
 }
 
 /// One use of a combat skill, from the intention to what actually happened (private; kept
-/// for the last [`crate::combat::USES_KEPT`] uses per character). `accepted_ms` is 0 for an
-/// attempt the rules refused, with `outcome` saying why.
+/// for the last [`crate::combat::USES_KEPT`] uses per living character, and a dead one's for
+/// [`crate::combat::DEAD_USES_GRACE_MS`] after its death; each finished row also goes out as a
+/// [`SkillUseEvent`]). `accepted_ms` is 0 for an attempt the rules refused, with `outcome`
+/// saying why.
 #[derive(Clone, Debug)]
 #[spacetimedb::table(accessor = skill_use)]
 pub struct SkillUse {
@@ -1906,6 +1913,33 @@ pub struct SkillUse {
     pub released_ms: u64,
     pub outcome: String,
     pub outcome_ms: u64,
+}
+
+/// A `skill_use` row as it stood when it was finished, for exporters (private event table: no
+/// row stays after its transaction; the owner's subscription receives each insert, and the
+/// commitlog keeps it). Sent when an outcome is written or amended (`why` "outcome"), and when a
+/// row that never had one leaves the table: trimmed past [`crate::combat::USES_KEPT`]
+/// ("trimmed") or drained after its actor's death ("drained", [`DeadSkillUseDue`]). The last
+/// event per `skill_use.id` is the row's final state. docs/COMBAT.md, "Skill uses".
+#[derive(Clone, Debug)]
+#[spacetimedb::table(accessor = skill_use_event, event)]
+pub struct SkillUseEvent {
+    /// "outcome", "trimmed" or "drained".
+    pub why: String,
+    /// When it was sent (ms).
+    pub sent_ms: u64,
+    pub skill_use: SkillUse,
+}
+
+/// A dead character whose `skill_use` rows go at `due_ms` (private): death plus
+/// [`crate::combat::DEAD_USES_GRACE_MS`], so tools that read a fight's uses at its end (trials'
+/// `final.json`) still find them. Drained once a second by housekeeping, by index.
+#[spacetimedb::table(accessor = dead_skill_use_due)]
+pub struct DeadSkillUseDue {
+    #[primary_key]
+    pub actor: u32,
+    #[index(btree)]
+    pub due_ms: u64,
 }
 
 #[derive(SpacetimeType, Clone, Debug, PartialEq)]
@@ -2735,6 +2769,12 @@ pub struct PinAt {
 ///   as `count` is; and where they stand: `centre_x`, `centre_y`, their mean position's whole metres
 ///   east and south of the square's top-left corner (0 to side - 1; drawn at + 0.5 m). A one-member
 ///   cell's centre is that member's position to the metre, still unnamed. Appended with defaults.
+/// - The whole colour histogram: `cloth_yellow` … `cloth_grey`, one per `living_rules::look::CLOTH`
+///   word in its order, how many members wear it, quantized as `count` is and capped at 255 (it
+///   reads 255 for 253 or more). It replaces `colour_a..c` as the truth; those stay written, as its
+///   top three, for clients that read them (deprecated: a column cannot be removed by an automatic
+///   migration). Ten named `u8` columns, not a `Vec<u8>`: appended columns need a const default,
+///   which a `Vec` has none documented for, and fixed-size columns carry no length to keep at 10.
 /// - Written by the viewer's sweep when a cell's fields change, never rewritten unchanged; a
 ///   viewer's rows go when heed stops applying to it (the law off: all of them in one tick), when
 ///   its character dies or another is played.
@@ -2778,6 +2818,26 @@ pub struct SeenThrong {
     pub centre_x: u8,
     #[default(0u8)]
     pub centre_y: u8,
+    #[default(0u8)]
+    pub cloth_yellow: u8,
+    #[default(0u8)]
+    pub cloth_black: u8,
+    #[default(0u8)]
+    pub cloth_green: u8,
+    #[default(0u8)]
+    pub cloth_tan: u8,
+    #[default(0u8)]
+    pub cloth_blue: u8,
+    #[default(0u8)]
+    pub cloth_red: u8,
+    #[default(0u8)]
+    pub cloth_cream: u8,
+    #[default(0u8)]
+    pub cloth_navy: u8,
+    #[default(0u8)]
+    pub cloth_purple: u8,
+    #[default(0u8)]
+    pub cloth_grey: u8,
 }
 
 /// The tick's own time in microseconds, for measuring its cadence (the `tick_marker_on` law, a

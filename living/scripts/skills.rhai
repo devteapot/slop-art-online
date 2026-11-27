@@ -234,6 +234,7 @@ fn laws() {
         // A diagnostic, off in play: the authority logs each heed pass, windup and blow of a
         // character with a mind (the verify-core heed scene reads them).
         heed_trace: false,
+        familiar_limit: 2048.0, familiar_regard: false,
         // ...and for players too (with heed_on): their perceived set is whom they heed, the rest of
         // their sight a counted throng. Off until its own play-test.
         heed_players: false,
@@ -3293,6 +3294,8 @@ fn law_about(l, name) {
         "heed_ceiling" => `no one keeps track of more than ${short(l.heed_ceiling)} others as individuals at once`,
         "heed_closing_s" => `whether someone is coming toward one is judged over ${short(l.heed_closing_s)} s, not a glance`,
         "heed_contact_s" => `someone whose blow reached one stays an individual to one for ${short(l.heed_contact_s)} s, whatever one heeds`,
+        "familiar_limit" => `one keeps about ${short(l.familiar_limit)} faces, places and things familiar`,
+        "familiar_regard" => if l.familiar_regard { "strangers are forgotten first, the known never" } else { "the oldest is forgotten first" },
         "heed_trace" => "A test switch that logs how each mind's character keeps track of others in a fight; it is off in play.",
         "heed_players" => if l.heed_players { "a player keeps track of only so many others as individuals too; everyone else in sight is a throng" } else { "a player perceives everyone in sight as an individual" },
         "far_cap" => if l.far_cap > 0.0 { `a player sees at most ${short(l.far_cap)} others at once, the nearest` } else { "a player sees everyone in sight" },

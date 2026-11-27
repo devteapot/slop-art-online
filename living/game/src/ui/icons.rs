@@ -48,9 +48,12 @@ pub enum Mark {
     Sheathed,
     Drawn,
     Tip,
+    /// The clock by day and by night (`top.rs`).
+    Sun,
+    Moon,
 }
 
-pub const MARKS: [Mark; 22] = [Mark::Close, Mark::Caret, Mark::Option, Mark::Pack, Mark::Dots, Mark::Person, Mark::People, Mark::Book, Mark::Scroll, Mark::Gear, Mark::Leave, Mark::Give, Mark::Trade, Mark::Wave, Mark::Eye, Mark::Talk, Mark::Needle, Mark::NeedleS, Mark::Up, Mark::Sheathed, Mark::Drawn, Mark::Tip];
+pub const MARKS: [Mark; 24] = [Mark::Close, Mark::Caret, Mark::Option, Mark::Pack, Mark::Dots, Mark::Person, Mark::People, Mark::Book, Mark::Scroll, Mark::Gear, Mark::Leave, Mark::Give, Mark::Trade, Mark::Wave, Mark::Eye, Mark::Talk, Mark::Needle, Mark::NeedleS, Mark::Up, Mark::Sheathed, Mark::Drawn, Mark::Tip, Mark::Sun, Mark::Moon];
 
 /// How an item is drawn in the pack: a few shapes by what the item is called, else a bundle.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -444,6 +447,17 @@ fn mark(m: Mark, p: Vec2) -> f32 {
             let base = rbox(p, v(0.0, -0.58), v(0.22, 0.18), 0.06);
             bulb.min(base)
         }
+        Mark::Sun => {
+            // A disc and eight short rays.
+            let mut d = circle(p, v(0.0, 0.0), 0.36);
+            for i in 0..8 {
+                let a = i as f32 * PI / 4.0;
+                let (s, c) = a.sin_cos();
+                d = d.min(seg(p, v(c * 0.56, s * 0.56), v(c * 0.84, s * 0.84), 0.09));
+            }
+            d
+        }
+        Mark::Moon => sub(circle(p, v(0.0, 0.0), 0.72), circle(p, v(0.36, 0.22), 0.6)),
     }
 }
 

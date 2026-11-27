@@ -36,10 +36,10 @@ touches behaviour, these cases with the fake model only:
                  its per-world checks, the seed's laws composed over the shipped script among them,
                  on the world, island, cullet and cullet-laws genesis worlds; a failing check is a
                  part `<case>:<seed>:<check>` the red-on-main list can hold)
-  verify-ui      the render group, only when a merge changes how the client draws, split by path
-                 (RENDER_CHARACTER: looks (Cullet), hair, seat; RENDER_CAMERA: camera-faces,
-                 camera-lod, far (island); RENDER_BOTH: all six; docs/TOOLING.md, "The render
-                 group"), check.py one at a time after
+  verify-ui      the render group, only when a merge changes how the client draws or its HUD, split by
+                 path (RENDER_CHARACTER: looks (Cullet), hair, seat; RENDER_CAMERA: camera-faces,
+                 camera-lod, far (island); RENDER_UI: body-clock (island); RENDER_BOTH: all seven;
+                 docs/TOOLING.md, "The render group"), check.py one at a time after
                  every other group, on the pinned render asset set (render_set.py check, then link;
                  corrupt or stale fail setup, exit 2). A case fails on check.py's exit and on
                  shader/pipeline, asset (bevy_asset) or panic ERROR lines in its client logs; a log
@@ -81,7 +81,7 @@ Usage:
       --force     run even when no behavioural path changed
       --genesis-only  the genesis fuel publishes alone: no scenes, no red-on-main list
       --genesis-fuel-report JSON  a staged genesis_fuel.py report for its seed (repeatable)
-      --render-only  only the render cases the diff selects (all six with --force), on this host's
+      --render-only  only the render cases the diff selects (all seven with --force), on this host's
                   set; records the pass (for a merge another host refused)
   scene_gate.py seeds [--json PATH]   compiled seeds against their living/seeds/worlds/ sources
                   (seed_fresh.py, files only); a stale block listed red on main as
@@ -203,18 +203,20 @@ ACTS_PATHS = ("living/authority/src/acts.rs", "living/rules/src/acts.rs", "livin
 # bows and arrows), for merges that change blows, missiles and their codes.
 COMBAT_PATHS = ("living/authority/src/combat.rs", "living/authority/src/codes.rs", "living/rules/src/combat.rs")
 
-# The render group (gate-render, 2026-11-20): verify-ui's drawing cases, for merges that change how
-# the client draws people, the camera or sight. Each glob's `*` stays within a folder, `**` crosses
-# folders. The group is split in two halves by path (render-autosplit, 2026-11-21; the whole group
-# took about 11 minutes on dev-box): a character path selects the character half (looks, hair, seat;
-# about 6 minutes), a camera, LOD or sight path the camera half (camera-faces, camera-lod, far;
-# about 5 minutes); a path in RENDER_BOTH (any shader, the client's manifest, the verify-ui drivers)
-# selects both, as does a diff touching one path of each half. RENDER_BOTH is matched first.
+# The render group (gate-render, 2026-11-20): verify-ui's drawing and HUD cases, for merges that
+# change how the client draws people, the camera/sight or its HUD. Each glob's `*` stays within a
+# folder, `**` crosses folders. The group is split by path (render-autosplit, 2026-11-21; ui half
+# added with body-clock, 2026-11-27): a character path selects the character half (looks, hair,
+# seat; about 6 minutes), a camera, LOD or sight path the camera half (camera-faces, camera-lod,
+# far; about 5 minutes), a UI path (living/game/src/ui/** or body-clock's feature map) the ui half
+# (body-clock); a path in RENDER_BOTH (any shader, the client's manifest, the verify-ui drivers)
+# selects all halves, as does a diff touching paths of multiple halves. RENDER_BOTH is matched first.
 GAME = "living/game/src/"
 RENDER_CHARACTER = tuple(GAME + p for p in (
     "characters/**", "characters.rs", "handmade.rs", "compose.rs", "lookdev.rs", "looks.rs", "style.rs", "bodies.rs",
     "anim.rs", "gait.rs", "ik.rs", "twist.rs", "mouth.rs", "facing.rs", "post.rs", "**hair*.rs"))
 RENDER_CAMERA = tuple(GAME + p for p in ("camera.rs", "perf.rs", "fade.rs", "envs.rs", "sightfield.rs", "sightedge.rs"))
+RENDER_UI = (GAME + "ui/**", ".agents/skills/verify-ui/features/body-clock.md")
 RENDER_BOTH = (GAME + "*.wesl", "living/game/Cargo.toml", ".agents/skills/verify-ui/scripts/**")
 
 # Each case: its surface skill and the world group it runs in. Known flakes are from the skills'
@@ -319,6 +321,7 @@ CASES = {
     "camera-faces": {"skill": "verify-ui", "group": "render", "world": "island", "render": "camera"},
     "camera-lod":   {"skill": "verify-ui", "group": "render", "world": "island", "render": "camera"},
     "far":          {"skill": "verify-ui", "group": "render", "world": "island", "render": "camera"},
+    "body-clock":   {"skill": "verify-ui", "group": "render", "world": "island", "render": "ui"},
     # A host without the set runs this instead (the VRoid bases, the look-dev tour and one live
     # drive; shader, pipeline and panic lines fail it), and needs a recorded render pass.
     "render-smoke": {"skill": "verify-ui", "group": "render-smoke"},
@@ -586,16 +589,23 @@ def load_warnings(loads, host="this host"):
     return out
 
 
-HALVES = ("character", "camera")  # the render group's halves, in the order they run
+HALVES = ("character", "camera", "ui")  # the render group's halves, in the order they run
 HALF_CASES = {h: [c for c in RENDER_CASES if CASES[c]["render"] == h] for h in HALVES}
 
 
+def join_halves(hs):
+    """Format a non-empty list of half names ('character', 'character and camera', 'character, camera and ui')."""
+    if len(hs) <= 2:
+        return " and ".join(hs)
+    return ", ".join(hs[:-1]) + " and " + hs[-1]
+
+
 def render_classes(paths):
-    """{class: [paths]} for the drawing paths among `paths`: `both`, `character`, `camera`."""
+    """{class: [paths]} for the drawing/UI paths among `paths`: `both`, `character`, `camera`, `ui`."""
     out = {}
     for p in paths:
         kind = ("both" if glob_match(p, RENDER_BOTH) else "character" if glob_match(p, RENDER_CHARACTER)
-                else "camera" if glob_match(p, RENDER_CAMERA) else None)
+                else "camera" if glob_match(p, RENDER_CAMERA) else "ui" if glob_match(p, RENDER_UI) else None)
         if kind:
             out.setdefault(kind, []).append(p)
     return out
@@ -607,7 +617,7 @@ def rendering(paths):
 
 def render_halves(paths):
     """The halves a diff needs: a character path the character half, a camera path the camera half,
-    a RENDER_BOTH path (or one of each) both; none when it draws nothing."""
+    a UI path the ui half, a RENDER_BOTH path all halves; none when it touches none."""
     kinds = render_classes(paths)
     return [h for h in HALVES if h in kinds or "both" in kinds]
 
@@ -1699,6 +1709,10 @@ def judge_on_main(a, runner, repo, base, cases, record):
             for c in [c for c in todo if spec(c)["group"] in RENDER_GROUPS]:
                 verdict[c] = ("unknown", "", f"main {base[:10]}'s verify-ui drivers predate the render group")
                 todo.remove(c)
+        check_py = root / ".agents/skills/verify-ui/scripts/check.py"
+        if "body-clock" in todo and '@scenario("body-clock")' not in (check_py.read_text() if check_py.exists() else ""):
+            verdict["body-clock"] = ("unknown", "", f"main {base[:10]}'s verify-ui check.py predates body-clock")
+            todo.remove("body-clock")
     if todo:
         say(f"judging {', '.join(todo)} on main {base[:10]} (checkout {root}, build {a.main_dir}-target)")
         env = dict(runner.env, CARGO_TARGET_DIR=f"{a.main_dir}-target")
@@ -1737,7 +1751,7 @@ def plan_cases(a, paths, touched, hunks=None):
     """(scene cases, render cases) a run needs. --cases names them exactly; otherwise the scene
     cases when behaviour is touched (all with --force; a `paths` case only for its paths, or for
     its words in the changed hunks of its `hunks` files) and the render cases of the halves the
-    drawing paths select (all six with --render-only --force)."""
+    drawing/UI paths select (all seven with --render-only --force)."""
     if a.cases:
         cases = a.cases.split(",")
         return [c for c in cases if c not in RENDER_CASES], [c for c in cases if c in RENDER_CASES]
@@ -1773,7 +1787,7 @@ def cmd_run(a):
     drawn = rendering(paths)
     if getattr(a, "render_split", False) or os.environ.get("LIVING_GATE_RENDER_SPLIT"):
         say("note: --render-split and LIVING_GATE_RENDER_SPLIT are retired: the render group is split by path "
-            "(character paths the character half, camera paths the camera half); `--render-only --force` runs all six")
+            "(character, camera and ui halves); `--render-only --force` runs all seven")
     bad = [c for c in (a.cases.split(",") if a.cases else []) if c not in CASES]
     if bad:
         raise SystemExit(f"scene-gate: unknown case {bad}; cases: {ORDER}")
@@ -1831,7 +1845,7 @@ def cmd_run(a):
                 red = [c for c in render if verdicts[c][0] == "recorded-red-on-main"]
                 say(f"render: not run here; {entry.get('host')} recorded a pass for this content at {entry.get('at')} "
                     f"(key {key[:12]}, head {str(entry.get('head'))[:10]}, set {entry.get('set')}) covering the "
-                    f"{' and '.join(halves)} {'halves' if len(halves) > 1 else 'half'}: passed {', '.join(passed) or 'none'}"
+                    f"{join_halves(halves)} {'halves' if len(halves) > 1 else 'half'}: passed {', '.join(passed) or 'none'}"
                     f"{'; red on main, NOT passed: ' + ', '.join(red) if red else ''}")
                 for c in red:
                     say(f"WARNING render: {c} did not pass in {entry.get('host')}'s recorded pass: it was judged {verdicts[c][1]}. "
@@ -1848,8 +1862,8 @@ def cmd_run(a):
                         say(f"render: {c} not covered by the recorded pass: {verdicts[c][1]}")
                 parents = git("rev-list", "--parents", "-n", "1", "HEAD").split()[1:]
                 say(f"render: not run here; needs a pinned asset set ({RENDER_HOST}): none at {RENDER_ASSETS}, and no render pass "
-                    f"recorded for this content's {' and '.join(missing or halves)} {'halves' if len(missing or halves) > 1 else 'half'} "
-                    f"(key {key[:12]}{'; recorded: the ' + ' and '.join(have) + ' half' if have else ''}). "
+                    f"recorded for this content's {join_halves(missing or halves)} {'halves' if len(missing or halves) > 1 else 'half'} "
+                    f"(key {key[:12]}{'; recorded: the ' + join_halves(have) + (' halves' if len(have) > 1 else ' half') if have else ''}). "
                     f"There: make the same tree ({'merge ' + parents[1][:10] + ' into ' + parents[0][:10] if len(parents) > 1 else 'check out ' + head[:10]}"
                     f", content key {key[:12]}) and run `just living-scene-gate run --render-only --base {base[:10]}"
                     f"{' --cases ' + ','.join(todo) if todo != render else ''}`; the merge here is refused until then")
@@ -2030,7 +2044,7 @@ def record_render_pass(a, key, head, cases, record, render_set):
         return True
     try:
         update_reds(a.passes, change, f"render pass: {head[:10]} ({', '.join(cases)})", branch=PASSES_BRANCH, file=PASSES_FILE)
-        say(f"render: pass recorded for this content (key {key[:12]}; {' and '.join(halves_of(cases)) or 'no whole'} "
+        say(f"render: pass recorded for this content (key {key[:12]}; {join_halves(halves_of(cases)) or 'no whole'} "
             f"{'halves' if len(halves_of(cases)) > 1 else 'half'}) on {REDS_REMOTE}/{PASSES_BRANCH}")
     except Exception as e:
         say(f"WARNING: the render pass could not be recorded on {REDS_REMOTE}/{PASSES_BRANCH} ({e})")
@@ -2228,7 +2242,7 @@ def main(argv):
     r.add_argument("--main-dir", default=os.environ.get("LIVING_GATE_MAIN_DIR", str(STATE / "main")))
     r.add_argument("--json")
     r.add_argument("--render-only", action="store_true",
-                   help="only the render cases of the halves the diff selects (all six with --force), on this host's render asset set; records the pass")
+                   help="only the render cases of the halves the diff selects (all seven with --force), on this host's render asset set; records the pass")
     r.add_argument("--render-split", action="store_true", help=argparse.SUPPRESS)  # retired: the split is automatic
     r.set_defaults(f=cmd_run)
     t = sub.add_parser("touches")

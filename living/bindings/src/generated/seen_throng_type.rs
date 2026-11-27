@@ -29,6 +29,16 @@ pub struct SeenThrong {
     pub others: u16,
     pub centre_x: u8,
     pub centre_y: u8,
+    pub cloth_yellow: u8,
+    pub cloth_black: u8,
+    pub cloth_green: u8,
+    pub cloth_tan: u8,
+    pub cloth_blue: u8,
+    pub cloth_red: u8,
+    pub cloth_cream: u8,
+    pub cloth_navy: u8,
+    pub cloth_purple: u8,
+    pub cloth_grey: u8,
 }
 
 impl __sdk::InModule for SeenThrong {
@@ -61,6 +71,16 @@ pub struct SeenThrongCols {
     pub others: __sdk::__query_builder::Col<SeenThrong, u16>,
     pub centre_x: __sdk::__query_builder::Col<SeenThrong, u8>,
     pub centre_y: __sdk::__query_builder::Col<SeenThrong, u8>,
+    pub cloth_yellow: __sdk::__query_builder::Col<SeenThrong, u8>,
+    pub cloth_black: __sdk::__query_builder::Col<SeenThrong, u8>,
+    pub cloth_green: __sdk::__query_builder::Col<SeenThrong, u8>,
+    pub cloth_tan: __sdk::__query_builder::Col<SeenThrong, u8>,
+    pub cloth_blue: __sdk::__query_builder::Col<SeenThrong, u8>,
+    pub cloth_red: __sdk::__query_builder::Col<SeenThrong, u8>,
+    pub cloth_cream: __sdk::__query_builder::Col<SeenThrong, u8>,
+    pub cloth_navy: __sdk::__query_builder::Col<SeenThrong, u8>,
+    pub cloth_purple: __sdk::__query_builder::Col<SeenThrong, u8>,
+    pub cloth_grey: __sdk::__query_builder::Col<SeenThrong, u8>,
 }
 
 impl __sdk::__query_builder::HasCols for SeenThrong {
@@ -89,6 +109,16 @@ impl __sdk::__query_builder::HasCols for SeenThrong {
             others: __sdk::__query_builder::Col::new(table_name, "others"),
             centre_x: __sdk::__query_builder::Col::new(table_name, "centre_x"),
             centre_y: __sdk::__query_builder::Col::new(table_name, "centre_y"),
+            cloth_yellow: __sdk::__query_builder::Col::new(table_name, "cloth_yellow"),
+            cloth_black: __sdk::__query_builder::Col::new(table_name, "cloth_black"),
+            cloth_green: __sdk::__query_builder::Col::new(table_name, "cloth_green"),
+            cloth_tan: __sdk::__query_builder::Col::new(table_name, "cloth_tan"),
+            cloth_blue: __sdk::__query_builder::Col::new(table_name, "cloth_blue"),
+            cloth_red: __sdk::__query_builder::Col::new(table_name, "cloth_red"),
+            cloth_cream: __sdk::__query_builder::Col::new(table_name, "cloth_cream"),
+            cloth_navy: __sdk::__query_builder::Col::new(table_name, "cloth_navy"),
+            cloth_purple: __sdk::__query_builder::Col::new(table_name, "cloth_purple"),
+            cloth_grey: __sdk::__query_builder::Col::new(table_name, "cloth_grey"),
         }
     }
 }

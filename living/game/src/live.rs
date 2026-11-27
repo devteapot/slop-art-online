@@ -739,6 +739,7 @@ fn bodies(
                     motion.action = Some(a);
                     motion.speed = 0.0;
                     motion.now_ms = scene.now_ms;
+                    motion.live_ms = Some(scene.mine_ms);
                 }
             }
             continue;
@@ -1166,6 +1167,7 @@ fn bodies(
         motion.stand = if talking.contains(&id) { "talk" } else { show.idle.unwrap_or("idle") };
         motion.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None, ..Default::default() })).or(startle).or(turn_action).or(stop_action);
         motion.now_ms = scene.now_ms;
+        motion.live_ms = Some(scene.mine_ms);
         motion.reverse = reverse;
         motion.twist = twist;
         motion.neck = neck;
@@ -1772,11 +1774,19 @@ fn script(
             true
         }
         "heed" => {
-            // Ask the authority to pin this id as it is, past the client's own check that I
-            // perceive them (`heed::ask`): so a check can see the authority's refusal words.
-            match arg.parse::<u32>() {
-                Ok(id) => crate::heed::ask(id),
-                Err(_) => warn!("live script: heed wants an id, got {arg:?}"),
+            // Ask the authority to pin this id (`heed:ID`) or point (`heed:at:X,Y`) as it is,
+            // past the client's own checks (`heed::ask`, `heed::ask_at`), so a check can see the
+            // authority's refusal words.
+            if let Some(xy) = arg.strip_prefix("at:") {
+                match xy.split_once(',').and_then(|(x, y)| Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))) {
+                    Some((x, y)) => crate::heed::ask_at(Vec2::new(x, y)),
+                    None => warn!("live script: heed:at wants X,Y, got {arg:?}"),
+                }
+            } else {
+                match arg.parse::<u32>() {
+                    Ok(id) => crate::heed::ask(id),
+                    Err(_) => warn!("live script: heed wants an id or at:X,Y, got {arg:?}"),
+                }
             }
             true
         }

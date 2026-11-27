@@ -83,8 +83,9 @@ const IN_CROWD: u32 = 1 << 8;
 const WOLF_NEAR: u32 = 1 << 9;
 /// Something heard near and out of sight (only while sight has a field).
 const SOUND_NEAR: u32 = 1 << 10;
-/// Familiarity rows a character keeps before pruning (docs/BATTLE_SCALE.md, fix 1). Over it, the
-/// oldest unseen rows go: never one touched within `FAMILIAR_KEEP_MS`, nor one whose thing is in
+/// Familiarity rows a character keeps before pruning (docs/BATTLE_SCALE.md, fix 1): the
+/// `familiar_limit` law (familiar-cap). Over it, the oldest unseen rows go (with `familiar_regard`,
+/// unnamed strangers first): never one touched within `FAMILIAR_KEEP_MS`, nor one whose thing is in
 /// the character's seen set (in view lately), nor, with `notice_delta`, a structure within its last
 /// look's disc. It is never what is in view that is forgotten, so this is not a bound on a
 /// character's rows: what is in view can exceed it.
@@ -96,7 +97,8 @@ const SOUND_NEAR: u32 = 1 << 10;
 /// fighter's rows grew about 190 a minute at first, then about 100 a minute, the rate the remains
 /// at the site grew. Remains last an hour, so a site's hour of dead (about 5,800 at that rate)
 /// would put a fighter near 6,000 rows (docs/BATTLE_SCALE.md, "Familiarity of remains").
-const FAMILIAR_LIMIT: usize = 2_048;
+/// Since familiar-cap the limit is the `familiar_limit` law (2,048 as shipped), read at each
+/// check, and structures live in `seen_structures` (docs/BOUNDED_RETENTION.md §3.1).
 /// A familiarity row touched this recently is not pruned (twice its 30 s touch period).
 const FAMILIAR_KEEP_MS: u64 = 60_000;
 /// Something looked at within this long counts as still in view (the seen set's horizon).
@@ -1795,21 +1797,26 @@ impl<'a> Ev<'a> {
         self.ctx.db.activity().id().find(self.me.id).is_some_and(|x| x.node == id && x.revision == self.st.revision && x.phase == 0)
     }
 
-    /// Over `FAMILIAR_LIMIT`, forget the oldest familiarity by age only (fix 1): never a row
-    /// touched within `FAMILIAR_KEEP_MS`, nor one whose thing is in the seen set (in view lately:
-    /// its row is touched only every 30 s, so its `last_ms` can trail while it stays in view).
+    /// Over the `familiar_limit` law (2,048 as shipped), forget the oldest familiarity
+    /// by age only (fix 1): never a row touched within `FAMILIAR_KEEP_MS`, nor one whose thing is
+    /// in the seen set (in view lately: its row is touched only every 30 s, so its `last_ms` can
+    /// trail while it stays in view). With the `familiar_regard` law (familiar-cap), unnamed
+    /// strangers go first, the oldest first, then places and things; never someone this character
+    /// knows by name or has a relation with (`regarded`).
     fn prune_familiar(&mut self) {
         let (me, now) = (self.me.id, self.now);
+        let laws = common::laws(self.ctx);
+        let limit = laws.familiar_limit as usize;
         let mut all: Vec<(u64, u64, u64)> = self.ctx.db.familiar().actor().filter(me).map(|f| (f.last_ms, f.id, f.thing)).collect();
         common::diag(|| "familiar:prune_checks", 1);
-        if all.len() <= FAMILIAR_LIMIT {
+        if all.len() <= limit {
             return;
         }
         // While profiling: how often a character is over the limit, and by how much.
         common::diag(|| "familiar:over_limit", 1);
-        common::diag(|| "familiar:over_by", (all.len() - FAMILIAR_LIMIT) as u64);
+        common::diag(|| "familiar:over_by", (all.len() - limit) as u64);
         all.sort_unstable();
-        let mut over = all.len() - FAMILIAR_LIMIT;
+        let mut over = all.len() - limit;
         // With `notice_delta`, a structure within the last look's disc is in view (the next look
         // passes over it without re-marking it), and is spared as one in the seen set is.
         let look = if common::laws(self.ctx).notice_delta { self.ctx.db.last_look().id().find(me) } else { None };
@@ -1819,21 +1826,69 @@ impl<'a> Ev<'a> {
                     && self.ctx.db.structure().id().find(thing & ((1 << 40) - 1)).is_some_and(|s| common::dist((l.x, l.y), (s.x, s.y)) <= l.r)
             })
         };
-        for (last, id, thing) in all {
-            if over == 0 {
-                break;
-            }
-            if now.saturating_sub(last) < FAMILIAR_KEEP_MS || self.seen_key(thing).and_then(|k| self.seen_at(k)).is_some_and(|t| now.saturating_sub(t) < SEEN_MS) || in_look(thing) {
-                continue;
-            }
+        let kept = |last: u64, thing: u64| {
+            now.saturating_sub(last) < FAMILIAR_KEEP_MS || self.seen_key(thing).and_then(|k| self.seen_at(k)).is_some_and(|t| now.saturating_sub(t) < SEEN_MS) || in_look(thing)
+        };
+        let evict = |id: u64, thing: u64| {
             common::diag(|| "familiar:evict", 1);
             self.ctx.db.familiar().id().delete(id);
             // What it remembered of their body fades with them (`sex_seen`).
             if thing & !((1 << 40) - 1) == FAM_CREATURE {
                 crate::sex::forget_pair(self.ctx, me, (thing & ((1 << 40) - 1)) as u32);
             }
+        };
+        if laws.familiar_regard {
+            // Unnamed strangers first, the oldest first; places and things after them, the
+            // oldest first; someone known or felt about never.
+            let mut rest: Vec<(u64, u64)> = Vec::new();
+            for (last, id, thing) in all {
+                if over == 0 {
+                    break;
+                }
+                if kept(last, thing) {
+                    continue;
+                }
+                if thing & !((1 << 40) - 1) != FAM_CREATURE {
+                    rest.push((id, thing));
+                    continue;
+                }
+                if self.regarded((thing & ((1 << 40) - 1)) as u32) {
+                    common::diag(|| "familiar:spared", 1);
+                    continue;
+                }
+                common::diag(|| "familiar:evict_stranger", 1);
+                evict(id, thing);
+                over -= 1;
+            }
+            for (id, thing) in rest {
+                if over == 0 {
+                    break;
+                }
+                evict(id, thing);
+                over -= 1;
+            }
+            return;
+        }
+        for (last, id, thing) in all {
+            if over == 0 {
+                break;
+            }
+            if kept(last, thing) {
+                continue;
+            }
+            evict(id, thing);
             over -= 1;
         }
+    }
+
+    /// Someone this character keeps in mind whatever it forgets (`familiar_regard`): one it knows
+    /// by name (family, its community, an introduction: `perception::knows_name`) or that its mind
+    /// has a relation with, or said whether it fights (`relation`, `relation_fight`).
+    fn regarded(&self, other: u32) -> bool {
+        let ctx = self.ctx;
+        self.relation(other).is_some()
+            || ctx.db.relation_fight().by_pair().filter((self.me.id, other)).next().is_some()
+            || ctx.db.character().id().find(other).is_some_and(|t| crate::perception::knows_name(ctx, &self.me, &t))
     }
 
     /// The seen-set key of a familiarity row's thing (as `noticed` looks things up), if any.
@@ -1862,13 +1917,15 @@ impl<'a> Ev<'a> {
             None => {
                 common::diag(|| "familiar:insert", 1);
                 self.ctx.db.familiar().insert(Familiar { id: 0, actor: self.me.id, thing, first_ms: self.now, last_ms: self.now, times: 1 });
-                // Every 64 new rows of this character, its count is checked against the limit.
+                // Every `familiar_limit / 32` new rows of this character (64 as shipped; 8 to 64),
+                // its count is checked against the limit.
                 let me = self.me.id;
+                let every = (common::laws(self.ctx).familiar_limit as u32 / 32).clamp(8, 64);
                 let check = FAMILIAR_NEW.with(|n| {
                     let mut n = n.borrow_mut();
                     let c = n.entry(me).or_insert(0);
                     *c += 1;
-                    *c % 64 == 0
+                    *c % every == 0
                 });
                 if check {
                     self.prune_familiar();

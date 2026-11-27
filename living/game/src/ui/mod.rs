@@ -93,7 +93,7 @@ impl Plugin for UiPlugin {
             .add_systems(PostUpdate, (theme, sweep.run_if(rebuilding), (frame::spawn, cluster::spawn, prim::spawn_tooltip, wheel::spawn, grid::spawn, overhead::spawn, numbers::spawn, say::spawn, prompt::spawn, top::spawn, win::spawn_anchors, death::spawn, verbs::spawn, link::spawn, tips::spawn).run_if(rebuilding), rebuilt).chain().before(UiSystems::Prepare).before(win::apply))
             .add_systems(Update, (default_camera, scale))
             .add_systems(PostUpdate, tips::update.before(UiSystems::Prepare));
-        let widgets = ((cluster::extras, cluster::fill, prim::paint, prim::tooltip).chain(), cluster::update, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
+        let widgets = ((cluster::extras, cluster::fill, prim::paint, prim::tooltip).chain(), cluster::update, top::clock, frame::target, frame::vignette, overhead::plates, overhead::bubbles, numbers::update, top::update, death::update, link::update, verbs::menu, verbs::toasts, visibility);
         let windows = (people::update, people::hints, people::offers, prompt::update, say::update, pack::update, wheel::update, grid::update);
         if lookdev {
             app.add_systems(PostUpdate, (sample::fill, widgets).chain().before(UiSystems::Prepare))
@@ -369,7 +369,11 @@ fn dump(
         // The pack's load and limit as its header shows them (while the pack is open).
         "pack": model.verbs.inventory.as_ref().map(|i| serde_json::json!({"carried": i.carried, "limit": i.limit, "items": i.rows.iter().map(|r| (r.0.clone(), r.1)).collect::<Vec<_>>()})),
         // My bars (`meters()`) and pills (`status_of`) as drawn.
-        "me": model.me.as_ref().map(|m| serde_json::json!({"meters": m.meters.iter().map(|x| serde_json::json!({"name": x.name, "label": x.label, "value": x.value, "max": x.max})).collect::<Vec<_>>(), "statuses": m.statuses.iter().map(|x| serde_json::json!({"name": x.name, "tone": format!("{:?}", x.tone), "text": x.text})).collect::<Vec<_>>()})),
+        "me": model.me.as_ref().map(|m| serde_json::json!({"meters": m.meters.iter().map(|x| serde_json::json!({"name": x.name, "label": x.label, "value": x.value, "max": x.max})).collect::<Vec<_>>(), "statuses": m.statuses.iter().map(|x| serde_json::json!({"name": x.name, "tone": format!("{:?}", x.tone), "text": x.text})).collect::<Vec<_>>(),
+            // Every meter in the body's tooltip (bars or not) and its words as drawn.
+            "body": m.body.iter().map(|x| serde_json::json!({"name": x.name, "label": x.label, "value": x.value, "max": x.max, "shown": x.shown, "word": x.word})).collect::<Vec<_>>(), "body_tip": cluster::body_tip(m).text})),
+        // The clock as drawn (`top.rs`): the hour, its text, night, the season and its days.
+        "clock": model.time.as_ref().map(|t| serde_json::json!({"hour": t.hour, "text": t.clock(), "night": t.night, "season": t.season, "season_word": t.season_word(), "day": t.day, "season_day": t.season_day, "season_days": t.season_days, "tip": top::clock_tip(t).text})),
         // Who is under the cursor (`pick.rs`), whose nameplates show as hovered, and the target plate.
         "under": pick.as_ref().and_then(|p| p.under),
         // `holds`: the cursor is inside its outline as `pick.rs` draws it (its own test).
@@ -494,6 +498,7 @@ pub struct DumpExtra<'w, 's> {
     town: Option<Res<'w, crate::town::Town>>,
     loading: Option<Res<'w, crate::loading::Loading>>,
     combat: Option<Res<'w, crate::combat::Combat>>,
+    glints: Option<Res<'w, crate::vfx::Glints>>,
     heed: Option<Res<'w, crate::heed::Heed>>,
     throng: Option<Res<'w, crate::throng::Throng>>,
 }
@@ -539,7 +544,8 @@ impl DumpExtra<'_, '_> {
                 }
             }
         }
-        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "theme": self.theme.name.key(),
+        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "combat_timing": self.prefs.combat_timing.name(), "windup_glint": self.prefs.windup_glint, "theme": self.theme.name.key(),
+            "glints": self.glints.as_ref().map(|g| g.log.iter().map(|e| serde_json::json!({"actor": e.actor, "act_ms": e.act_ms, "release_ms": e.release_ms, "f": e.f, "clock_ms": e.clock_ms})).collect::<Vec<_>>()),
             "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
             "events": self.talks.events.iter().rev().take(12).rev().map(|(_, t)| t.clone()).collect::<Vec<_>>(),
             // The Log's last lines as the Log and the person windows show them (speech-detail-1).

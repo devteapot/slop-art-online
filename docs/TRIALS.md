@@ -83,7 +83,7 @@ Each instance is a database `verify-trial-<batch>-<trial>-<variant>-r<k>` on the
 - `samples.jsonl`: the subject every 2 s (hour, position, health, hunger, energy, activity and target, inventory, plan, distance to each role, how many of each role are alive);
 - `graphs.jsonl` (each behaviour graph revision), `thoughts.jsonl`, `experiences.jsonl` (the subject's percepts, which the authority deletes once consolidated), `chronicle.jsonl` (rows touching the subject or the cast), `mind_rows.jsonl` (relation, judgment, persona, know-how, place and structure rows whenever they change);
 - `journal/`: the mind's journal, with the actual requests and replies; `mind.log`, `models.json`, `mind-env.json` (no secrets);
-- `final.json`: the subject's rows at the end; `summary.json`: the probes.
+- `final.json`: the subject's rows at the end (its `skill_use` rows too: the authority drains a dead character's 120 s after its death, so a run that goes on past that, `life.stop_on_death` false, adds the rows it read when the death was seen; docs/COMBAT.md "Skill uses: kept, sent and drained"); `summary.json`: the probes.
 
 The run stops at `minutes`, at a token cap if the trial or `TRIALS_TOTAL_TOKENS` sets one (none does by default), when the runaway watchdog fires (below), 20 s after the subject dies, or when the mind exits (a life run restarts it instead). Deleted databases leave their replica directories in the volume (about 0.4 GB each for an island world); run `trials.py reclaim` after large batches.
 

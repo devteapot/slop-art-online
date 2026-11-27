@@ -1818,7 +1818,8 @@ fn dodge_too_early(ctx: &ReducerContext, vc: &Character, attacker: u32, skill: &
     let why = format!("it was over before {came} came");
     u.outcome = format!("{MADE_WAY}: {why}");
     let skill = u.skill.clone();
-    ctx.db.skill_use().id().update(u);
+    let u = ctx.db.skill_use().id().update(u);
+    crate::combat::sent(ctx, "outcome", u, now);
     tell(ctx, vc.id, false, &skill, &skill, &why, now, living_rules::outcome::act::FAILED, true);
 }
 
@@ -2673,6 +2674,7 @@ pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.familiar().actor().delete(id);
     ctx.db.seen_structures().actor().delete(id);
     crate::seen_structures::forget(id);
+    ctx.db.far_handle().observer().delete(id);
     crate::known::forget(ctx, id);
     ctx.db.last_look().id().delete(id);
     ctx.db.character_senses().id().delete(id);
@@ -2720,9 +2722,8 @@ pub fn retire(ctx: &ReducerContext, id: u32) {
     ctx.db.rhythm().id().delete(id);
     ctx.db.rearing().id().delete(id);
     ctx.db.relation().actor().delete(id);
-    for f in ctx.db.relation_fight().by_pair().filter(id).map(|f| f.id).collect::<Vec<_>>() {
-        ctx.db.relation_fight().id().delete(f);
-    }
+    ctx.db.relation_fight().by_pair().delete(id);
+    ctx.db.relation_fight().other().delete(id);
     ctx.db.belief().actor().delete(id);
     if ctx.db.character().id().find(id).is_some_and(|c| c.kind != "person") {
         common::invalidate_traits(ctx, id);
@@ -3134,6 +3135,9 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
         common::invalidate_remains_label(ctx, s.id);
         let last_ms = sc.remains_ms(&kind).max(0.0) as u64;
         ctx.db.rot().insert(Rot { structure: s.id, due_ms: now + last_ms });
+    } else if common::laws(ctx).familiar_regard {
+        // No remains to see: under `familiar_regard` it is forgotten by everyone now (familiar-cap).
+        ctx.db.familiar().thing().delete(FAM_CREATURE | id as u64);
     }
     if kind == "person" {
         common::chronicle(ctx, now, "death", id, killer, at, format!("{name} died ({cause})"));
@@ -3165,6 +3169,7 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
     forget_dead(ctx, id);
     retire(ctx, id);
     crate::combat::died(ctx, id, killer, at, now, unseen.is_some());
+    crate::combat::uses_died(ctx, id, now);
 }
 
 #[cfg(test)]
