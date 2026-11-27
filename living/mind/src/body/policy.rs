@@ -118,10 +118,28 @@ pub trait Policy: Send {
     fn decide(&self, o: &Observation, encoded: &[f32], memory: &mut Memory, brief: Option<&BriefView>, slot: &SlotView) -> Intent;
 }
 
-/// The policy serving `role` (a character's kind). The pilot has one placeholder for every role,
-/// one instance per role; a trained net per role would be chosen here.
+/// The policy serving `role` (a character's kind). When `LIVING_BODY_WEIGHTS` points to a trained
+/// `RoleNet` file (or `LIVING_BODY_WEIGHTS_RANDOM=1` for Step 1 throughput testing), the `"person"`
+/// role uses that one shared `RoleNet`; otherwise it falls back to the scripted `HoldDistance`.
 pub fn for_role(role: &str, distance: Option<f32>) -> Box<dyn Policy> {
-    let _ = role;
+    if role == "person" {
+        if let Ok(path) = std::env::var("LIVING_BODY_WEIGHTS") {
+            let trimmed = path.trim();
+            if !trimmed.is_empty() {
+                match super::net::RoleNet::load(std::path::Path::new(trimmed)) {
+                    Ok(net) => return Box::new(net),
+                    Err(e) => {
+                        log::error!("body worker: failed to load LIVING_BODY_WEIGHTS={trimmed}: {e:#}");
+                        std::process::exit(3);
+                    }
+                }
+            }
+        }
+        if std::env::var("LIVING_BODY_WEIGHTS_RANDOM").ok().as_deref() == Some("1") {
+            let w = super::net::RoleNetWeights::seeded_init("person", 20261127);
+            return Box::new(super::net::RoleNet::new(w).expect("seeded RoleNet"));
+        }
+    }
     Box::new(HoldDistance::new(distance))
 }
 

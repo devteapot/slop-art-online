@@ -72,6 +72,12 @@ async fn main() -> Result<()> {
     if std::env::args().nth(1).as_deref() == Some("rethink-replay") {
         return mind::rethink::replay_main(&root, std::env::args().skip(2).collect()).await;
     }
+    if std::env::args().nth(1).as_deref() == Some("body-train") {
+        return body::net::train_main(std::env::args().skip(2).collect());
+    }
+    if std::env::args().nth(1).as_deref() == Some("body-bench") {
+        return body::net::bench_main(std::env::args().skip(2).collect());
+    }
     let server = std::env::var("LIVING_SERVER").unwrap_or_else(|_| "http://127.0.0.1:3300".into());
     let db = std::env::var("LIVING_DB").unwrap_or_else(|_| "living".into());
     let token = match std::env::var("LIVING_TOKEN") {
@@ -86,6 +92,10 @@ async fn main() -> Result<()> {
     // the characters' controller's identity for the delegation rows, a fresh identity per session.
     if std::env::args().nth(1).as_deref() == Some("body") {
         return body::main(server, db, token).await;
+    }
+    if std::env::args().nth(1).as_deref() == Some("body-observe") {
+        let manifest = std::env::args().nth(2).ok_or_else(|| anyhow!("usage: living-mind body-observe <manifest.json>"))?;
+        return body::observe_main(server, db, token, manifest).await;
     }
     let models: llm::ModelsFile = serde_json::from_str(&std::fs::read_to_string(
         std::env::var("LIVING_MODELS").map(PathBuf::from).unwrap_or_else(|_| root.join("living/configs/models.json")),

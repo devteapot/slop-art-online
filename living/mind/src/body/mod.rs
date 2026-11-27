@@ -26,6 +26,7 @@
 
 pub mod capture;
 pub mod encode;
+pub mod net;
 pub mod policy;
 
 use anyhow::{anyhow, Context, Result};
@@ -397,6 +398,7 @@ fn observe(control: &DbConnection, actor: u32, s: &Session, now: u64) -> Observa
 /// One decision for a served character: observe, encode, decide, send through the player input
 /// reducers (movement and the look only on a change), capture.
 fn decide(control: &DbConnection, slot: BodySlot, policy: &dyn Policy, memory: &mut Memory, s: &mut Session, records: &Records, mut capture: Option<&mut capture::Capture>) {
+    let t_start = Instant::now();
     let now = crate::llm::now_ms();
     let actor = slot.actor;
     let o = observe(control, actor, s, now);
@@ -413,6 +415,7 @@ fn decide(control: &DbConnection, slot: BodySlot, policy: &dyn Policy, memory: &
     let v = encode::encode(&o, brief.as_ref(), &sv);
     let before = memory.flat();
     let intent = policy.decide(&o, &v, memory, brief.as_ref(), &sv);
+    let decide_us = t_start.elapsed().as_micros() as u64;
     s.seq += 1;
     let (seq, epoch) = (s.seq, s.epoch);
     let reply = |reducer: &'static str| {
@@ -456,7 +459,8 @@ fn decide(control: &DbConnection, slot: BodySlot, policy: &dyn Policy, memory: &
         c.write(
             "decision",
             json!({
-                "actor": actor, "role": slot.role, "epoch": epoch, "seq": seq, "now_ms": now, "policy": policy.name(), "policy_version": policy.version(),
+                "actor": actor, "role": slot.role, "epoch": epoch, "seq": seq, "now_ms": now, "decide_us": decide_us,
+                "policy": policy.name(), "policy_version": policy.version(),
                 "encoded": v, "len": encode::LEN, "memory": before, "memory_after": memory.flat(), "flat": flat,
                 "intent_encoded": encoded_intent,
                 "observation": {
@@ -479,4 +483,253 @@ fn angle_close(a: (f32, f32, bool), b: (f32, f32, bool)) -> bool {
         return na < 1e-3 && nb < 1e-3;
     }
     (a.0 * b.0 + a.1 * b.1) / (na * nb) > 0.996
+}
+
+// ---- Teacher-graph capture on player-equivalent sessions (`living-mind body-observe`) ----
+
+#[derive(Clone, Debug, serde::Deserialize)]
+struct ObserveEntry {
+    actor: u32,
+    target: u32,
+    role: String,
+    goal: String,
+    skills: Vec<String>,
+    episode: String,
+    teacher: String,
+    opponent_cfg: String,
+}
+
+struct PendingObs {
+    now_ms: u64,
+    encoded: Vec<f32>,
+    obs_age_ms: Option<u64>,
+    was_rooted: bool,
+    had_block: bool,
+    body_xy: Option<(f32, f32)>,
+    brief: Option<BriefView>,
+    sv: SlotView,
+    others_n: usize,
+    seen_n: usize,
+    fighters_n: usize,
+    cues_n: usize,
+    busy_until: u64,
+}
+
+struct Observed {
+    entry: ObserveEntry,
+    session: Option<Session>,
+    memory: Memory,
+    seen_uses: std::collections::HashSet<u64>,
+    prev: Option<PendingObs>,
+}
+
+/// Observe graph-controlled characters through real `body_open` player-equivalent sessions and
+/// capture causality-aligned `(observation, teacher_intent)` pairs via `Capture` without sending
+/// any player inputs. Used in Step 2 of docs/NEURAL_BODY.md ("Pilot run").
+pub async fn observe_main(server: String, db: String, token: String, manifest_path: String) -> Result<()> {
+    let entries: Vec<ObserveEntry> = serde_json::from_str(&std::fs::read_to_string(&manifest_path).with_context(|| format!("read {manifest_path}"))?)?;
+    let hz: f32 = std::env::var("LIVING_BODY_HZ").ok().and_then(|v| v.parse().ok()).unwrap_or(15.0);
+    let mut capture = capture::Capture::from_env()?.ok_or_else(|| anyhow!("LIVING_BODY_CAPTURE must be set for body-observe"))?;
+    let records: Records = Arc::new(Mutex::new(Vec::new()));
+    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<()>();
+    let ready = Arc::new(Mutex::new(Some(ready_tx)));
+    let control = DbConnection::builder()
+        .with_uri(server.clone())
+        .with_database_name(db.clone())
+        .with_token(Some(token))
+        .on_connect(move |c, identity, _| {
+            log::info!("body observe: connected as controller {identity}");
+            let ready = ready.clone();
+            c.subscription_builder()
+                .on_applied(move |_| {
+                    if let Some(tx) = ready.lock().unwrap().take() {
+                        let _ = tx.send(());
+                    }
+                })
+                .on_error(|_, e| log::error!("body observe: subscription error: {e:?}"))
+                .subscribe(["SELECT * FROM body_slot", "SELECT * FROM body_brief", "SELECT * FROM body_session", "SELECT * FROM skill_card", "SELECT * FROM law_override"].map(String::from).to_vec());
+        })
+        .on_disconnect(|_, e| {
+            log::error!("body observe: controller disconnected: {e:?}");
+            std::process::exit(2);
+        })
+        .build()
+        .with_context(|| format!("connect to {server}/{db}"))?;
+    control.run_threaded();
+    ready_rx.await.map_err(|_| anyhow!("body observe: controller subscription never applied"))?;
+    let mut lease_ms = lease_ms(&control);
+    let period = Duration::from_secs_f32(1.0 / hz.clamp(1.0, 60.0));
+    let block_code = control.db.skill_card().iter().find(|k| k.skill == "block").map(|k| k.code).unwrap_or(0);
+    capture.write("layout", json!({"encoded": encode::LEN, "memory": policy::MEMORY, "state": policy::STATE, "history": policy::HISTORY, "intent": policy::INTENT,
+                                   "flat": "encoded, then memory (state, then history newest first)", "traits": living_rules::body::MAX_TRAITS, "mode": "observe"}));
+    let mut actors: Vec<Observed> = entries
+        .into_iter()
+        .map(|entry| Observed { entry, session: None, memory: Memory::new(0, 0), seen_uses: Default::default(), prev: None })
+        .collect();
+    let mut tick = tokio::time::interval(period);
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        tick.tick().await;
+        lease_ms = lease_ms_now(&control, lease_ms);
+        for (kind, rec) in std::mem::take(&mut *records.lock().unwrap()) {
+            capture.write(&kind, rec);
+        }
+        for ob in &mut actors {
+            let actor = ob.entry.actor;
+            let row = control.db.body_session().actor().find(&actor);
+            let ours = ob.session.as_ref().is_some_and(|x| row.as_ref().is_some_and(|r| r.live && r.identity == x.identity && r.epoch == x.epoch));
+            if !ours {
+                if let Some(old) = ob.session.take() {
+                    let _ = old.conn.disconnect();
+                }
+                ob.prev = None;
+                match open(&server, &db, &control, actor, &records).await {
+                    Ok(new) => {
+                        capture.write("session", json!({"actor": actor, "epoch": new.epoch, "event": "opened", "mode": "observe", "episode": ob.entry.episode}));
+                        // Pre-populate already existing uses so we only label new uses going forward.
+                        ob.session = Some(new);
+                    }
+                    Err(e) => {
+                        log::warn!("body observe: #{actor}: open failed: {e:#}");
+                        continue;
+                    }
+                }
+            }
+            let Some(sess) = ob.session.as_mut() else { continue };
+            if !*sess.applied.lock().unwrap() {
+                continue;
+            }
+            if sess.last_beat.elapsed().as_millis() as u64 >= lease_ms / 3 {
+                sess.last_beat = Instant::now();
+                let _ = sess.conn.reducers.body_beat(sess.epoch);
+            }
+            let now = crate::llm::now_ms();
+            let o = observe(&control, actor, sess, now);
+            let Some(me_body) = sess.conn.db.my_body().iter().next() else {
+                // Dead or despawned.
+                ob.prev = None;
+                continue;
+            };
+            let b_row = control.db.body_brief().actor().find(&actor);
+            let brief_rev = b_row.as_ref().map_or(0, |b| b.revision);
+            let brief = b_row
+                .filter(|b| !b.goal.is_empty())
+                .map(|b| BriefView { revision: b.revision, goal: b.goal, target: b.target, stance: b.stance, risk: b.risk, style: b.style, traits: b.traits, expires_ms: b.expires_ms });
+            let sv = SlotView { revision: 1, node: 1, goal: ob.entry.goal.clone(), target: ob.entry.target, skills: ob.entry.skills.clone() };
+            if ob.memory.follow(sess.epoch, brief_rev) {
+                capture.write("memory", json!({"actor": actor, "epoch": sess.epoch, "brief": brief_rev, "event": "reset", "episode": ob.entry.episode}));
+                ob.prev = None;
+            }
+            let v = encode::encode(&o, brief.as_ref(), &sv);
+            let cur_own_act = o.own_fighter.as_ref().filter(|f| f.act != 0 && f.until_ms > now).map_or(0, |f| f.act);
+            let cur_had_block = block_code != 0 && cur_own_act == block_code;
+            let cur_rooted = cur_own_act != 0 && !cur_had_block;
+
+            // Collect newly accepted skill uses from player-equivalent `my_skill_uses`.
+            let mut new_uses: Vec<SkillUse> = sess
+                .conn
+                .db
+                .my_skill_uses()
+                .iter()
+                .filter(|u| u.actor == actor && u.accepted_ms > 0 && ob.seen_uses.insert(u.id))
+                .collect();
+            new_uses.sort_by_key(|u| (u.accepted_ms, u.id));
+
+            if let Some(prev) = ob.prev.take() {
+                let mut intent = Intent::default();
+                let spd = me_body.vx.hypot(me_body.vy);
+                if spd > 0.05 {
+                    intent.moving = Some((me_body.vx / spd, me_body.vy / spd, me_body.running));
+                } else {
+                    intent.moving = Some((0.0, 0.0, false));
+                }
+                let face_ang = me_body.heading + me_body.face_off;
+                intent.face = Some((face_ang.cos(), face_ang.sin()));
+
+                let mut out_of_scope: Vec<String> = Vec::new();
+                for u in &new_uses {
+                    if u.accepted_ms + 80 >= prev.now_ms {
+                        if ob.entry.skills.iter().any(|s| s == &u.skill) {
+                            if intent.press.is_none() {
+                                intent.press = Some((u.skill.clone(), u.target, u.aim_x, u.aim_y));
+                            }
+                        } else {
+                            out_of_scope.push(u.skill.clone());
+                        }
+                    }
+                }
+                if intent.press.is_none() && prev.had_block && !cur_had_block {
+                    intent.release = Some("block".into());
+                }
+
+                // If the authority graph reacted on the exact tick a foe windup started (between
+                // `prev.now_ms` and `now`), `prev` predates the windup while `v` (current frame)
+                // holds the first player-delivered cue of that windup. Pair the pre-action self
+                // state (`prev.encoded[..OWN]`) with the newly arrived perceived scene (`v[OWN..]`)
+                // so the observation reflects what a player-path controller perceives before pressing.
+                let mut obs_vec = prev.encoded.clone();
+                let mut same_tick_cue = false;
+                if let Some((sk, ..)) = &intent.press {
+                    if (sk == "dodge" || sk == "block") && obs_vec[encode::OWN + 8] <= 0.0 && v[encode::OWN + 8] > 0.0 && v[encode::OWN + 10] > 0.5 {
+                        obs_vec[encode::OWN..].copy_from_slice(&v[encode::OWN..]);
+                        same_tick_cue = true;
+                    }
+                }
+
+                let before = ob.memory.flat();
+                let encoded_intent = intent.encode(&prev.sv);
+                ob.memory.remember(encoded_intent);
+                sess.seq += 1;
+                let mut flat = obs_vec.clone();
+                flat.extend_from_slice(&before);
+                capture.write(
+                    "decision",
+                    json!({
+                        "actor": actor, "role": ob.entry.role, "epoch": sess.epoch, "seq": sess.seq, "now_ms": prev.now_ms,
+                        "policy": "graph-teacher", "policy_version": ob.entry.teacher,
+                        "episode": ob.entry.episode, "opponent_cfg": ob.entry.opponent_cfg,
+                        "encoded": obs_vec, "len": encode::LEN, "memory": before, "memory_after": ob.memory.flat(), "flat": flat,
+                        "intent_encoded": encoded_intent,
+                        "audit": {
+                            "target_delivered": obs_vec[encode::OWN] > 0.5,
+                            "target_act": obs_vec[encode::OWN + 8],
+                            "target_elapsed_s": obs_vec[encode::OWN + 9],
+                            "target_at_me": obs_vec[encode::OWN + 10] > 0.5,
+                            "same_tick_cue_aligned": same_tick_cue,
+                            "obs_age_ms": prev.obs_age_ms,
+                            "was_rooted": prev.was_rooted,
+                            "out_of_scope_skills": out_of_scope,
+                            "teacher": ob.entry.teacher,
+                            "episode": ob.entry.episode,
+                            "opponent_cfg": ob.entry.opponent_cfg,
+                        },
+                        "observation": {
+                            "body": prev.body_xy.map(|(x, y)| json!([x, y])),
+                            "others": prev.others_n, "seen": prev.seen_n, "fighters": prev.fighters_n, "cues": prev.cues_n,
+                            "busy_until": prev.busy_until, "age_ms": prev.obs_age_ms,
+                        },
+                        "slot": {"revision": prev.sv.revision, "node": prev.sv.node, "goal": prev.sv.goal, "target": prev.sv.target, "skills": prev.sv.skills},
+                        "brief": prev.brief.as_ref().map(|b| json!({"revision": b.revision, "goal": b.goal, "target": b.target, "stance": b.stance, "risk": b.risk, "style": b.style, "traits": b.traits, "expires_ms": b.expires_ms})),
+                        "intent": intent,
+                    }),
+                );
+            }
+
+            ob.prev = Some(PendingObs {
+                now_ms: now,
+                encoded: v,
+                obs_age_ms: o.others.iter().map(|b| now.saturating_sub(b.t_ms)).max(),
+                was_rooted: cur_rooted,
+                had_block: cur_had_block,
+                body_xy: o.here(),
+                brief,
+                sv,
+                others_n: o.others.len(),
+                seen_n: o.seen.len(),
+                fighters_n: o.fighters.len(),
+                cues_n: o.cues.len(),
+                busy_until: o.busy_until,
+            });
+        }
+    }
 }
