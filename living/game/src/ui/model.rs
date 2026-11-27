@@ -24,6 +24,8 @@ pub struct HudModel {
     /// Floating combat numbers (damage dealt and taken, healing).
     pub numbers: Vec<FloatNumber>,
     pub map: MapInfo,
+    /// The world's clock and calendar as the rules read them (none offline without a world).
+    pub time: Option<TimeView>,
     /// The verbs' list, notes and panels (`verbs.rs`); all hidden by default.
     pub verbs: VerbsView,
     /// The connection, when it is not live after having been: a notice of being offline and
@@ -104,6 +106,10 @@ pub struct Me {
     /// Every meter now, named by the field it shows (a skill card's `pool`): what a bar slot's
     /// cost is checked against.
     pub pools: Vec<MeterView>,
+    /// Every meter of the world's `meters()` in order, shown on the screen or not (energy and
+    /// hunger are not bars), each with the rules' word for it now (`status_of`'s status that
+    /// names that meter, a plain one too): the cluster's tooltip, at the precision graphs read.
+    pub body: Vec<BodyLine>,
     /// 1 just after being hurt, fading to 0 (a flash on the health bar).
     pub hurt: f32,
 }
@@ -147,6 +153,63 @@ pub struct MeterView {
     pub label: String,
     pub value: f32,
     pub max: f32,
+}
+
+/// One meter in the body's tooltip: its label, value and max now, and the rules' word for it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BodyLine {
+    pub name: String,
+    pub label: String,
+    pub value: f32,
+    pub max: f32,
+    pub shown: bool,
+    pub word: Option<String>,
+}
+
+/// The world's time of day and season, from the `world` row at the displayed server time
+/// (`living_rules::hour_of`, `day_of`, `season_of`): the hour graphs test (`hour`), the night the
+/// rules' `daylight` law says, and the season (`winter`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TimeView {
+    /// 0..24.
+    pub hour: f32,
+    /// The world's day, from 1.
+    pub day: u64,
+    pub night: bool,
+    /// `living_rules::SEASONS`' name.
+    pub season: String,
+    /// The day within the season (from 1) and the season's length in days.
+    pub season_day: u64,
+    pub season_days: u64,
+}
+
+impl TimeView {
+    /// From the world's clock at `now` (ms), with whether the rules call it night.
+    pub fn at(now_ms: u64, epoch_ms: u64, day_ms: u64, year_days: u64, night: bool) -> Self {
+        let day_ms = day_ms.max(1);
+        let hour = living_rules::hour_of(now_ms, epoch_ms, day_ms);
+        let day = living_rules::day_of(now_ms, epoch_ms, day_ms);
+        let y = year_days.max(4);
+        let s = living_rules::season_of(now_ms, epoch_ms, day_ms, y);
+        // The season of a day of the year, as `season_of` cuts it.
+        let of = |i: u64| ((i * 4) / y) as usize;
+        let i = (day.max(1) - 1) % y;
+        let first = (0..y).find(|&k| of(k) == s).unwrap_or(0);
+        let days = (0..y).filter(|&k| of(k) == s).count() as u64;
+        TimeView { hour, day, night, season: living_rules::SEASONS[s].to_string(), season_day: i - first + 1, season_days: days }
+    }
+
+    /// The clock as the HUD shows it, to the game minute (the `daylight` law is read per game
+    /// minute): "06:00". Cut down, not rounded, so 05:59.6 is not shown as dawn.
+    pub fn clock(&self) -> String {
+        let m = ((self.hour as f64) * 60.0).floor() as u32 % (24 * 60);
+        format!("{:02}:{:02}", m / 60, m % 60)
+    }
+
+    /// The season with a capital: "Winter".
+    pub fn season_word(&self) -> String {
+        super::label(&self.season)
+    }
 }
 
 /// One status pill (`status_of`): its name, how it reads and its words.
@@ -366,4 +429,49 @@ pub struct Outbox {
     /// Lines to say, and to whom (a character id; 0 for no one in particular).
     pub say: Vec<(String, u32)>,
     pub rejoin: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DAY: u64 = 1_440_000; // a 24-minute day
+
+    /// The world epoch under which `hour` of day `day` (from 1) is `now`.
+    fn epoch_for(now: u64, day: u64, hour: f64) -> u64 {
+        now + DAY * 7 / 24 - (hour / 24.0 * DAY as f64) as u64 - (day - 1) * DAY
+    }
+
+    #[test]
+    fn clock_is_cut_to_the_minute() {
+        let now = 100 * DAY;
+        // The world starts at 07:00 on day 1: an early hour is on day 2.
+        let t = TimeView::at(now, epoch_for(now, 2, 5.0 + 59.6 / 60.0), DAY, 32, true);
+        assert_eq!((t.clock().as_str(), t.day), ("05:59", 2), "05:59.6 is not dawn yet");
+        let t = TimeView::at(now, epoch_for(now, 1, 17.5), DAY, 32, false);
+        assert_eq!(t.clock(), "17:30");
+        assert_eq!(t.day, 1);
+        let t = TimeView::at(now, epoch_for(now, 3, 0.0), DAY, 32, true);
+        assert_eq!((t.clock().as_str(), t.day), ("00:00", 3));
+    }
+
+    #[test]
+    fn season_and_its_days_follow_season_of() {
+        let now = 1000 * DAY;
+        for (year, day) in [(32u64, 1u64), (32, 8), (32, 9), (32, 25), (32, 32), (32, 33), (10, 3), (10, 4), (10, 8), (10, 10), (5, 5)] {
+            let e = epoch_for(now, day, 12.0);
+            let t = TimeView::at(now, e, DAY, year, false);
+            let s = living_rules::season_of(now, e, DAY, year);
+            assert_eq!(t.season, living_rules::SEASONS[s], "year {year} day {day}");
+            let y = year.max(4);
+            let i = (day - 1) % y;
+            let same: Vec<u64> = (0..y).filter(|&k| ((k * 4) / y) as usize == s).collect();
+            assert_eq!(t.season_days, same.len() as u64, "year {year} day {day}");
+            assert_eq!(t.season_day, i - same[0] + 1, "year {year} day {day}");
+            assert!(t.season_day >= 1 && t.season_day <= t.season_days);
+        }
+        // A 32-day year: day 25 is the first of winter.
+        let t = TimeView::at(now, epoch_for(now, 25, 12.0), DAY, 32, false);
+        assert_eq!((t.season.as_str(), t.season_day, t.season_days, t.season_word().as_str()), ("winter", 1, 8, "Winter"));
+    }
 }

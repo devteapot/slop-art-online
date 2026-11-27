@@ -155,13 +155,18 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
         let since_hurt = (now_ms - v.hurt_ms as f64) as f32 / 1000.0;
         // The bars and pills from the world's `meters()` and `status_of` over my vitals row read
         // generically (no column named here): a new vital is one column and one meters row.
-        let (meters, statuses, pools) = match (rules.scripts.as_ref(), mine.get(&id)) {
+        let (meters, statuses, pools, body) = match (rules.scripts.as_ref(), mine.get(&id)) {
             (Some(sc), Some(c)) => my_body(sc, v, &c.kind, crate::verbs::stage_name(c.stage), sc.is_night(clock.hour()), now_ms),
-            _ => (Vec::new(), Vec::new(), Vec::new()),
+            _ => (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
         };
         let name = mine.get(&id).map_or(net.name.clone(), |c| c.name.clone());
         let _ = hunger;
-        Me { name, hp, max_hp: v.max_hp, energy, max_energy: 100.0, meters, statuses, pools, hurt: if v.hurt_ms > 0 { (1.0 - since_hurt / 0.8).clamp(0.0, 1.0) } else { 0.0 } }
+        Me { name, hp, max_hp: v.max_hp, energy, max_energy: 100.0, meters, statuses, pools, body, hurt: if v.hurt_ms > 0 { (1.0 - since_hurt / 0.8).clamp(0.0, 1.0) } else { 0.0 } }
+    });
+    // The world's clock and season at the displayed server time, night by the rules' light.
+    model.time = conn.db.world().iter().next().filter(|_| now_ms > 0.0).map(|w| {
+        let night = rules.scripts.as_ref().map_or(false, |sc| sc.is_night(clock.hour()));
+        TimeView::at(now_ms as u64, w.epoch_ms, w.day_ms, w.year_days as u64, night)
     });
     let hostile = |id: u32| me.is_some_and(|m| crate::combat::hostile_to_me(conn, id, m, now_ms));
     // Others' health as anyone sees it: the band of their `fighter` row, if they have fought.
@@ -386,8 +391,8 @@ pub fn fill(mut model: ResMut<HudModel>, mut out: ResMut<Outbox>, mut net: NonSe
 /// moved along `<field>_rate` per minute since `<field>_from_ms` or the row's `at_ms`, held
 /// within its max) and the pills (`status_of` over the same facts the authority and the minds
 /// build). The row is read by field name, generically.
-fn my_body(sc: &living_rules::script::Scripts, row: &impl spacetimedb_sdk::__codegen::__sats::ser::Serialize, kind: &str, stage: &str, night: bool, now_ms: f64) -> (Vec<MeterView>, Vec<StatusView>, Vec<MeterView>) {
-    let Ok(json) = spacetimedb_sdk::__codegen::__sats::ser::serde::serialize_to(row, serde_json::value::Serializer) else { return (Vec::new(), Vec::new(), Vec::new()) };
+fn my_body(sc: &living_rules::script::Scripts, row: &impl spacetimedb_sdk::__codegen::__sats::ser::Serialize, kind: &str, stage: &str, night: bool, now_ms: f64) -> (Vec<MeterView>, Vec<StatusView>, Vec<MeterView>, Vec<BodyLine>) {
+    let Ok(json) = spacetimedb_sdk::__codegen::__sats::ser::serde::serialize_to(row, serde_json::value::Serializer) else { return (Vec::new(), Vec::new(), Vec::new(), Vec::new()) };
     let fields = living_rules::script::body::fields_of_json(&json);
     let get = |k: &str| fields.iter().find(|(n, _)| n == k).map(|(_, v)| *v);
     let mut ms: Vec<&living_rules::script::body::Meter> = sc.meters().iter().collect();
@@ -413,8 +418,12 @@ fn my_body(sc: &living_rules::script::Scripts, row: &impl spacetimedb_sdk::__cod
     let pools = all.iter().map(|(m, v)| MeterView { name: m.value.clone(), ..v.clone() }).collect();
     let facts = living_rules::script::BodyFacts::of(kind, stage, night, &fields, sc.meters(), now_ms.max(0.0) as u64);
     // A `plain` status is the body's words when all is well (a mind's "rested"): no pill.
-    let statuses = sc.status_of(&facts).map(|v| v.iter().map(|s| StatusView { name: s.name.clone(), tone: Tone::parse(&s.tone), text: s.text.clone() }).filter(|s| s.tone != Tone::Plain).collect()).unwrap_or_default();
-    (meters, statuses, pools)
+    let all_statuses = sc.status_of(&facts).unwrap_or_default();
+    let statuses = all_statuses.iter().map(|s| StatusView { name: s.name.clone(), tone: Tone::parse(&s.tone), text: s.text.clone() }).filter(|s| s.tone != Tone::Plain).collect();
+    // Every meter, shown or not, with the rules' word that names it (a plain one too): the
+    // tooltip that gives hunger and energy at the precision the graphs read them.
+    let body = all.iter().map(|(m, v)| BodyLine { name: m.name.clone(), label: m.label.clone(), value: v.value, max: v.max, shown: m.shown, word: all_statuses.iter().find(|s| s.meter == m.name).map(|s| s.text.clone()) }).collect();
+    (meters, statuses, pools, body)
 }
 
 /// What the bar says when an item a skill needs is not carried.
