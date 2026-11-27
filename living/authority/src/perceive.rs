@@ -1173,8 +1173,19 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
             }
         }
         if s.kind == "remains" || t.holds.is_some() {
-            let inv: JMap<String, Value> = common::inv_list(ctx, STRUCTURE_BIT | s.id).into_iter().map(|(k, q)| (k, json!(q))).collect();
-            o["contents"] = Value::Object(inv);
+            // Under `perceived_holds_on`, beyond arm's length only what one saw inside it, and when.
+            if common::laws(ctx).perceived_holds_on && d > crate::stores::LOOK_M {
+                match crate::stores::remembered(ctx, id, s.id) {
+                    Some(r) => {
+                        o["contents"] = Value::Object(r.items.into_iter().zip(r.qty).map(|(k, q)| (k, json!(q))).collect());
+                        o["contents_seen"] = json!(living_rules::day_clock(r.seen_ms, w.epoch_ms, w.day_ms));
+                    }
+                    None => o["contents"] = json!("not looked into"),
+                }
+            } else {
+                let inv: JMap<String, Value> = common::inv_list(ctx, STRUCTURE_BIT | s.id).into_iter().map(|(k, q)| (k, json!(q))).collect();
+                o["contents"] = Value::Object(inv);
+            }
         }
         structures.push(o);
     }

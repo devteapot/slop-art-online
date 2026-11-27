@@ -1314,13 +1314,18 @@ impl<'a> Ev<'a> {
                 best.map(|(p, _)| Resolved { class: 4, id: 0, at: p, kind: f.kind.clone(), name: String::new() })
             }
             living_rules::catalog::KindClass::Structure => {
-                let (me, ctx) = (self.me.id, self.ctx);
-                let holds = |id: u64| f.holds.as_deref().map_or(true, |item| common::inv_count(ctx, STRUCTURE_BIT | id, item) >= 1);
+                let (me, ctx, at, now) = (self.me.id, self.ctx, self.at, self.now);
+                // What it holds: under `perceived_holds_on`, as the character saw inside it
+                // (`stores::holds`); off, its true contents.
+                let seen = common::laws(ctx).perceived_holds_on;
+                let holds = |s: &Structure| {
+                    f.holds.as_deref().map_or(true, |item| if seen { crate::stores::holds(ctx, me, at, s, item, now) } else { common::inv_count(ctx, STRUCTURE_BIT | s.id, item) >= 1 })
+                };
                 // A kind `like` the one asked for counts as it (a world's `store` is a storage).
                 let sc = common::scripts(ctx);
                 self.structures()
                     .iter()
-                    .find(|(s, _)| sc.is_kind(&s.kind, &f.kind) && (!f.mine || s.owner == me) && holds(s.id))
+                    .find(|(s, _)| sc.is_kind(&s.kind, &f.kind) && (!f.mine || s.owner == me) && holds(s))
                     .map(|(s, _)| Resolved { class: 2, id: s.id, at: (s.x, s.y), kind: s.kind.clone(), name: String::new() })
             }
         }
@@ -2122,6 +2127,10 @@ impl<'a> Ev<'a> {
         // What it remembers of resources here (talk-places): a look, if one is due.
         let (ctx, id, w) = (self.ctx, self.me.id, &self.w);
         crate::stock::look(ctx, &self.me, at, || common::sight_for(ctx, id, w, now), now);
+        // What it sees inside the stores beside it (perception parity, `perceived_holds_on`).
+        if common::laws(ctx).perceived_holds_on {
+            crate::stores::look(ctx, id, at, now);
+        }
 
         drop(part);
         // Creatures.

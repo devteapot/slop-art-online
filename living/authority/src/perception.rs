@@ -1433,6 +1433,9 @@ fn sweep_one(ctx: &ReducerContext, id: u32, viewer: Identity, w: &World, map: &M
     drop(hearing);
     // What it remembers of resources here (talk-places): the look a mind takes at its noticing.
     crate::stock::look(ctx, &me, here, || sight, now);
+    if common::laws(ctx).perceived_holds_on {
+        crate::stores::look(ctx, me.id, here, now);
+    }
     let sight_rows = common::detail_span("sweep.rows");
     let rows_out = common::detail_span("rows.out");
     for p in &rows {
@@ -2709,6 +2712,13 @@ pub fn my_experience(ctx: &ViewContext) -> Vec<Experience> {
 #[spacetimedb::view(accessor = my_places, public, primary_key = id)]
 pub fn my_places(ctx: &ViewContext) -> Vec<Place> {
     living(ctx).map(|c| ctx.db.place().actor().filter(c.id).collect()).unwrap_or_default()
+}
+
+/// What my living characters saw inside stores (perception parity, `perceived_holds_on`; empty
+/// while the law is off): one point read by actor.
+#[spacetimedb::view(accessor = my_seen_stores, public, primary_key = id)]
+pub fn my_seen_stores(ctx: &ViewContext) -> Vec<SeenStore> {
+    living(ctx).map(|c| ctx.db.seen_store().actor().filter(c.id).collect()).unwrap_or_default()
 }
 
 /// What my living characters carry.
