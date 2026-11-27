@@ -36,7 +36,11 @@ enum Kind {
     Glow,
     Ember,
     Guard,
+    Glint,
 }
+
+/// How long a windup midpoint glint stays visible (s).
+pub const GLINT_LIFE: f32 = 0.12;
 
 #[derive(Resource)]
 struct Assets3 {
@@ -47,6 +51,7 @@ struct Assets3 {
     column: Handle<Mesh>,
     disc: Handle<Mesh>,
     guard: Handle<Mesh>,
+    glint_mesh: Handle<Mesh>,
     slash: Handle<StandardMaterial>,
     wood: Handle<StandardMaterial>,
     fire: Handle<StandardMaterial>,
@@ -55,6 +60,7 @@ struct Assets3 {
     heal: Handle<StandardMaterial>,
     shield: Handle<StandardMaterial>,
     claw: Handle<StandardMaterial>,
+    glint: Handle<StandardMaterial>,
 }
 
 /// One live effect: where it started, how it moves and grows, and when it ends (s).
@@ -78,6 +84,146 @@ struct Flights(HashMap<(u32, u8), Vec<Entity>>);
 /// Effects that last as long as a fighter's state: a raised guard, a fire bolt's windup.
 #[derive(Resource, Default)]
 struct Held(HashMap<(u32, Kind), Entity>);
+
+/// One recorded windup telegraph glint firing (for `verify-ui` dumps).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GlintEvent {
+    pub actor: u32,
+    pub act_ms: u64,
+    pub release_ms: u64,
+    pub f: f32,
+    pub clock_ms: f64,
+}
+
+/// Pure keying state for one-shot windup glints: fires once per `(actor, act_ms)` when a
+/// visible hostile windup reaches `LATE_WINDUP`, and clears its active cue on release or cancel.
+#[derive(Debug)]
+pub struct GlintTracker<T: Copy = Entity> {
+    fired: HashMap<u32, u64>,
+    active: HashMap<(u32, u64), T>,
+}
+
+impl<T: Copy> Default for GlintTracker<T> {
+    fn default() -> Self {
+        Self { fired: HashMap::new(), active: HashMap::new() }
+    }
+}
+
+/// Outcome of reconciling `GlintTracker` against this frame's active late windups.
+#[derive(Debug, PartialEq)]
+pub struct GlintDiff<T: Copy = Entity> {
+    /// Active glint handles whose windup released, was cancelled, or turned off: despawn now.
+    pub clear: Vec<T>,
+    /// Newly triggered `(actor, LateWindup)` cues to spawn this frame.
+    pub spawn: Vec<(u32, crate::combat::LateWindup)>,
+    /// Still-active cues `(actor, act_ms, handle, LateWindup)` whose position should follow the body.
+    pub keep: Vec<(u32, u64, T, crate::combat::LateWindup)>,
+}
+
+impl<T: Copy> Default for GlintDiff<T> {
+    fn default() -> Self {
+        Self { clear: Vec::new(), spawn: Vec::new(), keep: Vec::new() }
+    }
+}
+
+impl<T: Copy> GlintTracker<T> {
+    /// Reconcile active glints against `late` (`Combat::late_windups`). When `enabled` is false,
+    /// clears every active glint and resets fired keys.
+    pub fn reconcile(&mut self, enabled: bool, late: &HashMap<u32, crate::combat::LateWindup>, still_alive: impl Fn(T) -> bool) -> GlintDiff<T> {
+        let mut diff = GlintDiff::default();
+        if !enabled {
+            diff.clear.extend(self.active.drain().map(|(_, e)| e));
+            self.fired.clear();
+            return diff;
+        }
+        // Clear any active glint whose windup ended (release or cancel), or drop expired handles.
+        self.active.retain(|&(actor, act_ms), &mut handle| {
+            if !still_alive(handle) {
+                return false;
+            }
+            match late.get(&actor) {
+                Some(w) if w.act_ms == act_ms => {
+                    diff.keep.push((actor, act_ms, handle, *w));
+                    true
+                }
+                _ => {
+                    diff.clear.push(handle);
+                    false
+                }
+            }
+        });
+        // Trigger once per `(actor, act_ms)` when a hostile windup reaches `LATE_WINDUP`.
+        for (&actor, &w) in late {
+            if self.fired.get(&actor) != Some(&w.act_ms) {
+                self.fired.insert(actor, w.act_ms);
+                diff.spawn.push((actor, w));
+            }
+        }
+        diff.spawn.sort_by_key(|(id, _)| *id);
+        diff
+    }
+
+    pub fn insert_active(&mut self, actor: u32, act_ms: u64, handle: T) {
+        self.active.insert((actor, act_ms), handle);
+    }
+
+    /// Drop remembered actor keys that are no longer visible.
+    pub fn retain_actors(&mut self, keep: impl Fn(u32) -> bool) {
+        self.fired.retain(|id, _| keep(*id));
+    }
+}
+
+/// Active and recently fired windup telegraph glints (`Kind::Glint`).
+#[derive(Resource, Default)]
+pub struct Glints {
+    tracker: GlintTracker<Entity>,
+    /// Recent glint firings (capped at 32) for `verify-ui` dumps.
+    pub log: Vec<GlintEvent>,
+}
+
+/// A compact 3D 4-point star glint (~0.34 m tip-to-tip), crossed in the horizontal XZ plane and
+/// two tilted vertical planes so it reads crisply from the 58° top-down camera at any yaw.
+fn glint_mesh() -> Mesh {
+    let mut pos: Vec<[f32; 3]> = Vec::new();
+    let mut idx: Vec<u32> = Vec::new();
+    let mut add_star = |rot: Quat| {
+        let base = pos.len() as u32;
+        // 4 outer tips (radius 0.17 m -> 0.34 m across) and 4 inner waist vertices (radius 0.036 m).
+        let outer = 0.17f32;
+        let inner = 0.036f32;
+        let pts = [
+            Vec3::ZERO,
+            Vec3::new(0.0, 0.0, outer),
+            Vec3::new(inner, 0.0, inner),
+            Vec3::new(outer, 0.0, 0.0),
+            Vec3::new(inner, 0.0, -inner),
+            Vec3::new(0.0, 0.0, -outer),
+            Vec3::new(-inner, 0.0, -inner),
+            Vec3::new(-outer, 0.0, 0.0),
+            Vec3::new(-inner, 0.0, inner),
+        ];
+        for p in pts {
+            pos.push((rot * p).into());
+        }
+        for k in 0..8u32 {
+            let a = base + 1 + k;
+            let b = base + 1 + ((k + 1) % 8);
+            idx.extend_from_slice(&[base, a, b]);
+        }
+    };
+    // Horizontal star (strongest from 58° top-down) + two orthogonal vertical stars so it reads
+    // at any camera angle without vanishing edge-on.
+    add_star(Quat::IDENTITY);
+    add_star(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2));
+    add_star(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2));
+    let normals = vec![[0.0, 1.0, 0.0]; pos.len()];
+    let uvs = vec![[0.0, 0.0]; pos.len()];
+    Mesh::new(bevy::mesh::PrimitiveTopology::TriangleList, bevy::asset::RenderAssetUsages::default())
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+        .with_inserted_indices(bevy::mesh::Indices::U32(idx))
+}
 
 fn unlit(mats: &mut Assets<StandardMaterial>, c: LinearRgba, add: bool) -> Handle<StandardMaterial> {
     mats.add(StandardMaterial { base_color: Color::LinearRgba(c), emissive: c * 2.0, unlit: true, alpha_mode: if add { AlphaMode::Add } else { AlphaMode::Blend }, cull_mode: None, ..default() })
@@ -123,6 +269,7 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: Res
             m.scale_by(Vec3::new(0.8, 1.0, 0.8));
             m
         }),
+        glint_mesh: meshes.add(glint_mesh()),
         slash: unlit(&mut mats, LinearRgba::new(1.0, 0.93, 0.75, 0.55), true),
         wood: unlit(&mut mats, LinearRgba::new(0.55, 0.42, 0.28, 1.0), false),
         fire: unlit(&mut mats, LinearRgba::new(1.0, 0.38, 0.08, 0.7), true),
@@ -131,9 +278,18 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: Res
         heal: unlit(&mut mats, LinearRgba::new(0.35, 1.0, 0.55, 0.45), true),
         shield: unlit(&mut mats, LinearRgba::new(0.55, 0.78, 1.0, 0.5), true),
         claw: unlit(&mut mats, LinearRgba::new(1.0, 0.45, 0.4, 0.5), true),
+        glint: mats.add(StandardMaterial {
+            base_color: Color::LinearRgba(LinearRgba::new(1.0, 0.90, 0.54, 0.95)),
+            emissive: LinearRgba::new(1.0, 0.88, 0.48, 1.0) * 3.0,
+            unlit: true,
+            alpha_mode: AlphaMode::Add,
+            cull_mode: None,
+            ..default()
+        }),
     });
     commands.init_resource::<Flights>();
     commands.init_resource::<Held>();
+    commands.init_resource::<Glints>();
 }
 
 /// Ground height under a sim point (the island's, else the tile ground).
@@ -242,12 +398,26 @@ fn spawn(mut commands: Commands, a: Res<Assets3>, c: Res<Combat>, cards: Res<Car
     }
 }
 
-/// A raised guard's arc and a fire bolt's ember, for as long as the fighter row says.
+/// A raised guard's arc, a fire bolt's ember, and (when enabled) the hostile windup midpoint glint.
 #[allow(clippy::too_many_arguments)]
-fn persistent(mut commands: Commands, a: Res<Assets3>, cards: Res<Cards>, net: NonSend<Net>, scene: NonSend<Scene>, island: Option<Res<crate::island::Island>>, mut held: ResMut<Held>, mut q: Query<&mut Transform, With<Fx>>, time: Res<Time>) {
+fn persistent(
+    mut commands: Commands,
+    a: Res<Assets3>,
+    cards: Res<Cards>,
+    c: Res<Combat>,
+    prefs: Res<crate::keys::Prefs>,
+    net: NonSend<Net>,
+    scene: NonSend<Scene>,
+    island: Option<Res<crate::island::Island>>,
+    mut held: ResMut<Held>,
+    mut glints: ResMut<Glints>,
+    mut q: Query<(&mut Transform, &mut Fx)>,
+    time: Res<Time>,
+) {
     let now = time.elapsed_secs();
     let Some(conn) = net.conn.as_ref() else { return };
-    let t = scene.now_ms as u64;
+    let clock_ms = crate::combat::combat_now_ms(&scene, prefs.combat_timing);
+    let t = clock_ms as u64;
     let mut want: Vec<((u32, Kind), Vec3, Quat)> = Vec::new();
     for (id, (p, _)) in &scene.shown {
         let Some(f) = crate::net::find_fighter(conn, *id) else { continue };
@@ -275,7 +445,7 @@ fn persistent(mut commands: Commands, a: Res<Assets3>, cards: Res<Cards>, net: N
     for (key, at, rot) in want {
         match held.0.get(&key) {
             Some(e) => {
-                if let Ok(mut tf) = q.get_mut(*e) {
+                if let Ok((mut tf, _)) = q.get_mut(*e) {
                     tf.translation = at;
                     tf.rotation = rot;
                     if key.1 == Kind::Ember {
@@ -292,6 +462,42 @@ fn persistent(mut commands: Commands, a: Res<Assets3>, cards: Res<Cards>, net: N
             }
         }
     }
+    // Hostile windup midpoint glint (`Kind::Glint`, once per `(actor, act_ms)`, cleared on release/cancel).
+    let glint_pos = |id: u32, w: &crate::combat::LateWindup| -> Option<Vec3> {
+        let &(p, _) = scene.shown.get(&id)?;
+        let g = ground(&island, &scene, p);
+        let aim = w.aim.normalize_or(Vec2::Y);
+        if w.animal {
+            let xy = p + aim * 0.85;
+            Some(Vec3::new(xy.x, g + 0.65, xy.y))
+        } else {
+            let side = Vec2::new(aim.y, -aim.x) * 0.14;
+            let xy = p + aim * 0.45 + side;
+            Some(Vec3::new(xy.x, g + 1.25, xy.y))
+        }
+    };
+    let diff = glints.tracker.reconcile(prefs.windup_glint, &c.late_windups, |e| q.contains(e));
+    for e in diff.clear {
+        commands.entity(e).try_despawn();
+    }
+    for (actor, _, e, w) in diff.keep {
+        if let (Some(at), Ok((mut tf, mut fx))) = (glint_pos(actor, &w), q.get_mut(e)) {
+            tf.translation = at;
+            fx.from = at;
+        }
+    }
+    for (actor, w) in diff.spawn {
+        let Some(at) = glint_pos(actor, &w) else { continue };
+        let e = put(&mut commands, &a.glint_mesh, &a.glint, Kind::Glint, now, GLINT_LIFE, at, Vec3::ZERO, (0.4, 1.0), face(w.aim), 0.7);
+        glints.tracker.insert_active(actor, w.act_ms, e);
+        info!("combat: windup glint #{actor} act_ms={} release_ms={} f={:.3}", w.act_ms, w.release_ms, w.f);
+        glints.log.push(GlintEvent { actor, act_ms: w.act_ms, release_ms: w.release_ms, f: w.f, clock_ms });
+        if glints.log.len() > 32 {
+            let drop = glints.log.len() - 32;
+            glints.log.drain(..drop);
+        }
+    }
+    glints.tracker.retain_actors(|id| scene.shown.contains_key(&id));
 }
 
 fn animate(mut commands: Commands, a: Res<Assets3>, mut q: Query<(Entity, &mut Fx, &mut Transform)>, time: Res<Time>) {
@@ -326,10 +532,81 @@ fn animate(mut commands: Commands, a: Res<Assets3>, mut q: Query<(Entity, &mut F
                     trails.push(tf.translation);
                 }
             }
+            Kind::Glint => {
+                // Crisp flash: rapid snap to peak in the first quarter, smooth taper out.
+                let pulse = if t < 0.25 {
+                    fx.grow.0 + (fx.grow.1 - fx.grow.0) * (t / 0.25)
+                } else {
+                    let u = (t - 0.25) / 0.75;
+                    fx.grow.1 * (1.0 - u) * (1.0 - u)
+                };
+                tf.rotation = fx.base * Quat::from_rotation_y(t * fx.spin);
+                tf.scale = Vec3::splat(pulse.max(0.01));
+            }
             _ => tf.scale = Vec3::splat(s),
         }
     }
     for p in trails {
         put(&mut commands, &a.ball, &a.fire, Kind::Trail, now, 0.3, p, Vec3::Y * 0.5, (0.24, 0.06), Quat::IDENTITY, 0.0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::combat::LateWindup;
+
+    fn lw(act_ms: u64, release_ms: u64, f: f32) -> LateWindup {
+        LateWindup { act_ms, release_ms, f, aim: Vec2::X, animal: false }
+    }
+
+    #[test]
+    fn glint_fires_once_per_windup_and_retriggers_on_next_blow() {
+        let mut tr = GlintTracker::<u32>::default();
+        let mut late = HashMap::new();
+        late.insert(5, lw(1000, 1350, 0.52));
+
+        let d1 = tr.reconcile(true, &late, |_| true);
+        assert_eq!(d1.spawn.len(), 1);
+        assert_eq!(d1.spawn[0].0, 5);
+        assert!(d1.clear.is_empty());
+        tr.insert_active(5, 1000, 101);
+
+        // Subsequent frames of the same windup keep tracking without spawning a second glint.
+        late.insert(5, lw(1000, 1350, 0.75));
+        let d2 = tr.reconcile(true, &late, |_| true);
+        assert!(d2.spawn.is_empty(), "same (actor, act_ms) never glints twice");
+        assert!(d2.clear.is_empty());
+        assert_eq!(d2.keep.len(), 1);
+        assert_eq!(d2.keep[0].2, 101);
+
+        // Next blow (new act_ms) clears any lingering old glint and triggers once.
+        late.insert(5, lw(2000, 2350, 0.51));
+        let d3 = tr.reconcile(true, &late, |_| true);
+        assert_eq!(d3.clear, vec![101]);
+        assert_eq!(d3.spawn.len(), 1);
+        assert_eq!(d3.spawn[0].1.act_ms, 2000);
+    }
+
+    #[test]
+    fn glint_clears_immediately_on_release_cancel_or_setting_off() {
+        let mut tr = GlintTracker::<u32>::default();
+        let mut late = HashMap::new();
+        late.insert(6, lw(1000, 1750, 0.50));
+        let d1 = tr.reconcile(true, &late, |_| true);
+        assert_eq!(d1.spawn.len(), 1);
+        tr.insert_active(6, 1000, 202);
+
+        // Cancel or release removes the actor from `late_windups` -> glint is cleared at once.
+        late.clear();
+        let d2 = tr.reconcile(true, &late, |_| true);
+        assert_eq!(d2.clear, vec![202]);
+        assert!(d2.spawn.is_empty());
+
+        // Setting off suppresses all glints and clears any active ones.
+        late.insert(6, lw(3000, 3750, 0.55));
+        let d3 = tr.reconcile(false, &late, |_| true);
+        assert!(d3.spawn.is_empty());
+        assert!(d3.clear.is_empty());
     }
 }

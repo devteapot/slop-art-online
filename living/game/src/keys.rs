@@ -397,11 +397,16 @@ pub struct Prefs {
     /// The hair shine (`style::HAIR_SHINES`: crown, soft, today), once chosen in Settings; none
     /// follows the default (crown since hair-ring-2).
     pub hair_shine: Option<String>,
+    /// Combat clip timing: `Live` (default, plays windup clips on `scene.mine_ms` and scales wolf
+    /// bite to its windup) or `Old` (legacy delayed `scene.now_ms`, fixed-rate animal clips).
+    pub combat_timing: crate::combat::CombatTiming,
+    /// Brief glint halfway through a visible hostile fighter's windup (`f >= 0.5`); off by default.
+    pub windup_glint: bool,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Self { camera: crate::camera::Mode::default(), camera_tuning: Default::default(), camera_rotate: true, camera_rotate_speed: 1.0, camera_rotate_invert: false, facing: None, cursor_facing: crate::twist::LookWalk::cursor(), control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, throng: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None }
+        Self { camera: crate::camera::Mode::default(), camera_tuning: Default::default(), camera_rotate: true, camera_rotate_speed: 1.0, camera_rotate_invert: false, facing: None, cursor_facing: crate::twist::LookWalk::cursor(), control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, throng: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None, combat_timing: crate::combat::CombatTiming::default(), windup_glint: false }
     }
 }
 
@@ -424,10 +429,19 @@ pub fn path() -> std::path::PathBuf {
 
 pub fn load() -> (Binds, Prefs) {
     let p = path();
-    let Ok(text) = std::fs::read_to_string(&p) else { return (Binds::default(), Prefs::default()) };
+    let apply_env = |mut prefs: Prefs| {
+        if let Some(t) = crate::combat::CombatTiming::from_env() {
+            prefs.combat_timing = t;
+        }
+        if let Some(g) = crate::combat::windup_glint_from_env() {
+            prefs.windup_glint = g;
+        }
+        prefs
+    };
+    let Ok(text) = std::fs::read_to_string(&p) else { return (Binds::default(), apply_env(Prefs::default())) };
     let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
         warn!("settings: {} is not JSON; using the defaults", p.display());
-        return (Binds::default(), Prefs::default());
+        return (Binds::default(), apply_env(Prefs::default()));
     };
     let preset = match v["preset"].as_str() {
         Some("numbers") => Preset::Numbers,
@@ -478,7 +492,10 @@ pub fn load() -> (Binds, Prefs) {
         sight_look: v["sight_look"].as_str().map(String::from),
         film: v["film"].as_str().map(String::from),
         hair_shine: v["hair_shine"].as_str().map(String::from),
+        combat_timing: v["combat_timing"].as_str().and_then(crate::combat::CombatTiming::parse).unwrap_or(d.combat_timing),
+        windup_glint: v["windup_glint"].as_bool().unwrap_or(d.windup_glint),
     };
+    let prefs = apply_env(prefs);
     info!("settings: read {} ({} preset)", p.display(), binds.preset.name());
     (binds, prefs)
 }
@@ -506,6 +523,8 @@ pub fn save(binds: &Binds, prefs: &Prefs) {
         "sight_look": prefs.sight_look,
         "film": prefs.film,
         "hair_shine": prefs.hair_shine,
+        "combat_timing": prefs.combat_timing.name(),
+        "windup_glint": prefs.windup_glint,
     });
     if let Some(dir) = p.parent() {
         let _ = std::fs::create_dir_all(dir);

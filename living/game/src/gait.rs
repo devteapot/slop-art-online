@@ -837,8 +837,10 @@ fn record(
             // Walking or running clips as drawn (`live.rs` `family`), and my row's own word.
             "family": motions.get(e).ok().map(|m| format!("{:?}", m.family)),
             "running": roam.running,
-            // Connected play: the authority time my body is drawn at, and its segment then.
+            // Connected play: the authority time my body is drawn at, the delayed display clock,
+            // and its segment then.
             "mine_ms": scene.as_ref().map(|s| s.mine_ms),
+            "now_ms": scene.as_ref().map(|s| s.now_ms),
             // The game camera's eye and its pitch below the horizon (degrees).
             "eye": camera.single().ok().map(|c| {
                 let (p, f) = (c.translation(), c.forward());

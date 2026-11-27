@@ -104,8 +104,11 @@ pub struct Motion {
     pub stand: &'static str,
     /// A one-shot over it (a move, a hit, a death, a gesture, getting up).
     pub action: Option<Action>,
-    /// The clock `action.start_ms` is on (ms).
+    /// The clock `action.start_ms` is on (ms, delayed display clock).
     pub now_ms: f64,
+    /// Live authority time estimate (ms, `scene.mine_ms`), used by `Action::live` combat clips so
+    /// windups play before release without disturbing non-combat one-shots on `now_ms`.
+    pub live_ms: Option<f64>,
     /// Walking backwards: the gaits play in reverse (the planted foot then moves forward under
     /// the hips, as the body backs away), so legs facing away from the travel keep still feet.
     pub reverse: bool,
@@ -140,7 +143,7 @@ pub struct Motion {
 
 impl Default for Motion {
     fn default() -> Self {
-        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, reverse: false, twist: 0.0, neck: 0.0, eyes: 0.0, aim: false, pace: 1.0, freeze: false, travel: 0.0, cursor_facing: false, family: crate::gait::Family::Clips }
+        Self { speed: 0.0, stride: 1.0, stand: "idle", action: None, now_ms: 0.0, live_ms: None, reverse: false, twist: 0.0, neck: 0.0, eyes: 0.0, aim: false, pace: 1.0, freeze: false, travel: 0.0, cursor_facing: false, family: crate::gait::Family::Clips }
     }
 }
 
@@ -354,6 +357,7 @@ struct Once {
     w: f32,
     t: f32,
     upper: bool,
+    live: bool,
 }
 
 /// The pose state of one animated character.
@@ -806,17 +810,19 @@ fn play(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &Motion, 
 fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
     // One-shots. A requested move already showing in the same clip (my predicted one, now
     // confirmed) carries on; a new start replays it.
+    let clock = |live: bool| if live { m.live_ms.unwrap_or(m.now_ms) } else { m.now_ms };
     let want = m.action.filter(|x| set.full.contains_key(x.clip));
     if let Some(x) = want {
-        let carry = a.onces.last().is_some_and(|o| o.clip == x.clip && (o.key == x.start_ms || (o.w > 0.0 && (o.hold.is_some() || o.t < set.len(resolve(&a.plays, o.clip))))));
+        let want_now = clock(x.live);
+        let carry = a.onces.last().is_some_and(|o| o.clip == x.clip && o.live == x.live && (o.key == x.start_ms || (o.w > 0.0 && (o.hold.is_some() || o.t < set.len(resolve(&a.plays, o.clip))))));
         if carry {
             let o = a.onces.last_mut().unwrap();
             o.rate = x.rate;
             o.hold = x.hold;
             o.key = x.start_ms;
-        } else if x.start_ms <= m.now_ms && a.spent != Some((x.clip, x.start_ms)) {
+        } else if (x.live || x.start_ms <= want_now) && a.spent != Some((x.clip, x.start_ms)) {
             let upper = set.upper.contains_key(x.clip);
-            a.onces.push(Once { clip: x.clip, rate: x.rate, from: x.from, cut: x.cut, start_ms: x.start_ms, key: x.start_ms, hold: x.hold, w: 0.0, t: x.from, upper });
+            a.onces.push(Once { clip: x.clip, rate: x.rate, from: x.from, cut: x.cut, start_ms: x.start_ms, key: x.start_ms, hold: x.hold, w: 0.0, t: x.from, upper, live: x.live });
             if a.onces.len() > 2 {
                 a.onces.remove(0);
             }
@@ -828,7 +834,7 @@ fn step(a: &mut Anim, set: &Set, m: &Motion, dt: f32) {
         let len = set.len(resolve(plays, o.clip));
         let end = o.cut.map_or(len, |c| c.min(len) + FADE_OUT * o.rate).min(len);
         let requested = i == last && want.is_some_and(|x| x.clip == o.clip && x.start_ms == o.key);
-        o.t = o.from + (((m.now_ms - o.start_ms) / 1000.0) as f32 * o.rate).max(0.0);
+        o.t = o.from + (((clock(o.live) - o.start_ms) / 1000.0) as f32 * o.rate).max(0.0);
         if let Some(h) = o.hold {
             o.t = o.t.min(h * len);
         }
@@ -1048,6 +1054,22 @@ mod tests {
         step(&mut a, &s, &Motion { action: Some(act(1500.0)), now_ms: 1500.0, ..default() }, 0.1);
         assert_eq!(a.onces.last().unwrap().start_ms, 1500.0);
     }
+
+    #[test]
+    fn live_combat_oneshot_starts_on_live_clock_while_delayed_oneshot_waits() {
+        let s = Arc::new(set());
+        let mut a_old = anim(&s);
+        let mut a_live = anim(&s);
+        // Display clock lags 300 ms behind live authority time when a windup starts at t = 1000.
+        let delayed = Action { clip: "wave", rate: 1.0, start_ms: 1000.0, live: false, ..Default::default() };
+        let live = Action { clip: "wave", rate: 1.0, start_ms: 1000.0, live: true, ..Default::default() };
+        step(&mut a_old, &s, &Motion { action: Some(delayed), now_ms: 700.0, live_ms: Some(1020.0), ..default() }, 0.05);
+        step(&mut a_live, &s, &Motion { action: Some(live), now_ms: 700.0, live_ms: Some(1020.0), ..default() }, 0.05);
+        assert!(a_old.onces.is_empty(), "delayed action waits for now_ms >= start_ms");
+        assert_eq!(a_live.onces.len(), 1, "live action starts immediately on live_ms");
+        assert!((a_live.onces[0].t - 0.02).abs() < 1e-4, "seeks to live_ms - start_ms: {}", a_live.onces[0].t);
+        assert!(a_live.onces[0].w > 0.5, "already fading in during windup: {}", a_live.onces[0].w);
+    }
     #[test]
     fn the_ground_seat_follows_the_clips_times() {
         assert_eq!(seat_of("walk", 1.0, 1.0), None);
@@ -1067,7 +1089,7 @@ mod tests {
         a.moving = 1.0;
         assert_eq!(a.ground_seat(), 0.0, "walking off is not");
         a.moving = 0.0;
-        let once = |clip, t, w, upper| Once { clip, rate: 1.6, from: 0.0, cut: None, start_ms: 0.0, key: 0.0, hold: None, w, t, upper };
+        let once = |clip, t, w, upper| Once { clip, rate: 1.6, from: 0.0, cut: None, start_ms: 0.0, key: 0.0, hold: None, w, t, upper, live: false };
         a.onces = vec![once("stand_up_ground", 1.0, 1.0, false)];
         assert_eq!(a.ground_seat(), 1.0, "early in getting up the cloth stays down");
         a.onces = vec![once("stand_up_ground", 2.0, 1.0, false)];
@@ -1085,7 +1107,7 @@ mod tests {
         assert_eq!(a.ground_share(), 0.0, "standing idle has no ground seat");
         a.stands = vec![("sit_ground", 1.0)];
         assert_eq!(a.ground_share(), 1.0);
-        let once = |clip, t, w| Once { clip, rate: 1.6, from: 0.0, cut: None, start_ms: 0.0, key: 0.0, hold: None, w, t, upper: false };
+        let once = |clip, t, w| Once { clip, rate: 1.6, from: 0.0, cut: None, start_ms: 0.0, key: 0.0, hold: None, w, t, upper: false, live: false };
         // Late in getting up the cloth has left the ground, but the clip still has the body.
         a.onces = vec![once("stand_up_ground", 2.0, 1.0)];
         assert_eq!(a.ground_seat(), 0.0);

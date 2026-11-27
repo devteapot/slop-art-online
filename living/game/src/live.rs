@@ -739,6 +739,7 @@ fn bodies(
                     motion.action = Some(a);
                     motion.speed = 0.0;
                     motion.now_ms = scene.now_ms;
+                    motion.live_ms = Some(scene.mine_ms);
                 }
             }
             continue;
@@ -1166,6 +1167,7 @@ fn bodies(
         motion.stand = if talking.contains(&id) { "talk" } else { show.idle.unwrap_or("idle") };
         motion.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None, ..Default::default() })).or(startle).or(turn_action).or(stop_action);
         motion.now_ms = scene.now_ms;
+        motion.live_ms = Some(scene.mine_ms);
         motion.reverse = reverse;
         motion.twist = twist;
         motion.neck = neck;
