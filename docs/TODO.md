@@ -186,6 +186,8 @@ See [verification and reproduction](BEVY_BROWSER_CLIENT.md). This is a local dev
   - **Stale fleeing.** In five real flights traced in r2d, the new plan took effect 10–21 s after the mind's reply. Until then the body kept its old plan: standing while the attacker closed to 1.2 m, or chasing it. The mind's choice of a place on the attacker's side is a separate cause, noted there.
     - Evidence: [FRAMING.md, "Fled toward the attacker"](FRAMING.md#fled-toward-the-attacker-the-act-or-the-mind-2026-11-12) and [flee_trace.py](../living/tools/flee_trace.py).
 
+- **Sight-edge hysteresis (design, low priority; after perception-parity phase 1).** In the 200-fighter battle, fighters at the edge of sight leave a viewer's sent set and come back on almost every 200 ms sweep; the game client absorbs the churn (battle-spikes 268bdb239 keeps hidden bodies 6 s), but the authority still re-sends them. A short design note (Neon) on leaving sight at a slightly larger radius than entering, or only after one or two sweeps out: the delivery volume it saves in the Cullet battle (measured), whether it changes what minds perceive (players and minds see the same), whether the gap leaks anything an observer should not see, and a recommendation. It changes a sight rule, so it goes to the owner before anything is built (2026-11-27).
+
 ## Later stages
 
 These are staged growth areas after the foundation; richer presentation can develop alongside broader mechanics rather than waiting for all society or scaling work to finish.
