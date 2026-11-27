@@ -1342,6 +1342,139 @@ def perceived_holds(s):
         off_the_line(s, line, cast, dy=68)
 
 
+def compass8(a, b):
+    """The rules' `sight::compass8`: which of eight ways `b` lies from `a` (0 north, clockwise;
+    north is -y)."""
+    ang = math.degrees(math.atan2(b[0] - a[0], -(b[1] - a[1])))
+    return int(((ang + 360.0 + 22.5) % 360.0) // 45.0) % 8
+
+
+def heard_band(d, near_m, close_m):
+    """The rules' `sight::heard_band`: 0 near, 1 close, 2 far."""
+    return 0 if d <= near_m else 1 if d <= close_m else 2
+
+
+def heard_point(a, b, near_m, close_m, hearing):
+    """The rules' `sight::heard_point`: the point on `b`'s compass way from `a` at the middle of
+    its band (what a player's `heard_sounds` row says: way and band)."""
+    way = math.radians(compass8(a, b) * 45.0)
+    close_m = max(close_m, near_m)
+    band = heard_band(math.dist(a, b), near_m, close_m)
+    d = near_m * 0.5 if band == 0 else (near_m + close_m) * 0.5 if band == 1 else close_m + max(hearing - close_m, 2.0) * 0.5
+    return (a[0] + d * math.sin(way), a[1] - d * math.cos(way))
+
+
+def perceived_sound(s):
+    """A graph's sound under the `perceived_sound_on` law (perception parity,
+    docs/PERCEPTION_PARITY_AUDIT.md, the `Target::Sound` row; `brain.rs` `heard_at`,
+    `sight::heard_point`). With sight on a field (`fov_on`), a listener L on an open line faces
+    east; S stands behind it to the west, off the line where the map lets it, out of its field and
+    its near ring and within its hearing: heard, not seen. L's graph turns to the `sound`, asks
+    whether the sound is `near` within a distance between where S is and where its band's middle
+    is, and, after S speaks, turns to the `speaker`. Law off (the leak): L turns to exactly where
+    S stands, and `near` measures that. Law on: L turns to the point a player's `heard_sounds` row
+    gives (S's compass way at its band's middle: a way and a band, nothing finer), and `near`
+    measures that. About 2 minutes."""
+    line = open_line(s)
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    walk = walkable(s)
+    lis, src = cast = s.people(2)
+    e = line[12]
+    # S behind L: 6 tiles west, and 2 tiles off the line where the map has ground there.
+    off = next((d for d in (2, -2, 1, -1) if walk(int(line[6][0]), int(line[6][1] + d))), 0)
+    spot = (line[6][0], line[6][1] + off)
+    (s.out / f"{s.name}-cast.json").write_text(json.dumps({"L": lis, "S": src, "L_at": e, "S_at": spot}) + "\n")
+    rounds = iter(range(1000))
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+    near_m, close_m = law_value(s, "heard_near_m"), law_value(s, "heard_close_m")
+
+    def pos(c):
+        b = s.http_rows(f"SELECT x, y FROM body WHERE id = {c}")[0]
+        return (b["x"], b["y"])
+
+    def place():
+        s.call("place_at", lis, e[0], e[1])
+        s.call("place_at", src, spot[0], spot[1])
+        s.graph(src, {"wait": 60 + next(rounds)})
+        # L faces east, away from S.
+        s.graph(lis, {"seq": [{"first": [{"do": {"skill": "face", "target": {"at": [e[0] + 4.0, e[1]]}}}, {"wait": 0.1}]}, {"wait": 60 + next(rounds)}]})
+        time.sleep(2.0)
+        return pos(lis), pos(src)
+
+    def faced(tag, t0):
+        """L's first `face` after `t0`: the point it turned to."""
+        def got():
+            for r in s.http_rows(f"SELECT * FROM activity WHERE id = {lis}"):
+                t = r["target"]
+                if r["skill"] == "face" and r["started_ms"] >= t0:
+                    return r, ((t["x"], t["y"]) if isinstance(t, dict) else (t[2], t[3]))
+            return None
+        r, p = s.wait(got, seconds=15, every=0.1)
+        (s.out / f"{s.name}-face-{tag}.json").write_text(json.dumps(r, indent=2) + "\n")
+        return p
+
+    def said(tag, t0):
+        rows = s.wait(lambda: [r for r in s.rows(f"SELECT * FROM chronicle WHERE kind = 'speech' AND a = {lis}") if r["at_ms"] >= t0 and tag in r["text"]] or None, seconds=20, every=0.5)
+        (s.out / f"{s.name}-said-{tag}.json").write_text(json.dumps(rows, indent=2) + "\n")
+        return rows[0]["text"]
+
+    def case(law):
+        out = {}
+        l_at, s_at = place()
+        exact, heard = s_at, heard_point(l_at, s_at, near_m, close_m, 9.0)
+        out["L"], out["S"], out["heard_point"] = l_at, s_at, heard
+        out["way_band"] = (compass8(l_at, s_at), heard_band(math.dist(l_at, s_at), near_m, close_m))
+        # The sound, as a target the body acts on.
+        t0 = now()
+        s.graph(lis, {"seq": [{"do": {"skill": "face", "target": "sound"}}, {"wait": 60 + next(rounds)}]})
+        out["sound"] = faced(f"{law}-sound", t0)
+        # The sound in a condition: `near` within the middle of the two distances.
+        l_at, s_at = place()
+        within = round((math.dist(l_at, s_at) + math.dist(l_at, heard)) / 2, 2)
+        tag = f"ps{next(rounds)}"
+        t0 = now()
+        s.graph(lis, {"seq": [{"if": {"cond": {"near": {"target": "sound", "within": within}}, "then": {"say": f"{tag} near"}, "else": {"say": f"{tag} not near"}}}, {"wait": 60 + next(rounds)}]})
+        out["within"], out["near"] = within, said(tag, t0)
+        # An unseen speaker: S speaks, L turns to the speaker.
+        place()
+        t0 = now()
+        s.graph(src, {"seq": [{"say": {"text": f"ps{next(rounds)} hello"}}, {"wait": 60 + next(rounds)}]})
+        s.wait(lambda: [r for r in s.rows(f"SELECT * FROM chronicle WHERE kind = 'speech' AND a = {src}") if r["at_ms"] >= t0] or None, seconds=20, every=0.5)
+        t1 = now()
+        s.graph(lis, {"seq": [{"do": {"skill": "face", "target": "speaker"}}, {"wait": 60 + next(rounds)}]})
+        out["speaker"] = faced(f"{law}-speaker", t1)
+        (s.out / f"{s.name}-case-{law}.json").write_text(json.dumps(out, indent=2) + "\n")
+        return out
+
+    close = lambda p, q, tol=0.35: math.dist(p, q) <= tol
+    try:
+        for c in cast:
+            s.graph(c, {"wait": 120 + next(rounds)})
+        set_law(s, "fov_on", True)
+        set_law(s, "perceived_sound_on", False)
+        got = case("off")
+        # Only a creature heard and not seen is a sound: S resolving as one is S out of L's sight.
+        s.expect("law off, target: L turns to exactly where S stands (S heard and not seen; the leak)", close(got["sound"], got["S"]), got)
+        s.expect("law off, condition: `near` measures S's exact distance", " near" in got["near"] and " not near" not in got["near"], got)
+        s.expect("law off, an unseen speaker: L turns to exactly where S stands", close(got["speaker"], got["S"]), got)
+        set_law(s, "perceived_sound_on", True)
+        s.wait(lambda: own_laws(s.rows).get("perceived_sound_on") == "true", 10)
+        got = case("on")
+        s.expect("law on, target: L turns to S's way and band (the point a player's heard_sounds row gives), not to S",
+                 close(got["sound"], got["heard_point"], 0.05) and not close(got["sound"], got["S"], 1.0), got)
+        s.expect("law on: the point keeps S's way and band and nothing finer",
+                 (compass8(got["L"], got["sound"]), heard_band(math.dist(got["L"], got["sound"]), near_m, close_m)) == tuple(got["way_band"]), got)
+        s.expect("law on, condition: `near` measures the band's middle", " not near" in got["near"], got)
+        s.expect("law on, an unseen speaker: L turns to the speaker's way and band, not to S",
+                 close(got["speaker"], got["heard_point"], 0.05) and not close(got["speaker"], got["S"], 1.0), got)
+    finally:
+        set_law(s, "perceived_sound_on", False, check=False)
+        set_law(s, "fov_on", False, check=False)
+        for k, c in enumerate(cast):
+            s.graph(c, {"wait": 60 + next(rounds)})
+            s.call("place_at", c, line[0][0] + 60 + 2 * k, line[0][1] + 48, check=False)
+
+
 def drop_geometry(s, cls=8):
     """On this world's own map: an `eye` tile and an `across` one on one axis with only tiles of
     class `cls` (8 a drop, 9 a low thing; 1 to 3 of them) between and walkable ground behind each
@@ -6167,6 +6300,7 @@ SCENES["sex_seen_bound"] = sex_seen_bound
 SCENES["familiar_regard"] = familiar_regard
 SCENES["goods"] = goods
 SCENES["perceived_holds"] = perceived_holds
+SCENES["perceived_sound"] = perceived_sound
 SCENES["workplace"] = workplace
 SCENES["making"] = making
 SCENES["stock"] = stock

@@ -121,6 +121,8 @@ fn laws() {
         perceived_threat_on: false,
         // Perception parity: a store's contents known only as seen inside it.
         perceived_holds_on: false,
+        // Perception parity: a sound out of sight known only by its way and band, as heard.
+        perceived_sound_on: false,
         // Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): a graph's
         // `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a
         // personal relation only when it is clear (trust -25 or less or a hostile word; 25 or more
@@ -3287,6 +3289,7 @@ fn law_about(l, name) {
         "longing_food" => if l.longing_food > 0.0 { `and only while carrying at least ${short(l.longing_food)} food` } else { "whatever food it carries" },
         "relation_fight_on" => if l.relation_fight_on { "whom one fights: what one said (enemy or spare) first, then a clear feeling about them, then how one's people stand with theirs" } else { "whom one fights: how one feels about someone, if one has any feeling about them, else how one's people stand with theirs" },
         "perceived_holds_on" => if l.perceived_holds_on { "one knows what a store holds only from looking inside it" } else { "one knows what every store holds" },
+        "perceived_sound_on" => if l.perceived_sound_on { "a sound out of sight is known only by its way and how far, as one hears it" } else { "a sound out of sight is known exactly where it is" },
         "stranger_by_name" => if l.stranger_by_name { "in a routine, a stranger is someone whose name one does not know" } else { "in a routine, a stranger is someone one has no feelings about yet" },
         "cues_on" => if l.cues_on { "what one wrote one would watch for brings one to think when one perceives it" } else { "one thinks when something happens to one, not because one watches for it" },
         "cue_cooldown_s" => `the same thing seen again brings no new thought from what one watches for within ${short(l.cue_cooldown_s)} s`,

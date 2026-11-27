@@ -186,6 +186,24 @@ pub fn heard_band(dist: f32, near_m: f32, close_m: f32) -> u8 {
     }
 }
 
+/// Where a sound heard at `to` from `from` seems to be, as a listener is told it (the
+/// `perceived_sound_on` law, perception parity): only its compass way (`compass8`) and its band
+/// (`heard_band`), the same two a player's `heard_sounds` row carries, made into a point on that
+/// way at the middle of the band (near: half of `near_m`; close: between `near_m` and `close_m`;
+/// far: between `close_m` and the listener's `hearing`). The point measures back to the same way
+/// and band, and nothing finer of where the sound is survives.
+pub fn heard_point(from: (f32, f32), to: (f32, f32), near_m: f32, close_m: f32, hearing: f32) -> (f32, f32) {
+    let way = compass8(from, to) as f32 * std::f32::consts::FRAC_PI_4;
+    let (near_m, close_m) = (near_m.max(0.0), close_m.max(near_m.max(0.0)));
+    let d = match heard_band((to.0 - from.0).hypot(to.1 - from.1), near_m, close_m) {
+        0 => near_m * 0.5,
+        1 => (near_m + close_m) * 0.5,
+        _ => close_m + (hearing - close_m).max(2.0) * 0.5,
+    };
+    // North is -y, clockwise: east is +x.
+    (from.0 + d * way.sin(), from.1 - d * way.cos())
+}
+
 /// Scene key under which a mind's scene lists what it hears but does not see (while its sight
 /// has a field).
 pub const HEARD: &str = "you hear (out of sight)";
@@ -237,6 +255,32 @@ mod tests {
 
     fn open() -> Map {
         Map { w: 64, h: 64, tiles: vec![Terrain::Grass as u8; 64 * 64], blocked: Default::default(), cover: None, opaque: Default::default(), nav: Default::default() }
+    }
+
+    /// A heard sound's point keeps its compass way and band and nothing finer: measured back
+    /// from the listener it has the same way and band, and two sounds with one way and band are
+    /// one point (`perceived_sound_on`).
+    #[test]
+    fn a_heard_point_is_its_way_and_band() {
+        let from = (40.3, 17.8);
+        for (near, close, hearing) in [(5.0, 15.0, 9.0), (5.0, 15.0, 30.0), (3.0, 8.0, 20.0), (0.0, 4.0, 12.0)] {
+            let mut points: std::collections::HashMap<(u8, u8), (f32, f32)> = Default::default();
+            for k in 0..720 {
+                let a = k as f32 * 0.5f32.to_radians();
+                for d in [0.3f32, 1.0, 2.4, 4.9, 5.2, 7.7, 11.0, 14.9, 15.5, 22.0, 29.0] {
+                    let to = (from.0 + d * a.cos(), from.1 + d * a.sin());
+                    let (way, band) = (compass8(from, to), heard_band(d, near, close));
+                    let p = heard_point(from, to, near, close, hearing);
+                    let back = (p.0 - from.0).hypot(p.1 - from.1);
+                    assert_eq!((compass8(from, p), heard_band(back, near, close)), (way, band), "{to:?} at {d} m ({near}, {close}, {hearing})");
+                    let q = *points.entry((way, band)).or_insert(p);
+                    assert!((q.0 - p.0).abs() < 1e-4 && (q.1 - p.1).abs() < 1e-4, "one way and band, one point");
+                }
+            }
+        }
+        // North is -y, east +x: a sound due east and close (between 5 and 15 m) is 10 m east.
+        let p = heard_point((0.0, 0.0), (12.0, 0.3), 5.0, 15.0, 30.0);
+        assert!((p.0 - 10.0).abs() < 1e-4 && p.1.abs() < 1e-4, "{p:?}");
     }
 
     /// The shipped starting values (`laws()`'s `fov_*`) by day.
