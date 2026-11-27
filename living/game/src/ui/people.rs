@@ -329,6 +329,9 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                             });
                         });
                     }
+                    // A courting offer between us (`kin.rs`): theirs with the rules' act that takes
+                    // it up, mine without.
+                    super::kin::spawn_card(body, f, id);
                     // What I can give them, from my pack and the rules (opened by Give ›).
                     body.spawn((GiveList(id), Node { flex_direction: FlexDirection::Column, border: wood::b(2.0), border_radius: wood::r(8.0), overflow: Overflow::clip(), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundColor(wood::surface_hi()), BorderColor::all(wood::edge()), Pickable::IGNORE)).with_children(|g| {
                         for i in 0..GIVE_ROWS {
@@ -351,6 +354,8 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                     });
                     body.spawn((LogTab(0), Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, flex_shrink: 1.0, min_height: Val::Px(0.0), ..default() }, Pickable::IGNORE)).with_children(|t| thread(t, f, w, HEARD_ROWS, "Nothing heard yet. Lines you hear and say gather here."));
                     body.spawn((LogTab(1), Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(2.0), flex_grow: 1.0, flex_shrink: 1.0, min_height: Val::Px(0.0), overflow: Overflow::scroll_y(), display: Display::None, ..default() }, ScrollPosition::default(), Block)).with_children(|t| {
+                        // My family and community first (`kin.rs`), then everyone met.
+                        super::kin::spawn_section(t, f);
                         t.spawn((Empty(Win::Settings), Text::new("No one met yet."), f.body(13.0, 600), TextColor(wood::muted()), Pickable::IGNORE));
                         for i in 0..PEOPLE_ROWS {
                             t.spawn((PersonRow(i), Hot, Tag(format!("log:person:{i}")), kit::Paint::Row, Lit(false), Node { flex_direction: FlexDirection::Column, padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)), border_radius: wood::r(6.0), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundGradient::default())).with_children(|r| {
@@ -373,7 +378,7 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
 }
 
 /// The people listed under Log › People, most recent first.
-fn people_list(t: &Talks, me: Option<u32>, looks: &Looks) -> Vec<u32> {
+pub(super) fn people_list(t: &Talks, me: Option<u32>, looks: &Looks) -> Vec<u32> {
     let mut v: Vec<(u64, u32)> = t.met.iter().filter(|(id, _)| Some(**id) != me && looks.of(**id).is_some()).map(|(id, m)| (t.with(*id).last().map_or(m.first_ms, |l| l.at_ms.max(m.first_ms)), *id)).collect();
     v.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
     v.into_iter().map(|(_, id)| id).collect()
@@ -482,7 +487,7 @@ pub fn gifts(choices: &[crate::verbs::Choice]) -> Vec<&crate::verbs::Choice> {
 /// Fill the people windows from the store, the projection and the words being typed.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn update(
-    (talks, looks, ws, input, talk, typing, page, verbs, time, pointer, ui): (Res<Talks>, Res<Looks>, Res<Windows>, Res<crate::controls::Input>, Res<crate::talk::Talk>, Res<super::say::Typing>, Res<LogPage>, Res<crate::verbs::Verbs>, Res<Time>, Res<crate::pointer::Pointer>, Res<UiPointer>),
+    (talks, looks, ws, input, talk, typing, page, verbs, time, pointer, ui, kin): (Res<Talks>, Res<Looks>, Res<Windows>, Res<crate::controls::Input>, Res<crate::talk::Talk>, Res<super::say::Typing>, Res<LogPage>, Res<crate::verbs::Verbs>, Res<Time>, Res<crate::pointer::Pointer>, Res<UiPointer>, Res<super::kin::Kin>),
     net: NonSend<Net>,
     scene: NonSend<crate::world::Scene>,
     mut texts: ParamSet<(
@@ -507,7 +512,9 @@ pub fn update(
 ) {
     let me = net.my_id;
     let now = scene.now_ms;
-    let lower = |id: u32| if Some(id) == me { "you".to_string() } else { looks.of(id).unwrap_or("someone").to_string() };
+    // Someone I have no label for this session: as my family or a suitor's card names them
+    // ("your parent", "Tobin Marrow"), else "someone".
+    let lower = |id: u32| if Some(id) == me { "you".to_string() } else { looks.of(id).map(String::from).or_else(|| kin.title_of(id).map(|t| super::kin::lowered(&t))).unwrap_or_else(|| "someone".into()) };
     let perceived = |id: u32| net.conn.as_ref().is_some_and(|c| crate::net::find_character(c, id).is_some());
     // Each open window's lines (the log: everything heard and said).
     // The same words said again by the same speaker to the same one, in a row, are one bubble
@@ -547,7 +554,7 @@ pub fn update(
     }
     for (e, mut n) in &mut empties {
         show(&mut n, match e.0 {
-            Win::Settings => people_list(&talks, me, &looks).is_empty(),
+            Win::Settings => people_list(&talks, me, &looks).is_empty() && !kin.any(),
             w => shown.get(&w).is_none_or(|v| v.is_empty()),
         });
     }
@@ -603,18 +610,20 @@ pub fn update(
     for (w, mut t) in &mut texts.p1() {
         let m = talks.met.get(&w.0);
         // Kept short: when we met, and whether they are in sight.
-        let mut s = m.map_or_else(String::new, |m| format!("First seen {}", ago(now, m.first_ms)));
+        let mut parts: Vec<String> = m.map(|m| format!("First seen {}", ago(now, m.first_ms))).into_iter().collect();
         if m.and_then(|m| m.introduced_ms).is_some() {
-            s.push_str(" · told you their name");
+            parts.push("told you their name".into());
         }
         if !perceived(w.0) {
-            s.push_str(" · not in sight");
+            parts.push(if parts.is_empty() { "Not in sight".into() } else { "not in sight".into() });
         }
-        set_text(&mut t, &s);
+        set_text(&mut t, &parts.join(" · "));
     }
     for (w, mut t) in &mut texts.p7().p0() {
         if let Win::Person(id) = w.0 {
-            set_text(&mut t, &wood::fit(&looks.cap(id), 34));
+            // Someone I have not seen this session: as my family or a suitor's card names them.
+            let title = if looks.of(id).is_some() { looks.cap(id) } else { kin.title_of(id).unwrap_or_else(|| looks.cap(id)) };
+            set_text(&mut t, &wood::fit(&title, 34));
         }
     }
     // The box: whom it speaks to, the words, a caret.

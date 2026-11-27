@@ -236,7 +236,8 @@ fn the_three_looks_by_name_are_declared_not_coded() {
     let mut declared: Vec<&str> = s.ui_specs().filter(|u| u.declared).map(|u| u.name.as_str()).collect();
     declared.sort();
     // and the recipe grids of the ways of making (recipes-1): craft, cook, smoke, make.
-    assert_eq!(declared, ["accept", "appraise", "block", "bowshot", "cook", "craft", "decline", "dodge", "face", "feed", "firebolt", "give", "heal", "jump", "make", "nod", "offer", "shoot", "smoke", "strike", "teach", "throw", "wave"], "the shipped script declares these");
+    // and conceive's answer on a courting card (parity-kin-client).
+    assert_eq!(declared, ["accept", "appraise", "block", "bowshot", "conceive", "cook", "craft", "decline", "dodge", "face", "feed", "firebolt", "give", "heal", "jump", "make", "nod", "offer", "shoot", "smoke", "strike", "teach", "throw", "wave"], "the shipped script declares these");
     // Face is in no list of a player's (play-test 5): a player faces where it looks, as the tip says.
     let face = s.ui("face").unwrap();
     assert!(face.on.is_empty() && face.tip.is_some() && !s.ui_default("face").unwrap().on.is_empty(), "{face:?}");
@@ -244,6 +245,30 @@ fn the_three_looks_by_name_are_declared_not_coded() {
         let u = s.ui(skill).unwrap();
         assert!(u.look.icon == Some("trade") && u.is_on(On::Offer) && u.is_on(On::Person), "{skill}: {u:?}");
     }
+}
+
+#[test]
+fn a_courting_offer_is_answered_by_the_skills_on_bond() {
+    let s = with("");
+    // Shipped: conceive, which takes the offer up (`op: "bond"`); it keeps its default places.
+    let on: Vec<&str> = s.ui_specs().filter(|u| u.is_on(On::Bond)).map(|u| u.name.as_str()).collect();
+    assert_eq!(on, ["conceive"]);
+    let (u, d) = (s.ui("conceive").unwrap(), s.ui_default("conceive").unwrap());
+    assert_eq!(UiSpec { on: d.on.clone(), declared: false, ..u.clone() }, d, "only `on` is declared");
+    assert_eq!(u.on, [d.on.clone(), vec![On::Bond]].concat(), "its default places, then the card");
+    // Its act toward the offer's maker, as a mind writes it.
+    assert_eq!(act_node("conceive", &ActTarget::Creature(4), &Picked::default()), json!({"do": "conceive", "target": {"id": 4}}));
+    // A world that also answers one with decline (the Spark's bond-decline) gets a second button
+    // by declaration alone.
+    let d = with("fn decline_ui() { #{ on: [\"person\", \"thing\", \"offer\", \"bond\"], look: #{ icon: \"trade\" } } }");
+    assert!(d.ui_errors().is_empty(), "{:?}", d.ui_errors());
+    let mut on: Vec<&str> = d.ui_specs().filter(|u| u.is_on(On::Bond)).map(|u| u.name.as_str()).collect();
+    on.sort();
+    assert_eq!(on, ["conceive", "decline"]);
+    // `bond` is toward the maker: a skill that takes no target is refused it.
+    let e = with("fn eat_ui() { #{ on: [\"self\", \"bond\"] } }");
+    assert!(e.ui_errors().iter().any(|m| m.contains("eat_ui: `on`: `bond` needs a spec with `target: true`")), "{:?}", e.ui_errors());
+    assert!(!e.ui("eat").unwrap().is_on(On::Bond));
 }
 
 #[test]
@@ -425,6 +450,7 @@ fn targets(on: On, spec: &crate::catalog::SkillSpec) -> Vec<ActTarget> {
         On::Item if spec.needs_target => vec![ActTarget::Creature(7)],
         On::Item => vec![ActTarget::Me],
         On::Offer => vec![ActTarget::Offer { from: 7, offer: 1 }, ActTarget::Record { from: 7, record: 2 }],
+        On::Bond => vec![ActTarget::Creature(7)],
         On::Bar | On::Box => vec![],
     }
 }

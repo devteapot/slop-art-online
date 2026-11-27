@@ -433,8 +433,8 @@ pub fn pointer(mut ws: ResMut<Windows>, ui: Res<UiPointer>, heads: Query<&WinHea
 
 /// Where each window sits, its height limit and its order; the anchors' outlines while dragging.
 #[allow(clippy::type_complexity)]
-pub fn place(mut ws: ResMut<Windows>, cams: Query<&Camera, With<Camera3d>>, ui_scale: Res<UiScale>, mut frames: Query<(&WinFrame, &mut Node, &mut GlobalZIndex), Without<AnchorMark>>, mut marks: Query<(&AnchorMark, &mut Node), Without<WinFrame>>) {
-    let logical = cams.iter().find_map(|c| c.logical_viewport_size()).unwrap_or(Vec2::new(1600.0, 900.0));
+pub fn place(mut ws: ResMut<Windows>, cams: Query<(&Camera, Has<bevy::ui::IsDefaultUiCamera>), Or<(With<bevy::ui::IsDefaultUiCamera>, With<Camera3d>)>>, ui_scale: Res<UiScale>, mut frames: Query<(&WinFrame, &mut Node, &mut GlobalZIndex), Without<AnchorMark>>, mut marks: Query<(&AnchorMark, &mut Node), Without<WinFrame>>) {
+    let logical = crate::graphics::ui_camera(cams.iter()).and_then(|c| c.logical_viewport_size()).unwrap_or(Vec2::new(1600.0, 900.0));
     let k = ui_scale.0.max(0.01);
     let screen = logical / k;
     ws.screen = screen;

@@ -82,7 +82,7 @@ impl UiPointer {
 pub fn hit(
     pointer: Res<crate::pointer::Pointer>,
     mouse: Res<ButtonInput<MouseButton>>,
-    cams: Query<&Camera, With<Camera3d>>,
+    cams: Query<(&Camera, Has<bevy::ui::IsDefaultUiCamera>), Or<(With<bevy::ui::IsDefaultUiCamera>, With<Camera3d>)>>,
     ui_scale: Res<UiScale>,
     nodes: Query<(Entity, &ComputedNode, &UiGlobalTransform, &InheritedVisibility, &ComputedStackIndex, Option<&CalculatedClip>, Has<Hot>), Or<(With<Hot>, With<Block>)>>,
     tagged: Query<(&Tag, &ComputedNode, &UiGlobalTransform, &InheritedVisibility, Option<&CalculatedClip>)>,
@@ -93,8 +93,9 @@ pub fn hit(
     ui.dropped = None;
     ui.pressed_elsewhere = false;
     ui.pressed_world = false;
-    ui.scale = cams.iter().find_map(|c| c.target_scaling_factor()).unwrap_or(1.0);
-    let size = cams.iter().find_map(|c| c.physical_viewport_size()).map_or(Vec2::new(1600.0, 900.0), |s| s.as_vec2());
+    let ui_cam = crate::graphics::ui_camera(cams.iter());
+    ui.scale = ui_cam.and_then(|c| c.target_scaling_factor()).unwrap_or(1.0);
+    let size = ui_cam.and_then(|c| c.physical_viewport_size()).map_or(Vec2::new(1600.0, 900.0), |s| s.as_vec2());
     ui.tags.clear();
     // Only scripts read tags (`click:@NAME`, `dump:`).
     let scripted = crate::live::scripted();

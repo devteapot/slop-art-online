@@ -406,11 +406,17 @@ pub struct Prefs {
     /// (`style::CharRim`: off, subtle, strong), once chosen in Settings; none follows the default.
     pub light: Option<String>,
     pub char_rim: Option<String>,
+    /// Graphics quality tier (`graphics::Quality`: low, medium, high), once chosen in Settings;
+    /// none follows the default (high).
+    pub quality: Option<String>,
+    /// 3D render scale (`graphics::RenderScale`: 67, 75, 85, 100, auto), once chosen in Settings;
+    /// none follows the default (100%).
+    pub render_scale: Option<String>,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
-        Self { camera: crate::camera::Mode::default(), camera_tuning: Default::default(), camera_rotate: true, camera_rotate_speed: 1.0, camera_rotate_invert: false, facing: None, cursor_facing: crate::twist::LookWalk::cursor(), control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, throng: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None, combat_timing: crate::combat::CombatTiming::default(), windup_glint: false, light: None, char_rim: None }
+        Self { camera: crate::camera::Mode::default(), camera_tuning: Default::default(), camera_rotate: true, camera_rotate_speed: 1.0, camera_rotate_invert: false, facing: None, cursor_facing: crate::twist::LookWalk::cursor(), control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, throng: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None, combat_timing: crate::combat::CombatTiming::default(), windup_glint: false, light: None, char_rim: None, quality: None, render_scale: None }
     }
 }
 
@@ -500,6 +506,8 @@ pub fn load() -> (Binds, Prefs) {
         windup_glint: v["windup_glint"].as_bool().unwrap_or(d.windup_glint),
         light: v["light"].as_str().map(String::from),
         char_rim: v["char_rim"].as_str().map(String::from),
+        quality: v["quality"].as_str().map(String::from),
+        render_scale: v["render_scale"].as_str().map(String::from),
     };
     let prefs = apply_env(prefs);
     info!("settings: read {} ({} preset)", p.display(), binds.preset.name());
@@ -533,6 +541,8 @@ pub fn save(binds: &Binds, prefs: &Prefs) {
         "windup_glint": prefs.windup_glint,
         "light": prefs.light,
         "char_rim": prefs.char_rim,
+        "quality": prefs.quality,
+        "render_scale": prefs.render_scale,
     });
     if let Some(dir) = p.parent() {
         let _ = std::fs::create_dir_all(dir);

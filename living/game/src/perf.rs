@@ -455,3 +455,8 @@ pub fn log_views(
 pub fn value(name: &str) -> Option<f32> {
     std::env::var("LIVING_GAME_PERF").ok()?.split(',').find_map(|f| f.trim().strip_prefix(name)?.strip_prefix('=')?.parse().ok())
 }
+
+/// A string flag's value (`name=value`).
+pub fn string(name: &str) -> Option<String> {
+    std::env::var("LIVING_GAME_PERF").ok()?.split(',').find_map(|f| Some(f.trim().strip_prefix(name)?.strip_prefix('=')?.trim().to_string())).filter(|v| !v.is_empty())
+}

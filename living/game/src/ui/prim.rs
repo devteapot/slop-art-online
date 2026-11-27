@@ -256,8 +256,8 @@ pub fn paint(
 /// Over the bar, the hovered slot's words: its label, then why it is greyed, or its description.
 /// Elsewhere, a hovered [`Tip`]'s words.
 #[allow(clippy::type_complexity)]
-pub fn tooltip(slots: Res<Slots>, ui: Res<UiPointer>, cams: Query<&Camera, With<Camera3d>>, roots: Query<(&SlotKey, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<SlotRoot>>, tips: Query<(&Tip, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform)>, mut tip: Query<&mut Node, With<Tooltip>>, mut title: Query<&mut Text, (With<TooltipTitle>, Without<TooltipText>)>, mut text: Query<&mut Text, (With<TooltipText>, Without<TooltipTitle>)>) {
-    let screen = cams.iter().find_map(|c| c.logical_viewport_size()).unwrap_or(Vec2::new(1600.0, 900.0)) / ui.ui_scale.max(0.01);
+pub fn tooltip(slots: Res<Slots>, ui: Res<UiPointer>, cams: Query<(&Camera, Has<bevy::ui::IsDefaultUiCamera>), Or<(With<bevy::ui::IsDefaultUiCamera>, With<Camera3d>)>>, roots: Query<(&SlotKey, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<SlotRoot>>, tips: Query<(&Tip, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform)>, mut tip: Query<&mut Node, With<Tooltip>>, mut title: Query<&mut Text, (With<TooltipTitle>, Without<TooltipText>)>, mut text: Query<&mut Text, (With<TooltipText>, Without<TooltipTitle>)>) {
+    let screen = crate::graphics::ui_camera(cams.iter()).and_then(|c| c.logical_viewport_size()).unwrap_or(Vec2::new(1600.0, 900.0)) / ui.ui_scale.max(0.01);
     let hovered = ui.pos.and_then(|p| roots.iter().find(|(_, n, t)| n.contains_point(**t, p * ui.scale)).map(|(k, n, t)| (k.clone(), (t.affine().translation - n.size() / 2.0) * n.inverse_scale_factor())));
     let v = hovered.as_ref().and_then(|(k, _)| slots.0.get(k)).filter(|v| !v.label.is_empty());
     // A hovered tip node: its words, and its rectangle (top left and size, UI px).

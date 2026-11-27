@@ -24,6 +24,7 @@ mod daylight;
 mod demo;
 mod envs;
 mod gait;
+mod graphics;
 mod handmade;
 mod ground;
 mod ik;
@@ -143,6 +144,7 @@ fn main() {
         .add_plugins(style::StylePlugin)
         .add_plugins(contact_shadow::ContactShadowPlugin)
         .add_plugins(post::PostPlugin)
+        .add_plugins(graphics::GraphicsPlugin)
         .add_plugins(characters::CharactersPlugin)
         .add_plugins(gait::GaitPlugin)
         .add_plugins(anim::AnimPlugin)

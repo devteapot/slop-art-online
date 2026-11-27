@@ -65,6 +65,10 @@ vocab! {
         /// An incoming offer or proposal: toward its sender (`target: {"id": sender}`), naming the
         /// offer it answers (`"offer": id`).
         Offer = "offer",
+        /// An incoming courting offer (`my_bond_offers`): toward its maker (`target: {"id":
+        /// maker}`). A skill on it answers the offer; what it does is the rules' (shipped:
+        /// `conceive`, whose `done` gives `op: "bond"`, takes it up).
+        Bond = "bond",
     }
 }
 
