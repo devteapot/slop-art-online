@@ -5056,7 +5056,8 @@ def delegate_body_case(run):
         probes['old_epoch'] = [code, text[:200]]
         # The older identity holds nothing now: it is answered as any identity without a character.
         checks['old_epoch_fenced'] = code != 200 and 'you have no living character' in text
-        code, text = call(b_tok, 'human_move', [0.0, 1.0, False])
+        code, text = call(b_tok, 'human_move', [1.0, 0.0, False])
+        probes['epoch_2'] = [code, text[:200]]
         sess = run.private(f'SELECT * FROM body_session WHERE actor = {s}', 'session-2')
         checks['epoch_2_accepted'] = code == 200 and sess[0]['epoch'] == 2
         time.sleep(1.6)
