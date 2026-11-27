@@ -121,7 +121,10 @@ PRIVATE = ['attention', 'copy_state', 'lines_state', 'applied_gaze', 'cover_grou
            # remembers of others' bodies (`sex_seen`): the mind service reads it as the owner.
            'sex', 'sex_seen',
            # The near tier's copies (frame-views): a player reads them through seen_*_near.
-           'motion_near', 'fighter_near', 'doing_near']
+           'motion_near', 'fighter_near', 'doing_near',
+           # Each finished skill use for exporters (an event table), and the dead whose uses go
+           # after the grace (skill-use-drain, docs/COMBAT.md "Skill uses"): the owner's only.
+           'skill_use_event', 'dead_skill_use_due']
 # Private in the default `scoped` build; public only in a LIVING_PERCEPTION=open build (diagnostics).
 SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'place', 'audience',
           'inventory', 'know_how']
@@ -147,7 +150,7 @@ PLAYER = {'use_skill': ['strike', 0, 0.0, 0.0], 'release_skill': ['block'],
           # The player's look (fov-1): any living character may send it.
           'human_face': [1.0, 0.0], 'human_gaze': [1],
           # Heed for players: no pins and no focus (clears the choice), for any living character.
-          'human_heed': [{'pins': [], 'focus': {'none': []}}]}
+          'human_heed': [{'pins': [], 'focus': {'none': []}, 'pin_at': {'none': []}}]}
 MIND = ['mind_routines', 'mind_install', 'mind_install_way', 'mind_say', 'mind_act', 'mind_skip',
         'mind_consolidated', 'mind_update', 'mind_judged', 'mind_where', 'mind_heed']
 # Procedures (their answer goes to the caller alone), under the same controller rule: a talk turn's
@@ -681,7 +684,7 @@ class Run:
             code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, raw=True)
             okay = subscription['status'] == 'rejected' and 'private' in subscription['error'].lower() and code != 200 and 'private' in error.lower()
             row = {'table': table, 'subscription': subscription, 'http_status': code, 'http_error': error}
-            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence', 'guest', 'rhythm', 'player', 'heard', 'law_change', 'sex', 'look', 'last_look']:
+            if table in SCOPED + ['thought', 'belief', 'persona', 'mind_state', 'perceived', 'projected', 'presence', 'guest', 'rhythm', 'player', 'heard', 'law_change', 'sex', 'look', 'last_look', 'skill_use_event']:
                 as_player = self.probe('private-player-' + table, ['SELECT * FROM ' + table], player_token)
                 code, error = V.http(f"/v1/database/{self.state['db']}/sql", 'SELECT * FROM ' + table, player_token, raw=True)
                 okay = okay and as_player['status'] == 'rejected' and 'private' in as_player['error'].lower() and code != 200

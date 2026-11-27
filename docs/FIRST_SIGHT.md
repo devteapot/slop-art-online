@@ -59,7 +59,7 @@ A first sight is the existing bookkeeping, unchanged: no `familiar` row for `(ob
 
 **When it re-arms:**
 - **Never for the same pair while the row lasts.** "You see X again after a long time" (no `familiar` touch for more than a game day, salience 0.25) is recognition of someone familiar, not a first sight. It does not ask.
-- **After forgetting.** The body keeps at most 2,048 `familiar` rows (`FAMILIAR_LIMIT`; 256 before `battle-scale`, docs/BATTLE_SCALE.md). Over it, it drops the oldest by `last_ms`, but never one seen within the last minute or still in view. Someone dropped and later seen again is a first sight again, so it asks again. This happens only to a character that has seen more than 2,048 creatures and things since, which in practice means a city. The gap below bounds it there.
+- **After forgetting.** The body keeps at most the `familiar_limit` law's `familiar` rows (2,048 as shipped; 256 before `battle-scale`, docs/BATTLE_SCALE.md; a law since familiar-cap, docs/BOUNDED_RETENTION.md §3.1). Over it, it drops the oldest by `last_ms`, but never one seen within the last minute or still in view; with the `familiar_regard` law, unnamed strangers first and never someone it knows by name or has a relation with. Someone dropped and later seen again is a first sight again, so it asks again. This happens only to a character that has seen more creatures and things than the limit since, which in practice means a city or a battle. The gap below bounds it there.
 - **After the person becomes placeable:** someone who told you their name is named in later lines, so they never ask.
 - **A new identity** (a new character after a death) is a new id with no rows, so it is a first sight to everyone.
 

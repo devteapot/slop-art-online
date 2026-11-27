@@ -15,8 +15,16 @@ use spacetimedb::{Identity, ReducerContext, Table, ViewContext};
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-/// Uses of combat skills kept per character in `skill_use`.
+/// Uses of combat skills kept per living character in `skill_use`. The rules read only the
+/// newest (`open_use`, `act::dodge_too_early`), and a player's `my_skill_uses` shows them.
 pub const USES_KEPT: usize = 24;
+/// How long a dead character's `skill_use` rows stay after its death (ms): nothing in the
+/// world reads them again (its missiles go at death, `died`), but a tool that reads a fight's
+/// uses when it ends (trials' `final.json`, 20 s after a subject's death) still finds them.
+/// Every finished row went out as a `skill_use_event` already.
+pub const DEAD_USES_GRACE_MS: u64 = 120_000;
+/// Dead characters' rows drained per housekeeping call at most (64 a second).
+const DEAD_USES_PER_CALL: usize = 64;
 /// How long a perceived event stays in `combat_seen` for the two involved (ms), as before
 /// frames: a subscribed client reads each row once, by id, but a reader that polls (a scripted
 /// player, verify-player's combat scenes) reads a second or more after the event, and 1.5 s
@@ -459,14 +467,52 @@ pub fn housekeeping(ctx: &ReducerContext, now: u64) {
 /// An attempt: what was asked, before the rules weigh it.
 pub fn attempt(ctx: &ReducerContext, actor: u32, skill: &str, source: &str, target: u32, aim: (f32, f32), now: u64) -> u64 {
     let row = ctx.db.skill_use().insert(SkillUse { id: 0, actor, skill: skill.into(), source: source.into(), at_ms: now, target, aim_x: aim.0, aim_y: aim.1, accepted_ms: 0, released_ms: 0, outcome: String::new(), outcome_ms: 0 });
-    let mut ids: Vec<u64> = ctx.db.skill_use().actor().filter(actor).map(|u| u.id).collect();
-    if ids.len() > USES_KEPT {
-        ids.sort_unstable();
-        for id in &ids[..ids.len() - USES_KEPT] {
-            ctx.db.skill_use().id().delete(*id);
+    let mut rows: Vec<SkillUse> = ctx.db.skill_use().actor().filter(actor).collect();
+    if rows.len() > USES_KEPT {
+        rows.sort_unstable_by_key(|u| u.id);
+        for u in rows.drain(..rows.len() - USES_KEPT) {
+            ctx.db.skill_use().id().delete(u.id);
+            if unfinished(&u) {
+                sent(ctx, "trimmed", u, now);
+            }
         }
     }
     row.id
+}
+
+/// A row that never had its outcome event: no outcome yet, or a missile still in flight.
+fn unfinished(u: &SkillUse) -> bool {
+    u.outcome.is_empty() || u.outcome == IN_FLIGHT
+}
+
+const IN_FLIGHT: &str = "in flight";
+
+/// Send a `skill_use` row's state to exporters (`skill_use_event`).
+pub fn sent(ctx: &ReducerContext, why: &str, u: SkillUse, now: u64) {
+    ctx.db.skill_use_event().insert(SkillUseEvent { why: why.into(), sent_ms: now, skill_use: u });
+}
+
+/// A character died: its `skill_use` rows go after [`DEAD_USES_GRACE_MS`].
+pub fn uses_died(ctx: &ReducerContext, actor: u32, now: u64) {
+    if ctx.db.skill_use().actor().filter(actor).next().is_none() {
+        return;
+    }
+    ctx.db.dead_skill_use_due().actor().delete(actor);
+    ctx.db.dead_skill_use_due().insert(DeadSkillUseDue { actor, due_ms: now + DEAD_USES_GRACE_MS });
+}
+
+/// Once a second: the `skill_use` rows of the dead whose grace is over go, by index (rows that
+/// never had an outcome event are sent first, "drained"). Reads only the due rows.
+pub fn drain_dead_uses(ctx: &ReducerContext, now: u64) {
+    let _timer = common::span("housekeeping.dead_uses");
+    let due: Vec<u32> = ctx.db.dead_skill_use_due().due_ms().filter(..=now).take(DEAD_USES_PER_CALL).map(|d| d.actor).collect();
+    for actor in due {
+        for u in ctx.db.skill_use().actor().filter(actor).filter(unfinished) {
+            sent(ctx, "drained", u, now);
+        }
+        ctx.db.skill_use().actor().delete(actor);
+        ctx.db.dead_skill_use_due().actor().delete(actor);
+    }
 }
 
 fn open_use(ctx: &ReducerContext, actor: u32, skill: &str) -> Option<SkillUse> {
@@ -522,15 +568,21 @@ pub fn outcome(ctx: &ReducerContext, actor: u32, skill: &str, text: &str, now: u
     if let Some(mut u) = open_accepted(ctx, actor, skill) {
         u.outcome = if text.is_empty() { "done".into() } else { text.chars().take(200).collect() };
         u.outcome_ms = now;
-        ctx.db.skill_use().id().update(u);
+        let u = ctx.db.skill_use().id().update(u);
+        sent(ctx, "outcome", u, now);
     }
 }
 
+/// A use's outcome by its id. Empty text is a missile's launch (`launch` writes "in flight"
+/// next): no outcome event until the missile's own.
 fn outcome_of(ctx: &ReducerContext, use_id: u64, text: &str, now: u64) {
     if let Some(mut u) = ctx.db.skill_use().id().find(use_id) {
         u.outcome = text.chars().take(200).collect();
         u.outcome_ms = now;
-        ctx.db.skill_use().id().update(u);
+        let u = ctx.db.skill_use().id().update(u);
+        if !text.is_empty() {
+            sent(ctx, "outcome", u, now);
+        }
     }
 }
 
@@ -549,7 +601,7 @@ pub fn launch(ctx: &ReducerContext, owner: u32, skill: &str, from: (f32, f32), d
     if use_id != 0 {
         outcome_of(ctx, use_id, "", now);
         if let Some(mut u) = ctx.db.skill_use().id().find(use_id) {
-            u.outcome = "in flight".into();
+            u.outcome = IN_FLIGHT.into();
             ctx.db.skill_use().id().update(u);
         }
     }

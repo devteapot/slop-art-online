@@ -29,7 +29,7 @@ The six starter skills and the older force skills (`attack`, `shoot`, `throw`) s
 4. **Released.** Effects apply (a blow, a heal) or a missile leaves; the recovery starts.
 5. **Outcome.** What actually happened: hit, blocked, dodged, missed, struck a wall, hit nothing, killed, broken off, refused.
 
-`skill_use` keeps all five for the last 24 uses per character. A player's attempts and refusals are all recorded (the reducer returns `Ok` and the refusal is told back through `my_combat`, so the record survives the transaction). A graph's use is recorded from acceptance; its refusals go back to its leaf (`mind_state.last`) as before, because a graph re-tries at combat cadence and a row per refused retry would grow without bound.
+`skill_use` keeps all five for the last 24 uses per living character, and a dead one's for 120 s after its death; every finished row also goes out as a `skill_use_event` ([Skill uses](#skill-uses-kept-sent-and-drained-2026-11-26)). A player's attempts and refusals are all recorded (the reducer returns `Ok` and the refusal is told back through `my_combat`, so the record survives the transaction). A graph's use is recorded from acceptance; its refusals go back to its leaf (`mind_state.last`) as before, because a graph re-tries at combat cadence and a row per refused retry would grow without bound.
 
 ### The skills (numbers are the Rhai script's, `living/scripts/skills.rhai`)
 
@@ -63,7 +63,7 @@ Changes to existing rules that labs share: `dodge` and `block` now have cooldown
 
 | Path | Reads | Writes | Index | Recipients | Frequency | Growth |
 |---|---|---|---|---|---|---|
-| A player presses a skill (`use_skill`) | character by controller, body, readiness, steer, activity | `skill_use` (1), maybe `combat_seen` (refusal), activity, readiness | `character.controller`, PKs | the player (view) | at most the input bucket (`input_hz` 30/s, shared with movement) | bounded: 24 uses per character |
+| A player presses a skill (`use_skill`) | character by controller, body, readiness, steer, activity | `skill_use` (1), maybe `combat_seen` (refusal), activity, readiness | `character.controller`, PKs | the player (view) | at most the input bucket (`input_hz` 30/s, shared with movement) | bounded: 24 uses per living character; a dead one's drained 120 s after its death |
 | A windup starts (any controller) | readiness | readiness, `fighter`, `skill_use` | PKs | `fighter` subscribers in the window | per move | none |
 | A release | target, body | vitals, `fighter`, `skill_use`, `combat_seen` × viewers | PKs, chunk cache | viewers in sight | per move | expires in 4 s |
 | A missile in flight | due missiles, the chunk-body cache along the step, the cached map | the missile row | `missile.next_ms` | — | every tick while it flies (≤ 1 s) | deleted on impact |
@@ -443,6 +443,25 @@ About 1.8 due rows a tick are sorted in each list (106 motion and 112 activity r
 - **The p95 of the one-second figures:** 301.5 against 301.7.
 - **The runs' spread:** between runs of one arm, 10 ms/s (the control's two runs are 11 apart). The spans bound the code's own share at about 0.04 ms/s. Anything beyond that in the A/B would come from the battle going differently (which blow lands first, which fighter the cadence reaches first), not from the sort. The A/B cannot resolve it.
 - **Evidence:** `~/slop-evidence/fair-ties-cost-20261122.tar.zst` on the Spark, sha256 `a103ad367dcca3db9a243913bec782b2ecec45a73e72b81a40330f465d3b14e7`. It holds every run's `battle_viewers` output, the per-second metric samples, the module logs, the driver, the analysis and the measuring patch.
+
+## Skill uses: kept, sent and drained (2026-11-26)
+
+Branch `skill-use-drain` (docs/BOUNDED_RETENTION.md §3.2). Before it, `skill_use` kept the last 24 uses of each living character and every row of the dead, forever: about 58,000 rows after 21 minutes of the 216 battle, growing about 2,800 a minute.
+
+**SpacetimeDB documentation consulted (2026-11-26):** [event tables](https://spacetimedb.com/docs/tables/event-tables/) (rows "exist only for the duration of the transaction that created them"; "The inserts are still recorded in the commitlog"; clients get `on_insert` only; they cannot be read in views), [tables](https://spacetimedb.com/docs/tables/) (private: "Visible only to reducers and the database owner"), [indexes](https://spacetimedb.com/docs/tables/indexes/) (`delete` by a B-tree key or range; `filter(..=x)`), [table performance](https://spacetimedb.com/docs/tables/performance/) (bounded growth by cleanup schedules) and [automatic migrations](https://spacetimedb.com/docs/databases/automatic-migrations/) (a new table is a safe migration with no disconnect; appending a column is not). The docs read 2.0.0; checked in the pinned 2.14.1 crate: `spacetimedb-2.14.1/src/table.rs` (`event_table_available`, `delete` by a B-tree point returning the count, by a range likewise) and the `event` flag in `spacetimedb-bindings-macro-2.14.1`. No column was added to `skill_use`.
+
+- **Living characters: unchanged.** The rules read a living character's newest uses (`combat::open_use`, the open use of a skill; `act::dodge_too_early`, an attacker's accepted windup and a dodger's own made-way dash), and a player sees its own through `my_skill_uses`. They stay the last `USES_KEPT` (24) per character, as before; that is already a bound.
+- **Each finished row goes out** as a row of `skill_use_event`, a private event table (the owner's alone; nothing stays after the transaction; the commitlog keeps it): with `why` "outcome" whenever an outcome is written or amended (a refusal, a blow's result, a missile's strike, "broken off", a dodge found too early), and, for a row that never had one (no outcome yet, or a missile "in flight"), "trimmed" when it leaves past the 24 or "drained" when it goes after its actor's death. The last event per `skill_use.id` is that row's final state, so an exporter subscribed as the owner misses nothing the table drops. A missile's launch ("in flight") sends none; its strike does.
+- **A dead character's rows go 120 s after its death** (`DEAD_USES_GRACE_MS`). Death writes `dead_skill_use_due { actor, due_ms }` (private; only for a character with uses), and housekeeping, once a second (inside every 60th tick under `det_clock`), takes at most 64 due rows by the `due_ms` index, sends the dead's unfinished rows, and deletes the rest with one indexed `skill_use().actor().delete(actor)`. Nothing writes a dead character's uses after its death (`combat::died` removes its missiles), and nothing in the world reads them: the views read the living only, and the mind service does not subscribe to `skill_use`. `purge_dead` queues the dead of older worlds the same way.
+- **Tools.** `trials.py` reads the subject's uses into `final.json` when the run ends, 20 s after a subject's death by default, well inside the grace; a run that goes on past a death (`life.stop_on_death` false) keeps the subject's rows as read when the death was seen and adds them to `final.json`. `record.uses` (`uses.jsonl`, read by `arena_report.py`) polls each actor every sample, inside the grace too. `battle_diag.py` reads recent windows; `island_fight.py` reads `skill_use` live. A tool that wants a long world's whole history subscribes to `skill_use_event` as the owner, or reads faster than 120 s.
+
+| Path | Reads | Writes | Index | Recipients | Frequency | Growth |
+|---|---|---|---|---|---|---|
+| An outcome written | the use by id | `skill_use` (update), `skill_use_event` (1) | PK | the owner's subscription | per finished use | none (event rows are not kept; the commitlog grows by a row) |
+| A death | the actor's uses (one row) | `dead_skill_use_due` (1) | `skill_use.actor` | — | per death of a character with uses | one row per dead character, for 120 s |
+| The drain | due rows by `due_ms` (≤ 64), the actor's uses | deletes, `skill_use_event` for unfinished rows | `dead_skill_use_due.due_ms`, `skill_use.actor` | the owner's subscription | 1 Hz | — |
+
+`det_compare` against main is identical on the Cullet battle of 200 (60 s run: no grace ends in it), and `dead_skill_use_due` is not in the trace. verify-client `skill_use_events.py` proves the privacy, the events and the drain; the validation records name the runs.
 
 ## What is missing
 

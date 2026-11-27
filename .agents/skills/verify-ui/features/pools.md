@@ -1,6 +1,6 @@
 # Pools on the bar, and the walk speed law
 
-stamina-1 gave bodies pools in `my_vitals` (stamina for every bodily move, focus for fire bolt and heal; each with `*_from_ms` and a rate per second) and each bar skill a pool and a cost (`skill_card.pool`, `cost`). The bars are the world's `meters()`: health, stamina and focus (under the world's word, "Mana") shown always, energy and hunger off the screen. A slot whose pool is short of its cost greys in the rules' own words (`short_of(pool)`: "not enough mana", "out of breath"); a grey is a hint, a press still goes. Settings › Play › Walk speed reads the world's `walk_base` law and, with a play scene's admin link, sets it (`set_world_law`).
+stamina-1 gave bodies pools in `my_vitals` (stamina for every bodily move, focus for fire bolt and heal; each with `*_from_ms` and a rate per second) and each bar skill a pool and a cost (`skill_card.pool`, `cost`). The bars are the world's `meters()`: health, stamina and focus (under the world's word, "Mana") shown always, energy and hunger on no bar: the body's tooltip on the meters gives them as numbers ([body-clock.md](body-clock.md)). A slot whose pool is short of its cost greys in the rules' own words (`short_of(pool)`: "not enough mana", "out of breath"); a grey is a hint, a press still goes. Settings › Play › Walk speed reads the world's `walk_base` law and, with a play scene's admin link, sets it (`set_world_law`).
 
 ## Sub-features
 

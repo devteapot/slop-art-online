@@ -321,8 +321,13 @@ fn expire_remains(ctx: &ReducerContext, now: u64) {
             Some(st) => {
                 common::invalidate_structures_in(ctx, st.chunk);
                 // With a person's remains goes what minds remembered of their body.
-                if st.kind == "remains" && ctx.db.character().id().find(st.owner).is_some_and(|c| !c.alive && c.kind == "person") {
+                let dead = ctx.db.character().id().find(st.owner).filter(|c| !c.alive);
+                if st.kind == "remains" && dead.as_ref().is_some_and(|c| c.kind == "person") {
                     crate::sex::forget_known(ctx, st.owner);
+                }
+                // And, under `familiar_regard`, everyone's familiarity with the dead (familiar-cap).
+                if st.kind == "remains" && dead.is_some() && common::laws(ctx).familiar_regard {
+                    ctx.db.familiar().thing().delete(FAM_CREATURE | st.owner as u64);
                 }
             }
             None => missing = true,
@@ -543,6 +548,7 @@ fn housekeeping_body(ctx: &ReducerContext) -> Result<(), String> {
     spoil(ctx, now);
     expire_remains(ctx, now);
     crate::combat::housekeeping(ctx, now);
+    crate::combat::drain_dead_uses(ctx, now);
     crate::fast::pump(ctx, now);
 
     // One pass over the living: population counts for the stats row. The dead keep their rows

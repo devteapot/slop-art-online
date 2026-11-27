@@ -76,7 +76,7 @@ Since 2026-11-22 (branch `experience-incremental`; docs/HUMAN_FIGHTER_COST.md §
 
 ## Heed for players
 
-docs/ATTENTION_BUDGET.md, "Built: the player side": with `heed_on` and `heed_players` on (both off as shipped), a player's `perceived` set is its individuals and the rest of its sight is the public `seen_throng` (6 m cells, quantized counts, heading and kinds bits, no ids; row-level security `viewer = :sender`; written on change only). `heed_choice` (a player's pins and focus) is private (`PRIVATE` in drive.py); `human_heed` is in the permission matrix (`PLAYER`, empty pins and no focus); `seen_throng` is in `RLS_TABLES` and docs/TICK_RATE.md's pin list.
+docs/ATTENTION_BUDGET.md, "Built: the player side": with `heed_on` and `heed_players` on (both off as shipped), a player's `perceived` set is its individuals and the rest of its sight is the public `seen_throng` (6 m cells, quantized counts, heading and kinds bits, three cloth-colour indices with quantized counts, no ids; row-level security `viewer = :sender`; written on change only). `heed_choice` (a player's pins and focus) is private (`PRIVATE` in drive.py); `human_heed` is in the permission matrix (`PLAYER`, empty pins, no focus, no `pin_at`); `seen_throng` is in `RLS_TABLES` and docs/TICK_RATE.md's pin list.
 
 `scripts/heed_rows.py --run "$R"` (any seed; build the probe first). Players P and Q join with fresh identities beside eight held walkers, the heed laws on with `heed_ceiling` 2, cues and the feed's events on. Rust SDK probes stream P's views, copies, cues, feed, earshot and heard rows and `seen_throng`, Q's and an anonymous connection's `seen_throng`, and P asking for Q's by identity. Checks:
 - every subscription accepted;
@@ -85,6 +85,10 @@ docs/ATTENTION_BUDGET.md, "Built: the player side": with `heed_on` and `heed_pla
 - earshot reads sight: `my_earshot`'s text counts the rest "in the throng", its hearers individuals only;
 - contact: the throng member that strikes P becomes an individual;
 - `seen_throng` reaches only its own viewer (P and Q receive their own, the anonymous connection and P's peek none);
-- change only: no `seen_throng` insert, update or delete while nobody moves.
+- change only: no `seen_throng` insert, update or delete while nobody moves (on a fresh world: on a reused one, earlier drives' walkers end their 600 s hold and wander into sight);
+- colours carry no identity: each row holds only its cells, counts, bits and three cloth indices (0-9, 255 none) with counts, 255 with count 0; its counts by kind (`people`, `wolves`, `deer`, `others`) no larger than its count allows and its centre (`centre_x`, `centre_y`) within its square; its histogram (`cloth_*`) one quantized count per CLOTH word, no more wearers than its count allows;
+- `pin_at`: Q picks a walker out of its own throng by its position (an individual to Q, not P, and no `seen_characters` row of it reaching P in the 1.5 s after); an anonymous `pin_at` is refused as any `human_heed` is; Q's throng row changes in the pick's own update (within 50 ms of the picked one's `seen_characters` insert).
 
 Evidence: `heed-<who>.jsonl`, `heed_rows.json`. `human_heed`'s refusal words (the same for a throng member and an id no one has) and the kill switch are verify-player's `heed.py`.
+
+The game client subscribes `seen_throng` in its perception set while both laws are on (`net::Feed::throng`, [game-client.md](game-client.md)), draws it, and sends `human_heed`: verify-ui's [heed.md](../../verify-ui/features/heed.md) (`check.py heed-throng`, `heed-pins`, `heed-refusal`), which also compares the rows the client holds with the authority's.

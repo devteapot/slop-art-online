@@ -739,6 +739,7 @@ fn bodies(
                     motion.action = Some(a);
                     motion.speed = 0.0;
                     motion.now_ms = scene.now_ms;
+                    motion.live_ms = Some(scene.mine_ms);
                 }
             }
             continue;
@@ -1166,6 +1167,7 @@ fn bodies(
         motion.stand = if talking.contains(&id) { "talk" } else { show.idle.unwrap_or("idle") };
         motion.action = action.or(rising.map(|t| crate::combat::Action { clip: STAND_UP.0, rate: STAND_UP.1, start_ms: t, hold: None, face: None, ..Default::default() })).or(startle).or(turn_action).or(stop_action);
         motion.now_ms = scene.now_ms;
+        motion.live_ms = Some(scene.mine_ms);
         motion.reverse = reverse;
         motion.twist = twist;
         motion.neck = neck;
@@ -1313,6 +1315,8 @@ fn report(net: NonSend<Net>, live: Res<Live>, time: Res<Time>, mut next: Local<f
 /// - `skill:NAME[:AIM]`: use a skill-bar skill through `use_skill` (`combat.rs`); AIM is
 ///   `nearest`, a creature kind (`wolf`) or `DX,DY` metres from me; `release:NAME` lets go of
 ///   a held one; `aim:NAME[:AIM]` shows its indicator (until `aim:`);
+/// - `heed:ID`: ask the authority to pin character ID as it is (heed for players, `heed.rs`), past
+///   the client's own check that I perceive ID: the authority's refusal words show in the notes.
 /// - `gesture:wave|nod|appraise[:ID]`: greet, or look someone over, through `human_act` as the
 ///   G, B and V keys do (`town.rs`), at character ID, else whom the keys would pick;
 /// - verbs (`verbs.rs`): `act:SKILL[:ITEM][@AIM]` sends an act as a list pick does (AIM is
@@ -1767,6 +1771,23 @@ fn script(
         }
         "release" => {
             skills.release.push(arg.to_string());
+            true
+        }
+        "heed" => {
+            // Ask the authority to pin this id (`heed:ID`) or point (`heed:at:X,Y`) as it is,
+            // past the client's own checks (`heed::ask`, `heed::ask_at`), so a check can see the
+            // authority's refusal words.
+            if let Some(xy) = arg.strip_prefix("at:") {
+                match xy.split_once(',').and_then(|(x, y)| Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))) {
+                    Some((x, y)) => crate::heed::ask_at(Vec2::new(x, y)),
+                    None => warn!("live script: heed:at wants X,Y, got {arg:?}"),
+                }
+            } else {
+                match arg.parse::<u32>() {
+                    Ok(id) => crate::heed::ask(id),
+                    Err(_) => warn!("live script: heed wants an id or at:X,Y, got {arg:?}"),
+                }
+            }
             true
         }
         "gesture" => {

@@ -44,12 +44,57 @@ const HIT_MS: f64 = 450.0;
 /// the viewer's frame or, at the latest, a second or so after (`combat::expire`).
 const SEEN_KEEP_MS: f64 = 60_000.0;
 
+/// Which clock combat windup/hold clips (and the windup glint) follow.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum CombatTiming {
+    /// Play combat windup/hold clips on the live authority clock (`scene.mine_ms`) and scale
+    /// animal clips to their windup, so swings show during the windup and peak on release.
+    #[default]
+    Live,
+    /// Legacy delayed display clock (`scene.now_ms`) with fixed-rate animal clips (pre-fix).
+    Old,
+}
+
+impl CombatTiming {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Live => "live",
+            Self::Old => "old",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "live" | "new" | "on" | "1" => Some(Self::Live),
+            "old" | "delayed" | "off" | "0" => Some(Self::Old),
+            _ => None,
+        }
+    }
+
+    pub fn is_live(self) -> bool {
+        self == Self::Live
+    }
+
+    pub fn from_env() -> Option<Self> {
+        std::env::var("LIVING_GAME_COMBAT_TIMING").ok().and_then(|v| Self::parse(&v))
+    }
+}
+
+/// Optional env override for the windup telegraph glint (`LIVING_GAME_WINDUP_GLINT=1|0`).
+pub fn windup_glint_from_env() -> Option<bool> {
+    match std::env::var("LIVING_GAME_WINDUP_GLINT").ok()?.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "on" | "yes" => Some(true),
+        "0" | "false" | "off" | "no" => Some(false),
+        _ => None,
+    }
+}
+
 /// What a drawn character plays for a move.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Action {
     pub clip: &'static str,
     pub rate: f32,
-    /// When it started (display ms); a new start replays the clip.
+    /// When it started (display or live authority ms, according to `live`); a new start replays the clip.
     pub start_ms: f64,
     /// Hold the pose at this fraction of the clip (a raised guard, the fallen body).
     pub hold: Option<f32>,
@@ -62,12 +107,26 @@ pub struct Action {
     /// A whole-body clip that lets the gait go on stepping under it (a moving jump's take, so the
     /// gait is in stride when the take fades at landing; `anim.rs`).
     pub gait: bool,
+    /// Time this clip against the live authority clock (`Motion::live_ms`) rather than the
+    /// interpolation-delayed display clock (`Motion::now_ms`).
+    pub live: bool,
 }
 
 impl Default for Action {
     fn default() -> Self {
-        Self { clip: "", rate: 1.0, start_ms: 0.0, hold: None, face: None, from: 0.0, cut: None, gait: false }
+        Self { clip: "", rate: 1.0, start_ms: 0.0, hold: None, face: None, from: 0.0, cut: None, gait: false, live: false }
     }
+}
+
+/// A visible hostile fighter's windup that has reached `living_rules::doing::LATE_WINDUP`
+/// (`f >= 0.5`) and has not yet released or been broken off. Keyed by `(actor, act_ms)` in `vfx`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LateWindup {
+    pub act_ms: u64,
+    pub release_ms: u64,
+    pub f: f32,
+    pub aim: Vec2,
+    pub animal: bool,
 }
 
 /// One perceived event, as received.
@@ -117,8 +176,13 @@ pub struct Combat {
     pub killer: Option<u32>,
     /// The creature my targeted skills go to: under or nearest the cursor.
     pub target: Option<u32>,
+    /// The creature I last sent a skill aimed at (a creature-aimed `use_skill`), and when (display
+    /// ms): my current combat target, which heed's focus follows (`heed.rs`).
+    pub aimed: Option<(u32, f64)>,
     /// What each drawn character plays now.
     pub actions: HashMap<u32, Action>,
+    /// Visible hostile fighters currently past `LATE_WINDUP` (`f >= 0.5`), never my own character.
+    pub late_windups: HashMap<u32, LateWindup>,
     /// My pressed move awaiting the authority: (skill, pressed at display ms).
     predicted: Option<(String, f64)>,
     /// When I last pressed each skill (display ms), for the HUD until readiness arrives.
@@ -187,6 +251,8 @@ impl Cards {
 pub struct Roles {
     pub bar: living_rules::ui::Bar,
     pub hostile: Vec<String>,
+    /// Every skill whose rules shape marks it `hostile` (including non-bar skills like `attack`).
+    pub all_hostile: HashSet<String>,
     /// Each bar skill's label (`<name>_ui()`'s, else its name as words).
     pub labels: HashMap<String, String>,
 }
@@ -211,6 +277,16 @@ impl Roles {
 
     pub fn is_hostile(&self, skill: &str) -> bool {
         self.hostile.iter().any(|h| h == skill)
+    }
+
+    /// Whether a skill card is a hostile attack (bar or non-bar, e.g. `strike`, `attack`,
+    /// `bowshot`, `firebolt`). Falls back to `aim` before the world's rules have compiled.
+    pub fn is_hostile_skill(&self, card: &SkillCard) -> bool {
+        if !self.all_hostile.is_empty() {
+            self.all_hostile.contains(&card.skill)
+        } else {
+            matches!(card.aim.as_str(), "creature" | "point")
+        }
     }
 
     pub fn dodge(&self) -> Option<&str> {
@@ -238,6 +314,7 @@ fn read_roles(rules: NonSend<crate::verbs::Rules>, mut roles: ResMut<Roles>, mut
     let bar = living_rules::ui::bar_places(sc);
     let shapes = sc.shapes();
     let hostile = bar.iter().filter(|(_, _, n)| shapes.get(n).is_some_and(|s| s.hostile)).map(|(_, _, n)| n.to_string()).collect();
+    let all_hostile = shapes.iter().filter(|(_, s)| s.hostile).map(|(n, _)| n.to_string()).collect();
     let labels: HashMap<String, String> = bar.iter().map(|(_, _, n)| (n.to_string(), sc.ui(n).map_or_else(|| living_rules::ui::label_of(n), |u| u.label.clone()))).collect();
     if let Ok(mut g) = LOOK_NAMES.write() {
         *g = Some(sc.ui_specs().map(|u| (u.name.clone(), u.look.clone())).collect());
@@ -253,7 +330,7 @@ fn read_roles(rules: NonSend<crate::verbs::Rules>, mut roles: ResMut<Roles>, mut
         jump: bar.jump.as_ref().map(|n| labels.get(n).cloned().unwrap_or_else(|| n.clone())),
         dodge: bar.dodge.as_ref().map(|n| labels.get(n).cloned().unwrap_or_else(|| n.clone())),
     };
-    *roles = Roles { bar, hostile, labels };
+    *roles = Roles { bar, hostile, all_hostile, labels };
 }
 
 /// How a skill looks on this client.
@@ -403,6 +480,43 @@ fn now_ms(scene: &Scene) -> f64 {
     scene.now_ms
 }
 
+/// The clock combat windups, holds and the windup glint run on (`scene.mine_ms` when live
+/// timing is on, else the delayed `scene.now_ms`).
+pub fn combat_now_ms(scene: &Scene, timing: CombatTiming) -> f64 {
+    if timing.is_live() { scene.mine_ms } else { scene.now_ms }
+}
+
+/// Progress through a fighter's windup (`0.0..1.0`) at `now_ms`, or `None` outside it (not
+/// started, no windup, already released, or broken off before release). Matches
+/// `living_rules::doing::move_phase` and uses `living_rules::doing::LATE_WINDUP` (`0.5`).
+pub fn windup_f(act_ms: u64, release_ms: u64, until_ms: u64, now_ms: f64) -> Option<f32> {
+    if act_ms == 0 || release_ms <= act_ms || now_ms < act_ms as f64 {
+        return None;
+    }
+    if until_ms < release_ms && now_ms >= until_ms as f64 {
+        return None;
+    }
+    if now_ms >= release_ms as f64 {
+        return None;
+    }
+    let f = ((now_ms - act_ms as f64) / (release_ms - act_ms) as f64) as f32;
+    Some(f.clamp(0.0, 1.0))
+}
+
+/// Whether a visible fighter's row represents a hostile late windup (`f >= LATE_WINDUP`) that
+/// should be telegraphed (never for my own character).
+pub fn late_windup_of(id: u32, me: Option<u32>, f: &Fighter, hostile_skill: bool, animal: bool, now_ms: f64) -> Option<LateWindup> {
+    if Some(id) == me || !hostile_skill || f.act == 0 {
+        return None;
+    }
+    let frac = windup_f(f.act_ms, f.release_ms, f.until_ms, now_ms)?;
+    if frac < living_rules::doing::LATE_WINDUP {
+        return None;
+    }
+    let aim = if f.aim_x != 0.0 || f.aim_y != 0.0 { Vec2::new(f.aim_x, f.aim_y).normalize_or(Vec2::Y) } else { Vec2::Y };
+    Some(LateWindup { act_ms: f.act_ms, release_ms: f.release_ms, f: frac, aim, animal })
+}
+
 /// New perceived events, numbers and deaths.
 pub fn ingest(net: NonSend<Net>, scene: NonSend<Scene>, cards: Res<Cards>, mut c: ResMut<Combat>) {
     let now = now_ms(&scene);
@@ -515,12 +629,13 @@ pub fn input(
     ui: Res<crate::hud::UiWants>,
     cards: Res<Cards>,
     mut scripted: ResMut<Scripted>,
-    (pointer, mut talk, rules, picking): (Res<crate::pointer::Pointer>, Option<ResMut<crate::talk::Talk>>, NonSend<crate::verbs::Rules>, Res<crate::pick::Pick>),
+    (pointer, mut talk, rules, picking, throng): (Res<crate::pointer::Pointer>, Option<ResMut<crate::talk::Talk>>, NonSend<crate::verbs::Rules>, Res<crate::pick::Pick>, Option<Res<crate::throng::Throng>>),
     mut c: ResMut<Combat>,
-    (binds, roles, mut weapon, taps): (Res<crate::keys::Binds>, Res<Roles>, ResMut<crate::weapon::Weapon>, Res<crate::keys::DoubleTap>),
+    (binds, roles, mut weapon, taps, prefs): (Res<crate::keys::Binds>, Res<Roles>, ResMut<crate::weapon::Weapon>, Res<crate::keys::DoubleTap>, Res<crate::keys::Prefs>),
 ) {
     let now = now_ms(&scene);
-    if c.predicted.as_ref().is_some_and(|(_, t)| now - t > PREDICT_MS) {
+    let clip_now = combat_now_ms(&scene, prefs.combat_timing);
+    if c.predicted.as_ref().is_some_and(|(_, t)| clip_now - t > PREDICT_MS) {
         c.predicted = None;
     }
     let (Some(conn), Some(me_id), Some(me3)) = (net.conn.as_ref(), net.my_id, target.0) else { return };
@@ -555,14 +670,16 @@ pub fn input(
     }
     // Sheathed (`weapon.rs`), a tap on a person talks to them (play-test 2: the owner, tapping to
     // interact, struck the first resident who greeted him). Drawn, a tap strikes whoever is
-    // under the cursor.
+    // under the cursor. While heed for players is on, a tap on a throng figure pins it instead of
+    // striking or drawing (`heed.rs`).
     let person = |id: u32| crate::net::find_character(conn, id).is_some_and(|k| k.kind == "person");
     let tap_target = |c: &Combat| {
         let reach = roles.skill(Act::Primary).and_then(|s| cards.by_name(s)).map_or(0.0, |k| k.reach);
         c.target.or_else(|| nearest(&scene, &picking, me, aim_point(&cam, me, &input), reach + 0.4))
     };
-    let tap_talks = |c: &Combat| (!weapon.drawn).then(|| tap_target(c)).flatten().filter(|id| person(*id));
-    if !input.demo && pointer.tapped && free_mouse {
+    let tapped_throng = !input.demo && !typing && pointer.tapped && free_mouse && picking.under.is_none() && throng.as_ref().is_some_and(|t| t.on && t.under.is_some());
+    let tap_talks = |c: &Combat| (!weapon.drawn && !tapped_throng).then(|| tap_target(c)).flatten().filter(|id| person(*id));
+    if !input.demo && pointer.tapped && free_mouse && !tapped_throng {
         // Open: a tap on someone addresses them instead; closed: it opens the box to them.
         let whom = if typing { c.target.filter(|id| person(*id)) } else { tap_talks(&c) };
         if let (Some(id), Some(t)) = (whom, talk.as_mut()) {
@@ -572,7 +689,7 @@ pub fn input(
     let tapped_talk = !input.demo && !typing && pointer.tapped && talk.is_some() && tap_talks(&c).is_some();
     if !input.demo && !typing && pointer.tapped {
         let whom = tap_target(&c);
-        info!("tap: {} (at {:?}, weapon {})", if tapped_talk { "talk" } else if weapon.drawn { "strike" } else { "draw" }, whom, if weapon.drawn { "drawn" } else { "sheathed" });
+        info!("tap: {} (at {:?}, weapon {})", if tapped_talk { "talk" } else if tapped_throng { "throng" } else if weapon.drawn { "strike" } else { "draw" }, whom, if weapon.drawn { "drawn" } else { "sheathed" });
     }
     if !input.demo && !typing {
         // Held keys show their skill's indicator.
@@ -581,7 +698,7 @@ pub fn input(
         let digits = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9];
         let numbered = ui.menu && digits.iter().any(|k| keys.just_pressed(*k));
         for a in BAR_ACTS {
-            let down = binds.went_down(a, &keys, &mouse) && ok(a) && !(a == Act::Primary && tapped_talk) && !numbered;
+            let down = binds.went_down(a, &keys, &mouse) && ok(a) && !(a == Act::Primary && (tapped_talk || tapped_throng)) && !numbered;
             if let Some(s) = roles.skill(a).filter(|_| down) {
                 presses.push((s.to_string(), None, None));
             }
@@ -637,6 +754,9 @@ pub fn input(
             }
             _ => (tgt.unwrap_or(0), aim),
         };
+        if card.aim == "creature" && target_id != 0 {
+            c.aimed = Some((target_id, now));
+        }
         let args = || serde_json::json!({"skill": skill, "target": target_id, "x": point.x, "y": point.y});
         let r = conn.reducers.use_skill_then(skill.clone(), target_id, point.x, point.y, net.on_reply("skill", "use_skill", args));
         net.report("skill", r);
@@ -652,7 +772,7 @@ pub fn input(
             c.guarding = true;
             c.guard_dir = Some((point - me).normalize_or(input.look.unwrap_or(Vec2::Y).normalize_or(Vec2::Y)));
         }
-        c.predicted = Some((skill, now));
+        c.predicted = Some((skill, clip_now));
     }
     for skill in releases {
         let r = conn.reducers.release_skill_then(skill.clone(), net.on_reply("release", "release_skill", || serde_json::json!({"skill": skill})));
@@ -722,16 +842,34 @@ pub fn hostile_to_me(conn: &crate::net::PlayerConnection, id: u32, me: u32, now_
     hurt || hostile(conn, id, me)
 }
 
+/// When the wolf's `bite` clip (`living/tools/blender/wolf.py`, `BITE_SNAP`) lands its snap (s).
+const BITE_SNAP: f32 = 0.55;
+
 /// An animal's move: its own clip by how the rules aim the skill (`skill_card.aim`), never by
 /// the skill's name, so a skill the rules give animals shows without a client change. The
-/// wolf's bite (wolf.py) snaps at 0.55 s, the rules' 550 ms `attack_duration` for a wolf, so it
-/// plays at rate 1 from the move's start; its leap (0.5 s) plays faster, as a dash is short.
+/// wolf's bite (wolf.py) snaps at [`BITE_SNAP`] (0.55 s); its leap (0.5 s) plays faster, as a
+/// dash is short.
 pub fn animal_clip(card: &SkillCard) -> Option<(&'static str, f32, Option<f32>)> {
     match card.aim.as_str() {
         "creature" => Some(("bite", 1.0, None)),
         "dash" => Some(("leap", 1.67, None)),
         _ => None,
     }
+}
+
+/// An animal's move as an [`Action`]. When `scale_bite` is true (live combat timing), the wolf
+/// bite's playback rate and start offset scale to `windup_s` so the snap lands on release even
+/// if laws override `attack_duration`.
+pub fn animal_action(card: &SkillCard, windup_s: Option<f32>, scale_bite: bool) -> Option<Action> {
+    let (clip, rate, hold) = animal_clip(card)?;
+    if scale_bite && clip == "bite" {
+        if let Some(w) = windup_s.filter(|&w| w > 0.05) {
+            let rate = (BITE_SNAP / w).clamp(RATE.0, RATE.1);
+            let from = (BITE_SNAP - w * rate).max(0.0);
+            return Some(Action { clip, rate, from, hold, ..Default::default() });
+        }
+    }
+    Some(Action { clip, rate, hold, ..Default::default() })
 }
 
 /// A death seen at `t` (display ms), held on its last pose: an animal's (wolf.py) ends lying on
@@ -788,12 +926,18 @@ pub fn timing(clip: &str, windup_s: f32) -> Option<(f32, f32, f32)> {
 }
 
 /// What each drawn character plays: its death, its move (mine predicted until confirmed),
-/// else a hit reaction.
-pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, cards: Res<Cards>, mut c: ResMut<Combat>) {
+/// else a hit reaction. Also refreshes `Combat::late_windups` for visible hostile fighters.
+pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, cards: Res<Cards>, roles: Res<Roles>, prefs: Res<crate::keys::Prefs>, mut c: ResMut<Combat>) {
     let now = now_ms(&scene);
-    let Some(conn) = net.conn.as_ref() else { return };
+    let live_timing = prefs.combat_timing.is_live();
+    let combat_now = combat_now_ms(&scene, prefs.combat_timing);
+    let Some(conn) = net.conn.as_ref() else {
+        c.late_windups.clear();
+        return;
+    };
     let me = net.my_id;
     let mut out: HashMap<u32, Action> = HashMap::new();
+    let mut late: HashMap<u32, LateWindup> = HashMap::new();
     let ids: Vec<u32> = scene.shown.keys().copied().collect();
     for &id in &ids {
         if !c.animals.contains(&id) && crate::net::find_character(conn, id).is_some_and(|c| c.kind != "person") {
@@ -810,17 +954,28 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
             continue;
         }
         let f = crate::net::find_fighter(conn, id);
+        let card = f.as_ref().and_then(|f| cards.by_code(f.act));
+        let is_dash = card.is_some_and(|k| k.aim == "dash");
+        // Live combat timing runs combat windups and holds on `scene.mine_ms` so swings show
+        // during the windup and peak on release; dashes stay on the display clock so they match
+        // their body's interpolated travel.
+        let use_live = live_timing && !is_dash;
+        let act_clock = if use_live { combat_now } else { now };
         // Live until its recovery ends, or, cut short (a guard let go, a move broken off: its end
         // comes before its release), until it ended (play-test 1: a guard let go after 1 s stayed
         // drawn for its whole 8 s hold).
-        let live = f.as_ref().filter(|f| f.act != 0 && (now as u64) < if f.until_ms < f.release_ms { f.until_ms } else { f.release_ms.max(f.until_ms) } + 120);
+        let live = f.as_ref().filter(|f| f.act != 0 && (act_clock as u64) < if f.until_ms < f.release_ms { f.until_ms } else { f.release_ms.max(f.until_ms) } + 120);
         let face = live.and_then(|f| (f.aim_x != 0.0 || f.aim_y != 0.0).then(|| Vec2::new(f.aim_x, f.aim_y)));
         let animal = c.animals.contains(&id);
         if let Some(f) = live {
-            let clip = if animal { cards.by_code(f.act).and_then(animal_clip).map(|(c, r, h)| Action { clip: c, rate: r, hold: h, ..Default::default() }) } else { clip_of(cards.by_code(f.act), (f.act_ms / 7) as u32, Some(f.release_ms.saturating_sub(f.act_ms) as f32 / 1000.0)) };
+            if let Some(lw) = card.and_then(|k| late_windup_of(id, me, f, roles.is_hostile_skill(k), animal, combat_now)) {
+                late.insert(id, lw);
+            }
+            let windup_s = Some(f.release_ms.saturating_sub(f.act_ms) as f32 / 1000.0);
+            let clip = if animal { card.and_then(|k| animal_action(k, windup_s, live_timing)) } else { clip_of(card, (f.act_ms / 7) as u32, windup_s) };
             if let Some(a) = clip {
                 // A held guard stays up while the authority holds it.
-                out.insert(id, Action { start_ms: f.act_ms as f64, face, ..a });
+                out.insert(id, Action { start_ms: f.act_ms as f64, face, live: use_live, ..a });
                 if Some(id) == me && c.predicted.as_ref().is_some_and(|(s, t)| cards.code(s) == f.act && (f.act_ms as f64) >= t - 400.0) {
                     c.predicted = None;
                 }
@@ -835,7 +990,7 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
                 if let Some(a) = clip_of(cards.by_name(&skill), c.strikes, None) {
                     // Faces the cursor while it waits for the authority, if it is aimed there.
                     let face = input.look.filter(|_| cards.by_name(&skill).is_some_and(|k| aims_at_cursor(&k.aim)));
-                    out.insert(id, Action { start_ms: t, face, ..a });
+                    out.insert(id, Action { start_ms: t, face, live: live_timing, ..a });
                     continue;
                 }
             }
@@ -847,6 +1002,7 @@ pub fn actions(net: NonSend<Net>, scene: NonSend<Scene>, input: Res<Input>, card
         }
     }
     c.actions = out;
+    c.late_windups = late;
 }
 
 /// Aim and range indicators, subtle and only while a skill key is held.
@@ -1023,5 +1179,83 @@ mod feed_tests {
         c.fresh.clear();
         take_rows(&mut c, vec![row(9_999, seen::DEATH, 7, 9, 0.0, 130_000)], None, |id| id == 7, &cards, 80_000.0, false);
         assert!(c.fresh.is_empty(), "the death is not taken again");
+    }
+}
+
+#[cfg(test)]
+mod windup_tests {
+    use super::*;
+
+    fn fighter(id: u32, act: u8, act_ms: u64, release_ms: u64, until_ms: u64) -> Fighter {
+        Fighter { id, act, act_ms, release_ms, until_ms, target: 99, aim_x: 1.0, aim_y: 0.0, band: 0 }
+    }
+
+    fn card(skill: &str, aim: &str) -> SkillCard {
+        SkillCard { skill: skill.into(), code: 1, slot: 0, aim: aim.into(), reach: 2.0, radius: 0.0, arc: 0.0, windup_ms: 550, recover_ms: 300, cooldown_ms: 0, needs: String::new(), knows: String::new(), cost: 0.0, pool: String::new() }
+    }
+
+    #[test]
+    fn windup_f_matches_midpoint_release_and_cancel() {
+        // 350 ms strike: midpoint at 1175, release at 1350.
+        assert_eq!(windup_f(0, 1350, 1600, 1200.0), None);
+        assert_eq!(windup_f(1000, 1000, 1300, 1000.0), None, "instant move has no windup");
+        assert_eq!(windup_f(1000, 1350, 1600, 999.0), None, "before start");
+        let early = windup_f(1000, 1350, 1600, 1174.0).unwrap();
+        assert!(early < living_rules::doing::LATE_WINDUP, "early {early}");
+        let mid = windup_f(1000, 1350, 1600, 1175.0).unwrap();
+        assert!((mid - 0.5).abs() < 1e-6, "exact midpoint {mid}");
+        assert_eq!(windup_f(1000, 1350, 1600, 1350.0), None, "cleared at release");
+        // Broken off before release (`until_ms < release_ms`).
+        assert!(windup_f(1000, 1750, 1450, 1400.0).unwrap() >= 0.5);
+        assert_eq!(windup_f(1000, 1750, 1450, 1450.0), None, "cleared on cancel");
+    }
+
+    #[test]
+    fn late_windup_skips_own_character_and_non_hostile_skills() {
+        let f = fighter(7, 1, 1000, 1350, 1600);
+        // Never telegraphs my own character.
+        assert_eq!(late_windup_of(7, Some(7), &f, true, false, 1200.0), None);
+        // Never telegraphs non-hostile skills (block, heal).
+        assert_eq!(late_windup_of(7, Some(99), &f, false, false, 1200.0), None);
+        // Hostile fighter before midpoint: not yet.
+        assert_eq!(late_windup_of(7, Some(99), &f, true, false, 1100.0), None);
+        // Hostile fighter at or past midpoint: present until release or cancel.
+        let lw = late_windup_of(7, Some(99), &f, true, true, 1175.0).expect("late windup");
+        assert_eq!(lw.act_ms, 1000);
+        assert_eq!(lw.release_ms, 1350);
+        assert!((lw.f - 0.5).abs() < 1e-5);
+        assert!(lw.animal);
+        assert_eq!(late_windup_of(7, Some(99), &f, true, true, 1350.0), None);
+        // Cancelled before release.
+        let cancelled = fighter(7, 1, 1000, 1750, 1400);
+        assert_eq!(late_windup_of(7, Some(99), &cancelled, true, false, 1400.0), None);
+    }
+
+    #[test]
+    fn animal_bite_scales_to_windup_when_live_and_stays_fixed_when_old() {
+        let bite = card("attack", "creature");
+        // Default 550 ms wolf bite matches BITE_SNAP = 0.55 s -> rate 1.0, from 0.0.
+        let a550 = animal_action(&bite, Some(0.55), true).unwrap();
+        assert_eq!(a550.clip, "bite");
+        assert!((a550.rate - 1.0).abs() < 1e-5);
+        assert!((a550.from - 0.0).abs() < 1e-5);
+        // Faster 350 ms bite speeds up so snap lands at 0.35 s.
+        let a350 = animal_action(&bite, Some(0.35), true).unwrap();
+        assert!((a350.from + a350.rate * 0.35 - BITE_SNAP).abs() < 1e-4, "snap on release: {:?}", a350);
+        // Slower 900 ms bite clamps at RATE.0 (0.8) and adjusts `from` so snap lands at release.
+        let a900 = animal_action(&bite, Some(0.90), true).unwrap();
+        assert!((a900.rate - RATE.0).abs() < 1e-5);
+        // Old timing keeps fixed rate 1.0 regardless of windup.
+        let old = animal_action(&bite, Some(0.35), false).unwrap();
+        assert_eq!(old.rate, 1.0);
+        assert_eq!(old.from, 0.0);
+    }
+
+    #[test]
+    fn combat_timing_defaults_to_live_and_parses_old() {
+        assert_eq!(CombatTiming::default(), CombatTiming::Live);
+        assert_eq!(CombatTiming::parse("live"), Some(CombatTiming::Live));
+        assert_eq!(CombatTiming::parse("old"), Some(CombatTiming::Old));
+        assert_eq!(CombatTiming::parse("bogus"), None);
     }
 }

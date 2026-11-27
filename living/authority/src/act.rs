@@ -1415,6 +1415,25 @@ pub fn cancel(ctx: &ReducerContext, a: Activity, now: u64, why: Option<&str>) {
     cancel_as(ctx, a, now, why, living_rules::outcome::act::BROKEN_OFF);
 }
 
+/// A graph leaf's activity under way whose leaf can no longer resolve its target (it went out
+/// of sight, died, a role nobody fills now): broken off and told as a failure, as one its
+/// completion said no to is, in the same words for a player's command and a mind's plan, once
+/// per `repeat_failure_s` (`report`), and counted against its routine. `why`: what happened,
+/// `code`: which kind of failure (`living_rules::outcome::act`). The leaf has failed on this look
+/// already, so no leaf result is left for it to read a second time. A deliberate act or a
+/// player's move is not a leaf's; a committed move runs its course (`combat::committed`): the
+/// caller leaves those alone.
+pub fn lost(ctx: &ReducerContext, a: Activity, now: u64, why: &str, code: &'static str) {
+    let (id, node, revision) = (a.id, a.node, a.revision);
+    log::info!("activity {id}: {} (node {node}) broken off: {why}", a.skill);
+    routine_outcome(ctx, id, revision, node, false, why, now);
+    cancel_as(ctx, a, now, Some(why), code);
+    if let Some(mut st) = ctx.db.mind_state().id().find(id).filter(|s| s.last.as_ref().is_some_and(|l| l.node == node && l.revision == revision)) {
+        st.last = None;
+        ctx.db.mind_state().id().update(st);
+    }
+}
+
 /// Break off what `a`'s maker was doing because they moved before it was done (a player's move;
 /// a skill whose spec says `on_the_move` is never broken off this way). Told in the rules' words
 /// (`moved_off(skill)`: "the wave stopped: you moved off before it was done"), code `moved`.
@@ -1799,7 +1818,8 @@ fn dodge_too_early(ctx: &ReducerContext, vc: &Character, attacker: u32, skill: &
     let why = format!("it was over before {came} came");
     u.outcome = format!("{MADE_WAY}: {why}");
     let skill = u.skill.clone();
-    ctx.db.skill_use().id().update(u);
+    let u = ctx.db.skill_use().id().update(u);
+    crate::combat::sent(ctx, "outcome", u, now);
     tell(ctx, vc.id, false, &skill, &skill, &why, now, living_rules::outcome::act::FAILED, true);
 }
 
@@ -2653,6 +2673,7 @@ fn missed(ctx: &ReducerContext, attacker: u32, victim: u32, at_v: (f32, f32), sk
 pub fn forget_dead(ctx: &ReducerContext, id: u32) {
     ctx.db.familiar().actor().delete(id);
     ctx.db.seen_structures().actor().delete(id);
+    ctx.db.far_handle().observer().delete(id);
     crate::known::forget(ctx, id);
     ctx.db.last_look().id().delete(id);
     ctx.db.character_senses().id().delete(id);
@@ -2701,9 +2722,8 @@ pub fn retire(ctx: &ReducerContext, id: u32) {
     ctx.db.rhythm().id().delete(id);
     ctx.db.rearing().id().delete(id);
     ctx.db.relation().actor().delete(id);
-    for f in ctx.db.relation_fight().by_pair().filter(id).map(|f| f.id).collect::<Vec<_>>() {
-        ctx.db.relation_fight().id().delete(f);
-    }
+    ctx.db.relation_fight().by_pair().delete(id);
+    ctx.db.relation_fight().other().delete(id);
     ctx.db.belief().actor().delete(id);
     if ctx.db.character().id().find(id).is_some_and(|c| c.kind != "person") {
         common::invalidate_traits(ctx, id);
@@ -3115,6 +3135,9 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
         common::invalidate_remains_label(ctx, s.id);
         let last_ms = sc.remains_ms(&kind).max(0.0) as u64;
         ctx.db.rot().insert(Rot { structure: s.id, due_ms: now + last_ms });
+    } else if common::laws(ctx).familiar_regard {
+        // No remains to see: under `familiar_regard` it is forgotten by everyone now (familiar-cap).
+        ctx.db.familiar().thing().delete(FAM_CREATURE | id as u64);
     }
     if kind == "person" {
         common::chronicle(ctx, now, "death", id, killer, at, format!("{name} died ({cause})"));
@@ -3146,6 +3169,7 @@ pub fn die_unseen(ctx: &ReducerContext, id: u32, cause: &str, now: u64, killer: 
     forget_dead(ctx, id);
     retire(ctx, id);
     crate::combat::died(ctx, id, killer, at, now, unseen.is_some());
+    crate::combat::uses_died(ctx, id, now);
 }
 
 #[cfg(test)]

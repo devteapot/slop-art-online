@@ -1862,7 +1862,7 @@ class Instance:
 
     # -- state kept for `resume`
     STATE = ("database_identity", "world_epoch", "replica", "status", "subject", "roles", "t0", "cursor", "jpos", "brain_rev", "done_at", "saved_graphs", "nsample",
-             "died", "published", "cleanup_error", "snapshots", "stopped_by", "starts", "runaway_seen", "thinkers", "capped", "census_at", "outages")
+             "died", "published", "cleanup_error", "snapshots", "stopped_by", "starts", "runaway_seen", "thinkers", "capped", "census_at", "outages", "dead_uses")
 
     def save(self):
         st = {k: getattr(self, k, None) for k in self.STATE}
@@ -2029,6 +2029,12 @@ class Instance:
                 snap[name] = self.rows(q)
             except RuntimeError as e:
                 snap[name] = {"error": str(e)}
+        # A dead subject's uses as read at its death, where the world has since drained them.
+        kept = getattr(self, "dead_uses", None)
+        if kept and isinstance(snap.get("skill_use"), list):
+            have = {r["id"] for r in snap["skill_use"]}
+            snap["skill_use"] += [r for r in kept if r["id"] not in have]
+            snap["skill_use"].sort(key=lambda r: r["id"])
         (self.dir / "final.json").write_text(json.dumps(snap, indent=1))
         if self.journal.exists():
             shutil.copytree(self.journal, self.dir / "journal", dirs_exist_ok=True)
@@ -2248,6 +2254,13 @@ class Instance:
             self.reslot()
             if row["alive"] is False and self.died is None:
                 self.died = self.t()
+                # The authority drains a dead character's `skill_use` rows 120 s after its death
+                # (combat::DEAD_USES_GRACE_MS); a run that goes on past it (`stop_on_death`
+                # false) keeps them here for `final.json`.
+                try:
+                    self.dead_uses = self.rows(f"SELECT * FROM skill_use WHERE actor = {self.subject}")
+                except RuntimeError as e:
+                    self.emit("events", {"t": self.t(), "dead_uses_error": str(e)})
             mind_down = self.mind is not None and not self.mind.alive()
             if mind_down and life and (row["alive"] is not False or not self.trial.get("life", {}).get("stop_on_death", True)):
                 # A life run keeps its world: the mind is restarted (as run-mind.sh does).
