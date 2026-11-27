@@ -9,8 +9,9 @@
 // - Catmull-Rom from the 2x2 nearest texels (three gathers, weighted exactly in gamma 2) plus four
 //   bilinear taps for the outer ring (the corner taps of the 4x4 kernel dropped; their weights are
 //   tiny), after Jorge Jimenez's filmic SMAA sharp filter.
-// - CAS: the four bilinear neighbours one source texel away pull the centre apart from their mean,
-//   less where the cross already spans most of the range.
+// - CAS: the four ring taps (one to one and a half source texels out) pull the centre apart from
+//   their mean, less where they already span most of the range. Reusing them costs no taps: seven
+//   fetches in all against 4b's nine, and it measured the same as a separate one-texel cross.
 // - Anti-ringing: the result is clamped to the min and max of the 2x2 nearest texels, so an
 //   outline is never darker than its ink nor the stone beside it brighter than the stone. The
 //   sharpening therefore only steepens edges inside that range, which is why the default runs
@@ -79,9 +80,11 @@ fn fragment(in: UiVertexOutput) -> @location(0) vec4<f32> {
     let kd = w3.x * w12.y;
     let ke = w12.x * w3.y;
     let centre = q00 * (w1.x * w1.y) + q10 * (w2.x * w1.y) + q01 * (w1.x * w2.y) + q11 * (w2.x * w2.y);
-    var c = tap2(vec2<f32>(t12.x, t0.y)) * ka + tap2(vec2<f32>(t0.x, t12.y)) * kb + centre
-        + tap2(vec2<f32>(t3.x, t12.y)) * kd + tap2(vec2<f32>(t12.x, t3.y)) * ke;
-    c = c / (ka + kb + kc + kd + ke);
+    let ra = tap2(vec2<f32>(t12.x, t0.y));
+    let rb = tap2(vec2<f32>(t0.x, t12.y));
+    let rd = tap2(vec2<f32>(t3.x, t12.y));
+    let re = tap2(vec2<f32>(t12.x, t3.y));
+    var c = (ra * ka + rb * kb + centre + rd * kd + re * ke) / (ka + kb + kc + kd + ke);
 
     let variant = upscale.params.z;
     if (variant < 0.5) {
@@ -92,16 +95,12 @@ fn fragment(in: UiVertexOutput) -> @location(0) vec4<f32> {
         c = clamp(c, lo4, hi4);
     }
 
-    // Contrast-adaptive sharpening, in gamma 2.
-    let n = tap2(uv + vec2<f32>(0.0, -inv.y));
-    let s = tap2(uv + vec2<f32>(0.0, inv.y));
-    let w = tap2(uv + vec2<f32>(-inv.x, 0.0));
-    let e = tap2(uv + vec2<f32>(inv.x, 0.0));
-    let lo = min(c, min(min(n, s), min(w, e)));
-    let hi = max(c, max(max(n, s), max(w, e)));
+    // Contrast-adaptive sharpening, in gamma 2, with the ring taps as its cross.
+    let lo = min(c, min(min(ra, re), min(rb, rd)));
+    let hi = max(c, max(max(ra, re), max(rb, rd)));
     let amp = sqrt(clamp(min(lo, 1.0 - hi) / max(hi, vec3<f32>(1e-4)), vec3<f32>(0.0), vec3<f32>(1.0)));
     let k = amp * (-1.0 / mix(8.0, 5.0, clamp(upscale.params.x, 0.0, 1.0)));
-    var o = (c + (n + s + w + e) * k) / (1.0 + 4.0 * k);
+    var o = (c + (ra + rb + rd + re) * k) / (1.0 + 4.0 * k);
     if (variant < 1.5) {
         o = clamp(o, vec3<f32>(0.0), vec3<f32>(1.0));
     } else {

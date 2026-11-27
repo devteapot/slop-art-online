@@ -289,16 +289,17 @@ pub enum UpscaleFilter {
     Bilinear,
     /// Catmull-Rom, clamped: right ink and no halo, but soft (0.6-0.75x 100%'s detail).
     Clamped,
-    /// Catmull-Rom, clamped, then CAS: rings again (ink to luma 1-20, halos) though in gamma 2.
+    /// Catmull-Rom, clamped, then CAS: rings again though in gamma 2 (ink near black, halos).
     ClampedCas,
-    /// Catmull-Rom, then CAS, then clamped (the default).
+    /// Catmull-Rom, then CAS (its cross: the Catmull-Rom ring taps), then clamped (the default).
     CasClamped,
 }
 
 impl Upscale {
     /// Default CAS sharpness: full strength, safe because the clamp follows it. On live 2x
-    /// captures (look-dev 4c) Auto keeps 100%'s ink colour and has no halo, with a Laplacian of
-    /// 0.90-1.04x 100%'s on clean crops (4b's unclamped linear filter: 0.99-1.20x, ink to black).
+    /// captures (look-dev 4c) Auto keeps 100%'s ink colour (43,28,25) with no halo and a Laplacian
+    /// of 0.88-1.08x 100%'s; 4b's unclamped linear filter took the ink to (6,0,0), (39,8,0) at
+    /// night, with halos. CAS 0 under the clamp stays soft (0.79-0.94x).
     pub const SHARPNESS: f32 = 1.0;
 
     fn from_env() -> Upscale {

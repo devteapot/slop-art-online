@@ -962,7 +962,8 @@ def graphics(run, c):
     """Quality and 3D render scale (`graphics.rs`, Settings › Play): a fresh settings file starts
     at High and 100% with no composite (the 3D camera at the whole 1600x900 picture, `upscale`
     null) and Gaussian shadows, which Low and Medium keep (look-dev 4b); 75% renders
-    1200x675 and composites it through the Catmull-Rom + CAS material; 100% tears that down; the
+    1200x675 and composites it through the clamped Catmull-Rom + CAS material (look-dev 4c); 100%
+    tears that down; the
     file keeps the last choices and the next start reads them back. `LIVING_GAME_QUALITY`,
     `LIVING_GAME_RENDER_SCALE` and `LIVING_GAME_PERF` must not be set."""
     s = "graphics"
@@ -992,7 +993,7 @@ def graphics(run, c):
     c.check(s, "Medium keeps Gaussian shadows", d["03"].get("quality") == "medium" and d["03"].get("shadow_filter") == "Gaussian", str(g(d["03"])))
     up = d["04"].get("upscale") or {}
     c.check(s, "75% renders the 3D at 1200x675", d["03"].get("render_scale_px") == [1200, 675] and d["04"].get("render_scale_px") == [1200, 675], str(g(d["04"])))
-    c.check(s, "a scaled picture is composited with Catmull-Rom + CAS", up.get("method") == "catmull-rom+cas" and 0.0 <= (up.get("sharpness") if up.get("sharpness") is not None else -1) <= 1.0, str(up))
+    c.check(s, "a scaled picture is composited with Catmull-Rom + CAS, then clamped", up.get("method") == "catmull-rom+cas-clamped" and 0.0 <= (up.get("sharpness") if up.get("sharpness") is not None else -1) <= 1.0, str(up))
     c.check(s, "back to 100%: no composite, the whole picture again", d["05"].get("render_scale_px") == [W, H] and d["05"].get("upscale") is None, str(g(d["05"])))
     t = log(out)
     c.check(s, "the log names the scaled composite and its teardown", "graphics: render scale 75 (1200x675 -> 1600x900" in t and "graphics: render scale native (1600x900)" in t)
@@ -1002,7 +1003,7 @@ def graphics(run, c):
     out2, code2, _ = drive(run, s, "ready;wait:2;dump:07;quit")
     e = x(out2, "07")
     c.check(s, "the next start reads them back", e.get("quality") == "medium" and e.get("render_scale") == "75" and e.get("render_scale_px") == [1200, 675]
-            and (e.get("upscale") or {}).get("method") == "catmull-rom+cas" and e.get("shadow_filter") == "Gaussian", str(g(e)))
+            and (e.get("upscale") or {}).get("method") == "catmull-rom+cas-clamped" and e.get("shadow_filter") == "Gaussian", str(g(e)))
 
 
 @scenario("light")
