@@ -3151,7 +3151,7 @@ def combat_switches_ui(run, c):
         t = log(os.path.dirname(p))
         if "playing character" not in t:
             continue
-        reads = re.findall(r"perception: on the \w+ set after \d+ ms \(tables: motion \w+ characters \w+ fighters (\w+) combat_feed (\w+);", t)
+        reads = re.findall(r"perception: on the \w+ set after \d+ ms \(tables: motion \w+ characters \w+ fighters (\w+) combat_feed (\w+)\b", t)
         on.append((os.path.basename(os.path.dirname(p)), reads))
     bad = [(n, r) for n, r in on if not r or any(x != ("true", "true") for x in r)]
     c.check(s, f"every client of the scenarios read the fighter table and the combat feed ({len(on)} clients)", on and not bad, json.dumps(bad or [n for n, _ in on]))
@@ -4495,8 +4495,11 @@ def committed(run, c):
     dist = lambda a, b: ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 if a and b else None
     still = [dist(pos("a0", w), pos(k, w)) for k in ("a1", "a2") for w in ("body", "drawn")]
     c.check(s, "W pressed in the windup: neither the authority's body nor the drawn one moves", all(x is not None and x < 0.1 for x in still), f"windup {wb:.2f} s; moved {still}")
-    after = dist(pos("a0", "body"), pos("a4", "body"))
-    c.check(s, "the walk follows once the windup ends (held, then resumed)", after is not None and after > 0.5, f"{after}")
+    # The authority row's x, y is the start of its motion segment, so a walk that starts as one long
+    # segment reads 0 m on it while W is still held: judge the drawn body at a4 and the authority's
+    # row at b0 (after W is let go, the stop segment starts where the walk ended).
+    after = [dist(pos("a0", "drawn"), pos("a4", "drawn")), dist(pos("a0", "body"), pos("b0", "body"))]
+    c.check(s, "the walk follows once the windup ends (held, then resumed)", all(x is not None and x > 0.5 for x in after), f"drawn at a4, authority at b0: {after}")
     sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
     me = sc.get("me")
     bolts = [r for r in (sql(run, f"SELECT id, kind, skill, why FROM act_outcome WHERE observer = {me}") if me else []) if r.get("skill") == "firebolt"]
