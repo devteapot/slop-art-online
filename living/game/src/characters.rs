@@ -1804,6 +1804,20 @@ pub fn rig_springs(
 }
 
 impl Springs {
+    /// Start again as a new character's chains do (`anim::afresh`: a body shown again after it
+    /// left sight): placed at rest when next simulated, never from the rotations they last kept
+    /// (a seat's drape, a run's swing). Returns each joint's rest transform, to draw it with
+    /// until then.
+    pub fn restart(&mut self) -> Vec<(Entity, Transform)> {
+        self.fresh = true;
+        self.held = false;
+        self.ease = None;
+        self.wake = None;
+        self.drawn = self.joints.iter().map(|j| j.r0).collect();
+        self.moved = self.joints.iter().map(|j| j.t).collect();
+        self.joints.iter().map(|j| (j.e, Transform { translation: j.t, rotation: j.r0, scale: j.s0 })).collect()
+    }
+
     /// Simulate `steps` fixed steps against the current pose (read-only transforms). A fresh
     /// character is first placed where its joints were drawn (the rotations they kept while its
     /// chains rested; at rest the first time) and settled for `settle` steps against this pose,

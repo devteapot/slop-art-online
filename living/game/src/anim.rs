@@ -428,6 +428,11 @@ impl Anim {
         self.showing
     }
 
+    /// The standing loops blended now and their weights (the UI dump's `bodies`).
+    pub fn stands(&self) -> &[(&'static str, f32)] {
+        &self.stands
+    }
+
     /// The animation this body plays for the logical `clip` (its variant's, [`Plays`]).
     pub fn played(&self, clip: &'static str) -> &'static str {
         resolve(&self.plays, clip)
@@ -682,6 +687,34 @@ fn build(
             ik: 0.0,
         });
     }
+}
+
+/// A body shown again from one kept hidden after it left sight (`live.rs`, `Kept`) starts as a
+/// new body does: nothing of what it played, where its feet were held or how its cloth hung
+/// carries over. Its clips stop and its [`Anim`] goes, so [`build`] gives it a new one this
+/// frame from what it does now (its standing loop at full weight, no one-shot under way: a seat,
+/// a death or a blow it left sight in is not blended out on screen); its feet's IK holds are let
+/// go (`ik::Legs`) and its spring chains start again from rest (`characters::Springs`).
+pub fn afresh(mut e: EntityWorldMut) {
+    if let Some(player) = e.get::<Anim>().map(|a| a.player) {
+        e.remove::<Anim>();
+        e.world_scope(|w| {
+            if let Some(mut p) = w.get_mut::<AnimationPlayer>(player) {
+                p.stop_all();
+            }
+        });
+    }
+    if let Some(mut legs) = e.get_mut::<crate::ik::Legs>() {
+        legs.let_go();
+    }
+    let rest = e.get_mut::<crate::characters::Springs>().map(|mut sp| sp.restart()).unwrap_or_default();
+    e.world_scope(|w| {
+        for (j, tf) in rest {
+            if let Some(mut t) = w.get_mut::<Transform>(j) {
+                *t = tf;
+            }
+        }
+    });
 }
 
 /// A clip name as `&'static str` (names from the environment or files; each is kept once).

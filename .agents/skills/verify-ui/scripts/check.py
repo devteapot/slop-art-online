@@ -6378,6 +6378,203 @@ def windup(run, c):
             f"live={live_onsets} old={old_onsets}")
 
 
+def body_of(d, cid):
+    """A drawn body's entry in a dump's `bodies` (None when not drawn)."""
+    return next((b for b in ((d or {}).get("bodies") or {}).get("drawn") or [] if b["id"] == cid), None)
+
+
+def kept_of(d, cid):
+    return next((b for b in ((d or {}).get("bodies") or {}).get("kept") or [] if b["id"] == cid), None)
+
+
+def stale_stands(b):
+    """Standing loops blended in a body's `Anim` other than the one its `Motion` asks for now."""
+    return [(clip, round(w, 3)) for clip, w in (b or {}).get("stands") or [] if clip != b.get("stand") and w > 0.02]
+
+
+def body_pose(b):
+    """What a drawn body shows, to compare a kept body shown again with a body built anew."""
+    if not b:
+        return None
+    return {"stand": b.get("stand"), "action": b.get("action"), "seat": b.get("seat"), "stale": stale_stands(b)}
+
+
+BACK_DUMPS = 24
+
+
+def rests_seated(cid):
+    """town.rs: a resident resting outdoors in dry weather sits on the ground unless
+    `world::hash(id, 0x5e47)` (`living_rules::cover::placement_sample`) is under 0.3."""
+    m = 0xFFFFFFFF
+    h = ((cid * 0x9E3779B1) & m) ^ ((0x5e47 * 0x85EBCA77) & m)
+    h ^= h >> 15
+    h = (h * 0x2C1B3C6D) & m
+    h ^= h >> 12
+    return (h & 0xFFFF) / 65535.0 >= 0.3
+
+
+@scenario("body-return", explicit=True)
+def body_return(run, c):
+    """A body kept after its character left sight comes back with the character's state now
+    (battle-spikes, `live.rs` "Leaving and coming back into sight"). Three residents beside me in
+    the crowded street at noon (sight 11 m, `fov_on` off): A stands, C rests (sits on the ground),
+    B stands. At `away` all three are put 30 m off (`place_at`), out of sight; while away (`change`)
+    A is told to rest (it sits) and its health set to 30 (`admin_set_vitals`: a wound, the health
+    band on its plate), C is told to wait (it gets up), and B's look key is changed to another
+    resident's line (owner SQL on `look`). At `back`, about 3 s after `away` (inside `KEEP_S`, 6 s),
+    they are put back beside me. Dumps every 0.1 s from `back`: each body as drawn (`bodies`: its
+    entity, standing loop, one-shot, its `Anim`'s standing loops and its seat) and each plate's
+    health. Two arms: kept bodies (the default) and `LIVING_GAME_PERF=nokeepbodies`, every body
+    built anew. Both must show the same: A seated and wounded, C standing with no seat or seated
+    loop left in its clips, B in its new look on a new body; in the default arm A and C on the
+    bodies they left on, in the control arm on new ones. Admin calls and SQL are scene setup."""
+    s = "body-return"
+    # A and C sit when they rest: town.rs stands about three in ten at ease instead, by their id.
+    pool = residents(run, 12)
+    sitters = [i for i in pool if rests_seated(i)]
+    others = [i for i in pool if i not in sitters[:2]]
+    ids = sitters[:2] + others[:1]
+    c.check(s, "three adult residents to borrow, two who sit when they rest", len(ids) == 3, f"{ids} from {pool}")
+    if len(ids) < 3:
+        return
+    a_id, c_id, b_id = ids
+    looks = {r["id"]: r["line"] for r in sql(run, "SELECT id, line FROM look")}
+    vit = (sql(run, f"SELECT hp, max_hp FROM vitals WHERE id = {a_id}") or [{}])[0]
+    old_line = looks.get(b_id, "")
+    new_line = next((l for i, l in sorted(looks.items()) if l and l != old_line and i not in ids), "")
+    c.check(s, "B has a look and another line to change it to", old_line and new_line, f"#{b_id} {old_line!r} -> {new_line!r}")
+    if not (old_line and new_line):
+        return
+    rest = json.dumps(json.dumps({"do": "rest"}))
+    wait = json.dumps(json.dumps({"wait": 600}))
+    syncs = ["start=sql|SELECT id, x, y FROM body WHERE id = {me}",
+             'setup=set_world_law|"fov_on"|"false";place_at|{me}|420.5|255.5;set_weather|false|900',
+             "noon=sql|UPDATE world SET epoch_ms = {epoch_at:12} WHERE id = 0",
+             f"sit=set_behavior|{c_id}|{rest}",
+             f"away=place_at|{a_id}|(mx+30)|(my);place_at|{c_id}|(mx-30)|(my);place_at|{b_id}|(mx)|(my+30)",
+             f"change=set_behavior|{a_id}|{rest};admin_set_vitals|{a_id}|30;set_behavior|{c_id}|{wait};sql|UPDATE look SET line = '{new_line}' WHERE id = {b_id}",
+             "held=sql|SELECT id, since_ms, until_ms FROM doing WHERE " + " OR ".join(f"id = {i}" for i in ids),
+             f"back=place_at|{a_id}|(mx+2.2)|(my);place_at|{c_id}|(mx-2.2)|(my);place_at|{b_id}|(mx)|(my+2.2)"]
+    back = "".join(f"wait:0.1;dump:b{i:02d};" + ("shot:02_back;" if i == 6 else "") for i in range(BACK_DUMPS))
+    plan = ("ready;sync:start;sync:noon;sync:setup;wait:2;sync:scene;look:180;cursor:0.5,0.55;wait:2;sync:sit;wait:5;dump:before;shot:00_before;"
+            "sync:away;wait:0.6;dump:away;sync:change;wait:1.2;dump:hidden;sync:back;" + back + "sync:held;wait:1;dump:late;shot:03_late;quit")
+    free = [f"{a_id}:2.2:0", f"{c_id}:-2.2:0", f"{b_id}:0:2.2"]
+    arms = {}
+    # Where I stood before the first arm (its `start` snapshot), to put me back: later scenarios
+    # (battle-views) find their residents round where a newcomer arrives.
+    start = None
+    try:
+        with resident_fixture(run, ids):
+            for arm, env in (("kept", {}), ("anew", {"LIVING_GAME_PERF": "nokeepbodies"})):
+                # Each arm starts from the same state: C standing, A unhurt, B in its old look, and
+                # all three out of my sight (420.5, 255.5), so B's look is read again as it comes
+                # into sight (a projection is made as someone comes into sight).
+                call_admin(run, "admin_set_vitals", [a_id, vit.get("max_hp") or vit.get("hp") or 100])
+                sql(run, f"UPDATE look SET line = '{old_line}' WHERE id = {b_id}", check=True)
+                for i, (dx, dy) in zip(ids, ((30, 0), (-30, 0), (0, 30))):
+                    call_admin(run, "place_at", [i, 420.5 + dx, 255.5 + dy])
+                    call_admin(run, "set_behavior", [i, json.dumps({"wait": 600})])
+                time.sleep(1.5)
+                name = f"{s}-{arm}"
+                # C's every frame (the feet log): what its clips play and where its hips are, from
+                # the frame it is first drawn again.
+                ev = os.path.join(ROOT, ".local/living/verify", run, "ui", name)
+                os.makedirs(ev, exist_ok=True)
+                feet = os.path.join(ev, "feet.jsonl")
+                env = dict(env, LIVING_GAME_FEET=feet, LIVING_GAME_FEET_ID=str(c_id))
+                out, code, text = drive(run, name, plan, free=free, syncs=syncs, env=env)
+                c.check(s, f"{arm}: client ran and joined", code == 0, text[-300:])
+                L = log(out)
+                after_back = partition_sync(L, "back")[2]
+                d0, da, dh, dl = (dump(out, n) or {} for n in ("before", "away", "hidden", "late"))
+                backs = [dump(out, f"b{i:02d}") or {} for i in range(BACK_DUMPS)]
+                arm_rec = arms[arm] = {"out": out, "ids": {"A": a_id, "C": c_id, "B": b_id}}
+                sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
+                start = start or next(iter(((sc.get("snaps") or {}).get("start") or [{}])[0].get("rows") or []), None)
+                before = {k: body_of(d0, i) for k, i in (("A", a_id), ("C", c_id), ("B", b_id))}
+                arm_rec["before"] = before
+                c.check(s, f"{arm}: before: A and B standing, C seated on the ground, all three drawn", all(before.values()) and before["A"]["stand"] != "sit_ground" and before["B"]["stand"] != "sit_ground" and before["C"]["stand"] == "sit_ground" and before["C"]["seat"],
+                        json.dumps(before)[:600])
+                look_b0 = next((x["look"] for x in d0.get("looks") or [] if x["id"] == b_id), None)
+                c.check(s, f"{arm}: before: B drawn in its old look", look_b0 == old_line, f"{look_b0!r} (row {old_line!r})")
+                gone = [i for i in ids if body_of(da, i) or body_of(dh, i)]
+                c.check(s, f"{arm}: away: none of the three drawn (out of sight)", not gone, f"still drawn {gone}")
+                kept = {i: kept_of(dh, i) for i in ids}
+                if arm == "kept":
+                    c.check(s, "kept: while away the three bodies are kept hidden, on the entities they were drawn on",
+                            all(kept[i] and kept[i]["entity"] == before[k]["entity"] for k, i in (("A", a_id), ("C", c_id), ("B", b_id))), f"{kept}")
+                else:
+                    c.check(s, "anew: while away no body is kept", not any(kept.values()) and not (dh.get("bodies") or {}).get("kept"), f"{(dh.get('bodies') or {}).get('kept')}")
+                held = {r["id"]: r for r in (((json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}).get("snaps") or {}).get("held") or [{}])[0].get("rows", [])}
+                c.check(s, f"{arm}: back, the authority has A resting and C not", a_id in held and c_id not in held, f"doing rows {held}")
+                # Back: each body from the first dump it is drawn in.
+                first = {}
+                for k, i in (("A", a_id), ("C", c_id), ("B", b_id)):
+                    first[k] = next((n for n, d in enumerate(backs) if body_of(d, i)), None)
+                arm_rec["first_drawn_dump"] = first
+                c.check(s, f"{arm}: back: all three drawn again within {BACK_DUMPS / 10:.1f} s", all(v is not None for v in first.values()), f"{first}")
+                if any(v is None for v in first.values()):
+                    continue
+                seq = {k: [body_of(d, i) for d in backs[first[k]:]] + [body_of(dl, i)] for k, i in (("A", a_id), ("C", c_id), ("B", b_id))}
+                arm_rec["back"] = {k: [body_pose(b) for b in v] for k, v in seq.items()}
+                again = {k: seq[k][0]["entity"] == before[k]["entity"] for k in seq}
+                arm_rec["same_entity"] = again
+                shown_again = sorted(int(x) for x in re.findall(r"bodies: #(\d+) shown again from its kept body", after_back))
+                anew_b = re.search(rf"bodies: #{b_id} drawn anew: its kept body was drawn as person (\S+) .*? it is now person (\S+) ", after_back)
+                if arm == "kept":
+                    c.check(s, "kept: A and C shown again on the bodies they left on (same entity, `shown again` lines)", again["A"] and again["C"] and {a_id, c_id} <= set(shown_again), f"same entity {again}; shown again {shown_again}")
+                    c.check(s, "kept: B, in a changed look, on a new body (`drawn anew` from its kept body's look to the new one)", not again["B"] and b_id not in shown_again and anew_b and anew_b.groups() == (old_line, new_line),
+                            f"same entity {again['B']}; log {anew_b.group(0) if anew_b else None}")
+                else:
+                    c.check(s, "anew: every body built new (no entity reused, no `shown again` line)", not any(again.values()) and not shown_again, f"same entity {again}; shown again {shown_again}")
+                # A: seated now, and wounded.
+                a_seq = [b for b in seq["A"] if b]
+                a_anim = [b for b in a_seq if b.get("stands")]
+                c.check(s, f"{arm}: A drawn seated, its standing loop sit_ground in every dump from its first, never its old standing loop in its clips",
+                        a_seq and all(b["stand"] == "sit_ground" for b in a_seq) and a_anim and not any(stale_stands(b) for b in a_anim) and seq["A"][-1]["seat"],
+                        f"stands {[b['stand'] for b in a_seq][:4]}…; stale {[stale_stands(b) for b in a_anim if stale_stands(b)][:3]}; seat at late {seq['A'][-1]['seat']}; {len(a_anim)}/{len(a_seq)} with clips")
+                plates = lambda d: {p["id"]: p.get("hp") for p in (d or {}).get("plates") or []}
+                hp_a0, hp_al = plates(d0).get(a_id), plates(dl).get(a_id)
+                arm_rec["plate_hp_A"] = [hp_a0, hp_al]
+                c.check(s, f"{arm}: A's plate shows its wound when back (health band under full; none or full before)", hp_al is not None and hp_al < 0.9 and (hp_a0 is None or hp_a0 > hp_al), f"before {hp_a0}, late {hp_al}")
+                # C: standing now, nothing of its seat left.
+                c_seq = [b for b in seq["C"] if b]
+                c_anim = [b for b in c_seq if b.get("stands")]
+                c.check(s, f"{arm}: C drawn standing, no seat and no seated loop in its clips in any dump from its first",
+                        c_seq and all(b["stand"] != "sit_ground" and not b["seat"] and b.get("action") not in ("stand_up_ground", "sit_ground_down") for b in c_seq) and c_anim and not any(stale_stands(b) or (b.get("ground_seat") or 0) > 0.01 for b in c_anim),
+                        f"stands {[b['stand'] for b in c_seq][:4]}…; actions {sorted({str(b.get('action')) for b in c_seq})}; stale {[stale_stands(b) for b in c_anim if stale_stands(b)][:3]}; seat {[b['seat'] for b in c_seq if b['seat']][:2]}; ground {max((b.get('ground_seat') or 0) for b in c_anim) if c_anim else None}")
+                # Every frame C is drawn at all after `back` (fade under 1): standing, its hips up,
+                # nothing of its seat in its clips. A kept body shown again with the clips it left
+                # sight in would sit for its first frames while it fades in.
+                t_back = script_t(L, "sync:back")
+                rows = [r for r in (feet_rows(feet, c_id) if os.path.exists(feet) else []) if t_back is not None and r["t"] >= t_back and (r.get("fade") if r.get("fade") is not None else 1.0) < 0.999]
+                hips = lambda r: r["hips_at"][1] - r["l"][3]
+                seated = [(round(r["t"] - t_back, 3), r.get("clip"), [(x, round(w, 2)) for x, w in r.get("stands") or [] if x == "sit_ground"], round(hips(r), 2), round(r["fade"], 2)) for r in rows
+                          if r.get("clip") in ("sit_ground", "sit_ground_down", "stand_up_ground") or any(x == "sit_ground" and w > 0.02 for x, w in r.get("stands") or []) or hips(r) < 0.6]
+                arm_rec["C_frames"] = {"visible": len(rows), "first": rows[0] and {k: rows[0].get(k) for k in ("t", "entity", "clip", "stand", "stands", "fade")} if rows else None, "seated": seated[:20]}
+                c.check(s, f"{arm}: C in every frame it is drawn after back (fade under 1, feet log): standing clips, hips over 0.6 m, no seated loop blended", rows and not seated,
+                        f"{len(rows)} frames; seated in {len(seated)}: {seated[:6]}")
+                look_bl = next((x for x in dl.get("looks") or [] if x["id"] == b_id), {})
+                c.check(s, f"{arm}: B drawn in its new look, composed", look_bl.get("look") == new_line and look_bl.get("composed"), f"{look_bl}")
+                errors = [l for l in L.splitlines() if " ERROR " in l or "panicked" in l]
+                c.check(s, f"{arm}: no ERROR line or panic in the client log", not errors, f"{errors[:3]}")
+    finally:
+        call_admin(run, "admin_set_vitals", [a_id, vit.get("hp") or vit.get("max_hp") or 100])
+        sql(run, f"UPDATE look SET line = '{old_line}' WHERE id = {b_id}")
+        if start:
+            call_admin(run, "place_at", [start["id"], start["x"], start["y"]])
+    k, n = arms.get("kept", {}), arms.get("anew", {})
+    if k.get("back") and n.get("back"):
+        # The same state either way: what each body shows once settled, and from its first dump.
+        late = {x: (k["back"][x][-1], n["back"][x][-1]) for x in ("A", "C", "B")}
+        c.check(s, "both arms show the same late state (standing loop, one-shot, seat, nothing stale) for A, C and B", all(a == b for a, b in late.values()), json.dumps(late))
+        first = {x: (k["back"][x][0], n["back"][x][0]) for x in ("A", "C")}
+        c.check(s, "both arms show A and C the same in their first drawn dump", all(a == b for a, b in first.values()), json.dumps(first))
+        c.check(s, "both arms show A's plate the same wound", k.get("plate_hp_A", [None, None])[1] == n.get("plate_hp_A", [None, None])[1], f"kept {k.get('plate_hp_A')}, anew {n.get('plate_hp_A')}")
+    evidence = os.path.join(ROOT, ".local/living/verify", run, "ui", "body-return.json")
+    json.dump({a: {x: v for x, v in r.items() if x != "out"} for a, r in arms.items()}, open(evidence, "w"), indent=1)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run")

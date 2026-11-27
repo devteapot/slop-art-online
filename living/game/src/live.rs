@@ -28,12 +28,15 @@
 //!   (`town.rs`); they reappear at the door when they come out.
 //! - **Leaving and coming back into sight.** A body the authority stops sending fades out where
 //!   it was and is then kept hidden for [`KEEP_S`] (at most [`KEEP_MAX`] bodies, the oldest let
-//!   go first). Someone sent again while their body is fading out or kept, in the same kind and
-//!   look, has it shown again where they now are and fades back in, instead of a new body built
-//!   from their recipe: at the edge of a crowd's sight people come and go with every perception
-//!   sweep (200 ms), and each new body spawned, converted and rigged its scene in the same
-//!   frames (the battle bench's 25–60 ms frames, docs/TOOLING.md). `LIVING_GAME_PERF=nokeepbodies`
-//!   builds a new body every time, as before, to compare.
+//!   go first). Someone sent again while their body is fading out or kept, in the same kind,
+//!   look, life stage and dress, has it shown again where they now are and fades back in, instead
+//!   of a new body built from their recipe: at the edge of a crowd's sight people come and go
+//!   with every perception sweep (200 ms), and each new body spawned, converted and rigged its
+//!   scene in the same frames (the battle bench's 25–60 ms frames, docs/TOOLING.md). It comes back
+//!   as they are now, not as it left: its frame runs at once (place, facing, standing loop,
+//!   one-shot, fade, seat), and `anim::afresh` lets go of its pose state (clips, feet's holds,
+//!   cloth), so it shows what a new body would. A body that died in sight is never kept.
+//!   `LIVING_GAME_PERF=nokeepbodies` builds a new body every time, as before, to compare.
 //! - **You** join at the `land` row's arrival point (`join`); the camera, the island's
 //!   streaming and the atmosphere follow your displayed body. The cursor meets the island's
 //!   ground for facing and click-to-move.
@@ -252,6 +255,9 @@ struct Shown {
     composed: bool,
     /// The life stage it was drawn at.
     stage: u8,
+    /// A person's folk and dress style as the projection gave them ([`dress_of`]): what a VRoid
+    /// recipe is drawn in when there is no look key.
+    dress: String,
 }
 
 /// A body that left sight and can be shown again for the same character ([`Live::kept`]): what
@@ -261,6 +267,7 @@ struct Kept {
     kind: String,
     look: String,
     stage: u8,
+    dress: String,
     person: bool,
     beast: bool,
     startles: bool,
@@ -270,24 +277,34 @@ struct Kept {
 
 impl Shown {
     /// A body coming into sight at `p` facing `h` (sim angle): (person, beast, startles), its
-    /// kind, its running weight and (look key, composed, life stage).
-    fn new(entity: Entity, p: Vec2, h: f32, (person, beast, startles): (bool, bool, bool), kind: String, run_w: f32, (look, composed, stage): (String, bool, u8)) -> Self {
-        Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, seat: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind, face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w, look, composed, stage }
+    /// kind, its running weight and (look key, dress, composed, life stage).
+    fn new(entity: Entity, p: Vec2, h: f32, (person, beast, startles): (bool, bool, bool), kind: String, run_w: f32, (look, dress, composed, stage): (String, String, bool, u8)) -> Self {
+        Shown { entity, last: p, speed: 0.0, person, beast, yaw: h, drawn: p, sitting: false, rising: None, seat: None, startles, still: 0.0, startle: None, tilt: Quat::IDENTITY, kind, face: h, back: false, turning: false, turn: None, jump: None, jump_key: -1.0, jump_took: false, walked: false, along: false, stop: None, stop_at: p, rest_at: None, calm_speed: 0.0, run_w, look, composed, stage, dress }
     }
 }
 
+/// What a person's body is drawn as besides their look key and life stage: their folk and dress
+/// style, which a VRoid recipe takes when there is no key ([`vroid_for`]); empty for anyone else.
+fn dress_of(c: Option<&SeenCharacter>, kind: &str) -> String {
+    c.filter(|_| kind == "person").map(|c| format!("{}/{}", c.folk, c.style)).unwrap_or_default()
+}
+
 /// The body kept for `id` ([`Live::kept`]), fading out or hidden, if it was drawn as the
-/// character is now (kind, look key and life stage): taken out of `leaving` or `parked` to be
-/// shown again. One drawn otherwise is no longer kept: a faint figure goes at once (a new body
-/// is drawn), a fading one fades out as before, a hidden one goes.
-fn take_kept(commands: &mut Commands, live: &mut Live, id: u32, kind: &str, look: &str, stage: u8) -> Option<(Entity, Kept)> {
+/// character is now (kind, look key, life stage and dress): taken out of `leaving` or `parked`
+/// to be shown again. One drawn otherwise is no longer kept: a faint figure goes at once (a new
+/// body is drawn), a fading one fades out as before, a hidden one goes.
+///
+/// Everything else a body shows is taken from what the character does now, as for a new body:
+/// `bodies` runs its frame on the body shown again at once, and `anim::afresh` lets go of its
+/// pose state.
+fn take_kept(commands: &mut Commands, live: &mut Live, id: u32, kind: &str, (look, stage, dress): (&str, u8, &str)) -> Option<(Entity, Kept)> {
     let fading = live.leaving.iter().position(|(e, _, i, _)| *i == id && live.kept.contains_key(e));
     let entity = match fading {
         Some(i) => live.leaving[i].0,
         None => live.parked.get(&id)?.0,
     };
     let k = live.kept.remove(&entity)?;
-    if k.id == id && k.kind == kind && k.look == look && k.stage == stage {
+    if k.id == id && k.kind == kind && k.look == look && k.stage == stage && k.dress == dress {
         match fading {
             Some(i) => {
                 live.leaving.remove(i);
@@ -297,6 +314,9 @@ fn take_kept(commands: &mut Commands, live: &mut Live, id: u32, kind: &str, look
             }
         }
         return Some((entity, k));
+    }
+    if scripted() || crate::perf::has("diag") {
+        info!("bodies: #{id} drawn anew: its kept body was drawn as {} {} stage {} ({}), it is now {kind} {} stage {stage} ({dress})", k.kind, if k.look.is_empty() { "-" } else { &k.look }, k.stage, k.dress, if look.is_empty() { "-" } else { look });
     }
     match fading {
         Some(i) if live.leaving[i].3 => {
@@ -464,6 +484,12 @@ impl Live {
     /// Each person drawn and the look they were drawn from.
     pub fn looks(&self) -> impl Iterator<Item = DrawnLook<'_>> + '_ {
         self.shown.iter().filter(|(_, s)| s.person).map(|(id, s)| DrawnLook { id: *id, look: &s.look, composed: s.composed, swapping: self.swaps.iter().any(|w| w.2 == *id) })
+    }
+
+    /// The bodies kept to be shown again ([`Kept`]): whose, the entity, and whether it is hidden
+    /// already (else still fading out).
+    pub fn kept_bodies(&self) -> impl Iterator<Item = (u32, Entity, bool)> + '_ {
+        self.parked.iter().map(|(id, (e, _))| (*id, *e, true)).chain(self.leaving.iter().filter(|l| self.kept.contains_key(&l.0)).map(|l| (l.2, l.0, false)))
     }
 
     /// The bodies drawn now and their entities (those leaving sight are not among them). While a
@@ -907,15 +933,18 @@ fn bodies(
                         motion.speed = 0.0;
                     }
                     live.leaving.push((s.entity, 0.0, id, ghost));
-                    if !crate::perf::has("nokeepbodies") {
-                        let k = Kept { id, kind: s.kind, look: s.look, stage: s.stage, person: s.person, beast: s.beast, startles: s.startles, composed: s.composed, height: live.heights.get(&id).copied().unwrap_or(1.75) };
+                    // Not a body that died in sight (it lay where it fell until now, `deaths`):
+                    // death is permanent, so it is never shown again.
+                    let dead = q.get(s.entity).is_ok_and(|d| d.4.action.is_some_and(|a| a.clip == "death"));
+                    if !dead && !crate::perf::has("nokeepbodies") {
+                        let k = Kept { id, kind: s.kind, look: s.look, stage: s.stage, dress: s.dress, person: s.person, beast: s.beast, startles: s.startles, composed: s.composed, height: live.heights.get(&id).copied().unwrap_or(1.75) };
                         live.kept.insert(s.entity, k);
                     }
                 }
                 Err(_) => commands.entity(s.entity).despawn(),
             }
             live.churn.gone += 1;
-            if diag {
+            if diag || scripted() {
                 live.churn.left.insert(id, now_s);
             }
         }
@@ -963,73 +992,70 @@ fn bodies(
             }
             let h = h.unwrap_or(body.heading);
             let size = character.as_ref().map_or(1.0, |c| stage_scale(c.stage));
-            // Back in sight while their body is fading out or kept hidden: shown again.
+            // Back in sight while their body is fading out or kept hidden: shown again, where and
+            // as they are now. It is placed, faced, posed and faded by the frame below, as a body
+            // already drawn is; its pose state starts afresh (`anim::afresh`) and its seat, if it
+            // left sight seated, went with it.
             let seen_look = character.as_ref().filter(|_| body.kind == "person").map(crate::characters::seen::of).unwrap_or_default().look;
             let stage = character.as_ref().map_or(0, |c| c.stage);
-            if let Some((entity, k)) = take_kept(&mut commands, &mut live, id, &body.kind, &seen_look, stage) {
-                let dir = Vec2::new(h.cos(), h.sin());
-                if let Ok((mut tf, fitted, _, _, mut motion, _)) = q.get_mut(entity) {
-                    let y_off = fitted.map_or(0.0, |f| f.y_off * if k.beast { size } else { 1.0 });
-                    tf.translation = Vec3::new(p.x, ground + y_off, p.y);
-                    tf.rotation = if k.person {
-                        Quat::from_rotation_y(yaw_of(dir) + PI)
-                    } else if k.beast {
-                        Quat::from_rotation_y(yaw_of(dir))
-                    } else {
-                        Quat::from_rotation_y(-h)
-                    };
+            let dress = dress_of(character.as_ref(), &body.kind);
+            if let Some((entity, k)) = take_kept(&mut commands, &mut live, id, &body.kind, (&seen_look, stage, &dress)) {
+                if let Ok((_, _, _, _, mut motion, _)) = q.get_mut(entity) {
                     *motion = Motion::default();
                 }
                 if let Ok(mut f) = fades.get_mut(entity) {
                     f.target = 0.0;
                 }
-                // Its seat, if it left sight seated, went with it.
-                commands.entity(entity).try_remove::<crate::characters::SeatAnchor>();
+                commands.entity(entity).try_remove::<crate::characters::SeatAnchor>().queue_silenced(crate::anim::afresh);
+                if mine {
+                    commands.entity(entity).insert((crate::gait::Feet, crate::gait::Logged(id)));
+                } else if crate::gait::logged_other() == Some(id) {
+                    commands.entity(entity).insert(crate::gait::Logged(id));
+                }
+                if scripted() || diag {
+                    let ago = live.churn.left.get(&id).map_or(f32::NAN, |t| now_s - t);
+                    info!("bodies: #{id} shown again from its kept body {entity} ({} {} stage {stage}; left sight {ago:.1} s ago)", body.kind, if seen_look.is_empty() { "-" } else { &seen_look });
+                }
+                let run_w = if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 };
+                live.shown.insert(id, Shown::new(entity, p, h, (k.person, k.beast, k.startles), body.kind.clone(), run_w, (k.look, k.dress, k.composed, k.stage)));
+                live.heights.insert(id, k.height);
+                live.churn.again += 1;
+            } else {
+                live.churn.new += 1;
+                if live.churn.left.get(&id).is_some_and(|t| now_s - t < KEEP_S) {
+                    live.churn.new_back += 1;
+                }
+                let mut composed = false;
+                let (entity, height, person, beast) = if body.kind == "person" {
+                    let c = character.as_ref().unwrap();
+                    let mut recipe = recipe_for(crate::characters::book::book(), island.land.seed, c);
+                    // A line carries its own height; a VRoid recipe is scaled by life stage.
+                    if recipe.person.is_none() {
+                        recipe.height *= stage_scale(c.stage);
+                    }
+                    composed = recipe.person.is_some();
+                    let e = crate::characters::spawn(&mut commands, &assets, &recipe, at, yaw_of(Vec2::new(h.cos(), h.sin())));
+                    (e, recipe.height, true, false)
+                } else if let Some(e) = crate::bodies::spawn_beast(&mut commands, &assets, &body.kind, at, yaw_of(Vec2::new(h.cos(), h.sin())), size) {
+                    (e, crate::bodies::beast_height(&body.kind) * size, false, true)
+                } else {
+                    let tf = Transform::from_translation(at).with_rotation(Quat::from_rotation_y(-h));
+                    let e = crate::bodies::spawn(&mut commands, &mut meshes, &palette, &style, &body.kind, id, false, tf, p);
+                    (e, crate::bodies::beast_height(&body.kind).min(1.4), false, false)
+                };
+                let startles = beast && crate::bodies::beast_file(&body.kind).is_some_and(|f| crate::gait::of(f).info(STARTLE.0).is_some());
+                // Coming into sight: fade in once the model can be seen (`fade.rs`).
+                commands.entity(entity).insert((Motion::default(), crate::fade::Fade::appearing()));
                 if mine {
                     commands.entity(entity).insert((crate::gait::Feet, crate::gait::Logged(id)));
                 } else if crate::gait::logged_other() == Some(id) {
                     commands.entity(entity).insert(crate::gait::Logged(id));
                 }
                 let run_w = if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 };
-                live.shown.insert(id, Shown::new(entity, p, h, (k.person, k.beast, k.startles), body.kind.clone(), run_w, (k.look, k.composed, k.stage)));
-                live.heights.insert(id, k.height);
-                live.churn.again += 1;
+                live.shown.insert(id, Shown::new(entity, p, h, (person, beast, startles), body.kind.clone(), run_w, (seen_look, dress, composed, stage)));
+                live.heights.insert(id, height);
                 continue;
             }
-            live.churn.new += 1;
-            if live.churn.left.get(&id).is_some_and(|t| now_s - t < KEEP_S) {
-                live.churn.new_back += 1;
-            }
-            let mut composed = false;
-            let (entity, height, person, beast) = if body.kind == "person" {
-                let c = character.as_ref().unwrap();
-                let mut recipe = recipe_for(crate::characters::book::book(), island.land.seed, c);
-                // A line carries its own height; a VRoid recipe is scaled by life stage.
-                if recipe.person.is_none() {
-                    recipe.height *= stage_scale(c.stage);
-                }
-                composed = recipe.person.is_some();
-                let e = crate::characters::spawn(&mut commands, &assets, &recipe, at, yaw_of(Vec2::new(h.cos(), h.sin())));
-                (e, recipe.height, true, false)
-            } else if let Some(e) = crate::bodies::spawn_beast(&mut commands, &assets, &body.kind, at, yaw_of(Vec2::new(h.cos(), h.sin())), size) {
-                (e, crate::bodies::beast_height(&body.kind) * size, false, true)
-            } else {
-                let tf = Transform::from_translation(at).with_rotation(Quat::from_rotation_y(-h));
-                let e = crate::bodies::spawn(&mut commands, &mut meshes, &palette, &style, &body.kind, id, false, tf, p);
-                (e, crate::bodies::beast_height(&body.kind).min(1.4), false, false)
-            };
-            let startles = beast && crate::bodies::beast_file(&body.kind).is_some_and(|f| crate::gait::of(f).info(STARTLE.0).is_some());
-            // Coming into sight: fade in once the model can be seen (`fade.rs`).
-            commands.entity(entity).insert((Motion::default(), crate::fade::Fade::appearing()));
-            if mine {
-                commands.entity(entity).insert((crate::gait::Feet, crate::gait::Logged(id)));
-            } else if crate::gait::logged_other() == Some(id) {
-                commands.entity(entity).insert(crate::gait::Logged(id));
-            }
-            let run_w = if row.as_ref().is_some_and(|r| r.running) { 1.0 } else { 0.0 };
-            live.shown.insert(id, Shown::new(entity, p, h, (person, beast, startles), body.kind.clone(), run_w, (seen_look, composed, stage)));
-            live.heights.insert(id, height);
-            continue;
         }
         // A new look key for someone drawn (a band change, a `relook`): redrawn in place.
         if live.shown.get(&id).is_some_and(|s| s.person) {
@@ -2134,15 +2160,17 @@ mod tests {
     }
 
     fn kept(id: u32, look: &str) -> Kept {
-        Kept { id, kind: "person".into(), look: look.into(), stage: 3, person: true, beast: false, startles: false, composed: true, height: 1.7 }
+        Kept { id, kind: "person".into(), look: look.into(), stage: 3, dress: "adult/".into(), person: true, beast: false, startles: false, composed: true, height: 1.7 }
     }
 
     /// A body that left sight is shown again for the same character in the same look, from its
-    /// fade out or from hiding; one in another look is not, and a hidden or faint one then goes.
+    /// fade out or from hiding; one in another look, life stage or (without a key) dress is not,
+    /// and a hidden or faint one then goes.
     #[test]
     fn a_kept_body_is_shown_again_only_in_the_same_look() {
         let mut world = bevy::prelude::World::new();
         let (fading, hidden, ghost, other) = (world.spawn_empty().id(), world.spawn_empty().id(), world.spawn_empty().id(), world.spawn_empty().id());
+        let redressed = world.spawn_empty().id();
         let mut live = Live::default();
         live.leaving.push((fading, 0.1, 1, false));
         live.kept.insert(fading, kept(1, "lk_a"));
@@ -2152,20 +2180,23 @@ mod tests {
         live.kept.insert(ghost, kept(3, "lk_c"));
         // A look swap's old body leaves under its id but is never kept.
         live.leaving.push((other, 0.0, 4, false));
+        live.parked.insert(5, (redressed, 2.0));
+        live.kept.insert(redressed, kept(5, ""));
         {
             let mut commands = world.commands();
-            let (e, k) = take_kept(&mut commands, &mut live, 1, "person", "lk_a", 3).expect("fading body shown again");
+            let (e, k) = take_kept(&mut commands, &mut live, 1, "person", ("lk_a", 3, "adult/")).expect("fading body shown again");
             assert_eq!((e, k.id, k.height), (fading, 1, 1.7));
-            assert!(take_kept(&mut commands, &mut live, 2, "person", "lk_b", 4).is_none(), "another life stage draws anew");
-            assert!(take_kept(&mut commands, &mut live, 3, "person", "lk_new", 3).is_none(), "another look draws anew");
-            assert!(take_kept(&mut commands, &mut live, 4, "person", "", 3).is_none(), "a swap's old body is not kept");
+            assert!(take_kept(&mut commands, &mut live, 2, "person", ("lk_b", 4, "adult/")).is_none(), "another life stage draws anew");
+            assert!(take_kept(&mut commands, &mut live, 3, "person", ("lk_new", 3, "adult/")).is_none(), "another look draws anew");
+            assert!(take_kept(&mut commands, &mut live, 4, "person", ("", 3, "adult/")).is_none(), "a swap's old body is not kept");
+            assert!(take_kept(&mut commands, &mut live, 5, "person", ("", 3, "adult/hide")).is_none(), "a VRoid body in another dress draws anew");
         }
         world.flush();
         assert!(live.leaving.iter().all(|l| l.0 != fading && l.0 != ghost), "shown again, or a faint figure gone at once");
         assert!(live.leaving.iter().any(|l| l.0 == other), "the swap's old body still fades out");
         assert!(live.parked.is_empty() && live.kept.is_empty());
         assert!(world.get_entity(fading).is_ok() && world.get_entity(other).is_ok());
-        assert!(world.get_entity(hidden).is_err() && world.get_entity(ghost).is_err());
+        assert!(world.get_entity(hidden).is_err() && world.get_entity(ghost).is_err() && world.get_entity(redressed).is_err());
     }
 
     #[test]

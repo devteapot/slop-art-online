@@ -78,6 +78,16 @@ impl Plugin for IkPlugin {
     }
 }
 
+impl Legs {
+    /// Hold no foot: as a new body's legs, or a body out of IK's reach (`anim::afresh`).
+    pub fn let_go(&mut self) {
+        self.lock = [None; 2];
+        self.step = [None; 2];
+        self.drop = 0.0;
+        self.written = Vec3::NAN;
+    }
+}
+
 /// Bones of one person's legs, and the IK state.
 #[derive(Component)]
 pub struct Legs {
