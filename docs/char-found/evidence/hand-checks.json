@@ -1,0 +1,742 @@
+{
+  "base-l1": {
+    "triangles": {
+      "body": 5440,
+      "hands": 2816,
+      "head": 7028,
+      "hair": 0
+    },
+    "welded_wrist_edges": {
+      "L": 20,
+      "R": 20
+    },
+    "rest_wrist_to_middle_tip_mm": 240.76,
+    "natural_wrist_to_middle_tip_mm": 212.13,
+    "size_ratio": 1.135,
+    "right_hand": {
+      "idle": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 123.29,
+        "tip_to_palm_mm": {
+          "Index": 166.9,
+          "Middle": 174.22,
+          "Ring": 162.34,
+          "Little": 150.93,
+          "Thumb": 143.65
+        },
+        "thumb_tip_to_index_skin_mm": 89.3
+      },
+      "wave": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 123.29,
+        "tip_to_palm_mm": {
+          "Index": 166.9,
+          "Middle": 174.22,
+          "Ring": 162.34,
+          "Little": 150.93,
+          "Thumb": 143.65
+        },
+        "thumb_tip_to_index_skin_mm": 89.3
+      },
+      "sword_slash": {
+        "seconds": 0.5333,
+        "thumb3_to_index3_pivots_mm": 119.49,
+        "tip_to_palm_mm": {
+          "Index": 76.74,
+          "Middle": 53.92,
+          "Ring": 45.88,
+          "Little": 58.15,
+          "Thumb": 169.17
+        },
+        "thumb_tip_to_index_skin_mm": 120.78
+      },
+      "sword_overhead": {
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 119.49,
+        "tip_to_palm_mm": {
+          "Index": 76.74,
+          "Middle": 53.92,
+          "Ring": 45.88,
+          "Little": 58.15,
+          "Thumb": 169.17
+        },
+        "thumb_tip_to_index_skin_mm": 120.78
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "2eebe75bef26a662555a6d001dadf6374c240dc45f05cceedc4a3fe6e5f47ffc"
+  },
+  "base-l2": {
+    "triangles": {
+      "body": 21760,
+      "hands": 11088,
+      "head": 7060,
+      "hair": 0
+    },
+    "welded_wrist_edges": {
+      "L": 40,
+      "R": 40
+    },
+    "rest_wrist_to_middle_tip_mm": 240.29,
+    "natural_wrist_to_middle_tip_mm": 211.71,
+    "size_ratio": 1.135,
+    "right_hand": {
+      "idle": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 123.29,
+        "tip_to_palm_mm": {
+          "Index": 166.51,
+          "Middle": 173.82,
+          "Ring": 161.96,
+          "Little": 150.61,
+          "Thumb": 143.26
+        },
+        "thumb_tip_to_index_skin_mm": 87.7
+      },
+      "wave": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 123.29,
+        "tip_to_palm_mm": {
+          "Index": 166.51,
+          "Middle": 173.82,
+          "Ring": 161.96,
+          "Little": 150.61,
+          "Thumb": 143.26
+        },
+        "thumb_tip_to_index_skin_mm": 87.7
+      },
+      "sword_slash": {
+        "seconds": 0.5333,
+        "thumb3_to_index3_pivots_mm": 119.49,
+        "tip_to_palm_mm": {
+          "Index": 76.97,
+          "Middle": 54.33,
+          "Ring": 46.25,
+          "Little": 58.28,
+          "Thumb": 168.81
+        },
+        "thumb_tip_to_index_skin_mm": 121.0
+      },
+      "sword_overhead": {
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 119.49,
+        "tip_to_palm_mm": {
+          "Index": 76.97,
+          "Middle": 54.33,
+          "Ring": 46.25,
+          "Little": 58.28,
+          "Thumb": 168.81
+        },
+        "thumb_tip_to_index_skin_mm": 121.0
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "dbacc5d173b0e1bc4f0afd82d869ba6106f71ac34d6de3faa159e48652e3a381"
+  },
+  "woman-l1": {
+    "triangles": {
+      "body": 5440,
+      "hands": 2816,
+      "head": 7028,
+      "hair": 0
+    },
+    "welded_wrist_edges": {
+      "L": 20,
+      "R": 20
+    },
+    "rest_wrist_to_middle_tip_mm": 223.37,
+    "natural_wrist_to_middle_tip_mm": 196.81,
+    "size_ratio": 1.135,
+    "right_hand": {
+      "idle": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 114.38,
+        "tip_to_palm_mm": {
+          "Index": 154.85,
+          "Middle": 161.63,
+          "Ring": 150.61,
+          "Little": 140.02,
+          "Thumb": 133.27
+        },
+        "thumb_tip_to_index_skin_mm": 82.85
+      },
+      "wave": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 114.38,
+        "tip_to_palm_mm": {
+          "Index": 154.85,
+          "Middle": 161.63,
+          "Ring": 150.61,
+          "Little": 140.02,
+          "Thumb": 133.27
+        },
+        "thumb_tip_to_index_skin_mm": 82.85
+      },
+      "sword_slash": {
+        "seconds": 0.5333,
+        "thumb3_to_index3_pivots_mm": 110.86,
+        "tip_to_palm_mm": {
+          "Index": 71.2,
+          "Middle": 50.03,
+          "Ring": 42.57,
+          "Little": 53.95,
+          "Thumb": 156.95
+        },
+        "thumb_tip_to_index_skin_mm": 112.06
+      },
+      "sword_overhead": {
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 110.86,
+        "tip_to_palm_mm": {
+          "Index": 71.2,
+          "Middle": 50.03,
+          "Ring": 42.57,
+          "Little": 53.95,
+          "Thumb": 156.95
+        },
+        "thumb_tip_to_index_skin_mm": 112.06
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "3dedcd3e38556a0dae4e7535351b98b9e94607b2ddce7c95b50285fc06237ccc"
+  },
+  "woman-l2": {
+    "triangles": {
+      "body": 21760,
+      "hands": 11088,
+      "head": 7060,
+      "hair": 0
+    },
+    "welded_wrist_edges": {
+      "L": 40,
+      "R": 40
+    },
+    "rest_wrist_to_middle_tip_mm": 222.93,
+    "natural_wrist_to_middle_tip_mm": 196.42,
+    "size_ratio": 1.135,
+    "right_hand": {
+      "idle": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 114.38,
+        "tip_to_palm_mm": {
+          "Index": 154.48,
+          "Middle": 161.26,
+          "Ring": 150.27,
+          "Little": 139.73,
+          "Thumb": 132.91
+        },
+        "thumb_tip_to_index_skin_mm": 81.37
+      },
+      "wave": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 114.38,
+        "tip_to_palm_mm": {
+          "Index": 154.48,
+          "Middle": 161.26,
+          "Ring": 150.27,
+          "Little": 139.73,
+          "Thumb": 132.91
+        },
+        "thumb_tip_to_index_skin_mm": 81.37
+      },
+      "sword_slash": {
+        "seconds": 0.5333,
+        "thumb3_to_index3_pivots_mm": 110.86,
+        "tip_to_palm_mm": {
+          "Index": 71.41,
+          "Middle": 50.41,
+          "Ring": 42.91,
+          "Little": 54.07,
+          "Thumb": 156.62
+        },
+        "thumb_tip_to_index_skin_mm": 112.26
+      },
+      "sword_overhead": {
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 110.86,
+        "tip_to_palm_mm": {
+          "Index": 71.41,
+          "Middle": 50.41,
+          "Ring": 42.91,
+          "Little": 54.07,
+          "Thumb": 156.62
+        },
+        "thumb_tip_to_index_skin_mm": 112.26
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "fe5c73210fe554c4390f78727640f8da529d6b1b90d9f023d56ec6b037a1c3ce"
+  },
+  "man-l1": {
+    "triangles": {
+      "body": 5440,
+      "hands": 2816,
+      "head": 7028,
+      "hair": 0
+    },
+    "welded_wrist_edges": {
+      "L": 20,
+      "R": 20
+    },
+    "rest_wrist_to_middle_tip_mm": 282.85,
+    "natural_wrist_to_middle_tip_mm": 249.2,
+    "size_ratio": 1.135,
+    "right_hand": {
+      "idle": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 144.83,
+        "tip_to_palm_mm": {
+          "Index": 196.07,
+          "Middle": 204.67,
+          "Ring": 190.71,
+          "Little": 177.3,
+          "Thumb": 168.76
+        },
+        "thumb_tip_to_index_skin_mm": 104.91
+      },
+      "wave": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 144.83,
+        "tip_to_palm_mm": {
+          "Index": 196.07,
+          "Middle": 204.67,
+          "Ring": 190.71,
+          "Little": 177.3,
+          "Thumb": 168.76
+        },
+        "thumb_tip_to_index_skin_mm": 104.91
+      },
+      "sword_slash": {
+        "seconds": 0.5333,
+        "thumb3_to_index3_pivots_mm": 140.37,
+        "tip_to_palm_mm": {
+          "Index": 90.15,
+          "Middle": 63.35,
+          "Ring": 53.9,
+          "Little": 68.31,
+          "Thumb": 198.74
+        },
+        "thumb_tip_to_index_skin_mm": 141.89
+      },
+      "sword_overhead": {
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 140.37,
+        "tip_to_palm_mm": {
+          "Index": 90.15,
+          "Middle": 63.35,
+          "Ring": 53.9,
+          "Little": 68.31,
+          "Thumb": 198.74
+        },
+        "thumb_tip_to_index_skin_mm": 141.89
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "9a412067672c55d5082ef3cfbd6f633010009279837e8cf37d7b9dfaefbf88ea"
+  },
+  "man-l2": {
+    "triangles": {
+      "body": 21760,
+      "hands": 11088,
+      "head": 7060,
+      "hair": 0
+    },
+    "welded_wrist_edges": {
+      "L": 40,
+      "R": 40
+    },
+    "rest_wrist_to_middle_tip_mm": 282.29,
+    "natural_wrist_to_middle_tip_mm": 248.71,
+    "size_ratio": 1.135,
+    "right_hand": {
+      "idle": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 144.83,
+        "tip_to_palm_mm": {
+          "Index": 195.61,
+          "Middle": 204.2,
+          "Ring": 190.27,
+          "Little": 176.94,
+          "Thumb": 168.3
+        },
+        "thumb_tip_to_index_skin_mm": 103.03
+      },
+      "wave": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 144.83,
+        "tip_to_palm_mm": {
+          "Index": 195.61,
+          "Middle": 204.2,
+          "Ring": 190.27,
+          "Little": 176.94,
+          "Thumb": 168.3
+        },
+        "thumb_tip_to_index_skin_mm": 103.03
+      },
+      "sword_slash": {
+        "seconds": 0.5333,
+        "thumb3_to_index3_pivots_mm": 140.37,
+        "tip_to_palm_mm": {
+          "Index": 90.42,
+          "Middle": 63.83,
+          "Ring": 54.34,
+          "Little": 68.47,
+          "Thumb": 198.32
+        },
+        "thumb_tip_to_index_skin_mm": 142.15
+      },
+      "sword_overhead": {
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 140.37,
+        "tip_to_palm_mm": {
+          "Index": 90.42,
+          "Middle": 63.83,
+          "Ring": 54.34,
+          "Little": 68.47,
+          "Thumb": 198.32
+        },
+        "thumb_tip_to_index_skin_mm": 142.15
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "d5b1a4ec71b88137184c717ec317c9bb6f7094763b9d09d85fc8ea5692ee391e"
+  },
+  "elder-l1": {
+    "triangles": {
+      "body": 5440,
+      "hands": 2816,
+      "head": 7028,
+      "hair": 0
+    },
+    "welded_wrist_edges": {
+      "L": 20,
+      "R": 20
+    },
+    "rest_wrist_to_middle_tip_mm": 240.7,
+    "natural_wrist_to_middle_tip_mm": 212.07,
+    "size_ratio": 1.135,
+    "right_hand": {
+      "idle": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 123.25,
+        "tip_to_palm_mm": {
+          "Index": 166.86,
+          "Middle": 174.17,
+          "Ring": 162.29,
+          "Little": 150.88,
+          "Thumb": 143.61
+        },
+        "thumb_tip_to_index_skin_mm": 89.28
+      },
+      "wave": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 123.25,
+        "tip_to_palm_mm": {
+          "Index": 166.86,
+          "Middle": 174.17,
+          "Ring": 162.29,
+          "Little": 150.88,
+          "Thumb": 143.61
+        },
+        "thumb_tip_to_index_skin_mm": 89.28
+      },
+      "sword_slash": {
+        "seconds": 0.5333,
+        "thumb3_to_index3_pivots_mm": 119.46,
+        "tip_to_palm_mm": {
+          "Index": 76.72,
+          "Middle": 53.91,
+          "Ring": 45.87,
+          "Little": 58.13,
+          "Thumb": 169.12
+        },
+        "thumb_tip_to_index_skin_mm": 120.75
+      },
+      "sword_overhead": {
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 119.46,
+        "tip_to_palm_mm": {
+          "Index": 76.72,
+          "Middle": 53.91,
+          "Ring": 45.87,
+          "Little": 58.13,
+          "Thumb": 169.12
+        },
+        "thumb_tip_to_index_skin_mm": 120.75
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "3db0e651c663b988526c8b6bed78ae5f927be31ea34085f6555edf5149ed026f"
+  },
+  "elder-l2": {
+    "triangles": {
+      "body": 21760,
+      "hands": 11088,
+      "head": 7060,
+      "hair": 0
+    },
+    "welded_wrist_edges": {
+      "L": 40,
+      "R": 40
+    },
+    "rest_wrist_to_middle_tip_mm": 240.22,
+    "natural_wrist_to_middle_tip_mm": 211.65,
+    "size_ratio": 1.135,
+    "right_hand": {
+      "idle": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 123.25,
+        "tip_to_palm_mm": {
+          "Index": 166.46,
+          "Middle": 173.77,
+          "Ring": 161.92,
+          "Little": 150.57,
+          "Thumb": 143.22
+        },
+        "thumb_tip_to_index_skin_mm": 87.68
+      },
+      "wave": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 123.25,
+        "tip_to_palm_mm": {
+          "Index": 166.46,
+          "Middle": 173.77,
+          "Ring": 161.92,
+          "Little": 150.57,
+          "Thumb": 143.22
+        },
+        "thumb_tip_to_index_skin_mm": 87.68
+      },
+      "sword_slash": {
+        "seconds": 0.5333,
+        "thumb3_to_index3_pivots_mm": 119.46,
+        "tip_to_palm_mm": {
+          "Index": 76.95,
+          "Middle": 54.32,
+          "Ring": 46.24,
+          "Little": 58.27,
+          "Thumb": 168.77
+        },
+        "thumb_tip_to_index_skin_mm": 120.97
+      },
+      "sword_overhead": {
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 119.46,
+        "tip_to_palm_mm": {
+          "Index": 76.95,
+          "Middle": 54.32,
+          "Ring": 46.24,
+          "Little": 58.27,
+          "Thumb": 168.77
+        },
+        "thumb_tip_to_index_skin_mm": 120.97
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "19a036a6bd5b86f0ea51111145271cb4f5a11833be22c563e4c859b5309ff154"
+  },
+  "child-l1": {
+    "triangles": {
+      "body": 5440,
+      "hands": 2816,
+      "head": 7028,
+      "hair": 0
+    },
+    "welded_wrist_edges": {
+      "L": 20,
+      "R": 20
+    },
+    "rest_wrist_to_middle_tip_mm": 145.75,
+    "natural_wrist_to_middle_tip_mm": 128.41,
+    "size_ratio": 1.135,
+    "right_hand": {
+      "idle": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 74.63,
+        "tip_to_palm_mm": {
+          "Index": 101.04,
+          "Middle": 105.47,
+          "Ring": 98.28,
+          "Little": 91.37,
+          "Thumb": 86.96
+        },
+        "thumb_tip_to_index_skin_mm": 54.06
+      },
+      "wave": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 74.63,
+        "tip_to_palm_mm": {
+          "Index": 101.04,
+          "Middle": 105.47,
+          "Ring": 98.28,
+          "Little": 91.37,
+          "Thumb": 86.96
+        },
+        "thumb_tip_to_index_skin_mm": 54.06
+      },
+      "sword_slash": {
+        "seconds": 0.5333,
+        "thumb3_to_index3_pivots_mm": 72.33,
+        "tip_to_palm_mm": {
+          "Index": 46.46,
+          "Middle": 32.64,
+          "Ring": 27.78,
+          "Little": 35.2,
+          "Thumb": 102.41
+        },
+        "thumb_tip_to_index_skin_mm": 73.12
+      },
+      "sword_overhead": {
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 72.33,
+        "tip_to_palm_mm": {
+          "Index": 46.46,
+          "Middle": 32.64,
+          "Ring": 27.78,
+          "Little": 35.2,
+          "Thumb": 102.41
+        },
+        "thumb_tip_to_index_skin_mm": 73.12
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "9c6ef0e342750d5209bb2e120f485ff52d16cacb9014dccfb003f7db3d047c30"
+  },
+  "child-l2": {
+    "triangles": {
+      "body": 21760,
+      "hands": 11088,
+      "head": 7060,
+      "hair": 0
+    },
+    "welded_wrist_edges": {
+      "L": 40,
+      "R": 40
+    },
+    "rest_wrist_to_middle_tip_mm": 145.46,
+    "natural_wrist_to_middle_tip_mm": 128.16,
+    "size_ratio": 1.135,
+    "right_hand": {
+      "idle": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 74.63,
+        "tip_to_palm_mm": {
+          "Index": 100.8,
+          "Middle": 105.22,
+          "Ring": 98.05,
+          "Little": 91.18,
+          "Thumb": 86.72
+        },
+        "thumb_tip_to_index_skin_mm": 53.09
+      },
+      "wave": {
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 74.63,
+        "tip_to_palm_mm": {
+          "Index": 100.8,
+          "Middle": 105.22,
+          "Ring": 98.05,
+          "Little": 91.18,
+          "Thumb": 86.72
+        },
+        "thumb_tip_to_index_skin_mm": 53.09
+      },
+      "sword_slash": {
+        "seconds": 0.5333,
+        "thumb3_to_index3_pivots_mm": 72.33,
+        "tip_to_palm_mm": {
+          "Index": 46.6,
+          "Middle": 32.89,
+          "Ring": 28.0,
+          "Little": 35.28,
+          "Thumb": 102.19
+        },
+        "thumb_tip_to_index_skin_mm": 73.25
+      },
+      "sword_overhead": {
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 72.33,
+        "tip_to_palm_mm": {
+          "Index": 46.6,
+          "Middle": 32.89,
+          "Ring": 28.0,
+          "Little": 35.28,
+          "Thumb": 102.19
+        },
+        "thumb_tip_to_index_skin_mm": 73.25
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "835cfa5094b25bd819ae36eec821bbf6b95b45f0032b27d4a3eee1b0cb58424c"
+  }
+}

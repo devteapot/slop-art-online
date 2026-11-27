@@ -1,6 +1,6 @@
 # Character foundation · Stage 1 body
 
-[Stage 2 head fitting checkpoint and outstanding art gate](head-checkpoint.md)
+[Stage 2 hands, grip measurements and photographs](hands.md) · [Head fitting checkpoint and outstanding art gate](head-checkpoint.md)
 
 ![Five body mixes in the game at inspection and play distances](contact-sheet.png)
 

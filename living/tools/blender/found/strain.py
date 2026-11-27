@@ -10,7 +10,9 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from bind_pose import read_bind_basis
 
-source, output = sys.argv[sys.argv.index("--") + 1 :]
+args = sys.argv[sys.argv.index("--") + 1 :]
+digits = "--digits" in args
+source, output = [v for v in args if v != "--digits"]
 bind = read_bind_basis(source, disable_bone_shape=True, guess_original_bind_pose=False)
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
@@ -68,21 +70,44 @@ regions["saddle"] = (
 )
 assert regions["saddle"].any()
 report = {}
-for clip in ["walk", "run", "sit_ground", "sword_slash"]:
+clips = ["walk", "run", "sit_ground", "sword_slash"]
+finger_regions = {}
+if digits:
+    clips += ["sword_overhead", "wave"]
+    groups = [g.name.split("_")[-1] for g in body.vertex_groups]
+    for side in ("L", "R"):
+        share = np.zeros((len(body.data.vertices), 6))
+        for vertex in body.data.vertices:
+            for g in vertex.groups:
+                if not body.vertex_groups[g.group].name.startswith(f"J_Bip_{side}_"):
+                    continue
+                for i, name in enumerate(("Thumb", "Index", "Middle", "Ring", "Little", "Hand")):
+                    if groups[g.group].startswith(name):
+                        share[vertex.index, i] += g.weight
+        edge_share = share[edges].mean(axis=1)
+        for i, name in enumerate(("Thumb", "Index", "Middle", "Ring", "Little")):
+            # Include blended web edges in each digit with a material influence.
+            finger_regions[side + "_" + name] = (rest > .0001) & (edge_share[:, i] >= .12)
+        finger_regions[side + "_whole_hand"] = (rest > .0001) & (edge_share.sum(1) >= .49)
+
+for clip in clips:
     track = next(t for t in ad.nla_tracks if t.name == clip)
     strip = track.strips[0]
     ad.action = strip.action
     ad.action_slot = strip.action_slot
     start, end = map(round, ad.action.frame_range)
-    samples = {k: [] for k in regions}
+    active = regions
+    if digits and clip in ("sword_slash", "sword_overhead", "wave"):
+        active = regions | finger_regions
+    samples = {k: [] for k in active}
     for frame in range(start, end + 1):
         scene.frame_set(frame)
         posed = lengths(coords())
-        for k, mask in regions.items():
+        for k, mask in active.items():
             samples[k].append(posed[mask] / rest[mask])
     report[clip] = {
         k: {
-            "edges": int(regions[k].sum()),
+            "edges": int(active[k].sum()),
             "frames": len(v),
             "min_p05_p95_max": np.percentile(v, [0, 5, 95, 100]).round(4).tolist(),
         }
