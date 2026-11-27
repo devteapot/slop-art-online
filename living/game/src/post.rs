@@ -189,8 +189,9 @@ pub fn update(
     let [lr, lg, lb] = s.line_color;
     let [rr, rg, rb] = s.rim_color;
     let [gr, gg, gb] = s.grade_color;
+    let line_strength = if s.look.on { s.line_strength * s.look.scenery_edges } else { s.line_strength };
     *e = Edges {
-        line: Vec4::new(lr, lg, lb, if on { s.line_strength } else { 0.0 }),
+        line: Vec4::new(lr, lg, lb, if on { line_strength } else { 0.0 }),
         params: Vec4::new(s.depth_threshold, s.normal_threshold, s.line_width * scale, near),
         fade: Vec4::new(s.line_fade[0], s.line_fade[1], s.screen_rim_width * scale, if on { s.screen_rim } else { 0.0 }),
         rim: Vec4::new(rr, rg, rb, 0.0),

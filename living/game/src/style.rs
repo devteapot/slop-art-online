@@ -470,6 +470,10 @@ pub struct LookParams {
     /// How much of the sun's colour shadows keep (1 as classic; 0: shadows are lit by the sky
     /// alone, the warm/cool split at dusk).
     pub shadow_sun: f32,
+    /// Scenery edge-line multiplier in `post.rs` (0.80 under Look-dev so characters lead; 1.0 in Classic).
+    pub scenery_edges: f32,
+    /// Character shell-outline weight multiplier (`OutlineWeight::scale`, Look-dev only).
+    pub outline_weight: f32,
 }
 
 impl Default for Style {
@@ -699,12 +703,85 @@ impl CharRim {
     }
 }
 
+/// Character outline weight with the look-dev light (Settings › Play › Outline weight, step 2.3):
+/// scales character shell outlines only when [`Look::Lookdev`] is active; Classic ignores it.
+/// `LIVING_GAME_OUTLINE_WEIGHT=fine|standard|bold` starts in one.
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum OutlineWeight {
+    Fine,
+    #[default]
+    Standard,
+    Bold,
+}
+
+impl OutlineWeight {
+    pub const ALL: [OutlineWeight; 3] = [OutlineWeight::Fine, OutlineWeight::Standard, OutlineWeight::Bold];
+    pub fn name(self) -> &'static str {
+        match self {
+            OutlineWeight::Fine => "fine",
+            OutlineWeight::Standard => "standard",
+            OutlineWeight::Bold => "bold",
+        }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            OutlineWeight::Fine => "Fine",
+            OutlineWeight::Standard => "Standard",
+            OutlineWeight::Bold => "Bold",
+        }
+    }
+    pub fn parse(s: &str) -> Option<OutlineWeight> {
+        OutlineWeight::ALL.into_iter().find(|w| w.name() == s)
+    }
+    pub fn from_env() -> Option<OutlineWeight> {
+        std::env::var("LIVING_GAME_OUTLINE_WEIGHT").ok().and_then(|v| OutlineWeight::parse(v.trim()))
+    }
+    pub fn scale(self) -> f32 {
+        match self {
+            OutlineWeight::Fine => 0.72,
+            OutlineWeight::Standard => 1.0,
+            OutlineWeight::Bold => 1.32,
+        }
+    }
+}
+
+/// Optional per-submesh shell outline width multiplier (e.g. mean of `_OUTLINE_WIDTH` when
+/// authored on a mesh). Applied only under [`Look::Lookdev`].
+#[derive(Component, Clone, Copy, Debug)]
+pub struct OutlineScale(pub f32);
+
+/// Extract a per-mesh outline width multiplier from `_OUTLINE_WIDTH` if authored on the mesh.
+pub fn mesh_outline_scale(mesh: &Mesh) -> Option<f32> {
+    let bevy::mesh::VertexAttributeValues::Float32(vals) = mesh.attribute(crate::characters::compose::ATTRIBUTE_OUTLINE_WIDTH)? else {
+        return None;
+    };
+    if vals.is_empty() {
+        return None;
+    }
+    let mean = vals.iter().copied().filter(|v| v.is_finite()).sum::<f32>() / vals.len() as f32;
+    Some(mean.clamp(0.25, 1.25))
+}
+
 impl LookParams {
-    /// The look-dev light's values (look-dev step 1's tuning), or off. `LIVING_GAME_PERF=ldsteps=N`
+    /// The look-dev light's values (look-dev steps 1–2's tuning), or off. `LIVING_GAME_PERF=ldsteps=N`
     /// keeps its first N parts (1 the hemisphere and warm/cool split, 2 the ramp, 3 the specular,
     /// 4 the rims), the rest as classic, to time each part.
-    pub fn of(look: Look, rim: CharRim) -> LookParams {
-        let full = LookParams { on: true, char_rim: rim.strength(), specular: 1.0, scenery_rim: 0.25, sky: 0.075, bounce: 0.06, shadow_depth: 0.56, skin_saturation: 1.14, char_threshold: -0.08, char_brush: 0.35, shadow_sun: 0.35 };
+    pub fn of(look: Look, rim: CharRim, weight: OutlineWeight) -> LookParams {
+        let full = LookParams {
+            on: true,
+            char_rim: rim.strength(),
+            specular: 1.0,
+            scenery_rim: 0.25,
+            sky: 0.075,
+            bounce: 0.06,
+            shadow_depth: 0.56,
+            skin_saturation: 1.14,
+            char_threshold: -0.08,
+            char_brush: 0.35,
+            shadow_sun: 0.35,
+            scenery_edges: 0.80,
+            outline_weight: weight.scale(),
+        };
         match look {
             Look::Classic => LookParams::default(),
             Look::Lookdev => match crate::perf::value("ldsteps") {
@@ -730,8 +807,8 @@ impl LookParams {
 
 /// Keep the style profile on the chosen light (an environment's switch rebuilds the profile from
 /// its defaults); written only when it differs.
-fn apply_look(look: Res<Look>, rim: Res<CharRim>, mut style: ResMut<Style>) {
-    let want = LookParams::of(*look, *rim);
+fn apply_look(look: Res<Look>, rim: Res<CharRim>, weight: Res<OutlineWeight>, mut style: ResMut<Style>) {
+    let want = LookParams::of(*look, *rim, *weight);
     if style.look != want {
         style.look = want;
     }
@@ -852,6 +929,7 @@ impl Plugin for StylePlugin {
             .insert_resource(HairShine::from_env().unwrap_or_default())
             .insert_resource(Look::from_env().unwrap_or_default())
             .insert_resource(CharRim::from_env().unwrap_or_default())
+            .insert_resource(OutlineWeight::from_env().unwrap_or_default())
             .add_systems(Startup, load_detail)
             .add_systems(Update, (apply_shine, apply_look, apply, fog_outlines).chain());
     }
@@ -868,6 +946,8 @@ impl Plugin for StylePlugin {
 const PERSON_NEAR: f32 = 8.0;
 const PERSON_FAR: f32 = 30.0;
 const PERSON_THIN: f32 = 0.6;
+/// Face submesh outline width multiplier under Look-dev (`FacePart` meshes without `_OUTLINE_WIDTH`).
+const FACE_OUTLINE_SCALE: f32 = 0.42;
 
 fn person_width(style: &Style, distance: f32) -> f32 {
     let t = ((distance - PERSON_NEAR) / (PERSON_FAR - PERSON_NEAR)).clamp(0.0, 1.0);
@@ -875,11 +955,61 @@ fn person_width(style: &Style, distance: f32) -> f32 {
     (w * 8.0).round() / 8.0
 }
 
+/// Look-dev character outline distance curve (step 2.3):
+/// - Portrait / close-up (<= 2.0 m): thinner (`0.62x`, face `0.42x` -> ~0.47 px) so close-up faces
+///   read delicately like Blue Protocol (`ref4`).
+/// - Play Near (~8–10 m) and Middle (~14 m): crisp (`0.92x` -> `0.86x`, ~1.55–1.65 px at Standard).
+/// - Play Far (~22 m) to 32 m: tapers smoothly down to `0.42x` so distant figures don't turn chunky.
+pub(crate) fn ld_person_width(style: &Style, distance: f32, submesh_scale: f32) -> f32 {
+    let s = |a: f32, b: f32, x: f32| {
+        let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    };
+    let close_to_near = 0.62 + (0.92 - 0.62) * s(1.8, 7.5, distance);
+    let near_to_far = 0.92 + (0.42 - 0.92) * s(13.0, 32.0, distance);
+    let curve = if distance < 10.0 { close_to_near } else { near_to_far };
+    let w = style.outline_people * curve * style.look.outline_weight * submesh_scale;
+    // Quantize in 1/16 px steps so close-up face outlines stay smooth while crowds rarely rewrite.
+    ((w * 16.0).round() / 16.0).max(0.25)
+}
+
+/// Look-dev outline colour harmonized with the ambient fill and time of day (step 2.3):
+/// replaces fixed warm espresso (`[0.17, 0.11, 0.10]`) with a cool-harmonized dark charcoal at
+/// noon, deep twilight plum at dusk, and cool midnight indigo at night so night silhouettes never
+/// look like brown/black cutouts.
+pub(crate) fn ld_outline_color(atmo: Option<&crate::daylight::Atmo>, style: &Style) -> Color {
+    let (ambient_dir, day, warm) = match atmo.filter(|a| a.active) {
+        Some(a) => {
+            let dir = a.fill.normalize_or(Vec3::new(0.45, 0.50, 0.75));
+            let day = (a.lux / 9000.0).clamp(0.0, 1.0);
+            let l = Color::srgb(a.light[0], a.light[1], a.light[2]).to_linear();
+            let lum = (0.2126 * l.red + 0.7152 * l.green + 0.0722 * l.blue).max(1e-4);
+            let warm = (((l.red - l.blue) / lum - 0.02) / 0.25).clamp(0.0, 1.0);
+            (dir, day, warm)
+        }
+        None => {
+            let c = Color::hsv(style.shadow_hue * 360.0, 0.45, 1.0).to_linear();
+            (Vec3::new(c.red, c.green, c.blue).normalize_or(Vec3::new(0.45, 0.50, 0.75)), 1.0, 0.5)
+        }
+    };
+    // Warm umber anchor by day, cool sky/ambient-hue dark ink at dusk and night.
+    let warm_ink = Vec3::new(0.020, 0.013, 0.013);
+    let cool_lum = 0.008 + 0.014 * day;
+    let cool_ink = ambient_dir * cool_lum + Vec3::splat(0.002 + 0.003 * day);
+    let mix_warm = 0.48 * warm * day;
+    let lin = cool_ink.lerp(warm_ink, mix_warm);
+    // Quantize to 1/255 sRGB steps so OutlineVolume isn't dirtied by sub-LSB drift.
+    let srgb = Color::linear_rgb(lin.x, lin.y, lin.z).to_srgba();
+    let q = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() / 255.0;
+    Color::srgb(q(srgb.red), q(srgb.green), q(srgb.blue))
+}
+
 #[allow(clippy::type_complexity)]
 fn fog_outlines(
     style: Res<Style>,
+    atmo: Option<Res<crate::daylight::Atmo>>,
     cams: Query<(&GlobalTransform, &DistanceFog), With<Camera3d>>,
-    mut outlines: Query<(&Outlined, &mut OutlineVolume, &GlobalTransform, Option<&InheritedVisibility>, Option<&bevy::mesh::MeshTag>)>,
+    mut outlines: Query<(&Outlined, &mut OutlineVolume, &GlobalTransform, Option<&InheritedVisibility>, Option<&bevy::mesh::MeshTag>, Has<crate::lookdev::FacePart>, Option<&OutlineScale>)>,
     (edge, target): (Option<Res<crate::sightedge::SightEdge>>, Option<Res<crate::controls::Target>>),
 ) {
     let Ok((cam, fog)) = cams.single() else { return };
@@ -887,9 +1017,11 @@ fn fog_outlines(
     let cutoff = start + (end - start) * 0.55;
     let eye = cam.translation();
     let on = style.outlines && style.enabled;
+    let [cr, cg, cb] = style.outline_color;
+    let want_col = if style.look.on { ld_outline_color(atmo.as_deref(), &style) } else { Color::srgb(cr, cg, cb) };
     // Limited view fogs round my character, not by the camera's distance (sightedge.rs).
     let limit = edge.and_then(|e| e.outline_limit(target.and_then(|t| t.0)));
-    for (kind, mut o, g, shown, tag) in &mut outlines {
+    for (kind, mut o, g, shown, tag, face_part, scale) in &mut outlines {
         let d = g.translation().distance(eye);
         // A thing mostly faded out (fade.rs) loses its lines with it.
         let faded = tag.is_some_and(|t| crate::fade::tag_level(t.value) > 6);
@@ -898,10 +1030,20 @@ fn fog_outlines(
         if o.visible != want {
             o.visible = want;
         }
-        if want && matches!(kind, Outlined::Person) {
-            let w = person_width(&style, d);
-            if o.width != w {
-                o.width = w;
+        if want {
+            if o.colour != want_col {
+                o.colour = want_col;
+            }
+            if matches!(kind, Outlined::Person) {
+                let w = if style.look.on {
+                    let submesh = scale.map_or(if face_part { FACE_OUTLINE_SCALE } else { 1.0 }, |s| if face_part { s.0.min(FACE_OUTLINE_SCALE) } else { s.0 });
+                    ld_person_width(&style, d, submesh)
+                } else {
+                    person_width(&style, d)
+                };
+                if o.width != w {
+                    o.width = w;
+                }
             }
         }
     }
@@ -967,3 +1109,63 @@ pub fn outline_normals(mesh: &mut Mesh) -> bool {
 /// Meshes whose outline directions were generated, and meshes that brought their own (the
 /// `assets:` diag line, perf.rs).
 pub static OUTLINE_NORMALS: (std::sync::atomic::AtomicUsize, std::sync::atomic::AtomicUsize) = (std::sync::atomic::AtomicUsize::new(0), std::sync::atomic::AtomicUsize::new(0));
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn outline_weight_scales_and_parses() {
+        assert_eq!(OutlineWeight::default(), OutlineWeight::Standard);
+        assert_eq!(OutlineWeight::parse("fine"), Some(OutlineWeight::Fine));
+        assert_eq!(OutlineWeight::parse("standard"), Some(OutlineWeight::Standard));
+        assert_eq!(OutlineWeight::parse("bold"), Some(OutlineWeight::Bold));
+        assert_eq!(OutlineWeight::parse("other"), None);
+        assert!(OutlineWeight::Fine.scale() < OutlineWeight::Standard.scale());
+        assert!(OutlineWeight::Standard.scale() < OutlineWeight::Bold.scale());
+    }
+
+    #[test]
+    fn ld_outline_distance_curve_thins_at_portrait_and_far_and_on_faces() {
+        let mut s = Style::default();
+        s.look = LookParams::of(Look::Lookdev, CharRim::Subtle, OutlineWeight::Standard);
+        let portrait = ld_person_width(&s, 1.4, 1.0);
+        let portrait_face = ld_person_width(&s, 1.4, FACE_OUTLINE_SCALE);
+        let near = ld_person_width(&s, 9.4, 1.0);
+        let middle = ld_person_width(&s, 14.1, 1.0);
+        let far = ld_person_width(&s, 28.0, 1.0);
+        assert!(portrait < near, "portrait ({portrait}) is thinner than Near ({near})");
+        assert!(portrait_face < portrait * 0.55, "face ({portrait_face}) is thinner than body ({portrait})");
+        assert!(near >= middle && middle > far, "Near ({near}) >= Middle ({middle}) > Far ({far})");
+
+        let mut fine = s;
+        fine.look = LookParams::of(Look::Lookdev, CharRim::Subtle, OutlineWeight::Fine);
+        let mut bold = s;
+        bold.look = LookParams::of(Look::Lookdev, CharRim::Subtle, OutlineWeight::Bold);
+        assert!(ld_person_width(&fine, 14.1, 1.0) < middle);
+        assert!(ld_person_width(&bold, 14.1, 1.0) > middle);
+    }
+
+    #[test]
+    fn ld_outline_color_shifts_cool_at_night_and_dusk() {
+        let style = Style::default();
+        let noon = crate::daylight::Atmo {
+            active: true,
+            lux: 9000.0,
+            light: [1.0, 0.96, 0.88],
+            fill: Vec3::new(0.010, 0.008, 0.022),
+            ..default()
+        };
+        let night = crate::daylight::Atmo {
+            active: true,
+            lux: 2800.0,
+            light: [0.46, 0.60, 1.0],
+            fill: Vec3::new(0.008, 0.012, 0.028),
+            ..default()
+        };
+        let c_noon = ld_outline_color(Some(&noon), &style).to_srgba();
+        let c_night = ld_outline_color(Some(&night), &style).to_srgba();
+        assert!(c_night.blue > c_night.red, "night outline harmonizes cool blue ({c_night:?})");
+        assert!(c_noon.red > c_night.red, "noon outline is warmer/lighter than night ({c_noon:?} vs {c_night:?})");
+    }
+}

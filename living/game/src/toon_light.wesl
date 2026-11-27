@@ -536,3 +536,25 @@ fn ld_char_rim(N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, sun: vec3<f32>, shadow:
     let sky = hsv_to_rgb(vec3<f32>(sc.hue, 0.45, 1.0)) * luma(sun) * far * hair_sky * 0.24;
     return (key + sky) * s;
 }
+
+// Local warm point lights under Look-dev (step 2.2): softer near-bulb falloff (`d2 + 1.4`) so low
+// braziers and characters standing beside a street lamp don't clip to white while casting a rich
+// warm pool across cobblestones and nearby clothes; gentle highlight shoulder prevents over-bright
+// washout where two pools meet.
+fn ld_point_lights(albedo: vec3<f32>, p: vec3<f32>, N: vec3<f32>, view_z: f32, frag: vec2<f32>, ortho: bool) -> vec3<f32> {
+    var color = vec3<f32>(0.0);
+    let cluster = clustered_forward::view_fragment_cluster_index(frag, view_z, ortho);
+    let ranges = clustered_forward::unpack_clusterable_object_index_ranges(cluster);
+    for (var i: u32 = ranges.first_point_light_index_offset; i < ranges.first_spot_light_index_offset; i = i + 1u) {
+        let id = clustered_forward::get_clusterable_object_id(i);
+        let l = &view_bindings::clustered_lights.data[id];
+        let to = (*l).position_radius.xyz - p;
+        let d2 = dot(to, to);
+        let f = d2 * (*l).color_inverse_square_range.w;
+        let window = clamp(1.0 - f * f, 0.0, 1.0);
+        let fall = window * window / (d2 + 1.4);
+        let b = smoothstep(-0.15, 0.25, dot(N, normalize(to))) * 0.78 + 0.22;
+        color = color + albedo * (*l).color_inverse_square_range.rgb * fall * b * view_bindings::view.exposure / 3.14159265 * toon.extra.w;
+    }
+    return color / (vec3<f32>(1.0) + color * 0.22);
+}

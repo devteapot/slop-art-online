@@ -1168,6 +1168,10 @@ fn spawn_item(commands: &mut Commands, assets: &AssetServer, land: &Land, it: &I
     let mut out = vec![e.id()];
     if let Some((light, tf)) = crate::envs::local_light(&it.kind, it.glow, it.height, it.k) {
         out.push(commands.spawn((EnvPart, light, Transform::from_translation(at + tf.translation))).id());
+    } else if it.height > 1.0 && it.size.is_none() {
+        if let Some((light, tf)) = crate::envs::lookdev_local_light(&it.kind, it.height) {
+            out.push(commands.spawn((EnvPart, light, Transform::from_translation(at + tf.translation), Visibility::Hidden)).id());
+        }
     }
     out
 }

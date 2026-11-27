@@ -618,6 +618,9 @@ fn fragment(
         if (is_kind(4.0)) {
             color = color + hair_light(albedo.rgb, N, V, L, lit, fr, strand_light(in, duv), facing(in), in) * sun * (1.0 - ink_cov);
         }
+@if(LOOKDEV)
+        color = color + ld_point_lights(lit_albedo, p.xyz, N, view_z, pbr_input.frag_coord.xy, pbr_input.is_orthographic);
+@else
         color = color + point_lights(lit_albedo, p.xyz, N, view_z, pbr_input.frag_coord.xy, pbr_input.is_orthographic);
         color = color + emission(pbr_input.material.emissive.rgb, sc);
         out.color = vec4<f32>(color, out_a);

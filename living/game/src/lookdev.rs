@@ -83,11 +83,11 @@ pub struct NightGlow;
 pub struct Unlit;
 
 /// The toon materials of [`NightGlow`] models that glow, with their glow as authored, and the
-/// daylight share last applied to them.
+/// daylight share and look mode last applied to them.
 #[derive(Resource, Default)]
 pub struct NightGlows {
     mats: HashMap<AssetId<Toon>, LinearRgba>,
-    applied: Option<f32>,
+    applied: Option<(f32, bool)>,
 }
 
 /// How dark it is at an hour (0 day to 1 night, in steps of 0.05): the world's `daylight` law
@@ -109,22 +109,40 @@ fn darkness(rules: Option<&crate::verbs::Rules>, hour: f32) -> f32 {
 }
 
 /// Damp the glow of [`NightGlow`] models' materials by daylight; written only when the
-/// darkness changes (at most 20 steps a dusk) or a new glowing material appears.
-pub fn night_glow(clock: Res<crate::daylight::Clock>, rules: Option<NonSend<crate::verbs::Rules>>, mut glows: ResMut<NightGlows>, mut toons: ResMut<Assets<Toon>>) {
+/// darkness or look mode changes (at most 20 steps a dusk) or a new glowing material appears.
+/// Under Look-dev (step 2.2), lamps and embers also warm up smoothly during dusk (`atmo.glow`)
+/// and boost HDR emission so panes and coals catch bloom cleanly; Classic is unchanged.
+pub fn night_glow(
+    clock: Res<crate::daylight::Clock>,
+    look: Res<crate::style::Look>,
+    atmo: Option<Res<crate::daylight::Atmo>>,
+    rules: Option<NonSend<crate::verbs::Rules>>,
+    mut glows: ResMut<NightGlows>,
+    mut toons: ResMut<Assets<Toon>>,
+) {
     if glows.mats.is_empty() {
         return;
     }
+    let lookdev = *look == crate::style::Look::Lookdev;
     let dark = darkness(rules.as_deref(), clock.hour());
-    if glows.applied == Some(dark) {
+    let level = if lookdev {
+        let dusk = atmo.as_deref().filter(|a| a.active).map_or(0.0, |a| ((a.glow - 1.08) / 0.82).clamp(0.0, 1.0));
+        // Quantize to 20 steps so materials aren't rewritten every frame at dusk.
+        let dusk = (dusk * 20.0).round() / 20.0;
+        dark.max(dusk) * 3.2
+    } else {
+        dark
+    };
+    if glows.applied == Some((level, lookdev)) {
         return;
     }
-    glows.applied = Some(dark);
+    glows.applied = Some((level, lookdev));
     for (id, glow) in &glows.mats {
         if let Some(mut m) = toons.get_mut(*id) {
-            m.base.emissive = *glow * dark;
+            m.base.emissive = *glow * level;
         }
     }
-    debug!("night glow: {} materials at {dark:.2} of their glow (hour {:.2})", glows.mats.len(), clock.hour());
+    debug!("night glow: {} materials at {level:.2} of their glow (lookdev={lookdev}, hour {:.2})", glows.mats.len(), clock.hour());
 }
 
 /// On a model's root: its meshes cast no shadow (grass, flowers, small props: many, and their
@@ -748,6 +766,9 @@ pub fn convert(
             // character's outline where the strip reaches past the head.
         } else if character {
             ec.insert(outline(Outlined::Person, &style));
+            if let Some(scale) = meshes.get(&mesh.0).and_then(crate::style::mesh_outline_scale) {
+                ec.insert(crate::style::OutlineScale(scale));
+            }
         } else if owner.file.starts_with("lookdev/") || owner.file.starts_with("view/") {
             ec.insert(outline(Outlined::Thing, &style));
         } else if !crate::perf::has("nostencil") {

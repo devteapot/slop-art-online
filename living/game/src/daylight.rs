@@ -543,35 +543,61 @@ fn apply(
     }
 }
 
-/// A lamp's point light (envs::local_light): its full intensity, and whether it is a lamp people
-/// light at night (else a glowing plant or crystal, which glows by day too).
+/// A lamp's point light (envs::local_light / envs::lookdev_local_light): its full intensity,
+/// whether it is a lamp people light at night (else a glowing plant or crystal, which glows by
+/// day too), and whether it is gated on Look-dev (`style::Look::Lookdev`, step 2.2) so Classic
+/// stays identical to main.
 #[derive(Component, Clone, Copy)]
 pub struct Lamp {
     pub lumens: f32,
     pub lit_at_night: bool,
+    pub lookdev_only: bool,
 }
 
-/// Most lamps lit at once, and how far from you.
+/// Most lamps lit at once, and how far from you (Classic and Look-dev).
 const LAMPS: usize = 14;
 const LAMP_REACH: f32 = 48.0;
+const LD_LAMPS: usize = 10;
+const LD_LAMP_REACH: f32 = 40.0;
 
 /// Point lights only near you, nearest first and capped, brighter at night; lamps people light
-/// are out by day. Without the atmosphere every lamp stays as authored.
-fn lamps(atmo: Res<Atmo>, target: Res<crate::controls::Target>, mut q: Query<(Entity, &Lamp, &mut PointLight, &GlobalTransform, &mut Visibility)>, mut order: Local<Vec<(f32, Entity)>>) {
-    let night = ((atmo.glow - 1.0) / 1.0).clamp(0.0, 1.0);
+/// are out by day. Without the atmosphere every lamp stays as authored. Look-dev-only lamps stay
+/// off in Classic so Classic draws identically to main.
+fn lamps(atmo: Res<Atmo>, look: Res<crate::style::Look>, target: Res<crate::controls::Target>, mut q: Query<(Entity, &Lamp, &mut PointLight, &GlobalTransform, &mut Visibility)>, mut order: Local<Vec<(f32, Entity)>>) {
+    let lookdev = *look == crate::style::Look::Lookdev;
+    // In Look-dev, dusk lamps start warming up around 17.3h (atmo.glow ~ 1.15 -> 2.0); Classic
+    // keeps its exact ramp.
+    let night = if lookdev {
+        ((atmo.glow - 1.08) / 0.92).clamp(0.0, 1.0)
+    } else {
+        ((atmo.glow - 1.0) / 1.0).clamp(0.0, 1.0)
+    };
+    let (cap, reach) = if lookdev { (LD_LAMPS, LD_LAMP_REACH) } else { (LAMPS, LAMP_REACH) };
     let me = target.0.unwrap_or(Vec3::ZERO);
     order.clear();
     if atmo.active {
         for (e, lamp, _, g, _) in &q {
+            if lamp.lookdev_only && !lookdev {
+                continue;
+            }
             let d = g.translation().distance(me);
-            if d < LAMP_REACH && (!lamp.lit_at_night || night > 0.02) {
+            if d < reach && (!lamp.lit_at_night || night > 0.02) {
                 order.push((d, e));
             }
         }
         order.sort_by(|a, b| a.0.total_cmp(&b.0));
-        order.truncate(LAMPS);
+        order.truncate(cap);
     }
     for (e, lamp, mut light, _, mut vis) in &mut q {
+        if lamp.lookdev_only && !lookdev {
+            if *vis != Visibility::Hidden {
+                *vis = Visibility::Hidden;
+            }
+            if light.intensity != 0.0 {
+                light.intensity = 0.0;
+            }
+            continue;
+        }
         let (on, want) = if !atmo.active {
             (true, lamp.lumens)
         } else {
@@ -582,9 +608,12 @@ fn lamps(atmo: Res<Atmo>, target: Res<crate::controls::Target>, mut q: Query<(En
                 continue;
             };
             // Fade out toward the edge of the reach, so the cap never pops a light.
-            let edge = 1.0 - ((d - LAMP_REACH * 0.7) / (LAMP_REACH * 0.3)).clamp(0.0, 1.0);
+            let edge = 1.0 - ((d - reach * 0.7) / (reach * 0.3)).clamp(0.0, 1.0);
             let level = if lamp.lit_at_night { night } else { 0.55 + 0.45 * night };
-            (true, lamp.lumens * level * edge)
+            // Existing quay lamps (`fixtures.json`, 60k lm) join the richer Look-dev pool level
+            // without changing their Classic brightness.
+            let scale = if lookdev && !lamp.lookdev_only && lamp.lit_at_night { 3.4 } else { 1.0 };
+            (true, lamp.lumens * scale * level * edge)
         };
         let want_vis = if on { Visibility::Inherited } else { Visibility::Hidden };
         if *vis != want_vis {
