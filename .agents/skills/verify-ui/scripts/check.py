@@ -957,6 +957,69 @@ def film(run, c):
     c.check(s, "the next start reads it back", (((dump(out2, "05") or {}).get("extra") or {}).get("film")) == "screen", str(((dump(out2, "05") or {}).get("extra") or {}).get("film")))
 
 
+@scenario("light")
+def light(run, c):
+    """The light (`style::Look`, Settings › Play › Light) and the character rim (`style::CharRim`,
+    Settings › Play › Character rim): a fresh settings file starts Classic with the rim Subtle and
+    saves neither; Settings sets Look-dev and Strong and the file keeps them; the next start reads
+    them back. Then the live script's `light:` and `rim:` switch them in one view: Look-dev
+    changes the picture, Classic between two Look-devs returns to it (no more change than between
+    two Classic shots), and the rim changes people only. Stills `01_classic` … `05_rim_off` for the
+    eye. `LIVING_GAME_LOOK` and `LIVING_GAME_CHAR_RIM` must not be set."""
+    s = "light"
+    for k in ("LIVING_GAME_LOOK", "LIVING_GAME_CHAR_RIM"):
+        if os.environ.get(k):
+            c.check(s, f"{k} is unset (it overrides the settings file)", False, os.environ[k])
+            return
+    out0 = os.path.join(ROOT, ".local/living/verify", run, "ui", f"light-{THEME}" if THEME else "light")
+    st = os.path.join(out0, "settings.json")
+    if os.path.exists(st):
+        os.remove(st)
+    open_settings = "click:@menu;wait:0.4;click:@menu:Settings;wait:0.6;"
+    plan = ("ready;wait:2;dump:01;" + open_settings + "click:@settings:light:lookdev;wait:0.4;dump:02;shot:02_settings;"
+            "click:@settings:char_rim:strong;wait:0.4;dump:03;key:Escape:tap;wait:0.4;quit")
+    out, code, text = drive(run, s, plan)
+    c.check(s, "client ran and joined", code == 0, text[-300:])
+    x = lambda o, k: ((dump(o, k) or {}).get("extra") or {})
+    first = x(out, "01")
+    c.check(s, "a fresh settings file starts Classic, rim Subtle, and saves no choice", (first.get("light"), first.get("char_rim"), first.get("light_saved"), first.get("char_rim_saved")) == ("classic", "subtle", None, None), str((first.get("light"), first.get("char_rim"), first.get("light_saved"), first.get("char_rim_saved"))))
+    c.check(s, "Settings › Play › Light sets Look-dev, Character rim sets Strong", x(out, "02").get("light") == "lookdev" and x(out, "03").get("char_rim") == "strong", str((x(out, "02").get("light"), x(out, "03").get("char_rim"))))
+    c.check(s, "the log names each choice", log(out).count("settings: light: ") == 1 and log(out).count("settings: character rim: ") == 1)
+    saved = json.load(open(st)) if os.path.exists(st) else {}
+    c.check(s, "the settings file keeps both", (saved.get("light"), saved.get("char_rim")) == ("lookdev", "strong"), str((saved.get("light"), saved.get("char_rim"))))
+    seq = [("classic", "subtle"), ("lookdev", "subtle"), ("classic", "subtle"), ("lookdev", "strong"), ("lookdev", "off")]
+    names = ["01_classic", "02_lookdev", "03_classic", "04_rim_strong", "05_rim_off"]
+    shots = "".join(f"light:{l};rim:{r};wait:0.8;shot:{n};" for (l, r), n in zip(seq, names))
+    # A resident held still beside me, the cursor in the world (the dump's `seen`), the start's
+    # notes faded.
+    a, _ = residents(run)
+    out2, code2, _ = drive(run, s, "ready;wait:2;dump:00;sync:scene;cursor:0.70,0.55;wait:6;" + shots + "dump:06;quit", places=[f"{a}:-1.5:1.5"])
+    c.check(s, "the next start reads them back", (x(out2, "00").get("light"), x(out2, "00").get("char_rim")) == ("lookdev", "strong"), str((x(out2, "00").get("light"), x(out2, "00").get("char_rim"))))
+    try:
+        import numpy as np
+        from PIL import Image
+    except ImportError:
+        c.check(s, "pixels: numpy and Pillow are available (uv run --with pillow --with numpy)", False)
+        return
+    shot = {n: np.asarray(Image.open(os.path.join(out2, f"{n}.png")).convert("RGB")).astype(int) for n in names}
+    h, w = shot[names[0]].shape[:2]
+    near = np.zeros((h, w), bool)
+    yy, xx = np.mgrid[0:h, 0:w]
+    for b in (dump(out2, "06") or {}).get("seen") or []:
+        (hx, hy), (fx, fy) = b["head"], b["feet"]
+        tall = max(abs(fy - hy), 8.0)
+        near |= (np.abs(xx - (hx + fx) / 2) <= 0.4 * tall) & (yy >= min(hy, fy) - 0.15 * tall) & (yy <= max(hy, fy) + 0.1 * tall)
+    changed = lambda p, q: (np.abs(shot[p] - shot[q]).max(2) > 6).mean() * 100
+    base = changed("01_classic", "03_classic")
+    look = changed("01_classic", "02_lookdev")
+    c.check(s, "Look-dev changes the picture", look > base + 5, f"{look:.2f}% against {base:.2f}% between the Classics")
+    # People walk and the sun moves meanwhile: Classic after Look-dev is Classic again, the two
+    # Classics far closer than either is to Look-dev.
+    c.check(s, "Classic after Look-dev is Classic again", base <= 0.35 * min(look, changed("02_lookdev", "03_classic")), f"{base:.2f}% between the Classics, {look:.2f}% to Look-dev")
+    rim = np.abs(shot["04_rim_strong"] - shot["05_rim_off"]).max(2) > 6
+    c.check(s, "the rim changes people, little else", (rim & near).sum() > 40 and (rim & ~near).mean() * 100 <= base * 1.25 + 0.5, f"{int((rim & near).sum())} px on people, {(rim & ~near).mean() * 100:.2f}% elsewhere")
+
+
 @scenario("hair")
 def hair(run, c):
     """The hair shine (`style::HAIR_SHINES`, Settings › Play › Hair shine): a fresh settings file

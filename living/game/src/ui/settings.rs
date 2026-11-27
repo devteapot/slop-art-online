@@ -7,7 +7,8 @@
 //!   unseen ground looks (memory by default, grey, wash, lantern, shadows, hatch), facing sight
 //!   (on/off, its five values and its switch where the launcher allows it: `ui/facing.rs`), the
 //!   film (soft by default, full as before film-1, or none: `post::Film`), the hair shine (crown
-//!   by default, soft, or today's ring: `style::HAIR_SHINES`), the
+//!   by default, soft, or today's ring: `style::HAIR_SHINES`), the light (classic by default, or
+//!   look-dev: `style::Look`) and its character rim (`style::CharRim`), the
 //!   weapon drawing itself when something attacks you, and key hints and first-time tips (with
 //!   "Show tips again").
 //! - **Controls:** the skill-key preset ("Q E R, plus 1–9", "1–9 only", "My own") and every
@@ -136,6 +137,8 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                 row(pg, f, "Unseen ground", "How ground you don't see now looks, with \"not seen now\"", |c| kit::seg(c, f, "settings:look", &crate::sightedge::Look::ALL.map(|l| (l.label(), l.name()))));
                 row(pg, f, "Film", "The warm haze from the top of the screen. Soft keeps dark colours; Full lifts them too", |c| kit::seg(c, f, "settings:film", &crate::post::Film::ALL.map(|m| (m.label(), m.name()))));
                 row(pg, f, "Hair shine", "The highlight on hair. Crown lies over the crown and stays off a fringe", |c| kit::seg(c, f, "settings:hair", &crate::style::HairShine::choices()));
+                row(pg, f, "Light", "Look-dev: sky and ground fill, deeper shadows, warm skin, highlights on metal and glass", |c| kit::seg(c, f, "settings:light", &crate::style::Look::ALL.map(|l| (l.label(), l.name()))));
+                row(pg, f, "Character rim", "With the look-dev light: a rim of light on people's sun side", |c| kit::seg(c, f, "settings:char_rim", &crate::style::CharRim::ALL.map(|r| (r.label(), r.name()))));
                 row(pg, f, "Weapon", "Draw it by itself when something attacks you", |c| kit::toggle(c, "settings:auto_draw"));
                 row(pg, f, "Combat timing", "Play attack animations live during the windup, or on the old delayed clock", |c| kit::seg(c, f, "settings:combat_timing", &[("Live (default)", "live"), ("Old (delayed)", "old")]));
                 row(pg, f, "Windup glint", "Brief flash halfway through a hostile windup", |c| kit::toggle(c, "settings:windup_glint"));
@@ -248,6 +251,7 @@ pub fn update(
         ResMut<crate::graphics::Quality>,
         ResMut<crate::graphics::RenderScale>,
     ),
+    (mut light, mut rim): (ResMut<crate::style::Look>, ResMut<crate::style::CharRim>),
 ) {
     let mut changed = false;
     if !open.is_open(Win::Settings) {
@@ -366,6 +370,22 @@ pub fn update(
                     changed = true;
                 }
             }
+            "settings:light" => {
+                if let Some(l) = crate::style::Look::parse(value) {
+                    info!("settings: light: {value}");
+                    *light = l;
+                    prefs.light = Some(value.into());
+                    changed = true;
+                }
+            }
+            "settings:char_rim" => {
+                if let Some(r) = crate::style::CharRim::parse(value) {
+                    info!("settings: character rim: {value}");
+                    *rim = r;
+                    prefs.char_rim = Some(value.into());
+                    changed = true;
+                }
+            }
             "settings:combat_timing" => {
                 if let Some(m) = crate::combat::CombatTiming::parse(value) {
                     info!("settings: combat timing: {}", m.name());
@@ -451,6 +471,7 @@ pub fn update(
     let control = if input.control == crate::controls::Control::Cursor { "cursor" } else { "travel" };
     let (pg, preset, theme_now, look_walk, film_now) = (*page, binds.preset.name(), theme.name.key(), lw.base().to_string(), film.name());
     let shine_now = shine.name();
+    let (light_now, rim_now) = (light.name(), rim.name());
     let (quality_now, scale_now) = (quality.name(), render_scale.name());
     kit::light(&mut lit, |t| {
         let (what, value) = t.rsplit_once(':').unwrap_or((t, ""));
@@ -472,6 +493,8 @@ pub fn update(
             "settings:look_walk" => Some(value == look_walk),
             "settings:film" => Some(value == film_now),
             "settings:hair" => Some(value == shine_now),
+            "settings:light" => Some(value == light_now),
+            "settings:char_rim" => Some(value == rim_now),
             "settings:combat_timing" => Some(value == prefs.combat_timing.name()),
             "settings:quality" => Some(value == quality_now),
             "settings:render_scale" => Some(value == scale_now),
@@ -695,7 +718,7 @@ pub(super) fn camera_controls(
 
 /// The settings file's Play settings, once at start, unless the environment sets them
 /// (`LIVING_GAME_CONTROL`, `LIVING_SIGHT_EDGE`, `LIVING_GAME_LOOK_WALK`, `LIVING_GAME_FILM`,
-/// `LIVING_GAME_HAIR_SHINE`, used by
+/// `LIVING_GAME_HAIR_SHINE`, `LIVING_GAME_LOOK`, `LIVING_GAME_CHAR_RIM`, used by
 /// headless captures).
 pub fn apply_prefs(
     prefs: Res<Prefs>,
@@ -708,6 +731,7 @@ pub fn apply_prefs(
         ResMut<crate::graphics::Quality>,
         ResMut<crate::graphics::RenderScale>,
     ),
+    (mut light, mut rim): (ResMut<crate::style::Look>, ResMut<crate::style::CharRim>),
     mut done: Local<bool>,
 ) {
     if *done {
@@ -725,6 +749,12 @@ pub fn apply_prefs(
     }
     if let (Some(s), None) = (prefs.hair_shine.as_deref().and_then(crate::style::HairShine::parse), crate::style::HairShine::from_env()) {
         *shine = s;
+    }
+    if let (Some(l), None) = (prefs.light.as_deref().and_then(crate::style::Look::parse), crate::style::Look::from_env()) {
+        *light = l;
+    }
+    if let (Some(r), None) = (prefs.char_rim.as_deref().and_then(crate::style::CharRim::parse), crate::style::CharRim::from_env()) {
+        *rim = r;
     }
     if let (Some(q), None) = (prefs.quality.as_deref().and_then(crate::graphics::Quality::parse), crate::graphics::Quality::from_env()) {
         *quality = q;

@@ -88,6 +88,18 @@ struct Toon {
     // A seated character's skirted piece (characters.rs `seat_clamp`, hem-ground): xyz the seat
     // plane's upward normal, w its offset a margin up; zero on every shared material.
     seat: vec4<f32>,
+    // The look-dev light (style.rs `Look`, `ld_*` below): x 1 on, y the character rim's strength,
+    // z the specular's strength, w the share of the classic rim scenery keeps. All zero in the
+    // classic look, whose code paths are untouched.
+    look: vec4<f32>,
+    // x the sky's fill (times the sun's brightness), y the ground's warm bounce (times the sun),
+    // z cloth and scenery shadow depth, w skin shadows' saturation.
+    look_light: vec4<f32>,
+    // x 1 on a character's material.
+    character: vec4<f32>,
+    // The look-dev ramp on characters: x the band threshold (N·L), y the brush breakup's share;
+    // z how much of the sun's colour shadows keep (0 none: their colour is the sky's).
+    look_ramp: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100)
@@ -367,4 +379,160 @@ fn metres_per_pixel(z: f32) -> f32 {
 
 fn eye() -> vec3<f32> {
     return view_bindings::view.world_position.xyz;
+}
+
+// The look-dev light (style.rs `Look::Lookdev`, look-dev step 1). Only pipelines with the shader
+// def LOOKDEV (style.rs `ToonKey`, terrain.rs) call these; the classic look's code is as before.
+
+// The sun's bands with the look-dev light: characters' own ramp (`ld_bands`), everything else
+// as before.
+fn ld_band_pair(ndl: f32, relief: f32, p: vec3<f32>) -> vec2<f32> {
+    if (toon.character.x > 0.5) {
+        return ld_bands(ndl, p);
+    }
+    return bands(ndl + relief, p);
+}
+
+// How warm the key light is (0 for cool moonlight or neutral white, 1 for warm daytime/dusk sun):
+// gates sun-desaturation, skin's warm shadow shift, and warm ground bounce so cool moonlight stays
+// cool in shadow instead of turning skin orange-tan or ground green.
+fn ld_sun_warmth(sun: vec3<f32>) -> f32 {
+    return smoothstep(0.02, 0.25, (sun.r - sun.b) / max(luma(sun), 1e-4));
+}
+
+// The shadow's value with the look-dev light: cloth and scenery at look_light.z (softened slightly
+// under cool night moonlight so outer-plaza figures stay legible); skin deepened modestly by day
+// for clearer form turn; face parts as before.
+fn ld_value(depth: f32, away: f32, skin: bool, part: bool, warm: f32) -> f32 {
+    if (part) {
+        return 1.0 - depth;
+    }
+    if (skin) {
+        let scale = select(1.26, 1.12, is_kind(2.0));
+        return 1.0 - depth * mix(1.0, scale, warm);
+    }
+    let d = toon.look_light.z - 0.08 * (1.0 - warm);
+    return (1.0 - d) * away;
+}
+
+fn luma(c: vec3<f32>) -> f32 {
+    return dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
+}
+
+// The light that isn't the sun, by the surface's facing: the sky's fill from above, in the
+// scene's shadow hue (cool by day, violet at dusk, blue at night) at a share of the sun's
+// brightness, and the sunlit ground's warm bounce from below (gated on sun warmth so moonlight
+// stays cool under chins). Skin takes less of the extra sky tint by day/dusk so dusk jaws stay
+// warm peach rather than mauve.
+fn ld_hemi(N: vec3<f32>, sun: vec3<f32>, sc: Scene, warm: f32, skin: bool) -> vec3<f32> {
+    let sky_tint = hsv_to_rgb(vec3<f32>(sc.hue, 0.55, 1.0)) * luma(sun) * toon.look_light.x;
+    let sky_scale = select(1.0, mix(1.0, 0.45, warm), skin);
+    let sky = sky_tint * sky_scale + sc.fill;
+    let high = clamp(sun_direction().y, 0.0, 1.0);
+    let warm_ground = sun * vec3<f32>(1.0, 0.82, 0.64) * toon.look_light.y * high;
+    let ground = mix(sc.fill * 0.35, warm_ground, warm);
+    return mix(ground, sky, clamp(N.y * 0.5 + 0.5, 0.0, 1.0));
+}
+
+// `shadow_of` for the look-dev light: skin's shadow moves toward warm peach-rose when the key light
+// is warm (noon/dusk), and stays harmonized with the cool scene hue under blue moonlight at night.
+fn ld_shadow_of(lit: vec3<f32>, value: f32, scene_hue: f32, warm: f32) -> vec3<f32> {
+    var hsv = rgb_to_hsv(lit);
+    let skin = is_kind(1.0) || is_kind(2.0);
+    let hair = is_kind(4.0);
+    let own = select(0.0, smoothstep(0.12, 0.35, hsv.y), hair);
+    if (skin) {
+        var d_warm = 0.008 - hsv.x;
+        d_warm = d_warm - round(d_warm);
+        var d_cool = scene_hue - hsv.x;
+        d_cool = d_cool - round(d_cool);
+        hsv.x = fract(hsv.x + d_warm * (0.40 * warm) + d_cool * (0.15 * (1.0 - warm)));
+        hsv.y = clamp(hsv.y * mix(1.0, toon.look_light.w, warm), 0.0, 1.0);
+    } else {
+        let red = 1.0 - smoothstep(0.05, 0.12, abs(hsv.x - round(hsv.x)));
+        let shift = toon.shade.y * (1.0 - 0.75 * red) * (1.0 - own);
+        var d = scene_hue - hsv.x;
+        d = d - round(d);
+        hsv.x = fract(hsv.x + d * shift);
+        let sat = mix(toon.shade.z, max(toon.shade.z, 1.12), own);
+        hsv.y = clamp(hsv.y * sat, 0.0, 1.0);
+    }
+    hsv.z = hsv.z * value;
+    return hsv_to_rgb(hsv);
+}
+
+// The sun's bands on a character with the look-dev light: its own threshold (a little more of
+// the form turns to shadow) and less brush breakup, so cloth reads as clean cel bands.
+fn ld_bands(ndl: f32, p: vec3<f32>) -> vec2<f32> {
+    let brush = (noise3(p * toon.extra.x) - 0.5) * toon.band.z * toon.look_ramp.y;
+    let t = toon.look_ramp.x + brush;
+    return vec2<f32>(
+        smoothstep(t - toon.band.y, t + toon.band.y, ndl),
+        smoothstep(-0.35 + brush, -0.15 + brush, ndl)
+    );
+}
+
+// `banded` for the look-dev light: the hemisphere instead of the flat fill (kept low on lit planes
+// so noon sunlight stays crisp and warm), and warm-gated sun desaturation in shadow so warm sun
+// splits against cool sky shadows while cool moonlight keeps 1.0 of its blue colour.
+fn ld_banded(albedo: vec3<f32>, sun: vec3<f32>, lit: f32, value: f32, sc: Scene, N: vec3<f32>) -> vec3<f32> {
+    let warm = ld_sun_warmth(sun);
+    let skin = is_kind(1.0) || is_kind(2.0);
+    let lit_color = albedo * sun;
+    var sun_keep = mix(1.0, toon.look_ramp.z, warm);
+    sun_keep = select(sun_keep, mix(sun_keep, 1.0, 0.4), skin);
+    let neutral = albedo * mix(vec3<f32>(luma(sun)), sun, sun_keep);
+    let shadow_color = ld_shadow_of(neutral, value, sc.hue, warm) * toon.shadow.rgb + albedo * sun * toon.extra.y;
+    let color = mix(shadow_color, lit_color, lit);
+    return color + albedo * ld_hemi(N, sun, sc, warm, skin) * mix(1.0, 0.08, lit);
+}
+
+// A cel-stepped highlight (Blue Protocol): broader curve so curved metal poles, copper and glass
+// catch stylized glints across normal camera angles while tamed peak intensity keeps flat lamp
+// roofs from blowing out; none from roughness 0.88 up (cloth, skin, stone).
+fn ld_specular(N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, sun: vec3<f32>, lit: f32, albedo: vec3<f32>, rough: f32, metal: f32, k: f32) -> vec3<f32> {
+    let gloss = 1.0 - smoothstep(0.5, 0.88, rough);
+    if (gloss <= 0.0 || toon.look.z <= 0.0) {
+        return vec3<f32>(0.0);
+    }
+    let H = normalize(L + V);
+    let ndh = max(dot(N, H), 0.0);
+    let r = clamp(rough, 0.04, 1.0);
+    let s = pow(ndh, mix(96.0, 8.0, sqrt(r)));
+    let w = mix(0.05, 0.26, r);
+    let cel = smoothstep(0.45 - w, 0.45 + w, s);
+    let tint = mix(vec3<f32>(1.0, 0.97, 0.92), clamp(albedo * 1.6 + 0.12, vec3<f32>(0.0), vec3<f32>(1.15)), metal);
+    return tint * sun * cel * lit * gloss * mix(0.24, 0.52, metal) * k * toon.look.z;
+}
+
+// The character rim: an asymmetric, cel-stepped Fresnel crescent on the sunward silhouette (with
+// front-lit view projection suppressing double-shoulder halos, a luminance-preserving hair tint so
+// dark hair stays rich rather than chalky, and a wider anti-aliased Fresnel band plus upward sky
+// separation so Subtle reads cleanly at 8-12 m without 1 px wires on boots). Zero when off.
+fn ld_char_rim(N: vec3<f32>, V: vec3<f32>, L: vec3<f32>, sun: vec3<f32>, shadow: f32, albedo: vec3<f32>, sc: Scene, hair: bool) -> vec3<f32> {
+    let s = toon.look.y;
+    if (s <= 0.0) {
+        return vec3<f32>(0.0);
+    }
+    let fr = fresnel(N, V);
+    let fw = fwidth(fr);
+    let lv = dot(L, V);
+    let l_perp = L - V * max(lv, 0.0);
+    let l_len = length(l_perp);
+    let l_dir = select(L, l_perp / max(l_len, 1e-4), lv > 0.0);
+    let asym = select(1.0, smoothstep(0.08, 0.38, l_len), lv > 0.0);
+    let back = smoothstep(0.0, -0.5, lv);
+    let side = clamp(smoothstep(0.12, 0.52, dot(N, l_dir)) * asym + back * 0.75, 0.0, 1.0);
+    let edge = smoothstep(0.40 - fw, 0.62 + fw, fr);
+    let up_key = smoothstep(-0.25, 0.28, N.y);
+    let lum_scale = mix(0.50, 1.0, sqrt(clamp(luma(albedo), 0.0, 1.0)));
+    let cloth_col = mix(toon.rim.rgb, albedo * 1.4 + vec3<f32>(0.08), 0.22) * lum_scale;
+    let hair_col = albedo * 1.55 + toon.rim.rgb * 0.06;
+    let col = select(cloth_col, hair_col, hair);
+    let key = col * sun * edge * side * up_key * mix(0.30, 1.0, shadow) * 0.72;
+    let up_sky = smoothstep(-0.05, 0.50, N.y);
+    let far = smoothstep(0.44 - fw, 0.72 + fw, fr) * (1.0 - side * 0.7) * up_sky;
+    let hair_sky = select(1.0, mix(0.25, 1.0, sqrt(clamp(luma(albedo), 0.0, 1.0))), hair);
+    let sky = hsv_to_rgb(vec3<f32>(sc.hue, 0.45, 1.0)) * luma(sun) * far * hair_sky * 0.24;
+    return (key + sky) * s;
 }
