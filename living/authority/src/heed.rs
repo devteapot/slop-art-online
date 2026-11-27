@@ -684,8 +684,10 @@ struct Field<'a> {
     reads: Reads,
     now: u64,
     sc: Rc<living_rules::script::Scripts>,
-    /// Windups aimed at me now, by maker.
+    /// Windups aimed at me now, by maker (empty under `perceived_threat_on`).
     winding: Vec<u32>,
+    /// The `perceived_threat_on` law: a candidate threatens me as I see it (`perception::threat_seen`).
+    perceived_threat: bool,
     /// Who hurt me last, and how long ago (s).
     hurt: Option<(u32, f32)>,
     /// Who spoke or waved to me last, and how long ago (s).
@@ -700,7 +702,9 @@ struct Field<'a> {
 impl<'a> Field<'a> {
     #[allow(clippy::too_many_arguments)]
     fn new(ctx: &ReducerContext, me: &'a Character, at: (f32, f32), heeded: &'a [u32], since: &'a HashMap<u32, u64>, in_sight: &'a HashMap<u32, u64>, cued: &'a HashMap<u32, u64>, reads: Reads, now: u64) -> Field<'a> {
-        let winding = ctx.db.activity().victim().filter(me.id).filter(|a| a.phase == 1 && a.ends_ms > now).map(|a| a.id).collect();
+        // Under `perceived_threat_on`, each candidate (someone seen) is asked instead (`candidate`).
+        let perceived_threat = common::laws(ctx).perceived_threat_on;
+        let winding = if perceived_threat { Vec::new() } else { ctx.db.activity().victim().filter(me.id).filter(|a| a.phase == 1 && a.ends_ms > now).map(|a| a.id).collect() };
         let hurt = ctx.db.vitals().id().find(me.id).filter(|v| v.hurt_by != 0 && v.hurt_ms != 0).map(|v| (v.hurt_by, now.saturating_sub(v.hurt_ms) as f32 / 1000.0));
         let mut spoke = Vec::new();
         if let Some(st) = ctx.db.mind_state().id().find(me.id) {
@@ -715,7 +719,7 @@ impl<'a> Field<'a> {
         let community = if reads.community { ctx.db.membership().member().find(me.id).map(|m| m.community) } else { None };
         // A player's pins and focus, while a person plays it (minds holding it read none).
         let chosen = if crate::combat::human(ctx, me.id).is_some() { ctx.db.heed_choice().actor().find(me.id).map(|c| chosen_weights(&c)).unwrap_or_default() } else { Vec::new() };
-        Field { me, at, heeded, since, in_sight, cued, reads, now, sc: common::scripts(ctx), winding, hurt, spoke, acting: acting_on(ctx, me.id), contacts, community, chosen }
+        Field { me, at, heeded, since, in_sight, cued, reads, now, sc: common::scripts(ctx), winding, perceived_threat, hurt, spoke, acting: acting_on(ctx, me.id), contacts, community, chosen }
     }
 
     fn candidate(&self, ctx: &ReducerContext, c: &NearCreature) -> Candidate {
@@ -774,7 +778,7 @@ impl<'a> Field<'a> {
             closing,
             made_out,
             relations,
-            threatening: self.winding.contains(&id),
+            threatening: if self.perceived_threat { crate::perception::threat_seen(ctx, &self.sc, id, c.pos, self.me.id, self.at, now) } else { self.winding.contains(&id) },
             doing,
             hurt_me_ago_s: self.hurt.filter(|(who, _)| *who == id).map(|(_, a)| a),
             addressed_me_ago_s: self.spoke.iter().filter(|(who, _)| *who == id).map(|(_, a)| *a).reduce(f32::min),

@@ -248,6 +248,43 @@ pub struct MyOffer {
     pub until_ms: u64,
 }
 
+/// A family member of my living character (`my_kin`): its parents (`parent_a`/`parent_b`), its
+/// children (`character.parent_a`/`parent_b`), and its partner (the other parent of its youngest
+/// child, as `Target::Partner` and minds' scenes define it). Character ids and relation role only
+/// (`"parent"`, `"child"`, or `"partner"`); names come from `my_known_names`, and nothing of an
+/// unseen relative's health, position or whether they still live is exposed.
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct MyKin {
+    pub id: u32,
+    pub relation: String,
+}
+
+/// A standing courting / family offer my living character is a party to (`my_bond_offers`).
+/// `incoming` is true when addressed to me (`to == me`; I may `conceive` toward `from` to accept),
+/// false when made by me (`from == me`). Character ids only (no names: the caller may not know
+/// them; names come from `seen_characters` / `my_known_names`).
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct MyBondOffer {
+    pub id: u64,
+    pub incoming: bool,
+    pub from: u32,
+    pub to: u32,
+    pub at_ms: u64,
+}
+
+/// The community my living character belongs to (`my_community`), if any: its id, name,
+/// founder, founded time, home coordinates, and when my character joined (`since_ms`).
+#[derive(SpacetimeType, Clone, Debug, PartialEq)]
+pub struct MyCommunity {
+    pub id: u32,
+    pub name: String,
+    pub founder: u32,
+    pub founded_ms: u64,
+    pub home_x: f32,
+    pub home_y: f32,
+    pub since_ms: u64,
+}
+
 // ---- the one sight rule ------------------------------------------------------------------
 
 /// The one sight rule: whether `observer`, its eye at `eye` and its body facing `heading`, sees
@@ -1005,6 +1042,22 @@ pub fn visibly(ctx: &ReducerContext, sc: &Scripts, id: u32, now: u64) -> Option<
     let phase = doing::act_phase(d.since_ms, until, now)?;
     let skill = sc.shows().iter().find(|(_, s)| s.code == d.code)?.0.to_string();
     Some(Visibly { skill, phase, target: d.target, aim: (0.0, 0.0), combat: false })
+}
+
+/// Whether `maker`, a creature `me` perceives standing at `at`, visibly threatens `me` (standing at
+/// `me_at`) now: a hostile move of its still winding up and aimed at me (its target, or its drawn
+/// aim, as `seen_fighters` shows a player), or a menace at me under way (weapon raised, closing
+/// in: `act::threatened`, which has no row of its own and is told to its target). The
+/// `perceived_threat_on` law's `threatened` (graph condition, desire weight, heed): the caller
+/// passes only creatures in its scene, so an unseen attacker never counts.
+pub fn threat_seen(ctx: &ReducerContext, sc: &Scripts, maker: u32, at: (f32, f32), me: u32, me_at: (f32, f32), now: u64) -> bool {
+    use living_rules::doing::Phase;
+    if let Some(v) = visibly(ctx, sc, maker, now) {
+        if v.combat && matches!(v.phase, Phase::WindingUp | Phase::AboutToRelease) && sc.shapes().get(&v.skill).is_some_and(|s| s.hostile) && v.at(me, me_at, at) {
+            return true;
+        }
+    }
+    ctx.db.activity().id().find(maker).is_some_and(|a| a.victim == me && a.phase == 1 && a.ends_ms > now && sc.shapes().get(&a.skill).is_some_and(|s| s.menace))
 }
 
 impl Visibly {
@@ -2708,6 +2761,72 @@ pub fn my_offers(ctx: &ViewContext) -> Vec<MyOffer> {
     let to_me = ctx.db.trade_offer().to().filter(c.id).map(|o| row(o, true));
     let mine = ctx.db.trade_offer().from().filter(c.id).filter(|o| o.to != c.id).map(|o| row(o, false));
     to_me.chain(mine).collect()
+}
+
+/// My living character's own family: parents, children, and partner (the other parent of its
+/// youngest child). Indexed reads on `player`, `character` (PK, `parent_a`, `parent_b`); no
+/// whole-table scan.
+#[spacetimedb::view(accessor = my_kin, public, primary_key = id)]
+pub fn my_kin(ctx: &ViewContext) -> Vec<MyKin> {
+    let Some(me) = living(ctx) else { return Vec::new() };
+    let mut kin: std::collections::BTreeMap<u32, &'static str> = std::collections::BTreeMap::new();
+    let mut children: Vec<Character> = Vec::new();
+    let mut seen_children: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    for c in ctx.db.character().parent_a().filter(me.id).chain(ctx.db.character().parent_b().filter(me.id)) {
+        if c.id != me.id && seen_children.insert(c.id) {
+            children.push(c);
+        }
+    }
+    if let Some(youngest) = children.iter().max_by_key(|c| (c.born_ms, c.id)) {
+        let other = if youngest.parent_a == me.id { youngest.parent_b } else { youngest.parent_a };
+        if other != 0 && other != me.id {
+            kin.insert(other, "partner");
+        }
+    }
+    for p in [me.parent_a, me.parent_b] {
+        if p != 0 && p != me.id {
+            kin.insert(p, "parent");
+        }
+    }
+    for c in children {
+        kin.insert(c.id, "child");
+    }
+    kin.into_iter().map(|(id, relation)| MyKin { id, relation: relation.into() }).collect()
+}
+
+/// Standing courting / family offers addressed to my living character (`incoming: true`) and
+/// the one it has made (`incoming: false`). Two indexed reads on `bond_offer` (`to`, `from`).
+#[spacetimedb::view(accessor = my_bond_offers, public, primary_key = id)]
+pub fn my_bond_offers(ctx: &ViewContext) -> Vec<MyBondOffer> {
+    let Some(c) = living(ctx) else { return Vec::new() };
+    let row = |o: BondOffer, incoming: bool| MyBondOffer {
+        id: o.id,
+        incoming,
+        from: o.from,
+        to: o.to,
+        at_ms: o.at_ms,
+    };
+    let to_me = ctx.db.bond_offer().to().filter(c.id).map(|o| row(o, true));
+    let mine = ctx.db.bond_offer().from().filter(c.id).filter(|o| o.to != c.id).map(|o| row(o, false));
+    to_me.chain(mine).collect()
+}
+
+/// My living character's own community membership, if any. Indexed point reads on `membership`
+/// (`member`, unique) and `community` (`id`, primary key); no whole-table scan.
+#[spacetimedb::view(accessor = my_community, public, primary_key = id)]
+pub fn my_community(ctx: &ViewContext) -> Vec<MyCommunity> {
+    let Some(c) = living(ctx) else { return Vec::new() };
+    let Some(m) = ctx.db.membership().member().find(c.id) else { return Vec::new() };
+    let Some(com) = ctx.db.community().id().find(m.community) else { return Vec::new() };
+    vec![MyCommunity {
+        id: com.id,
+        name: com.name,
+        founder: com.founder,
+        founded_ms: com.founded_ms,
+        home_x: com.home_x,
+        home_y: com.home_y,
+        since_ms: m.since_ms,
+    }]
 }
 
 

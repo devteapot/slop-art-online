@@ -114,6 +114,11 @@ fn laws() {
         // labelled "stranger". On: anyone whose name one does not know, the rule that names
         // people in scenes, percepts and memory (`perception::knows_name`).
         stranger_by_name: false,
+        // What `threatened` (a graph's condition and weight, heed's) reads (perception parity,
+        // docs/PERCEPTION_PARITY_AUDIT.md): on, a hostile move winding up at one, or a menace,
+        // by someone one perceives (sight, its line, its field), as a player sees it; off, any
+        // move aimed at one, seen or not (sight checked only under `fov_on`).
+        perceived_threat_on: false,
         // Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): a graph's
         // `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a
         // personal relation only when it is clear (trust -25 or less or a hostile word; 25 or more
@@ -172,7 +177,7 @@ fn laws() {
         // A look checks only the structures new since the last look, or outside its sight then;
         // `notice_delta_check` (a diagnostic) checks that every one skipped was already familiar.
         notice_delta: true, notice_delta_check: false,
-        seen_ranges: true, seen_ranges_check: false,
+        seen_ranges: true, seen_ranges_check: false, seen_ranges_max_pairs: 128.0,
         // How what is near a player, or fighting it, reaches the player's client: as cues at once,
         // behind near copies that follow every 500 ms (on, since frame-views' acceptance), or at the
         // player's frames (off). Delivery only: the client ends on the same rows either way
@@ -3339,6 +3344,7 @@ fn law_about(l, name) {
         "notice_delta_check" => "a diagnostic: what a look passes over is checked to be already familiar",
         "seen_ranges" => "remember which structures were seen in ranges of ids by block",
         "seen_ranges_check" => "a diagnostic: compare structure newness with familiarity",
+        "seen_ranges_max_pairs" => `cap seen-structure pairs per block at ${short(l.seen_ranges_max_pairs)} (0: none)`,
         "latency_nav_from" => if l.latency_nav_from == 0 { "navigation latency logging is off" } else { "navigation latency logging starts at the chosen character id" },
         "latency_fast" => if l.latency_fast { "the fast lane's authority stages are logged" } else { "fast lane latency logging is off" },
         "latency_acts" => if l.latency_acts { "the course of each deliberate act is logged" } else { "deliberate act logging is off" },
@@ -3359,6 +3365,7 @@ fn law_about(l, name) {
         "fast_lane_stale_s" => `a reason for one that waits ${short(l.fast_lane_stale_s)} s is let go`,
         "force_outcomes" => if l.force_outcomes { "whoever strikes, shoots or casts learns how it came out, as far as they see" } else { "a blow, shot or bolt tells its maker how it came out only when it fails, or for a few skills" },
         "alert_after_hit_s" => `a body struck within the last ${short(l.alert_after_hit_s)} s cannot fall asleep`,
+        "perceived_threat_on" => if l.perceived_threat_on { "one sees a blow or a threat coming only from someone one sees" } else { "one knows of every blow or threat aimed at one, seen or not" },
         "renew_in_place" => if l.renew_in_place { "a rest, a sleep or work is still seen while it is taken up again" } else { "between one rest, sleep or piece of work and the next, nothing is seen for a moment" },
         "alert_while_attacker_near" => if l.alert_while_attacker_near { "nor while the one who struck it is close and the fight is on" } else { "even with the one who struck it close by" },
         "gaze_on" => "whether creatures can change their gaze band",

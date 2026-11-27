@@ -135,13 +135,13 @@ SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'plac
 RLS_TABLES = ['seen_body_cue', 'seen_fighter_cue', 'seen_doing_cue', 'seen_body_copy', 'seen_character_copy', 'seen_fighter_copy', 'combat_feed', 'experience_copy', 'seen_throng']
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex',
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'my_kin', 'my_bond_offers', 'my_community', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex',
          # The near and far tiers of the three copy-backed views (frame-views; scripts/cues.py proves them).
          'seen_bodies_near', 'seen_bodies_far', 'seen_fighters_near', 'seen_fighters_far', 'seen_doing_near', 'seen_doing_far']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
-OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_senses_v_2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
+OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_kin', 'my_bond_offers', 'my_community', 'my_heard', 'my_senses', 'my_senses_v_2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
@@ -881,6 +881,12 @@ class Run:
                     and set(p['my_places']) <= mine and set(p['my_inventory']) <= mine and set(p['my_know_how']) <= mine
                     # Offers to or from my character; incoming exactly when addressed to me.
                     and all((o['to'] in mine) == o['incoming'] and (o['from'] in mine or o['to'] in mine) for o in p['my_offers'])
+                    # Kin of my character: valid relation roles, never itself.
+                    and all(k['relation'] in ('parent', 'child', 'partner') and k['id'] not in mine for k in p['my_kin'])
+                    # Bond offers to or from my character; incoming exactly when addressed to me.
+                    and all((o['to'] in mine) == o['incoming'] and (o['from'] in mine or o['to'] in mine) for o in p['my_bond_offers'])
+                    # My community: at most one row, with a non-empty name.
+                    and len(p['my_community']) <= 1 and all(isinstance(c['name'], str) and c['name'] for c in p['my_community'])
                     # Who heard my lines: only my own lines (docs/COMMUNICATION.md §6).
                     and {h['speaker'] for h in p['my_heard']} <= mine
                     # My senses: exactly one row, my character's, with the law's sight and hearing.
@@ -952,6 +958,7 @@ class Run:
                    code == 200 and theirs and not {'controller', 'ai', 'home_x', 'home_y', 'parent_a', 'parent_b', 'cause'} & set(cols)
                    and theirs['name'] == '' and theirs['label'] and theirs['hp'] < 0, 'seen-characters.json', f"columns {cols}; other {theirs and theirs['label']}")
         self.offers(identities, admin_token, me, other, t1, t2)
+        self.bond_offers_and_community(identities, admin_token, me, other, t1, t2)
         far = scene('beyond-sight', spots['open'][0], spots['far'])
         gone = lambda s, a, b: not any(b in s[a][t] for t in SEEN)
         self.check('beyond sight: no body, character, fighter or doing row', gone(far, me, other) and gone(far, other, me), 'sight.json',
@@ -984,6 +991,46 @@ class Run:
                    and rows['anonymous-connected'] == [] and rows['anonymous'] == []
                    and all(o['until_ms'] > 0 for o in rows['player-1'] + rows['player-2']),
                    'offers.json', f"player-1 {mine}, player-2 {theirs}, ClientAnon {rows['anonymous-connected']}, anonymous {rows['anonymous']}")
+
+    def bond_offers_and_community(self, identities, admin_token, me, other, t1, t2):
+        """`my_bond_offers` and `my_community`: a courting offer reaches its maker (outgoing) and
+        addressee (incoming) and no one else; a founded community reaches its member and no one
+        else; anonymous receives none of either (`bond_offer`, `community`, `membership` private)."""
+        self.call('player-1', t1, 'human_act', [json.dumps({'do': 'conceive', 'target': {'id': other}})])
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline and not [r for r in self.sql_admin('SELECT * FROM bond_offer') if r['from'] == me and r['to'] == other]:
+            time.sleep(0.5)
+        got = {}
+        for label, token, _ in identities:
+            got[label] = self.probe('bond-offers-' + label, ['SELECT * FROM my_bond_offers'], token, seconds=1)
+        got['anonymous'] = self.probe('bond-offers-anonymous', ['SELECT * FROM my_bond_offers'])
+        rows = {l: v['final']['perception']['my_bond_offers'] if v['status'] == 'applied' else None for l, v in got.items()}
+        write(self.directory / 'bond-offers.json', rows)
+        key = lambda o: (o['from'], o['to'], o['incoming'])
+        mine = [key(o) for o in rows['player-1'] or []]
+        theirs = [key(o) for o in rows['player-2'] or []]
+        self.check('my_bond_offers: the maker reads its offer as outgoing, the addressee as incoming, no one else any',
+                   mine == [(me, other, False)] and theirs == [(me, other, True)]
+                   and rows['anonymous-connected'] == [] and rows['anonymous'] == []
+                   and all(o['at_ms'] > 0 for o in rows['player-1'] + rows['player-2']),
+                   'bond-offers.json', f"player-1 {mine}, player-2 {theirs}, ClientAnon {rows['anonymous-connected']}, anonymous {rows['anonymous']}")
+
+        # `my_community`: player-1 founds a community; only player-1 receives the row.
+        self.call('player-1', t1, 'human_act', [json.dumps({'do': 'found', 'text': 'VerifyClan'})])
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline and not [r for r in self.sql_admin('SELECT * FROM membership') if r['member'] == me]:
+            time.sleep(0.5)
+        cgot = {}
+        for label, token, _ in identities:
+            cgot[label] = self.probe('community-' + label, ['SELECT * FROM my_community'], token, seconds=1)
+        cgot['anonymous'] = self.probe('community-anonymous', ['SELECT * FROM my_community'])
+        crows = {l: v['final']['perception']['my_community'] if v['status'] == 'applied' else None for l, v in cgot.items()}
+        write(self.directory / 'community.json', crows)
+        c1 = crows['player-1'] or []
+        self.check('my_community: the founder reads its own community, no one else any',
+                   len(c1) == 1 and c1[0]['name'] == 'VerifyClan' and c1[0]['founder'] == me and c1[0]['since_ms'] > 0
+                   and crows['player-2'] == [] and crows['anonymous-connected'] == [] and crows['anonymous'] == [],
+                   'community.json', f"player-1 {c1}, player-2 {crows['player-2']}, ClientAnon {crows['anonymous-connected']}, anonymous {crows['anonymous']}")
 
     def field_of_view(self, spots, admin_token, mine, theirs):
         """Sight that depends on facing (docs/PERCEPTION.md, "The field of view"), switched on by

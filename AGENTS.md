@@ -67,13 +67,14 @@ For documentation-only work, check links, terminology, current/target labels and
 
 ## Models and coordination
 
-Work is routed by kind (owner's choice, 2026-11-26; it replaces the 2026-11-19 routing). Two providers share the building work so one provider's usage limit cannot stop every machine.
+Work is routed by kind (owner's choice, 2026-11-26, amended 2026-11-27; it replaces the 2026-11-19 routing). Several providers share the work so one provider's usage limit cannot stop every machine.
 
 - **Coordinators:** each machine has one coordinator thread on Claude Opus 5.5 (`claude-opus-5-5`) at high reasoning effort.
 - **Implementation of game logic and systems:** Claude Opus 5.5 at high effort, or Gemini 4 Neon (`gemini-4-neon`, provider `antigravity`, `thought_level` `high`); the owner treats them as interchangeable. This covers the authority, rules and laws, the mind service, the game client's systems, schemas, subscriptions and merges of code that changes behaviour. Spread the work between the two, and prefer whichever has usage headroom. Start these workers with Claude's native `Agent` tool or T3's `delegate_task` (provider `claudeAgent` with effort `high`, or provider `antigravity` with model `gemini-4-neon`), each in its own worktree from `origin/main`.
-- **Exploration and execution:** Gemini 4 Neon via `delegate_task`. This covers research and design surveys, diagnoses, measurement series and trial runs, reviews, documentation, tooling chores and verification runs. Use `thought_level` `medium` for routine runs and `high` for diagnoses and designs.
+- **Exploration and design:** Gemini 4 Neon via `delegate_task` (`thought_level` `high`). This covers research and design surveys, audits, deep diagnoses and long-context reviews.
+- **Execution:** GPT-6.2 Sol (`gpt-6.2-sol`, Codex provider, via `delegate_task`) at low reasoning effort, or Neon at `thought_level` `medium`, by headroom. This covers measurement series and trial runs, test-staging fixes, tooling chores, documentation and verification runs. Sol works only as a subagent, never as a thread the owner talks to (owner, 2026-11-27). When an execution task turns into implementing game logic, hand the implementation to Opus or Neon.
 - **Visual review:** Gemini 4 Neon is the first critic for character sheets, stills and screenshots against their references, before they reach the general coordinator and the owner.
-- **Asset generation:** GPT-6.2 Astra (`gpt-6.2-astra`, Codex provider) at low reasoning effort for 3D models, skeletons, textures and the asset generators. Astra is the only OpenAI model in routine use (owner, 2026-11-26).
+- **Asset generation:** GPT-6.2 Astra (`gpt-6.2-astra`, Codex provider) at low reasoning effort for 3D models, skeletons, textures and the asset generators. Besides Sol's subagent execution work, Astra is the only OpenAI model in routine use (owner, 2026-11-26 and 2026-11-27).
 - **Researching external posts and links** (X, Reddit, videos): Grok (`grok-4.7`, provider `grok`) at high effort.
 - **Escalation:** a task a worker has attempted and could not solve goes to the other of Opus and Neon. Say in the report when a task was moved and why.
 - **When Astra is unavailable** (usage limit reached, provider down), asset work continues on Claude Opus 5.5 or Gemini 4 Neon at high effort. Do not use Fable: it is good, especially for 3D, but too expensive (owner, 2026-11-20 and 2026-11-26). Say in the report which tasks moved for this reason.

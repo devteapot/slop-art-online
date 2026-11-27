@@ -621,6 +621,10 @@ pub struct Laws {
     /// relation row (or one labelled "stranger"); on, someone whose name one does not know
     /// (`perception::knows_name`, the rule scenes and percepts name people by).
     pub stranger_by_name: bool,
+    /// What `threatened` reads (perception parity): on, a hostile move winding up at the
+    /// character, or a menace at it, by someone it perceives (`perception::threat_seen` over the
+    /// scene's creatures); off, any move aimed at it (`activity.victim`), seen or not.
+    pub perceived_threat_on: bool,
     /// Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): on, a graph's
     /// `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a clear
     /// personal relation, then the community's stance, and minds are told so; off, any personal
@@ -850,6 +854,10 @@ pub struct Laws {
     pub notice_delta_check: bool,
     pub seen_ranges: bool,
     pub seen_ranges_check: bool,
+    /// Value-only cap on disjoint structure-id pairs per `(actor, block)` in `seen_structures`
+    /// when fragmented live remains defeat exact compaction (0: no cap; trimming keeps 3/4,
+    /// default 128 -> 96, sparing every interval holding a permanent structure).
+    pub seen_ranges_max_pairs: f32,
     /// The fast lane (docs/FAST_LANE.md): a mind-run character's re-plan between blows, asked
     /// of its mind on a blow taken or a move it sees repeated. Off: none is asked.
     pub fast_lane_on: bool,
@@ -964,6 +972,7 @@ impl Default for Laws {
             alert_while_attacker_near: true,
             renew_in_place: true,
             stranger_by_name: false,
+            perceived_threat_on: false,
             relation_fight_on: true,
             cues_on: false,
             cue_cooldown_s: 600.0,
@@ -1024,6 +1033,7 @@ impl Default for Laws {
             notice_delta_check: false,
             seen_ranges: true,
             seen_ranges_check: false,
+            seen_ranges_max_pairs: 128.0,
             fast_lane_on: false,
             seen_again_n: 3.0,
             fast_lane_rate: 2.0,
@@ -3349,6 +3359,7 @@ impl Scripts {
             alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
             renew_in_place: flag("renew_in_place", l.renew_in_place),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
+            perceived_threat_on: flag("perceived_threat_on", l.perceived_threat_on),
             relation_fight_on: flag("relation_fight_on", l.relation_fight_on),
             cues_on: flag("cues_on", l.cues_on),
             cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),
@@ -3409,6 +3420,7 @@ impl Scripts {
             notice_delta_check: flag("notice_delta_check", l.notice_delta_check),
             seen_ranges: flag("seen_ranges", l.seen_ranges),
             seen_ranges_check: flag("seen_ranges_check", l.seen_ranges_check),
+            seen_ranges_max_pairs: g("seen_ranges_max_pairs", l.seen_ranges_max_pairs).round().clamp(0.0, 4096.0),
             fast_lane_on: flag("fast_lane_on", l.fast_lane_on),
             seen_again_n: g("seen_again_n", l.seen_again_n).round().clamp(1.0, 100.0),
             fast_lane_rate: g("fast_lane_rate", l.fast_lane_rate).clamp(0.0, 100.0),
@@ -3672,7 +3684,7 @@ pub enum ValueOnly {
 /// value changes nothing a full install derives beyond what [`Scripts::apply_overrides`] and the
 /// authority refresh for its class. A script that reads one elsewhere makes it an ordinary law
 /// for that world ([`Scripts::value_only`]).
-pub const VALUE_ONLY: [(&str, ValueOnly); 39] = [
+pub const VALUE_ONLY: [(&str, ValueOnly); 40] = [
     ("cue_transport_on", ValueOnly::Delivery),
     ("near_tier_on", ValueOnly::Delivery),
     // battle-views: where a player's motion copies live (`frame.rs`, `seen_body_copy`).
@@ -3730,6 +3742,8 @@ pub const VALUE_ONLY: [(&str, ValueOnly); 39] = [
     // check and by the remains' expiry at its next pass.
     ("familiar_limit", ValueOnly::Delivery),
     ("familiar_regard", ValueOnly::Delivery),
+    // seen-structures-remains: per-block cap on fragmented remains ranges (seen_structures.rs).
+    ("seen_ranges_max_pairs", ValueOnly::Delivery),
     // the learned-body pilot's plumbing (docs/NEURAL_BODY.md): read by the install checks, the
     // body reducers and the tick's lease pass at their next call.
     ("body_delegate_on", ValueOnly::Delivery),

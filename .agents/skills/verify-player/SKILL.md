@@ -26,6 +26,8 @@ The player's statuses as the game works them out (its own `my_vitals` row and th
 
 A player at a field of remains, with all 20 body structures present and no noticing lines in `my_experience`, is driven by `scripts/seen_remains.py --run "$R"` on a fresh default-seed run. The admin stages the bodies and places the player. The reads use the player identity.
 
+Kin, courting offers and community (`my_kin`, `my_bond_offers`, `my_community`): `scripts/kin.py --run "$R"` ([features/kin.md](features/kin.md)), with `place_near`, `set_behavior` and a short-gestation `install_script` overlay (reinstalled to the tree's script in `finally`).
+
 ## Feature map
 
 [features/README.md](features/README.md) lists the player features. [references/validation/](references/validation/README.md) holds one record per real run; the newest files are the last validated runs.
