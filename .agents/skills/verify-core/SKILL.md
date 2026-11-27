@@ -27,6 +27,8 @@ python3 "$V" doctor --run "$R" > "$E/doctor.txt" 2>&1
 
 Stop driving if launch or doctor fails. Run cleanup and retain the error. The scenes use the in-container admin CLI. Do not mix a remote `LIVING_STDB_URL` with `stdb -s local`.
 
+When registering a scene in `scenes.py`, add a nightly entry with its seed and area, add a scene-gate case that drives it, or record an exclusion with its reason in `living/tools/nightly_suite.py`. Run `python3 living/tools/nightly_suite.py plan --repo .` before pushing. See [the nightly suite](../../../docs/TOOLING.md#the-nightly-suite).
+
 ## Drive the baseline
 
 ```bash
