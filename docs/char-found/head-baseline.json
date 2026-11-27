@@ -1,0 +1,1220 @@
+{
+  "commit": "06cbb63e68ebbe6e5e08b8d493dfd16d8726a013",
+  "inputs_sha256": {
+    "base": {
+      "base.glb": "9abc87e6730824cf43b13abff48aa0757770d6b04e096d5eae28d5a6aab1d18e",
+      "base.face.png": "f9fff170e2b9d7ef8a3b28a576e5b91b22f29167e2ffaced5d862d59d07143dc"
+    },
+    "woman": {
+      "woman.glb": "b02a522f19c6efcf0c10a14e20af92045b97ece4db70c7e685589ffd039f9348",
+      "woman.face.png": "f9fff170e2b9d7ef8a3b28a576e5b91b22f29167e2ffaced5d862d59d07143dc"
+    },
+    "man": {
+      "man.glb": "7caeaa623cdda57842d315d16ab27289bf61e3e514911aa45067a5117ff78b18",
+      "man.face.png": "f9fff170e2b9d7ef8a3b28a576e5b91b22f29167e2ffaced5d862d59d07143dc"
+    },
+    "elder": {
+      "elder.glb": "db57c2c8ea93d24e5d7f1618ac472328d933d4ea9603d9bbd631e6597c008724",
+      "elder.face.png": "f9fff170e2b9d7ef8a3b28a576e5b91b22f29167e2ffaced5d862d59d07143dc"
+    },
+    "child": {
+      "child.glb": "3c1fb3c1e6ac96d667cc0aad040989eb88326ead9d26242fab483658d78da71a",
+      "child.face.png": "f9fff170e2b9d7ef8a3b28a576e5b91b22f29167e2ffaced5d862d59d07143dc"
+    }
+  },
+  "light_hour": 11,
+  "checkpoint_hashes": {
+    "base": {
+      "expected": "9abc87e6730824cf43b13abff48aa0757770d6b04e096d5eae28d5a6aab1d18e",
+      "match": true
+    },
+    "woman": {
+      "expected": "b02a522f19c6efcf0c10a14e20af92045b97ece4db70c7e685589ffd039f9348",
+      "match": true
+    },
+    "man": {
+      "expected": "7caeaa623cdda57842d315d16ab27289bf61e3e514911aa45067a5117ff78b18",
+      "match": true
+    },
+    "elder": {
+      "expected": "db57c2c8ea93d24e5d7f1618ac472328d933d4ea9603d9bbd631e6597c008724",
+      "match": true
+    },
+    "child": {
+      "expected": "3c1fb3c1e6ac96d667cc0aad040989eb88326ead9d26242fab483658d78da71a",
+      "match": true
+    }
+  },
+  "shots": [
+    {
+      "mix": "base",
+      "view": "Face-only front",
+      "expression": "neutral",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        614,
+        624,
+        828,
+        838
+      ],
+      "sheet_xy_px": [
+        8,
+        66
+      ]
+    },
+    {
+      "mix": "woman",
+      "view": "Face-only front",
+      "expression": "neutral",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        614,
+        629,
+        828,
+        843
+      ],
+      "sheet_xy_px": [
+        296,
+        66
+      ]
+    },
+    {
+      "mix": "man",
+      "view": "Face-only front",
+      "expression": "neutral",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        614,
+        628,
+        828,
+        842
+      ],
+      "sheet_xy_px": [
+        584,
+        66
+      ]
+    },
+    {
+      "mix": "elder",
+      "view": "Face-only front",
+      "expression": "neutral",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        620,
+        650,
+        834,
+        864
+      ],
+      "sheet_xy_px": [
+        872,
+        66
+      ]
+    },
+    {
+      "mix": "child",
+      "view": "Face-only front",
+      "expression": "neutral",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        612,
+        690,
+        826,
+        904
+      ],
+      "sheet_xy_px": [
+        1160,
+        66
+      ]
+    },
+    {
+      "mix": "base",
+      "view": "Front",
+      "expression": "neutral",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        190,
+        855,
+        458
+      ],
+      "sheet_xy_px": [
+        8,
+        412
+      ]
+    },
+    {
+      "mix": "woman",
+      "view": "Front",
+      "expression": "neutral",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        276,
+        855,
+        544
+      ],
+      "sheet_xy_px": [
+        296,
+        412
+      ]
+    },
+    {
+      "mix": "man",
+      "view": "Front",
+      "expression": "neutral",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        150,
+        855,
+        418
+      ],
+      "sheet_xy_px": [
+        584,
+        412
+      ]
+    },
+    {
+      "mix": "elder",
+      "view": "Front",
+      "expression": "neutral",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        594,
+        247,
+        862,
+        515
+      ],
+      "sheet_xy_px": [
+        872,
+        412
+      ]
+    },
+    {
+      "mix": "child",
+      "view": "Front",
+      "expression": "neutral",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        586,
+        587,
+        854,
+        855
+      ],
+      "sheet_xy_px": [
+        1160,
+        412
+      ]
+    },
+    {
+      "mix": "base",
+      "view": "Three-quarter",
+      "expression": "neutral",
+      "shot": "idle@1/three-quarter",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        635,
+        190,
+        903,
+        458
+      ],
+      "sheet_xy_px": [
+        8,
+        726
+      ]
+    },
+    {
+      "mix": "woman",
+      "view": "Three-quarter",
+      "expression": "neutral",
+      "shot": "idle@1/three-quarter",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        631,
+        276,
+        899,
+        544
+      ],
+      "sheet_xy_px": [
+        296,
+        726
+      ]
+    },
+    {
+      "mix": "man",
+      "view": "Three-quarter",
+      "expression": "neutral",
+      "shot": "idle@1/three-quarter",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        633,
+        150,
+        901,
+        418
+      ],
+      "sheet_xy_px": [
+        584,
+        726
+      ]
+    },
+    {
+      "mix": "elder",
+      "view": "Three-quarter",
+      "expression": "neutral",
+      "shot": "idle@1/three-quarter",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        611,
+        247,
+        879,
+        515
+      ],
+      "sheet_xy_px": [
+        872,
+        726
+      ]
+    },
+    {
+      "mix": "child",
+      "view": "Three-quarter",
+      "expression": "neutral",
+      "shot": "idle@1/three-quarter",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        625,
+        587,
+        893,
+        855
+      ],
+      "sheet_xy_px": [
+        1160,
+        726
+      ]
+    },
+    {
+      "mix": "base",
+      "view": "Left profile",
+      "expression": "neutral",
+      "shot": "idle@1/90:0",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        653,
+        190,
+        921,
+        458
+      ],
+      "sheet_xy_px": [
+        8,
+        1040
+      ]
+    },
+    {
+      "mix": "woman",
+      "view": "Left profile",
+      "expression": "neutral",
+      "shot": "idle@1/90:0",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        649,
+        276,
+        917,
+        544
+      ],
+      "sheet_xy_px": [
+        296,
+        1040
+      ]
+    },
+    {
+      "mix": "man",
+      "view": "Left profile",
+      "expression": "neutral",
+      "shot": "idle@1/90:0",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        650,
+        150,
+        918,
+        418
+      ],
+      "sheet_xy_px": [
+        584,
+        1040
+      ]
+    },
+    {
+      "mix": "elder",
+      "view": "Left profile",
+      "expression": "neutral",
+      "shot": "idle@1/90:0",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        609,
+        247,
+        877,
+        515
+      ],
+      "sheet_xy_px": [
+        872,
+        1040
+      ]
+    },
+    {
+      "mix": "child",
+      "view": "Left profile",
+      "expression": "neutral",
+      "shot": "idle@1/90:0",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        641,
+        587,
+        909,
+        855
+      ],
+      "sheet_xy_px": [
+        1160,
+        1040
+      ]
+    },
+    {
+      "mix": "base",
+      "view": "Right profile",
+      "expression": "neutral",
+      "shot": "idle@1/-90:0",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        519,
+        190,
+        787,
+        458
+      ],
+      "sheet_xy_px": [
+        8,
+        1354
+      ]
+    },
+    {
+      "mix": "woman",
+      "view": "Right profile",
+      "expression": "neutral",
+      "shot": "idle@1/-90:0",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        523,
+        276,
+        791,
+        544
+      ],
+      "sheet_xy_px": [
+        296,
+        1354
+      ]
+    },
+    {
+      "mix": "man",
+      "view": "Right profile",
+      "expression": "neutral",
+      "shot": "idle@1/-90:0",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        521,
+        150,
+        789,
+        418
+      ],
+      "sheet_xy_px": [
+        584,
+        1354
+      ]
+    },
+    {
+      "mix": "elder",
+      "view": "Right profile",
+      "expression": "neutral",
+      "shot": "idle@1/-90:0",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        561,
+        247,
+        829,
+        515
+      ],
+      "sheet_xy_px": [
+        872,
+        1354
+      ]
+    },
+    {
+      "mix": "child",
+      "view": "Right profile",
+      "expression": "neutral",
+      "shot": "idle@1/-90:0",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        531,
+        587,
+        799,
+        855
+      ],
+      "sheet_xy_px": [
+        1160,
+        1354
+      ]
+    },
+    {
+      "mix": "base",
+      "view": "neutral",
+      "expression": "neutral",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        190,
+        855,
+        458
+      ],
+      "sheet_xy_px": [
+        8,
+        1700
+      ]
+    },
+    {
+      "mix": "woman",
+      "view": "neutral",
+      "expression": "neutral",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        276,
+        855,
+        544
+      ],
+      "sheet_xy_px": [
+        296,
+        1700
+      ]
+    },
+    {
+      "mix": "man",
+      "view": "neutral",
+      "expression": "neutral",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        150,
+        855,
+        418
+      ],
+      "sheet_xy_px": [
+        584,
+        1700
+      ]
+    },
+    {
+      "mix": "elder",
+      "view": "neutral",
+      "expression": "neutral",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        594,
+        247,
+        862,
+        515
+      ],
+      "sheet_xy_px": [
+        872,
+        1700
+      ]
+    },
+    {
+      "mix": "child",
+      "view": "neutral",
+      "expression": "neutral",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        586,
+        587,
+        854,
+        855
+      ],
+      "sheet_xy_px": [
+        1160,
+        1700
+      ]
+    },
+    {
+      "mix": "base",
+      "view": "Fcl_EYE_Close",
+      "expression": "Fcl_EYE_Close",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        190,
+        855,
+        458
+      ],
+      "sheet_xy_px": [
+        8,
+        2014
+      ]
+    },
+    {
+      "mix": "woman",
+      "view": "Fcl_EYE_Close",
+      "expression": "Fcl_EYE_Close",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        276,
+        855,
+        544
+      ],
+      "sheet_xy_px": [
+        296,
+        2014
+      ]
+    },
+    {
+      "mix": "man",
+      "view": "Fcl_EYE_Close",
+      "expression": "Fcl_EYE_Close",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        150,
+        855,
+        418
+      ],
+      "sheet_xy_px": [
+        584,
+        2014
+      ]
+    },
+    {
+      "mix": "elder",
+      "view": "Fcl_EYE_Close",
+      "expression": "Fcl_EYE_Close",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        594,
+        247,
+        862,
+        515
+      ],
+      "sheet_xy_px": [
+        872,
+        2014
+      ]
+    },
+    {
+      "mix": "child",
+      "view": "Fcl_EYE_Close",
+      "expression": "Fcl_EYE_Close",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        586,
+        587,
+        854,
+        855
+      ],
+      "sheet_xy_px": [
+        1160,
+        2014
+      ]
+    },
+    {
+      "mix": "base",
+      "view": "Fcl_MTH_A",
+      "expression": "Fcl_MTH_A",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        190,
+        855,
+        458
+      ],
+      "sheet_xy_px": [
+        8,
+        2328
+      ]
+    },
+    {
+      "mix": "woman",
+      "view": "Fcl_MTH_A",
+      "expression": "Fcl_MTH_A",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        276,
+        855,
+        544
+      ],
+      "sheet_xy_px": [
+        296,
+        2328
+      ]
+    },
+    {
+      "mix": "man",
+      "view": "Fcl_MTH_A",
+      "expression": "Fcl_MTH_A",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        150,
+        855,
+        418
+      ],
+      "sheet_xy_px": [
+        584,
+        2328
+      ]
+    },
+    {
+      "mix": "elder",
+      "view": "Fcl_MTH_A",
+      "expression": "Fcl_MTH_A",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        594,
+        247,
+        862,
+        515
+      ],
+      "sheet_xy_px": [
+        872,
+        2328
+      ]
+    },
+    {
+      "mix": "child",
+      "view": "Fcl_MTH_A",
+      "expression": "Fcl_MTH_A",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        586,
+        587,
+        854,
+        855
+      ],
+      "sheet_xy_px": [
+        1160,
+        2328
+      ]
+    },
+    {
+      "mix": "base",
+      "view": "Fcl_EYE_Joy",
+      "expression": "Fcl_EYE_Joy",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        190,
+        855,
+        458
+      ],
+      "sheet_xy_px": [
+        8,
+        2642
+      ]
+    },
+    {
+      "mix": "woman",
+      "view": "Fcl_EYE_Joy",
+      "expression": "Fcl_EYE_Joy",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        276,
+        855,
+        544
+      ],
+      "sheet_xy_px": [
+        296,
+        2642
+      ]
+    },
+    {
+      "mix": "man",
+      "view": "Fcl_EYE_Joy",
+      "expression": "Fcl_EYE_Joy",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        150,
+        855,
+        418
+      ],
+      "sheet_xy_px": [
+        584,
+        2642
+      ]
+    },
+    {
+      "mix": "elder",
+      "view": "Fcl_EYE_Joy",
+      "expression": "Fcl_EYE_Joy",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        594,
+        247,
+        862,
+        515
+      ],
+      "sheet_xy_px": [
+        872,
+        2642
+      ]
+    },
+    {
+      "mix": "child",
+      "view": "Fcl_EYE_Joy",
+      "expression": "Fcl_EYE_Joy",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        586,
+        587,
+        854,
+        855
+      ],
+      "sheet_xy_px": [
+        1160,
+        2642
+      ]
+    },
+    {
+      "mix": "base",
+      "view": "Fcl_BRW_Angry",
+      "expression": "Fcl_BRW_Angry",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        190,
+        855,
+        458
+      ],
+      "sheet_xy_px": [
+        8,
+        2956
+      ]
+    },
+    {
+      "mix": "woman",
+      "view": "Fcl_BRW_Angry",
+      "expression": "Fcl_BRW_Angry",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        276,
+        855,
+        544
+      ],
+      "sheet_xy_px": [
+        296,
+        2956
+      ]
+    },
+    {
+      "mix": "man",
+      "view": "Fcl_BRW_Angry",
+      "expression": "Fcl_BRW_Angry",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        150,
+        855,
+        418
+      ],
+      "sheet_xy_px": [
+        584,
+        2956
+      ]
+    },
+    {
+      "mix": "elder",
+      "view": "Fcl_BRW_Angry",
+      "expression": "Fcl_BRW_Angry",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        594,
+        247,
+        862,
+        515
+      ],
+      "sheet_xy_px": [
+        872,
+        2956
+      ]
+    },
+    {
+      "mix": "child",
+      "view": "Fcl_BRW_Angry",
+      "expression": "Fcl_BRW_Angry",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        586,
+        587,
+        854,
+        855
+      ],
+      "sheet_xy_px": [
+        1160,
+        2956
+      ]
+    },
+    {
+      "mix": "base",
+      "view": "Fcl_BRW_Surprised",
+      "expression": "Fcl_BRW_Surprised",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        190,
+        855,
+        458
+      ],
+      "sheet_xy_px": [
+        8,
+        3270
+      ]
+    },
+    {
+      "mix": "woman",
+      "view": "Fcl_BRW_Surprised",
+      "expression": "Fcl_BRW_Surprised",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        276,
+        855,
+        544
+      ],
+      "sheet_xy_px": [
+        296,
+        3270
+      ]
+    },
+    {
+      "mix": "man",
+      "view": "Fcl_BRW_Surprised",
+      "expression": "Fcl_BRW_Surprised",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        587,
+        150,
+        855,
+        418
+      ],
+      "sheet_xy_px": [
+        584,
+        3270
+      ]
+    },
+    {
+      "mix": "elder",
+      "view": "Fcl_BRW_Surprised",
+      "expression": "Fcl_BRW_Surprised",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        594,
+        247,
+        862,
+        515
+      ],
+      "sheet_xy_px": [
+        872,
+        3270
+      ]
+    },
+    {
+      "mix": "child",
+      "view": "Fcl_BRW_Surprised",
+      "expression": "Fcl_BRW_Surprised",
+      "shot": "idle@1/front",
+      "projection": "orthographic",
+      "capture_px_per_m": 669.7673950195312,
+      "crop_px": [
+        586,
+        587,
+        854,
+        855
+      ],
+      "sheet_xy_px": [
+        1160,
+        3270
+      ]
+    },
+    {
+      "mix": "base",
+      "view": "Near",
+      "expression": "neutral",
+      "shot": "idle@1/near@0",
+      "projection": "perspective",
+      "capture_px_per_m": null,
+      "crop_px": [
+        660,
+        310,
+        940,
+        590
+      ],
+      "sheet_xy_px": [
+        8,
+        3616
+      ]
+    },
+    {
+      "mix": "woman",
+      "view": "Near",
+      "expression": "neutral",
+      "shot": "idle@1/near@0",
+      "projection": "perspective",
+      "capture_px_per_m": null,
+      "crop_px": [
+        660,
+        310,
+        940,
+        590
+      ],
+      "sheet_xy_px": [
+        296,
+        3616
+      ]
+    },
+    {
+      "mix": "man",
+      "view": "Near",
+      "expression": "neutral",
+      "shot": "idle@1/near@0",
+      "projection": "perspective",
+      "capture_px_per_m": null,
+      "crop_px": [
+        660,
+        310,
+        940,
+        590
+      ],
+      "sheet_xy_px": [
+        584,
+        3616
+      ]
+    },
+    {
+      "mix": "elder",
+      "view": "Near",
+      "expression": "neutral",
+      "shot": "idle@1/near@0",
+      "projection": "perspective",
+      "capture_px_per_m": null,
+      "crop_px": [
+        660,
+        310,
+        940,
+        590
+      ],
+      "sheet_xy_px": [
+        872,
+        3616
+      ]
+    },
+    {
+      "mix": "child",
+      "view": "Near",
+      "expression": "neutral",
+      "shot": "idle@1/near@0",
+      "projection": "perspective",
+      "capture_px_per_m": null,
+      "crop_px": [
+        660,
+        310,
+        940,
+        590
+      ],
+      "sheet_xy_px": [
+        1160,
+        3616
+      ]
+    },
+    {
+      "mix": "base",
+      "view": "Middle",
+      "expression": "neutral",
+      "shot": "idle@1/middle@0",
+      "projection": "perspective",
+      "capture_px_per_m": null,
+      "crop_px": [
+        660,
+        310,
+        940,
+        590
+      ],
+      "sheet_xy_px": [
+        8,
+        3930
+      ]
+    },
+    {
+      "mix": "woman",
+      "view": "Middle",
+      "expression": "neutral",
+      "shot": "idle@1/middle@0",
+      "projection": "perspective",
+      "capture_px_per_m": null,
+      "crop_px": [
+        660,
+        310,
+        940,
+        590
+      ],
+      "sheet_xy_px": [
+        296,
+        3930
+      ]
+    },
+    {
+      "mix": "man",
+      "view": "Middle",
+      "expression": "neutral",
+      "shot": "idle@1/middle@0",
+      "projection": "perspective",
+      "capture_px_per_m": null,
+      "crop_px": [
+        660,
+        310,
+        940,
+        590
+      ],
+      "sheet_xy_px": [
+        584,
+        3930
+      ]
+    },
+    {
+      "mix": "elder",
+      "view": "Middle",
+      "expression": "neutral",
+      "shot": "idle@1/middle@0",
+      "projection": "perspective",
+      "capture_px_per_m": null,
+      "crop_px": [
+        660,
+        310,
+        940,
+        590
+      ],
+      "sheet_xy_px": [
+        872,
+        3930
+      ]
+    },
+    {
+      "mix": "child",
+      "view": "Middle",
+      "expression": "neutral",
+      "shot": "idle@1/middle@0",
+      "projection": "perspective",
+      "capture_px_per_m": null,
+      "crop_px": [
+        660,
+        310,
+        940,
+        590
+      ],
+      "sheet_xy_px": [
+        1160,
+        3930
+      ]
+    }
+  ]
+}

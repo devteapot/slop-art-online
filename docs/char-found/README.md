@@ -69,3 +69,35 @@ python3 living/tools/blender/found/proportions.py living/game/assets/view/char-f
 Both levels of every mix were photographed with the dev-box `~/.local/state/bakeoff/shoot.sh`, `shots.env`, a worktree-local Cargo target and eight build jobs under the shared build gate. The shared run produced 170 stills; five additional L2 profiles show the chest, back and head position. The head and hands remain placeholders. The viewer's unskinned framing box for the child is larger than the child's morphed height. At Near, the woman’s hip flare, the man’s broad shoulder caps, the elder’s forward head and the child’s short limbs are visible. At Middle, the elder and base are the closest pair. The profile gives the clearest view of the stoop. The paired underbust spots have cleared in front, three-quarter and all six photographed walk frames.
 
 A second generation of woman L2 produced an identical GLB. The geometry and materials are project-generated. The source cage derives from our B2 at `2fd3cc1249e8a6d5e1d6b4c8464ec6aa9c6b425a`. The pinned `lookdev/anim/own-clips.glb` supplies the joint landmarks and animation. [Original Stage 1 measurements and photographs](stage1-initial.md)
+
+## Stage 2 head judging
+
+The [session brief](FABLE-HEAD-BRIEF.md) describes the proposed head pass and its stop rules. The [baseline sheet](head-baseline.png) and [manifest](head-baseline.json) show the five L2 mixes at `06cbb63e6`, including both profiles, the six expressions, a face-only row and the Near and Middle play cameras. All five regenerated GLBs match [the Stage 2 hands checkpoint hashes](evidence/hand-checks.json).
+
+- [session_guard.py](../../living/tools/blender/found/session_guard.py) stores one session in a dedicated directory. Run `start --dir DIR` once. Run `check --dir DIR` before each iteration and `record --dir DIR --score N` after the critic scores the sheet. Run `status --dir DIR` to see scores and stop conditions.
+- [session_guard_selftest.py](../../living/tools/blender/found/session_guard_selftest.py) exercises the guard CLI with a fake clock. Run it with `python3`.
+- [head_sheet.py](../../living/tools/blender/found/head_sheet.py) takes an asset-view directory with `base.glb`, `woman.glb`, `man.glb`, `elder.glb` and `child.glb`, each with its matching `.face.png` and any other sidecars. The tool photographs a fixed idle frame in the game. The face-only row hides the other meshes and uses the same orthographic scale for every mix. The Near and Middle tiles retain the original screenshot pixel scale. The JSON records the labeled commit, input hashes, capture settings and tile positions.
+
+Regenerate the baseline from the repository root with the generator at `06cbb63e6`. The body command accepts the same optional parameter overrides as above. Keep the fitted head's intermediate basename `MIX-l2.glb`, which the generator embeds as the VRM title. This command uses the pinned animation library at the body generator's default path (SHA-256 `1c6d5202995a267acb1bf0c9cd4772f80a0b862303cebdbaba53f14bdea668d0`).
+
+```bash
+export PATH="$HOME/.local/share/slop-tools/build-bin:$PATH" JOBS=3
+tool=living/tools/blender/found
+work=.local/head-baseline
+assets=living/game/assets/view/head-baseline
+mkdir -p "$work" "$assets"
+for mix in base woman man elder child; do
+  blender -b -t 3 --python-exit-code 1 -P "$tool/body.py" -- \
+    "$work/$mix-body.glb" --preset "$mix" --level 2
+  python3 "$tool/head.py" "$work/$mix-body.glb" "$work/$mix-l2.glb"
+  python3 "$tool/hands.py" "$work/$mix-l2.glb" "$assets/$mix.glb" --size 1.135
+done
+```
+
+With the sheet tool available, render the baseline and compare its GLBs to the checkpoint. The tool uses the shared Cargo build gate and its own worktree-local target directory. For a candidate, omit `--checkpoint-hashes` and supply the candidate's generator commit with `--commit` (defaults to HEAD).
+
+```bash
+python3 living/tools/blender/found/head_sheet.py \
+  living/game/assets/view/head-baseline docs/char-found/head-baseline.png \
+  --commit 06cbb63e6 --checkpoint-hashes docs/char-found/evidence/hand-checks.json
+```
