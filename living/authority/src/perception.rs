@@ -849,7 +849,7 @@ pub fn project(ctx: &ReducerContext, observer: &Character, target: &Character, n
 
 /// A projection's health fields under precision `precision`: the band (255 where the law hides
 /// health), and exact health and its maximum where granted (-1 otherwise).
-fn health_fields(seen: Option<HealthSeen>) -> (u8, f32, f32) {
+pub fn health_fields(seen: Option<HealthSeen>) -> (u8, f32, f32) {
     match seen {
         None => (255, -1.0, -1.0),
         Some(HealthSeen { band, exact: None }) => (band, -1.0, -1.0),

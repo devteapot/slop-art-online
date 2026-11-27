@@ -5,7 +5,7 @@
 use crate::motion::{self, Event, Goal, IDLE};
 use crate::perceive::{self, percept, witnessed};
 use crate::tables::*;
-use crate::common::{self, dist, pos};
+use crate::common::{self, dist, pos, NearCreature};
 use living_rules::catalog;
 use living_rules::combat::{Aim, Shape};
 use living_rules::map::chunk_of;
@@ -595,7 +595,10 @@ fn skill_ctx_with(ctx: &ReducerContext, id: u32, a: &Activity, now: u64, roll: f
             let heading = ctx.db.body().id().find(id).map_or(0.0, |b| common::facing_at(&b, now));
             let (gather, _) = common::gather_radius(ctx, &senses, 0.0);
             let seen = common::creatures_near(ctx, from, gather, now).into_iter().filter(|c| c.id == id || crate::perception::in_sight(ctx, &map, id, from, heading, c.id, c.pos, c.dist, &w, now, false));
-            for c in seen.chain(common::smelled_near(ctx, id, &actor.kind, from, sight, now)) {
+            // Under `perceived_can_on` the predator weighs only what it senses: kept for the company it sees.
+            let perceived = common::laws(ctx).perceived_can_on;
+            let sensed_all: Vec<NearCreature> = seen.chain(common::smelled_near(ctx, id, &actor.kind, from, sight, now)).collect();
+            for c in &sensed_all {
                 match sensed.iter_mut().find(|(k, _)| *k == *c.kind) {
                     Some(e) => e.1 += 1,
                     None => sensed.push((c.kind.to_string(), 1)),
@@ -607,7 +610,18 @@ fn skill_ctx_with(ctx: &ReducerContext, id: u32, a: &Activity, now: u64, roll: f
             if let Some(tp) = target_pos(ctx, &a.target, now) {
                 target.near_fire = warmth(ctx, tp, now).fire;
                 let (me, them) = (id, target.id as u32);
-                target.company = common::creatures_near(ctx, tp, common::laws(ctx).alone_within, now).iter().filter(|c| &*c.kind == "person" && c.id != me && c.id != them).count() as u32;
+                let within = common::laws(ctx).alone_within;
+                target.company = if perceived {
+                    // The people it sees or smells near its prey, not everyone there; and what its
+                    // prey is visibly doing (asleep), not its private activity.
+                    target.activity = crate::perception::visibly(ctx, &sc, them, now).map(|v| v.skill).unwrap_or_default();
+                    let mut ids: Vec<u32> = sensed_all.iter().filter(|c| &*c.kind == "person" && c.id != me && c.id != them && dist(c.pos, tp) <= within).map(|c| c.id).collect();
+                    ids.sort_unstable();
+                    ids.dedup();
+                    ids.len() as u32
+                } else {
+                    common::creatures_near(ctx, tp, within, now).iter().filter(|c| &*c.kind == "person" && c.id != me && c.id != them).count() as u32
+                };
             }
         }
     }
@@ -837,7 +851,10 @@ pub fn continues(ctx: &ReducerContext, cur: &Activity, a: &living_rules::graph::
 /// Whether the rules would let a skill go ahead now (the `can` condition): the check an action
 /// passes when it starts, without starting it.
 pub fn can(ctx: &ReducerContext, id: u32, skill: &str, target: Resolved, item: &str, qty: u32, now: u64) -> bool {
+    let perceived = common::laws(ctx).perceived_can_on;
     let item = match (skill, item) {
+        // What a store holds is not seen (`perceived_can_on`): its food is what is asked of it.
+        ("take", "food") if target.class == 2 && perceived => Some("food".to_string()),
         ("take", "food") if target.class == 2 => common::best_food(ctx, STRUCTURE_BIT | target.id),
         (_, "food") => common::best_food(ctx, id as u64),
         (_, i) => Some(i.to_string()),
@@ -863,7 +880,44 @@ pub fn can(ctx: &ReducerContext, id: u32, skill: &str, target: Resolved, item: &
         offer: 0,
         record: 0,
     };
-    common::scripts(ctx).check(skill, &skill_ctx(ctx, id, &act, now)).is_ok()
+    let mut sctx = skill_ctx(ctx, id, &act, now);
+    if perceived {
+        perceive(ctx, id, &act, &mut sctx, now);
+    }
+    common::scripts(ctx).check(skill, &sctx).is_ok()
+}
+
+/// The `perceived_can_on` law: a `can`'s context as the actor perceives the world (perception
+/// parity), the rule the game client's choices follow: another's health as it is shown (its band,
+/// exact while appraised: `perception::health_seen`), a yield only when one saw it, what another
+/// carries or a store holds assumed to be what is asked, what it knows and its sex unknown
+/// (`TargetFacts::perceived`), and whoever struck the actor close only while the actor sees them.
+/// `begin` still checks the act on the truth and refuses it truthfully when the guess was wrong.
+fn perceive(ctx: &ReducerContext, id: u32, a: &Activity, sctx: &mut SkillCtx, now: u64) {
+    if sctx.actor.hurt_by_near && !crate::perception::sees_creature(ctx, id, sctx.actor.hurt_by, now) {
+        sctx.actor.hurt_by_near = false;
+    }
+    match a.target.class {
+        3 if a.target.id as u32 != id => {
+            let who = a.target.id as u32;
+            if let (Some(me), Some(t)) = (ctx.db.character().id().find(id), ctx.db.character().id().find(who)) {
+                let (band, hp, max_hp) = crate::perception::health_fields(crate::perception::health_seen(ctx, &me, &t, now));
+                let full = common::scripts(ctx).num_of("max_hp", &t.kind, 100.0) as f32;
+                (sctx.target.hp, sctx.target.max_hp) = living_rules::combat::perceived_hp(band, hp, max_hp, full);
+                if sctx.target.yielded_ago.is_some() || has(&common::scripts(ctx), &a.skill, |s| s.dares) {
+                    sctx.target.yielded_ago = yield_seen(ctx, id, who, now);
+                }
+            }
+            sctx.target = std::mem::take(&mut sctx.target).perceived(&a.item, a.qty);
+        }
+        2 => sctx.target = std::mem::take(&mut sctx.target).perceived(&a.item, a.qty),
+        _ => {}
+    }
+}
+
+/// How long ago `observer` saw `who` yield (ms), from its own lines (`living_rules::script::yielded_seen`).
+fn yield_seen(ctx: &ReducerContext, observer: u32, who: u32, now: u64) -> Option<f32> {
+    living_rules::script::yielded_seen(ctx.db.experience().observer().filter(observer).filter(|e| e.kind == "yield").map(|e| (e.kind, e.subject, e.at_ms)), who, now)
 }
 
 thread_local! {

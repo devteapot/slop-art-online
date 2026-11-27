@@ -252,6 +252,22 @@ pub fn band(hp: f32, max_hp: f32) -> u8 {
 }
 
 /// A health fraction to draw for a band (the middle of its range).
+/// Another's health as an actor perceives it, from what it is shown (a projection's `band`, `hp`
+/// and `max_hp`: `hp` and `max_hp` below 0 unless exact, `band` above 4 when hidden), for a
+/// rule's check (perception parity): (hp, max). `default_max` is the kind's full health. Exact
+/// when shown, else the band's fraction of it, else full (nothing seen of it).
+pub fn perceived_hp(band: u8, hp: f32, max_hp: f32, default_max: f32) -> (f32, f32) {
+    let max = if max_hp > 0.0 { max_hp } else { default_max };
+    let hp = if hp >= 0.0 {
+        hp
+    } else if band <= 4 {
+        band_fraction(band) * max
+    } else {
+        max
+    };
+    (hp, max)
+}
+
 pub fn band_fraction(band: u8) -> f32 {
     match band {
         4 => 0.95,
@@ -403,6 +419,15 @@ pub fn body_radius(kind: &str) -> f32 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn perceived_health_is_exact_when_shown_else_the_band_else_full() {
+        use super::perceived_hp;
+        assert_eq!(perceived_hp(2, 41.0, 90.0, 100.0), (41.0, 90.0));
+        let (hp, max) = perceived_hp(1, -1.0, -1.0, 100.0);
+        assert!((hp - 30.0).abs() < 1e-3 && max == 100.0);
+        assert_eq!(perceived_hp(255, -1.0, -1.0, 80.0), (80.0, 80.0));
+    }
+
     use super::*;
 
     #[test]
