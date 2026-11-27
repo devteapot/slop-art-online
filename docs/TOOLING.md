@@ -801,3 +801,18 @@ Every part arrives with `main` once `tool-7` is merged; `just living-check` keep
 - **Live Cullet plaza (`--mode plaza`, or `--mode both`):** launches a scratch `verify-ui-lookdev-*` Cullet world via `verify.py`, drives `drive.py` at the Counting House yard plaza `(536.5, 767.5)` with 14 held residents across Middle and Near at Noon, Dusk and Night (6 stills + `plaza_sheet.png`), and cleans up the scratch database on exit. Add `--bench` for uncapped steady-state frame-time capture (`LIVING_GAME_FPS_CAP=0`, `LIVING_GAME_FRAMES`), outputting `frametime_summary.json`.
 - **Settings and binary discovery:** accepts `--quality low|medium|high`, `--render-scale 67|75|85|100|auto`, `--film`, `--hair-shine`, `--weather`, `--look`, `--perf`, `--size`, and repeatable `--env KEY=VAL` (or inherits `LIVING_GAME_*` from the environment). Finds the release binary from `--bin`, `$LIVING_GAME_BIN`, `$CARGO_TARGET_DIR/release/living-game`, `.local/target/release/living-game`, or `living/target/release/living-game`. Run `python3 living/tools/lookdev_shoot.py --help` for full usage.
 - **Live 2x captures:** headless shoots render at scale factor 1, so lines are 1 px at every render scale. To see what a Retina player sees, add `--env LIVING_GAME_WINDOW=1 --env LIVING_GAME_FULLSCREEN=1 --size 1512x982`: the client opens borderless on the whole primary display (`main.rs`; 3024x1898 physical on the laptop's notched panel) and `shot:` photographs the window. Add `--env LIVING_GAME_VSYNC=0` with `--bench` for a live frame-time run. `--perf upscale=bilinear` or `--perf sharpen=S` A/B the scaled composite (`graphics.rs` `Upscale`).
+
+## Battle frame times (`living/tools/bench_battle.py`)
+
+[The battle benchmark](../living/tools/bench_battle.py) launches a fresh Cullet scratch world through `verify.py`. It stages two sides of 100 spear fighters on a fixed starting layout at clear noon, places one player 9 m south of the opening centroid, and drives the release client at Play Middle with camera auto-framing off. Each rep uses High quality, runs uncapped, and samples 12 seconds after a 3.5-second warmup. Combat and player perception continue during capture.
+
+Use a dedicated SpacetimeDB server with a `/wasm` mount as described in the [verify skill](../.agents/skills/verify/SKILL.md#launch). Set `LIVING_STDB_CONTAINER`, `LIVING_STDB_URL`, and a worktree-local `CARGO_TARGET_DIR`. Link and check the composed render set before running. Hold the shared build gate once per configuration if running a matrix on the dev-box.
+
+```sh
+python3 living/tools/bench_battle.py --run ui-battle-bench-01 \
+  --out .local/battle-bench/01 --size 1920x1080 --look classic --scale 100
+```
+
+Use a fresh `--run` name for each rep. `--look` chooses `classic` or `lookdev`, and `--scale` fixes the internal render scale at 75 or 100 percent. `--bin` overrides the release client search shared with `lookdev_shoot.py`, which also checks `$LIVING_GAME_BIN` and `$CARGO_TARGET_DIR/release/living-game`. For diagnostic logging, set `LIVING_GAME_PERF=diag,hitch=16.7`.
+
+`--out` holds the whole run in `frames.csv`, the measured window in `sample.csv`, its statistics in `frametime_summary.json`, plus the screenshot, scene dumps, fighter snapshots, and logs. The wrapper deletes the scratch database through `verify.py`. Run `python3 living/tools/bench_battle_selftest.py` to check the arguments and sample boundaries without launching a server.
