@@ -46,6 +46,8 @@ python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
 # What someone is visibly doing: the `doing` condition and the scene's `visibly`, by sight, field
 # and far label (features/doing.md, about 2 min).
 python3 "$C/scenes.py" doing_seen --run "$R" > "$E/doing_seen.txt" 2>&1
+# `threatened` from what one perceives under perceived_threat_on: an unseen attacker gives none, the condition and the weight, off as a control (features/perceived-threat.md, about 4 min).
+python3 "$C/scenes.py" perceived_threat --run "$R" > "$E/perceived_threat.txt" 2>&1
 # A continuous activity's row held to its renewal: no blink of doing nothing between two rests, the pacing unchanged, a real change still at once, the renew_in_place law (features/doing.md, about 2 min).
 python3 "$C/scenes.py" doing_renew --run "$R" > "$E/doing_renew.txt" 2>&1
 # Committed moves end early only by a wall or death (features/combat.md, about 30 s).
