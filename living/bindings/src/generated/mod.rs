@@ -234,8 +234,12 @@ pub mod motion_type;
 pub mod moving_type;
 pub mod my_act_outcomes_table;
 pub mod my_body_table;
+pub mod my_bond_offer_type;
+pub mod my_bond_offers_table;
 pub mod my_characters_table;
 pub mod my_combat_table;
+pub mod my_community_table;
+pub mod my_community_type;
 pub mod my_deliberations_table;
 pub mod my_doing_table;
 pub mod my_earshot_table;
@@ -243,6 +247,8 @@ pub mod my_experience_table;
 pub mod my_fighter_table;
 pub mod my_heard_table;
 pub mod my_inventory_table;
+pub mod my_kin_table;
+pub mod my_kin_type;
 pub mod my_know_how_table;
 pub mod my_known_names_table;
 pub mod my_offer_type;
@@ -652,8 +658,12 @@ pub use motion_type::Motion;
 pub use moving_type::Moving;
 pub use my_act_outcomes_table::*;
 pub use my_body_table::*;
+pub use my_bond_offer_type::MyBondOffer;
+pub use my_bond_offers_table::*;
 pub use my_characters_table::*;
 pub use my_combat_table::*;
+pub use my_community_table::*;
+pub use my_community_type::MyCommunity;
 pub use my_deliberations_table::*;
 pub use my_doing_table::*;
 pub use my_earshot_table::*;
@@ -661,6 +671,8 @@ pub use my_experience_table::*;
 pub use my_fighter_table::*;
 pub use my_heard_table::*;
 pub use my_inventory_table::*;
+pub use my_kin_table::*;
+pub use my_kin_type::MyKin;
 pub use my_know_how_table::*;
 pub use my_known_names_table::*;
 pub use my_offer_type::MyOffer;
@@ -1621,8 +1633,10 @@ pub struct DbUpdate {
     motion_seen: __sdk::TableUpdate<MotionSeen>,
     my_act_outcomes: __sdk::TableUpdate<ActOutcome>,
     my_body: __sdk::TableUpdate<Moving>,
+    my_bond_offers: __sdk::TableUpdate<MyBondOffer>,
     my_characters: __sdk::TableUpdate<Character>,
     my_combat: __sdk::TableUpdate<CombatSeen>,
+    my_community: __sdk::TableUpdate<MyCommunity>,
     my_deliberations: __sdk::TableUpdate<Deliberation>,
     my_doing: __sdk::TableUpdate<Doing>,
     my_earshot: __sdk::TableUpdate<CharacterEarshot>,
@@ -1630,6 +1644,7 @@ pub struct DbUpdate {
     my_fighter: __sdk::TableUpdate<Fighter>,
     my_heard: __sdk::TableUpdate<LineHeard>,
     my_inventory: __sdk::TableUpdate<Inventory>,
+    my_kin: __sdk::TableUpdate<MyKin>,
     my_know_how: __sdk::TableUpdate<KnowHow>,
     my_known_names: __sdk::TableUpdate<KnownName>,
     my_offers: __sdk::TableUpdate<MyOffer>,
@@ -1979,12 +1994,18 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_body" => db_update
                     .my_body
                     .append(my_body_table::parse_table_update(table_update)?),
+                "my_bond_offers" => db_update
+                    .my_bond_offers
+                    .append(my_bond_offers_table::parse_table_update(table_update)?),
                 "my_characters" => db_update
                     .my_characters
                     .append(my_characters_table::parse_table_update(table_update)?),
                 "my_combat" => db_update
                     .my_combat
                     .append(my_combat_table::parse_table_update(table_update)?),
+                "my_community" => db_update
+                    .my_community
+                    .append(my_community_table::parse_table_update(table_update)?),
                 "my_deliberations" => db_update
                     .my_deliberations
                     .append(my_deliberations_table::parse_table_update(table_update)?),
@@ -2006,6 +2027,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_inventory" => db_update
                     .my_inventory
                     .append(my_inventory_table::parse_table_update(table_update)?),
+                "my_kin" => db_update
+                    .my_kin
+                    .append(my_kin_table::parse_table_update(table_update)?),
                 "my_know_how" => db_update
                     .my_know_how
                     .append(my_know_how_table::parse_table_update(table_update)?),
@@ -2699,10 +2723,16 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.my_body = cache
             .apply_diff_to_table::<Moving>("my_body", &self.my_body)
             .with_updates_by_pk(|row| &row.id);
+        diff.my_bond_offers = cache
+            .apply_diff_to_table::<MyBondOffer>("my_bond_offers", &self.my_bond_offers)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_characters = cache
             .apply_diff_to_table::<Character>("my_characters", &self.my_characters)
             .with_updates_by_pk(|row| &row.id);
         diff.my_combat = cache.apply_diff_to_table::<CombatSeen>("my_combat", &self.my_combat);
+        diff.my_community = cache
+            .apply_diff_to_table::<MyCommunity>("my_community", &self.my_community)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_deliberations =
             cache.apply_diff_to_table::<Deliberation>("my_deliberations", &self.my_deliberations);
         diff.my_doing = cache
@@ -2722,6 +2752,9 @@ impl __sdk::DbUpdate for DbUpdate {
             .with_updates_by_pk(|row| &row.line);
         diff.my_inventory = cache
             .apply_diff_to_table::<Inventory>("my_inventory", &self.my_inventory)
+            .with_updates_by_pk(|row| &row.id);
+        diff.my_kin = cache
+            .apply_diff_to_table::<MyKin>("my_kin", &self.my_kin)
             .with_updates_by_pk(|row| &row.id);
         diff.my_know_how = cache
             .apply_diff_to_table::<KnowHow>("my_know_how", &self.my_know_how)
@@ -3053,11 +3086,17 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_body" => db_update
                     .my_body
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_bond_offers" => db_update
+                    .my_bond_offers
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_characters" => db_update
                     .my_characters
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_combat" => db_update
                     .my_combat
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_community" => db_update
+                    .my_community
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_deliberations" => db_update
                     .my_deliberations
@@ -3079,6 +3118,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_inventory" => db_update
                     .my_inventory
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_kin" => db_update
+                    .my_kin
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_know_how" => db_update
                     .my_know_how
@@ -3594,11 +3636,17 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_body" => db_update
                     .my_body
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_bond_offers" => db_update
+                    .my_bond_offers
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_characters" => db_update
                     .my_characters
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_combat" => db_update
                     .my_combat
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_community" => db_update
+                    .my_community
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_deliberations" => db_update
                     .my_deliberations
@@ -3620,6 +3668,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_inventory" => db_update
                     .my_inventory
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_kin" => db_update
+                    .my_kin
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_know_how" => db_update
                     .my_know_how
@@ -3963,8 +4014,10 @@ pub struct AppliedDiff<'r> {
     motion_seen: __sdk::TableAppliedDiff<'r, MotionSeen>,
     my_act_outcomes: __sdk::TableAppliedDiff<'r, ActOutcome>,
     my_body: __sdk::TableAppliedDiff<'r, Moving>,
+    my_bond_offers: __sdk::TableAppliedDiff<'r, MyBondOffer>,
     my_characters: __sdk::TableAppliedDiff<'r, Character>,
     my_combat: __sdk::TableAppliedDiff<'r, CombatSeen>,
+    my_community: __sdk::TableAppliedDiff<'r, MyCommunity>,
     my_deliberations: __sdk::TableAppliedDiff<'r, Deliberation>,
     my_doing: __sdk::TableAppliedDiff<'r, Doing>,
     my_earshot: __sdk::TableAppliedDiff<'r, CharacterEarshot>,
@@ -3972,6 +4025,7 @@ pub struct AppliedDiff<'r> {
     my_fighter: __sdk::TableAppliedDiff<'r, Fighter>,
     my_heard: __sdk::TableAppliedDiff<'r, LineHeard>,
     my_inventory: __sdk::TableAppliedDiff<'r, Inventory>,
+    my_kin: __sdk::TableAppliedDiff<'r, MyKin>,
     my_know_how: __sdk::TableAppliedDiff<'r, KnowHow>,
     my_known_names: __sdk::TableAppliedDiff<'r, KnownName>,
     my_offers: __sdk::TableAppliedDiff<'r, MyOffer>,
@@ -4236,12 +4290,22 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<Moving>("my_body", &self.my_body, event);
+        callbacks.invoke_table_row_callbacks::<MyBondOffer>(
+            "my_bond_offers",
+            &self.my_bond_offers,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Character>(
             "my_characters",
             &self.my_characters,
             event,
         );
         callbacks.invoke_table_row_callbacks::<CombatSeen>("my_combat", &self.my_combat, event);
+        callbacks.invoke_table_row_callbacks::<MyCommunity>(
+            "my_community",
+            &self.my_community,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<Deliberation>(
             "my_deliberations",
             &self.my_deliberations,
@@ -4265,6 +4329,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.my_inventory,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<MyKin>("my_kin", &self.my_kin, event);
         callbacks.invoke_table_row_callbacks::<KnowHow>("my_know_how", &self.my_know_how, event);
         callbacks.invoke_table_row_callbacks::<KnownName>(
             "my_known_names",
@@ -5204,8 +5269,10 @@ impl __sdk::SpacetimeModule for RemoteModule {
         motion_seen_table::register_table(client_cache);
         my_act_outcomes_table::register_table(client_cache);
         my_body_table::register_table(client_cache);
+        my_bond_offers_table::register_table(client_cache);
         my_characters_table::register_table(client_cache);
         my_combat_table::register_table(client_cache);
+        my_community_table::register_table(client_cache);
         my_deliberations_table::register_table(client_cache);
         my_doing_table::register_table(client_cache);
         my_earshot_table::register_table(client_cache);
@@ -5213,6 +5280,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_fighter_table::register_table(client_cache);
         my_heard_table::register_table(client_cache);
         my_inventory_table::register_table(client_cache);
+        my_kin_table::register_table(client_cache);
         my_know_how_table::register_table(client_cache);
         my_known_names_table::register_table(client_cache);
         my_offers_table::register_table(client_cache);
@@ -5382,8 +5450,10 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "motion_seen",
         "my_act_outcomes",
         "my_body",
+        "my_bond_offers",
         "my_characters",
         "my_combat",
+        "my_community",
         "my_deliberations",
         "my_doing",
         "my_earshot",
@@ -5391,6 +5461,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_fighter",
         "my_heard",
         "my_inventory",
+        "my_kin",
         "my_know_how",
         "my_known_names",
         "my_offers",
