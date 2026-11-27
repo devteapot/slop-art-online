@@ -2721,9 +2721,8 @@ pub fn retire(ctx: &ReducerContext, id: u32) {
     ctx.db.rhythm().id().delete(id);
     ctx.db.rearing().id().delete(id);
     ctx.db.relation().actor().delete(id);
-    for f in ctx.db.relation_fight().by_pair().filter(id).map(|f| f.id).collect::<Vec<_>>() {
-        ctx.db.relation_fight().id().delete(f);
-    }
+    ctx.db.relation_fight().by_pair().delete(id);
+    ctx.db.relation_fight().other().delete(id);
     ctx.db.belief().actor().delete(id);
     if ctx.db.character().id().find(id).is_some_and(|c| c.kind != "person") {
         common::invalidate_traits(ctx, id);
