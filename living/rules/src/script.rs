@@ -611,6 +611,10 @@ pub struct Laws {
     /// relation row (or one labelled "stranger"); on, someone whose name one does not know
     /// (`perception::knows_name`, the rule scenes and percepts name people by).
     pub stranger_by_name: bool,
+    /// Where a graph's sound is (perception parity): on, a sound heard and not seen (the target
+    /// `sound`, and an unseen speaker turned to) is where a player's `heard_sounds` row says,
+    /// its compass way and distance band (`sight::heard_point`); off, exactly where it is.
+    pub perceived_sound_on: bool,
     /// Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): on, a graph's
     /// `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a clear
     /// personal relation, then the community's stance, and minds are told so; off, any personal
@@ -951,6 +955,7 @@ impl Default for Laws {
             alert_while_attacker_near: true,
             renew_in_place: true,
             stranger_by_name: false,
+            perceived_sound_on: false,
             relation_fight_on: true,
             cues_on: false,
             cue_cooldown_s: 600.0,
@@ -3333,6 +3338,7 @@ impl Scripts {
             alert_while_attacker_near: flag("alert_while_attacker_near", l.alert_while_attacker_near),
             renew_in_place: flag("renew_in_place", l.renew_in_place),
             stranger_by_name: flag("stranger_by_name", l.stranger_by_name),
+            perceived_sound_on: flag("perceived_sound_on", l.perceived_sound_on),
             relation_fight_on: flag("relation_fight_on", l.relation_fight_on),
             cues_on: flag("cues_on", l.cues_on),
             cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),

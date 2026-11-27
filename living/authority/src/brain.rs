@@ -403,6 +403,18 @@ impl<'a> Ev<'a> {
         self.scene.as_ref().and_then(|s| s.heard.as_deref()).unwrap_or(&[])
     }
 
+    /// Where a creature heard and not seen seems to be: where it is, or under the
+    /// `perceived_sound_on` law (perception parity) only its compass way and distance band from
+    /// here, the two a player's `heard_sounds` row carries (`sight::heard_point`).
+    fn heard_at(&self, c: &NearCreature) -> (f32, f32) {
+        let laws = common::laws(self.ctx);
+        if !laws.perceived_sound_on {
+            return c.pos;
+        }
+        let hearing = common::hearing_for(self.ctx, self.me.id, &self.w, self.now);
+        living_rules::sight::heard_point(self.at, c.pos, laws.heard_near_m, laws.heard_close_m, hearing)
+    }
+
     /// The resources in sight, nearest first (gathered when first asked for).
     fn resources(&mut self) -> &[(ResourceNode, f32)] {
         let (ctx, me, at, now) = (self.ctx, self.me.id, self.at, self.now);
@@ -1081,7 +1093,8 @@ impl<'a> Ev<'a> {
                         if !self.smell {
                             return None;
                         }
-                        self.heard_list().iter().find(|c| c.id == sp).map(|c| Resolved::point(c.pos))
+                        let c = self.heard_list().iter().find(|c| c.id == sp).cloned()?;
+                        Some(Resolved::point(self.heard_at(&c)))
                     })
                 } else {
                     None
@@ -1119,7 +1132,10 @@ impl<'a> Ev<'a> {
                 }
             }
             // Toward the nearest thing heard and not seen (a point: the body does not know who).
-            Target::Sound => self.heard_list().first().map(|c| Resolved::point(c.pos)),
+            Target::Sound => {
+                let c = self.heard_list().first().cloned()?;
+                Some(Resolved::point(self.heard_at(&c)))
+            }
             Target::Commotion => {
                 let sight = common::sight_for(self.ctx, self.me.id, &self.w, now);
                 crate::town::commotion(self.ctx, self.at, sight, now).map(Resolved::point)
