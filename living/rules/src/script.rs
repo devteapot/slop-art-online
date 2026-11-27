@@ -628,6 +628,10 @@ pub struct Laws {
     /// know-how, and a person never smells (scent stays an animal's sense, whatever a seed's
     /// species say). Off, as before.
     pub perceived_private_on: bool,
+    /// Where a graph's `commotion` (target and weight) is (perception parity): on, a fight or a
+    /// death the character perceives (`town::commotion_seen`: the spot in its sight, field and
+    /// line, or someone in its scene visibly fighting); off, any within its sight radius.
+    pub perceived_commotion_on: bool,
     /// Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): on, a graph's
     /// `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a clear
     /// personal relation, then the community's stance, and minds are told so; off, any personal
@@ -976,6 +980,7 @@ impl Default for Laws {
             perceived_holds_on: false,
             perceived_sound_on: false,
             perceived_private_on: false,
+            perceived_commotion_on: false,
             relation_fight_on: true,
             cues_on: false,
             cue_cooldown_s: 600.0,
@@ -3363,6 +3368,7 @@ impl Scripts {
             perceived_holds_on: flag("perceived_holds_on", l.perceived_holds_on),
             perceived_sound_on: flag("perceived_sound_on", l.perceived_sound_on),
             perceived_private_on: flag("perceived_private_on", l.perceived_private_on),
+            perceived_commotion_on: flag("perceived_commotion_on", l.perceived_commotion_on),
             relation_fight_on: flag("relation_fight_on", l.relation_fight_on),
             cues_on: flag("cues_on", l.cues_on),
             cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),

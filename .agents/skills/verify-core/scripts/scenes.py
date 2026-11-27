@@ -1517,6 +1517,94 @@ def perceived_private(s):
             s.graph(c, {"wait": 60 + next(rounds)})
 
 
+def perceived_commotion(s):
+    """A graph's `commotion` under the `perceived_commotion_on` law (perception parity,
+    docs/PERCEPTION_PARITY_AUDIT.md, `town::commotion_seen`): a fight draws only those who
+    perceive it. On this map's own wall geometry (`wall_geometry`, as `sight`), a fight at `eye`
+    is watched by O in the open 3 tiles off and by X behind 1 to 3 tiles of rock or wall, both
+    within sight. Each one's routine walks to the commotion, as a target (`sees commotion`) or
+    as a desire's weight (`commotion`). Each case is one first blow (attackers A and B take turns,
+    so every blow is a fight's first and writes its chronicle line). Law off (control, the leak):
+    both go, X through the wall. Law on: O goes, X does not. About 3 minutes."""
+    spots = wall_geometry(s)
+    (s.out / f"{s.name}-spots.json").write_text(json.dumps(spots, indent=2) + "\n")
+    a, b, victim, o, x = cast = s.people(5)
+    (s.out / f"{s.name}-cast.json").write_text(json.dumps({"A": a, "B": b, "victim": victim, "O": o, "X": x}) + "\n")
+    fight = spots["eye"]
+    home = {a: (fight[0], fight[1]), b: (fight[0], fight[1]), victim: (fight[0], fight[1]), o: tuple(spots["open"]), x: tuple(spots["hidden"])}
+    rounds = iter(range(1000))
+    now = lambda: s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    def place():
+        for c, at in home.items():
+            s.call("place_at", c, at[0], at[1])
+
+    def routine(how):
+        if how == "target":
+            return {"first": {"label": "commotion", "children": [
+                {"if": {"cond": {"sees": "commotion"}, "then": {"do": {"skill": "goto", "target": "commotion"}}}},
+                {"wait": 0.2 + 0.001 * next(rounds)}]}}
+        return {"desires": [{"want": "look", "weight": {"base": 0.0, "commotion": 2.0}, "do": {"do": {"skill": "goto", "target": "commotion"}}},
+                            {"want": "stand", "weight": {"base": 1.0}, "do": {"wait": 0.2 + 0.001 * next(rounds)}}]}
+
+    def went(who, t0):
+        """Whether `who` set off toward the fight: a `goto` aimed within 2.5 m of it, or its body
+        off its spot by more than 0.6 m (O stands 3 m off: its walk can end between two polls)."""
+        for r in s.http_rows(f"SELECT * FROM activity WHERE id = {who}"):
+            t = r["target"]
+            tx, ty = (t["x"], t["y"]) if isinstance(t, dict) else (t[2], t[3])
+            if r["skill"] == "goto" and math.dist((tx, ty), fight) < 2.5:
+                return True
+        b = s.http_rows(f"SELECT x, y FROM body WHERE id = {who}")
+        return bool(b) and math.dist((b[0]["x"], b[0]["y"]), home[who]) > 0.6
+
+    def case(law, how, attacker):
+        place()
+        for c in (o, x):
+            s.graph(c, routine(how))
+        time.sleep(1.5)
+        t0 = now()
+        s.graph(attacker, {"seq": [{"do": {"skill": "attack", "target": {"id": victim}}}, {"wait": 60 + next(rounds)}]})
+        line = s.wait(lambda: [r for r in s.story("attack", attacker) if r["at_ms"] >= t0 and r["b"] == victim] or None, seconds=20, every=0.5)[0]
+        seen = {o: False, x: False}
+        end = time.monotonic() + 5.0
+        while time.monotonic() < end and not all(seen.values()):
+            for c in seen:
+                seen[c] = seen[c] or went(c, t0)
+            time.sleep(0.2)
+        for c in (o, x):
+            s.rows(f"SELECT * FROM activity WHERE id = {c}", f"activity-{law}-{how}-{c}")
+            s.graph(c, {"wait": 60 + next(rounds)})
+        s.graph(attacker, {"wait": 60 + next(rounds)})
+        s.call("admin_set_vitals", victim, 100.0, check=False)
+        # The chronicle line draws for 8 s (`COMMOTION_MS`): the next case starts after it.
+        time.sleep(9)
+        return line, seen
+
+    try:
+        for c in cast:
+            s.graph(c, {"wait": 120 + next(rounds)})
+        set_law(s, "perceived_commotion_on", False)
+        place()
+        time.sleep(46)  # a body is not second-guessed for 45 s after arrival (`brain.rs`)
+        turn = iter([a, b] * 4)
+        for how in ("target", "weight"):
+            line, seen = case("off", how, next(turn))
+            s.expect(f"law off, {how}: O in the open and X behind the wall both go to the fight (X through the wall: the leak)", seen[o] and seen[x], {"line": line, "went": seen})
+        set_law(s, "perceived_commotion_on", True)
+        s.wait(lambda: own_laws(s.rows).get("perceived_commotion_on") == "true", 10)
+        for how in ("target", "weight"):
+            line, seen = case("on", how, next(turn))
+            s.expect(f"law on, {how}: O goes to the fight, X behind the wall does not", seen[o] and not seen[x], {"line": line, "went": seen})
+        fights = {e: [r for r in s.rows(f"SELECT * FROM experience WHERE observer = {e}", f"experience-{e}") if r["kind"] == "fight"] for e in (o, x)}
+        s.expect("O witnessed the fights and X none (the perception path agrees)", fights[o] and not fights[x], {k: v[:2] for k, v in fights.items()})
+    finally:
+        set_law(s, "perceived_commotion_on", False, check=False)
+        for c in cast:
+            s.graph(c, {"wait": 60 + next(rounds)})
+            s.call("place_at", c, fight[0] + 40 + 2 * cast.index(c), fight[1] + 40, check=False)
+
+
 def drop_geometry(s, cls=8):
     """On this world's own map: an `eye` tile and an `across` one on one axis with only tiles of
     class `cls` (8 a drop, 9 a low thing; 1 to 3 of them) between and walkable ground behind each
@@ -6344,6 +6432,7 @@ SCENES["goods"] = goods
 SCENES["perceived_holds"] = perceived_holds
 SCENES["perceived_sound"] = perceived_sound
 SCENES["perceived_private"] = perceived_private
+SCENES["perceived_commotion"] = perceived_commotion
 SCENES["workplace"] = workplace
 SCENES["making"] = making
 SCENES["stock"] = stock

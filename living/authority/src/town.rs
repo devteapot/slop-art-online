@@ -304,16 +304,57 @@ const COMMOTION_KINDS: &[&str] = &["attack", "threat", "killing", "death"];
 /// Where the nearest recent fight or death within `sight` of `at` is (a fight's chronicle
 /// row is refreshed at every blow, so it stays recent while the fight lasts).
 pub fn commotion(ctx: &ReducerContext, at: (f32, f32), sight: f32, now: u64) -> Option<(f32, f32)> {
+    recent_commotions(ctx, now).into_iter().map(|p| (dist(at, p), p)).filter(|(d, _)| *d <= sight).min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, p)| p)
+}
+
+/// Where the recent fights and deaths are (once per transaction).
+fn recent_commotions(ctx: &ReducerContext, now: u64) -> Vec<(f32, f32)> {
     let key = common::stamp(ctx);
-    let recent = COMMOTIONS.with(|c| {
+    COMMOTIONS.with(|c| {
         let mut c = c.borrow_mut();
         if c.as_ref().map_or(true, |(k, _)| *k != key) {
             let rows = ctx.db.chronicle().at_ms().filter(now.saturating_sub(COMMOTION_MS)..).filter(|r| COMMOTION_KINDS.contains(&r.kind.as_str())).map(|r| (r.x, r.y)).collect();
             *c = Some((key, rows));
         }
         c.as_ref().map(|(_, v)| v.clone()).unwrap_or_default()
-    });
-    recent.into_iter().map(|p| (dist(at, p), p)).filter(|(d, _)| *d <= sight).min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, p)| p)
+    })
+}
+
+/// The `perceived_commotion_on` law's commotion for `me` standing at `at` (perception parity,
+/// docs/PERCEPTION_PARITY_AUDIT.md): the nearest of what it perceives of a fight or a death,
+/// through the perception path players' sets use (`perception::in_sight`: its sight, its field
+/// under `fov_on`, the light, a clear line), never through a wall:
+/// - the spot of a recent blow, threat or death ([`commotion`]'s chronicle rows) that it sees now;
+/// - someone in its scene (`seen`: the creatures it perceives) visibly making a hostile move,
+///   a person or at a person (the chronicle's fights), at the maker.
+pub fn commotion_seen(ctx: &ReducerContext, me: u32, at: (f32, f32), sight: f32, seen: &[common::NearCreature], now: u64) -> Option<(f32, f32)> {
+    let mut best: Option<(f32, (f32, f32))> = None;
+    let mut take = |d: f32, p: (f32, f32)| {
+        if best.is_none_or(|(b, _)| d < b) {
+            best = Some((d, p));
+        }
+    };
+    let spots: Vec<(f32, (f32, f32))> = recent_commotions(ctx, now).into_iter().map(|p| (dist(at, p), p)).filter(|(d, _)| *d <= sight).collect();
+    if !spots.is_empty() {
+        if let Some(eye) = ctx.db.body().id().find(me) {
+            let (w, map) = (common::world(ctx), common::map(ctx));
+            for (d, p) in spots {
+                if crate::perception::sees(ctx, me, &eye, p, &w, &map, now) {
+                    take(d, p);
+                }
+            }
+        }
+    }
+    let sc = common::scripts(ctx);
+    let person = |id: u32| ctx.db.character().id().find(id).is_some_and(|c| c.kind == "person");
+    for c in seen {
+        if let Some(v) = crate::perception::visibly(ctx, &sc, c.id, now) {
+            if v.combat && sc.shapes().get(&v.skill).is_some_and(|s| s.hostile) && (&*c.kind == "person" || (v.target != 0 && person(v.target))) {
+                take(c.dist, c.pos);
+            }
+        }
+    }
+    best.map(|(_, p)| p)
 }
 
 /// Walkable tiles in the 5x5 square around a point (a narrow street has few).

@@ -126,6 +126,8 @@ fn laws() {
         // Perception parity: no fact a player has no view of (being the only one alive who
         // knows a technique, a person's scent).
         perceived_private_on: false,
+        // Perception parity: a commotion only as seen, never through walls.
+        perceived_commotion_on: false,
         // Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): a graph's
         // `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a
         // personal relation only when it is clear (trust -25 or less or a hostile word; 25 or more
@@ -3294,6 +3296,7 @@ fn law_about(l, name) {
         "perceived_holds_on" => if l.perceived_holds_on { "one knows what a store holds only from looking inside it" } else { "one knows what every store holds" },
         "perceived_sound_on" => if l.perceived_sound_on { "a sound out of sight is known only by its way and how far, as one hears it" } else { "a sound out of sight is known exactly where it is" },
         "perceived_private_on" => if l.perceived_private_on { "no one knows whether anyone else alive knows what they know, and people do not smell" } else { "one knows whether anyone else alive knows what one knows" },
+        "perceived_commotion_on" => if l.perceived_commotion_on { "a fight or death draws only those who see it" } else { "a fight or death draws anyone within sight of it, walls or not" },
         "stranger_by_name" => if l.stranger_by_name { "in a routine, a stranger is someone whose name one does not know" } else { "in a routine, a stranger is someone one has no feelings about yet" },
         "cues_on" => if l.cues_on { "what one wrote one would watch for brings one to think when one perceives it" } else { "one thinks when something happens to one, not because one watches for it" },
         "cue_cooldown_s" => `the same thing seen again brings no new thought from what one watches for within ${short(l.cue_cooldown_s)} s`,
