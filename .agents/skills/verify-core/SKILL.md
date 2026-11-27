@@ -144,6 +144,8 @@ python3 "$C/scenes.py" intents_cost --run "$R" > "$E/intents_cost.txt" 2>&1
 python3 "$C/scenes.py" health_seen --run "$R" > "$E/health_seen.txt" 2>&1
 # Sight that depends on facing, switched by set_world_law (features/fov.md, about 3 min).
 python3 "$C/scenes.py" fov --run "$R" > "$E/fov.txt" 2>&1
+# Facts no player has a view of under perceived_private_on: no "you alone know how to" from a scan of everyone's know-how; off, the feeling (features/perceived-private.md, about 3 min).
+python3 "$C/scenes.py" perceived_private --run "$R" > "$E/perceived_private.txt" 2>&1
 python3 "$C/scenes.py" say --run "$R" > "$E/say.txt" 2>&1
 # A goto to a kind of ground arrives standing on it: goto then clear or plant, graph, mind plan and
 # player (features/steering.md#a-goto-to-a-kind-of-ground, about 3 min; spawns 32 people).
