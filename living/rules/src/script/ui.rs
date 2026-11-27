@@ -372,6 +372,25 @@ impl Scripts {
                 u.on = on;
             }
         }
+        // A label of its own at a place it is on (read after `on`).
+        if way && m.contains_key("labels") {
+            err(format!("{f}: `labels` names a skill's label at its places; a way's label is set by `{name}_speech()`"));
+        } else if let Some(lm) = field!("labels", |v: &Dynamic| v.clone().try_cast::<Map>().ok_or_else(|| format!("{f}: `labels` is a map from a place to its label (`#{{ own_bond: \"Withdraw\" }}`)"))) {
+            for (k, v) in lm {
+                let k = k.to_string();
+                let Some(p) = On::parse(&k) else {
+                    err(format!("{f}: `labels` names places among {} (not `{k}`)", ui::PLACES.join(", ")));
+                    continue;
+                };
+                match v.into_string() {
+                    _ if !u.is_on(p) => err(format!("{f}: `labels.{k}`: `{name}` is not on `{k}` (`on` has no `{k}`)")),
+                    Ok(l) if !l.trim().is_empty() => {
+                        u.labels.insert(p, l);
+                    }
+                    _ => err(format!("{f}: `labels.{k}` is a short display name, not empty")),
+                }
+            }
+        }
         if let Some(p) = field!("place", |v| one_of(f, "place", v, BarPlace::parse, ui::BAR_PLACES)) {
             if u.is_on(On::Bar) {
                 u.place = Some(p);

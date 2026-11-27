@@ -268,7 +268,7 @@ pub const STATES: &[&str] = &[];
 pub const ITEM_GROUPS: &[&str] = &["food", "tool", "material", "garment", "money", "fuel", "weapon", "glass"];
 
 /// The keys of a `<name>_ui()` map.
-pub const UI_TRAITS: &[&str] = &["label", "on", "place", "order", "input", "picks", "choose", "detail", "unready", "toggles", "drag", "pin", "running", "refused", "look", "marker", "key", "tip", "alias", "to_label", "room_label", "rows", "bubble", "source"];
+pub const UI_TRAITS: &[&str] = &["label", "on", "place", "order", "input", "picks", "choose", "detail", "unready", "toggles", "drag", "pin", "running", "refused", "look", "marker", "key", "tip", "alias", "to_label", "room_label", "rows", "bubble", "source", "labels"];
 /// The keys only a way of speaking's `_ui()` may have.
 pub const WAY_UI_TRAITS: &[&str] = &["alias", "to_label", "room_label", "rows", "bubble"];
 /// The keys of `look`.
@@ -327,8 +327,14 @@ pub struct UiSpec {
     pub on: Vec<On>,
     /// Its declared bar place (none: placed by aim, [`bar_places`]).
     pub place: Option<BarPlace>,
-    /// Its declared position within its place or list (none: the script's order).
+    /// Its declared position within its place or list (none: the script's order). On the bar
+    /// it is the skill key; on a card's or list's buttons ([`on_place`]) the declared come
+    /// first, by it.
     pub order: Option<i64>,
+    /// Its label at a place where `label` reads badly there (`labels: #{ own_bond: "Withdraw" }`:
+    /// decline on one's own offer); each place is one it is `on`. Elsewhere `label`
+    /// ([`UiSpec::label_at`]). Presentation only, as every field here.
+    pub labels: BTreeMap<On, String>,
     pub input: Input,
     pub picks: Vec<Pick>,
     /// Where an item choice comes from (none: the skill takes no item).
@@ -363,10 +369,27 @@ impl UiSpec {
         self.on.contains(&place)
     }
 
+    /// Its label at a place: the place's own (`labels`), else `label`.
+    pub fn label_at(&self, place: On) -> &str {
+        self.labels.get(&place).map_or(self.label.as_str(), String::as_str)
+    }
+
     /// How a foreseen refusal shows at a place.
     pub fn refused_at(&self, place: On) -> Refused {
         self.refused.unwrap_or(if place == On::Bar { Refused::Grey } else { Refused::Note })
     }
+}
+
+/// The skills on a place, in the order its buttons go: those with a declared `order` first, by
+/// it, then the rest; each group in the order given (`Scripts::ui_specs`, the script's). A card
+/// puts its first act in the primary slot (a courting offer's: conceive's `order: 0` puts Accept
+/// before decline, whose spec comes first). Presentation only: the specs' order, which the rules
+/// and `det` follow, is not touched.
+pub fn on_place<'a>(specs: impl IntoIterator<Item = &'a UiSpec>, place: On) -> Vec<&'a UiSpec> {
+    let mut on: Vec<&UiSpec> = specs.into_iter().filter(|u| u.is_on(place)).collect();
+    // Stable: equal keys keep the order given.
+    on.sort_by_key(|u| u.order.unwrap_or(i64::MAX));
+    on
 }
 
 /// A name as a label: `_` as a space, the first letter capitalised (`fire_bolt` → "Fire bolt").
@@ -535,6 +558,7 @@ pub fn defaults(src: &Source) -> UiSpec {
         on: on_by_spec(src),
         place: None,
         order: None,
+        labels: BTreeMap::new(),
         input: input_by_aim(aim),
         picks: src.spec.map(|k| picks_by_spec(k, src.shape)).unwrap_or_default(),
         source: src.spec.filter(|k| k.needs_item).map(item_source_by_spec),

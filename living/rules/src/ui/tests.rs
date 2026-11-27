@@ -258,8 +258,20 @@ fn a_courting_offer_is_answered_by_the_skills_on_bond() {
     let own: Vec<&str> = s.ui_specs().filter(|u| u.is_on(On::OwnBond)).map(|u| u.name.as_str()).collect();
     assert_eq!(own, ["decline"]);
     let (u, d) = (s.ui("conceive").unwrap(), s.ui_default("conceive").unwrap());
-    assert_eq!(UiSpec { on: d.on.clone(), declared: false, ..u.clone() }, d, "only `on` is declared");
+    assert_eq!(UiSpec { on: d.on.clone(), order: None, labels: d.labels.clone(), declared: false, ..u.clone() }, d, "only `on`, `order` and `labels` are declared");
     assert_eq!(u.on, [d.on.clone(), vec![On::Bond]].concat(), "its default places, then the card");
+    // The buttons' order and words: Accept (conceive, `order: 0`) is the incoming card's first
+    // act though decline's spec comes first; on my own card decline reads "Withdraw".
+    let card = |place: On| on_place(s.ui_specs(), place).into_iter().map(|u| (u.name.as_str(), u.label_at(place))).collect::<Vec<_>>();
+    assert_eq!(s.ui_specs().filter(|u| u.is_on(On::Bond)).map(|u| u.name.as_str()).collect::<Vec<_>>(), ["decline", "conceive"], "the script's order");
+    assert_eq!(card(On::Bond), [("conceive", "Accept"), ("decline", "Decline")]);
+    assert_eq!(card(On::OwnBond), [("decline", "Withdraw")]);
+    // A trade offer's card declares no order: as before, the script's (Accept, Decline).
+    assert_eq!(card(On::Offer), [("accept", "Accept"), ("decline", "Decline")]);
+    // `label`, the one field the authority reads (`perception.rs` doing words, `heed.rs`), is
+    // the skill's own everywhere: a place's label is for that place's buttons only.
+    assert_eq!((s.ui("conceive").unwrap().label.as_str(), s.ui("decline").unwrap().label.as_str()), ("Conceive", "Decline"));
+    assert_eq!(s.ui("decline").unwrap().label_at(On::Person), "Decline");
     // Acts toward the other person, as a mind writes them.
     assert_eq!(act_node("conceive", &ActTarget::Creature(4), &Picked::default()), json!({"do": "conceive", "target": {"id": 4}}));
     assert_eq!(act_node("decline", &ActTarget::Bond { other: 4, bond: 9 }, &Picked::default()), json!({"do": "decline", "target": {"id": 4}, "bond": 9}));
@@ -269,6 +281,28 @@ fn a_courting_offer_is_answered_by_the_skills_on_bond() {
         assert!(e.ui_errors().iter().any(|m| m.contains(&format!("eat_ui: `on`: `{place}` needs a spec with `target: true`"))), "{:?}", e.ui_errors());
         assert!(!e.ui("eat").unwrap().is_on(On::parse(place).unwrap()));
     }
+}
+
+#[test]
+fn a_place_may_have_a_label_of_its_own() {
+    let ok = with("fn decline_ui() { #{ on: [\"person\", \"offer\", \"own_bond\"], labels: #{ own_bond: \"Withdraw\", offer: \"No thanks\" } } }");
+    assert!(ok.ui_errors().is_empty(), "{:?}", ok.ui_errors());
+    let u = ok.ui("decline").unwrap();
+    assert_eq!((u.label_at(On::OwnBond), u.label_at(On::Offer), u.label_at(On::Person), u.label.as_str()), ("Withdraw", "No thanks", "Decline", "Decline"));
+    // Each problem keeps that entry's default and is named.
+    for (decl, says) in [
+        ("labels: #{ bond: \"Withdraw\" }", "decline_ui: `labels.bond`: `decline` is not on `bond`"),
+        ("labels: #{ shelf: \"Withdraw\" }", "decline_ui: `labels` names places among"),
+        ("labels: #{ person: \"  \" }", "decline_ui: `labels.person` is a short display name"),
+        ("labels: \"Withdraw\"", "decline_ui: `labels` is a map from a place to its label"),
+    ] {
+        let e = with(&format!("fn decline_ui() {{ #{{ on: [\"person\"], {decl} }} }}"));
+        assert!(e.ui_errors().iter().any(|m| m.contains(says)), "{decl}: {:?}", e.ui_errors());
+        assert!(e.ui("decline").unwrap().labels.is_empty(), "{decl}");
+    }
+    // A declared order sorts a place's buttons; equal or none keep the script's order.
+    let o = with("fn decline_ui() { #{ on: [\"person\", \"offer\"], order: 1 } }\nfn accept_ui() { #{ on: [\"person\", \"offer\"], order: 2 } }");
+    assert_eq!(on_place(o.ui_specs(), On::Offer).iter().map(|u| u.name.as_str()).collect::<Vec<_>>(), ["decline", "accept"]);
 }
 
 #[test]
@@ -1180,7 +1214,7 @@ const GOLDEN: &[(&str, &[&str])] = &[
     ("EFFECTS", &["slash", "arrow", "bolt", "burst", "glow", "guard_arc"]),
     ("STATES", &[]),
     ("ITEM_GROUPS", &["food", "tool", "material", "garment", "money"]),
-    ("UI_TRAITS", &["label", "on", "place", "order", "input", "picks", "choose", "detail", "unready", "toggles", "drag", "pin", "running", "refused", "look", "marker", "key", "tip", "alias", "to_label", "room_label", "rows", "bubble", "source"]),
+    ("UI_TRAITS", &["label", "on", "place", "order", "input", "picks", "choose", "detail", "unready", "toggles", "drag", "pin", "running", "refused", "look", "marker", "key", "tip", "alias", "to_label", "room_label", "rows", "bubble", "source", "labels"]),
     ("WAY_UI_TRAITS", &["alias", "to_label", "room_label", "rows", "bubble"]),
     ("LOOK_TRAITS", &["icon", "clip", "effect"]),
     ("RUNNING_TRAITS", &["show", "text"]),

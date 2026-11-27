@@ -259,8 +259,8 @@ The client keeps a fixed vocabulary. The rules choose names from it, and only th
 | `item` | Clicking an item in the pack | as for `self`, with that item |
 | `box` | The ways chips in the text box | `human_speak(text, to, way)` |
 | `offer` | An incoming offer or proposal | `human_act` toward its sender, `target: {"id": sender}`, with the offer it answers, `"offer": id` (docs/WORLD_RULES.md, "Answering") |
-| `bond` | An incoming courting offer (`my_bond_offers`, `incoming: true`), a card in its maker's person window | `human_act` toward its maker, `target: {"id": maker}`, optionally with `"bond": id` (`ActTarget::Bond`). Shipped: `conceive` (accepts) and `decline` (declines) |
-| `own_bond` | One's own outgoing courting offer (`my_bond_offers`, `incoming: false`), a card in the addressee's person window | `human_act` toward its addressee, `target: {"id": to}`, optionally with `"bond": id` (`ActTarget::Bond`). Shipped: `decline` (withdraws) |
+| `bond` | An incoming courting offer (`my_bond_offers`, `incoming: true`), a card in its maker's person window | `human_act` toward its maker, `target: {"id": maker}`, optionally with `"bond": id` (`ActTarget::Bond`). Shipped: `conceive` ("Accept", first by `order: 0`) and `decline` (declines) |
+| `own_bond` | One's own outgoing courting offer (`my_bond_offers`, `incoming: false`), a card in the addressee's person window | `human_act` toward its addressee, `target: {"id": to}`, optionally with `"bond": id` (`ActTarget::Bond`). Shipped: `decline` ("Withdraw", by `labels`) |
 
 Declarations can add rows to two fixed window kinds: `person` (pinned acts) and `skills` (descriptions). A new window kind is a client change (section 4).
 
@@ -302,7 +302,7 @@ The client's theme maps each name to assets. The lists live in `living_rules::ui
 | `label` | Short display name ("Fire bolt"). For a way, only `_speech()` sets it | The name, with `_` replaced by a space and capitalised (as now) |
 | `on` | One place or a list (section 2); never empty (hide a skill with `listed: false`) | `bar` for a skill in `skill_bar()`. Otherwise from the spec, unless real-time combat: `person` (and `thing` when checked) if `target`, `self` otherwise, and `item` for a pack item with no target |
 | `place` | For the bar: `primary`, `secondary`, `skill`, `jump`, `dodge`, `weapon` or `extra` | By aim, as the WIP's `Roles::of` does now, but computed in `living_rules::ui` |
-| `order` | A number: position within its place or list. For a way, only `_speech()` sets it | Script order |
+| `order` | A number: position within its place or list. On the bar the skill key; on a card's or list's buttons (`living_rules::ui::on_place`, so far the offer and courting cards) the declared come first, by it (shipped: `conceive` `order: 0` puts Accept first on a courting card). For a way, only `_speech()` sets it | Script order |
 | `input` | An input kind (section 2) | From the combat aim: creature → `tap`; self_or_ally → `tap`, on the hovered ally, else oneself; point → `aim_point`; facing → `hold`; dash → `tap`. Otherwise `tap` |
 | `picks` | What must be chosen. `target` needs a spec with `target: true`; `item` needs `item`; `qty`, `want` and `words` need those args (`qty`, `want`, `text`) | From the spec |
 | `choose` | How an item is chosen: `list` or `grid`; `wheel` is proposed for a small fixed set (section 8.1) | `list` |
@@ -318,6 +318,7 @@ The client's theme maps each name to assets. The lists live in `living_rules::ui
 | `key` | A suggested default key, used only if the viewer has not bound that act | none |
 | `tip` | A first-time hint, with `{key}` | none |
 | `alias`, `to_label`, `room_label`, `rows`, `bubble` | For ways of speaking only (see the whisper example) | the say defaults |
+| `labels` | A map from a place the skill is `on` to its label there, where `label` reads badly (shipped: `decline` `labels: #{ own_bond: "Withdraw" }`, `conceive` `labels: #{ bond: "Accept" }`). Skills only; the authority reads `label`, never this | `label` at every place |
 
 What `refused` means:
 - **`grey`:** when needs, knows, cost or cooldown change, the client runs the skill's `_check` on its own facts, as the F list does (`verbs.rs:303-318`). A refusal greys the slot, and the check's text is the tooltip, with `about` and `takes` under it. A skill with no `_check` is never greyed.
@@ -922,7 +923,7 @@ The owner's only pointer is a laptop trackpad. On a trackpad, one finger moves t
 | An item in the pack | No | A click in a window; a wheel would cover the neighbouring cells. The list beside the cell stays. |
 | The skill bar | No | One key per skill, answered in the same frame (section 4); a wheel adds a step and covers the fight. |
 | Talking, ways of speaking | No | You are typing; the ways are chips in the box. The person wheel's Talk opens the box. |
-| An incoming offer | No | Two buttons on the offer card (`ui-1-step4`). A courting offer's card is the same: a button per skill on `bond`. |
+| An incoming offer | No | Two buttons on the offer card (`ui-1-step4`). A courting offer's card is the same: a button per skill on `bond` (on one's own offer, `own_bond`), in `order`. |
 | The ground (build at a point) | No | `aim_point` already picks the point. Build's kinds could later be a `choose: "wheel"` sub-choice. |
 
 ### 8.4 Refusals, grey hints and progress

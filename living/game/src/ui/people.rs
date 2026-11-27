@@ -329,8 +329,8 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                             });
                         });
                     }
-                    // A courting offer between us (`kin.rs`): theirs with the rules' act that takes
-                    // it up, mine without.
+                    // A courting offer between us (`kin.rs`): theirs with the rules' acts that
+                    // answer it (`bond`), mine with those that withdraw it (`own_bond`).
                     super::kin::spawn_card(body, f, id);
                     // What I can give them, from my pack and the rules (opened by Give ›).
                     body.spawn((GiveList(id), Node { flex_direction: FlexDirection::Column, border: wood::b(2.0), border_radius: wood::r(8.0), overflow: Overflow::clip(), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundColor(wood::surface_hi()), BorderColor::all(wood::edge()), Pickable::IGNORE)).with_children(|g| {
@@ -741,10 +741,12 @@ pub fn hints(hints: Res<Hints>, talk: Option<Res<crate::talk::Talk>>, input: Res
 }
 
 
-/// The rules' acts on an offer, in the script's order: each skill whose `_ui()` puts it `on`
-/// `offer` (Accept, Decline), as (skill, label).
+/// The rules' acts on an offer, as its buttons go (`living_rules::ui::on_place`: a declared
+/// `order` first, then the script's order): each skill whose `_ui()` puts it `on` `offer`
+/// (shipped: Accept, Decline), as (skill, its label there).
 fn offer_acts(rules: &crate::verbs::Rules) -> Vec<(String, String)> {
-    rules.scripts.as_ref().map(|sc| sc.ui_specs().filter(|u| u.is_on(living_rules::ui::On::Offer)).map(|u| (u.name.clone(), u.label.clone())).collect()).unwrap_or_default()
+    use living_rules::ui::{on_place, On};
+    rules.scripts.as_ref().map(|sc| on_place(sc.ui_specs(), On::Offer).into_iter().map(|u| (u.name.clone(), u.label_at(On::Offer).to_string())).collect()).unwrap_or_default()
 }
 
 /// Answering a card, the one place an offer's acts are built: the rules' own node toward the

@@ -4419,7 +4419,7 @@ def kin_restore(run, me, child, child_parents, nameless, name):
     quoted = name.replace("'", "''")
     qs = [f"UPDATE character SET name = '{quoted}' WHERE id = {nameless}",
           f"UPDATE character SET parent_a = {child_parents[0]}, parent_b = {child_parents[1]} WHERE id = {child}",
-          f"DELETE FROM membership WHERE id = {KIN_IDS}", f"DELETE FROM community WHERE id = {KIN_IDS}", f"DELETE FROM bond_offer WHERE id = {KIN_IDS}"]
+          f"DELETE FROM membership WHERE id = {KIN_IDS}", f"DELETE FROM community WHERE id = {KIN_IDS}", f"DELETE FROM bond_offer WHERE id = {KIN_IDS}", f"DELETE FROM bond_offer WHERE id = {KIN_IDS + 1}"]
     if me:
         qs += [f"UPDATE character SET parent_a = 0, parent_b = 0 WHERE id = {me}", f'DELETE FROM bond_offer WHERE "to" = {me}', f'DELETE FROM bond_offer WHERE "from" = {me}',
                f"DELETE FROM expecting WHERE b = {me}", f"DELETE FROM expecting WHERE a = {me}"]
@@ -4438,9 +4438,12 @@ def kin(run, c):
     (admin `mind_act` conceive). Checks: names where the rules give one, the rules' relation
     words, "Your parent" and "not in sight" for the nameless one far off, nothing of an unseen
     relative's health, life or place; the community's founder, days and the home's way and
-    distance; the partner's window with my offer and no button; the suitor's window opened with
-    the card and the rules' act, which sends `conceive` toward them and is taken up; a reconnect
-    brings the rows back. The scene puts every row back."""
+    distance; the partner's window with my offer and the rules' act on `own_bond` (Withdraw),
+    which withdraws it (`decline` naming the offer), the card going with the row; the suitor's
+    window opened with the card and the rules' acts on `bond` in their declared order (Accept,
+    then Decline); Decline turns the offer down (the row gone, the maker told); offered again,
+    Accept sends `conceive` toward them, naming the offer, and is taken up, dropping my own
+    standing offer; a reconnect brings the rows back. The scene puts every row back."""
     s = "kin"
     rs = residents(run, n=8)
     if len(rs) < 5:
@@ -4467,17 +4470,32 @@ def kin(run, c):
         f"sql|SELECT * FROM community WHERE id = {KIN_IDS}",
         "client_sql|SELECT * FROM my_kin", "client_sql|SELECT * FROM my_bond_offers", "client_sql|SELECT * FROM my_community"])
     court = act(E, {"do": "conceive", "target": {"id": "{me}"}})
-    taken = "taken=sql|SELECT * FROM expecting WHERE b = {me};sql|SELECT * FROM bond_offer WHERE \"to\" = {me}"
+    # Offered again after the decline, with my own offer to D standing again (owner SQL), so
+    # taking E's up shows that it drops mine.
+    court2 = f'sql|INSERT INTO bond_offer (id, "from", "to", at_ms) VALUES ({KIN_IDS + 1}, {{me}}, {D}, {{now_ms}});' + court
+    # Out of sight the authority refuses the act before the rules see it ("no #N in sight"); in
+    # sight the rules withdraw it. D comes beside me for that, then goes back 40 m off.
+    hold = json.dumps(json.dumps({"wait": 600}))
+    near = f"near=place_at|{D}|(mx+1.2)|(my-1.4);set_behavior|{D}|{hold}"
+    away = f"away=place_at|{D}|(mx+40)|(my);set_behavior|{D}|{hold}"
+    refused = f"refused=sql|SELECT * FROM bond_offer WHERE id = {KIN_IDS};sql|SELECT id, ok, skill, code, why FROM act_outcome WHERE observer = {{me}} AND kind = 'act' AND skill = 'decline'"
+    withdrawn = (f"withdrawn=sql|SELECT * FROM bond_offer WHERE id = {KIN_IDS};sql|SELECT id, ok, skill, code, why FROM act_outcome WHERE observer = {{me}} AND kind = 'act' AND skill = 'decline'"
+                 f";sql|SELECT kind, text FROM experience WHERE observer = {D}")
+    declined = f"declined=sql|SELECT * FROM bond_offer WHERE \"to\" = {{me}};sql|SELECT kind, text FROM experience WHERE observer = {E}"
+    taken = "taken=sql|SELECT * FROM expecting WHERE b = {me};sql|SELECT * FROM bond_offer WHERE \"to\" = {me};sql|SELECT * FROM bond_offer WHERE \"from\" = {me}"
     plan = ("ready;sync:scene;sync:kit;wait:3;key:KeyL:tap;wait:0.6;click:@log:tab:1;wait:1;dump:people;shot:01_people;"
-            "click:@log:kin:2;wait:1;dump:partner;shot:02_partner_offer;click:@win:Person{D}:close;wait:0.5;"
-            "sync:court;wait:4;dump:court;shot:03_courted;click:@person:bond:{E}:0;wait:4;dump:accepted;shot:04_taken_up;sync:taken;"
-            "reconnect;wait:10;dump:recon0;key:KeyL:tap;wait:0.6;click:@log:tab:1;wait:1;dump:recon;shot:05_after_reconnect;quit").replace("{D}", str(D)).replace("{E}", str(E))
+            "click:@log:kin:2;wait:1;dump:partner;shot:02_partner_offer;click:@person:bond:{D}:0;wait:3;dump:refused;shot:03_refused_unseen;sync:refused;"
+            "sync:near;wait:3;dump:near;click:@person:bond:{D}:0;wait:3;dump:withdrawn;shot:03_withdrawn;sync:withdrawn;sync:away;wait:2;"
+            "click:@win:Person{D}:close;wait:0.5;"
+            "sync:court;wait:4;dump:court;shot:04_courted;click:@person:bond:{E}:1;wait:3;dump:declined;shot:05_declined;sync:declined;"
+            "sync:court2;wait:4;dump:court2;click:@person:bond:{E}:0;wait:4;dump:accepted;shot:06_taken_up;sync:taken;"
+            "reconnect;wait:10;dump:recon0;key:KeyL:tap;wait:0.6;click:@log:tab:1;wait:1;dump:recon;shot:07_after_reconnect;quit").replace("{D}", str(D)).replace("{E}", str(E))
     # A, C and E in sight (E within the 2 m the rules give `conceive`); B and D far off, held still.
     places = [f"{A}:-1.8:1.2", f"{C}:1.6:1.4", f"{E}:-0.6:1.3", f"{B}:0:-40", f"{D}:40:0"]
     me = None
     with resident_fixture(run, [A, B, C, D, E]):
         try:
-            out, code, text = drive(run, s, plan, places=places, syncs=[f"kit={kit}", f"court={court}", taken])
+            out, code, text = drive(run, s, plan, places=places, syncs=[f"kit={kit}", refused, near, away, withdrawn, f"court={court}", declined, f"court2={court2}", taken])
             sc = json.load(open(os.path.join(out, "scene.json"))) if os.path.exists(os.path.join(out, "scene.json")) else {}
             me = sc.get("me")
         finally:
@@ -4491,7 +4509,7 @@ def kin(run, c):
     view_rows = [x for x in snaps.get("kit", []) if "FROM my_kin" in x["query"]]
     cols = {k for r in (view_rows[0]["rows"] if view_rows else []) for k in r}
     c.check(s, "the client's own my_kin rows carry ids and relations only (no alive, hp, name or place)", cols == {"id", "relation"}, str(view_rows[:1])[:300])
-    d = {k: dump(out, k) or {} for k in ["people", "partner", "court", "accepted", "recon"]}
+    d = {k: dump(out, k) or {} for k in ["people", "partner", "refused", "near", "withdrawn", "court", "declined", "court2", "accepted", "recon"]}
     kin_of = lambda k: d[k].get("kin") or {}
     rows = kin_of("people").get("rows") or []
     by = {r["id"]: r for r in rows}
@@ -4504,10 +4522,12 @@ def kin(run, c):
     c.check(s, "my child in sight: their name, the rules' word for a child, here now", cc.get("title") == names[C] and cc.get("word") in KIN_WORDS["child"] and cc.get("note") == f"your {cc.get('word')} · here now", str(cc))
     c.check(s, "a parent the rules give no name, out of sight (seen earlier as a stranger): the relation alone (\"Your parent\", \"not in sight\")", b.get("title") == "Your parent" and b.get("note") == "not in sight" and b.get("word") == "parent" and b.get("named") is False, str(b))
     c.check(s, "my partner, named, out of sight: the name, \"your partner · not in sight\"", dd.get("title") == names[D] and dd.get("note") == "your partner · not in sight" and dd.get("here") is False, str(dd))
-    leaks = [(k, t) for k in d for r in (kin_of(k).get("rows") or []) if r["id"] in (B, D) for t in (r["title"], r["note"])
+    # D is brought into sight (`near`, `withdrawn`) only to withdraw my offer.
+    unseen = [k for k in d if k not in ("near", "withdrawn")]
+    leaks = [(k, t) for k in unseen for r in (kin_of(k).get("rows") or []) if r["id"] in (B, D) for t in (r["title"], r["note"])
              if re.search(r"\d|\b(alive|dead|died|hp|health|wounded|hurt|north|south|east|west|here now|m away)\b", t, re.I)]
     c.check(s, "nothing of an unseen relative's health, life or place on screen", not leaks, str(leaks))
-    c.check(s, "an unseen relative is in no plate, hover or target", not any(a_.get("id") in (B, D) for k in d for a_ in d[k].get("hovered") or []) and all(d[k].get("targeted") not in (B, D) for k in d), "")
+    c.check(s, "an unseen relative is in no plate, hover or target", not any(a_.get("id") in (B, D) for k in unseen for a_ in d[k].get("hovered") or []) and all(d[k].get("targeted") not in (B, D) for k in unseen), "")
     com = kin_of("people").get("community") or {}
     lines = com.get("lines") or []
     founded = ((next((x for x in snaps.get("kit", []) if "FROM community" in x["query"]), {}).get("rows") or [{}])[0]).get("founded_ms")
@@ -4520,21 +4540,45 @@ def kin(run, c):
     bonds = lambda k: kin_of(k).get("bonds") or []
     mine = [b_ for b_ in bonds("partner") if b_["with"] == D and not b_["incoming"]]
     c.check(s, "a family row opens their window (Family › partner)", (f"Person{D}", "Left") in wins(d["partner"]), str(wins(d["partner"])))
-    c.check(s, "my courting offer: a card in their window, \"You asked … to start a family\", counting down, no button", mine and mine[0]["text"].startswith(f"You asked {names[D]} to start a family.") and re.search(r"\d+:\d\d left$", mine[0]["text"]) and not [t for t in d["partner"].get("tags") or {} if t.startswith(f"person:bond:{D}:")], str(mine))
+    L = log(out)
+    snap = lambda k, i: ((snaps.get(k) or [])[i:i + 1] or [{}])[0].get("rows") or []
+    tags_of = lambda k: d[k].get("tags") or {}
+    # My own offer's card: the rules' acts on `own_bond` (shipped: decline, labelled Withdraw).
+    own = kin_of("partner").get("own_acts") or []
+    wd = f"person:bond:{D}:0"
+    c.check(s, "my courting offer: a card in their window, \"You asked … to start a family\", counting down", mine and mine[0]["text"].startswith(f"You asked {names[D]} to start a family.") and re.search(r"\d+:\d\d left$", mine[0]["text"]), str(mine))
+    c.check(s, "its buttons are the skills the rules put on `own_bond`, labelled for that place (shipped: decline, \"Withdraw\")", [(a_.get("skill"), a_.get("label")) for a_ in own] == [("decline", "Withdraw")] and wd in tags_of("partner") and f"person:bond:{D}:1" not in tags_of("partner"), str((own, sorted(t for t in tags_of("partner") if t.startswith("person:bond")))))
+    sent = re.findall(rf'verbs: Withdraw → \{{"bond":{KIN_IDS},"do":"decline","target":\{{"id":{D}\}}\}}', L)
+    c.check(s, "Withdraw sends the rules' act toward them, naming the offer (human_act decline, bond), once per click", len(sent) == 2, str(re.findall(r"verbs: Withdraw → .*", L))[:300])
+    # The newest decline outcome is this click's (an earlier run of the same player leaves rows).
+    newest = lambda k: max(snap(k, 1), key=lambda o_: o_["id"], default={})
+    no = [o_ for o_ in [newest("refused")] if o_ and not o_.get("ok")]
+    c.check(s, "out of sight it is refused truthfully: a refused outcome, the offer and its card stay", no and snap("refused", 0) and wd in tags_of("refused") and [b_ for b_ in bonds("refused") if not b_["incoming"]], f"outcomes {snap('refused', 1)}; row {snap('refused', 0)}")
+    c.check(s, "the refusal is a note in the authority's words", no and any(n.lower().startswith(no[0]["why"].lower().rstrip(".")) for n in d["refused"].get("notes") or []), str((d["refused"].get("notes"), [o_.get("why") for o_ in no])))
+    c.check(s, "fixture: brought beside me, the partner is in sight", D in set(d["near"].get("perceived") or []), str(d["near"].get("perceived")))
+    outs = [newest("withdrawn")]
+    c.check(s, "in sight the rules withdrew it: the row gone, an accepted outcome, the card and its button gone", not snap("withdrawn", 0) and outs[0].get("ok") and outs[0]["id"] != (no[0]["id"] if no else None) and wd not in tags_of("withdrawn") and not [b_ for b_ in bonds("withdrawn") if not b_["incoming"]],
+            f"row {snap('withdrawn', 0)}; outcomes {outs}; D told {[r_['text'] for r_ in snap('withdrawn', 2) if 'withdrew' in r_.get('text', '')]}")
+    c.check(s, "the outcome is a note in the rules' words (\"Withdrew your offer to start a family …\")", any("withdrew your offer to start a family" in n.lower() for n in d["withdrawn"].get("notes") or []), str(d["withdrawn"].get("notes")))
     inc = [b_ for b_ in bonds("court") if b_["with"] == E and b_["incoming"]]
     tag = f"person:bond:{E}:0"
     acts = kin_of("court").get("acts") or []
-    c.check(s, "a courting offer to me opens the suitor's window with the card and the rules' act", (f"Person{E}", "Left") in wins(d["court"]) and inc and inc[0]["text"].endswith("left") and " wants to start a family with you." in inc[0]["text"] and tag in (d["court"].get("tags") or {}), str((wins(d["court"]), inc, acts)))
-    c.check(s, "the card's acts are the skills the rules put on `bond` (shipped: conceive alone), one button each", [a_.get("skill") for a_ in acts] == ["conceive"] and all(a_.get("label") for a_ in acts) and f"person:bond:{E}:1" not in (d["court"].get("tags") or {}), str(acts))
+    c.check(s, "a courting offer to me opens the suitor's window with the card and the rules' acts", (f"Person{E}", "Left") in wins(d["court"]) and inc and inc[0]["text"].endswith("left") and " wants to start a family with you." in inc[0]["text"] and tag in tags_of("court"), str((wins(d["court"]), inc, acts)))
+    pos = [tags_of("court").get(f"person:bond:{E}:{j}") for j in (0, 1)]
+    c.check(s, "the card's acts are the skills the rules put on `bond`, in their declared order: Accept (conceive, `order: 0`) first, then Decline", [(a_.get("skill"), a_.get("label")) for a_ in acts] == [("conceive", "Accept"), ("decline", "Decline")] and all(pos) and pos[0][0] < pos[1][0] and f"person:bond:{E}:2" not in tags_of("court"), str((acts, pos)))
     c.check(s, "the suitor is named as I see them (not known by name: no name)", inc and names[E] not in inc[0]["text"], str(inc))
     c.check(s, "it is noted once, in the authority's words", len([n for n in d["court"].get("notes") or [] if "wants to start a family with you" in n]) == 1, str(d["court"].get("notes")))
-    L = log(out)
-    c.check(s, "the card's button sends the rules' act toward the suitor (human_act conceive)", re.search(rf'verbs: \S+ → \{{"do":"conceive","target":\{{"id":{E}\}}\}}', L) is not None, "")
-    t_ = snaps.get("taken") or []
-    expecting = t_[0]["rows"] if t_ else []
-    standing = t_[1]["rows"] if len(t_) > 1 else []
-    c.check(s, "the rules took it up: a child on the way, nothing left standing to me, the card gone", expecting and not standing and tag not in (d["accepted"].get("tags") or {}) and not [b_ for b_ in bonds("accepted") if b_["incoming"]], f"expecting {expecting}; standing {standing}")
-    c.check(s, "taking one up drops my own offer (the rules), and its card", not [b_ for b_ in bonds("accepted") if not b_["incoming"]], str(bonds("accepted")))
+    first = inc[0]["id"] if inc else None
+    c.check(s, "Decline sends the rules' decline toward the suitor, naming the offer", first is not None and re.search(rf'verbs: Decline → \{{"bond":{first},"do":"decline","target":\{{"id":{E}\}}\}}', L) is not None, str(re.findall(r"verbs: Decline → .*", L))[:300])
+    told = [r_["text"] for r_ in snap("declined", 1) if "declined your offer to start a family" in r_.get("text", "")]
+    c.check(s, "the rules turned it down: nothing standing to me, the card gone, the maker told", not snap("declined", 0) and tag not in tags_of("declined") and not [b_ for b_ in bonds("declined") if b_["incoming"]] and told, f"standing {snap('declined', 0)}; told {told}")
+    c.check(s, "the outcome is a note in the rules' words (\"Declined … offer to start a family\")", any("declined" in n.lower() and "offer to start a family" in n for n in d["declined"].get("notes") or []), str(d["declined"].get("notes")))
+    inc2 = [b_ for b_ in bonds("court2") if b_["with"] == E and b_["incoming"]]
+    c.check(s, "offered again, the card is back with its acts", inc2 and inc2[0]["id"] != first and tag in tags_of("court2"), str(inc2))
+    c.check(s, "Accept sends the rules' act toward the suitor, naming the offer (human_act conceive)", inc2 and re.search(rf'verbs: Accept → \{{"bond":{inc2[0]["id"]},"do":"conceive","target":\{{"id":{E}\}}\}}', L) is not None, str(re.findall(r"verbs: Accept → .*", L))[:300])
+    expecting, standing, mine_left = snap("taken", 0), snap("taken", 1), snap("taken", 2)
+    c.check(s, "the rules took it up: a child on the way, nothing left standing to me, the card gone", expecting and not standing and tag not in tags_of("accepted") and not [b_ for b_ in bonds("accepted") if b_["incoming"]], f"expecting {expecting}; standing {standing}")
+    c.check(s, "taking one up drops my own offer (the rules), and its card", bool([b_ for b_ in bonds("court2") if not b_["incoming"]]) and not mine_left and not [b_ for b_ in bonds("accepted") if not b_["incoming"]], f"before {[b_ for b_ in bonds('court2') if not b_['incoming']]}; rows after {mine_left}; cards after {bonds('accepted')}")
     c.check(s, "a reconnect asks the views again, and the family and community are back", len(re.findall(rf"kin views applied for #{me}", L)) >= 2 and [r["id"] for r in kin_of("recon").get("rows") or []] == parents + [D, C] and (kin_of("recon").get("community") or {}).get("name") == KIN_COMMUNITY, str(len(re.findall("kin views applied", L))))
     texts = [(f"{k}:{w_}", t) for k in d for w_, t in d[k].get("naming") or [] if w_ in ("kin", "community", "bond")]
     given = set(d["people"].get("known_names") or []) | set(d["people"].get("given_places") or [])
