@@ -448,6 +448,191 @@ The raw evidence, partial-window analyses, RSS and table-row CSVs, build
 logs and binary hashes are in `~/slop-evidence/gate216-clean-remeasure-20261126.tar.zst`
 with a SHA-256 sidecar.
 
+## 10. Spark X925 relay re-measure on current main (2026-11-27)
+
+The Cullet relay build `5dfab0cef` merges `origin/main` `0ad2e13da` into the
+previous measurement branch (§9), which descends from the relay prototype
+`b18402236`. It includes main's growth and retention fixes, including
+the familiar and seen-structure limits, far-handle death cleanup,
+relation-fight pruning, and draining tracked skill uses. The relay uses
+the delivery laws in §8 and keeps main's defaults for the other laws.
+Bindings were regenerated with SpacetimeDB 2.14.1 and `just living-check`
+passed. The arms differ by `memory_off=1`, which
+suppresses players' witness lines about others' fights in the tick.
+
+The pinned SpacetimeDB 2.14.1 server ran on X925 CPUs 5–9 and 15–19 with
+a fresh private database per arm. The driver, relay and sampling processes
+ran on A725 CPUs 0–4 and 10–14. The Docker-managed loopback proxy retained
+its host affinity. The loaded arms each used 100 human fighters,
+116 walkers and the driver's two owner clock connections. Each run had a
+20 s warm-up. The 60 s idle control had zero added fighters, humans or
+walkers. World rules and seed residents continued throughout. Detailed
+profiling and model calls were off.
+
+The gate requires at least 59.9 ticks/s, a server-marker p99 no higher than
+max(17.5 ms, idle p99 + 0.5 ms), and at most 0.5% of intervals over 25 ms.
+Idle measured 59.99 ticks/s, 17.861 ms p99 and
+0.000% over 25 ms, setting the p99 bound to
+**18.361 ms**. Whole-run tick rate comes from the server counter.
+Block and one-minute rates come from counted server markers.
+The marker analysis is `e16a43e5e`, unchanged.
+
+| Window | §5 recorded | §5 earlier fixes | Relay 2 | Relay 3 | Memory off |
+|---|---:|---:|---:|---:|---:|
+| 0–5 min | 59.47 / 17.63 / 0.88% | 59.80 / 17.62 / 0.34% | 59.77 / 18.279 / 0.379% · fail | 59.72 / 18.292 / 0.463% · fail | 59.92 / 18.074 / 0.139% · pass |
+| 5–10 min | 58.41 / 17.68 / 2.61% | 59.55 / 17.60 / 0.71% | 59.46 / 20.074 / 0.835% · fail | 59.41 / 20.936 / 0.954% · fail | 59.78 / 18.169 / 0.368% · fail |
+| 10–15 min | 57.60 / 17.81 / 4.15% | 59.06 / 17.56 / 1.55% | 59.31 / 32.427 / 1.113% · fail | 58.34 / 33.304 / 2.794% · fail | 59.70 / 18.365 / 0.480% · fail |
+| 15–20 min | 56.50 / 17.82 / 5.91% | 58.14 / 17.74 / 3.10% | 59.09 / 32.794 / 1.484% · fail | 58.20 / 33.463 / 3.030% · fail | 59.85 / 18.107 / 0.251% · fail |
+| 20–25 min | 47.27 / 84.56 / 17.28% | 58.03 / 17.80 / 3.31% | 59.00 / 32.850 / 1.554% · fail | 58.16 / 33.454 / 3.072% · fail | 59.76 / 18.111 / 0.374% · fail |
+| 25–30 min | 12.16 / 118.35 / 100% | 58.55 / 17.67 / 2.41% | 59.36 / 30.180 / 1.028% · fail | 58.34 / 33.320 / 2.703% · fail | 59.82 / 18.142 / 0.295% · fail |
+| Whole run | — | — | 59.33 / 32.070 / 1.065% · fail | 58.70 / 33.175 / 2.159% · fail | 59.81 / 18.139 / 0.318% · fail |
+| 60 s windows passing | — | — | 0/30 | 1/30 | 6/30 |
+
+Cells give ticks/s, p99 in ms and the percentage of intervals over 25 ms.
+§5 uses the unprofiled portions of each minute on the earlier builds. §8's
+three disturbed runs gave 54.39–54.95 ticks/s whole-run, with p99
+34.169–34.339 ms and 9.025–10.041% of steps over 25 ms. The interrupted
+§9 relay attempt measured 59.59 ticks/s, 19.185 ms p99 and 0.636% over
+25 ms in 21.28 minutes, with 4 of 21 minute windows meeting its numerical
+line. Its host-load rise of 4.33 disqualified that attempt.
+
+Both valid relay runs missed all three whole-run limits. Memory off
+passed p99 and the over-25-ms limit and missed tick rate by 0.09 ticks/s.
+It met the line in the opening five-minute block and in 6 of 30 individual
+minutes. The third five-minute memory-off block exceeded the p99 bound by
+0.004 ms. None of today's valid runs showed the dusk collapse from §5.
+At 25–30 minutes, they held 58.34–59.82 ticks/s, versus 12.16 on the
+recorded build and 58.55 with the earlier fixes. The valid relay runs'
+p99 climbed above 30 ms from minute 10 onward. The Nov 26 partial relay
+run stayed below 21 ms through the first four complete blocks, with
+higher cadence in each of those blocks.
+
+At the last table sample, there were 3,643–3,661 structures, close to
+the 3,661 in §5 at minute 29. Retained skill uses stayed around 8,000
+after minute 5, versus 83,478 at minute 29 in §5 and 58,386 by minute
+20.3 in §9. The memory-off run peaked at 850.4 MiB RSS, versus
+933.1 and 1,021.6 MiB for the valid relay runs. These fresh-world samples
+show growth over 30 minutes. An operating range for a longer world
+remains unmeasured.
+
+The row counts and RSS below use the nearest observed sample to each
+five-minute checkpoint.
+
+**Relay 2.** The driver recorded 302.00 fighter
+inputs/s and 3,595 fighter deaths, with 3,589
+rejoins. The relay accepted 216 clients. The fresh-world
+server RSS samples and table-row gauges follow. `structure` includes remains
+and other structures. The server exports their combined row count in this
+gauge.
+
+| Table sample min | RSS sample min | Server RSS MiB | Character | Structure | Line seen | Sex seen | Skill use | Experience | Experience copy | Familiar | Far handle | Relation fight |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.25 | 0.08 | 803.7 | 291 | 144 | 5,792 | 5,345 | 2,504 | 14,017 | 5,581 | 5,540 | 2,148 | 379 |
+| 5.25 | 4.92 | 860.1 | 886 | 738 | 6,916 | 29,498 | 7,754 | 34,466 | 6,830 | 29,920 | 2,778 | 437 |
+| 10.25 | 9.92 | 898.1 | 1,483 | 1,342 | 7,222 | 54,152 | 8,030 | 36,980 | 7,066 | 54,593 | 2,766 | 414 |
+| 15.25 | 14.92 | 894.4 | 2,081 | 1,937 | 7,199 | 81,741 | 7,972 | 38,273 | 7,132 | 82,209 | 2,780 | 470 |
+| 20.25 | 19.92 | 923.0 | 2,681 | 2,544 | 7,119 | 81,502 | 8,131 | 36,372 | 6,944 | 81,814 | 2,509 | 417 |
+| 25.25 | 24.92 | 933.1 | 3,296 | 3,159 | 7,315 | 78,490 | 8,449 | 36,710 | 7,123 | 78,853 | 2,394 | 465 |
+| 29.25 | 29.92 | 930.3 | 3,780 | 3,643 | 6,828 | 77,798 | 8,184 | 36,117 | 6,727 | 78,215 | 2,445 | 449 |
+
+Peak in-window server RSS was 933.1 MiB.
+Server cgroup memory ranged from 911.2 MiB at the first sample
+to 2,452.8 MiB at the last, with a 3,270.0 MiB peak.
+
+**Relay 3.** The driver recorded 302.10 fighter
+inputs/s and 3,624 fighter deaths, with 3,620
+rejoins. The relay accepted 216 clients. The fresh-world
+server RSS samples and table-row gauges follow. `structure` includes remains
+and other structures. The server exports their combined row count in this
+gauge.
+
+| Table sample min | RSS sample min | Server RSS MiB | Character | Structure | Line seen | Sex seen | Skill use | Experience | Experience copy | Familiar | Far handle | Relation fight |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.30 | 0.14 | 874.4 | 297 | 154 | 5,989 | 5,499 | 2,601 | 14,418 | 5,766 | 5,694 | 1,983 | 333 |
+| 5.30 | 4.97 | 924.5 | 910 | 765 | 6,999 | 32,360 | 7,880 | 33,503 | 6,848 | 32,780 | 2,719 | 503 |
+| 10.30 | 9.97 | 971.5 | 1,516 | 1,370 | 6,901 | 60,845 | 7,996 | 37,315 | 6,750 | 61,293 | 2,753 | 435 |
+| 15.30 | 14.97 | 966.9 | 2,122 | 1,978 | 7,008 | 90,077 | 8,083 | 37,321 | 6,935 | 90,537 | 2,768 | 392 |
+| 20.30 | 19.97 | 1,006.9 | 2,722 | 2,577 | 7,273 | 99,615 | 8,236 | 38,697 | 7,147 | 99,943 | 2,778 | 443 |
+| 25.30 | 24.97 | 1,001.4 | 3,336 | 3,191 | 7,161 | 101,492 | 8,434 | 39,926 | 6,936 | 101,834 | 2,861 | 439 |
+| 29.30 | 29.97 | 1,017.2 | 3,809 | 3,661 | 6,730 | 102,247 | 8,335 | 39,951 | 6,661 | 102,645 | 2,961 | 482 |
+
+Peak in-window server RSS was 1,021.6 MiB.
+Server cgroup memory ranged from 987.7 MiB at the first sample
+to 2,602.4 MiB at the last, with a 3,638.7 MiB peak.
+
+**Memory off.** The driver recorded 301.70 fighter
+inputs/s and 3,589 fighter deaths, with 3,583
+rejoins. The relay accepted 216 clients. The fresh-world
+server RSS samples and table-row gauges follow. `structure` includes remains
+and other structures. The server exports their combined row count in this
+gauge.
+
+| Table sample min | RSS sample min | Server RSS MiB | Character | Structure | Line seen | Sex seen | Skill use | Experience | Experience copy | Familiar | Far handle | Relation fight |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.30 | 0.14 | 762.5 | 297 | 153 | 4,324 | 5,181 | 2,589 | 12,723 | 4,193 | 5,374 | 2,057 | 330 |
+| 5.30 | 4.97 | 798.8 | 900 | 757 | 6,374 | 29,814 | 8,078 | 30,749 | 6,295 | 30,256 | 2,806 | 461 |
+| 10.30 | 9.97 | 813.4 | 1,498 | 1,359 | 6,520 | 53,161 | 8,123 | 31,595 | 6,408 | 53,614 | 2,649 | 547 |
+| 15.30 | 14.97 | 847.0 | 2,116 | 1,977 | 6,090 | 71,056 | 8,126 | 31,689 | 6,051 | 71,492 | 2,365 | 449 |
+| 20.31 | 19.97 | 839.8 | 2,702 | 2,570 | 6,401 | 72,123 | 8,040 | 30,897 | 6,321 | 72,416 | 2,122 | 475 |
+| 25.31 | 24.97 | 833.8 | 3,291 | 3,167 | 6,638 | 58,769 | 7,968 | 29,146 | 6,580 | 59,077 | 1,792 | 433 |
+| 29.31 | 29.97 | 828.1 | 3,774 | 3,653 | 6,435 | 57,687 | 7,979 | 28,680 | 6,300 | 58,032 | 1,731 | 458 |
+
+Peak in-window server RSS was 850.4 MiB.
+Server cgroup memory ranged from 853.7 MiB at the first sample
+to 2,353.8 MiB at the last, with a 2,353.8 MiB peak.
+
+X925 preflights sampled each core for 150 s. Each launch had under 10%
+mean busy on every X925 core and 1-minute load below 4. Frostmarsh checks
+stayed clear. The original in-window raw-load rule rejected the first idle
+control and the first two relay runs. The coordinator clarified that the
+loaded fixture's own activity can raise host load. For the loaded arms the
+disturbance test therefore uses attributable outside X925 CPU time.
+
+The table pairs consecutive 30 s snapshots and counts the change in a
+thread's whole-second CPU counter if both processor observations were on
+X925. The private server, its loopback proxy and driver are fixture work.
+The acceptance cutoff used here is at most 0.15 outside cores on average
+and at most 0.35 in any paired window, across 10 authority cores.
+Unassigned time is the gap to per-CPU aggregate busy sampled each second.
+Thread migration, short-lived processes, whole-second counters and kernel
+activity limit attribution. The respective raw-load rises were 26.89, 5.92, 4.47 and 4.83.
+
+| Attempt | X925 busy mean, cores | Fixture mean | Outside mean | Outside 30 s peak | Unassigned mean | Host verdict |
+|---|---:|---:|---:|---:|---:|---|
+| relay-1 | 1.091 | 0.706 | 0.244 | 0.532 | 0.141 | rejected |
+| relay-2 | 0.866 | 0.684 | 0.140 | 0.266 | 0.042 | valid |
+| relay-3 | 0.840 | 0.688 | 0.136 | 0.299 | 0.016 | valid |
+| memory-off-1 | 0.787 | 0.629 | 0.134 | 0.332 | 0.025 | valid |
+
+The first relay attempt had outside work from the concurrent
+`slop-bond-decline-20261127` and `slop-psp-stdb` servers on X925.
+The host also ran `slop-bond-decline-det-tpl-x` and
+`slop-bond-decline-det-tpl-y` and Cargo builds during its load spikes.
+It measured 59.07 ticks/s, 32.862 ms p99 and 1.507% over 25 ms.
+The second idle control was the session baseline. Its load rise was
+0.47, after 1.29 on the first idle attempt, with another server observed
+on X925 during the first control. The rejected runs are in the archive.
+
+Whole-host runner sampling began at the end of relay 3. It has no
+earlier coverage. The difference from paired fixture process CPU
+counts includes other CPU activity and kernel work.
+
+- Relay 3 had 30 s of coverage. Mean host busy was 1.595 cores, with
+  1.240 attributable to the fixture and 0.354 remaining.
+- Memory off had 1,771 s of coverage. Mean host busy was 1.462 cores,
+  with 1.240 attributable to the fixture and 0.223 remaining. The sampler
+  found zero GitHub runner processes in either covered period.
+
+The battle lock was released at `2026-11-27T16:56:24+01:00` after the last private
+server shutdown. The archive contains host preflights and 30 s process
+snapshots, the driver and server logs, build hashes, block and minute
+verdicts, RSS samples at 10 s and all table-row gauges at 60 s. All six
+private servers exited 0 on SIGINT. Each created world was paused,
+checked by SQL, and deleted.
+See `~/slop-evidence/gate216-relay-20261127.tar.zst` and its
+SHA-256 sidecar. This series tests server cadence and growth on the relay
+prototype with scripted inputs. It leaves full product acceptance open.
+
 ## Evidence
 
 - **Runs:** `~/slop-growth-diag/out/runs/{long-relay,long-main,long-relayfix,smoke-main}/`. Each holds `prof.jsonl`, `spans.json`, `ticks.json`, `mem.jsonl`, `cores.jsonl`, `ticks-watch.csv` (the marker), `battle-viewers.json` and the replica's module logs. Plus `out/driver.log` and the server logs.
