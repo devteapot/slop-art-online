@@ -42,7 +42,7 @@ It is keyed like `known_ground` (actor and 128 m block), so the two kinds of "I 
 - C2's prune protection of the last look's disc applies to legacy rows only.
 - A structure is never forgotten while it exists; this is the documented difference (approved: "that's how a person remembers a place").
 
-**Compaction.** When a row's ranges pass 64 pairs, they are rebuilt from the block's existing structures that are seen. Ids of structures gone drop out, and runs of consecutive seen ids merge. A battle's remains take nearly consecutive ids, so ranges stay few. The row is bounded by the structures that exist, and the remains' own hour bounds those.
+**Compaction.** When a row's ranges pass 64 pairs (or `seen_ranges_max_pairs` when lower), `compact_live` rebuilds them from the block's live structures: expired ids drop out and consecutive seen live ids bridge across dead, other-block or sequence-skip gaps that hold no unseen live structure. When interleaved live remains still exceed `seen_ranges_max_pairs` (default 128), oldest remains-only intervals trim to 3/4 of the cap (96), sparing every interval holding a permanent structure. While a block stays above the trigger, compaction is rate-limited to at most once per 16 new pairs (`COMPACT_STEP`, `BTreeMap` cleared on death).
 
 **Migration.**
 - Worlds already running hold `FAM_STRUCTURE` rows and no ranges. An entrant not in a range is asked of `familiar` as well.
@@ -52,6 +52,7 @@ It is keyed like `known_ground` (actor and 128 m block), so the two kinds of "I 
 **Laws.**
 - `seen_ranges` (on): R1. Off: `familiar` as before.
 - `seen_ranges_check` (a diagnostic): `familiar` rows are written and read as well. Each entrant's newness by ranges is compared with newness by `familiar`, counted and logged (`seen_ranges:differed`).
+- `seen_ranges_max_pairs` (value-only law, default `128.0`): per-block cap on disjoint structure-id pairs when live remains fragment `seen_structures` past exact compaction; trimming keeps 3/4 of the cap (`96` at default) while sparing permanent structures. `0` disables trimming (exact compaction and rate-limiting still apply).
 - The one expected difference is a structure whose `familiar` row was pruned. It is counted apart (`seen_ranges:kept`), not as a difference, because that is the approved change.
 - `notice_delta_check` asks `seen(id)` of what C2 passes over.
 
