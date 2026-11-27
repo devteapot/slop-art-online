@@ -149,6 +149,7 @@ impl Ranks {
                 for row in rows {
                     rank_field(row, party, character);
                     rank_field(row, "offer", |id| self.of("trade_offer", id));
+                    rank_field(row, "bond", |id| self.of("bond_offer", id));
                 }
             }
         }
@@ -195,7 +196,10 @@ impl Ranks {
             let line = replace_ids(line, "(offer ", &["), or let it pass."], |id| {
                 Some(self.of("trade_offer", id).to_string())
             });
-            let line = replace_ids(&line, "(#", &[") asks to start a family with you;"], character);
+            let line = replace_ids(&line, "(bond ", &["); choose conceive"], |id| {
+                Some(self.of("bond_offer", id).to_string())
+            });
+            let line = replace_ids(&line, "(#", &[") asks to start a family with you;", ") asks to start a family with you (bond "], character);
             if line.starts_with("You long for a child with ") || line.starts_with("You long for another child with ") {
                 replace_ids(&line, "(#", &[")."], character)
             } else if line.starts_with("What you had decided did not work out: ") {

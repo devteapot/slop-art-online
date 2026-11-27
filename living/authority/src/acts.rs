@@ -222,7 +222,7 @@ fn next_reporting(ctx: &ReducerContext, actor: u32, now: u64, replacing: Option<
             }
         }
         let want = (a.want.clone().unwrap_or_default(), a.want_qty.unwrap_or(0));
-        match act::begin(ctx, actor, ACT, revision, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), a.text.as_deref().unwrap_or(""), a.topic.as_deref().unwrap_or(""), (&want.0, want.1), (a.offer.unwrap_or(0), a.record.unwrap_or(0)), a.run, a.spacing(), now) {
+        match act::begin(ctx, actor, ACT, revision, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), a.text.as_deref().unwrap_or(""), a.topic.as_deref().unwrap_or(""), (&want.0, want.1), (a.offer.unwrap_or(0), a.record.unwrap_or(0), a.bond.unwrap_or(0)), a.run, a.spacing(), now) {
             Ok(()) => {
                 if let Some(r) = &under_way {
                     crate::latency::acts(ctx, actor, "act_replaced", r.started_ms, format_args!("{} {} {} {}", r.skill, r.phase, now.saturating_sub(r.started_ms), p.source));

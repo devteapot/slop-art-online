@@ -9035,6 +9035,144 @@ def ground_goto(s):
                          len(done) == len(group) and all(p["on_goto_done"] == kind for p in done), [(p["d"], p.get("on_goto_done")) for p in group], fatal=False)
 
 
+def bond_decline(s):
+    """Declining and withdrawing a bond (courting / family) offer through `decline`:
+    - Receiver declines by id (`{"do":"decline","target":{"id":maker},"bond":id}`) while a
+      trade offer also stands (the bond goes, the trade stays); maker is told (`kind="record"`),
+      decliner gets its outcome (`kind="act"`), onlooker witnesses "turned down".
+    - Third party trying to decline or withdraw someone else's bond offer is refused
+      ("that offer is not yours"); stale id refused ("that offer is gone").
+    - Receiver declines via behavior graph targeting `"suitor"` (unnamed).
+    - Maker withdraws their own offer by id (wrong target refused "that offer is not with them")
+      and unnamed; receiver is told ("withdrew their offer to start a family.").
+    - Expired bond offer (past `bond_window_s`, within the 60 s row-retention grace) refused
+      with "that offer has expired" for both receiver and maker."""
+    # Spawn fresh well-fed adults so hunger never blocks `conceive`.
+    before = {c["id"] for c in s.rows("SELECT id FROM character")}
+    s.call("spawn_crowd", 4, True)
+    people = sorted(c["id"] for c in s.rows("SELECT id FROM character") if c["id"] not in before)
+    a, b, c, d = people[:4]
+    for x in (a, b, c, d):
+        s.graph(x, {"wait": 120})
+    for x in (b, c, d):
+        s.call("place_near", x, a)
+    s.call("grant_items", a, "berries", 4)
+    s.call("grant_items", b, "wood", 4)
+    time.sleep(1.0)
+
+    def bond_of(maker, to=None):
+        rows = [o for o in s.http_rows("SELECT * FROM bond_offer") if o["from"] == maker and (to is None or o["to"] == to)]
+        return max(rows, key=lambda o: o["id"]) if rows else None
+
+    def trade_of(maker):
+        rows = [o for o in s.http_rows("SELECT * FROM trade_offer") if o["from"] == maker]
+        return max(rows, key=lambda o: o["id"]) if rows else None
+
+    def refused(actor, words, since):
+        return [r for r in s.http_rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {actor}")
+                if r["at_ms"] >= since and "did not work out" in r["text"] and words in r["text"]]
+
+    def told_since(actor, words, since, kind="record"):
+        return [r for r in s.http_rows(f"SELECT kind, text, at_ms FROM experience WHERE observer = {actor}")
+                if r["at_ms"] >= since and r["kind"] == kind and words in r["text"]]
+
+    def now():
+        return s.http_rows("SELECT last_ms FROM clock")[0]["last_ms"]
+
+    # 1. A offers both a bond and a trade to B; C cannot decline A's bond; B declines bond by id,
+    #    trade stays, maker told, onlooker witnesses, decliner gets outcome.
+    s.act(a, {"do": "conceive", "target": {"id": b}})
+    bo = s.wait(lambda: bond_of(a, b), seconds=20)
+    s.expect("A makes a standing bond offer to B", bo is not None, bo)
+    s.act(a, {"do": "offer", "target": {"id": b}, "item": "berries", "qty": 1, "want": "wood", "want_qty": 1})
+    tr = s.wait(lambda: trade_of(a), seconds=20)
+    s.rows("SELECT * FROM bond_offer", "standing-bond")
+
+    t0 = now()
+    s.act(c, {"do": "decline", "target": {"id": a}, "bond": bo["id"]})
+    s.expect("third party cannot decline/withdraw someone else's bond offer",
+             bool(s.wait(lambda: refused(c, "that offer is not yours", t0), seconds=20)) and bond_of(a, b) is not None,
+             bond_of(a, b))
+
+    t0 = now()
+    s.act(b, {"do": "decline", "target": {"id": a}, "bond": bo["id"]})
+    s.wait(lambda: bond_of(a, b) is None, seconds=20)
+    told = s.wait(lambda: told_since(a, "declined your offer to start a family.", t0, "record"), seconds=20)
+    seen = s.wait(lambda: told_since(d, "turned down", t0, "record"), seconds=20)
+    out = s.wait(lambda: told_since(b, "offer to start a family", t0, "act"), seconds=15)
+    s.expect("decline by bond id removes bond_offer while trade_offer stands",
+             bond_of(a, b) is None and trade_of(a) is not None, {"bond": bond_of(a, b), "trade": trade_of(a)})
+    s.expect("maker is told receiver declined (kind record)", bool(told), told)
+    s.expect("onlooker witnesses bond decline", bool(seen), seen)
+    s.expect("decliner receives act outcome", bool(out), out)
+
+    t0 = now()
+    s.act(b, {"do": "decline", "target": {"id": a}, "bond": bo["id"]})
+    s.expect("declining a deleted bond offer is refused: gone",
+             bool(s.wait(lambda: refused(b, "that offer is gone", t0), seconds=20)))
+
+    # Clear A's trade offer so unnamed decline tests hit bond_offer cleanly.
+    s.act(b, {"do": "decline", "target": {"id": a}, "offer": tr["id"]})
+    s.wait(lambda: trade_of(a) is None, seconds=20)
+
+    # 2. Decline via behavior graph targeting `"suitor"` (unnamed).
+    s.act(a, {"do": "conceive", "target": {"id": b}})
+    bo2 = s.wait(lambda: bond_of(a, b), seconds=20)
+    t0 = now()
+    s.graph(b, {"seq": [{"do": {"skill": "decline", "target": "suitor"}}, {"wait": 120}]})
+    s.wait(lambda: bond_of(a, b) is None, seconds=20)
+    told2 = s.wait(lambda: told_since(a, "declined your offer to start a family.", t0, "record"), seconds=20)
+    s.expect("graph decline toward suitor removes bond_offer and tells maker",
+             bo2 is not None and bond_of(a, b) is None and bool(told2), told2)
+    s.graph(b, {"wait": 120})
+
+    # 3. Maker withdraws own bond offer (wrong target refused, by id works, unnamed works).
+    s.act(a, {"do": "conceive", "target": {"id": b}})
+    bo3 = s.wait(lambda: bond_of(a, b), seconds=20)
+    t0 = now()
+    s.act(a, {"do": "decline", "target": {"id": c}, "bond": bo3["id"]})
+    s.expect("withdrawing toward the wrong person is refused: not with them",
+             bool(s.wait(lambda: refused(a, "that offer is not with them", t0), seconds=20)) and bond_of(a, b) is not None,
+             bond_of(a, b))
+
+    t0 = now()
+    s.act(a, {"do": "decline", "target": {"id": b}, "bond": bo3["id"]})
+    s.wait(lambda: bond_of(a, b) is None, seconds=20)
+    withdrawn = s.wait(lambda: told_since(b, "withdrew their offer to start a family.", t0, "record"), seconds=20)
+    w_out = s.wait(lambda: told_since(a, "Withdrew your offer to start a family", t0, "act"), seconds=15)
+    s.expect("withdraw by id deletes bond_offer and tells receiver",
+             bond_of(a, b) is None and bool(withdrawn), withdrawn)
+    s.expect("maker receives withdraw act outcome", bool(w_out), w_out)
+
+    s.act(a, {"do": "conceive", "target": {"id": b}})
+    bo4 = s.wait(lambda: bond_of(a, b), seconds=20)
+    t0 = now()
+    s.act(a, {"do": "decline", "target": {"id": b}})
+    s.wait(lambda: bond_of(a, b) is None, seconds=20)
+    withdrawn2 = s.wait(lambda: told_since(b, "withdrew their offer to start a family.", t0, "record"), seconds=20)
+    s.expect("unnamed decline by maker withdraws own bond_offer and tells receiver",
+             bo4 is not None and bond_of(a, b) is None and bool(withdrawn2), withdrawn2)
+
+    # 4. Expired bond offer (past bond_window_s, before 60 s row drop) is refused as expired.
+    try:
+        s.call("set_world_law", "bond_window_s", "2", "verify bond_decline expiry")
+        s.act(a, {"do": "conceive", "target": {"id": b}})
+        bo5 = s.wait(lambda: bond_of(a, b), seconds=20)
+        time.sleep(3.5)
+        t0 = now()
+        s.act(b, {"do": "decline", "target": {"id": a}, "bond": bo5["id"]})
+        s.expect("declining an expired bond offer is refused: expired",
+                 bool(s.wait(lambda: refused(b, "that offer has expired", t0), seconds=20)))
+        t0 = now()
+        s.act(a, {"do": "decline", "target": {"id": b}, "bond": bo5["id"]})
+        s.expect("withdrawing an expired bond offer is refused: expired",
+                 bool(s.wait(lambda: refused(a, "that offer has expired", t0), seconds=20)))
+    finally:
+        s.call("set_world_law", "bond_window_s", "120", "restore bond_window_s")
+    s.rows("SELECT * FROM bond_offer", "bond-after")
+
+
+SCENES["bond_decline"] = bond_decline
 SCENES["ground_goto"] = ground_goto
 
 if __name__ == "__main__":

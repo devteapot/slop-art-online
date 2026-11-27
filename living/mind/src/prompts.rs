@@ -626,7 +626,7 @@ Forms: if your scene shows a gaze band, {\"do\": \"gaze\", \"band\": \"middle\"|
 {\"do\": \"conceive\", \"target\": {\"id\": 6}} (start a family: it happens when you both choose it toward each other within two minutes), \
 {\"do\": \"give\", \"target\": {\"id\": 4}, \"item\": \"berries\", \"qty\": 3}, \
 {\"do\": \"offer\", \"target\": {\"id\": 4}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}, {\"do\": \"accept\", \"target\": {\"id\": 4}, \"offer\": 17} (take what they offered you: \"offer\" names their trade offer, \"record\" their proposed terms, by the id you were shown; without one, their terms come first, then their trade), \
-{\"do\": \"decline\", \"target\": {\"id\": 4}, \"offer\": 17} (say no to it: it ends, and they are told), \
+{\"do\": \"decline\", \"target\": {\"id\": 4}, \"offer\": 17} (say no to a trade offer, \"record\" for proposed terms, or \"bond\" for a family offer — or withdraw your own family offer to them: it ends, and they are told), \
 {\"do\": \"teach\", \"target\": {\"id\": 6}, \"item\": \"fire\"}, {\"do\": \"tend\", \"target\": {\"id\": 6}}, \
 {\"do\": \"host\", \"target\": {\"id\": 6}} (take someone in as your household's guest until morning: a bed in your house, food from its store), \
 {\"do\": \"write\", \"item\": \"tablet\"|\"sign\", \"text\": \"your words\", \"topic\": \"a technique you know\"}, {\"do\": \"read\"}, \
@@ -1523,7 +1523,7 @@ silence (say null) is fine. {} An ongoing movement such as follow belongs in a b
 \"say\": \"your words\" or null, \"to\": id of who you speak to, {}\
 \"acts\": [] or deliberate acts you carry out now, e.g. {{\"do\": \"conceive\", \"target\": {{\"id\": id of who you speak to}}}} once you both want a child together, \
 {{\"do\": \"accept\", \"target\": {{\"id\": id of who you speak to}}, \"offer\": id of their offer}} to take a trade they offered (\"record\": id of their proposal, for terms), \
-{{\"do\": \"decline\", \"target\": {{\"id\": id of who you speak to}}, \"offer\": id of their offer}} to say no to it, {{\"do\": \"give\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"berries\", \"qty\": 2}}, \
+{{\"do\": \"decline\", \"target\": {{\"id\": id of who you speak to}}, \"offer\": id of their offer}} to say no (or \"record\" for terms, \"bond\" for a family offer — or to withdraw your own family offer), {{\"do\": \"give\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"berries\", \"qty\": 2}}, \
 {{\"do\": \"offer\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fish\", \"qty\": 2, \"want\": \"wood\", \"want_qty\": 3}}, {{\"do\": \"teach\", \"target\": {{\"id\": id of who you speak to}}, \"item\": \"fire\"}}, \
 {{\"do\": \"host\", \"target\": {{\"id\": id of who you speak to}}}} to take them in as your household's guest until morning \
 (words change nothing in the world by themselves: what you agree to do now, do here; you will learn how it went), \

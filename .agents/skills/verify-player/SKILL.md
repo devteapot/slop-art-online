@@ -26,7 +26,7 @@ The player's statuses as the game works them out (its own `my_vitals` row and th
 
 A player at a field of remains, with all 20 body structures present and no noticing lines in `my_experience`, is driven by `scripts/seen_remains.py --run "$R"` on a fresh default-seed run. The admin stages the bodies and places the player. The reads use the player identity.
 
-Kin, courting offers and community (`my_kin`, `my_bond_offers`, `my_community`): `scripts/kin.py --run "$R"` ([features/kin.md](features/kin.md)), with `place_near`, `set_behavior` and a short-gestation `install_script` overlay (reinstalled to the tree's script in `finally`).
+Kin, courting offers and community (`my_kin`, `my_bond_offers`, `my_community`): `scripts/kin.py --run "$R"` ([features/kin.md](features/kin.md)), with `place_near`, `set_behavior` and a short-gestation `install_script` overlay (reinstalled to the tree's script in `finally`). Declining an incoming bond offer and withdrawing one's own via `decline` (`"bond": id` and unnamed): `scripts/bond_decline.py --run "$R"` (same file), with `spawn_crowd`, `place_near`, `set_behavior` and the walker's `mind_act`.
 
 ## Feature map
 

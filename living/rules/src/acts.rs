@@ -163,7 +163,15 @@ mod tests {
         assert_eq!(a.offer, Some(17));
         assert_eq!(from_json(&to_json(&a)).unwrap(), a);
         let d = parse(json!({"do": "decline", "target": {"id": 4}, "record_id": "12"}), None, &shapes).unwrap();
-        assert_eq!((d.skill.as_str(), d.offer, d.record), ("decline", None, Some(12)));
+        assert_eq!((d.skill.as_str(), d.offer, d.record, d.bond), ("decline", None, Some(12), None));
+        let b = parse(json!({"do": "decline", "target": {"id": 4}, "bond": 7}), None, &shapes).unwrap();
+        assert_eq!((b.skill.as_str(), b.offer, b.record, b.bond), ("decline", None, None, Some(7)));
+        assert_eq!(from_json(&to_json(&b)).unwrap(), b);
+        let b2 = parse(json!({"do": "decline", "target": {"id": 4}, "bond_id": "#8"}), None, &shapes).unwrap();
+        assert_eq!(b2.bond, Some(8));
+        assert_eq!(parse(json!({"do": "decline", "target": {"id": 4}, "bond": 0}), None, &shapes).unwrap().bond, None);
+        assert!(parse(json!({"do": "decline", "target": {"id": 4}, "bond": "yes"}), None, &shapes).unwrap_err().contains("the id of the family offer"));
+        assert_eq!(parse(json!({"do": "accept", "target": {"id": 4}, "bond": 7}), None, &shapes).unwrap().bond, None);
         assert_eq!(parse(json!({"do": "decline", "target": {"id": 4}, "offer": 0}), None, &shapes).unwrap().offer, None);
         assert!(parse(json!({"do": "accept", "target": {"id": 4}, "offer": "the fish"}), None, &shapes).unwrap_err().contains("the id of the trade offer"));
         // A skill that answers nothing ignores the words, as it did.

@@ -212,12 +212,18 @@ pub struct SkillCtx {
     pub records: Vec<crate::records::RecordFacts>,
     /// The record at hand: the one falling due (`on_expire`).
     pub record: Option<crate::records::RecordFacts>,
-    /// What an answer (accept, decline) names: a trade offer's id, a record's id (0: none).
+    /// What an answer (accept, decline) names: a trade offer's id, a record's id, or a family
+    /// offer's id (0: none).
     pub offer_id: u64,
     pub record_id: u64,
+    pub bond_id: u64,
     /// The trade offer at hand (filled only for a law that reads it): the one the act names, or,
     /// when that one is gone or none is named, the target's standing offer to the actor.
     pub offer: Option<OfferFacts>,
+    /// The family (courting) offer at hand (filled only for a law that reads it): the one the
+    /// act names, or, when none is named, a standing family offer between the actor and the
+    /// target (incoming from target first, else outgoing to target).
+    pub bond: Option<BondFacts>,
 }
 
 /// A trade offer as the rules see it (`a.offer`): `#{ id, from, to, give, give_qty, want,
@@ -231,6 +237,17 @@ pub struct OfferFacts {
     pub give_qty: u32,
     pub want: String,
     pub want_qty: u32,
+    pub open: bool,
+    pub left_s: f32,
+}
+
+/// A family (courting) offer as the rules see it (`a.bond`): `#{ id, from, to, open, left_s }`.
+/// `open` is false once `bond_window_s` has passed.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BondFacts {
+    pub id: u64,
+    pub from: u32,
+    pub to: u32,
     pub open: bool,
     pub left_s: f32,
 }
@@ -407,9 +424,9 @@ pub enum Effect {
     /// Accept the target's trade offer to the actor: the one with this id, or (0) the one
     /// standing.
     Accept { offer: u64 },
-    /// End the target's trade offer to the actor without a trade: the one with this id, or (0)
-    /// the one standing.
-    Decline { offer: u64 },
+    /// End a trade offer (`offer`, or 0 for the one standing) or a family offer (`bond`,
+    /// non-zero: decline an incoming one or withdraw one's own).
+    Decline { offer: u64, bond: u64 },
     Found,
     Join,
     Welcome,
@@ -4166,7 +4183,7 @@ fn effect(d: Dynamic) -> Result<Effect, String> {
         "plant" => Effect::Plant,
         "offer" => Effect::Offer,
         "accept" => Effect::Accept { offer: n("offer").max(0.0) as u64 },
-        "decline" => Effect::Decline { offer: n("offer").max(0.0) as u64 },
+        "decline" => Effect::Decline { offer: n("offer").max(0.0) as u64, bond: n("bond").max(0.0) as u64 },
         "found" => Effect::Found,
         "join" => Effect::Join,
         "welcome" => Effect::Welcome,
@@ -5809,13 +5826,49 @@ fn hum_spec() {{ #{{ target: false }} }}")).err().unwrap_or_default();
         // ... a trade offer is ended, its maker told what was declined.
         for c in [SkillCtx { offer_id: 41, ..dec.clone() }, SkillCtx { records: vec![], ..dec.clone() }] {
             let fx = s.done("decline", &c).unwrap();
-            assert_eq!(fx[0], Effect::Decline { offer: 41 }, "{fx:?}");
+            assert_eq!(fx[0], Effect::Decline { offer: 41, bond: 0 }, "{fx:?}");
             assert!(tells(&fx).iter().any(|(to, t)| *to == 1 && t == "{actor} declined your offer of 2 fish for 1 hide."), "{fx:?}");
         }
         // ... and with nothing standing the engine is asked, and refuses.
-        assert_eq!(s.done("decline", &SkillCtx { records: vec![], offer: None, ..dec.clone() }).unwrap(), vec![Effect::Decline { offer: 0 }]);
-        // The rules read the offer only for the skills that answer.
+        assert_eq!(s.done("decline", &SkillCtx { records: vec![], offer: None, ..dec.clone() }).unwrap(), vec![Effect::Decline { offer: 0, bond: 0 }]);
+        // ... a family (bond) offer: receiver declines it (by id or unnamed), maker withdraws their own.
+        let bond = |id: u64, from: u32, to: u32, open: bool| Some(BondFacts { id, from, to, open, left_s: if open { 60.0 } else { 0.0 } });
+        let incoming_bond = SkillCtx { bond: bond(7, 1, 9, true), ..dec.clone() };
+        // Named bond wins even while terms and a trade offer stand.
+        assert_eq!(s.check("decline", &SkillCtx { bond_id: 7, ..incoming_bond.clone() }), Ok(()));
+        let fx = s.done("decline", &SkillCtx { bond_id: 7, ..incoming_bond.clone() }).unwrap();
+        assert_eq!(fx[0], Effect::Decline { offer: 0, bond: 7 }, "{fx:?}");
+        assert!(tells(&fx).iter().any(|(to, t)| *to == 1 && t == "{actor} declined your offer to start a family."), "{fx:?}");
+        assert!(tells(&fx).iter().any(|(to, t)| *to == 9 && t == "declined {target}'s offer to start a family"), "{fx:?}");
+        assert!(fx.iter().any(|e| matches!(e, Effect::Witness { .. })), "{fx:?}");
+        // Unnamed falls through to incoming bond when no terms or trade stand.
+        let fx = s.done("decline", &SkillCtx { records: vec![], offer: None, ..incoming_bond.clone() }).unwrap();
+        assert_eq!(fx[0], Effect::Decline { offer: 0, bond: 7 }, "{fx:?}");
+        // Maker withdraws their own outgoing bond offer (by id or unnamed).
+        let outgoing_bond = SkillCtx { bond: bond(8, 9, 1, true), ..dec.clone() };
+        assert_eq!(s.check("decline", &SkillCtx { bond_id: 8, ..outgoing_bond.clone() }), Ok(()));
+        for c in [SkillCtx { bond_id: 8, ..outgoing_bond.clone() }, SkillCtx { records: vec![], offer: None, ..outgoing_bond.clone() }] {
+            let fx = s.done("decline", &c).unwrap();
+            assert_eq!(fx[0], Effect::Decline { offer: 0, bond: 8 }, "{fx:?}");
+            assert!(tells(&fx).iter().any(|(to, t)| *to == 1 && t == "{actor} withdrew their offer to start a family."), "{fx:?}");
+            assert!(tells(&fx).iter().any(|(to, t)| *to == 9 && t == "withdrew your offer to start a family with {target}"), "{fx:?}");
+            assert!(!fx.iter().any(|e| matches!(e, Effect::Witness { .. })), "{fx:?}");
+        }
+        // Truthful bond refusals: gone, not yours, wrong person, expired, multiple named.
+        let bref = |bond_id: u64, b: Option<BondFacts>| s.check("decline", &SkillCtx { bond_id, bond: b, records: vec![], offer: None, ..dec.clone() }).err().unwrap_or_default();
+        assert_eq!(bref(7, None), "that offer is gone");
+        assert_eq!(bref(7, bond(9, 1, 9, true)), "that offer is gone");
+        assert_eq!(bref(7, bond(7, 2, 3, true)), "that offer is not yours");
+        assert_eq!(bref(7, bond(7, 2, 9, true)), "that offer is not with them");
+        assert_eq!(bref(7, bond(7, 9, 2, true)), "that offer is not with them");
+        assert_eq!(bref(7, bond(7, 1, 9, false)), "that offer has expired");
+        assert_eq!(bref(7, bond(7, 9, 1, false)), "that offer has expired");
+        assert_eq!(bref(0, bond(7, 1, 9, false)), "that offer has expired");
+        assert_eq!(s.check("decline", &SkillCtx { offer_id: 41, bond_id: 7, ..incoming_bond.clone() }).unwrap_err(), "name one thing to answer: the offer, the proposal or the family offer");
+        assert_eq!(s.check("decline", &SkillCtx { record_id: 5, bond_id: 7, ..incoming_bond.clone() }).unwrap_err(), "name one thing to answer: the offer, the proposal or the family offer");
+        // The rules read the offer/bond only for the skills that answer.
         assert!(s.skill_reads("accept", "offer", false) && s.skill_reads("decline", "offer", true) && !s.skill_reads("give", "offer", true));
+        assert!(s.skill_reads("decline", "bond", false) && s.skill_reads("decline", "bond", true) && !s.skill_reads("accept", "bond", true) && !s.skill_reads("give", "bond", true));
         // A proposal to the reader names its id, for the answer.
         assert!(s.record_text(&proposal(5, "offered", true, 1, "to")).unwrap().ends_with("accept or decline (toward them, record 5)"));
     }

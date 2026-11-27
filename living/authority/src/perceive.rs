@@ -936,7 +936,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     let window = (common::laws(ctx).bond_window_s * 1000.0) as u64;
     let mut asked = Vec::new();
     for o in ctx.db.bond_offer().to().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
-        asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": "to start a family with you (it happens if you also choose conceive toward them in time)", "when": ago(o.at_ms)}));
+        asked.push(json!({"from": o.from, "name": common::label_for(ctx, &me, o.from), "asks": "to start a family with you (conceive toward them to accept, or decline)", "bond": o.id, "when": ago(o.at_ms)}));
     }
     let laws = common::laws(ctx);
     let join_ms = (laws.join_window_s * 1000.0) as u64;
@@ -953,7 +953,7 @@ pub fn scene_json(ctx: &ReducerContext, id: u32, now: u64) -> String {
     }
     let mut mine = Vec::new();
     for o in ctx.db.bond_offer().from().filter(id).filter(|o| now.saturating_sub(o.at_ms) <= window) {
-        mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": "to start a family", "when": ago(o.at_ms)}));
+        mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": "to start a family (decline toward them to withdraw)", "bond": o.id, "when": ago(o.at_ms)}));
     }
     for o in ctx.db.trade_offer().from().filter(id).filter(|o| now <= o.ends_ms(laws.trade_window_s)) {
         mine.push(json!({"to": o.to, "name": common::label_for(ctx, &me, o.to), "you asked": format!("a trade: your {} {} for their {} {}", o.give_qty, o.give_item, o.want_qty, o.want_item), "offer": o.id, "when": ago(o.at_ms)}));

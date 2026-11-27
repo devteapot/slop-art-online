@@ -155,8 +155,8 @@ struct Ev<'a> {
     visits: u32,
     last_fail: String,
     want: (String, u32),
-    /// What a graph leaf's answer (accept, decline) names: a trade offer, a record (0: none).
-    answers: (u64, u64),
+    /// What a graph leaf's answer (accept, decline) names: a trade offer, a record, a bond offer (0: none).
+    answers: (u64, u64, u64),
     /// The `run` of the action being started (a `Do` node's).
     run: Option<bool>,
     /// The distances of a movement intent being started (a `Do` node's).
@@ -212,7 +212,7 @@ pub fn evaluate(ctx: &ReducerContext, id: u32, now: u64) {
     let part = common::detail_span("load.ev");
     let acting = cur.as_ref().map_or(false, |a| act::held(a.node));
     let heed = crate::heed::applies(ctx, id);
-    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting, done: None, heed };
+    let mut ev = Ev { ctx, now, w, me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0, 0), run: None, spacing: Default::default(), latched: None, acting, done: None, heed };
     // A pace aside (an `aside` skill in the script) is a short walk that finishes on its own too.
     let sc = common::scripts(ctx);
     ev.latched = cur.filter(|a| a.revision == ev.st.revision && (sc.skills().get(&a.skill).is_some_and(|k| k.latch) || sc.shows().aside(&a.skill))).map(|a| a.node);
@@ -263,7 +263,7 @@ pub fn resolve_for(ctx: &ReducerContext, id: u32, t: &Target, now: u64) -> Resul
     let at = pos(&body, now);
     let needs = common::needs(&vit, now);
     let heed = crate::heed::applies(ctx, id);
-    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0), run: None, spacing: Default::default(), latched: None, acting: false, done: None, heed };
+    let mut ev = Ev { ctx, now, w: common::world(ctx), me, at, needs, vit, orig: st.clone(), st, g, scene: None, smelled: None, smell: false, running: None, path: Vec::new(), status: String::new(), visits: 0, last_fail: String::new(), want: (String::new(), 0), answers: (0, 0, 0), run: None, spacing: Default::default(), latched: None, acting: false, done: None, heed };
     match ev.sensed(t) {
         Some(r) => Ok(r),
         None => Err(ev.unresolved(t)),
@@ -772,7 +772,7 @@ impl<'a> Ev<'a> {
                     None => Resolved::none(),
                 };
                 self.want = (a.want.clone().unwrap_or_default(), a.want_qty.unwrap_or(0));
-                self.answers = (a.offer.unwrap_or(0), a.record.unwrap_or(0));
+                self.answers = (a.offer.unwrap_or(0), a.record.unwrap_or(0), a.bond.unwrap_or(0));
                 self.run = a.run;
                 self.spacing = a.spacing();
                 self.leaf(id, &a.skill, target, a.item.as_deref().unwrap_or(""), a.qty.unwrap_or(0), a.text.as_deref().unwrap_or(""), a.topic.as_deref().unwrap_or(""), graph::describe(n))

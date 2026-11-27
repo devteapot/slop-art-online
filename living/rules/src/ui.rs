@@ -65,10 +65,15 @@ vocab! {
         /// An incoming offer or proposal: toward its sender (`target: {"id": sender}`), naming the
         /// offer it answers (`"offer": id`).
         Offer = "offer",
-        /// An incoming courting offer (`my_bond_offers`): toward its maker (`target: {"id":
-        /// maker}`). A skill on it answers the offer; what it does is the rules' (shipped:
-        /// `conceive`, whose `done` gives `op: "bond"`, takes it up).
+        /// An incoming courting offer (`my_bond_offers`, `incoming: true`): toward its maker
+        /// (`target: {"id": maker}`), optionally naming `"bond": id` (`ActTarget::Bond`). A skill
+        /// on it answers the offer; what it does is the rules' (shipped: `conceive` takes it up,
+        /// `decline` turns it down).
         Bond = "bond",
+        /// One's own outgoing courting offer (`my_bond_offers`, `incoming: false`): toward its
+        /// addressee (`target: {"id": to}`), optionally naming `"bond": id` (`ActTarget::Bond`).
+        /// A skill on it withdraws the standing offer (shipped: `decline`).
+        OwnBond = "own_bond",
     }
 }
 
@@ -771,6 +776,10 @@ pub enum ActTarget {
     /// A proposal of terms to me (an `agreement` record, `offered`): toward its proposer,
     /// naming the record it answers (`"record": id`), so Accept takes exactly those terms.
     Record { from: u32, record: u64 },
+    /// A standing family (courting) offer (`my_bond_offers`): toward the other person (`from`
+    /// when declining an incoming offer, `to` when withdrawing my own), naming the offer
+    /// (`"bond": id`; 0 names none, and the rules take what stands with them).
+    Bond { other: u32, bond: u64 },
 }
 
 /// What the player chose for an act (an item's amount is 1 unless chosen, as today).
@@ -804,6 +813,12 @@ pub fn act_node(skill: &str, target: &ActTarget, picked: &Picked) -> serde_json:
         ActTarget::Record { from, record } => {
             leaf["target"] = json!({"id": from});
             leaf["record"] = json!(record);
+        }
+        ActTarget::Bond { other, bond } => {
+            leaf["target"] = json!({"id": other});
+            if *bond != 0 {
+                leaf["bond"] = json!(bond);
+            }
         }
         ActTarget::Thing { kind, .. } => leaf["target"] = json!({"nearest": kind}),
         ActTarget::At(p) => leaf["target"] = json!({"at": p}),

@@ -344,7 +344,7 @@ impl Scripts {
                 let why = match p {
                     On::Box if !way => Some("a skill is not in the text box; `box` is for ways of speaking".to_string()),
                     _ if way && p != On::Box => Some(format!("a way of speaking is in the text box (`box`), not `{s}`")),
-                    On::Person | On::Thing | On::Offer | On::Bond if !spec.is_some_and(|k| k.needs_target) => Some(format!("`{s}` needs a spec with `target: true`")),
+                    On::Person | On::Thing | On::Offer | On::Bond | On::OwnBond if !spec.is_some_and(|k| k.needs_target) => Some(format!("`{s}` needs a spec with `target: true`")),
                     // A point is a target only to a skill whose rules aim it at one.
                     On::Ground if !shape.is_some_and(|s| s.aim == crate::combat::Aim::Point) => Some("`ground` needs a combat aim of `point` (a skill that takes a point)".to_string()),
                     // Toward oneself a skill that needs a target sends an act the grammar refuses.

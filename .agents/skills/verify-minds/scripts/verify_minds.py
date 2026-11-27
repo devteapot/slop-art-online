@@ -921,6 +921,68 @@ def answers_case(run):
             'proposer_told': told[0]['text'], 'outcomes': outcomes[-4:], 'deliberations_with_ids': len(with_ids)}
 
 
+@case('bond-decline')
+def bond_decline_case(run):
+    """A real mind declines an incoming bond offer and withdraws its own outgoing bond offer
+    through deliberate acts (`decline` with `"bond": id`), while seeing an unknown suitor only
+    by its perceived label (no leaked stranger name; prompt parity)."""
+    run.harness('launch')
+    run.harness('doctor')
+    # Spawn two fresh well-fed strangers so neither knows the other's name and hunger is low.
+    before = {c['id'] for c in run.sql('SELECT id FROM character', 'chars-before')}
+    run.admin('spawn_crowd', 2, True)
+    spawned = sorted(
+        [c for c in run.sql('SELECT id, name FROM character', 'chars-after') if c['id'] not in before],
+        key=lambda c: c['id'],
+    )
+    actor, other = spawned[0]['id'], spawned[1]['id']
+    other_name = spawned[1]['name']
+    run.admin('set_behavior', other, json.dumps({'wait': 180}))
+    run.admin('set_behavior', actor, json.dumps({'wait': 180}))
+    run.admin('place_near', other, actor)
+
+    # 1. Stranger `other` offers to start a family with `actor`.
+    run.admin('mind_act', other, [json.dumps({'do': 'conceive', 'target': {'id': actor}})], 'verify-minds')
+    bo = run.wait(lambda: [o for o in run.private('SELECT * FROM bond_offer', 'bond-in') if o['from'] == other and o['to'] == actor], 'incoming bond offer', 30)[0]
+
+    decline_reply = basic_reply(acts=[{'do': 'decline', 'target': {'id': other}, 'bond': bo['id']}])
+    withdraw_reply = basic_reply(acts=[{'do': 'decline', 'target': {'id': other}}])
+    script = {
+        'replies': {
+            'think': {'thought': 'I will handle this family offer.', 'intend': ['decline'], 'say': None},
+            'deliberate': basic_reply(),
+        },
+        'rules': [
+            {'purpose': 'deliberate', 'contains': f'(bond {bo["id"]})', 'reply': decline_reply, 'times': 1},
+            {'purpose': 'deliberate', 'contains': 'decline toward them to withdraw', 'reply': withdraw_reply, 'times': 1},
+        ],
+    }
+    models = model(run, script)
+    run.start(models, [actor])
+    # Wait for mind to decline `bo` (bond() already requested deliberation for `actor`).
+    run.wait(lambda: not [o for o in run.private('SELECT * FROM bond_offer', 'bond-in-after') if o['id'] == bo['id']], 'mind declined incoming bond offer', 90)
+    told_dec = run.wait(lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {other}', 'maker-told') if e['kind'] == 'record' and 'declined your offer to start a family.' in e['text']], 'maker told of decline', 30)
+
+    # Verify prompt parity on the incoming offer deliberation: shows bond id, does NOT leak stranger name.
+    sent = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
+    in_reqs = [json.dumps(e) for e in sent if re.search(r'\\"bond\\": ?%d\b' % bo['id'], json.dumps(e))]
+    assert in_reqs, 'deliberation scene included the incoming bond id'
+    assert all(other_name not in r for r in in_reqs), f'stranger real name {other_name!r} leaked into mind prompt!'
+
+    # 2. Now `actor` makes an outgoing bond offer to `other`, deliberates, and withdraws it via a deliberate act.
+    run.admin('mind_act', actor, [json.dumps({'do': 'conceive', 'target': {'id': other}})], 'verify-minds')
+    bo2 = run.wait(lambda: [o for o in run.private('SELECT * FROM bond_offer', 'bond-out') if o['from'] == actor and o['to'] == other], 'outgoing bond offer', 30)[0]
+    run.request(actor, 'withdraw-bond')
+    run.wait(lambda: not [o for o in run.private('SELECT * FROM bond_offer', 'bond-out-after') if o['id'] == bo2['id']], 'mind withdrew outgoing bond offer', 90)
+    told_wd = run.wait(lambda: [e for e in run.private(f'SELECT * FROM experience WHERE observer = {other}', 'receiver-told') if e['kind'] == 'record' and 'withdrew their offer to start a family.' in e['text']], 'receiver told of withdraw', 30)
+    sent2 = [e for e in shared.rows(run.directory / 'fake-requests.jsonl') if e['purpose'] == 'deliberate']
+    out_reqs = [json.dumps(e) for e in sent2 if re.search(r'\\"bond\\": ?%d\b' % bo2['id'], json.dumps(e))]
+    assert out_reqs, 'deliberation scene included the outgoing bond id'
+    assert all(other_name not in r for r in out_reqs), f'stranger real name {other_name!r} leaked into withdraw prompt!'
+    return {'status': 'pass', 'bond_declined': bo['id'], 'maker_told': told_dec[0]['text'],
+            'bond_withdrawn': bo2['id'], 'receiver_told': told_wd[0]['text'], 'no_stranger_leak': True}
+
+
 def _direction_word(a, b):
     """`living_rules::bearing::direction`: which way `b` lies from `a` (+y is south)."""
     dx, dy = b[0] - a[0], b[1] - a[1]

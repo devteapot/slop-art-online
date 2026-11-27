@@ -636,6 +636,7 @@ fn skill_ctx_with(ctx: &ReducerContext, id: u32, a: &Activity, now: u64, roll: f
         _ => {}
     }
     let records = if sc.skill_reads_records(&a.skill, a.phase == 1) { crate::records::of(ctx, id, now) } else { Vec::new() };
+    let bond_id = bond_id_of(a);
     SkillCtx {
         gaze_band: Default::default(),
         records,
@@ -650,7 +651,7 @@ fn skill_ctx_with(ctx: &ReducerContext, id: u32, a: &Activity, now: u64, roll: f
         hour,
         season: common::season(ctx, now).into(),
         text: a.text.clone(),
-        topic: a.topic.clone(),
+        topic: if bond_id != 0 { String::new() } else { a.topic.clone() },
         roll,
         skill: a.skill.clone(),
         routine,
@@ -658,8 +659,18 @@ fn skill_ctx_with(ctx: &ReducerContext, id: u32, a: &Activity, now: u64, roll: f
         record: None,
         offer_id: a.offer,
         record_id: a.record,
+        bond_id,
         offer: if sc.skill_reads(&a.skill, "offer", a.phase == 1) { offer_at_hand(ctx, id, &a.target, a.offer, now) } else { None },
+        bond: if sc.skill_reads(&a.skill, "bond", a.phase == 1) { bond_at_hand(ctx, id, &a.target, bond_id, now) } else { None },
     }
+}
+
+/// Prefix encoding a named `bond_offer` id inside `Activity.topic` (unused by `decline`, avoiding
+/// a new table column).
+const BOND_TOPIC_PREFIX: &str = "bond:";
+
+fn bond_id_of(a: &Activity) -> u64 {
+    a.topic.strip_prefix(BOND_TOPIC_PREFIX).and_then(|s| s.parse().ok()).unwrap_or(0)
 }
 
 /// The trade offer an act has at hand (`a.offer`): the one it names, or, when that one is gone
@@ -683,6 +694,51 @@ fn offer_at_hand(ctx: &ReducerContext, me: u32, target: &TargetRef, named: u64, 
     let mut theirs: Vec<TradeOffer> = ctx.db.trade_offer().from().filter(from).filter(|o| o.to == me).collect();
     theirs.sort_by_key(|o| (now <= o.ends_ms(window_s), o.id));
     theirs.pop().map(facts)
+}
+
+/// The family (courting) offer an act has at hand (`a.bond`): the one it names (`named != 0`,
+/// point read by id), or, when none is named, a standing bond offer between `me` and `target`
+/// (incoming from target first, else outgoing from `me` to target; live before expired).
+fn bond_at_hand(ctx: &ReducerContext, me: u32, target: &TargetRef, named: u64, now: u64) -> Option<living_rules::script::BondFacts> {
+    let window_ms = (common::laws(ctx).bond_window_s * 1000.0) as u64;
+    let facts = |o: &BondOffer| {
+        let ends = o.at_ms.saturating_add(window_ms);
+        living_rules::script::BondFacts { id: o.id, from: o.from, to: o.to, open: now <= ends, left_s: ends.saturating_sub(now) as f32 / 1000.0 }
+    };
+    if named != 0 {
+        return ctx.db.bond_offer().id().find(named).as_ref().map(facts);
+    }
+    if target.class != 3 {
+        return None;
+    }
+    let other = target.id as u32;
+    let incoming = ctx.db.bond_offer().from().filter(other).filter(|o| o.to == me).max_by_key(|o| (now <= o.at_ms.saturating_add(window_ms), o.id));
+    if let Some(o) = incoming.as_ref().filter(|o| now <= o.at_ms.saturating_add(window_ms)) {
+        return Some(facts(o));
+    }
+    let outgoing = ctx.db.bond_offer().from().filter(me).filter(|o| o.to == other).max_by_key(|o| (now <= o.at_ms.saturating_add(window_ms), o.id));
+    if let Some(o) = outgoing.as_ref().filter(|o| now <= o.at_ms.saturating_add(window_ms)) {
+        return Some(facts(o));
+    }
+    incoming.or(outgoing).as_ref().map(facts)
+}
+
+/// The bond offer a `decline` ends: `named` (`bond_offer.id`, non-zero) between `me` and `other`,
+/// while still within `bond_window_s`. Either the receiver (`to == me`: decline) or the maker
+/// (`from == me`: withdraw) may end it; no one else.
+fn answered_bond(ctx: &ReducerContext, me: u32, other: u32, named: u64, now: u64) -> Result<BondOffer, String> {
+    let window_ms = (common::laws(ctx).bond_window_s * 1000.0) as u64;
+    let o = ctx.db.bond_offer().id().find(named).ok_or("that offer is gone")?;
+    if o.from != me && o.to != me {
+        return Err("that offer is not yours".into());
+    }
+    if !((o.from == other && o.to == me) || (o.from == me && o.to == other)) {
+        return Err("that offer is not with them".into());
+    }
+    if now.saturating_sub(o.at_ms) > window_ms {
+        return Err("that offer has expired".into());
+    }
+    Ok(o)
 }
 
 /// The trade offer an answer (accept, decline) is to: `named` (0: the standing one) from `from`
@@ -816,11 +872,12 @@ pub fn continues(ctx: &ReducerContext, cur: &Activity, a: &living_rules::graph::
         && cur.item == a.item.as_deref().unwrap_or("")
         && cur.qty == a.qty.unwrap_or(0)
         && cur.text == a.text.as_deref().unwrap_or("")
-        && cur.topic == a.topic.as_deref().unwrap_or("")
+        && (bond_id_of(cur) != 0 || cur.topic == a.topic.as_deref().unwrap_or(""))
         && cur.want == a.want.as_deref().unwrap_or("")
         && cur.want_qty == a.want_qty.unwrap_or(0)
         && cur.offer == a.offer.unwrap_or(0)
         && cur.record == a.record.unwrap_or(0)
+        && bond_id_of(cur) == a.bond.unwrap_or(0)
         && a.run.map_or(true, |r| r == motion::runs(ctx, cur.id));
     if !same {
         return false;
@@ -881,11 +938,11 @@ pub fn refusal() -> &'static str {
     REFUSAL.with(|r| r.replace(living_rules::outcome::act::REFUSED))
 }
 
-/// `answers` is what an answer (accept, decline) names: a trade offer's id and a record's id
-/// (0: none).
+/// `answers` is what an answer (accept, decline) names: a trade offer's id, a record's id and a
+/// family (bond) offer's id (0: none).
 /// `spacing` is a movement intent's distances (`living_rules::steer::INTENTS`).
 #[allow(clippy::too_many_arguments)]
-pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), run: Option<bool>, spacing: Spacing, now: u64) -> Result<(), String> {
+pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64, u64), run: Option<bool>, spacing: Spacing, now: u64) -> Result<(), String> {
     let cur = ctx.db.activity().id().find(id);
     begin_with(ctx, id, node, revision, skill, target, item, qty, text, topic, want, answers, run, spacing, now, cur)
 }
@@ -893,7 +950,7 @@ pub fn begin(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &st
 /// `begin`, given the body's activity row as it is now (`cur`, read by the caller in this
 /// transaction with nothing written since: a graph leaf's; docs/COMBAT_PHASE.md step 3).
 #[allow(clippy::too_many_arguments)]
-pub fn begin_with(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64), run: Option<bool>, spacing: Spacing, now: u64, cur: Option<Activity>) -> Result<(), String> {
+pub fn begin_with(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill: &str, target: Resolved, item: &str, qty: u32, text: &str, topic: &str, want: (&str, u32), answers: (u64, u64, u64), run: Option<bool>, spacing: Spacing, now: u64, cur: Option<Activity>) -> Result<(), String> {
     crate::latency::nav(ctx, id, "act_attempt", u64::from(revision), format_args!("{node} {skill}"));
     // A movement that can no longer end holds nothing (`unstick`).
     let cur = cur.filter(|a| !unstick(ctx, a, now));
@@ -1114,7 +1171,7 @@ pub fn begin_with(ctx: &ReducerContext, id: u32, node: u16, revision: u32, skill
         label: label(skill, &item, &target),
         // A rework carries a whole graph; other texts are a sign's or tablet's words.
         text: text.chars().take(if skill == "rework" { 32_000 } else { 400 }).collect(),
-        topic: topic.to_string(),
+        topic: if answers.2 != 0 { format!("{BOND_TOPIC_PREFIX}{}", answers.2) } else { topic.to_string() },
         want: want.0.to_string(),
         want_qty: want.1,
         offer: answers.0,
@@ -2207,11 +2264,16 @@ fn apply(ctx: &ReducerContext, a: &Activity, sctx: &SkillCtx, effects: Vec<Effec
                 witnessed(ctx, now, at, "trade", from, me, &format!("{{a}} and {{b}} traded {deal}"), 0.4, &[me, from]);
                 notes.push(format!("traded with {}: {deal}", seen_as(from)));
             }
-            Effect::Decline { offer } => {
-                // This only ends it: the rules word the outcome and tell its maker and onlookers
-                // (`tell`, `witness`).
-                let o = answered_offer(ctx, me, a.target.id as u32, offer, now)?;
-                ctx.db.trade_offer().id().delete(o.id);
+            Effect::Decline { offer, bond } => {
+                // This only ends it: the rules word the outcome and tell the other party and
+                // onlookers (`tell`, `witness`).
+                if bond != 0 {
+                    let o = answered_bond(ctx, me, a.target.id as u32, bond, now)?;
+                    ctx.db.bond_offer().id().delete(o.id);
+                } else {
+                    let o = answered_offer(ctx, me, a.target.id as u32, offer, now)?;
+                    ctx.db.trade_offer().id().delete(o.id);
+                }
             }
             Effect::Found => {
                 if ctx.db.membership().member().find(me).is_some() {
@@ -2504,18 +2566,17 @@ fn bond(ctx: &ReducerContext, me: u32, other: u32, at: (f32, f32), now: u64) -> 
     for mine in ctx.db.bond_offer().from().filter(me).map(|o| o.id).collect::<Vec<_>>() {
         ctx.db.bond_offer().id().delete(mine);
     }
-    ctx.db.bond_offer().insert(BondOffer { id: 0, from: me, to: other, at_ms: now });
+    let made = ctx.db.bond_offer().insert(BondOffer { id: 0, from: me, to: other, at_ms: now });
     if let Some(c) = ctx.db.character().id().find(other) {
-        percept(ctx, &c, now, "family", me, other, at, format!("{} wants to start a family with you (you would both have to choose it within two minutes).", common::label_cap(ctx, &c, me)), 0.9);
+        let who = common::label_cap(ctx, &c, me);
+        percept(ctx, &c, now, "family", me, other, at, format!("{who} wants to start a family with you (you would both have to choose it within two minutes)."), 0.9);
         // Being asked is worth a thought (an animal answers by its instincts).
-        if c.kind == "person" {
-            crate::perceive::request_deliberation(ctx, other, &format!("{my_name} (#{me}) asks to start a family with you; it happens if you choose it toward them within two minutes."), now);
-        }
         if c.ai {
-            perceive::request_deliberation(ctx, other, &format!("{my_name} asked to start a family with you."), now);
+            perceive::request_deliberation(ctx, other, &format!("{who} (#{me}) asks to start a family with you (bond {}); choose conceive toward them within two minutes to accept, or decline.", made.id), now);
         }
     }
-    Ok(format!("asked {other_name} to start a family"))
+    let seen = ctx.db.character().id().find(me).map(|c| common::label_for(ctx, &c, other)).unwrap_or(other_name);
+    Ok(format!("asked {seen} to start a family"))
 }
 
 /// Put a creature on combat cadence for the next few seconds.

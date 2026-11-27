@@ -513,9 +513,9 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
         let q = action.get("want_qty").or_else(|| action.get("for_qty")).and_then(|q| q.as_f64()).unwrap_or(1.0);
         out.insert("want_qty".into(), json!(q.max(1.0).round() as u64));
     }
-    // What an answer (accept, decline) is about: the id of the trade offer or proposal seen,
-    // for a skill whose spec reads it. Elsewhere the words are ignored, as before.
-    for (key, alias) in [("offer", "offer_id"), ("record", "record_id")] {
+    // What an answer (accept, decline) is about: the id of the trade offer, proposal or family
+    // offer seen, for a skill whose spec reads it. Elsewhere the words are ignored, as before.
+    for (key, alias) in [("offer", "offer_id"), ("record", "record_id"), ("bond", "bond_id")] {
         if !spec.args.iter().any(|a| a == key) {
             continue;
         }
@@ -526,7 +526,7 @@ fn do_node(m: Map<String, Value>, path: &str) -> Result<Value, String> {
                 Some(n) => {
                     out.insert(key.into(), json!(n));
                 },
-                _ => return Err(format!("{path}.do.{key}: the id of the {} you answer (a whole number from what you were asked)", if key == "offer" { "trade offer" } else { "proposal" })),
+                _ => return Err(format!("{path}.do.{key}: the id of the {} you answer (a whole number from what you were asked)", match key { "offer" => "trade offer", "record" => "proposal", _ => "family offer" })),
             }
         }
     }

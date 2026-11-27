@@ -250,25 +250,25 @@ fn the_three_looks_by_name_are_declared_not_coded() {
 #[test]
 fn a_courting_offer_is_answered_by_the_skills_on_bond() {
     let s = with("");
-    // Shipped: conceive, which takes the offer up (`op: "bond"`); it keeps its default places.
-    let on: Vec<&str> = s.ui_specs().filter(|u| u.is_on(On::Bond)).map(|u| u.name.as_str()).collect();
-    assert_eq!(on, ["conceive"]);
+    // Shipped: conceive takes an incoming offer up, decline turns it down (`On::Bond`);
+    // decline also withdraws one's own outgoing offer (`On::OwnBond`).
+    let mut on: Vec<&str> = s.ui_specs().filter(|u| u.is_on(On::Bond)).map(|u| u.name.as_str()).collect();
+    on.sort();
+    assert_eq!(on, ["conceive", "decline"]);
+    let own: Vec<&str> = s.ui_specs().filter(|u| u.is_on(On::OwnBond)).map(|u| u.name.as_str()).collect();
+    assert_eq!(own, ["decline"]);
     let (u, d) = (s.ui("conceive").unwrap(), s.ui_default("conceive").unwrap());
     assert_eq!(UiSpec { on: d.on.clone(), declared: false, ..u.clone() }, d, "only `on` is declared");
     assert_eq!(u.on, [d.on.clone(), vec![On::Bond]].concat(), "its default places, then the card");
-    // Its act toward the offer's maker, as a mind writes it.
+    // Acts toward the other person, as a mind writes them.
     assert_eq!(act_node("conceive", &ActTarget::Creature(4), &Picked::default()), json!({"do": "conceive", "target": {"id": 4}}));
-    // A world that also answers one with decline (the Spark's bond-decline) gets a second button
-    // by declaration alone.
-    let d = with("fn decline_ui() { #{ on: [\"person\", \"thing\", \"offer\", \"bond\"], look: #{ icon: \"trade\" } } }");
-    assert!(d.ui_errors().is_empty(), "{:?}", d.ui_errors());
-    let mut on: Vec<&str> = d.ui_specs().filter(|u| u.is_on(On::Bond)).map(|u| u.name.as_str()).collect();
-    on.sort();
-    assert_eq!(on, ["conceive", "decline"]);
-    // `bond` is toward the maker: a skill that takes no target is refused it.
-    let e = with("fn eat_ui() { #{ on: [\"self\", \"bond\"] } }");
-    assert!(e.ui_errors().iter().any(|m| m.contains("eat_ui: `on`: `bond` needs a spec with `target: true`")), "{:?}", e.ui_errors());
-    assert!(!e.ui("eat").unwrap().is_on(On::Bond));
+    assert_eq!(act_node("decline", &ActTarget::Bond { other: 4, bond: 9 }, &Picked::default()), json!({"do": "decline", "target": {"id": 4}, "bond": 9}));
+    // `bond` and `own_bond` are toward the other person: a skill that takes no target is refused.
+    for place in ["bond", "own_bond"] {
+        let e = with(&format!("fn eat_ui() {{ #{{ on: [\"self\", \"{place}\"] }} }}"));
+        assert!(e.ui_errors().iter().any(|m| m.contains(&format!("eat_ui: `on`: `{place}` needs a spec with `target: true`"))), "{:?}", e.ui_errors());
+        assert!(!e.ui("eat").unwrap().is_on(On::parse(place).unwrap()));
+    }
 }
 
 #[test]
@@ -418,7 +418,7 @@ fn want(t: &ActTarget) -> Kind {
         ActTarget::Creature(i) => Kind::Id(*i),
         ActTarget::Thing { kind, .. } => Kind::Nearest(kind.clone()),
         ActTarget::At(_) => Kind::At,
-        ActTarget::Offer { from, .. } | ActTarget::Record { from, .. } => Kind::Id(*from),
+        ActTarget::Offer { from, .. } | ActTarget::Record { from, .. } | ActTarget::Bond { other: from, .. } => Kind::Id(*from),
     }
 }
 
@@ -450,7 +450,13 @@ fn targets(on: On, spec: &crate::catalog::SkillSpec) -> Vec<ActTarget> {
         On::Item if spec.needs_target => vec![ActTarget::Creature(7)],
         On::Item => vec![ActTarget::Me],
         On::Offer => vec![ActTarget::Offer { from: 7, offer: 1 }, ActTarget::Record { from: 7, record: 2 }],
-        On::Bond => vec![ActTarget::Creature(7)],
+        On::Bond | On::OwnBond => {
+            let mut v = vec![ActTarget::Creature(7)];
+            if spec.args.iter().any(|a| a == "bond") {
+                v.push(ActTarget::Bond { other: 7, bond: 3 });
+            }
+            v
+        }
         On::Bar | On::Box => vec![],
     }
 }
@@ -1320,6 +1326,17 @@ fn an_act_toward_a_proposal_names_its_record() {
         let parsed = crate::acts::parse(node, None, &Default::default()).unwrap();
         assert_eq!((parsed.skill.as_str(), parsed.record, parsed.offer), (skill, Some(12), None));
     }
+}
+
+#[test]
+fn an_act_toward_a_bond_offer_names_it() {
+    // A standing family offer (`my_bond_offers`) is declined or withdrawn by its `bond` id
+    // toward the other person; 0 names none (rules pick what stands).
+    let node = act_node("decline", &ActTarget::Bond { other: 4, bond: 7 }, &Picked::default());
+    assert_eq!(node, json!({"do": "decline", "target": {"id": 4}, "bond": 7}));
+    let parsed = crate::acts::parse(node, None, &Default::default()).unwrap();
+    assert_eq!((parsed.skill.as_str(), parsed.bond, parsed.offer, parsed.record), ("decline", Some(7), None, None));
+    assert_eq!(act_node("decline", &ActTarget::Bond { other: 4, bond: 0 }, &Picked::default()), json!({"do": "decline", "target": {"id": 4}}));
 }
 
 /// The shipped bar's declarations (ui-1 step 4, INTERFACE.md step 2): they parse with no

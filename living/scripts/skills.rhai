@@ -1952,8 +1952,10 @@ fn smoke_ui() { making_look(making_grid("smoke", "Smoking {item}"), "pot") }
 // A player faces where it looks (the cursor scheme, `human_face`), so face is in no list of
 // theirs (play-test 5: F offered it and the rules refused it seven times); minds keep it.
 fn face_ui() { #{ on: [], tip: "You face where you look." } }
-// Saying no to an offer looks like dealing (the trade icon); what it does is its spec and check.
-fn decline_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
+// Saying no to an offer looks like dealing (the trade icon); it answers trade/terms offers
+// (`offer`), incoming courting offers (`bond`), and withdraws one's own courting offer
+// (`own_bond`). What it does is its spec and check.
+fn decline_ui() { #{ on: ["person", "thing", "offer", "bond", "own_bond"], look: #{ icon: "trade" } } }
 // Conceive is also an answer on a courting offer's card (their window): toward the offer's
 // maker. It keeps its default places (person, thing); what it does is its spec, check and done.
 fn conceive_ui() { #{ on: ["person", "thing", "bond"] } }
@@ -2108,15 +2110,28 @@ fn accept_done(a) {
      #{ op: "witness", text: "{a} and {b} came to an agreement." }]
 }
 
-// Saying no to what a person asked of you: the trade offer or proposal the act names, or
-// without a name the one accept would take (their terms first, then their trade). It ends it;
-// the one who made it is told, and onlookers see it.
+// Saying no to what a person asked of you (their terms, their trade offer or their offer to
+// start a family), or withdrawing your own standing family offer to them. With an id (`offer`,
+// `record` or `bond`) only that one is ended; without, their terms first, then their trade,
+// then their family offer, then your own family offer to them. It ends it; the other side is
+// told, and onlookers see a decline.
 fn decline_check(a) {
     if a.target.class != "creature" || a.target.kind != "person" { return "no one to answer"; }
-    answer_refused(a)
+    let why = answer_refused(a);
+    if why != "" { return why; }
+    if a.bond_id != 0 { return bond_answer_refused(a); }
+    if a.offer_id == 0 && a.record_id == 0 && proposal_from(a) == () && (a.offer == () || !a.offer.open) {
+        if a.bond != () && !a.bond.open { return "that offer has expired"; }
+    }
+    ""
 }
 fn decline_duration(a) { 1000 }
 fn decline_done(a) {
+    if a.bond_id != 0 {
+        let b = a.bond;
+        if b == () || b.id != a.bond_id { return [#{ op: "decline", bond: a.bond_id }]; }
+        return decline_bond(a, b);
+    }
     let r = if a.record_id != 0 { named_record(a) } else if a.offer_id != 0 { () } else { proposal_from(a) };
     if r != () {
         let t = r.terms;
@@ -2125,13 +2140,44 @@ fn decline_done(a) {
                 #{ op: "tell", to: a.actor.id, text: `declined {target}'s terms (${terms_line(t, "to")})` },
                 #{ op: "witness", text: "{a} turned down what {b} proposed." }];
     }
-    // Their trade offer (the engine refuses when none stands for you).
+    // Their trade offer (when named, or standing and open).
     let o = a.offer;
-    if o == () || (a.offer_id != 0 && o.id != a.offer_id) { return [#{ op: "decline", offer: a.offer_id }]; }
-    [#{ op: "decline", offer: o.id },
-     #{ op: "tell", to: o.from, salience: 0.7, text: `{actor} declined your offer of ${o.give_qty} ${o.give} for ${o.want_qty} ${o.want}.` },
-     #{ op: "tell", to: a.actor.id, text: `declined {target}'s offer of ${o.give_qty} ${o.give} for ${o.want_qty} ${o.want}` },
+    if a.offer_id != 0 {
+        if o == () || o.id != a.offer_id { return [#{ op: "decline", offer: a.offer_id }]; }
+        return [#{ op: "decline", offer: o.id },
+                #{ op: "tell", to: o.from, salience: 0.7, text: `{actor} declined your offer of ${o.give_qty} ${o.give} for ${o.want_qty} ${o.want}.` },
+                #{ op: "tell", to: a.actor.id, text: `declined {target}'s offer of ${o.give_qty} ${o.give} for ${o.want_qty} ${o.want}` },
+                #{ op: "witness", text: "{a} turned down {b}'s offer." }];
+    }
+    if o != () && o.open && o.to == a.actor.id && o.from == a.target.id {
+        return [#{ op: "decline", offer: o.id },
+                #{ op: "tell", to: o.from, salience: 0.7, text: `{actor} declined your offer of ${o.give_qty} ${o.give} for ${o.want_qty} ${o.want}.` },
+                #{ op: "tell", to: a.actor.id, text: `declined {target}'s offer of ${o.give_qty} ${o.give} for ${o.want_qty} ${o.want}` },
+                #{ op: "witness", text: "{a} turned down {b}'s offer." }];
+    }
+    // A standing family offer between us: theirs to decline, else mine to withdraw.
+    let b = a.bond;
+    if b != () && b.open { return decline_bond(a, b); }
+    [#{ op: "decline", offer: 0 }]
+}
+fn decline_bond(a, b) {
+    if b.from == a.actor.id && b.to == a.target.id {
+        return [#{ op: "decline", bond: b.id },
+                #{ op: "tell", to: b.to, salience: 0.7, text: `{actor} withdrew their offer to start a family.` },
+                #{ op: "tell", to: a.actor.id, text: `withdrew your offer to start a family with {target}` }];
+    }
+    [#{ op: "decline", bond: b.id },
+     #{ op: "tell", to: b.from, salience: 0.7, text: `{actor} declined your offer to start a family.` },
+     #{ op: "tell", to: a.actor.id, text: `declined {target}'s offer to start a family` },
      #{ op: "witness", text: "{a} turned down {b}'s offer." }]
+}
+fn bond_answer_refused(a) {
+    let b = a.bond;
+    if b == () || b.id != a.bond_id { return "that offer is gone"; }
+    if b.from != a.actor.id && b.to != a.actor.id { return "that offer is not yours"; }
+    if (b.to == a.actor.id && b.from != a.target.id) || (b.from == a.actor.id && b.to != a.target.id) { return "that offer is not with them"; }
+    if !b.open { return "that offer has expired"; }
+    ""
 }
 
 // The proposal an answer names, among the actor's own records (closed ones are kept a while).
@@ -2142,6 +2188,7 @@ fn named_record(a) {
 // Why an answer cannot be given to what it names (empty: it can). Without a name nothing is
 // refused here: accept and decline take what stands, as they always have.
 fn answer_refused(a) {
+    if a.bond_id != 0 && (a.offer_id != 0 || a.record_id != 0) { return "name one thing to answer: the offer, the proposal or the family offer"; }
     if a.offer_id != 0 && a.record_id != 0 { return "name one thing to answer: the offer or the proposal"; }
     if a.record_id != 0 {
         let r = named_record(a);
@@ -2781,9 +2828,9 @@ fn accept_spec() {
        takes: "a standing proposal from them to you", gives: "the swap done, or the agreement made" }
 }
 fn decline_spec() {
-    #{ target: true, args: ["offer", "record"], reach: 3.0, talk: true,
-       about: "Say no to what a person beside you proposed to you: their swap (offer) or their terms (offer_terms). It ends that proposal, and they are told you declined. offer or record: the id of the one you decline; without, the one accept would take. Not answering lets a proposal run out; declining says so now.",
-       takes: "a standing proposal from them to you", gives: "it ended; they know you declined" }
+    #{ target: true, args: ["offer", "record", "bond"], reach: 3.0, talk: true,
+       about: "Say no to what a person beside you proposed to you — their swap (offer), their terms (offer_terms), or their offer to start a family (conceive) — or withdraw your own family offer to them. It ends that offer, and the other person is told. offer, record or bond: the id of the one you end; without, their terms first, then their swap, then their family offer, then your own family offer to them. Not answering lets an offer run out; declining says so now.",
+       takes: "a standing proposal between you and them", gives: "it ended; the other person is told" }
 }
 fn offer_terms_spec() {
     #{ target: true, item: true, items: ["lodging"], args: ["qty", "want", "want_qty", "text"], reach: 3.0, talk: true,

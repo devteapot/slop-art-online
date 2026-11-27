@@ -277,6 +277,7 @@ def normalized(rows):
             for row in you.get(key, []):
                 rank_field(row, party, "character")
                 rank_field(row, "offer", "trade_offer")
+                rank_field(row, "bond", "bond_offer")
         earshot = "who would hear you now"
         if earshot in value:
             def hearer(match):
@@ -301,7 +302,8 @@ def normalized(rows):
         lines = []
         for line in source.split("\n"):
             line = rename(r"(?<=\(offer )[0-9]+(?=\), or let it pass\.)", "trade_offer", line)
-            line = rename(r"(?<=\(#)[0-9]+(?=\) asks to start a family with you;)", "character", line)
+            line = rename(r"(?<=\(bond )[0-9]+(?=\); choose conceive)", "bond_offer", line)
+            line = rename(r"(?<=\(#)[0-9]+(?=\) asks to start a family with you(?:;| \(bond ))", "character", line)
             if line.startswith(("You long for a child with ", "You long for another child with ")):
                 line = rename(r"(?<=\(#)[0-9]+(?=\)\.)", "character", line)
             elif line.startswith("What you had decided did not work out: "):

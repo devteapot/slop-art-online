@@ -1523,9 +1523,9 @@ impl Minds {
         let mut between = Vec::new();
         for o in self.conn.db.bond_offer().iter().filter(|o| now.saturating_sub(o.at_ms) <= 120_000) {
             if o.from == other && o.to == me {
-                between.push(format!("{other_name} has asked to start a family with you ({}s ago); it happens if you also choose it (the act conceive toward them) within two minutes of their asking.", now.saturating_sub(o.at_ms) / 1000));
+                between.push(format!("{other_name} has asked to start a family with you ({}s ago, bond {}); conceive toward them within two minutes to accept, or decline.", now.saturating_sub(o.at_ms) / 1000, o.id));
             } else if o.from == me && o.to == other {
-                between.push(format!("You asked {other_name} to start a family ({}s ago); they have not chosen it yet.", now.saturating_sub(o.at_ms) / 1000));
+                between.push(format!("You asked {other_name} to start a family ({}s ago, bond {}); they have not chosen it yet (decline toward them to withdraw).", now.saturating_sub(o.at_ms) / 1000, o.id));
             }
         }
         for o in self.conn.db.trade_offer().iter().filter(|o| now.saturating_sub(o.at_ms) <= 180_000) {

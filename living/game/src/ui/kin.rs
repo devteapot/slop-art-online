@@ -486,9 +486,9 @@ mod tests {
     fn the_shipped_script_has_the_words_and_the_act() {
         let sc = living_rules::script::Scripts::new(include_str!("../../../scripts/skills.rhai")).unwrap();
         assert_eq!(relation_word(sc.kin(), "parent", Some(Sex::Female)), "mother");
-        // The act that takes up a courting offer is on the card by its declaration.
+        // The acts that answer an incoming courting offer are on the card by declaration.
         let acts = bond_acts(&sc);
-        assert_eq!(acts.iter().map(|(s, _)| s.as_str()).collect::<Vec<_>>(), ["conceive"], "{acts:?}");
+        assert_eq!(acts.iter().map(|(s, _)| s.as_str()).collect::<Vec<_>>(), ["decline", "conceive"], "{acts:?}");
         assert!(sc.laws().bond_window_s > 0.0);
     }
 

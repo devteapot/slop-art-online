@@ -472,12 +472,13 @@ fn skills(p: &mut Probe) -> Result<(), String> {
                 }
             }
         }
-        // An answer (accept, decline) to an offer or a proposal it names, or to what stands.
-        let answers = s.skills.get(skill).is_some_and(|k| k.args.iter().any(|a| a == "offer" || a == "record"));
+        // An answer (accept, decline) to an offer, a proposal or a family offer it names, or to what stands.
+        let answers = s.skills.get(skill).is_some_and(|k| k.args.iter().any(|a| a == "offer" || a == "record" || a == "bond"));
+        let bonds = s.skills.get(skill).is_some_and(|k| k.args.iter().any(|a| a == "bond"));
         if answers {
             for a in &actors[..2] {
                 for t in &targets {
-                    samples.extend(answer_samples(sample(skill, a, t, "")));
+                    samples.extend(answer_samples(sample(skill, a, t, ""), bonds));
                 }
             }
         }
@@ -632,7 +633,7 @@ fn daylight(p: &mut Probe) -> Result<(), String> {
 /// What an answer can find at hand: the target's trade offer (standing, run out, addressed to
 /// someone else), the one named, gone or replaced, and records named (the sample proposal to the
 /// actor, its own, one gone), each with and without a name.
-fn answer_samples(c: SkillCtx) -> Vec<SkillCtx> {
+fn answer_samples(c: SkillCtx, bonds: bool) -> Vec<SkillCtx> {
     let them = c.target.id as u32;
     let offer = |id: u64, to: u32, open: bool| Some(super::OfferFacts { id, from: them, to, give: "fish".into(), give_qty: 2, want: "hide".into(), want_qty: 1, open, left_s: if open { 90.0 } else { 0.0 } });
     let me = c.actor.id;
@@ -650,6 +651,17 @@ fn answer_samples(c: SkillCtx) -> Vec<SkillCtx> {
         (41, 1, offer(41, me, true)),
     ] {
         out.push(SkillCtx { offer_id, record_id, offer: at_hand, ..c.clone() });
+    }
+    if bonds && c.target.class == "creature" && c.target.kind == "person" {
+        let bond = |id: u64, from: u32, to: u32, open: bool| Some(super::BondFacts { id, from, to, open, left_s: if open { 90.0 } else { 0.0 } });
+        for (bond_id, b) in [
+            (7, bond(7, them, me, true)),
+            (8, bond(8, me, them, true)),
+            (7, bond(7, them, me, false)),
+            (7, None),
+        ] {
+            out.push(SkillCtx { bond_id, bond: b, records: vec![], ..c.clone() });
+        }
     }
     out
 }
