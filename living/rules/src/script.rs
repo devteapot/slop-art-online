@@ -623,6 +623,11 @@ pub struct Laws {
     /// `sound`, and an unseen speaker turned to) is where a player's `heard_sounds` row says,
     /// its compass way and distance band (`sight::heard_point`); off, exactly where it is.
     pub perceived_sound_on: bool,
+    /// Facts a player has no view of (perception parity, docs/PERCEPTION_PARITY_AUDIT.md, the
+    /// private tables): on, no one is told "you alone know how to …" from a scan of everyone's
+    /// know-how, and a person never smells (scent stays an animal's sense, whatever a seed's
+    /// species say). Off, as before.
+    pub perceived_private_on: bool,
     /// Whom one fights (relation-fight, docs/WORLD_RULES.md "Whom one fights"): on, a graph's
     /// `relation: enemy`/`friend` takes what the character said (`relation_fight`), then a clear
     /// personal relation, then the community's stance, and minds are told so; off, any personal
@@ -970,6 +975,7 @@ impl Default for Laws {
             perceived_threat_on: false,
             perceived_holds_on: false,
             perceived_sound_on: false,
+            perceived_private_on: false,
             relation_fight_on: true,
             cues_on: false,
             cue_cooldown_s: 600.0,
@@ -3356,6 +3362,7 @@ impl Scripts {
             perceived_threat_on: flag("perceived_threat_on", l.perceived_threat_on),
             perceived_holds_on: flag("perceived_holds_on", l.perceived_holds_on),
             perceived_sound_on: flag("perceived_sound_on", l.perceived_sound_on),
+            perceived_private_on: flag("perceived_private_on", l.perceived_private_on),
             relation_fight_on: flag("relation_fight_on", l.relation_fight_on),
             cues_on: flag("cues_on", l.cues_on),
             cue_cooldown_s: g("cue_cooldown_s", l.cue_cooldown_s).clamp(0.0, 86_400.0),

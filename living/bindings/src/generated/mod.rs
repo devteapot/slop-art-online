@@ -351,6 +351,7 @@ pub mod seen_fighter_cue_type;
 pub mod seen_fighters_far_table;
 pub mod seen_fighters_near_table;
 pub mod seen_fighters_table;
+pub mod seen_pasture_table;
 pub mod seen_stock_table;
 pub mod seen_stock_type;
 pub mod seen_store_table;
@@ -775,6 +776,7 @@ pub use seen_fighter_cue_type::SeenFighterCue;
 pub use seen_fighters_far_table::*;
 pub use seen_fighters_near_table::*;
 pub use seen_fighters_table::*;
+pub use seen_pasture_table::*;
 pub use seen_stock_table::*;
 pub use seen_stock_type::SeenStock;
 pub use seen_store_table::*;
@@ -1696,6 +1698,7 @@ pub struct DbUpdate {
     seen_fighters: __sdk::TableUpdate<Fighter>,
     seen_fighters_far: __sdk::TableUpdate<Fighter>,
     seen_fighters_near: __sdk::TableUpdate<Fighter>,
+    seen_pasture: __sdk::TableUpdate<Pasture>,
     seen_stock: __sdk::TableUpdate<SeenStock>,
     seen_store: __sdk::TableUpdate<SeenStore>,
     seen_structures: __sdk::TableUpdate<SeenStructures>,
@@ -2183,6 +2186,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "seen_fighters_near" => db_update
                     .seen_fighters_near
                     .append(seen_fighters_near_table::parse_table_update(table_update)?),
+                "seen_pasture" => db_update
+                    .seen_pasture
+                    .append(seen_pasture_table::parse_table_update(table_update)?),
                 "seen_stock" => db_update
                     .seen_stock
                     .append(seen_stock_table::parse_table_update(table_update)?),
@@ -2818,6 +2824,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.seen_fighters_near = cache
             .apply_diff_to_table::<Fighter>("seen_fighters_near", &self.seen_fighters_near)
             .with_updates_by_pk(|row| &row.id);
+        diff.seen_pasture = cache
+            .apply_diff_to_table::<Pasture>("seen_pasture", &self.seen_pasture)
+            .with_updates_by_pk(|row| &row.chunk);
 
         diff
     }
@@ -3274,6 +3283,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_fighters_near" => db_update
                     .seen_fighters_near
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_pasture" => db_update
+                    .seen_pasture
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_stock" => db_update
                     .seen_stock
@@ -3825,6 +3837,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "seen_fighters_near" => db_update
                     .seen_fighters_near
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_pasture" => db_update
+                    .seen_pasture
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "seen_stock" => db_update
                     .seen_stock
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -4077,6 +4092,7 @@ pub struct AppliedDiff<'r> {
     seen_fighters: __sdk::TableAppliedDiff<'r, Fighter>,
     seen_fighters_far: __sdk::TableAppliedDiff<'r, Fighter>,
     seen_fighters_near: __sdk::TableAppliedDiff<'r, Fighter>,
+    seen_pasture: __sdk::TableAppliedDiff<'r, Pasture>,
     seen_stock: __sdk::TableAppliedDiff<'r, SeenStock>,
     seen_store: __sdk::TableAppliedDiff<'r, SeenStore>,
     seen_structures: __sdk::TableAppliedDiff<'r, SeenStructures>,
@@ -4481,6 +4497,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             &self.seen_fighters_near,
             event,
         );
+        callbacks.invoke_table_row_callbacks::<Pasture>("seen_pasture", &self.seen_pasture, event);
         callbacks.invoke_table_row_callbacks::<SeenStock>("seen_stock", &self.seen_stock, event);
         callbacks.invoke_table_row_callbacks::<SeenStore>("seen_store", &self.seen_store, event);
         callbacks.invoke_table_row_callbacks::<SeenStructures>(
@@ -5332,6 +5349,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         seen_fighters_table::register_table(client_cache);
         seen_fighters_far_table::register_table(client_cache);
         seen_fighters_near_table::register_table(client_cache);
+        seen_pasture_table::register_table(client_cache);
         seen_stock_table::register_table(client_cache);
         seen_store_table::register_table(client_cache);
         seen_structures_table::register_table(client_cache);
@@ -5513,6 +5531,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "seen_fighters",
         "seen_fighters_far",
         "seen_fighters_near",
+        "seen_pasture",
         "seen_stock",
         "seen_store",
         "seen_structures",

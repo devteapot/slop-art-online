@@ -2682,6 +2682,24 @@ pub fn my_senses(ctx: &ViewContext) -> Vec<CharacterSenses> {
     living(ctx).and_then(|c| ctx.db.character_senses().id().find(c.id)).into_iter().collect()
 }
 
+/// The grass of the map chunks round my living character (perception parity: how grazed a
+/// chunk is can be seen, and a graph's `nearest grass` reads it within its sight): the `pasture`
+/// rows of every chunk within its sight (`character_senses`; 16 m without a row) of where its
+/// body is, the chunks a graph's search from there reads. A chunk without a row was never grazed:
+/// it holds `pasture_per_tile` per grass or forest tile the map shows. A client reckons the grass
+/// left now as the authority does (`common::pasture_now`): `amount`, plus `max / pasture_per_tile
+/// × pasture_regen` (the laws in force) per minute of growing time since `at_ms`
+/// (`living_rules::growing_ms`), at most `max`; under 1, grazed bare. Point lookups only (at
+/// most 49 under Cullet's 48 m day sight); it re-runs when my body, my senses or one of those
+/// rows changes.
+#[spacetimedb::view(accessor = seen_pasture, public, primary_key = chunk)]
+pub fn seen_pasture(ctx: &ViewContext) -> Vec<Pasture> {
+    let Some(c) = living(ctx) else { return Vec::new() };
+    let Some(b) = ctx.db.body().id().find(c.id) else { return Vec::new() };
+    let sight = ctx.db.character_senses().id().find(c.id).map_or(living_rules::map::CHUNK as f32, |s| s.sight);
+    living_rules::map::chunks_around(b.x, b.y, sight).into_iter().filter_map(|k| ctx.db.pasture().chunk().find(k)).collect()
+}
+
 /// Whom a line I said now would reach, at each way of speaking (`character_earshot`): the
 /// people my living character perceives, and the same in words. One point lookup; it re-runs
 /// when the row changes (someone steps into or out of a way's reach, a label changes), at most

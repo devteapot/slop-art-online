@@ -1,0 +1,9 @@
+# parity-private-tables: the view `seen_pasture`
+
+Branch `parity-private-tables` (`2ba267b21`, from origin/main `3d41ec73d`). Spark, private server `slop-psp-stdb` (`127.0.0.1:3497`, SpacetimeDB 2.14.1), scoped build, default seed. Bindings regenerated with `just living-generate` (`LIVING_GENERATE_CMD`: a one-off `clockworklabs/spacetime:v2.14.1` container over the built module): `mod.rs` and the new `seen_pasture_table.rs` (the row type `Pasture` was already generated).
+
+**Shape change and the skill** (a scoped `maintain-verification-skill` pass, this view only; the per-feature source wave was not run): `drive.py`'s `VIEWS` gains `seen_pasture` and a `seen_pasture` step after `bond_offers_and_community`: a deer grazes on the grass nearest player-1 until that chunk has a `pasture` row, then every identity is probed; each player's rows must be exactly the owner's `pasture` rows of the chunks within its sight of its body (`chunks_around`, its `character_senses` sight), values equal; player-1's include the grazed chunk; anonymous none. `pasture` stays in `PRIVATE`. The probe subscribes the view and reports `chunk`, `amount`, `max`, `regen`, `at_ms`; features/perception.md and README name it. SpacetimeDB views (v2.14.1, https://spacetimedb.com/docs/functions/views/): per-sender, indexed point lookups only, re-run when a row it read changes.
+
+- `run.py --run client-ppt1-125323`: `drive.py` **48/48** (with `seen_pasture`: grazed chunk 0; player-1 and player-2 [0], ClientAnon and anonymous none), `cues.py` 23/23, `near_tier.py` 7/7, `motion_tables.py` 34/34, `combat_feed.py` 17/17, `lines_table.py` 18/18, `tick_marker.py` 5/5; cleanup confirmed (SQL 404, token removed).
+
+**Not covered:** the open (`LIVING_PERCEPTION=open`) build; a reconnect with rows present; a player whose sight reaches more than the 3×3 chunks round it (Cullet's day).

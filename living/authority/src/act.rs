@@ -780,7 +780,7 @@ fn intent_check(ctx: &ReducerContext, id: u32, skill: &str, target: &Resolved, s
         // Already in sight (resolved from what the body perceives, or a player's view): the keep
         // margins hold. A player's own check is its perceived set's.
         let kept = node != PLAYER || ctx.db.perceived().viewer().filter(ctx.sender()).any(|p| p.body == tb.id);
-        let seen = crate::perception::in_sight(ctx, &common::map(ctx), id, here, common::facing_at(me, now), tb.id, tp, d, &w, now, kept) || common::scent_of(&me.kind).is_some_and(|s| s.reaches(&tb.kind, d));
+        let seen = crate::perception::in_sight(ctx, &common::map(ctx), id, here, common::facing_at(me, now), tb.id, tp, d, &w, now, kept) || common::scent_for(ctx, &me.kind).is_some_and(|s| s.reaches(&tb.kind, d));
         if !seen {
             refuse(living_rules::outcome::act::UNSEEN);
             return Err("you cannot see them".into());

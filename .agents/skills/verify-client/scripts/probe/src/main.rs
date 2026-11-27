@@ -48,7 +48,7 @@ macro_rules! primary_tables {
             routine, routine_stat, cue, script, community, membership, join_request, genome,
             practice, land, settlement, lot, fighter, skill_card, act_card, speech_card, doing, weather, law_override,
             seen_bodies, seen_characters, seen_fighters, seen_doing, seen_bodies_near, seen_bodies_far, seen_fighters_near, seen_fighters_far, seen_doing_near, seen_doing_far, seen_character_copy, seen_fighter_copy, experience_copy, my_body, my_fighter, my_doing, my_characters, my_vitals,
-            my_experience, my_places, my_inventory, my_know_how, my_offers, my_kin, my_bond_offers, my_community, my_heard, my_senses, my_senses_v_2, my_earshot, my_act_outcomes, my_known_names, my_seen_stores, my_sex, seen_throng);
+            my_experience, my_places, my_inventory, my_know_how, my_offers, my_kin, my_bond_offers, my_community, my_heard, my_senses, my_senses_v_2, my_earshot, my_act_outcomes, my_known_names, my_seen_stores, my_sex, seen_pasture, seen_throng);
     };
 }
 
@@ -208,7 +208,8 @@ fn snapshot(c: &DbConnection) -> Value {
         my_act_outcomes,
         my_known_names,
         my_sex,
-        my_seen_stores
+        my_seen_stores,
+        seen_pasture
     );
     // What the perception views returned to this identity (docs/PERCEPTION.md).
     let ids = |v: Vec<u32>| { let mut v = v; v.sort_unstable(); v };
@@ -234,6 +235,8 @@ fn snapshot(c: &DbConnection) -> Value {
         "my_offers": c.db.my_offers().iter().map(|r| json!({"id":r.id,"incoming":r.incoming,"from":r.from,"to":r.to,"give_item":r.give_item,"want_item":r.want_item,"until_ms":r.until_ms})).collect::<Vec<_>>(),
         "my_kin": c.db.my_kin().iter().map(|r| json!({"id":r.id,"relation":r.relation})).collect::<Vec<_>>(),
         "my_bond_offers": c.db.my_bond_offers().iter().map(|r| json!({"id":r.id,"incoming":r.incoming,"from":r.from,"to":r.to,"at_ms":r.at_ms})).collect::<Vec<_>>(),
+        // The grass of the chunks within my character's sight (perception parity): chunk, amount, max.
+        "seen_pasture": c.db.seen_pasture().iter().map(|r| json!({"chunk":r.chunk,"amount":r.amount,"max":r.max,"regen":r.regen,"at_ms":r.at_ms})).collect::<Vec<_>>(),
         "my_community": c.db.my_community().iter().map(|r| json!({"id":r.id,"name":r.name,"founder":r.founder,"founded_ms":r.founded_ms,"home_x":r.home_x,"home_y":r.home_y,"since_ms":r.since_ms})).collect::<Vec<_>>(),
         // What my character senses (the `senses` law with all its facts), written on change.
         "my_senses_v_2": c.db.my_senses_v_2().iter().map(|r| row_json(&r)).collect::<Vec<_>>(),

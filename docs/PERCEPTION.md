@@ -105,7 +105,8 @@ Every table, by what it holds. "Open" and "scoped" are the two builds ([Compatib
 | `acquaintance` | own private state (whose name a character was told) | private | private | the projection, rules only |
 | `connection`, `presence` | private engine state (open connections; whether a played character's person is there, and who controls it) | private | private | the mind service (owner) |
 | `skill_code` | private engine state (stable presentation codes per skill; clients read codes from `skill_card` and `act_card`) | private | private | rules only |
-| `clock`, `steer`, `wake`, `infant_cry`, `familiar`, `rearing`, `act_queue`, `pasture`, `missile`, `tick_timer`, `slow_timer` | private engine state | private | private | rules only |
+| `clock`, `steer`, `wake`, `infant_cry`, `familiar`, `rearing`, `act_queue`, `missile`, `tick_timer`, `slow_timer` | private engine state | private | private | rules only |
+| `pasture` | private engine state (grass left per map chunk; since `parity-private-tables` a player reads the rows of the chunks within its sight through `seen_pasture`, as a graph's `nearest grass` reads them) | private | private | rules, `seen_pasture` |
 
 ## Design
 
@@ -134,6 +135,7 @@ All are per-sender (`ViewContext`), take no arguments, declare `primary_key = id
 | `my_vitals` | my living characters' `vitals` | `character.controller`, `vitals.id` |
 | `my_experience` | the newest `frame::LINES_SHOWN` (64) lines of my living character, or of my last character while none lives (since the fourth change; before, every character's 400-line window, the dead included) | `character.controller`, `line_seen.by_observer_shown` = (character, true): the released copies of the lines |
 | `my_places`, `my_inventory`, `my_know_how` | my living characters' rows | `character.controller`, then `place.actor`, `inventory.owner`, `know_how.actor` |
+| `seen_pasture` | the `pasture` rows of the map chunks within my living character's sight of its body (perception parity, `parity-private-tables`): how grazed a chunk is, which a graph's `nearest grass` reads; a chunk without a row was never grazed; a client reckons the grass left now as `common::pasture_now` does (`amount` plus `max / pasture_per_tile × pasture_regen` per minute of growing time since `at_ms`, at most `max`) | `player`, `body.id`, `character_senses.id`, then `pasture.chunk` for each chunk within sight (at most 49 point lookups under Cullet's 48 m day sight) |
 
 "My characters" are the caller's characters with `ai = false`. A mind service's identity controls AI characters (`ai = true`), so these views return nothing to it; it reads the tables as the owner.
 
