@@ -1680,16 +1680,17 @@ impl ChunkBrief {
 }
 
 thread_local! {
-    /// Per chunk, the brief of its cached list, drawn again whenever the list is (a `BTreeMap`:
-    /// no `RandomState`, see `CHUNK_FEW`).
-    static CHUNK_BRIEF: RefCell<std::collections::BTreeMap<u32, (ChunkList, Option<ChunkBrief>)>> = const { RefCell::new(std::collections::BTreeMap::new()) };
+    /// Per chunk, the brief of its cached list and its `(id, index)` pairs sorted by id, drawn
+    /// again whenever the list is (a `BTreeMap`: no `RandomState`, see `CHUNK_FEW`).
+    static CHUNK_BRIEF: RefCell<std::collections::BTreeMap<u32, (ChunkList, Option<ChunkBrief>, Rc<Vec<(u64, usize)>>)>> = const { RefCell::new(std::collections::BTreeMap::new()) };
 }
 
-/// `chunk`'s cached structures and their brief.
-pub fn chunk_brief(ctx: &ReducerContext, chunk: u32) -> (ChunkList, Option<ChunkBrief>) {
+/// `chunk`'s cached structures, their brief, and `(id, index)` sorted by `id` for binary-search
+/// tail scans when only a few new structures were added since a resident's last look.
+pub fn chunk_brief(ctx: &ReducerContext, chunk: u32) -> (ChunkList, Option<ChunkBrief>, Rc<Vec<(u64, usize)>>) {
     let all = chunk_structures(ctx, chunk);
-    if let Some(b) = CHUNK_BRIEF.with(|c| c.borrow().get(&chunk).filter(|(src, _)| Rc::ptr_eq(src, &all)).map(|(_, b)| *b)) {
-        return (all, b);
+    if let Some((b, by_id)) = CHUNK_BRIEF.with(|c| c.borrow().get(&chunk).filter(|(src, _, _)| Rc::ptr_eq(src, &all)).map(|(_, b, idx)| (*b, idx.clone()))) {
+        return (all, b, by_id);
     }
     let b = all.iter().fold(None, |b: Option<ChunkBrief>, s| {
         Some(match b {
@@ -1697,8 +1698,11 @@ pub fn chunk_brief(ctx: &ReducerContext, chunk: u32) -> (ChunkList, Option<Chunk
             Some(b) => ChunkBrief { max_id: b.max_id.max(s.id), lo: (b.lo.0.min(s.x), b.lo.1.min(s.y)), hi: (b.hi.0.max(s.x), b.hi.1.max(s.y)) },
         })
     });
-    CHUNK_BRIEF.with(|c| c.borrow_mut().insert(chunk, (all.clone(), b)));
-    (all, b)
+    let mut by_id: Vec<(u64, usize)> = all.iter().enumerate().map(|(i, s)| (s.id, i)).collect();
+    by_id.sort_unstable_by_key(|&(id, _)| id);
+    let by_id = Rc::new(by_id);
+    CHUNK_BRIEF.with(|c| c.borrow_mut().insert(chunk, (all.clone(), b, by_id.clone())));
+    (all, b, by_id)
 }
 
 /// [`structures_near`] of only the structures `which` reads: the same rows in the same order

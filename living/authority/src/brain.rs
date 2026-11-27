@@ -2248,14 +2248,38 @@ impl<'a> Ev<'a> {
         let _part = common::detail_span("noticed.structures");
         let mut seen = crate::seen_structures::Look::default();
         let new: Vec<usize> = if laws.notice_inplace {
-            let ids = self.new_structures_in_place(&laws, &mut seen);
-            if ids.is_empty() {
+            let mut new_rows = self.new_structures_in_place(&laws, &mut seen);
+            if new_rows.is_empty() {
                 // An unchanged look can still have migrated legacy familiarity.
                 seen.write(self.ctx);
                 return;
             }
+            // Remains are single-tile and never join with other structures, so when every new
+            // structure in sight is a remains we can announce them directly without building or
+            // cloning the full `self.structures()` list of all structures in sight.
+            if new_rows.iter().all(|(s, _)| s.kind == "remains") {
+                seen.write(self.ctx);
+                common::diag(|| "noticed:structures_new", new_rows.len() as u64);
+                new_rows.sort_by(|a, b| a.1.total_cmp(&b.1));
+                let mut counted = Vec::new();
+                let mut known = None;
+                for (s, dist) in &new_rows {
+                    if s.owner != self.me.id {
+                        let (species, readable) = common::remains_label(self.ctx, s.id, s.owner);
+                        let named = &*species == "person" && known.get_or_insert_with(|| crate::perception::known_name_ids(self.ctx, &self.me)).contains(&s.owner);
+                        if named || readable {
+                            self.notice_remains(s.owner, (s.x, s.y), *dist);
+                        } else {
+                            let group = if &*species == "person" { "stranger".to_owned() } else { species.to_string() };
+                            counted.push((s.owner, (s.x, s.y), *dist, group));
+                        }
+                    }
+                }
+                self.finish_counted_remains(now, at, counted);
+                return;
+            }
             common::diag(|| "notice_inplace:listed", 1);
-            let ids: std::collections::HashSet<u64> = ids.into_iter().collect();
+            let ids: std::collections::HashSet<u64> = new_rows.into_iter().map(|(s, _)| s.id).collect();
             self.structures().iter().enumerate().filter(|(_, (s, _))| ids.contains(&s.id)).map(|(i, _)| i).collect()
         } else {
             let ids: Vec<_> = self.structures().iter().map(|(s, _)| (s.id, s.chunk)).collect();
@@ -2331,6 +2355,10 @@ impl<'a> Ev<'a> {
             // Whose it is, only as the line names them (house-owner-label).
             crate::perceive::percept_owned(self.ctx, &self.me, now, "saw", if whose.is_some() { *owner } else { 0 }, 0, pos, text, 0.35);
         }
+        self.finish_counted_remains(now, at, counted);
+    }
+
+    fn finish_counted_remains(&self, now: u64, at: (f32, f32), counted: Vec<(u32, (f32, f32), f32, String)>) {
         if let [only] = counted.as_slice() {
             self.notice_remains(only.0, only.1, only.2);
         } else if let Some(nearest) = counted.first() {
@@ -2416,7 +2444,7 @@ impl<'a> Ev<'a> {
     /// (pruning spares legacy rows in the last look's disc). Only structures built since or come
     /// into sight are checked. `notice_delta_check` verifies that skipped IDs are recognized.
     /// A look that finds no valid row checks everything.
-    fn new_structures_in_place(&mut self, laws: &living_rules::script::Laws, look: &mut crate::seen_structures::Look) -> Vec<u64> {
+    fn new_structures_in_place(&mut self, laws: &living_rules::script::Laws, look: &mut crate::seen_structures::Look) -> Vec<(std::rc::Rc<Structure>, f32)> {
         let (check, delta, delta_check) = (laws.notice_inplace_check, laws.notice_delta, laws.notice_delta_check);
         let (ctx, me, now, at) = (self.ctx, self.me.id, self.now, self.at);
         let r = common::sight_for(ctx, me, &self.w, now);
@@ -2426,7 +2454,7 @@ impl<'a> Ev<'a> {
             common::diag(|| if last.is_some() { "notice_delta:incremental" } else { "notice_delta:whole" }, 1);
         }
         let mut recent: Vec<u32> = Vec::new();
-        let mut other: Vec<(u64, u32, f32)> = Vec::new();
+        let mut other: Vec<(std::rc::Rc<Structure>, f32)> = Vec::new();
         let mut passed: Vec<(u64, u32)> = Vec::new();
         let mut top = 0u64;
         // A whole chunk whose rows all pass is passed at once (growth-fix-2: a battle's remains
@@ -2436,7 +2464,7 @@ impl<'a> Ev<'a> {
         // check laws, which list every passed row. Its rows in sight still count for `top`.
         const MARGIN: f32 = 0.05;
         let whole_ok = last.is_some() && !(delta_check || check);
-        let mut visit = |s: &Structure, d: f32| {
+        let mut visit = |s: &std::rc::Rc<Structure>, d: f32| {
             if let Some(l) = &last {
                 if s.id <= l.max_structure && common::dist((l.x, l.y), (s.x, s.y)) <= l.r {
                     if delta_check || check {
@@ -2450,25 +2478,44 @@ impl<'a> Ev<'a> {
             if lately(k) {
                 recent.push(k);
             } else {
-                other.push((s.id, s.chunk, d));
+                other.push((s.clone(), d));
             }
         };
         for c in living_rules::map::chunks_around(at.0, at.1, r) {
-            let (list, brief) = common::chunk_brief(ctx, c);
+            let (list, brief, by_id) = common::chunk_brief(ctx, c);
             if whole_ok {
                 let l = last.as_ref().unwrap();
-                if let Some(b) = brief.filter(|b| b.max_id <= l.max_structure && b.farthest((l.x, l.y)) <= l.r - MARGIN) {
-                    common::diag(|| "notice_delta:chunk_passed", 1);
-                    if b.farthest(at) <= r - MARGIN {
-                        top = top.max(b.max_id);
-                    } else {
-                        for s in list.iter() {
-                            if common::dist(at, (s.x, s.y)) <= r {
-                                top = top.max(s.id);
+                if let Some(b) = brief.filter(|b| b.farthest((l.x, l.y)) <= l.r - MARGIN) {
+                    if b.max_id <= l.max_structure {
+                        common::diag(|| "notice_delta:chunk_passed", 1);
+                        if b.farthest(at) <= r - MARGIN {
+                            top = top.max(b.max_id);
+                        } else {
+                            for s in list.iter() {
+                                if common::dist(at, (s.x, s.y)) <= r {
+                                    top = top.max(s.id);
+                                }
                             }
                         }
+                        continue;
                     }
-                    continue;
+                    // The chunk lies wholly inside both the last look's disc and this one, but
+                    // has new rows (`b.max_id > l.max_structure`, e.g. fresh remains): skip every
+                    // row with `id <= l.max_structure` via binary search on `by_id` and visit only
+                    // the new tail in `list`'s original order.
+                    if b.farthest(at) <= r - MARGIN {
+                        top = top.max(b.max_id);
+                        let start = by_id.partition_point(|&(id, _)| id <= l.max_structure);
+                        common::diag(|| "notice_delta:chunk_tail_passed", start as u64);
+                        let mut idxs: Vec<usize> = by_id[start..].iter().map(|&(_, i)| i).collect();
+                        idxs.sort_unstable();
+                        for i in idxs {
+                            let s = &list[i];
+                            let d = common::dist(at, (s.x, s.y));
+                            visit(s, d);
+                        }
+                        continue;
+                    }
                 }
             }
             for s in list.iter() {
@@ -2500,25 +2547,25 @@ impl<'a> Ev<'a> {
             }
         }
         if !laws.seen_ranges || laws.seen_ranges_check || check {
-            other.sort_by(|a, b| a.2.total_cmp(&b.2));
+            other.sort_by(|a, b| a.1.total_cmp(&b.1));
         }
         if check {
             // The full list's split, less what the last look lets this one pass over (`delta`).
             let full: Vec<u64> = self.structures().iter().filter(|(s, _)| !passed.contains(&(s.id, s.chunk)) && !lately(structure_key(s.id))).map(|(s, _)| s.id).collect();
             let seen_n = self.structures().iter().filter(|(s, _)| !passed.contains(&(s.id, s.chunk))).count() - full.len();
             common::diag(|| "notice_inplace:checked", 1);
-            if full.iter().ne(other.iter().map(|(id, _, _)| id)) || seen_n != recent.len() {
+            if full.iter().ne(other.iter().map(|(s, _)| &s.id)) || seen_n != recent.len() {
                 common::diag(|| "notice_inplace:differed", 1);
-                log::error!("notice_inplace of {me}: in place {:?} ({} seen lately) differs from the full list's {:?} ({seen_n})", other.iter().map(|o| o.0).collect::<Vec<_>>(), recent.len(), full);
+                log::error!("notice_inplace of {me}: in place {:?} ({} seen lately) differs from the full list's {:?} ({seen_n})", other.iter().map(|(s, _)| s.id).collect::<Vec<_>>(), recent.len(), full);
             }
         }
         for k in recent {
             self.recently_seen(k);
         }
         let mut new = Vec::new();
-        for (id, chunk, _) in other {
-            if self.new_structure(laws, look, id, chunk) {
-                new.push(id);
+        for (s, d) in other {
+            if self.new_structure(laws, look, s.id, s.chunk) {
+                new.push((s, d));
             }
         }
         new
