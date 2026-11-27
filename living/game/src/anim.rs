@@ -264,12 +264,23 @@ pub fn has_clips(file: &str) -> bool {
 }
 
 /// The name of a clip file's animation root: the first node of its scene (`Armature` in a
-/// generated person).
+/// generated person). Read once a file: the shared clip file's JSON is large, and reading and
+/// parsing it for each body [`bind`] took about 5 ms on the development Mac, so a perception
+/// sweep that brought ten people into sight made a 50 ms frame (the battle bench, 2026-11-27).
 fn clip_root(clips: &str) -> Option<String> {
-    let j = crate::lookdev::glb_json(clips)?;
-    let scene = j["scene"].as_u64().unwrap_or(0) as usize;
-    let root = j["scenes"][scene]["nodes"][0].as_u64()? as usize;
-    j["nodes"][root]["name"].as_str().map(String::from)
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(v) = cache.lock().unwrap().get(clips) {
+        return v.clone();
+    }
+    let v = crate::lookdev::glb_json(clips).and_then(|j| {
+        let scene = j["scene"].as_u64().unwrap_or(0) as usize;
+        let root = j["scenes"][scene]["nodes"][0].as_u64()? as usize;
+        j["nodes"][root]["name"].as_str().map(String::from)
+    });
+    cache.lock().unwrap().insert(clips.to_string(), v.clone());
+    v
 }
 
 /// A character checked by [`bind`] (given a player, needing none, or warned that it can't be).
@@ -415,6 +426,11 @@ impl Anim {
     /// The clip that shows most (for recordings; its logical name).
     pub fn showing(&self) -> &'static str {
         self.showing
+    }
+
+    /// The standing loops blended now and their weights (the UI dump's `bodies`).
+    pub fn stands(&self) -> &[(&'static str, f32)] {
+        &self.stands
     }
 
     /// The animation this body plays for the logical `clip` (its variant's, [`Plays`]).
@@ -671,6 +687,34 @@ fn build(
             ik: 0.0,
         });
     }
+}
+
+/// A body shown again from one kept hidden after it left sight (`live.rs`, `Kept`) starts as a
+/// new body does: nothing of what it played, where its feet were held or how its cloth hung
+/// carries over. Its clips stop and its [`Anim`] goes, so [`build`] gives it a new one this
+/// frame from what it does now (its standing loop at full weight, no one-shot under way: a seat,
+/// a death or a blow it left sight in is not blended out on screen); its feet's IK holds are let
+/// go (`ik::Legs`) and its spring chains start again from rest (`characters::Springs`).
+pub fn afresh(mut e: EntityWorldMut) {
+    if let Some(player) = e.get::<Anim>().map(|a| a.player) {
+        e.remove::<Anim>();
+        e.world_scope(|w| {
+            if let Some(mut p) = w.get_mut::<AnimationPlayer>(player) {
+                p.stop_all();
+            }
+        });
+    }
+    if let Some(mut legs) = e.get_mut::<crate::ik::Legs>() {
+        legs.let_go();
+    }
+    let rest = e.get_mut::<crate::characters::Springs>().map(|mut sp| sp.restart()).unwrap_or_default();
+    e.world_scope(|w| {
+        for (j, tf) in rest {
+            if let Some(mut t) = w.get_mut::<Transform>(j) {
+                *t = tf;
+            }
+        }
+    });
 }
 
 /// A clip name as `&'static str` (names from the environment or files; each is kept once).

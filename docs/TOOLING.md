@@ -816,3 +816,23 @@ python3 living/tools/bench_battle.py --run ui-battle-bench-01 \
 Use a fresh `--run` name for each rep. `--look` chooses `classic` or `lookdev`, and `--scale` fixes the internal render scale at 75 or 100 percent. `--bin` overrides the release client search shared with `lookdev_shoot.py`, which also checks `$LIVING_GAME_BIN` and `$CARGO_TARGET_DIR/release/living-game`. For diagnostic logging, set `LIVING_GAME_PERF=diag,hitch=16.7`.
 
 `--out` holds the whole run in `frames.csv`, the measured window in `sample.csv`, its statistics in `frametime_summary.json`, plus the screenshot, scene dumps, fighter snapshots, and logs. The wrapper deletes the scratch database through `verify.py`. Run `python3 living/tools/bench_battle_selftest.py` to check the arguments and sample boundaries without launching a server.
+
+The wrapper strips the client log's ANSI colour codes before it looks for the sample marker: on the laptop the log is coloured, and the marker's timestamp did not parse.
+
+**The 200 ms spikes (battle-spikes, 2026-11-27).** On both machines the tail came on the authority's perception sweep. Each sweep moved a few fighters at the edge of the player's sight in or out of the sent set, and the client built a new body for everyone coming back into sight. Each new body ran `anim::bind`, which read and parsed the shared clip file's glTF JSON again (`anim::clip_root`, about 5 ms on the laptop). A sweep that brought ten people back made a 30–50 ms frame. With `LIVING_GAME_PERF=diag,nokeepbodies`, 6–11 bodies a second were built new during the fight, 60–80% of them for people who had left sight within 6 s.
+
+The client now does two things:
+
+- It keeps a body that leaves sight hidden for 6 s and shows it again if the same person returns in the same look (`live.rs`, "Leaving and coming back into sight").
+- It reads each clip file's root once.
+
+Nothing drawn changes: whoever is sent is drawn, and fades in as before. Laptop results (M4 Pro, 3 reps per row, the 12 s sample) are in `.local/living/battle-spikes/laptop/`:
+
+| Output | Client | Mean ms | p99 ms | Over 16.7 ms | Worst ms |
+|---|---|---:|---:|---:|---:|
+| 1920×1080 | main | 6.52 | 12.7 | 21 of 5,521 | 25.8 |
+| 1920×1080 | battle-spikes | 6.48 | 8.3 | 4 of 5,557 | 23.0 |
+| 3024×1964 | main | 8.55 | 13.0 | 17 of 4,209 | 28.0 |
+| 3024×1964 | battle-spikes | 8.59 | 10.0 | 2 of 4,191 | 18.5 |
+
+On main, 59 of the 70 gaps between slow frames (more than 1.8× the median) fell on multiples of 200 ms at 1080p. With the change, 11 slow frames remain at 1080p, against 78, and 3 at native resolution, against 22. The plaza bench is unchanged: High 100% at 1080p, mean 5.12 against 5.24 ms and p99 6.2 against 6.3 ms. Under `LIVING_GAME_PERF=diag`, each laptop run also had one 640–660 ms frame. In it, the render thread waited for a drawable while a new character's files first arrived. It appeared in every arm and never without `diag`.

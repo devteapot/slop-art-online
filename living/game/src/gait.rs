@@ -751,7 +751,7 @@ fn record(
     roam: Res<crate::envs::Roam>,
     scene: Option<NonSend<crate::world::Scene>>,
     camera: Query<&GlobalTransform, With<Camera3d>>,
-    (input, net, cam): (Option<Res<crate::controls::Input>>, Option<NonSend<crate::net::Net>>, Option<Res<crate::camera::Cam>>),
+    (input, net, cam, fades): (Option<Res<crate::controls::Input>>, Option<NonSend<crate::net::Net>>, Option<Res<crate::camera::Cam>>, Query<&crate::fade::Fade>),
     mut feet: Local<HashMap<Entity, Tracked>>,
     mut spine: Local<HashMap<Entity, [Option<Entity>; 3]>>,
 ) {
@@ -850,6 +850,12 @@ fn record(
             "eye_clearance": cam.as_ref().map(|c| c.ground_clearance),
             "seg": scene.as_ref().map(|s| [s.mine_seg.0 as f64, s.mine_seg.1 as f64, s.mine_seg.2 as f64]),
             "clip": anim.map_or("", |a| a.showing()),
+            // The standing loop asked for, and the standing loops its clips blend now with their
+            // weights; how faded the body is (1 not drawn, `fade.rs`); the entity drawn.
+            "stand": motions.get(e).ok().map(|m| m.stand),
+            "stands": anim.map(|a| a.stands()),
+            "fade": fades.get(e).ok().map(|f| f.level),
+            "entity": e.to_bits(),
             // The shared phase, the gaits and their weights, and each foot's marker contact.
             "phase": anim.map(|a| a.phase),
             "gaits": anim.map(|a| a.gaits()),

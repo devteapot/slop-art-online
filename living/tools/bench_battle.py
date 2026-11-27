@@ -36,6 +36,8 @@ def build_parser():
 
 
 def summarize_sample(frames, client_log, sample):
+    # The client colours its log on a terminal-capable stream (the laptop's): drop the codes.
+    client_log = re.sub(r"\x1b\[[0-9;]*m", "", client_log)
     marker = re.search(r"^(\S+).*live script: wait:12 \(", client_log, re.MULTILINE)
     if marker is None:
         raise RuntimeError("missing sample start marker in client.log")

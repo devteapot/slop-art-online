@@ -406,6 +406,11 @@ fn dump(
             "cells": g.cells.iter().map(|c| serde_json::json!({"product": c.product, "item": c.item, "label": c.label, "allowed": c.allowed, "reason": c.reason, "detail": c.detail, "rows": c.rows})).collect::<Vec<_>>()})),
         "tags": ui.tags.iter().map(|(k, v)| (k.clone(), serde_json::json!([v.x, v.y]))).collect::<serde_json::Map<_, _>>(),
         "looks": extra.looks_json(),
+        // Each body drawn as it is drawn now (`live.rs`): its entity (the same one when a body
+        // kept after it left sight is shown again), its standing loop and one-shot, its clips'
+        // weights, its seat and fade; and the bodies kept hidden. The health on each plate.
+        "bodies": extra.bodies_json(),
+        "plates": model.actors.iter().map(|a| serde_json::json!({"id": a.id, "hp": a.hp, "exact": a.exact, "hostile": a.stance == model::Stance::Hostile})).collect::<Vec<_>>(),
         // Staged genesis (`genesis.rs`): whether the world is made, how far, and what the first
         // load's cover says (its title, detail and bar share; the bar shows while preparing).
         "genesis": {
@@ -527,6 +532,7 @@ pub struct DumpExtra<'w, 's> {
     render_scale: Res<'w, crate::graphics::RenderScale>,
     upscale: Res<'w, crate::graphics::Upscale>,
     shadow_filter: Query<'w, 's, Option<&'static bevy::light::ShadowFilteringMethod>, With<Camera3d>>,
+    drawn: Query<'w, 's, (&'static crate::anim::Motion, Option<&'static crate::anim::Anim>, Has<crate::characters::SeatAnchor>, Option<&'static crate::fade::Fade>)>,
 }
 
 impl DumpExtra<'_, '_> {
@@ -537,6 +543,29 @@ impl DumpExtra<'_, '_> {
         let mut v: Vec<_> = live.looks().map(|l| serde_json::json!({"id": l.id, "look": l.look, "composed": l.composed, "swapping": l.swapping, "chips": self.looks.colours.get(&l.id)})).collect();
         v.sort_by_key(|x| x["id"].as_u64());
         v
+    }
+
+    /// Each body drawn: its entity, what its `Motion` asks (standing loop, one-shot) and what its
+    /// `Anim` plays (the clip showing most, the standing loops' weights, how far down on a ground
+    /// seat), its seat anchor and fade level; then the bodies kept hidden or fading out to be
+    /// shown again (`live.rs` "Leaving and coming back into sight").
+    fn bodies_json(&self) -> serde_json::Value {
+        let Some(live) = self.live.as_ref() else { return serde_json::json!({}) };
+        let mut drawn: Vec<_> = live
+            .drawn()
+            .map(|(id, e)| {
+                let (m, a, seat, fade) = match self.drawn.get(e) {
+                    Ok((m, a, seat, f)) => (Some(m), a, seat, f.map(|f| f.level)),
+                    Err(_) => (None, None, false, None),
+                };
+                serde_json::json!({"id": id, "entity": e.to_bits(), "stand": m.map(|m| m.stand), "action": m.and_then(|m| m.action.map(|x| x.clip)),
+                    "showing": a.map(|a| a.showing()), "stands": a.map(|a| a.stands().iter().map(|(c, w)| serde_json::json!([c, w])).collect::<Vec<_>>()), "ground_seat": a.map(|a| a.ground_seat()), "seat": seat, "fade": fade})
+            })
+            .collect();
+        drawn.sort_by_key(|x| x["id"].as_u64());
+        let mut kept: Vec<_> = live.kept_bodies().map(|(id, e, hidden)| serde_json::json!({"id": id, "entity": e.to_bits(), "hidden": hidden})).collect();
+        kept.sort_by_key(|x| x["id"].as_u64());
+        serde_json::json!({"drawn": drawn, "kept": kept})
     }
 
     fn json(&self) -> serde_json::Value {
