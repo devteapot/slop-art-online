@@ -74,6 +74,16 @@ impl Looks {
         self.compact_plate(id).or_else(|| self.of(id))
     }
 
+    /// The look key a person's colours/phrase were read from (empty for VRoid fallbacks or animals).
+    pub fn look_key(&self, id: u32) -> &str {
+        self.drawn_from.get(&id).map(String::as_str).unwrap_or("")
+    }
+
+    /// Whether I know this character's real name.
+    pub fn is_known(&self, id: u32) -> bool {
+        self.known.get(&id) == Some(&true)
+    }
+
     /// The same, capitalised for the start of a line.
     pub fn cap(&self, id: u32) -> String {
         crate::ui::label(self.of(id).unwrap_or("someone"))

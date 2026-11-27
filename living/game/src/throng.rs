@@ -45,13 +45,15 @@ pub const PEOPLE: u8 = 1;
 pub const WOLVES: u8 = 2;
 pub const DEER: u8 = 4;
 pub const OTHERS: u8 = 8;
-/// A person card's size (m): wide enough for a fighting spear without clipping; standing and
-/// walking silhouettes stay ~0.55 m wide in the centre (the rest is alpha-discarded).
-const CARD: (f32, f32) = (1.15, 1.85);
+/// A person card's base size (m): slender proportions matching 3D characters (~0.36 m body width),
+/// with room for a compact diagonal fighting spear without clipping. Scaled uniformly by
+/// [`billboard_scale`] so camera-aligned upright cards match 3D characters' screen height at every
+/// camera pitch.
+const CARD: (f32, f32) = (0.88, 1.68);
 /// Hit-test body width for a person card (m), matching the body rather than the spear reach.
-const PICK_W: f32 = 0.85;
+const PICK_W: f32 = 0.62;
 /// An animal stand-in's card (m).
-const BEAST: (f32, f32) = (1.3, 0.95);
+const BEAST: (f32, f32) = (1.25, 0.90);
 /// Fade in and out (s): as people do (`fade::IN_S`, `fade::OUT_S`), so a person leaving my
 /// individuals for the throng crossfades with their card.
 const IN_S: f32 = crate::fade::IN_S;
@@ -61,6 +63,11 @@ const GLIDE_MPS: f32 = 3.0;
 /// Clearance kept between a throng card's place and a remains mound (m): a mound's boulder radius
 /// is 0.4 m (`world.rs`), so 0.62 m keeps cards standing round mounds rather than bisecting them.
 const MOUND_CLEAR_M: f32 = 0.62;
+/// Clearance kept around perceived 3D characters (m) so throng cards do not slice through models.
+const PERCEIVED_CLEAR_M: f32 = 0.80;
+/// Extra clearance kept around pinned and focused characters (m) so throng cards never stand
+/// inside green pin rings (`r = 0.78 m`) or amber focus rings (`r = 0.95 m`).
+const RING_CLEAR_M: f32 = 1.10;
 /// The tint while rows carry no colour: one neutral slate, clearly a placeholder.
 pub const PLACEHOLDER: [u8; 3] = [126, 132, 146];
 /// The placeholder's head and legs: a little lighter and darker than the body, for legibility.
@@ -73,8 +80,20 @@ const TROUSERS: [u8; 3] = [52, 48, 58];
 const SPEAR: [u8; 3] = [148, 108, 66];
 const SPEAR_TIP: [u8; 3] = [220, 228, 238];
 const INK: [u8; 3] = [43, 28, 26];
-/// Silhouette outline thickness (m) on a card texture: crisp against stone paving and neighbours.
-const OUTLINE_M: f32 = 0.028;
+/// Subtle painted silhouette outline thickness (m): keeps light garments readable against stone
+/// without looking like a heavy cut-out sticker.
+const OUTLINE_M: f32 = 0.015;
+
+/// Uniform pitch-aware scale for camera-aligned upright billboards: a standing 3D person viewed at
+/// downward pitch `θ` projects onto `cam_up` with foreshortening `cos(θ)` plus top-down body depth
+/// (~`0.22 * sin(θ)`). Applying this uniform scale keeps camera-aligned cards strictly vertical on
+/// screen across the whole viewport (zero radial flank tilt) while matching 3D characters' exact
+/// screen height and slender proportions at both steep top-down (~58°) and shallow orbit pitches.
+pub fn billboard_scale(cam_fwd: Vec3) -> f32 {
+    let sin_p = (-cam_fwd.y).clamp(0.0, 1.0);
+    let cos_p = (1.0 - sin_p * sin_p).sqrt();
+    (cos_p + 0.22 * sin_p).clamp(0.68, 1.0)
+}
 /// The key light's illuminance by day (the island's noon, `assets/envs/island.json`): cards are
 /// unlit, so they are shaded by the light's colour and its share of this ([`shade`]).
 const DAY_LUX: f32 = 9000.0;
@@ -705,16 +724,18 @@ impl Throng {
     pub fn card_under(&self, cursor: Option<Vec2>, camera: Option<(&Camera, &GlobalTransform)>, ground: Option<Vec2>, ground_y: impl Fn(Vec2) -> f32) -> Option<(Row, Vec2)> {
         if let (Some(cur), Some((cam, gtf))) = (cursor, camera) {
             let eye = gtf.translation();
+            let cam_up = gtf.up().as_vec3();
+            let scale = billboard_scale(gtf.forward().as_vec3());
             let mut best: Option<(f32, Row, Vec2)> = None;
             for sq in self.squares.values() {
                 for c in sq.cards.iter().filter(|c| c.target > 0.5) {
                     let (w, h) = if c.kind == Kind::Person { (PICK_W, CARD.1) } else { BEAST };
                     let y = ground_y(c.at);
                     let feet = Vec3::new(c.at.x, y, c.at.y);
-                    let head = feet + Vec3::Y * h;
+                    let head = feet + cam_up * (h * scale);
                     let (Ok(f), Ok(t)) = (cam.world_to_viewport(gtf, feet), cam.world_to_viewport(gtf, head)) else { continue };
-                    let ppm = (f.y - t.y).abs() / h.max(0.1);
-                    let half = (w * 0.5 * ppm).max(6.0);
+                    let ppm = (f.y - t.y).abs() / (h * scale).max(0.1);
+                    let half = (w * scale * 0.5 * ppm).max(6.0);
                     let (left, right) = (f.x.min(t.x) - half, f.x.max(t.x) + half);
                     let (top, bottom) = (f.y.min(t.y) - 0.1 * ppm, f.y.max(t.y) + 0.1 * ppm);
                     if cur.x >= left && cur.x <= right && cur.y >= top && cur.y <= bottom {
@@ -862,39 +883,40 @@ fn seg(p: Vec2, a: Vec2, b: Vec2, r: f32) -> f32 {
 }
 
 /// Which part of a person card a point is (0 none, 1 head, 2 top and arms, 3 legs, 4 spear shaft,
-/// 5 spearhead) and its distance outside it (m); u across, v up. Standing, walking (legs in stride,
-/// arms swinging; facing +u), and fighting (wide braced lunge + prominent diagonal spear with a
-/// steel tip, unmistakable at Middle and Far).
+/// 5 spearhead) and its distance outside it (m); u across, v up. Slender upright silhouettes
+/// matching 3D characters: standing, walking (legs in stride, arms swinging; facing +u), and
+/// fighting (compact athletic stance, tucked arms, spear angled diagonally forward-and-up with a
+/// steel tip).
 fn person_part(u: f32, v: f32, pose: Pose) -> (u8, f32) {
     let p = Vec2::new((u - 0.5) * CARD.0, v * CARD.1);
     let (head, top, legs, spear, tip) = match pose {
         Pose::Fight => (
-            (p - Vec2::new(0.09, 1.50)).length() - 0.125,
-            seg(p, Vec2::new(-0.04, 0.88), Vec2::new(0.07, 1.32), 0.175)
-                .min(seg(p, Vec2::new(0.18, 1.28), Vec2::new(0.42, 1.18), 0.055))
-                .min(seg(p, Vec2::new(-0.15, 1.26), Vec2::new(-0.34, 0.98), 0.055)),
-            seg(p, Vec2::new(-0.08, 0.88), Vec2::new(-0.36, 0.04), 0.07)
-                .min(seg(p, Vec2::new(0.10, 0.88), Vec2::new(0.36, 0.04), 0.07)),
-            seg(p, Vec2::new(-0.52, 0.62), Vec2::new(0.44, 1.64), 0.036),
-            seg(p, Vec2::new(0.43, 1.63), Vec2::new(0.54, 1.77), 0.052),
+            (p - Vec2::new(0.03, 1.48)).length() - 0.115,
+            seg(p, Vec2::new(-0.01, 0.87), Vec2::new(0.02, 1.28), 0.140)
+                .min(seg(p, Vec2::new(0.13, 1.24), Vec2::new(0.24, 1.15), 0.044))
+                .min(seg(p, Vec2::new(-0.13, 1.24), Vec2::new(-0.15, 0.96), 0.044)),
+            seg(p, Vec2::new(-0.06, 0.86), Vec2::new(-0.18, 0.04), 0.056)
+                .min(seg(p, Vec2::new(0.06, 0.86), Vec2::new(0.16, 0.04), 0.056)),
+            seg(p, Vec2::new(-0.20, 0.72), Vec2::new(0.32, 1.54), 0.026),
+            seg(p, Vec2::new(0.31, 1.52), Vec2::new(0.38, 1.65), 0.036),
         ),
         Pose::Walk => (
-            (p - Vec2::new(0.04, 1.56)).length() - 0.125,
-            seg(p, Vec2::new(0.0, 0.92), Vec2::new(0.03, 1.35), 0.175)
-                .min(seg(p, Vec2::new(-0.16, 1.34), Vec2::new(-0.30, 0.98), 0.052))
-                .min(seg(p, Vec2::new(0.18, 1.34), Vec2::new(0.30, 1.00), 0.052)),
-            seg(p, Vec2::new(-0.06, 0.90), Vec2::new(-0.26, 0.04), 0.068)
-                .min(seg(p, Vec2::new(0.06, 0.90), Vec2::new(0.24, 0.06), 0.068)),
+            (p - Vec2::new(0.03, 1.49)).length() - 0.115,
+            seg(p, Vec2::new(0.0, 0.88), Vec2::new(0.02, 1.29), 0.140)
+                .min(seg(p, Vec2::new(-0.14, 1.26), Vec2::new(-0.24, 0.92), 0.044))
+                .min(seg(p, Vec2::new(0.14, 1.26), Vec2::new(0.23, 0.94), 0.044)),
+            seg(p, Vec2::new(-0.055, 0.86), Vec2::new(-0.18, 0.04), 0.055)
+                .min(seg(p, Vec2::new(0.055, 0.86), Vec2::new(0.17, 0.05), 0.055)),
             f32::MAX,
             f32::MAX,
         ),
         Pose::Stand => (
-            (p - Vec2::new(0.0, 1.58)).length() - 0.125,
-            seg(p, Vec2::new(0.0, 0.92), Vec2::new(0.0, 1.36), 0.175)
-                .min(seg(p, Vec2::new(-0.20, 1.36), Vec2::new(-0.24, 0.90), 0.052))
-                .min(seg(p, Vec2::new(0.20, 1.36), Vec2::new(0.24, 0.90), 0.052)),
-            seg(p, Vec2::new(-0.08, 0.90), Vec2::new(-0.10, 0.04), 0.068)
-                .min(seg(p, Vec2::new(0.08, 0.90), Vec2::new(0.10, 0.04), 0.068)),
+            (p - Vec2::new(0.0, 1.50)).length() - 0.115,
+            seg(p, Vec2::new(0.0, 0.88), Vec2::new(0.0, 1.30), 0.140)
+                .min(seg(p, Vec2::new(-0.16, 1.28), Vec2::new(-0.19, 0.86), 0.044))
+                .min(seg(p, Vec2::new(0.16, 1.28), Vec2::new(0.19, 0.86), 0.044)),
+            seg(p, Vec2::new(-0.065, 0.86), Vec2::new(-0.08, 0.04), 0.055)
+                .min(seg(p, Vec2::new(0.065, 0.86), Vec2::new(0.08, 0.04), 0.055)),
             f32::MAX,
             f32::MAX,
         ),
@@ -917,11 +939,11 @@ fn beast_part(u: f32, v: f32, pose: Pose, kind: Kind) -> f32 {
 }
 
 /// A card's texture: a person in the placeholder tint or calibrated top colour (skin, top, dark
-/// trousers, spear + bright spearhead when fighting), or an animal stand-in, with a crisp dark
+/// trousers, spear + bright spearhead when fighting), or an animal stand-in, with a subtle dark
 /// ink silhouette outline (`OUTLINE_M` wide, [`INK`]) so light garments stay readable against stone
 /// paving and cards stay cleanly separated under `AlphaMode::Mask(0.5)`.
 fn card_image(kind: Kind, pose: Pose, top: Option<[u8; 3]>) -> Image {
-    let (w, h) = if kind == Kind::Person { (72u32, 144u32) } else { (96u32, 70u32) };
+    let (w, h) = if kind == Kind::Person { (64u32, 128u32) } else { (96u32, 70u32) };
     let mut px = Vec::with_capacity((w * h * 4) as usize);
     for j in 0..h {
         for i in 0..w {
@@ -942,9 +964,10 @@ fn card_image(kind: Kind, pose: Pose, top: Option<[u8; 3]>) -> Image {
             } else {
                 (top.unwrap_or(PLACEHOLDER_LEGS), beast_part(u, v, pose, kind))
             };
-            // Silhouette extends by `OUTLINE_M`; pixels in `d > -0.008` blend cleanly into dark ink.
+            // Silhouette extends by `OUTLINE_M`; outer edge blends softly toward `INK` (78% max)
+            // so cards separate cleanly from grey stone without heavy sticker-thick borders.
             let a = edge(d - OUTLINE_M);
-            let ink_t = ((d + 0.008) / 0.016).clamp(0.0, 1.0);
+            let ink_t = ((d + 0.004) / 0.014).clamp(0.0, 1.0) * 0.78;
             let r = (c[0] as f32 * (1.0 - ink_t) + INK[0] as f32 * ink_t).round() as u8;
             let g = (c[1] as f32 * (1.0 - ink_t) + INK[1] as f32 * ink_t).round() as u8;
             let b = (c[2] as f32 * (1.0 - ink_t) + INK[2] as f32 * ink_t).round() as u8;
@@ -989,7 +1012,7 @@ fn kit(meshes: &mut Assets<Mesh>, images: &mut Assets<Image>, mats: &mut Assets<
         beast: meshes.add(Rectangle::new(BEAST.0, BEAST.1)),
         blob: meshes.add(Circle::new(0.5)),
         ring: meshes.add(Circle::new(1.0)),
-        blob_mat: mats.add(StandardMaterial { base_color: Color::srgba(0.08, 0.08, 0.12, 0.3), base_color_texture: Some(blob_tex), unlit: true, alpha_mode: AlphaMode::Blend, depth_bias: 40.0, ..default() }),
+        blob_mat: mats.add(StandardMaterial { base_color: Color::srgba(0.05, 0.05, 0.08, 0.56), base_color_texture: Some(blob_tex), unlit: true, alpha_mode: AlphaMode::Blend, depth_bias: 35.0, ..default() }),
         pin_mat: ring([0.15, 0.95, 0.35], mats),
         focus_mat: ring([1.0, 0.72, 0.10], mats),
         tex: BTreeMap::new(),
@@ -1018,7 +1041,7 @@ fn ground(island: Option<&crate::island::Island>, scene: &crate::world::Scene, p
     }
 }
 
-/// Spawn, update in place and fade the cards, and turn them to the camera.
+/// Spawn, update in place and fade the cards, and orient them upright to the camera.
 #[allow(clippy::too_many_arguments)]
 fn draw(
     mut commands: Commands,
@@ -1028,6 +1051,7 @@ fn draw(
     scene: NonSend<crate::world::Scene>,
     island: Option<Res<crate::island::Island>>,
     cam: Res<crate::camera::Cam>,
+    heed: Option<Res<crate::heed::Heed>>,
     time: Res<Time>,
     (mut meshes, mut images, mut mats): (ResMut<Assets<Mesh>>, ResMut<Assets<Image>>, ResMut<Assets<StandardMaterial>>),
     mut tfs: Query<&mut Transform>,
@@ -1050,6 +1074,16 @@ fn draw(
         .as_ref()
         .map(|c| c.db.structure().iter().filter(|s| s.kind == "remains").map(|s| Vec2::new(s.x, s.y)).collect())
         .unwrap_or_default();
+    let marked_ids: Vec<u32> = heed.as_ref().filter(|h| h.on).map(|h| h.marks().into_iter().map(|(id, _)| id).collect()).unwrap_or_default();
+    let mut perceived_pts: Vec<Vec2> = Vec::with_capacity(scene.shown.len());
+    let mut marked_pts: Vec<Vec2> = Vec::with_capacity(marked_ids.len());
+    for (&id, &(pos, _)) in &scene.shown {
+        if marked_ids.contains(&id) {
+            marked_pts.push(pos);
+        } else {
+            perceived_pts.push(pos);
+        }
+    }
     let t = &mut *t;
     // Rows to squares: a row's square keeps its cards; its count, poses and kinds are dealt
     // to them in a fixed order, so an unchanged row moves nothing.
@@ -1061,15 +1095,24 @@ fn draw(
         sq.row = row;
         let n = row.count as usize;
         let mut to = places(&row, n);
-        if !remains.is_empty() && n > 0 {
+        if n > 0 {
             let lo = row.origin() + Vec2::splat(0.25);
             let hi = row.origin() + Vec2::splat(row.side() - 0.25);
-            let near_remains: Vec<Vec2> = remains
-                .iter()
-                .copied()
-                .filter(|r| r.x >= lo.x - MOUND_CLEAR_M && r.x <= hi.x + MOUND_CLEAR_M && r.y >= lo.y - MOUND_CLEAR_M && r.y <= hi.y + MOUND_CLEAR_M)
-                .collect();
-            avoid_obstacles(&mut to, &near_remains, MOUND_CLEAR_M, lo, hi);
+            let near = |src: &[Vec2], clear: f32| -> Vec<Vec2> {
+                src.iter()
+                    .copied()
+                    .filter(|r| r.x >= lo.x - clear && r.x <= hi.x + clear && r.y >= lo.y - clear && r.y <= hi.y + clear)
+                    .collect()
+            };
+            if !remains.is_empty() {
+                avoid_obstacles(&mut to, &near(&remains, MOUND_CLEAR_M), MOUND_CLEAR_M, lo, hi);
+            }
+            if !perceived_pts.is_empty() {
+                avoid_obstacles(&mut to, &near(&perceived_pts, PERCEIVED_CLEAR_M), PERCEIVED_CLEAR_M, lo, hi);
+            }
+            if !marked_pts.is_empty() {
+                avoid_obstacles(&mut to, &near(&marked_pts, RING_CLEAR_M), RING_CLEAR_M, lo, hi);
+            }
         }
         let poses = row.poses();
         let kinds = row.card_kinds();
@@ -1126,8 +1169,10 @@ fn draw(
         }
     }
     let lit = shade(atmo.as_deref());
-    let eye = cam.pose.translation();
+    let cam_rot = cam.pose.rotation();
+    let cam_up = cam.pose.up().as_vec3();
     let right = cam.pose.right().as_vec3();
+    let scale = billboard_scale(cam.pose.forward().as_vec3());
     let mut step = |c: &mut Card, heading: Option<Vec2>| -> bool {
         // Fade toward its target.
         let rate = if c.target > c.alpha { dt / IN_S } else { dt / OUT_S };
@@ -1142,16 +1187,18 @@ fn draw(
         let p = c.at + sway;
         let base = ground(island.as_deref(), &scene, p);
         let half = if c.kind == Kind::Person { CARD.1 * 0.5 } else { BEAST.1 * 0.5 };
-        let yaw = (eye.x - base.x).atan2(eye.z - base.z);
         // Mirrored to face the way it walks, as the camera sees it.
         let face = heading.map(|h| Vec3::new(h.x, 0.0, h.y)).filter(|_| c.pose != Pose::Stand);
         let flip = if face.is_some_and(|f| f.dot(right) < 0.0) { -1.0 } else { 1.0 };
         if let Ok(mut tf) = tfs.get_mut(c.entity) {
-            *tf = Transform::from_translation(base + Vec3::Y * (half + lift)).with_rotation(Quat::from_rotation_y(yaw)).with_scale(Vec3::new(flip, 1.0, 1.0));
+            *tf = Transform::from_translation(base + cam_up * (half * scale + lift))
+                .with_rotation(cam_rot)
+                .with_scale(Vec3::new(flip * scale, scale, 1.0));
         }
         if let Ok(mut tf) = tfs.get_mut(c.blob) {
-            tf.translation = base + Vec3::Y * 0.05;
-            tf.scale = Vec3::splat(c.alpha * if c.kind == Kind::Person { 0.9 } else { 1.2 });
+            tf.translation = base + Vec3::Y * 0.03;
+            let (rx, ry) = if c.kind == Kind::Person { (0.76, 0.52) } else { (1.15, 0.75) };
+            tf.scale = Vec3::new(c.alpha * rx, c.alpha * ry, 1.0);
         }
         // Steady-state cards use opaque `AlphaMode::Mask(0.5)` so they write depth cleanly (no
         // translucent ghosting, no remains-mound outlines drawing over cards); `AlphaMode::Blend`
@@ -1345,40 +1392,57 @@ mod tests {
     }
 
     #[test]
-    fn avoid_obstacles_keeps_cards_clear_of_remains_mounds_inside_square() {
+    fn avoid_obstacles_keeps_cards_clear_of_mounds_perceived_and_rings_inside_square() {
         let lo = Vec2::new(60.0, 60.0);
         let hi = Vec2::new(65.5, 65.5);
         let mound = Vec2::new(63.0, 63.0);
-        let mut pts = vec![mound, mound + Vec2::new(0.2, 0.1), Vec2::new(61.0, 61.0)];
+        let pinned = Vec2::new(61.8, 63.0);
+        let mut pts = vec![mound, mound + Vec2::new(0.2, 0.1), pinned + Vec2::new(0.3, 0.0), Vec2::new(61.0, 61.0)];
         avoid_obstacles(&mut pts, &[mound], MOUND_CLEAR_M, lo, hi);
+        avoid_obstacles(&mut pts, &[pinned], RING_CLEAR_M, lo, hi);
         for p in &pts {
             assert!(p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y, "{p} outside square");
-            assert!(p.distance(mound) >= MOUND_CLEAR_M - 0.02, "{p} still inside mound (d={})", p.distance(mound));
+            assert!(p.distance(pinned) >= RING_CLEAR_M - 0.02, "{p} still inside pin ring (d={})", p.distance(pinned));
         }
+        assert!(pts[0].distance(mound) >= MOUND_CLEAR_M - 0.02);
         // Unobstructed point stays put.
-        assert_eq!(pts[2], Vec2::new(61.0, 61.0));
+        assert_eq!(pts[3], Vec2::new(61.0, 61.0));
     }
 
     #[test]
-    fn fighting_card_has_dark_outline_and_prominent_spear() {
+    fn billboard_scale_matches_3d_foreshortening_at_top_down_and_orbit_pitches() {
+        // 58° downward play camera: foreshortened to ~0.72 so upright cards match 3D character height.
+        let top_down = Vec3::new(0.0, -(58.0_f32.to_radians().sin()), -(58.0_f32.to_radians().cos())).normalize();
+        let s_td = billboard_scale(top_down);
+        assert!((0.68..=0.76).contains(&s_td), "top-down scale {s_td}");
+        // 28° orbit camera: nearly full height (~0.98).
+        let orbit = Vec3::new(0.0, -(28.0_f32.to_radians().sin()), -(28.0_f32.to_radians().cos())).normalize();
+        let s_orb = billboard_scale(orbit);
+        assert!(s_orb > 0.92 && s_orb <= 1.0, "orbit scale {s_orb}");
+        // Horizon camera: full 1.0.
+        assert!((billboard_scale(Vec3::NEG_Z) - 1.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn fighting_card_has_subtle_outline_and_compact_diagonal_spear() {
         let img = card_image(Kind::Person, Pose::Fight, Some([242, 238, 219]));
         let data = img.data.as_ref().unwrap();
         let (mut opaque, mut outline_dark, mut spear_px) = (0usize, 0usize, 0usize);
         for px in data.chunks_exact(4) {
             if px[3] >= 128 {
                 opaque += 1;
-                if px[0] <= 60 && px[1] <= 45 && px[2] <= 45 {
+                if px[0] <= 115 && px[1] <= 100 && px[2] <= 95 {
                     outline_dark += 1;
                 }
                 // Bright steel spearhead or warm spear shaft pixels.
-                if (px[0] > 200 && px[2] > 220) || (px[0] > 125 && px[1] > 90 && px[2] < 80) {
+                if (px[0] > 180 && px[2] > 195) || (px[0] > 115 && px[1] > 80 && px[2] < 80) {
                     spear_px += 1;
                 }
             }
         }
-        assert!(opaque > 1500, "opaque pixels {opaque}");
-        assert!(outline_dark > 300, "dark outline pixels {outline_dark}");
-        assert!(spear_px > 60, "spear + spearhead pixels {spear_px}");
+        assert!(opaque > 1000, "opaque pixels {opaque}");
+        assert!(outline_dark > 120, "outline pixels {outline_dark}");
+        assert!(spear_px > 40, "spear + spearhead pixels {spear_px}");
     }
 
     #[test]

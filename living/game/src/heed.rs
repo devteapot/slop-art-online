@@ -275,9 +275,38 @@ pub struct Heed {
     pub log: Vec<String>,
     /// Refusals shown, in the authority's words, for the dump.
     pub refusals: Vec<String>,
+    /// Frozen HUD labels for currently pinned creatures: `id -> (look_key, is_known, label)`.
+    /// Prevents twin-disambiguation from renaming an already-pinned stranger when other
+    /// strangers enter or leave `perceived`, while still updating if their look changes or their
+    /// real name is learned.
+    pinned_labels: std::collections::BTreeMap<u32, (String, bool, String)>,
 }
 
 impl Heed {
+    /// Sync frozen labels for `self.pins`: keep an existing frozen label as long as the pinned
+    /// creature's look key and known-name flag have not changed, and drop entries for unpinned ids.
+    pub fn sync_pin_labels(&mut self, looks: &crate::looks::Looks) {
+        self.sync_pin_labels_with(|id| looks.short(id).map(|s| (looks.look_key(id).to_string(), looks.is_known(id), s.to_string())));
+    }
+
+    /// Pure core of [`Self::sync_pin_labels`] for unit testing.
+    pub fn sync_pin_labels_with(&mut self, lookup: impl Fn(u32) -> Option<(String, bool, String)>) {
+        self.pinned_labels.retain(|id, _| self.pins.contains(id));
+        for &id in &self.pins {
+            let Some((key, known, label)) = lookup(id) else { continue };
+            let keep = self.pinned_labels.get(&id).is_some_and(|(k, kn, _)| *k == key && *kn == known);
+            if !keep {
+                self.pinned_labels.insert(id, (key, known, label));
+            }
+        }
+    }
+
+    /// The stable label to show for a pinned creature (frozen at pin time unless its look changes
+    /// or its real name is learned), falling back to `looks.short(id)`.
+    pub fn pin_label<'a>(&'a self, id: u32, looks: &'a crate::looks::Looks) -> Option<&'a str> {
+        self.pinned_labels.get(&id).map(|(_, _, s)| s.as_str()).or_else(|| looks.short(id))
+    }
+
     /// Ground rings (`throng.rs`): each pin, and my focus (true).
     pub fn marks(&self) -> Vec<(u32, bool)> {
         let mut v: Vec<(u32, bool)> = self.pins.iter().filter(|p| Some(**p) != self.focus).map(|p| (*p, false)).collect();
@@ -773,5 +802,27 @@ mod tests {
     fn marks_ring_each_pin_and_the_focus_once() {
         let h = Heed { pins: vec![3, 5], focus: Some(5), ..Default::default() };
         assert_eq!(h.marks(), vec![(3, false), (5, true)]);
+    }
+
+    #[test]
+    fn pinned_labels_stay_stable_across_twin_disambiguation_until_look_or_name_changes() {
+        let mut h = Heed { pins: vec![183], ..Default::default() };
+        let empty = crate::looks::Looks::default();
+        // Initial pin freezes "a stranger in dark grey" for look key "".
+        h.sync_pin_labels_with(|id| (id == 183).then(|| ("".into(), false, "a stranger in dark grey".into())));
+        assert_eq!(h.pin_label(183, &empty), Some("a stranger in dark grey"));
+        // Twin-disambiguation changes looks.short to "a stranger in dark grey and orange", same look key -> frozen label stays!
+        h.sync_pin_labels_with(|id| (id == 183).then(|| ("".into(), false, "a stranger in dark grey and orange".into())));
+        assert_eq!(h.pin_label(183, &empty), Some("a stranger in dark grey"));
+        // Look key actually changes -> label updates.
+        h.sync_pin_labels_with(|id| (id == 183).then(|| ("lk_new".into(), false, "a man in a red coat".into())));
+        assert_eq!(h.pin_label(183, &empty), Some("a man in a red coat"));
+        // Real name learned -> label updates.
+        h.sync_pin_labels_with(|id| (id == 183).then(|| ("lk_new".into(), true, "Bram".into())));
+        assert_eq!(h.pin_label(183, &empty), Some("Bram"));
+        // Unpin drops frozen entry.
+        h.pins.clear();
+        h.sync_pin_labels_with(|_| None);
+        assert_eq!(h.pin_label(183, &empty), None);
     }
 }
