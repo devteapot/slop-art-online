@@ -59,7 +59,7 @@ if [ -n "$UNINSTALL" ]; then
   systemctl --user daemon-reload
   echo "nightly_suite_install: removed $NAME.timer"; exit 0
 fi
-"$PY" "$HERE/nightly_suite.py" selftest --repo "$REPO" >/dev/null || {
+"$PY" "$HERE/nightly_suite.py" selftest --repo "$REPO" --origin-main || {
   echo "nightly_suite_install: the selftest failed; nothing installed" >&2; exit 1; }
 mkdir -p "$DEST" "$UNIT"
 install -m 0755 "$HERE/nightly_suite.py" "$DEST/nightly_suite.py"

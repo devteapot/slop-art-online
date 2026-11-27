@@ -89,6 +89,8 @@ def plan_entries():
                "heed", "sex_seen_bound", "familiar_regard"]
     for s in default:
         e.append({"id": s, "seed": W, "area": "core", "cmds": SCENE(s), "scene": s})
+    e.append({"id": "perceived_threat", "seed": W, "area": "perception",
+              "cmds": SCENE("perceived_threat"), "scene": "perceived_threat"})
     for s in ("seen_remains_gaze", "sweep_kept", "sweep_rollback", "sweep_marks"):
         e.append({"id": s, "seed": "cullet", "area": "perception", "cmds": SCENE(s), "scene": s})
     for s in ("low", "dealings"):
@@ -296,11 +298,15 @@ def sh(cmd, cwd, log, env, timeout):
         return p.returncode
 
 
+def fetch_main(repo):
+    subprocess.run(["git", "-C", repo, "fetch", "-q", "origin", "main"], check=True)
+    return subprocess.check_output(["git", "-C", repo, "rev-parse", "origin/main"], text=True).strip()
+
+
 def checkout(repo):
     """STATE/main: a detached worktree of the repository at origin/main (made once)."""
     main = STATE / "main"
-    subprocess.run(["git", "-C", repo, "fetch", "-q", "origin", "main"], check=True)
-    sha = subprocess.run(["git", "-C", repo, "rev-parse", "origin/main"], check=True, capture_output=True, text=True).stdout.strip()
+    sha = fetch_main(repo)
     if not (main / ".git").exists():
         main.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "-C", repo, "worktree", "add", "--detach", str(main), sha], check=True)
@@ -544,14 +550,29 @@ def cmd_run(a):
     return 0
 
 
-def cmd_selftest(_a):
+def cmd_selftest(a):
+    root = Path(a.repo)
+    if not a.origin_main:
+        return selftest(root)
+    # The installed runner uses its own plan against origin/main's scene and gate registries.
+    # Read those files at one commit without moving either the source repo or the nightly checkout.
+    sha = fetch_main(a.repo)
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        for path in (f"{C}/scenes.py", "living/tools/scene_gate.py"):
+            dest = root / path
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(subprocess.check_output(["git", "-C", a.repo, "show", f"{sha}:{path}"]))
+        return selftest(root)
+
+
+def selftest(root):
     failures = []
 
     def expect(name, cond, detail=""):
         print(("ok   " if cond else "FAIL ") + name + (f" ({detail})" if detail and not cond else ""))
         if not cond:
             failures.append(name)
-    root = Path(_a.repo)
     entries, unplanned = plan(root)
     expect("every scene is an entry, a gate case or excluded with a reason", not unplanned, unplanned)
     ids = [x["id"] for x in entries]
@@ -638,6 +659,7 @@ def main():
     r.set_defaults(f=cmd_run)
     s = sub.add_parser("selftest")
     s.add_argument("--repo", default=default_repo)
+    s.add_argument("--origin-main", action="store_true", help="check coverage against freshly fetched origin/main")
     s.set_defaults(f=cmd_selftest)
     a = ap.parse_args()
     return a.f(a)
