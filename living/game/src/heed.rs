@@ -266,6 +266,9 @@ pub struct Heed {
     awaiting_pick: Option<PendingPick>,
     /// The last creature id promoted and pinned via `pin_at`, for dumps.
     pub last_picked: Option<u32>,
+    /// The picked square's `(cell, before_count, after_count)` observed on the exact frame the
+    /// promoted individual arrived in `seen_characters`, for proving same-transaction row updates.
+    pub last_pick_cell: Option<([u32; 2], u16, u16)>,
     /// Pins I do not perceive now, since when (app s).
     gone: Vec<(u32, f64)>,
     /// The character the choice is for.
@@ -332,6 +335,7 @@ impl Heed {
         serde_json::json!({
             "on": self.on, "pins": self.pins, "focus": self.focus,
             "last_picked": self.last_picked,
+            "last_pick_cell": self.last_pick_cell.map(|(cell, before, after)| serde_json::json!({"cell": cell, "before": before, "after": after})),
             "acked": {"pins": self.sender.acked.pins, "focus": self.sender.acked.focus},
             "pending": self.sender.pending.as_ref().map(|c| serde_json::json!({
                 "pins": c.choice.pins, "focus": c.choice.focus,
@@ -452,7 +456,21 @@ fn input(
             }
             h.sender.record_picked(picked);
             h.last_picked = Some(picked);
-            h.note(format!("picked #{picked} ({}) from throng at ({:.1}, {:.1})", name(picked), pp.at.x, pp.at.y));
+            let cell_drop = pp.square.map(|sq| {
+                let key = sq.key();
+                let after = crate::net::throng(conn)
+                    .into_iter()
+                    .map(|r| crate::throng::Row::of(&r))
+                    .find(|r| r.key() == key)
+                    .map_or(0, |r| r.count);
+                ([sq.cx, sq.cy], sq.count, after)
+            });
+            h.last_pick_cell = cell_drop;
+            if let Some(([cx, cy], before, after)) = cell_drop {
+                h.note(format!("picked #{picked} ({}) from throng at ({:.1}, {:.1}); cell ({cx}, {cy}) count {before} → {after}", name(picked), pp.at.x, pp.at.y));
+            } else {
+                h.note(format!("picked #{picked} ({}) from throng at ({:.1}, {:.1})", name(picked), pp.at.x, pp.at.y));
+            }
         } else if now >= pp.until {
             h.awaiting_pick = None;
             h.note(format!("pin_at ({:.1}, {:.1}) accepted, no newly perceived id arrived", pp.at.x, pp.at.y));
