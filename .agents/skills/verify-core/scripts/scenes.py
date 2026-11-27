@@ -4678,8 +4678,11 @@ def perceived_threat(s):
         else:
             body = {"desires": [{"want": "evade", "weight": {"base": 0.0, "threatened": 2.0}, "do": {"do": "dodge"}},
                                 {"want": "stand", "weight": {"base": 1.0}, "do": {"wait": 0.2 + 0.001 * next(rounds)}}]}
-        s.graph(w, {"seq": [face, body]})
+        # Desires are scored only at a graph's top: W turns first, then takes the routine.
+        s.graph(w, {"seq": [face, {"wait": 60 + next(rounds)}]})
         time.sleep(2)
+        s.graph(w, body)
+        time.sleep(1)
 
     def case(law, how, who, skill):
         place()
@@ -4688,7 +4691,11 @@ def perceived_threat(s):
         at = home[w]
         s.graph(who, {"seq": [{"first": [{"do": {"skill": "face", "target": {"at": [at[0], at[1]]}}}, {"wait": 0.1}]},
                               {"do": {"skill": skill, "target": {"id": w}}}, {"wait": 60 + next(rounds)}]})
-        done = s.wait(lambda: [x for x in s.rows("SELECT * FROM skill_use") if x["at_ms"] >= t0 and x["actor"] == who and x["skill"] == skill and x["outcome"]] or None, seconds=30, every=1)
+        if skill == "threaten":
+            # A menace is no timed move (no `skill_use` row): its chronicle line, written as it begins.
+            done = s.wait(lambda: [dict(x, accepted_ms=x["at_ms"]) for x in s.story("threat", who) if x["at_ms"] >= t0 and x["b"] == w] or None, seconds=30, every=1)
+        else:
+            done = s.wait(lambda: [x for x in s.rows("SELECT * FROM skill_use") if x["at_ms"] >= t0 and x["actor"] == who and x["skill"] == skill and x["outcome"]] or None, seconds=30, every=1)
         time.sleep(0.5 if skill == "attack" else 2.5)
         uses = [x for x in s.rows("SELECT * FROM skill_use", f"uses-{law}-{how}-{skill}-{who}") if x["at_ms"] >= t0]
         s.graph(who, {"wait": 60 + next(rounds)})
