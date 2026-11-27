@@ -30,7 +30,7 @@ pub mod net;
 pub mod policy;
 
 use anyhow::{anyhow, Context, Result};
-use encode::{BodyRow, BriefView, CueRow, FighterRow, Observation, SeenRow, SkillRow, SlotView};
+use encode::{BodyRow, BriefView, CueRow, FighterRow, Observation, SeenRow, SkillRow, SlotView, VitalsRow};
 use living_bindings::*;
 use policy::{Intent, Memory, Policy};
 use serde_json::json;
@@ -122,8 +122,23 @@ pub async fn main(server: String, db: String, token: String) -> Result<()> {
     // One policy per role (a character's kind), shared by every character of it.
     let mut policies: HashMap<String, Box<dyn Policy>> = HashMap::new();
     if let Some(c) = capture.as_mut() {
-        c.write("layout", json!({"encoded": encode::LEN, "memory": policy::MEMORY, "state": policy::STATE, "history": policy::HISTORY, "intent": policy::INTENT,
-                                 "flat": "encoded, then memory (state, then history newest first)", "traits": living_rules::body::MAX_TRAITS}));
+        c.write("layout", json!({
+            "encoded": encode::LEN,
+            "own": encode::OWN,
+            "own_fields": encode::OWN_FIELDS,
+            "slot": encode::SLOT,
+            "others": encode::OTHERS,
+            "cue": encode::CUE,
+            "cues": encode::CUES,
+            "brief": encode::BRIEF,
+            "skills": encode::SKILLS,
+            "memory": policy::MEMORY,
+            "state": policy::STATE,
+            "history": policy::HISTORY,
+            "intent": policy::INTENT,
+            "flat": "encoded, then memory (state, then history newest first)",
+            "traits": living_rules::body::MAX_TRAITS,
+        }));
     }
     let mut last_loop = Instant::now();
     let mut tick = tokio::time::interval(period);
@@ -303,6 +318,7 @@ async fn open(server: &str, db: &str, control: &DbConnection, actor: u32, record
             [
                 "SELECT * FROM my_body",
                 "SELECT * FROM my_fighter",
+                "SELECT * FROM my_vitals",
                 "SELECT * FROM my_readiness",
                 "SELECT * FROM my_skill_uses",
                 "SELECT * FROM my_combat",
@@ -374,11 +390,38 @@ fn observe(control: &DbConnection, actor: u32, s: &Session, now: u64) -> Observa
     cues.sort_by_key(|c| c.at_ms);
     cues.dedup();
     let readiness = c.db.my_readiness().iter().next();
+    let vitals: Vec<VitalsRow> = c
+        .db
+        .my_vitals()
+        .iter()
+        .map(|v| VitalsRow {
+            id: v.id,
+            hp: v.hp,
+            max_hp: v.max_hp,
+            stamina: v.stamina,
+            stamina_max: v.stamina_max,
+            stamina_rate: v.stamina_rate,
+            stamina_from_ms: v.stamina_from_ms,
+            focus: v.focus,
+            focus_max: v.focus_max,
+            focus_rate: v.focus_rate,
+            focus_from_ms: v.focus_from_ms,
+            at_ms: v.at_ms,
+        })
+        .collect();
     let skills = control
         .db
         .skill_card()
         .iter()
-        .map(|k| SkillRow { skill: k.skill.clone(), code: k.code, reach: k.reach, ready_ms: readiness.as_ref().and_then(|r| r.ready.iter().find(|x| x.skill == k.skill).map(|x| x.at_ms)).unwrap_or(0) })
+        .map(|k| SkillRow {
+            skill: k.skill.clone(),
+            code: k.code,
+            reach: k.reach,
+            ready_ms: readiness.as_ref().and_then(|r| r.ready.iter().find(|x| x.skill == k.skill).map(|x| x.at_ms)).unwrap_or(0),
+            cost: k.cost,
+            pool: k.pool.clone(),
+            aim: k.aim.clone(),
+        })
         .collect();
     Observation {
         now_ms: now,
@@ -386,6 +429,7 @@ fn observe(control: &DbConnection, actor: u32, s: &Session, now: u64) -> Observa
         viewer: s.identity.to_byte_array(),
         body: me.as_ref().map(moving_row),
         own_fighter: c.db.my_fighter().iter().next().map(|f| fighter_row(&f)),
+        vitals,
         busy_until: readiness.as_ref().map_or(0, |r| r.busy_until),
         others: others.into_values().collect(),
         seen: seen.into_values().collect(),
@@ -465,6 +509,7 @@ fn decide(control: &DbConnection, slot: BodySlot, policy: &dyn Policy, memory: &
                 "intent_encoded": encoded_intent,
                 "observation": {
                     "body": o.body.as_ref().map(|b| json!([b.x, b.y, b.t_ms, b.vx, b.vy, b.heading])),
+                    "vitals": o.vitals.iter().find(|r| r.id == actor).map(|r| json!({"stamina": r.stamina_at(now), "stamina_max": r.stamina_max, "stamina_rate": r.effective_stamina_rate(now), "focus": r.focus_at(now), "guard_active": v[9] > 0.5, "guard_elapsed_s": v[10]})),
                     "others": o.others.len(), "seen": o.seen.len(), "fighters": o.fighters.len(), "cues": o.cues.len(),
                     "busy_until": o.busy_until,
                     "age_ms": o.others.iter().map(|b| now.saturating_sub(b.t_ms)).max(),
@@ -560,8 +605,24 @@ pub async fn observe_main(server: String, db: String, token: String, manifest_pa
     let mut lease_ms = lease_ms(&control);
     let period = Duration::from_secs_f32(1.0 / hz.clamp(1.0, 60.0));
     let block_code = control.db.skill_card().iter().find(|k| k.skill == "block").map(|k| k.code).unwrap_or(0);
-    capture.write("layout", json!({"encoded": encode::LEN, "memory": policy::MEMORY, "state": policy::STATE, "history": policy::HISTORY, "intent": policy::INTENT,
-                                   "flat": "encoded, then memory (state, then history newest first)", "traits": living_rules::body::MAX_TRAITS, "mode": "observe"}));
+    capture.write("layout", json!({
+        "encoded": encode::LEN,
+        "own": encode::OWN,
+        "own_fields": encode::OWN_FIELDS,
+        "slot": encode::SLOT,
+        "others": encode::OTHERS,
+        "cue": encode::CUE,
+        "cues": encode::CUES,
+        "brief": encode::BRIEF,
+        "skills": encode::SKILLS,
+        "memory": policy::MEMORY,
+        "state": policy::STATE,
+        "history": policy::HISTORY,
+        "intent": policy::INTENT,
+        "flat": "encoded, then memory (state, then history newest first)",
+        "traits": living_rules::body::MAX_TRAITS,
+        "mode": "observe",
+    }));
     let mut actors: Vec<Observed> = entries
         .into_iter()
         .map(|entry| Observed { entry, session: None, memory: Memory::new(0, 0), seen_uses: Default::default(), prev: None })
@@ -662,11 +723,11 @@ pub async fn observe_main(server: String, db: String, token: String, manifest_pa
                     intent.release = Some("block".into());
                 }
 
-                // If the authority graph reacted on the exact tick a foe windup started (between
-                // `prev.now_ms` and `now`), `prev` predates the windup while `v` (current frame)
-                // holds the first player-delivered cue of that windup. Pair the pre-action self
-                // state (`prev.encoded[..OWN]`) with the newly arrived perceived scene (`v[OWN..]`)
-                // so the observation reflects what a player-path controller perceives before pressing.
+                // If the authority graph reacted on the exact tick a foe windup started (or ended,
+                // dropping a held guard), `prev` predates that transition while `v` holds the newly
+                // delivered perceived scene. Pair the pre-action self state (`prev.encoded[..OWN]`)
+                // with `v[OWN..]` so the observation reflects what a player-path controller perceives
+                // right before pressing or releasing.
                 let mut obs_vec = prev.encoded.clone();
                 let mut same_tick_cue = false;
                 if let Some((sk, ..)) = &intent.press {
@@ -674,6 +735,16 @@ pub async fn observe_main(server: String, db: String, token: String, manifest_pa
                         obs_vec[encode::OWN..].copy_from_slice(&v[encode::OWN..]);
                         same_tick_cue = true;
                     }
+                }
+                if prev.had_block && !cur_had_block {
+                    // Guard just dropped between `prev` and `now` (e.g., right after the foe's
+                    // blow landed at 750 ms while the foe's Fighter row is still in 300 ms
+                    // recovery). Pair pre-drop own guard state (advancing `guard_elapsed_s` to the
+                    // drop instant) with `v[OWN..]` (carrying the post-impact RELEASE/GUARDED cue)
+                    // so the clone never learns to release 1 tick (~67 ms) before impact!
+                    obs_vec[encode::OWN..].copy_from_slice(&v[encode::OWN..]);
+                    obs_vec[10] = (obs_vec[10] + now.saturating_sub(prev.now_ms) as f32 / 1000.0).min(10.0);
+                    same_tick_cue = true;
                 }
 
                 let before = ob.memory.flat();
@@ -695,6 +766,9 @@ pub async fn observe_main(server: String, db: String, token: String, manifest_pa
                             "target_act": obs_vec[encode::OWN + 8],
                             "target_elapsed_s": obs_vec[encode::OWN + 9],
                             "target_at_me": obs_vec[encode::OWN + 10] > 0.5,
+                            "guard_active": obs_vec[9] > 0.5,
+                            "guard_elapsed_s": obs_vec[10],
+                            "stamina_frac": obs_vec[6],
                             "same_tick_cue_aligned": same_tick_cue,
                             "obs_age_ms": prev.obs_age_ms,
                             "was_rooted": prev.was_rooted,

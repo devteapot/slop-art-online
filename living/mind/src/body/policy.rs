@@ -248,7 +248,7 @@ mod tests {
             me: 1,
             body: Some(BodyRow { id: 1, x: 0.0, y: 0.0, t_ms: now, ..Default::default() }),
             others: vec![BodyRow { id: 2, x: dist, y: 0.0, t_ms: now, ..Default::default() }],
-            skills: vec![SkillRow { skill: "strike".into(), code: 1, reach: 1.6, ready_ms: 0 }],
+            skills: vec![SkillRow { skill: "strike".into(), code: 1, reach: 1.6, ready_ms: 0, ..Default::default() }],
             ..Default::default()
         }
     }

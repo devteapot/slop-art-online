@@ -1,8 +1,8 @@
-//! Compact CPU recurrent policy (`RoleNet`, ~23.3k parameters) and pure-Rust imitation trainer
+//! Compact CPU recurrent policy (`RoleNet`, ~24.2k parameters) and pure-Rust imitation trainer
 //! for the §7 neural-body pilot (docs/NEURAL_BODY.md "Pilot run").
 //!
-//! - Input: `flat` = `encoded` (`encode::LEN` = 99) || `memory.state` (16) || `memory.history` (32) = 147 floats.
-//! - Hidden 1: Linear(147 -> 96) + tanh (14,208 params).
+//! - Input: `flat` = `encoded` (`encode::LEN` = 108) || `memory.state` (16) || `memory.history` (32) = 156 floats.
+//! - Hidden 1: Linear(156 -> 96) + tanh (15,072 params).
 //! - Hidden 2: Linear(96 -> 64) + tanh (6,208 params).
 //! - Gated recurrent state update: `z = sigmoid(W_z h2 + b_z)`, `c = tanh(W_c h2 + b_c)`,
 //!   `state' = (1 - z) * state + z * c` (2,080 params).
@@ -13,7 +13,7 @@
 //!   - 4..6: face direction (dx, dy), normalized
 //!   - 6..12: skill categorical logits `[none, slot_0, slot_1, slot_2, slot_3, release_block]`
 //!   - 12: reserved auxiliary scalar (0)
-//! - Total parameters: 23,341 (~93.4 KB FP32). CPU only, no CUDA, deterministic weights hash.
+//! - Total parameters: 24,205 (~96.8 KB FP32). CPU only, no CUDA, deterministic weights hash.
 
 use super::encode::{self, BriefView, Observation, SlotView};
 use super::policy::{self, Intent, Memory, Policy, STATE};
@@ -24,7 +24,7 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::time::Instant;
 
-pub const IN_DIM: usize = encode::LEN + policy::MEMORY; // 99 + 48 = 147
+pub const IN_DIM: usize = encode::LEN + policy::MEMORY; // 108 + 48 = 156
 pub const H1: usize = 96;
 pub const H2: usize = 64;
 pub const OUT_DIM: usize = 13;
@@ -960,12 +960,14 @@ pub fn train_main(args: Vec<String>) -> Result<()> {
         }
     }
 
-    // Class weights: inverse-sqrt frequency capped at [1.0, 6.0] so rare skills (dodge/block/strike) learn without spamming.
+    // Class weights: gently tempered inverse frequency so rare skills learn without triggering
+    // premature guard releases (`release_block` capped at 3.0 against ~7:1 hold:release ratio).
     let mut class_w = [1.0f32; SKILL_CLASSES];
     let c0 = counts[0].max(1) as f32;
     for i in 1..SKILL_CLASSES {
         if counts[i] > 0 {
-            class_w[i] = (c0 / counts[i] as f32).sqrt().clamp(1.0, 6.0);
+            let cap = if i == 5 { 3.0 } else { 4.0 };
+            class_w[i] = (c0 / counts[i] as f32).powf(0.40).clamp(1.0, cap);
         }
     }
     log::info!("body-train: train={train_n} ({} eps), val={val_n} ({} eps), params={}, skill_counts={counts:?}, class_w={class_w:?}", train_eps.len(), val_eps.len(), w.param_count);
@@ -1168,7 +1170,7 @@ mod tests {
     #[test]
     fn rolenet_param_count_is_in_20k_to_30k_and_deterministic() {
         let w = RoleNetWeights::seeded_init("person", 7);
-        assert_eq!(w.param_count, 23_341);
+        assert_eq!(w.param_count, 24_205);
         assert!((20_000..=30_000).contains(&w.param_count));
         let net = RoleNet::new(w).unwrap();
         assert_eq!(replay_hash(&net), replay_hash(&net));
@@ -1182,7 +1184,7 @@ mod tests {
             me: 1,
             body: Some(encode::BodyRow { id: 1, x: 0.0, y: 0.0, t_ms: 10_000, ..Default::default() }),
             others: vec![encode::BodyRow { id: 2, x: 3.0, y: 0.0, t_ms: 10_000, ..Default::default() }],
-            skills: vec![encode::SkillRow { skill: "strike".into(), code: 1, reach: 1.6, ready_ms: 0 }],
+            skills: vec![encode::SkillRow { skill: "strike".into(), code: 1, reach: 1.6, ready_ms: 0, ..Default::default() }],
             ..Default::default()
         };
         let slot = SlotView { revision: 1, node: 1, goal: "engage".into(), target: 2, skills: vec!["strike".into(), "dodge".into(), "block".into()] };

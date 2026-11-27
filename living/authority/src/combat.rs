@@ -473,11 +473,21 @@ fn open_use(ctx: &ReducerContext, actor: u32, skill: &str) -> Option<SkillUse> {
     ctx.db.skill_use().actor().filter(actor).filter(|u| u.skill == skill && u.outcome.is_empty()).max_by_key(|u| u.id)
 }
 
+fn open_accepted(ctx: &ReducerContext, actor: u32, skill: &str) -> Option<SkillUse> {
+    ctx.db.skill_use().actor().filter(actor).filter(|u| u.skill == skill && u.accepted_ms != 0 && u.outcome.is_empty()).max_by_key(|u| u.id)
+}
+
 /// The rules accepted it: the windup (or dash) starts. A graph's or act's use is recorded
 /// from here (its refusals go back to its graph leaf or act, as before).
 pub fn accepted(ctx: &ReducerContext, a: &Activity, now: u64) {
     let source = match a.node {
-        act::PLAYER => "player",
+        act::PLAYER => {
+            if crate::delegation::viewer(ctx, a.id).is_some() {
+                crate::delegation::SOURCE
+            } else {
+                "player"
+            }
+        }
         act::ACT => "act",
         _ => "graph",
     };
@@ -500,7 +510,7 @@ pub fn accepted(ctx: &ReducerContext, a: &Activity, now: u64) {
 
 pub fn released(ctx: &ReducerContext, actor: u32, skill: &str, now: u64) {
     let _detail = common::detail_span("combat.released");
-    if let Some(mut u) = open_use(ctx, actor, skill) {
+    if let Some(mut u) = open_accepted(ctx, actor, skill) {
         u.released_ms = now;
         ctx.db.skill_use().id().update(u);
     }
@@ -509,7 +519,7 @@ pub fn released(ctx: &ReducerContext, actor: u32, skill: &str, now: u64) {
 /// What happened (or why it was refused or broken off).
 pub fn outcome(ctx: &ReducerContext, actor: u32, skill: &str, text: &str, now: u64) {
     let _detail = common::detail_span("combat.outcome");
-    if let Some(mut u) = open_use(ctx, actor, skill) {
+    if let Some(mut u) = open_accepted(ctx, actor, skill) {
         u.outcome = if text.is_empty() { "done".into() } else { text.chars().take(200).collect() };
         u.outcome_ms = now;
         ctx.db.skill_use().id().update(u);
@@ -531,7 +541,7 @@ const SWEEP_MS: u64 = 16;
 
 /// Loose a missile from `from` along `dir` (unit).
 pub fn launch(ctx: &ReducerContext, owner: u32, skill: &str, from: (f32, f32), dir: (f32, f32), spec: rules::MissileSpec, now: u64) {
-    let use_id = open_use(ctx, owner, skill).map_or(0, |u| u.id);
+    let use_id = open_accepted(ctx, owner, skill).map_or(0, |u| u.id);
     // It leaves from just in front of the body, so it does not strike its owner.
     let start = (from.0 + dir.0 * 0.5, from.1 + dir.1 * 0.5);
     ctx.db.missile().insert(Missile { id: 0, owner, skill: skill.into(), x: start.0, y: start.1, t_ms: now, dx: dir.0, dy: dir.1, speed: spec.speed, left: spec.range - 0.5, radius: spec.radius, next_ms: now + SWEEP_MS, use_id });

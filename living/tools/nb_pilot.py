@@ -33,10 +33,10 @@ import world_delete  # noqa: E402
 
 IMAGE = "clockworklabs/spacetime:v2.14.1"
 PIN_CPUS = "0-4,10-14"
-WASM_HOST_DIR = Path.home() / "slop-nbclone-wasm"
+WASM_HOST_DIR = Path(os.environ.get("NB_WASM_DIR", str(Path.home() / "slop-nbclone-wasm")))
 WASM_NAME = "living_authority_island.wasm"
-MIND_BIN = Path.home() / "slop-nbclone-target" / "release" / "living-mind"
-PILOT_DIR = ROOT / ".local/living/nb-pilot"
+MIND_BIN = Path(os.environ.get("NB_MIND_BIN", str(Path.home() / "slop-nbclone-target" / "release" / "living-mind")))
+PILOT_DIR = Path(os.environ.get("NB_PILOT_DIR", str(ROOT / ".local/living/nb-pilot")))
 SKILLS_IN_SCOPE = ["strike", "dodge", "block"]
 DELEGATE_SKILLS_ALL = ["strike", "dodge", "block"]
 
@@ -317,16 +317,18 @@ def delegate_leaf_graph(foe_id: int, goal: str = "engage", exit_hp: float = 15.0
     }
 
 
-def teacher_graph(foe_id: int, goal: str, stance: str = "even", privileged_control: bool = False) -> dict:
+def teacher_graph(foe_id: int, goal: str, stance: str = "even", privileged_control: bool = False,
+                  stamina_floor: int = 25) -> dict:
     """Real authority behaviour graphs used ONLY as imitation teachers in Step 2.
-    All normal teachers use ONLY player-perceivable conditions (doing 'winding up', near, sees, health, can).
-    `privileged_control=True` deliberately uses `about to release` (reads future release_ms) + `stamina`
+    All normal teachers use ONLY player-perceivable conditions (doing 'winding up', near, sees,
+    health, stamina via `my_vitals`, can).
+    `privileged_control=True` deliberately uses `about to release` (reads future release_ms) + `hunger`
     so the static AST teacher audit proves it catches and excludes privileged graphs.
     """
     if privileged_control:
         return {
             "first": [
-                {"if": {"cond": {"all": [{"doing": {"who": "person", "is": "hostile", "phase": "about to release", "at_me": True, "within": 4.0}}, {"stamina": {"above": 25}}]},
+                {"if": {"cond": {"all": [{"doing": {"who": "person", "is": "hostile", "phase": "about to release", "at_me": True, "within": 4.0}}, {"hunger": {"below": 90}}]},
                         "then": {"do": {"skill": "dodge"}}}},
                 {"do": {"skill": "strike", "target": {"id": foe_id}}},
             ]
@@ -334,50 +336,74 @@ def teacher_graph(foe_id: int, goal: str, stance: str = "even", privileged_contr
     if goal == "withdraw":
         return {
             "first": [
-                {"if": {"cond": {"doing": {"who": "person", "is": "hostile", "phase": "winding up", "at_me": True, "within": 3.5}},
-                        "then": {"do": {"skill": "dodge"}}}},
-                {"do": {"skill": "flee", "target": {"id": foe_id}, "run": True}},
+                {"if": {"cond": {"all": [
+                    {"doing": {"who": "person", "is": "hostile", "phase": "winding up", "at_me": True, "within": 3.2}},
+                    {"stamina": {"above": 22}},
+                ]}, "then": {"do": {"skill": "dodge"}}}},
+                {"if": {"cond": {"stamina": {"above": 28}},
+                        "then": {"do": {"skill": "flee", "target": {"id": foe_id}, "run": True}}}},
+                {"do": {"skill": "flee", "target": {"id": foe_id}, "run": False}},
             ]
         }
     if goal == "hold":
-        dmin, dmax = (4.0, 5.8) if stance == "guarded" else ((3.2, 5.0) if stance == "even" else (2.8, 4.5))
+        # Keep spacing squarely inside the frozen 2.5–6.0 m hold band against a pursuing foe:
+        # sprint away only when foe gets inside `run_d` (<2.8 m), walk back inside `dmin`,
+        # explicitly walk INWARD past `dmax` so it never drifts past 6.0 m or loses sight (11 m),
+        # and stand calmly inside [dmin, dmax].
+        run_d, dmin, dmax = (3.0, 3.8, 4.9) if stance == "guarded" else ((2.8, 3.5, 4.6) if stance == "even" else (2.6, 3.2, 4.3))
         return {
             "first": [
-                {"if": {"cond": {"doing": {"who": "person", "is": "hostile", "phase": "winding up", "at_me": True, "within": 3.5}},
-                        "then": {"first": [{"do": {"skill": "dodge"}}, {"do": {"skill": "block", "qty": 750}}]}}},
+                {"if": {"cond": {"doing": {"who": "person", "is": "hostile", "phase": "winding up", "at_me": True, "within": 3.0}},
+                        "then": {"first": [{"do": {"skill": "block", "qty": 1200}}, {"do": {"skill": "dodge"}}]}}},
+                {"if": {"cond": {"all": [
+                    {"near": {"target": {"id": foe_id}, "within": run_d}},
+                    {"stamina": {"above": 22}},
+                ]}, "then": {"do": {"skill": "back_off", "target": {"id": foe_id}, "distance": dmax - 0.3, "run": True}}}},
                 {"if": {"cond": {"near": {"target": {"id": foe_id}, "within": dmin}},
-                        "then": {"do": {"skill": "back_off", "target": {"id": foe_id}, "distance": dmax, "run": True}}}},
-                {"do": {"skill": "keep_distance", "target": {"id": foe_id}, "min": dmin, "max": dmax}},
+                        "then": {"do": {"skill": "back_off", "target": {"id": foe_id}, "distance": dmax - 0.2, "run": False}}}},
+                {"if": {"cond": {"not": {"near": {"target": {"id": foe_id}, "within": dmax}}},
+                        "then": {"do": {"skill": "close_in", "target": {"id": foe_id}, "distance": (dmin + dmax) * 0.5, "run": False}}}},
+                {"wait": 1},
             ]
         }
-    # goal == "engage"
+    # goal == "engage": hold block through the ENTIRE foe windup (no stamina gate on the block `if`
+    # so the guard is NEVER dropped mid-windup!), then drop block immediately when the windup ends —
+    # into breath recovery (`wait` -> explicit `release_block`) when stamina <= `stamina_floor`,
+    # into `close_in` (-> explicit `release_block`) when out of reach, or into `strike` with breath.
     if stance == "guarded":
         return {
             "first": [
-                {"if": {"cond": {"doing": {"who": "person", "is": "hostile", "phase": "winding up", "at_me": True, "within": 4.0}},
-                        "then": {"first": [{"do": {"skill": "dodge"}}, {"do": {"skill": "block", "qty": 800}}]}}},
+                {"if": {"cond": {"doing": {"who": "person", "is": "hostile", "phase": "winding up", "at_me": True, "within": 3.8}},
+                        "then": {"first": [
+                            {"if": {"cond": {"stamina": {"above": 48}}, "then": {"do": {"skill": "dodge"}}}},
+                            {"do": {"skill": "block", "qty": 1200}},
+                        ]}}},
+                {"if": {"cond": {"not": {"stamina": {"above": max(34, stamina_floor)}}},
+                        "then": {"wait": 1}}},
+                {"if": {"cond": {"all": [
+                    {"not": {"near": {"target": {"id": foe_id}, "within": 2.0}}},
+                    {"stamina": {"above": 35}},
+                ]}, "then": {"do": {"skill": "close_in", "target": {"id": foe_id}, "distance": 1.3, "run": True}}}},
                 {"if": {"cond": {"not": {"near": {"target": {"id": foe_id}, "within": 2.0}}},
-                        "then": {"do": {"skill": "close_in", "target": {"id": foe_id}, "distance": 1.4, "run": True}}}},
+                        "then": {"do": {"skill": "close_in", "target": {"id": foe_id}, "distance": 1.3, "run": False}}}},
                 {"do": {"skill": "strike", "target": {"id": foe_id}}},
             ]
         }
-    if stance == "pressing":
-        return {
-            "first": [
-                {"if": {"cond": {"doing": {"who": "person", "is": "hostile", "phase": "winding up", "at_me": True, "within": 3.4}},
-                        "then": {"first": [{"do": {"skill": "dodge"}}, {"do": {"skill": "block", "qty": 750}}]}}},
-                {"if": {"cond": {"not": {"near": {"target": {"id": foe_id}, "within": 2.0}}},
-                        "then": {"do": {"skill": "close_in", "target": {"id": foe_id}, "distance": 1.2, "run": True}}}},
-                {"do": {"skill": "strike", "target": {"id": foe_id}}},
-            ]
-        }
-    # stance == "even" (default engage teacher): dodge windup (or block on cooldown), close and strike in pause.
+    # stance == "even" or "pressing": block-first on windup (held through full windup; dodge fallback),
+    # explicit guard release on low breath or approach, relentless strike in reach with breath.
+    close_d = 1.2 if stance == "pressing" else 1.3
     return {
         "first": [
-            {"if": {"cond": {"doing": {"who": "person", "is": "hostile", "phase": "winding up", "at_me": True, "within": 3.8}},
-                    "then": {"first": [{"do": {"skill": "dodge"}}, {"do": {"skill": "block", "qty": 800}}]}}},
+            {"if": {"cond": {"doing": {"who": "person", "is": "hostile", "phase": "winding up", "at_me": True, "within": 3.6}},
+                    "then": {"first": [{"do": {"skill": "block", "qty": 1200}}, {"do": {"skill": "dodge"}}]}}},
+            {"if": {"cond": {"not": {"stamina": {"above": stamina_floor}}},
+                    "then": {"wait": 1}}},
+            {"if": {"cond": {"all": [
+                {"not": {"near": {"target": {"id": foe_id}, "within": 2.0}}},
+                {"stamina": {"above": 35}},
+            ]}, "then": {"do": {"skill": "close_in", "target": {"id": foe_id}, "distance": close_d, "run": True}}}},
             {"if": {"cond": {"not": {"near": {"target": {"id": foe_id}, "within": 2.0}}},
-                    "then": {"do": {"skill": "close_in", "target": {"id": foe_id}, "distance": 1.3, "run": True}}}},
+                    "then": {"do": {"skill": "close_in", "target": {"id": foe_id}, "distance": close_d, "run": False}}}},
             {"do": {"skill": "strike", "target": {"id": foe_id}}},
         ]
     }
@@ -402,7 +428,10 @@ def make_brief_arg(goal: str, target: int, stance: str = "even", risk: float = 0
 
 # ---- Static AST teacher audit ----
 
-PRIVILEGED_CONDS = {"stamina", "hunger", "energy", "has", "believes", "judged"}
+# Own stamina is player-perceivable via `my_vitals` (encoded in `encode.rs`).
+# Hunger, energy, inventory, beliefs, judgements, `about to release` (future `release_ms`),
+# and `threatened` (no FOV check) remain privileged and excluded.
+PRIVILEGED_CONDS = {"hunger", "energy", "has", "believes", "judged"}
 
 
 def audit_teacher_graph_ast(graph: dict) -> list[str]:
@@ -640,27 +669,27 @@ def cmd_collect(args):
     # 3 distinct sessions: sessions 1 & 2 -> train; session 3 -> val.
     # Every actor rank >= 10 (ranks 0..9 reserved exclusively for held-out Step 5 evaluation!).
     # Mix per session of 16 duels:
-    #   9 engage (5 even, 2 guarded, 2 pressing)
-    #   3 hold (even/guarded/pressing)
+    #   8 engage (5 even: 3 aggressive + 2 breath-gating for extra guard-release transitions; 2 guarded; 1 pressing)
+    #   4 hold (2 even, 1 guarded, 1 pressing)
     #   3 withdraw (guarded/even)
-    #   1 privileged-audit-control (uses `about to release` + `stamina` -> MUST be caught & excluded by static AST audit!)
+    #   1 privileged-audit-control (uses `about to release` + `hunger` -> MUST be caught & excluded by static AST audit!)
     brief_specs = [
-        ("engage", "even", 0.5, 0.5, [0.0, 0.0], False),
-        ("engage", "even", 0.6, 0.4, [0.2, -0.1], False),
-        ("engage", "even", 0.4, 0.6, [-0.2, 0.2], False),
-        ("engage", "even", 0.5, 0.5, [0.3, 0.1], False),
-        ("engage", "even", 0.55, 0.55, [-0.1, -0.3], False),
-        ("engage", "guarded", 0.2, 0.3, [-0.5, 0.2], False),
-        ("engage", "guarded", 0.3, 0.4, [-0.3, -0.2], False),
-        ("engage", "pressing", 0.85, 0.8, [0.6, 0.4], False),
-        ("engage", "pressing", 0.8, 0.7, [0.4, -0.4], False),
-        ("hold", "even", 0.3, 0.5, [0.0, 0.3], False),
-        ("hold", "guarded", 0.15, 0.3, [-0.4, 0.0], False),
-        ("hold", "pressing", 0.45, 0.6, [0.2, 0.5], False),
-        ("withdraw", "guarded", 0.1, 0.3, [-0.7, -0.2], False),
-        ("withdraw", "even", 0.2, 0.5, [-0.5, 0.1], False),
-        ("withdraw", "guarded", 0.15, 0.7, [-0.6, 0.3], False),
-        ("engage", "even", 0.5, 0.5, [0.0, 0.0], True),  # privileged teacher control (audited & excluded!)
+        ("engage", "even", 0.5, 0.5, [0.0, 0.0], False, 25),
+        ("engage", "even", 0.6, 0.4, [0.2, -0.1], False, 25),
+        ("engage", "even", 0.4, 0.6, [-0.2, 0.2], False, 25),
+        ("engage", "even", 0.5, 0.5, [0.3, 0.1], False, 32),
+        ("engage", "even", 0.55, 0.55, [-0.1, -0.3], False, 32),
+        ("engage", "guarded", 0.2, 0.3, [-0.5, 0.2], False, 35),
+        ("engage", "guarded", 0.3, 0.4, [-0.3, -0.2], False, 35),
+        ("engage", "pressing", 0.85, 0.8, [0.6, 0.4], False, 25),
+        ("hold", "even", 0.3, 0.5, [0.0, 0.3], False, 22),
+        ("hold", "even", 0.25, 0.5, [0.1, -0.1], False, 22),
+        ("hold", "guarded", 0.15, 0.3, [-0.4, 0.0], False, 22),
+        ("hold", "pressing", 0.45, 0.6, [0.2, 0.5], False, 22),
+        ("withdraw", "guarded", 0.1, 0.3, [-0.7, -0.2], False, 22),
+        ("withdraw", "even", 0.2, 0.5, [-0.5, 0.1], False, 22),
+        ("withdraw", "guarded", 0.15, 0.7, [-0.6, 0.3], False, 22),
+        ("engage", "even", 0.5, 0.5, [0.0, 0.0], True, 25),  # privileged teacher control (audited & excluded!)
     ]
     opp_configs = [
         ("heavy-750-std", dict(pause_a=2.0, pause_b=3.0, irregular=False, mixed_strike=False)),
@@ -686,9 +715,9 @@ def cmd_collect(args):
                 expected_wasm, expected_skills = meta["wasm_sha"], meta["skills_sha"]
             else:
                 guard.check_hashes(WASM_HOST_DIR / WASM_NAME, expected_wasm, meta["skills_sha"], expected_skills)
-            # Disjoint actors per session, all rank >= 10 (0..9 reserved for Step 5 test).
+            # Disjoint actors per session, all rank >= 12 with 2-actor buffer (0..9 reserved for Step 5 test).
             ranked = ranked_adult_residents(srv, db, set())
-            offset = 10 + (sess_idx - 1) * duels_per_session
+            offset = 12 + (sess_idx - 1) * (duels_per_session + 2)
             foes = ranked[offset:offset + duels_per_session]
             spots = find_open_spots(srv, db, duels_per_session * n_sessions, min_sep=42.0)
             sess_spots = spots[(sess_idx - 1) * duels_per_session: sess_idx * duels_per_session]
@@ -698,7 +727,7 @@ def cmd_collect(args):
             ast_audit = {}
             pending_graphs = []
             for j in range(duels_per_session):
-                goal, stance, risk, style, traits, priv = brief_specs[j % len(brief_specs)]
+                goal, stance, risk, style, traits, priv, stam_floor = brief_specs[j % len(brief_specs)]
                 opp_name, opp_kw = opp_configs[(j + sess_idx) % len(opp_configs)]
                 if split == "val":
                     opp_name = f"val-{opp_name}"
@@ -711,7 +740,7 @@ def cmd_collect(args):
                 srv.call(db, "admin_set_vitals", [fid, 100.0])
                 srv.call(db, "grant_items", [fid, "spear", 1])
                 srv.call(db, "grant_know_how", [fid, "wound_tending"])
-                t_graph = teacher_graph(fid, goal, stance, privileged_control=priv)
+                t_graph = teacher_graph(fid, goal, stance, privileged_control=priv, stamina_floor=stam_floor)
                 violations = audit_teacher_graph_ast(t_graph)
                 ast_audit[ep_id] = {"teacher": f"{goal}-{stance}{'-priv' if priv else ''}", "violations": violations, "split": split, "foe": fid, "opponent_cfg": opp_name}
                 # Place facing each other and install brief; keep both waiting until body-observe opens all sessions!
@@ -764,7 +793,7 @@ def cmd_collect(args):
             print(f"[Step 2] Session {sess_idx}/{n_sessions} ({split}): observing {duels_per_session} active teacher duels for {duration_s} s...", flush=True)
             t0 = time.time()
             next_heal = t0 + 5.0
-            next_reseat = t0 + 12.0
+            next_reseat = t0 + 18.0
             reseat_k = 0
             try:
                 while time.time() - t0 < duration_s:
@@ -772,7 +801,7 @@ def cmd_collect(args):
                     now_t = time.time()
                     if now_t >= next_heal:
                         next_heal = now_t + 5.0
-                        # Top up vitals every 5 s so no fighter dies during collection!
+                        # Top up HP every 5 s so no fighter dies during collection (stamina evolves naturally!).
                         for sid, fid, sx, sy, ang, dist0, goal in duel_actors:
                             try:
                                 srv.call(db, "admin_set_vitals", [sid, 100.0])
@@ -780,11 +809,11 @@ def cmd_collect(args):
                             except Exception:
                                 pass
                     if now_t >= next_reseat:
-                        next_reseat = now_t + 12.0
+                        next_reseat = now_t + 18.0
                         reseat_k += 1
-                        # Re-seat every 12 s across [1.4..9.2 m] so EVERY brief (engage, hold, withdraw)
-                        # gets rich movement coverage at close, mid, and far ranges (avoiding covariate shift!).
-                        dist_cycle = [1.5, 3.2, 5.5, 8.2, 9.2, 2.2, 6.8, 4.2]
+                        # Re-seat every 18 s across [1.5..8.2 m] so EVERY brief gets rich range coverage
+                        # while engage bouts run long enough to cycle stamina and guard hold/release transitions.
+                        dist_cycle = [1.5, 2.2, 3.2, 4.8, 7.5, 9.5, 2.5, 6.0]
                         for idx_d, (sid, fid, sx, sy, ang, dist0, goal) in enumerate(duel_actors):
                             try:
                                 new_ang = ang + reseat_k * 0.95
@@ -823,6 +852,9 @@ def build_dataset(session_meta: list[dict], out_dir: Path):
         "excluded_no_brief": 0,
         "by_goal": {},
         "by_skill_class": {str(i): 0 for i in range(6)},
+        "guard_hold_frames": 0,
+        "guard_release_frames": 0,
+        "guard_to_strike_frames": 0,
         "train_episodes": set(),
         "val_episodes": set(),
         "train_foes": set(),
@@ -935,6 +967,13 @@ def build_dataset(session_meta: list[dict], out_dir: Path):
                     goal = r["brief"]["goal"]
                     counts["by_goal"][goal] = counts["by_goal"].get(goal, 0) + 1
                     counts["by_skill_class"][str(skill_cls)] += 1
+                    if audit.get("guard_active"):
+                        if skill_cls == 0:
+                            counts["guard_hold_frames"] += 1
+                        elif skill_cls == 5:
+                            counts["guard_release_frames"] += 1
+                        elif skill_cls == 1:
+                            counts["guard_to_strike_frames"] += 1
                     if split == "train":
                         counts["train_episodes"].add(ep)
                         counts["train_foes"].add(info.get("foe"))
@@ -994,9 +1033,11 @@ def score_episode(ep_meta: dict, uses: list[dict], samples: list[dict],
     foe_uses.sort(key=lambda u: (u["accepted_ms"], u["id"]))
 
     # Perceived-cue coverage: check capture decisions (Arm L) or sight distance <= 11 m (Arm G).
+    cap_layout = next((r for r in (capture_recs or []) if r.get("kind") == "layout"), None)
     cap_decisions = [r for r in (capture_recs or []) if r.get("kind") == "decision"]
     cap_replies = [r for r in (capture_recs or []) if r.get("kind") == "reply"]
     cap_sessions = [r for r in (capture_recs or []) if r.get("kind") == "session"]
+    own_len = int(cap_layout["own"]) if (cap_layout and "own" in cap_layout) else (len(cap_decisions[0]["encoded"]) - 89 if cap_decisions else 19)
 
     def nearest_pos(ms: int):
         if not samples:
@@ -1007,7 +1048,7 @@ def score_episode(ep_meta: dict, uses: list[dict], samples: list[dict],
         if cap_decisions:
             near = [d for d in cap_decisions if ms - 150 <= d.get("now_ms", 0) <= ms + 600]
             if near:
-                return any(d["encoded"][10] > 0.5 for d in near)
+                return any(d["encoded"][own_len] > 0.5 for d in near)
         p = nearest_pos(ms)
         if p and p.get("dist") is not None:
             return p["dist"] <= 11.0
