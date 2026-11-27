@@ -156,8 +156,17 @@ fn visibility(model: Res<model::HudModel>, mut q: Query<(&mut Visibility, Has<de
     }
 }
 
-/// The game camera draws the UI, also when it renders into an image (headless photographs).
-fn default_camera(mut commands: Commands, cams: Query<Entity, Added<Camera3d>>) {
+/// The game camera draws the UI, also when it renders into an image (headless photographs),
+/// unless render scaling has already attached [`IsDefaultUiCamera`] to its native compositing
+/// camera.
+fn default_camera(
+    mut commands: Commands,
+    cams: Query<Entity, Added<Camera3d>>,
+    existing: Query<(), With<bevy::ui::IsDefaultUiCamera>>,
+) {
+    if !existing.is_empty() {
+        return;
+    }
     for e in &cams {
         commands.entity(e).insert(bevy::ui::IsDefaultUiCamera);
     }
@@ -166,8 +175,9 @@ fn default_camera(mut commands: Commands, cams: Query<Entity, Added<Camera3d>>) 
 /// Interface D was drawn at 1600×900: the UI scales with the target's height over 900
 /// (1600×900 → 1, 2560×1440 → 1.6), and never under 0.9 (at 720p the old HUD's 9–12 px type
 /// read as 6–8 px, play-test 1).
-fn scale(mut ui: ResMut<UiScale>, cams: Query<&Camera, With<Camera3d>>) {
-    let h = cams.iter().find_map(|c| c.logical_viewport_size()).map_or(900.0, |s| s.y);
+#[allow(clippy::type_complexity)]
+fn scale(mut ui: ResMut<UiScale>, cams: Query<(&Camera, Has<bevy::ui::IsDefaultUiCamera>), Or<(With<bevy::ui::IsDefaultUiCamera>, With<Camera3d>)>>) {
+    let h = crate::graphics::ui_camera(cams.iter()).and_then(|c| c.logical_viewport_size()).map_or(900.0, |s| s.y);
     let s = (h / 900.0).clamp(0.9, 2.5);
     if (ui.0 - s).abs() > 1e-3 {
         ui.0 = s;
@@ -308,13 +318,13 @@ pub struct Dump(pub Option<std::path::PathBuf>);
 /// Write the game UI's state: open windows (top last) with their anchors and rectangles (UI px
 /// and fractions of the picture), the Menu list, the list of acts, the words being typed and to
 /// whom, the notes shown, the weapon, and every tagged node shown.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn dump(
     mut d: ResMut<Dump>,
     ws: Res<win::Windows>,
     ui: Res<hit::UiPointer>,
     frames: Query<(&win::WinFrame, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform)>,
-    cams: Query<&Camera, With<Camera3d>>,
+    cams: Query<(&Camera, Has<bevy::ui::IsDefaultUiCamera>), Or<(With<bevy::ui::IsDefaultUiCamera>, With<Camera3d>)>>,
     verbs: Res<crate::verbs::Verbs>,
     input: Res<crate::controls::Input>,
     typing: Res<say::Typing>,
@@ -323,7 +333,7 @@ fn dump(
     (notes, prompt): (Query<(&Node, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<verbs::ToastRow>>, Query<(&Node, &bevy::ui::ComputedNode, &bevy::ui::UiGlobalTransform), With<prompt::Prompt>>),
 ) {
     let Some(path) = d.0.take() else { return };
-    let size = cams.iter().find_map(|c| c.physical_viewport_size()).map_or(Vec2::new(1600.0, 900.0), |s| s.as_vec2());
+    let size = crate::graphics::ui_camera(cams.iter()).and_then(|c| c.physical_viewport_size()).map_or(Vec2::new(1600.0, 900.0), |s| s.as_vec2());
     let k = ui.scale * ui.ui_scale.max(0.01);
     let windows: Vec<serde_json::Value> = ws
         .open
@@ -510,6 +520,8 @@ pub struct DumpExtra<'w, 's> {
     glints: Option<Res<'w, crate::vfx::Glints>>,
     heed: Option<Res<'w, crate::heed::Heed>>,
     throng: Option<Res<'w, crate::throng::Throng>>,
+    quality: Res<'w, crate::graphics::Quality>,
+    render_scale: Res<'w, crate::graphics::RenderScale>,
 }
 
 impl DumpExtra<'_, '_> {
@@ -562,6 +574,8 @@ impl DumpExtra<'_, '_> {
             "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
             "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": if self.cam.mode == crate::camera::Mode::TopDown { self.cam.top_zoom.shown } else { self.cam.zoom }, "mode": self.cam.mode.name(), "height": self.cam.eye_height, "ground_clearance": self.cam.ground_clearance, "pitch": self.cam.shown.pitch, "fov": self.cam.shown.fov}, "cursor_ground": ground, "lod": {"near": lod[0], "far": lod[1], "people": lod_people},
             "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()), "film": self.film.name(), "film_saved": self.prefs.film, "hair_shine": self.shine.name(), "hair_shine_saved": self.prefs.hair_shine,
+            "quality": self.quality.name(), "quality_saved": self.prefs.quality, "render_scale": self.render_scale.name(), "render_scale_saved": self.prefs.render_scale,
+            "render_scale_px": self.lod_camera.single().ok().and_then(|c| c.physical_viewport_size()).map(|s| [s.x, s.y]),
             // The one-shot each body plays now over its walk or stand (a gesture: `town.rs`), by
             // character id: a wave made while walking on plays on (talk-turns' `on_the_move`).
             "onces": self.town.as_ref().map(|t| t.shows.iter().filter_map(|(id, s)| s.once.map(|a| (id.to_string(), serde_json::json!(a.clip)))).collect::<serde_json::Map<_, _>>()),

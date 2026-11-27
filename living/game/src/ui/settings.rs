@@ -150,6 +150,7 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                     kit::toggle(c, "settings:tips");
                     kit::button(c, f, "Show tips again", "settings:tips_again", true);
                 });
+                graphics_rows(pg, f);
             });
             body.spawn((PageBody(Page::Camera), Node { flex_grow: 1.0, flex_direction: FlexDirection::Column, display: Display::None, ..default() }, Pickable::IGNORE)).with_children(|pg| {
                 row(pg, f, "Top-down rotation", "Middle drag or twist two fingers. Middle tap snaps north.", |c| kit::toggle(c, "settings:camera_rotate"));
@@ -240,7 +241,13 @@ pub fn update(
     (mut input, mut edge, mut tips, mut lw): (ResMut<crate::controls::Input>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<super::tips::Tips>, ResMut<crate::twist::LookWalk>),
     (keys, mouse, time, pointer): (Res<ButtonInput<KeyCode>>, Res<ButtonInput<MouseButton>>, Res<Time>, Res<crate::pointer::Pointer>),
     open: Res<super::win::Windows>,
-    (mut theme, mut film, mut shine): (ResMut<super::ThemeState>, ResMut<crate::post::Film>, ResMut<crate::style::HairShine>),
+    (mut theme, mut film, mut shine, mut quality, mut render_scale): (
+        ResMut<super::ThemeState>,
+        ResMut<crate::post::Film>,
+        ResMut<crate::style::HairShine>,
+        ResMut<crate::graphics::Quality>,
+        ResMut<crate::graphics::RenderScale>,
+    ),
 ) {
     let mut changed = false;
     if !open.is_open(Win::Settings) {
@@ -366,6 +373,22 @@ pub fn update(
                     changed = true;
                 }
             }
+            "settings:quality" => {
+                if let Some(q) = crate::graphics::Quality::parse(value) {
+                    info!("settings: quality: {}", q.name());
+                    *quality = q;
+                    prefs.quality = Some(q.name().into());
+                    changed = true;
+                }
+            }
+            "settings:render_scale" => {
+                if let Some(s) = crate::graphics::RenderScale::parse(value) {
+                    info!("settings: render scale: {}", s.name());
+                    *render_scale = s;
+                    prefs.render_scale = Some(s.name().into());
+                    changed = true;
+                }
+            }
             "settings:preset" if value != "own" => {
                 *binds = Binds::preset(if value == "numbers" { Preset::Numbers } else { Preset::Letters });
                 changed = true;
@@ -428,6 +451,7 @@ pub fn update(
     let control = if input.control == crate::controls::Control::Cursor { "cursor" } else { "travel" };
     let (pg, preset, theme_now, look_walk, film_now) = (*page, binds.preset.name(), theme.name.key(), lw.base().to_string(), film.name());
     let shine_now = shine.name();
+    let (quality_now, scale_now) = (quality.name(), render_scale.name());
     kit::light(&mut lit, |t| {
         let (what, value) = t.rsplit_once(':').unwrap_or((t, ""));
         match what {
@@ -449,6 +473,8 @@ pub fn update(
             "settings:film" => Some(value == film_now),
             "settings:hair" => Some(value == shine_now),
             "settings:combat_timing" => Some(value == prefs.combat_timing.name()),
+            "settings:quality" => Some(value == quality_now),
+            "settings:render_scale" => Some(value == scale_now),
             _ => match t {
                 "settings:camera_rotate" => Some(prefs.camera_rotate),
                 "settings:camera_rotate_invert" => Some(prefs.camera_rotate_invert),
@@ -671,7 +697,19 @@ pub(super) fn camera_controls(
 /// (`LIVING_GAME_CONTROL`, `LIVING_SIGHT_EDGE`, `LIVING_GAME_LOOK_WALK`, `LIVING_GAME_FILM`,
 /// `LIVING_GAME_HAIR_SHINE`, used by
 /// headless captures).
-pub fn apply_prefs(prefs: Res<Prefs>, mut input: ResMut<crate::controls::Input>, edge: Option<ResMut<crate::sightedge::SightEdge>>, mut lw: ResMut<crate::twist::LookWalk>, mut film: ResMut<crate::post::Film>, mut shine: ResMut<crate::style::HairShine>, mut done: Local<bool>) {
+pub fn apply_prefs(
+    prefs: Res<Prefs>,
+    mut input: ResMut<crate::controls::Input>,
+    edge: Option<ResMut<crate::sightedge::SightEdge>>,
+    mut lw: ResMut<crate::twist::LookWalk>,
+    (mut film, mut shine, mut quality, mut render_scale): (
+        ResMut<crate::post::Film>,
+        ResMut<crate::style::HairShine>,
+        ResMut<crate::graphics::Quality>,
+        ResMut<crate::graphics::RenderScale>,
+    ),
+    mut done: Local<bool>,
+) {
     if *done {
         return;
     }
@@ -688,6 +726,12 @@ pub fn apply_prefs(prefs: Res<Prefs>, mut input: ResMut<crate::controls::Input>,
     if let (Some(s), None) = (prefs.hair_shine.as_deref().and_then(crate::style::HairShine::parse), crate::style::HairShine::from_env()) {
         *shine = s;
     }
+    if let (Some(q), None) = (prefs.quality.as_deref().and_then(crate::graphics::Quality::parse), crate::graphics::Quality::from_env()) {
+        *quality = q;
+    }
+    if let (Some(s), None) = (prefs.render_scale.as_deref().and_then(crate::graphics::RenderScale::parse), crate::graphics::RenderScale::from_env()) {
+        *render_scale = s;
+    }
     let Some(mut e) = edge else { return };
     if let (Some(m), true) = (prefs.sight_edge.as_deref().and_then(crate::sightedge::Mode::parse), std::env::var("LIVING_SIGHT_EDGE").is_err()) {
         e.mode = m;
@@ -695,6 +739,15 @@ pub fn apply_prefs(prefs: Res<Prefs>, mut input: ResMut<crate::controls::Input>,
     if let (Some(l), true) = (prefs.sight_look.as_deref().and_then(crate::sightedge::Look::parse), std::env::var("LIVING_SIGHT_LOOK").is_err()) {
         e.look = l;
     }
+}
+
+fn graphics_rows(pg: &mut ChildSpawnerCommands, f: &Fonts) {
+    row(pg, f, "Quality", "Bloom, shadow filtering and shadow-map detail", |c| {
+        kit::seg(c, f, "settings:quality", &crate::graphics::Quality::ALL.map(|q| (q.label(), q.name())));
+    });
+    row(pg, f, "3D render scale", "Scales the 3D view while keeping the interface sharp; Auto caps near 1440p", |c| {
+        kit::seg(c, f, "settings:render_scale", &crate::graphics::RenderScale::ALL.map(|s| (s.label(), s.name())));
+    });
 }
 
 /// Heed's rows shown only while the world's laws let players heed (`heed::Heed::on`); right after
