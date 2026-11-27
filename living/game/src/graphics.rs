@@ -664,12 +664,12 @@ mod tests {
     #[test]
     fn upscale_filters_map_to_shader_variants() {
         // `upscale.wesl`: y 0 plain bilinear; z 0 clamped, 1 clamped then CAS, 2 CAS then clamped.
-        let p = |filter| Upscale { filter, sharpness: Upscale::SHARPNESS, active: false }.params();
+        let p = |filter| Upscale { filter, sharpness: Upscale::SHARPNESS, active: false, factor: 1.0 }.params();
         assert_eq!(p(UpscaleFilter::CasClamped), Vec4::new(1.0, 1.0, 2.0, 0.0));
         assert_eq!(p(UpscaleFilter::Clamped).z, 0.0);
         assert_eq!(p(UpscaleFilter::ClampedCas).z, 1.0);
         assert_eq!(p(UpscaleFilter::Bilinear).y, 0.0);
-        assert_eq!(Upscale { filter: UpscaleFilter::CasClamped, sharpness: 1.0, active: true }.method(), "catmull-rom+cas-clamped");
+        assert_eq!(Upscale { filter: UpscaleFilter::CasClamped, sharpness: 1.0, active: true, factor: 1.0 }.method(), "catmull-rom+cas-clamped");
     }
 
     #[test]
