@@ -76,6 +76,9 @@ python3 "$C/scenes.py" first_sight --run "$R" > "$E/first_sight.txt" 2>&1
 # wakes coalesced by witness_wake_ms, onlookers' fight lines folded by witness_fold_ms
 # (features/battle.md, about 9 min together).
 python3 "$C/scenes.py" familiar_dense --run "$R" > "$E/familiar_dense.txt" 2>&1
+# Familiarity under the familiar_limit and familiar_regard laws (familiar-cap): strangers forgotten first, the known never, the dead with their remains (features/battle.md, about 5 min); a body's sex_seen rows go with the remains (about 3 min).
+python3 "$C/scenes.py" familiar_regard --run "$R" > "$E/familiar_regard.txt" 2>&1
+python3 "$C/scenes.py" sex_seen_bound --run "$R" > "$E/sex_seen_bound.txt" 2>&1
 python3 "$C/scenes.py" notice_rate --run "$R" > "$E/notice_rate.txt" 2>&1
 python3 "$C/scenes.py" witness_wake --run "$R" > "$E/witness_wake.txt" 2>&1
 python3 "$C/scenes.py" witness_fold --run "$R" > "$E/witness_fold.txt" 2>&1

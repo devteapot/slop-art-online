@@ -51,6 +51,7 @@ impl __sdk::__query_builder::HasCols for Familiar {
 pub struct FamiliarIxCols {
     pub actor: __sdk::__query_builder::IxCol<Familiar, u32>,
     pub id: __sdk::__query_builder::IxCol<Familiar, u64>,
+    pub thing: __sdk::__query_builder::IxCol<Familiar, u64>,
 }
 
 impl __sdk::__query_builder::HasIxCols for Familiar {
@@ -59,6 +60,7 @@ impl __sdk::__query_builder::HasIxCols for Familiar {
         FamiliarIxCols {
             actor: __sdk::__query_builder::IxCol::new(table_name, "actor"),
             id: __sdk::__query_builder::IxCol::new(table_name, "id"),
+            thing: __sdk::__query_builder::IxCol::new(table_name, "thing"),
         }
     }
 }
