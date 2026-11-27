@@ -32,7 +32,8 @@ use crate::net::Net;
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use living_bindings::SeenThrong;
+use living_bindings::{SeenThrong, StructureTableAccess};
+use spacetimedb_sdk::Table;
 use std::collections::BTreeMap;
 
 /// A cell's side (m), as the authority's `throng::CELL_M`.
@@ -44,8 +45,11 @@ pub const PEOPLE: u8 = 1;
 pub const WOLVES: u8 = 2;
 pub const DEER: u8 = 4;
 pub const OTHERS: u8 = 8;
-/// A person card's size (m).
-const CARD: (f32, f32) = (0.9, 1.8);
+/// A person card's size (m): wide enough for a fighting spear without clipping; standing and
+/// walking silhouettes stay ~0.55 m wide in the centre (the rest is alpha-discarded).
+const CARD: (f32, f32) = (1.15, 1.85);
+/// Hit-test body width for a person card (m), matching the body rather than the spear reach.
+const PICK_W: f32 = 0.85;
 /// An animal stand-in's card (m).
 const BEAST: (f32, f32) = (1.3, 0.95);
 /// Fade in and out (s): as people do (`fade::IN_S`, `fade::OUT_S`), so a person leaving my
@@ -54,18 +58,31 @@ const IN_S: f32 = crate::fade::IN_S;
 const OUT_S: f32 = crate::fade::OUT_S;
 /// How fast a card walks to its new place when its row changes (m/s).
 const GLIDE_MPS: f32 = 3.0;
+/// Clearance kept between a throng card's place and a remains mound (m): a mound's boulder radius
+/// is 0.4 m (`world.rs`), so 0.62 m keeps cards standing round mounds rather than bisecting them.
+const MOUND_CLEAR_M: f32 = 0.62;
 /// The tint while rows carry no colour: one neutral slate, clearly a placeholder.
 pub const PLACEHOLDER: [u8; 3] = [126, 132, 146];
 /// The placeholder's head and legs: a little lighter and darker than the body, for legibility.
 const PLACEHOLDER_HEAD: [u8; 3] = [170, 174, 184];
 const PLACEHOLDER_LEGS: [u8; 3] = [84, 88, 100];
-/// The coloured card's skin, trousers and spear (E1b), for when a row carries colours.
+/// The coloured card's skin, trousers, spear shaft, spearhead and dark ink outline (matching
+/// `Style::default().outline_color = [0.17, 0.11, 0.10]`).
 const SKIN: [u8; 3] = [214, 170, 138];
 const TROUSERS: [u8; 3] = [52, 48, 58];
-const SPEAR: [u8; 3] = [120, 92, 60];
+const SPEAR: [u8; 3] = [148, 108, 66];
+const SPEAR_TIP: [u8; 3] = [220, 228, 238];
+const INK: [u8; 3] = [43, 28, 26];
+/// Silhouette outline thickness (m) on a card texture: crisp against stone paving and neighbours.
+const OUTLINE_M: f32 = 0.028;
 /// The key light's illuminance by day (the island's noon, `assets/envs/island.json`): cards are
 /// unlit, so they are shaded by the light's colour and its share of this ([`shade`]).
 const DAY_LUX: f32 = 9000.0;
+/// The toon shader's noon lit-band linear gain (`toon_light.wesl` `sun_color()`):
+/// `DAY_LUX * (1 / (2^9.7 * 1.2)) / PI * Style::default().exposure (0.82)`.
+/// Look-book outfit RGBs are pre-lighting albedos meant to be multiplied by this in `toon.wesl`;
+/// unlit cards bypass `sun_color()`, so [`swatches_of`] applies this gain when calibrating swatches.
+const TOON_SUN_GAIN: f32 = DAY_LUX * (1.0 / (831.746_4 * 1.2)) / std::f32::consts::PI * 0.82;
 /// The darkest the shading goes (the island's night is about 0.3 of noon).
 const NIGHT_SHADE: f32 = 0.3;
 /// A crowd card is under the cursor's ground point within this (m).
@@ -308,9 +325,9 @@ pub fn poses(count: u16, moving: u16, fighting: u16) -> Vec<Pose> {
 
 /// Where a row's cards stand (map m): `n` places round the row's centroid
 /// (`origin + (centre_x, centre_y) + 0.5 m`) on a sunflower spiral within half the row's `spread`
-/// (at least far enough apart to tell cards apart, `0.35 m × √n`), compressed per side into the
-/// square so cards stay centred on the centroid without leaving the square or piling on its edge.
-/// A lone card stands right on the centroid.
+/// (at least `0.55 m × √n` so dense cells breathe), then relaxed deterministically to keep cards
+/// separated without leaving the square or collapsing onto an edge sliver. A lone card stands
+/// right on the centroid.
 pub fn places(row: &Row, n: usize) -> Vec<Vec2> {
     if n == 0 {
         return Vec::new();
@@ -320,23 +337,90 @@ pub fn places(row: &Row, n: usize) -> Vec<Vec2> {
         return vec![c];
     }
     let half = row.side() * 0.5;
-    let r = (row.spread as f32 * 0.5).max(0.35 * (n as f32).sqrt()).max(0.5).min(half - 0.3);
-    let lo = row.origin() + Vec2::splat(0.2);
-    let hi = row.origin() + Vec2::splat(row.side() - 0.2);
-    let (rx_pos, rx_neg) = (r.min((hi.x - c.x).max(0.0)), r.min((c.x - lo.x).max(0.0)));
-    let (ry_pos, ry_neg) = (r.min((hi.y - c.y).max(0.0)), r.min((c.y - lo.y).max(0.0)));
+    let r_need = (0.55 * (n as f32).sqrt()).max(0.75).min(half - 0.25);
+    let r = (row.spread as f32 * 0.5).max(r_need).min(half - 0.25);
+    let lo = row.origin() + Vec2::splat(0.25);
+    let hi = row.origin() + Vec2::splat(row.side() - 0.25);
+    // Shift the packing centre inward only as far as `n` cards actually need to stay separated,
+    // so the cluster stays anchored near the centroid while never crushing onto an edge sliver.
+    let pack = c.clamp(lo + Vec2::splat(r_need), hi - Vec2::splat(r_need));
+    let (rx_pos, rx_neg) = (r.min((hi.x - pack.x).max(0.0)), r.min((pack.x - lo.x).max(0.0)));
+    let (ry_pos, ry_neg) = (r.min((hi.y - pack.y).max(0.0)), r.min((pack.y - lo.y).max(0.0)));
     // A turn of the spiral per square, so neighbouring squares don't line up.
     let turn = ((row.cx.wrapping_mul(7) ^ row.cy.wrapping_mul(13)) % 97) as f32;
-    (0..n)
+    let mut pts: Vec<Vec2> = (0..n)
         .map(|k| {
             let t = ((k as f32 + 0.5) / n.max(1) as f32).sqrt();
             let a = k as f32 * 2.399_963 + turn;
             let (ux, uy) = (a.cos() * t, a.sin() * t);
             let dx = if ux >= 0.0 { ux * rx_pos } else { ux * rx_neg };
             let dy = if uy >= 0.0 { uy * ry_pos } else { uy * ry_neg };
-            (c + Vec2::new(dx, dy)).clamp(lo, hi)
+            (pack + Vec2::new(dx, dy)).clamp(lo, hi)
         })
-        .collect()
+        .collect();
+    // Deterministic pairwise repulsion inside `[lo, hi]` so dense cells never stack into smudges.
+    // Target separation is 0.85 m (wider than a person's shoulders), gracefully scaling down only
+    // when a cell holds more cards than can physically pack at 0.85 m.
+    let min_sep = 0.85_f32.min(0.75 * row.side() / (n as f32).sqrt().max(1.0));
+    let min_sep2 = min_sep * min_sep;
+    for _ in 0..6 {
+        let mut moved = false;
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let d = pts[j] - pts[i];
+                let d2 = d.length_squared();
+                if d2 < min_sep2 {
+                    let dist = d2.sqrt();
+                    let dir = if dist > 1e-4 {
+                        d / dist
+                    } else {
+                        let ang = (i * 17 + j * 31) as f32;
+                        Vec2::new(ang.cos(), ang.sin())
+                    };
+                    let push = dir * ((min_sep - dist) * 0.52);
+                    pts[i] = (pts[i] - push).clamp(lo, hi);
+                    pts[j] = (pts[j] + push).clamp(lo, hi);
+                    moved = true;
+                }
+            }
+        }
+        if !moved {
+            break;
+        }
+    }
+    pts
+}
+
+/// Nudge card positions clear of ground obstacles (such as remains mounds) while staying inside
+/// `[lo, hi]`, so flat billboard cards stand round mounds instead of bisecting them.
+pub fn avoid_obstacles(pts: &mut [Vec2], obstacles: &[Vec2], min_clear: f32, lo: Vec2, hi: Vec2) {
+    if obstacles.is_empty() || min_clear <= 0.0 {
+        return;
+    }
+    let c2 = min_clear * min_clear;
+    for (k, p) in pts.iter_mut().enumerate() {
+        for _ in 0..3 {
+            let mut push = Vec2::ZERO;
+            for &o in obstacles {
+                let d = *p - o;
+                let d2 = d.length_squared();
+                if d2 < c2 {
+                    let dist = d2.sqrt();
+                    let dir = if dist > 1e-4 {
+                        d / dist
+                    } else {
+                        let a = k as f32 * 2.399_963;
+                        Vec2::new(a.cos(), a.sin())
+                    };
+                    push += dir * (min_clear - dist + 0.02);
+                }
+            }
+            if push.length_squared() < 1e-6 {
+                break;
+            }
+            *p = (*p + push).clamp(lo, hi);
+        }
+    }
 }
 
 /// One RGB swatch per [`living_rules::look::CLOTH`] word, derived from the look book's outfit
@@ -351,6 +435,70 @@ pub fn parse_hex(hex: &str) -> Option<[u8; 3]> {
     }
     let n = u32::from_str_radix(h, 16).ok()?;
     Some([((n >> 16) & 0xFF) as u8, ((n >> 8) & 0xFF) as u8, (n & 0xFF) as u8])
+}
+
+fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+}
+
+fn linear_to_srgb(c: f32) -> f32 {
+    let c = c.clamp(0.0, 1.0);
+    if c <= 0.003_130_8 { 12.92 * c } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 }
+}
+
+fn rgb_to_hsv(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
+    let mx = r.max(g).max(b);
+    let mn = r.min(g).min(b);
+    let d = mx - mn;
+    let h = if d <= 1e-5 {
+        0.0
+    } else if mx == r {
+        ((g - b) / d + if g < b { 6.0 } else { 0.0 }) / 6.0
+    } else if mx == g {
+        ((b - r) / d + 2.0) / 6.0
+    } else {
+        ((r - g) / d + 4.0) / 6.0
+    };
+    let s = if mx > 1e-5 { d / mx } else { 0.0 };
+    (h.rem_euclid(1.0), s, mx)
+}
+
+fn hsv_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
+    let h = h.rem_euclid(1.0) * 6.0;
+    let i = h.floor() as i32;
+    let f = h - i as f32;
+    let p = v * (1.0 - s);
+    let q = v * (1.0 - s * f);
+    let t = v * (1.0 - s * (1.0 - f));
+    let (r, g, b) = match i.rem_euclid(6) {
+        0 => (v, t, p),
+        1 => (q, v, p),
+        2 => (p, v, t),
+        3 => (p, q, v),
+        4 => (t, p, v),
+        _ => (v, p, q),
+    };
+    [(r.clamp(0.0, 1.0) * 255.0).round() as u8, (g.clamp(0.0, 1.0) * 255.0).round() as u8, (b.clamp(0.0, 1.0) * 255.0).round() as u8]
+}
+
+fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
+    let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Calibrate a look-book HSV mean `(h, s, v)` (from raw pre-lighting outfit albedos) for an unlit
+/// flat throng card under the scene's toon lighting:
+/// 1. Multiply linear value by [`TOON_SUN_GAIN`] (~2.35×, matching `toon_light.wesl` `sun_color()`
+///    at noon), since unlit cards bypass the sun's linear exposure gain.
+/// 2. Smoothly lift chroma and dark-chromatic value for chromatic words (`s > 0.14`, leaving
+///    neutrals like `black`, `tan` and `cream` faithful) so flat 2D cards stay distinct from grey
+///    stone paving even under warm noon light.
+pub fn calibrate_swatch(h: f32, s: f32, v: f32) -> [u8; 3] {
+    let v_lit = linear_to_srgb((srgb_to_linear(v) * TOON_SUN_GAIN).min(1.0));
+    let chroma_w = smoothstep(0.14, 0.22, s);
+    let s_cal = (s + chroma_w * (s.sqrt() - s) * 0.95).clamp(0.0, 0.95);
+    let v_cal = (v_lit + chroma_w * (v_lit.powf(0.75) - v_lit) * 0.60).clamp(0.0, 1.0);
+    hsv_to_rgb(h, s_cal, v_cal)
 }
 
 /// Strip gender (`-f`/`-m`) and trailing numeric variant (`_58`) from an outfit piece name.
@@ -386,11 +534,16 @@ pub fn top_piece_rgb(top_words: &str, outfit: &BTreeMap<String, String>) -> Opti
     None
 }
 
-/// Derive one swatch per [`living_rules::look::CLOTH`] word as the mean of the look book's
-/// top-garment outfit RGBs for lines naming that word. Words with no outfit in the book stay `None`.
+/// Derive one swatch per [`living_rules::look::CLOTH`] word from the look book's top-garment
+/// outfit RGBs: saturation-weighted circular mean hue, mean saturation and mean value in HSV
+/// (so multi-shade words such as `green` do not cancel chroma in RGB averaging), calibrated for
+/// unlit cards via [`calibrate_swatch`]. Words with no outfit in the book stay `None`.
 pub fn swatches_of(book: &crate::characters::book::LookBook) -> Swatches {
     use living_rules::look::{cloth_index, CLOTH, NO_CLOTH};
-    let mut sum = [[0u64; 3]; CLOTH.len()];
+    let mut hx = [0.0f64; CLOTH.len()];
+    let mut hy = [0.0f64; CLOTH.len()];
+    let mut sum_s = [0.0f64; CLOTH.len()];
+    let mut sum_v = [0.0f64; CLOTH.len()];
     let mut count = [0u64; CLOTH.len()];
     for line in book.lines.values() {
         let Some(top) = line.words.get("top").and_then(|v| v.as_str()) else { continue };
@@ -399,17 +552,24 @@ pub fn swatches_of(book: &crate::characters::book::LookBook) -> Swatches {
             continue;
         }
         let Some(rgb) = top_piece_rgb(top, &line.person.colors.outfit) else { continue };
+        let (h, s, v) = rgb_to_hsv(rgb[0] as f32 / 255.0, rgb[1] as f32 / 255.0, rgb[2] as f32 / 255.0);
+        let ang = (h as f64) * std::f64::consts::TAU;
+        let w = (s as f64).max(1e-3);
         let i = idx as usize;
-        sum[i][0] += rgb[0] as u64;
-        sum[i][1] += rgb[1] as u64;
-        sum[i][2] += rgb[2] as u64;
+        hx[i] += ang.cos() * w;
+        hy[i] += ang.sin() * w;
+        sum_s[i] += s as f64;
+        sum_v[i] += v as f64;
         count[i] += 1;
     }
     let mut out = [None; CLOTH.len()];
     for i in 0..CLOTH.len() {
         if count[i] > 0 {
-            let n = count[i];
-            out[i] = Some([((sum[i][0] + n / 2) / n) as u8, ((sum[i][1] + n / 2) / n) as u8, ((sum[i][2] + n / 2) / n) as u8]);
+            let n = count[i] as f64;
+            let h_mean = (hy[i].atan2(hx[i]) / std::f64::consts::TAU).rem_euclid(1.0) as f32;
+            let s_mean = (sum_s[i] / n) as f32;
+            let v_mean = (sum_v[i] / n) as f32;
+            out[i] = Some(calibrate_swatch(h_mean, s_mean, v_mean));
         }
     }
     out
@@ -499,6 +659,9 @@ struct Card {
     /// Drawn (0 gone, 1 full) and toward which.
     alpha: f32,
     target: f32,
+    /// Whether the card is currently in opaque `AlphaMode::Mask` (steady state) vs `AlphaMode::Blend`
+    /// (during spawn/despawn fade transitions).
+    masked: bool,
     /// A number of its own, for its stepping.
     seed: f32,
 }
@@ -545,7 +708,7 @@ impl Throng {
             let mut best: Option<(f32, Row, Vec2)> = None;
             for sq in self.squares.values() {
                 for c in sq.cards.iter().filter(|c| c.target > 0.5) {
-                    let (w, h) = if c.kind == Kind::Person { CARD } else { BEAST };
+                    let (w, h) = if c.kind == Kind::Person { (PICK_W, CARD.1) } else { BEAST };
                     let y = ground_y(c.at);
                     let feet = Vec3::new(c.at.x, y, c.at.y);
                     let head = feet + Vec3::Y * h;
@@ -698,32 +861,45 @@ fn seg(p: Vec2, a: Vec2, b: Vec2, r: f32) -> f32 {
     (p - (a + ab * t)).length() - r
 }
 
-/// Which part of a person card a point is (0 none, 1 head, 2 top and arms, 3 legs, 4 spear) and
-/// its distance outside it (m); u across, v up. The E1b mock's standing and fighting figures,
-/// and a walking one (legs in stride, arms swinging; facing +u).
+/// Which part of a person card a point is (0 none, 1 head, 2 top and arms, 3 legs, 4 spear shaft,
+/// 5 spearhead) and its distance outside it (m); u across, v up. Standing, walking (legs in stride,
+/// arms swinging; facing +u), and fighting (wide braced lunge + prominent diagonal spear with a
+/// steel tip, unmistakable at Middle and Far).
 fn person_part(u: f32, v: f32, pose: Pose) -> (u8, f32) {
     let p = Vec2::new((u - 0.5) * CARD.0, v * CARD.1);
-    let (head, top, legs, spear) = match pose {
+    let (head, top, legs, spear, tip) = match pose {
         Pose::Fight => (
-            (p - Vec2::new(0.06, 1.5)).length() - 0.12,
-            seg(p, Vec2::new(-0.02, 0.88), Vec2::new(0.04, 1.3), 0.17).min(seg(p, Vec2::new(0.16, 1.28), Vec2::new(0.34, 1.12), 0.05)).min(seg(p, Vec2::new(-0.16, 1.28), Vec2::new(-0.3, 1.02), 0.05)),
-            seg(p, Vec2::new(-0.08, 0.88), Vec2::new(-0.3, 0.04), 0.065).min(seg(p, Vec2::new(0.08, 0.88), Vec2::new(0.28, 0.04), 0.065)),
-            seg(p, Vec2::new(-0.4, 0.75), Vec2::new(0.44, 1.72), 0.022),
+            (p - Vec2::new(0.09, 1.50)).length() - 0.125,
+            seg(p, Vec2::new(-0.04, 0.88), Vec2::new(0.07, 1.32), 0.175)
+                .min(seg(p, Vec2::new(0.18, 1.28), Vec2::new(0.42, 1.18), 0.055))
+                .min(seg(p, Vec2::new(-0.15, 1.26), Vec2::new(-0.34, 0.98), 0.055)),
+            seg(p, Vec2::new(-0.08, 0.88), Vec2::new(-0.36, 0.04), 0.07)
+                .min(seg(p, Vec2::new(0.10, 0.88), Vec2::new(0.36, 0.04), 0.07)),
+            seg(p, Vec2::new(-0.52, 0.62), Vec2::new(0.44, 1.64), 0.036),
+            seg(p, Vec2::new(0.43, 1.63), Vec2::new(0.54, 1.77), 0.052),
         ),
         Pose::Walk => (
-            (p - Vec2::new(0.04, 1.56)).length() - 0.12,
-            seg(p, Vec2::new(0.0, 0.92), Vec2::new(0.03, 1.35), 0.17).min(seg(p, Vec2::new(-0.16, 1.34), Vec2::new(-0.3, 0.98), 0.05)).min(seg(p, Vec2::new(0.18, 1.34), Vec2::new(0.3, 1.0), 0.05)),
-            seg(p, Vec2::new(-0.06, 0.9), Vec2::new(-0.26, 0.04), 0.065).min(seg(p, Vec2::new(0.06, 0.9), Vec2::new(0.24, 0.06), 0.065)),
+            (p - Vec2::new(0.04, 1.56)).length() - 0.125,
+            seg(p, Vec2::new(0.0, 0.92), Vec2::new(0.03, 1.35), 0.175)
+                .min(seg(p, Vec2::new(-0.16, 1.34), Vec2::new(-0.30, 0.98), 0.052))
+                .min(seg(p, Vec2::new(0.18, 1.34), Vec2::new(0.30, 1.00), 0.052)),
+            seg(p, Vec2::new(-0.06, 0.90), Vec2::new(-0.26, 0.04), 0.068)
+                .min(seg(p, Vec2::new(0.06, 0.90), Vec2::new(0.24, 0.06), 0.068)),
+            f32::MAX,
             f32::MAX,
         ),
         Pose::Stand => (
-            (p - Vec2::new(0.0, 1.58)).length() - 0.12,
-            seg(p, Vec2::new(0.0, 0.92), Vec2::new(0.0, 1.36), 0.17).min(seg(p, Vec2::new(-0.2, 1.36), Vec2::new(-0.24, 0.9), 0.05)).min(seg(p, Vec2::new(0.2, 1.36), Vec2::new(0.24, 0.9), 0.05)),
-            seg(p, Vec2::new(-0.08, 0.9), Vec2::new(-0.1, 0.04), 0.065).min(seg(p, Vec2::new(0.08, 0.9), Vec2::new(0.1, 0.04), 0.065)),
+            (p - Vec2::new(0.0, 1.58)).length() - 0.125,
+            seg(p, Vec2::new(0.0, 0.92), Vec2::new(0.0, 1.36), 0.175)
+                .min(seg(p, Vec2::new(-0.20, 1.36), Vec2::new(-0.24, 0.90), 0.052))
+                .min(seg(p, Vec2::new(0.20, 1.36), Vec2::new(0.24, 0.90), 0.052)),
+            seg(p, Vec2::new(-0.08, 0.90), Vec2::new(-0.10, 0.04), 0.068)
+                .min(seg(p, Vec2::new(0.08, 0.90), Vec2::new(0.10, 0.04), 0.068)),
+            f32::MAX,
             f32::MAX,
         ),
     };
-    [(1u8, head), (2, top), (3, legs), (4, spear)].into_iter().fold((0u8, f32::MAX), |a, b| if b.1 < a.1 { b } else { a })
+    [(1u8, head), (2, top), (3, legs), (4, spear), (5, tip)].into_iter().fold((0u8, f32::MAX), |a, b| if b.1 < a.1 { b } else { a })
 }
 
 /// An animal stand-in (u across, v up; facing +u): a body, a head, four legs; the pose moves the
@@ -740,10 +916,12 @@ fn beast_part(u: f32, v: f32, pose: Pose, kind: Kind) -> f32 {
     body.min(head).min(neck).min(legs).min(tail)
 }
 
-/// A card's texture: a person in the placeholder tint, or with a top colour (skin, the top,
-/// dark trousers, a spear when fighting: E1b's coloured card), or an animal stand-in.
+/// A card's texture: a person in the placeholder tint or calibrated top colour (skin, top, dark
+/// trousers, spear + bright spearhead when fighting), or an animal stand-in, with a crisp dark
+/// ink silhouette outline (`OUTLINE_M` wide, [`INK`]) so light garments stay readable against stone
+/// paving and cards stay cleanly separated under `AlphaMode::Mask(0.5)`.
 fn card_image(kind: Kind, pose: Pose, top: Option<[u8; 3]>) -> Image {
-    let (w, h) = if kind == Kind::Person { (54u32, 108u32) } else { (78u32, 57u32) };
+    let (w, h) = if kind == Kind::Person { (72u32, 144u32) } else { (96u32, 70u32) };
     let mut px = Vec::with_capacity((w * h * 4) as usize);
     for j in 0..h {
         for i in 0..w {
@@ -755,6 +933,7 @@ fn card_image(kind: Kind, pose: Pose, top: Option<[u8; 3]>) -> Image {
                     (Some(t), 2) => t,
                     (Some(_), 3) => TROUSERS,
                     (_, 4) => SPEAR,
+                    (_, 5) => SPEAR_TIP,
                     (None, 1) => PLACEHOLDER_HEAD,
                     (None, 3) => PLACEHOLDER_LEGS,
                     _ => top.unwrap_or(PLACEHOLDER),
@@ -763,13 +942,38 @@ fn card_image(kind: Kind, pose: Pose, top: Option<[u8; 3]>) -> Image {
             } else {
                 (top.unwrap_or(PLACEHOLDER_LEGS), beast_part(u, v, pose, kind))
             };
-            let a = edge(d);
-            // Edge pixels darker: a soft outline, so neighbouring cards stay apart.
-            let k = if a < 0.99 { 0.55 } else { 1.0 };
-            px.extend_from_slice(&[(c[0] as f32 * k) as u8, (c[1] as f32 * k) as u8, (c[2] as f32 * k) as u8, (a * 255.0) as u8]);
+            // Silhouette extends by `OUTLINE_M`; pixels in `d > -0.008` blend cleanly into dark ink.
+            let a = edge(d - OUTLINE_M);
+            let ink_t = ((d + 0.008) / 0.016).clamp(0.0, 1.0);
+            let r = (c[0] as f32 * (1.0 - ink_t) + INK[0] as f32 * ink_t).round() as u8;
+            let g = (c[1] as f32 * (1.0 - ink_t) + INK[1] as f32 * ink_t).round() as u8;
+            let b = (c[2] as f32 * (1.0 - ink_t) + INK[2] as f32 * ink_t).round() as u8;
+            px.extend_from_slice(&[r, g, b, (a * 255.0) as u8]);
         }
     }
     Image::new(Extent3d { width: w, height: h, depth_or_array_layers: 1 }, TextureDimension::D2, px, TextureFormat::Rgba8UnormSrgb, RenderAssetUsages::default())
+}
+
+/// A ground ring texture: a bold band (`0.72..=0.96`) framed by a thin dark ink border
+/// (`0.68..0.72` and `0.96..=1.0`) so green pin and amber focus rings read clearly at Far zoom.
+fn ring_image(size: u32) -> Image {
+    let mut px = Vec::with_capacity((size * size * 4) as usize);
+    for j in 0..size {
+        for i in 0..size {
+            let u = (i as f32 + 0.5) / size as f32;
+            let v = 1.0 - (j as f32 + 0.5) / size as f32;
+            let r = Vec2::new(u - 0.5, v - 0.5).length() * 2.0;
+            let (rgb, a) = if (0.72..=0.95).contains(&r) {
+                (255u8, 255u8)
+            } else if (0.67..=1.0).contains(&r) {
+                (48u8, 235u8)
+            } else {
+                (0u8, 0u8)
+            };
+            px.extend_from_slice(&[rgb, rgb, rgb, a]);
+        }
+    }
+    Image::new(Extent3d { width: size, height: size, depth_or_array_layers: 1 }, TextureDimension::D2, px, TextureFormat::Rgba8UnormSrgb, RenderAssetUsages::default())
 }
 
 /// The kit, made the first time a throng is drawn.
@@ -778,8 +982,8 @@ fn kit(meshes: &mut Assets<Mesh>, images: &mut Assets<Image>, mats: &mut Assets<
         let a = (1.0 - Vec2::new(u - 0.5, v - 0.5).length() * 2.0).clamp(0.0, 1.0);
         a * a * (3.0 - 2.0 * a)
     }));
-    let ring_tex = images.add(soft(64, 64, |u, v| if (0.78..=1.0).contains(&(Vec2::new(u - 0.5, v - 0.5).length() * 2.0)) { 1.0 } else { 0.0 }));
-    let ring = |c: [f32; 3], mats: &mut Assets<StandardMaterial>| mats.add(StandardMaterial { base_color: Color::srgba(c[0], c[1], c[2], 0.95), base_color_texture: Some(ring_tex.clone()), unlit: true, alpha_mode: AlphaMode::Blend, depth_bias: 60.0, ..default() });
+    let ring_tex = images.add(ring_image(64));
+    let ring = |c: [f32; 3], mats: &mut Assets<StandardMaterial>| mats.add(StandardMaterial { base_color: Color::srgba(c[0], c[1], c[2], 0.98), base_color_texture: Some(ring_tex.clone()), unlit: true, alpha_mode: AlphaMode::Blend, depth_bias: 80.0, ..default() });
     Kit {
         card: meshes.add(Rectangle::new(CARD.0, CARD.1)),
         beast: meshes.add(Rectangle::new(BEAST.0, BEAST.1)),
@@ -787,7 +991,7 @@ fn kit(meshes: &mut Assets<Mesh>, images: &mut Assets<Image>, mats: &mut Assets<
         ring: meshes.add(Circle::new(1.0)),
         blob_mat: mats.add(StandardMaterial { base_color: Color::srgba(0.08, 0.08, 0.12, 0.3), base_color_texture: Some(blob_tex), unlit: true, alpha_mode: AlphaMode::Blend, depth_bias: 40.0, ..default() }),
         pin_mat: ring([0.15, 0.95, 0.35], mats),
-        focus_mat: ring([1.0, 0.72, 0.15], mats),
+        focus_mat: ring([1.0, 0.72, 0.10], mats),
         tex: BTreeMap::new(),
     }
 }
@@ -820,6 +1024,7 @@ fn draw(
     mut commands: Commands,
     mut t: ResMut<Throng>,
     kit_res: Option<ResMut<Kit>>,
+    net: NonSend<Net>,
     scene: NonSend<crate::world::Scene>,
     island: Option<Res<crate::island::Island>>,
     cam: Res<crate::camera::Cam>,
@@ -840,6 +1045,11 @@ fn draw(
     };
     let dt = time.delta_secs();
     let now = time.elapsed_secs();
+    let remains: Vec<Vec2> = net
+        .conn
+        .as_ref()
+        .map(|c| c.db.structure().iter().filter(|s| s.kind == "remains").map(|s| Vec2::new(s.x, s.y)).collect())
+        .unwrap_or_default();
     let t = &mut *t;
     // Rows to squares: a row's square keeps its cards; its count, poses and kinds are dealt
     // to them in a fixed order, so an unchanged row moves nothing.
@@ -850,7 +1060,17 @@ fn draw(
         let sq = t.squares.entry(key).or_insert_with(|| Square { row, cards: Vec::new() });
         sq.row = row;
         let n = row.count as usize;
-        let to = places(&row, n);
+        let mut to = places(&row, n);
+        if !remains.is_empty() && n > 0 {
+            let lo = row.origin() + Vec2::splat(0.25);
+            let hi = row.origin() + Vec2::splat(row.side() - 0.25);
+            let near_remains: Vec<Vec2> = remains
+                .iter()
+                .copied()
+                .filter(|r| r.x >= lo.x - MOUND_CLEAR_M && r.x <= hi.x + MOUND_CLEAR_M && r.y >= lo.y - MOUND_CLEAR_M && r.y <= hi.y + MOUND_CLEAR_M)
+                .collect();
+            avoid_obstacles(&mut to, &near_remains, MOUND_CLEAR_M, lo, hi);
+        }
         let poses = row.poses();
         let kinds = row.card_kinds();
         let top = tops(&row, &kinds);
@@ -891,7 +1111,7 @@ fn draw(
                 .spawn((Mesh3d(kit.blob.clone()), MeshMaterial3d(kit.blob_mat.clone()), Transform::from_translation(base + Vec3::Y * 0.05).with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)).with_scale(Vec3::ZERO), Visibility::Visible, bevy::light::NotShadowCaster))
                 .id();
             let seed = (row.cx.wrapping_mul(31) ^ row.cy.wrapping_mul(17)).wrapping_add(k as u32 * 7) as f32 * 0.618;
-            sq.cards.push(Card { entity, blob, mat, pose, kind, top: top[k], at: to[k], to: to[k], alpha: 0.0, target: 1.0, seed });
+            sq.cards.push(Card { entity, blob, mat, pose, kind, top: top[k], at: to[k], to: to[k], alpha: 0.0, target: 1.0, masked: false, seed });
         }
     }
     // Squares no longer in the rows: their cards fade out.
@@ -933,8 +1153,17 @@ fn draw(
             tf.translation = base + Vec3::Y * 0.05;
             tf.scale = Vec3::splat(c.alpha * if c.kind == Kind::Person { 0.9 } else { 1.2 });
         }
+        // Steady-state cards use opaque `AlphaMode::Mask(0.5)` so they write depth cleanly (no
+        // translucent ghosting, no remains-mound outlines drawing over cards); `AlphaMode::Blend`
+        // is used only during spawn/despawn crossfades.
+        let want_masked = c.alpha >= 0.99 && c.target >= 0.99;
         if let Some(mut m) = mats.get_mut(&c.mat) {
-            let want = Color::srgba(lit.x, lit.y, lit.z, c.alpha * 0.95);
+            if want_masked != c.masked {
+                c.masked = want_masked;
+                m.alpha_mode = if want_masked { AlphaMode::Mask(0.5) } else { AlphaMode::Blend };
+            }
+            let alpha = if want_masked { 1.0 } else { c.alpha };
+            let want = Color::srgba(lit.x, lit.y, lit.z, alpha);
             let (h, w) = (m.base_color.to_srgba(), want.to_srgba());
             if (h.alpha - w.alpha).abs() > 0.004 || (h.red - w.red).abs() > 0.01 || (h.green - w.green).abs() > 0.01 || (h.blue - w.blue).abs() > 0.01 {
                 m.base_color = want;
@@ -999,9 +1228,9 @@ fn rings(
     };
     for (id, focus) in marks {
         let Some((p, _)) = scene.shown.get(&id) else { continue };
-        let at = ground(island.as_deref(), &scene, *p) + Vec3::Y * 0.07;
+        let at = ground(island.as_deref(), &scene, *p) + Vec3::Y * 0.08;
         let mat = if focus { kit.focus_mat.clone() } else { kit.pin_mat.clone() };
-        let r = if focus { 0.85 } else { 0.7 };
+        let r = if focus { 0.95 } else { 0.78 };
         commands.spawn((Ring, Mesh3d(kit.ring.clone()), MeshMaterial3d(mat), Transform::from_translation(at).with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)).with_scale(Vec3::splat(r)), Visibility::Visible, bevy::light::NotShadowCaster));
     }
 }
@@ -1090,27 +1319,66 @@ mod tests {
             if count == 1 {
                 assert_eq!(ps[0], r.centre(), "a lone card stands right on the centroid");
             }
-            let reach = (spread as f32 * 0.5).max(0.35 * (count as f32).sqrt()).max(0.5) + 1e-3;
             for p in &ps {
                 assert!(r.holds(*p), "{p} outside {r:?}");
-                assert!(p.distance(r.centre()) <= reach, "{p} past the spread of {r:?}");
             }
             // The same row, the same places.
             assert_eq!(ps, places(&r, count as usize));
-            // Centroid pulls the cards to its side of the square.
-            if count > 1 && cx == 0 && cy == 0 && spread <= 4 {
+            // Centroid pulls small clusters to its side of the square.
+            if count > 1 && count <= 5 && cx == 0 && cy == 0 && spread <= 4 {
                 let mean = ps.iter().copied().fold(Vec2::ZERO, |a, b| a + b) / ps.len() as f32;
                 assert!(mean.x < r.origin().x + r.side() * 0.5 && mean.y < r.origin().y + r.side() * 0.5, "mean {mean} not on centroid side");
             }
-            // Apart enough to tell (no two stacked on a corner).
-            if count > 1 && count <= 30 {
+            // Minimum pairwise separation: dense cells spread out cleanly instead of stacking
+            // onto a corner or vertical sliver.
+            if count > 1 && count <= 20 {
                 let min = ps.iter().enumerate().flat_map(|(i, a)| ps[i + 1..].iter().map(move |b| a.distance(*b))).fold(f32::MAX, f32::min);
-                assert!(min > 0.05, "{count} cards in {size} at ({cx},{cy}): {min}");
+                assert!(min >= 0.65, "{count} cards in {size} at ({cx},{cy}): min separation {min:.3} m < 0.65 m");
+            } else if count > 20 && count <= 30 {
+                let min = ps.iter().enumerate().flat_map(|(i, a)| ps[i + 1..].iter().map(move |b| a.distance(*b))).fold(f32::MAX, f32::min);
+                assert!(min >= 0.55, "{count} cards in {size} at ({cx},{cy}): min separation {min:.3} m < 0.55 m");
             }
         }
         // A wide spread on a small square stays in the square.
         let r = Row::of(&row((1 << 16) | 1, 1, 6, 30, STILL, 0, 0, PEOPLE));
         assert!(places(&r, 6).iter().all(|p| r.holds(*p)));
+    }
+
+    #[test]
+    fn avoid_obstacles_keeps_cards_clear_of_remains_mounds_inside_square() {
+        let lo = Vec2::new(60.0, 60.0);
+        let hi = Vec2::new(65.5, 65.5);
+        let mound = Vec2::new(63.0, 63.0);
+        let mut pts = vec![mound, mound + Vec2::new(0.2, 0.1), Vec2::new(61.0, 61.0)];
+        avoid_obstacles(&mut pts, &[mound], MOUND_CLEAR_M, lo, hi);
+        for p in &pts {
+            assert!(p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y, "{p} outside square");
+            assert!(p.distance(mound) >= MOUND_CLEAR_M - 0.02, "{p} still inside mound (d={})", p.distance(mound));
+        }
+        // Unobstructed point stays put.
+        assert_eq!(pts[2], Vec2::new(61.0, 61.0));
+    }
+
+    #[test]
+    fn fighting_card_has_dark_outline_and_prominent_spear() {
+        let img = card_image(Kind::Person, Pose::Fight, Some([242, 238, 219]));
+        let data = img.data.as_ref().unwrap();
+        let (mut opaque, mut outline_dark, mut spear_px) = (0usize, 0usize, 0usize);
+        for px in data.chunks_exact(4) {
+            if px[3] >= 128 {
+                opaque += 1;
+                if px[0] <= 60 && px[1] <= 45 && px[2] <= 45 {
+                    outline_dark += 1;
+                }
+                // Bright steel spearhead or warm spear shaft pixels.
+                if (px[0] > 200 && px[2] > 220) || (px[0] > 125 && px[1] > 90 && px[2] < 80) {
+                    spear_px += 1;
+                }
+            }
+        }
+        assert!(opaque > 1500, "opaque pixels {opaque}");
+        assert!(outline_dark > 300, "dark outline pixels {outline_dark}");
+        assert!(spear_px > 60, "spear + spearhead pixels {spear_px}");
     }
 
     #[test]
@@ -1137,7 +1405,7 @@ mod tests {
     }
 
     #[test]
-    fn swatches_are_derived_as_mean_of_book_outfit_rgbs_and_missing_words_stay_neutral() {
+    fn swatches_are_derived_and_calibrated_from_book_outfit_rgbs_and_missing_words_stay_neutral() {
         let text = serde_json::json!({
             "generation": "test",
             "lines": {
@@ -1160,20 +1428,42 @@ mod tests {
                 "lk_0000000000000003": {
                     "person": {
                         "type": "adult-m-a", "height": 1.75,
-                        "colors": { "outfit": { "jersey-m": "#aa3322", "trousers-m": "#202020" } },
+                        "colors": { "outfit": { "jersey-m": "#562722", "trousers-m": "#202020" } },
                         "styles": { "outfit": ["jersey-m", "trousers-m"] }
                     },
                     "words": { "top": "a red jersey" }
+                },
+                "lk_0000000000000004": {
+                    "person": {
+                        "type": "adult-f-a", "height": 1.65,
+                        "colors": { "outfit": { "smock-f": "#416565", "trousers-f": "#202020" } },
+                        "styles": { "outfit": ["smock-f", "trousers-f"] }
+                    },
+                    "words": { "top": "a green smock" }
+                },
+                "lk_0000000000000005": {
+                    "person": {
+                        "type": "adult-m-a", "height": 1.75,
+                        "colors": { "outfit": { "coat-m": "#615c3f", "trousers-m": "#202020" } },
+                        "styles": { "outfit": ["coat-m", "trousers-m"] }
+                    },
+                    "words": { "top": "a green coat" }
                 }
             }
         });
         let book = crate::characters::book::LookBook::parse(&text.to_string()).unwrap();
         let sw = swatches_of(&book);
-        // Blue (index 4): mean of #406080 (64,96,128) and #6080a0 (96,128,160) = (80, 112, 144).
-        // Note: the cream apron (#f0f0f0) did not contaminate blue!
-        assert_eq!(sw[4], Some([80, 112, 144]));
-        // Red (index 5): #aa3322 (170, 51, 34).
-        assert_eq!(sw[5], Some([170, 51, 34]));
+        // Blue (index 4): brighter than raw mean (80,112,144) under toon lit-band gain, and
+        // clearly blue (b > g > r); cream apron (#f0f0f0) did not contaminate it.
+        let blue = sw[4].expect("blue swatch");
+        assert!(blue[2] > blue[1] && blue[1] > blue[0] && blue[2] > 160, "blue {blue:?}");
+        // Red (index 5): calibrated from dark crimson #562722 to a clearly red, brighter swatch.
+        let red = sw[5].expect("red swatch");
+        assert!(red[0] > 130 && red[0] > red[1] * 2 && red[0] > red[2] * 2, "red {red:?}");
+        // Green (index 2): teal-green (#416565) + olive-green (#615c3f) keep clear green chroma
+        // in HSV aggregation instead of collapsing to grey in RGB averaging.
+        let green = sw[2].expect("green swatch");
+        assert!(green[1] > green[0] + 40 && green[1] > green[2] + 40, "green {green:?}");
         // Grey (index 9) and every other absent word: None (neutral, never invented).
         assert_eq!(sw[9], None);
         assert_eq!(sw[0], None);

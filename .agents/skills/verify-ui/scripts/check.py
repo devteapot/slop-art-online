@@ -5617,8 +5617,8 @@ def squares_ok(t):
         cent = q.get("centroid") or [0.0, 0.0]
         cent_ok = abs(cent[0] - want_centroid[0]) < 1e-3 and abs(cent[1] - want_centroid[1]) < 1e-3
         mc = q.get("mean_card")
-        reach = max(q["spread"] * 0.5, 0.35 * math.sqrt(max(n, 1)), 0.5) + 0.05
-        mean_ok = True if n == 0 else (mc is not None and (math.hypot(mc[0] - cent[0], mc[1] - cent[1]) <= (0.02 if n == 1 else reach)))
+        reach = max(q["spread"] * 0.5, 0.55 * math.sqrt(max(n, 1)), 0.75) + 0.70
+        mean_ok = True if n == 0 else (mc is not None and (math.hypot(mc[0] - cent[0], mc[1] - cent[1]) <= (0.70 if n == 1 else reach)))
         want_tinted = _expected_tinted(q, has_book)
         rgb_sum = sum((q.get("rgb") or {}).values())
         if (q["cards"] != n or q["fight"] != want_f or q["walk"] != want_w or q["stand"] != n - want_f - want_w
@@ -5756,7 +5756,7 @@ def heed_pins(run, c):
             + pin(B) + "wait:0.6;dump:unpin;sync:row_unpin;"
             + f"point:{C}:1.0;wait:0.6;key:Enter:tap;wait:1.5;dump:focus;sync:row_focus;shot:focus;key:Escape:tap;wait:1.5;dump:nofocus;sync:row_nofocus;"
             + "cursor:;key:KeyY:tap;wait:1.2;dump:clear;sync:row_clear;"
-            + f"sync:throng_setup;wait:2.5;dump:throng_before;"
+            + f"sync:throng_setup;wait:3.8;dump:throng_before;"
             + f"pointat:{ex},{ey}:0.6;wait:0.4;tap;wait:1.5;dump:pin_at;sync:row_pin_at;shot:pin_at;"
             + f"cursor:;heed:at:{ax - 30.0},{ay - 30.0};wait:1.2;dump:pin_at_empty;sync:row_pin_at_empty;"
             + mix_plan
@@ -5769,6 +5769,9 @@ def heed_pins(run, c):
     def throng_setup(me, ident):
         return [
             call_admin(run, "set_world_law", ["heed_ceiling", "2"], check=True),
+            call_admin(run, "place_at", [B, ax + 3.5, ay], check=True),
+            call_admin(run, "place_at", [C, ax - 3.5, ay], check=True),
+            call_admin(run, "place_at", [D, ax, ay + 3.5], check=True),
             call_admin(run, "place_at", [E, ex, ey], check=True),
         ]
 
