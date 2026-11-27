@@ -524,6 +524,8 @@ pub struct DumpExtra<'w, 's> {
     throng: Option<Res<'w, crate::throng::Throng>>,
     quality: Res<'w, crate::graphics::Quality>,
     render_scale: Res<'w, crate::graphics::RenderScale>,
+    upscale: Res<'w, crate::graphics::Upscale>,
+    shadow_filter: Query<'w, 's, Option<&'static bevy::light::ShadowFilteringMethod>, With<Camera3d>>,
 }
 
 impl DumpExtra<'_, '_> {
@@ -578,6 +580,10 @@ impl DumpExtra<'_, '_> {
             "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()), "film": self.film.name(), "film_saved": self.prefs.film, "hair_shine": self.shine.name(), "hair_shine_saved": self.prefs.hair_shine, "light": self.light.name(), "light_saved": self.prefs.light, "char_rim": self.char_rim.name(), "char_rim_saved": self.prefs.char_rim,
             "quality": self.quality.name(), "quality_saved": self.prefs.quality, "render_scale": self.render_scale.name(), "render_scale_saved": self.prefs.render_scale,
             "render_scale_px": self.lod_camera.single().ok().and_then(|c| c.physical_viewport_size()).map(|s| [s.x, s.y]),
+            // How a scaled picture is composited (null at 100%: no extra pass), and the 3D
+            // camera's shadow filter (`Quality`).
+            "upscale": self.upscale.active.then(|| serde_json::json!({"method": self.upscale.method(), "sharpness": self.upscale.sharpness})),
+            "shadow_filter": self.shadow_filter.single().ok().map(|f| format!("{:?}", f.copied().unwrap_or_default())),
             // The one-shot each body plays now over its walk or stand (a gesture: `town.rs`), by
             // character id: a wave made while walking on plays on (talk-turns' `on_the_move`).
             "onces": self.town.as_ref().map(|t| t.shows.iter().filter_map(|(id, s)| s.once.map(|a| (id.to_string(), serde_json::json!(a.clip)))).collect::<serde_json::Map<_, _>>()),

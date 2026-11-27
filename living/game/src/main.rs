@@ -110,6 +110,14 @@ fn main() {
             primary_window: Some(Window {
                 title: "Slop Art Online — camera spike".into(),
                 resolution: bevy::window::WindowResolution::new(size.x, size.y),
+                // `LIVING_GAME_FULLSCREEN=1` (look-dev live captures): borderless on the whole
+                // primary display, so a 2x Retina run renders its full 3024x1964 rather than the
+                // window the menu bar and title bar leave.
+                mode: if std::env::var("LIVING_GAME_FULLSCREEN").is_ok_and(|v| !v.trim().is_empty() && v.trim() != "0") {
+                    bevy::window::WindowMode::BorderlessFullscreen(bevy::window::MonitorSelection::Primary)
+                } else {
+                    bevy::window::WindowMode::Windowed
+                },
                 // `LIVING_GAME_VSYNC=0|immediate|mailbox` (measurement): a window that presents
                 // without waiting for the display and updates as fast as it can when it hasn't
                 // the focus (below), so a windowed run's frame time is its cost, not 16.7 ms.
