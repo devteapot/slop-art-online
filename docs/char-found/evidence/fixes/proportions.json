@@ -28,28 +28,28 @@
   "child-l1": {
     "height_m": 1.2,
     "heads": 5.2787,
-    "hip_pct": 18.7479,
-    "waist_pct": 16.1654,
-    "waist_hip": 0.8622,
+    "hip_pct": 17.7598,
+    "waist_pct": 15.5036,
+    "waist_hip": 0.873,
     "shoulder_pct": 19.7765,
-    "shoulder_hip": 1.0549,
-    "bust_cm": -0.1338,
-    "head_forward_cm": -1.2223,
-    "neck_pct": 5.2048,
-    "back_cm": 1.2717
+    "shoulder_hip": 1.1136,
+    "bust_cm": 0.3468,
+    "head_forward_cm": -1.0232,
+    "neck_pct": 5.2066,
+    "back_cm": 1.7848
   },
   "child-l2": {
     "height_m": 1.2,
     "heads": 5.2787,
-    "hip_pct": 18.7479,
-    "waist_pct": 16.1822,
-    "waist_hip": 0.8631,
+    "hip_pct": 17.7598,
+    "waist_pct": 15.4994,
+    "waist_hip": 0.8727,
     "shoulder_pct": 19.7765,
-    "shoulder_hip": 1.0549,
-    "bust_cm": -0.122,
-    "head_forward_cm": -1.2202,
-    "neck_pct": 5.2048,
-    "back_cm": 1.2705
+    "shoulder_hip": 1.1136,
+    "bust_cm": 0.3634,
+    "head_forward_cm": -1.0232,
+    "neck_pct": 5.2066,
+    "back_cm": 1.7878
   },
   "elder-l1": {
     "height_m": 1.7,
@@ -62,7 +62,7 @@
     "bust_cm": -0.0287,
     "head_forward_cm": 3.8234,
     "neck_pct": 5.5623,
-    "back_cm": 5.9146
+    "back_cm": 4.7801
   },
   "elder-l2": {
     "height_m": 1.7,
@@ -75,7 +75,7 @@
     "bust_cm": -0.0039,
     "head_forward_cm": 3.8276,
     "neck_pct": 5.5623,
-    "back_cm": 5.8924
+    "back_cm": 4.8284
   },
   "man-l1": {
     "height_m": 1.86,
@@ -111,7 +111,7 @@
     "waist_hip": 0.6485,
     "shoulder_pct": 16.3106,
     "shoulder_hip": 0.8168,
-    "bust_cm": 4.4852,
+    "bust_cm": 4.1937,
     "head_forward_cm": 0.9677,
     "neck_pct": 5.2879,
     "back_cm": 3.4585
@@ -124,7 +124,7 @@
     "waist_hip": 0.6485,
     "shoulder_pct": 16.3106,
     "shoulder_hip": 0.8168,
-    "bust_cm": 4.702,
+    "bust_cm": 4.2581,
     "head_forward_cm": 0.9878,
     "neck_pct": 5.2879,
     "back_cm": 3.4589

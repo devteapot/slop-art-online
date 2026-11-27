@@ -46,10 +46,10 @@ BASE = {
 MORPHS = {
     "Sex_Female": {
         "underarm": 0.008,
-        "underbust": 0.015,
+        "underbust": 0.005,
         "hip": 1.15,
         "waist": 1.005,
-        "bust": 2.05,
+        "bust": 1.50,
         "chest_d": 1.08,
         "butt": 1.18,
         "sh_w": -0.052,
@@ -80,10 +80,10 @@ MORPHS = {
         "underarm": 0.012,
         "head": 1.32,
         "sh_w": -0.030,
-        "chest": 0.95,
+        "chest": 1.03,
         "bust": 0.0,
-        "waist": 1.33,
-        "hip": 0.90,
+        "waist": 1.14,
+        "hip": 0.95,
         "belly": 0.008,
         "neck": 0.92,
         "arm": 1.04,
@@ -237,6 +237,9 @@ def positions(P, joints):
             f *= P["chest_d"]
             b *= P["chest_d"]
             f += P["belly"] * 0.25
+        if P.get("child") and k in (5, 6):
+            # Fill out the lower ribs above the juvenile waistband.
+            rx += (0.016, 0.007)[k - 5]
         if g == "sh":
             rx = rx * P["chest"] + P["sh_w"]
             f *= P["chest_d"]
@@ -248,8 +251,9 @@ def positions(P, joints):
         # Ease the rib cage forward and settle the shoulder girdle into the back curve.
         bend = {"chest": 0.35, "sh": 0.75, "nb": 0.95, "neck": 1.10}.get(g, 0.0)
         st = -P["stoop"] * bend
+        if 3 <= k <= 12:
+            b += P["stoop"] * (0.04, 0.35, 0.92, 1.43, 1.75, 1.84, 1.70, 1.31, 0.81, 0.29)[k - 3]
         if g in ("chest", "sh"):
-            b += P["stoop"] * (1.58 if g == "chest" else 2.08)
             f -= P["stoop"] * 0.32
         for j in range(NT):
             th = j * 2 * math.pi / NT
@@ -260,8 +264,6 @@ def positions(P, joints):
                 x += np.sign(x) * abs(math.sin(th)) ** 4 * (wall - rx)
             if k in (10, 11) and math.cos(th) > 0:
                 y += 0.005 * math.cos(th) ** 12 - 0.006 * math.sin(2 * th) ** 2
-            if 5 <= k <= 10:
-                y += P["stoop"] * (0.12, 0.37, 0.54, 0.54, 0.41, 0.19)[k - 5] * max(0.0, -math.cos(th)) ** 2
             zz = z + dzb * (1 - math.cos(th)) / 2
             # Taper the deltoid into the acromion and raise the outer clavicle.
             if k in (9, 10) and math.cos(th) > 0:
@@ -270,16 +272,17 @@ def positions(P, joints):
             zz = np.interp(
                 zz, [0.850, 0.915, 1.327, 1.424], [HIP[2] - 0.065, HIP[2] + 0.005, SJ[2], HJ[2] - 0.030]
             )
-            if k in (5, 6, 7) and j in (1, 2, 3, 13, 14, 15):  # the bust
+            if P.get("underbust") and k in (4, 5, 6, 7, 8):
+                # Carry the projection through the sternum and lateral ribs.
+                arc = (0.017, 0.023, 0.022, 0.013, 0.0)[min(j, NT - j, 4)]
+                y -= P["bust"] * arc * (0.22, 0.70, 1.0, 0.83, 0.38)[k - 4]
+                if k == 5:
+                    y += P["underbust"] * max(0.0, math.cos(th))
+            elif k in (5, 6, 7) and j in (1, 2, 3, 13, 14, 15):  # the bust
                 jj = j if j < 8 else NT - j
                 y -= P["bust"] * {1: 0.022, 2: 0.030, 3: 0.007}[jj] * {5: 0.35, 6: 1.0, 7: 0.5}[k]
                 if k == 5:
                     zz -= 0.006 * P["bust"]
-                    fold = P.get("underbust", 0.0) * {1: 0.85, 2: 1.0, 3: 0.45}[jj]
-                    y += fold
-                    zz += fold
-                if k == 7:
-                    y -= 0.28 * P.get("underbust", 0.0)
             zz -= P["stoop"] * min(0.78, bend)
             V[("T", k, j)] = np.array([x, y + st, zz])
     V[("C",)] = np.array([0.020, 0.008, HIP[2] - 0.111])
