@@ -8,6 +8,12 @@
  "year_days": 4,
  "life_pace": 1.0,
  "laws_file": "worlds/cullet/laws.rhai",
+ "rules": {
+  "cover_sight_on": false,
+  "cover_brush_on": false,
+  "gaze_on": false,
+  "fov_on": false
+ },
  "setting": "A scene world: Cullet's laws on a 4-minute day and a 4-day year, so that winter comes about 11 real minutes after creation (verify-core scenes.py winter).",
  "resource_scale": {
   "tree": 0.0,
