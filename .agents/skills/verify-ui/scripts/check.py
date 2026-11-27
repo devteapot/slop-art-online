@@ -5478,20 +5478,22 @@ def reply_pace(run, c):
 
 # ---- heed for players (docs/ATTENTION_BUDGET.md "Built: the player side"; features/heed.md) ----
 
-HEED_LAWS = ("heed_on", "heed_players")
+HEED_LAWS = ("heed_on", "heed_players", "heed_ceiling")
 HEED_MAX = "You can keep at most 4 others pinned at once."
 HEED_UNSEEN = "You can only keep track of someone you can see now."
+HEED_EMPTY = "There is no one in the throng there to pick out."
 
 
 @contextmanager
 def heed_fixture(run):
-    """Both heed laws back to the world's own values (else off, as shipped) when the scene ends."""
+    """Heed laws back to the world's own values (else shipped defaults) when the scene ends."""
     original = own_laws(lambda q: sql(run, q))
     try:
         yield
     finally:
         for law in HEED_LAWS:
-            call_admin(run, "set_world_law", [law, original.get(law, shipped_law(law) or "false")], check=True)
+            default = "16" if law == "heed_ceiling" else "false"
+            call_admin(run, "set_world_law", [law, original.get(law, shipped_law(law) or default)], check=True)
 
 
 def heed_on_calls():
@@ -5546,9 +5548,12 @@ def verify_sql_noon(run):
 
 
 def throng_rows(run, ident):
-    """My throng as the authority holds it (owner SQL): (cell, size, count, moving, fighting) rows."""
-    rows = owner_rows(run, f"SELECT cell, size, count, spread, heading, moving, fighting, kinds FROM seen_throng WHERE viewer = 0x{ident}") or []
-    return [{k: r[k] for k in ("cell", "size", "count", "spread", "heading", "moving", "fighting", "kinds")} for r in rows]
+    """My throng as the authority holds it (owner SQL)."""
+    cols = ("cell", "size", "count", "spread", "heading", "moving", "fighting", "kinds",
+            "colour_a", "colour_a_count", "colour_b", "colour_b_count", "colour_c", "colour_c_count",
+            "people", "wolves", "deer", "others", "centre_x", "centre_y")
+    rows = owner_rows(run, f"SELECT {', '.join(cols)} FROM seen_throng WHERE viewer = 0x{ident}") or []
+    return [{k: r[k] for k in cols} for r in rows]
 
 
 def heed_choice(run, me):
@@ -5570,15 +5575,55 @@ def perception_sets(text):
     return re.findall(r"perception: subscribing the \w+ set \((\d+) queries; (tables: [^;)]*)", text)
 
 
+def _expected_tinted(q, has_book):
+    """How many cards in square `q` should carry a cloth swatch (mirrors `throng::tops_with`)."""
+    if not has_book:
+        return 0
+    n_people = q.get("people", 0)
+    if n_people == 0:
+        return 0
+    # Index 9 ("grey") has no outfit in the shipped look book, so it stays neutral.
+    slots = [(idx, cnt) for idx, cnt in (q.get("colours") or []) if idx != 255 and cnt > 0]
+    total_c = sum(cnt for _, cnt in slots)
+    if total_c == 0:
+        return 0
+    if total_c <= n_people:
+        return sum(cnt for idx, cnt in slots if idx != 9)
+    # Proportional largest-remainder apportionment across active slots.
+    exacts = [cnt * n_people / total_c for _, cnt in slots]
+    floors = [int(math.floor(e)) for e in exacts]
+    rem = n_people - sum(floors)
+    order = sorted(range(len(slots)), key=lambda i: (-(exacts[i] - floors[i]), i))
+    for i in order[:rem]:
+        floors[i] += 1
+    return sum(floors[i] for i, (idx, _) in enumerate(slots) if idx != 9)
+
+
 def squares_ok(t):
     """Each square of a dump's throng drawn as its row says: `count` cards, the poses by its
-    shares, and every card inside the square."""
+    shares, per-kind counts, cards tinted per its colour summary, centred on its centroid and
+    inside the square."""
     bad = []
+    has_book = (t or {}).get("tint") == "book"
     for q in (t or {}).get("squares") or []:
         n, f, m = q["count"], q["fighting"], q["moving"]
         want_f = min(f, n)
         want_w = min(m, n - want_f)
-        if q["cards"] != n or q["fight"] != want_f or q["walk"] != want_w or q["stand"] != n - want_f - want_w or not q["inside"] or q["tinted"]:
+        side = max(1, q["size"]) * 6.0
+        cx, cy = q["cell"]
+        ox, oy = cx * 6.0, cy * 6.0
+        ce = q.get("centre") or [0, 0]
+        want_centroid = [ox + min(ce[0], side - 1.0) + 0.5, oy + min(ce[1], side - 1.0) + 0.5]
+        cent = q.get("centroid") or [0.0, 0.0]
+        cent_ok = abs(cent[0] - want_centroid[0]) < 1e-3 and abs(cent[1] - want_centroid[1]) < 1e-3
+        mc = q.get("mean_card")
+        reach = max(q["spread"] * 0.5, 0.55 * math.sqrt(max(n, 1)), 0.75) + 0.70
+        mean_ok = True if n == 0 else (mc is not None and (math.hypot(mc[0] - cent[0], mc[1] - cent[1]) <= (0.70 if n == 1 else reach)))
+        want_tinted = _expected_tinted(q, has_book)
+        rgb_sum = sum((q.get("rgb") or {}).values())
+        if (q["cards"] != n or q["fight"] != want_f or q["walk"] != want_w or q["stand"] != n - want_f - want_w
+                or not q["inside"] or q["tinted"] != want_tinted or rgb_sum != q["tinted"]
+                or not cent_ok or not mean_ok):
             bad.append(q)
     return bad
 
@@ -5598,9 +5643,10 @@ def heed_throng(run, c):
     the drawing as before heed: no `seen_throng`, no throng, no keeping-track rows in Settings),
     then both laws on (`set_world_law`, admin): the client subscribes `seen_throng` beside the
     rest, make-before-break, and draws each row as `count` figure cards in its square with the
-    poses its shares give, at the play camera and zoomed out; Settings' switch hides them; then
-    `heed_players` off: the rows go and the set is the first one again. The laws go back to the
-    world's own values after."""
+    poses its shares give, cloth colours derived from the look book in proportion to `colour_a/b/c`,
+    and cards centred on `(cell corner + centre_x/y + 0.5 m)`, at the play camera and zoomed out;
+    Settings' switch hides them; then `heed_players` off: the rows go and the set is the first one
+    again. The laws go back to the world's own values after."""
     s = "heed-throng"
     plan = ("ready;wait:2;sync:battle;wait:5;dump:off;shot:off;"
             "click:@menu;wait:0.5;click:@menu:Settings;wait:0.8;dump:settings_off;click:@settings:page:controls;wait:0.6;dump:controls_off;click:@settings:page:play;wait:0.4;click:@win:Settings:close;wait:0.5;"
@@ -5610,7 +5656,6 @@ def heed_throng(run, c):
             "click:@settings:throng;wait:1.2;dump:hidden;shot:hidden;"
             "click:@settings:throng;wait:1.2;dump:shown;click:@win:Settings:close;wait:0.5;"
             "sync:off;wait:4;dump:after;sync:rows_after;shot:after;quit")
-    st = verify.load(run)
 
     def battle(me, ident):
         # Noon, so the player sees the whole battle (the island's night sight is short); the
@@ -5650,8 +5695,13 @@ def heed_throng(run, c):
     c.check(s, "laws on: the log names heed for players", "rules: heed for players true" in L and "heed: players heed true" in L)
     for k, rows_k in (("on", "rows_on_a"), ("far", "rows_far_a")):
         t = d[k].get("throng") or {}
+        sqs = t.get("squares") or []
         bad = squares_ok(t)
-        c.check(s, f"{k}: the throng has rows and every square is drawn as its row says (count cards, poses by shares, inside, placeholder tint)", t.get("rows", 0) > 0 and not bad and t.get("tint") == "placeholder", f"rows {t.get('rows')} cards {t.get('cards')}; bad {bad[:2]}")
+        c.check(s, f"{k}: the throng has rows and every square is drawn as its row says (count cards, poses, colours, centroids, inside)", t.get("rows", 0) > 0 and not bad and t.get("tint") == "book", f"rows {t.get('rows')} cards {t.get('cards')} tint {t.get('tint')}; bad {bad[:2]}")
+        distinct_rgbs = {rgb for q in sqs for rgb in (q.get("rgb") or {})}
+        tinted_total = sum(q.get("tinted", 0) for q in sqs)
+        non_origin_centres = any(q.get("centre") != [0, 0] for q in sqs)
+        c.check(s, f"{k}: cards carry real look-book cloth colours and non-trivial centroids", tinted_total > 0 and len(distinct_rgbs) >= 2 and non_origin_centres, f"tinted {tinted_total}, rgbs {sorted(distinct_rgbs)}, centres {[q.get('centre') for q in sqs[:4]]}")
         # The authority's rows just before and just after the dump: a row the battle changed
         # in between counts as alike when it matches either.
         both = (res.get(rows_k) or []) + (res.get(rows_k[:-1] + "b") or [])
@@ -5666,42 +5716,96 @@ def heed_throng(run, c):
     c.check(s, "the switch on again: drawn", ts.get("drawn") is True and ts.get("cards", 0) > 0, json.dumps({k: ts.get(k) for k in ("on", "drawn", "cards")}))
     c.check(s, "heed_players off: the dump has no throng or heed, the authority no rows of mine", d["after"].get("throng") is None and d["after"].get("heed") is None and res.get("rows_after") == [], f"{len(res.get('rows_after') or [])} rows")
     c.check(s, "heed_players off: the set is the first one again", bool(sets) and sets[-1] == first, f"{first} ... {sets[-1] if sets else None}")
-    c.check(s, "the heed laws are back to the world's own values", all(own_laws(lambda q: sql(run, q)).get(l, "false") == "false" for l in HEED_LAWS))
+    c.check(s, "the heed laws are back to the world's own values", all(own_laws(lambda q: sql(run, q)).get(l, "false") == "false" for l in ("heed_on", "heed_players")))
 
 
 @scenario("heed-pins", explicit=True)
 def heed_pins(run, c):
-    """Pins and focus (heed for players; features/heed.md): the player at a quiet open spot
-    (`UNHEARD_SPOT`, admin `place_at`), five residents held beside them,
-    both heed laws on (admin). The Pin key (T) on four of them pins them (the authority's
-    `heed_choice` row holds the four, owner SQL), on a fifth warns first, and a second press asks:
-    the authority refuses it in its own words, shown in the notes. T on a pinned one unpins it.
-    Focus follows whom the open text box speaks to, and goes when it closes. Y clears every pin.
-    Calls are at least 250 ms apart."""
+    """Pins, focus, throng-card click (`pin_at`), refused `pin_at` and a mixed people-and-wolf
+    cell (heed for players; features/heed.md): the player at a quiet open spot (`UNHEARD_SPOT`,
+    admin `place_at`), five residents held beside them, both heed laws on (admin). The Pin key (T)
+    on four of them pins them (the authority's `heed_choice` row holds the four, owner SQL), on a
+    fifth warns first, and a second press asks: the authority refuses it in its own words, shown in
+    the notes. T on a pinned one unpins it. Focus follows whom the open text box speaks to, and
+    goes when it closes. Y clears every pin. Then `heed_ceiling` is lowered to 2 and E placed in
+    its own 6 m cell 6.5 m east so E enters `seen_throng`: left-clicking (`tap`) E's throng card
+    sends `pin_at` and promotes + pins E; asking for `pin_at` at an empty point (`heed:at:…`) is
+    refused with `There is no one in the throng there to pick out.`. Finally, if the world has
+    living wolves, three residents and two wolves are placed in that same 6 m cell while two close
+    residents stay pinned, verifying per-kind card counts (`people: 3, wolf: 2`) and that only
+    people take cloth tints."""
     s = "heed-pins"
     ids = residents(run, 5)
     c.check(s, "five residents to pin", len(ids) == 5, str(ids))
     if len(ids) < 5:
         return
+    wolves = sorted(r["id"] for r in sql(run, "SELECT id, alive, kind FROM character WHERE kind = 'wolf'") if r.get("alive"))[:2]
     A, B, C, D, E = ids
     offsets = [(1.6, 0.0), (-1.6, 0.0), (0.0, 1.6), (1.2, 1.4), (-1.2, 1.4)]
     places = [f"{i}:{dx}:{dy}" for i, (dx, dy) in zip(ids, offsets)]
     pin = lambda i: f"point:{i}:1.0;wait:0.3;key:KeyT:tap;wait:0.7;"
-    # A quiet open spot first (`unheard`'s): a fight nearby would take the player's places
-    # (heed at work), so the residents would not all be individuals.
+    ax, ay = UNHEARD_SPOT
+    # Cell (51, 55): origin (306.0, 330.0); E stands at (306.5, 330.5) so its 1-member centroid is exact.
+    ex, ey = math.floor(ax / 6.0) * 6.0 + 6.5, math.floor(ay / 6.0) * 6.0 + 0.5
+    mix_plan = ""
+    if len(wolves) == 2:
+        mix_plan = "sync:mix_setup;wait:2.5;dump:mixed;shot:mixed;"
     plan = ("ready;wait:2;sync:spot;wait:3;sync:scene;wait:1;sync:heed;wait:4;dump:p0;"
             + pin(A) + pin(B) + pin(C) + pin(D) + "wait:0.6;dump:p4;sync:row4;"
             + f"point:{E}:1.0;wait:0.3;key:KeyT:tap;wait:0.6;dump:warn;key:KeyT:tap;wait:1.5;dump:five;shot:five;sync:row5;"
             + pin(B) + "wait:0.6;dump:unpin;sync:row_unpin;"
             + f"point:{C}:1.0;wait:0.6;key:Enter:tap;wait:1.5;dump:focus;sync:row_focus;shot:focus;key:Escape:tap;wait:1.5;dump:nofocus;sync:row_nofocus;"
-            + "cursor:;key:KeyY:tap;wait:1.2;dump:clear;sync:row_clear;quit")
+            + "cursor:;key:KeyY:tap;wait:1.2;dump:clear;sync:row_clear;"
+            + f"sync:throng_setup;wait:3.8;dump:throng_before;"
+            + f"pointat:{ex},{ey}:0.6;wait:0.4;tap;wait:1.5;dump:pin_at;sync:row_pin_at;shot:pin_at;"
+            + f"cursor:;heed:at:{ax - 30.0},{ay - 30.0};wait:1.2;dump:pin_at_empty;sync:row_pin_at_empty;"
+            + mix_plan
+            + "quit")
     row = lambda me, ident: heed_choice(run, me)
-    handlers = {"spot": lambda me, ident: call_admin(run, "place_at", [me, UNHEARD_SPOT[0], UNHEARD_SPOT[1]], check=True),
-                "heed": lambda me, ident: [call_admin(run, r, a, check=True) for r, a in heed_on_calls()], "row4": row, "row5": row, "row_unpin": row, "row_focus": row, "row_nofocus": row, "row_clear": row}
-    with resident_fixture(run, ids), heed_fixture(run):
+
+    def spot(me, ident):
+        return [verify_sql_noon(run), call_admin(run, "place_at", [me, ax, ay], check=True)]
+
+    def throng_setup(me, ident):
+        return [
+            call_admin(run, "set_world_law", ["heed_ceiling", "2"], check=True),
+            call_admin(run, "place_at", [B, ax + 3.5, ay], check=True),
+            call_admin(run, "place_at", [C, ax - 3.5, ay], check=True),
+            call_admin(run, "place_at", [D, ax, ay + 3.5], check=True),
+            call_admin(run, "place_at", [E, ex, ey], check=True),
+        ]
+
+    def mix_setup(me, ident):
+        idle = json.dumps({"wait": 60})
+        # Keep A (at 1.6 m) and E (pinned, moved to 1.6 m) as the 2 individuals (heed_ceiling = 2),
+        # and place B, C, D + 2 idle wolves together in cell (51, 55) so they form one mixed cell.
+        calls = [
+            call_admin(run, "place_at", [E, ax - 1.6, ay], check=True),
+            call_admin(run, "place_at", [B, ex + 0.8, ey + 0.5], check=True),
+            call_admin(run, "place_at", [C, ex + 1.6, ey + 0.5], check=True),
+            call_admin(run, "place_at", [D, ex + 2.4, ey + 0.5], check=True),
+        ]
+        for idx, wid in enumerate(wolves):
+            calls.append(call_admin(run, "set_behavior", [wid, idle], check=True))
+            calls.append(call_admin(run, "place_at", [wid, ex + 1.0 + idx * 1.4, ey + 2.2], check=True))
+        return calls
+
+    handlers = {
+        "spot": spot,
+        "heed": lambda me, ident: [call_admin(run, r, a, check=True) for r, a in heed_on_calls()],
+        "row4": row, "row5": row, "row_unpin": row, "row_focus": row, "row_nofocus": row, "row_clear": row,
+        "throng_setup": throng_setup, "row_pin_at": row, "row_pin_at_empty": row,
+    }
+    if len(wolves) == 2:
+        handlers["mix_setup"] = mix_setup
+    borrow = ids + wolves
+    with resident_fixture(run, borrow), heed_fixture(run), sight_fixture(run, {}):
         out, code, text, res = staged_drive(run, s, plan, handlers, extra=[x for p in places for x in ("--place", p)])
     c.check(s, "client ran and joined", code == 0, text[-300:])
-    d = {k: dump(out, k) or {} for k in ("p0", "p4", "warn", "five", "unpin", "focus", "nofocus", "clear")}
+    keys_d = ["p0", "p4", "warn", "five", "unpin", "focus", "nofocus", "clear", "throng_before", "pin_at", "pin_at_empty"]
+    if len(wolves) == 2:
+        keys_d.append("mixed")
+    d = {k: dump(out, k) or {} for k in keys_d}
     h = {k: d[k].get("heed") or {} for k in d}
     c.check(s, "heed for players is on and the five are individuals", h["p0"].get("on") is True and set(ids) <= set(d["p0"].get("perceived") or []), f"perceived {d['p0'].get('perceived')}")
     c.check(s, "four pinned, and the authority holds the four", h["p4"].get("pins") == [A, B, C, D] and (res.get("row4") or {}).get("pins") == [A, B, C, D], f"client {h['p4'].get('pins')}; authority {res.get('row4')}")
@@ -5714,12 +5818,31 @@ def heed_pins(run, c):
     c.check(s, "the box closed: no focus, here and on the authority", h["nofocus"].get("focus") is None and (res.get("row_nofocus") or {}).get("focus") is None, f"{h['nofocus'].get('focus')}; {res.get('row_nofocus')}")
     rc = res.get("row_clear")
     c.check(s, "Y clears every pin (the authority's row empty or gone)", h["clear"].get("pins") == [] and (rc is None or (rc.get("pins") == [] and rc.get("focus") is None)), f"{h['clear'].get('pins')}; {rc}")
+    # pin_at: E is in seen_throng before the click, promoted to perceived and pinned after clicking its card.
+    tb = d["throng_before"].get("throng") or {}
+    cell_e = [int(ex // 6), int(ey // 6)]
+    sq_e = next((q for q in (tb.get("squares") or []) if q.get("cell") == cell_e), None)
+    c.check(s, "pin_at setup: E is in the throng square and not perceived", E not in (d["throng_before"].get("perceived") or []) and sq_e is not None and sq_e.get("count") == 1, f"perceived {d['throng_before'].get('perceived')}; sq {sq_e}")
+    c.check(s, "clicking E's throng card promotes E to perceived and pins E here and on the authority",
+            E in (d["pin_at"].get("perceived") or []) and E in (h["pin_at"].get("pins") or []) and h["pin_at"].get("last_picked") == E and E in ((res.get("row_pin_at") or {}).get("pins") or []),
+            f"perceived {d['pin_at'].get('perceived')}; heed {h['pin_at']}; authority {res.get('row_pin_at')}")
+    # Refused pin_at at an empty point: exact authority words, existing pin kept.
+    c.check(s, "pin_at at an empty point: refused with exact words in notes, existing pin kept",
+            HEED_EMPTY in (h["pin_at_empty"].get("refusals") or []) and HEED_EMPTY in (d["pin_at_empty"].get("notes") or []) and E in ((res.get("row_pin_at_empty") or {}).get("pins") or []),
+            f"refusals {h['pin_at_empty'].get('refusals')}; notes {d['pin_at_empty'].get('notes')}; authority {res.get('row_pin_at_empty')}")
+    if len(wolves) == 2:
+        tm = d["mixed"].get("throng") or {}
+        sq_m = next((q for q in (tm.get("squares") or []) if q.get("cell") == cell_e), None)
+        ck = (sq_m or {}).get("card_kinds") or {}
+        c.check(s, "mixed people-and-wolf cell draws 3 people and 2 wolves by per-kind counts, only people tinted",
+                sq_m is not None and sq_m.get("by_kind") == [3, 2, 0, 0] and ck.get("person") == 3 and ck.get("wolf") == 2 and sq_m.get("animals") == 2 and 0 < sq_m.get("tinted", 0) <= 3 and not squares_ok(tm),
+                f"sq {sq_m}")
     L = log(out)
     stamps = [x for x in re.findall(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+)Z[^\n]*heed: sent", L)]
     import datetime
     ts = [datetime.datetime.fromisoformat(x).timestamp() for x in stamps]
     gaps = [round(b - a, 3) for a, b in zip(ts, ts[1:])]
-    c.check(s, "calls at least 250 ms apart, none refused as too many inputs", len(ts) >= 6 and all(g >= 0.25 for g in gaps) and "refused (paced)" not in L, f"{len(ts)} calls; gaps {gaps}")
+    c.check(s, "calls at least 250 ms apart, none refused as too many inputs", len(ts) >= 8 and all(g >= 0.25 for g in gaps) and "refused (paced)" not in L, f"{len(ts)} calls; gaps {gaps}")
     notes_clear(c, s, out)
 
 

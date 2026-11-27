@@ -64,6 +64,26 @@ impl Looks {
         self.phrases.get(&id).and_then(Option::as_ref).map(|(_, _, short)| short.as_str()).or_else(|| self.plate(id))
     }
 
+    /// Concise label for compact HUD strips (e.g. keeping-track pins): their known name once
+    /// learned, else a stranger's compact garment phrase ("a man in a blue jersey") rather than
+    /// the full hair/beard description.
+    pub fn short(&self, id: u32) -> Option<&str> {
+        if self.known.get(&id) == Some(&true) {
+            return self.of(id);
+        }
+        self.compact_plate(id).or_else(|| self.of(id))
+    }
+
+    /// The look key a person's colours/phrase were read from (empty for VRoid fallbacks or animals).
+    pub fn look_key(&self, id: u32) -> &str {
+        self.drawn_from.get(&id).map(String::as_str).unwrap_or("")
+    }
+
+    /// Whether I know this character's real name.
+    pub fn is_known(&self, id: u32) -> bool {
+        self.known.get(&id) == Some(&true)
+    }
+
     /// The same, capitalised for the start of a line.
     pub fn cap(&self, id: u32) -> String {
         crate::ui::label(self.of(id).unwrap_or("someone"))
@@ -237,15 +257,22 @@ fn place_by_name(piece: &str) -> Option<(Part, i32)> {
 /// Keep the labels of everyone perceived (Mirror phase, after the rows arrive).
 pub fn update(net: NonSend<Net>, island: Option<Res<crate::island::Island>>, mut looks: ResMut<Looks>, time: Res<Time>, mut next: Local<f64>) {
     let Some(conn) = net.conn.as_ref() else { return };
-    // Labels change rarely (a new face, a name learned): four times a second is enough.
+    let me = net.my_id;
+    let seen: Vec<SeenCharacter> = crate::net::characters(conn).into_iter().filter(|c| Some(c.id) != me).collect();
+    // Labels change rarely (a new face, a name learned): four times a second is enough, except
+    // when a newly perceived character (e.g. promoted via `pin_at`) has no label yet or just
+    // received a name or new look key — refresh those immediately so HUD strips never flash `#id`.
     let now = time.elapsed_secs_f64();
-    if now < *next {
+    let urgent = seen.iter().any(|c| {
+        !looks.labels.contains_key(&c.id)
+            || (!c.name.trim().is_empty() && looks.labels.get(&c.id).map(String::as_str) != Some(c.name.as_str()))
+            || (c.kind == "person" && looks.drawn_from.get(&c.id).map(String::as_str) != Some(crate::characters::seen::of(c).look.as_str()))
+    });
+    if !urgent && now < *next {
         return;
     }
     *next = now + 0.25;
-    let me = net.my_id;
     let seed = island.as_ref().map(|i| i.land.seed);
-    let seen: Vec<SeenCharacter> = crate::net::characters(conn).into_iter().filter(|c| Some(c.id) != me).collect();
     let mut base: Vec<(u32, String, Option<String>, Option<String>)> = Vec::with_capacity(seen.len());
     let mut phrased: HashMap<u32, (String, String)> = HashMap::new();
     for c in &seen {
