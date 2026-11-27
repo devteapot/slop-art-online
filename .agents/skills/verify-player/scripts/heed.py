@@ -12,7 +12,8 @@ The heed ceiling (`heed_ceiling`) is set to 2, so P's capacity is 2. Checks, in 
 - **on:** P perceives at most 2 of them, the nearest; its `seen_throng` rows count the other six
   (counts exact under 6), none names anyone (cells, counts, bits and colour indices only); each
   cell's three colours are its members' most worn cloth colours from their looks (read as the
-  owner), counts quantized as `count`; its counts by kind match its members (people here), and its
+  owner), counts quantized as `count`; its histogram (one count per CLOTH word) is theirs too, and
+  the deprecated top three agree with it; its counts by kind match its members (people here), and its
   centre is their mean position to the metre within the square; with `far_cap` 1 too, still 2 (heed replaces `far_cap`'s
   trim, never both);
 - **`human_heed`'s refusals:** five pins ("at most 4"); a pin on a throng member and one on an id
@@ -23,7 +24,8 @@ The heed ceiling (`heed_ceiling`) is set to 2, so P's capacity is 2. Checks, in 
   the throng within its rule's hold and a pass;
 - **pin_at:** a point where P has no throng is refused with `NO_ONE_THERE`; four pins and a
   point, with the four-pin words; a point in a throng cell makes the member nearest it there an
-  individual and its pin; at capacity 0 for P (below) a point in a cell is refused with
+  individual and its pin, and the square's row, read at once, is what the rest make (count, kinds,
+  histogram; gone if none is left); at capacity 0 for P (below) a point in a cell is refused with
   `NO_PLACE` and no one is promoted. Both refusals are compared word for word: they name no one;
 - **contact:** at capacity 0 for P alone (an installed `heed_capacity` that returns 0 for it; so no rule, the instinct's threat rule at the windup included, can
   take it) a throng member strikes P: it is in P's `perceived` set from the blow's own tick (its
@@ -135,6 +137,24 @@ def inside(r, p):
     return x0 <= p[0] < x0 + side and y0 <= p[1] < y0 + side
 
 
+def expected_histogram(members):
+    """Each CLOTH word's wearers among the members (their look rows read as the owner), quantized as
+    count is and capped at 255."""
+    n = [0] * len(CLOTH)
+    for m in members:
+        look = sql(f"SELECT words FROM look WHERE id = {m}")
+        if look:
+            w = look[0]["words"]
+            i = cloth_of(w.get("top") if isinstance(w, dict) else w[4])
+            if i != 255:
+                n[i] += 1
+    return [min(about(k), 255) for k in n]
+
+
+def histogram(r):
+    return [r[f"cloth_{w}"] for w in CLOTH]
+
+
 def expected_colours(members):
     """The authority's rule, from the members' look rows read as the owner: the three cloth colours
     most worn (most first, ties by index), counts quantized; (255, 0) for an empty place."""
@@ -221,16 +241,26 @@ try:
     record("on: a throng row carries cells, counts, bits and colour indices only (no id of anyone)",
            all(set(r) == {"id", "viewer", "cell", "size", "count", "spread", "heading", "moving", "fighting", "kinds",
                           "colour_a", "colour_a_count", "colour_b", "colour_b_count", "colour_c", "colour_c_count",
-                          "people", "wolves", "deer", "others", "centre_x", "centre_y"} for r in rows) and all(hexid(r["viewer"]) == ident for r in rows), rows[:2])
+                          "people", "wolves", "deer", "others", "centre_x", "centre_y",
+                          *(f"cloth_{w}" for w in CLOTH)} for r in rows) and all(hexid(r["viewer"]) == ident for r in rows), rows[:2])
     # The colours: each row's three, from its members' looks (positions and looks read as the owner).
     pos = {b["id"]: (b["x"], b["y"]) for b in sql("SELECT id, x, y FROM body") if b["id"] in crowd - ind}
     colours = []
     for r in rows:
         members = [m for m, p_ in pos.items() if inside(r, p_)]
         got_c = [(r["colour_a"], r["colour_a_count"]), (r["colour_b"], r["colour_b_count"]), (r["colour_c"], r["colour_c_count"])]
-        colours.append({"cell": r["cell"], "members": len(members), "got": got_c, "want": expected_colours(members)})
-    record("on: each cell's colours are its members' most worn cloth colours, counts quantized as count",
+        colours.append({"cell": r["cell"], "members": len(members), "got": got_c, "want": expected_colours(members),
+                        "histogram": histogram(r), "want_histogram": expected_histogram(members)})
+    record("on: each cell's colours are its members' most worn cloth colours, counts quantized as count (the deprecated top three)",
            colours and all(c["got"] == c["want"] for c in colours) and any(c["got"][0][0] != 255 for c in colours), colours)
+    record("on: each cell's histogram is its members' cloth colours, one count per CLOTH word, quantized as count",
+           colours and all(c["histogram"] == c["want_histogram"] for c in colours) and any(sum(c["histogram"]) for c in colours),
+           [{k: c[k] for k in ("cell", "members", "histogram", "want_histogram")} for c in colours])
+    # The top three are the histogram's three largest (ties by index), as written by the same pass.
+    top3 = lambda h: (sorted([(k, i) for i, k in enumerate(h) if k], key=lambda x: (-x[0], x[1])) + [(0, 255)] * 3)[:3]
+    record("on: the deprecated top three agree with the histogram",
+           all([(i, k) for k, i in top3(c["histogram"])] == [tuple(x) for x in c["got"]] for c in colours if all(k < 5 for k in c["histogram"])),
+           [{"got": c["got"], "histogram": c["histogram"]} for c in colours])
     # Kinds and centre: each row's counts by kind (all people here) and its members' mean position
     # to the metre within its square, from the owner's reading of their bodies.
     shape = []
@@ -293,12 +323,19 @@ try:
     want = min(in_cell, key=lambda m: (((in_cell[m][0] - point[0]) ** 2 + (in_cell[m][1] - point[1]) ** 2), m))
     before_pick = seen() & crowd
     code, body = call("human_heed", heed_input([], at=point), player)
+    # Read at once: the square's row as the pick's own transaction left it.
+    row_after = next((r for r in throng_rows() if r["cell"] == cell["cell"] and r["size"] == cell["size"]), None)
     after_pick = seen() & crowd
     record("pin_at in a throng cell picks out the member nearest the point there (now an individual)",
            code == 200 and want not in before_pick and want in after_pick, {"code": code, "body": body[:200], "want": want, "before": sorted(before_pick), "after": sorted(after_pick)})
     choice = sql(f"SELECT * FROM heed_choice WHERE actor = {me}")
     prow = next((r for r in perceived_rows() if r["body"] == want), None)
     record("pin_at: the picked one is a pin, and in P's perceived set from that call", choice and choice[0]["pins"] == [want] and prow is not None, {"choice": choice, "perceived": prow})
+    left = [m for m in in_cell if m != want]
+    want_row = None if not left else {"count": about(len(left)), "people": about(len(left)), "histogram": expected_histogram(left)}
+    got_row = None if row_after is None else {"count": row_after["count"], "people": row_after["people"], "histogram": histogram(row_after)}
+    record("pin_at: the square's row gives the person up in the same call (count, kinds and colours of the rest; gone if none is left)",
+           got_row == want_row, {"before": {"count": cell["count"], "histogram": histogram(cell)}, "after": got_row, "want": want_row})
     time.sleep(0.3)
     do("human_heed", heed_input([]), player)
     until(lambda: want not in seen(), 10, 0.25)

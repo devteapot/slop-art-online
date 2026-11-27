@@ -86,8 +86,8 @@ docs/ATTENTION_BUDGET.md, "Built: the player side": with `heed_on` and `heed_pla
 - contact: the throng member that strikes P becomes an individual;
 - `seen_throng` reaches only its own viewer (P and Q receive their own, the anonymous connection and P's peek none);
 - change only: no `seen_throng` insert, update or delete while nobody moves (on a fresh world: on a reused one, earlier drives' walkers end their 600 s hold and wander into sight);
-- colours carry no identity: each row holds only its cells, counts, bits and three cloth indices (0-9, 255 none) with counts, 255 with count 0; its counts by kind (`people`, `wolves`, `deer`, `others`) no larger than its count allows and its centre (`centre_x`, `centre_y`) within its square;
-- `pin_at`: Q picks a walker out of its own throng by its position (an individual to Q, not P, and no `seen_characters` row of it reaching P in the 1.5 s after); an anonymous `pin_at` is refused as any `human_heed` is.
+- colours carry no identity: each row holds only its cells, counts, bits and three cloth indices (0-9, 255 none) with counts, 255 with count 0; its counts by kind (`people`, `wolves`, `deer`, `others`) no larger than its count allows and its centre (`centre_x`, `centre_y`) within its square; its histogram (`cloth_*`) one quantized count per CLOTH word, no more wearers than its count allows;
+- `pin_at`: Q picks a walker out of its own throng by its position (an individual to Q, not P, and no `seen_characters` row of it reaching P in the 1.5 s after); an anonymous `pin_at` is refused as any `human_heed` is; Q's throng row changes in the pick's own update (within 50 ms of the picked one's `seen_characters` insert).
 
 Evidence: `heed-<who>.jsonl`, `heed_rows.json`. `human_heed`'s refusal words (the same for a throng member and an id no one has) and the kill switch are verify-player's `heed.py`.
 

@@ -833,7 +833,8 @@ pub const NO_PLACE: &str = "You are already keeping track of as many as you can.
 /// within the caller's `seen_throng` square that holds `at`, among those it sees and does not
 /// perceive individually now, put through the event pass as chosen (the instinct's "whoever I
 /// watch for"). Taken, it is an individual from this transaction on (`perception::admit` in
-/// [`event`]): its id is returned and becomes a pin. Refused with [`NO_ONE_THERE`] (no such cell
+/// [`event`]): its id is returned and becomes a pin, and the square's `seen_throng` row is
+/// rewritten from the members left in it (`throng::after_pick`), in the same transaction. Refused with [`NO_ONE_THERE`] (no such cell
 /// or member) or [`NO_PLACE`] (the pass took no place for it); neither names anyone.
 pub fn pick_at(ctx: &ReducerContext, me: &Character, viewer: spacetimedb::Identity, at: PinAt, now: u64) -> Result<u32, &'static str> {
     if !applies(ctx, me.id) || !at.x.is_finite() || !at.y.is_finite() {
@@ -841,7 +842,10 @@ pub fn pick_at(ctx: &ReducerContext, me: &Character, viewer: spacetimedb::Identi
     }
     let p = (at.x, at.y);
     let (cx, cy) = crate::throng::cell_of(p);
-    let Some(((x0, y0), side)) = ctx.db.seen_throng().viewer().filter(viewer).map(|r| crate::throng::square(r.cell, r.size)).find(|((x0, y0), side)| {
+    let Some((row, ((x0, y0), side))) = ctx.db.seen_throng().viewer().filter(viewer).map(|r| {
+        let sq = crate::throng::square(r.cell, r.size);
+        (r, sq)
+    }).find(|(_, ((x0, y0), side))| {
         let c0 = crate::throng::cell_of((*x0, *y0));
         let n = (*side / crate::throng::CELL_M) as u32;
         (c0.0..c0.0 + n).contains(&cx) && (c0.1..c0.1 + n).contains(&cy)
@@ -851,17 +855,23 @@ pub fn pick_at(ctx: &ReducerContext, me: &Character, viewer: spacetimedb::Identi
     let inside = |q: (f32, f32)| q.0 >= x0 && q.0 < x0 + side && q.1 >= y0 && q.1 < y0 + side;
     let centre = (x0 + side / 2.0, y0 + side / 2.0);
     let perceived: Vec<u32> = ctx.db.perceived().viewer().filter(viewer).map(|r| r.body).collect();
-    let pick = common::creatures_near(ctx, centre, side * 0.75, now)
+    // The square's throng members (in it now, seen, not perceived individually).
+    let members: Vec<NearCreature> = common::creatures_near(ctx, centre, side * 0.75, now)
         .into_iter()
         .filter(|c| c.id != me.id && inside(c.pos) && !perceived.contains(&c.id) && !crate::far::is_handle(c.id) && crate::perception::sees_creature(ctx, me.id, c.id, now))
-        .min_by(|a, b| common::dist(p, a.pos).total_cmp(&common::dist(p, b.pos)).then(a.id.cmp(&b.id)));
-    let Some(mut c) = pick else { return Err(NO_ONE_THERE) };
+        .collect();
+    let pick = members.iter().min_by(|a, b| common::dist(p, a.pos).total_cmp(&common::dist(p, b.pos)).then(a.id.cmp(&b.id)));
+    let Some(mut c) = pick.cloned() else { return Err(NO_ONE_THERE) };
     let Some(mb) = ctx.db.body().id().find(me.id) else { return Err(NO_ONE_THERE) };
     let here = common::pos(&mb, now);
     c.dist = common::dist(here, c.pos);
     fresh(ctx, me.id, now);
     if event(ctx, me, here, &c, now, |cand| cand.chosen = Some(PIN_WEIGHT)) {
         common::diag(|| "heed:pin_at_taken", 1);
+        // The square's row gives the person up in this transaction: it becomes what the rest of its
+        // members make (one displaced from the individuals joins it at the next sweep).
+        let rest: Vec<NearCreature> = members.into_iter().filter(|m| m.id != c.id).collect();
+        crate::throng::after_pick(ctx, viewer, &row, &rest, now);
         Ok(c.id)
     } else {
         common::diag(|| "heed:pin_at_no_place", 1);

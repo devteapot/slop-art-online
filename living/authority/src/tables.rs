@@ -2764,6 +2764,12 @@ pub struct PinAt {
 ///   as `count` is; and where they stand: `centre_x`, `centre_y`, their mean position's whole metres
 ///   east and south of the square's top-left corner (0 to side - 1; drawn at + 0.5 m). A one-member
 ///   cell's centre is that member's position to the metre, still unnamed. Appended with defaults.
+/// - The whole colour histogram: `cloth_yellow` … `cloth_grey`, one per `living_rules::look::CLOTH`
+///   word in its order, how many members wear it, quantized as `count` is and capped at 255 (it
+///   reads 255 for 253 or more). It replaces `colour_a..c` as the truth; those stay written, as its
+///   top three, for clients that read them (deprecated: a column cannot be removed by an automatic
+///   migration). Ten named `u8` columns, not a `Vec<u8>`: appended columns need a const default,
+///   which a `Vec` has none documented for, and fixed-size columns carry no length to keep at 10.
 /// - Written by the viewer's sweep when a cell's fields change, never rewritten unchanged; a
 ///   viewer's rows go when heed stops applying to it (the law off: all of them in one tick), when
 ///   its character dies or another is played.
@@ -2807,6 +2813,26 @@ pub struct SeenThrong {
     pub centre_x: u8,
     #[default(0u8)]
     pub centre_y: u8,
+    #[default(0u8)]
+    pub cloth_yellow: u8,
+    #[default(0u8)]
+    pub cloth_black: u8,
+    #[default(0u8)]
+    pub cloth_green: u8,
+    #[default(0u8)]
+    pub cloth_tan: u8,
+    #[default(0u8)]
+    pub cloth_blue: u8,
+    #[default(0u8)]
+    pub cloth_red: u8,
+    #[default(0u8)]
+    pub cloth_cream: u8,
+    #[default(0u8)]
+    pub cloth_navy: u8,
+    #[default(0u8)]
+    pub cloth_purple: u8,
+    #[default(0u8)]
+    pub cloth_grey: u8,
 }
 
 /// The tick's own time in microseconds, for measuring its cadence (the `tick_marker_on` law, a
