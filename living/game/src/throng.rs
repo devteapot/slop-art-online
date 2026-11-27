@@ -6,18 +6,20 @@
 //! or draws anything.
 //!
 //! **The figures.** Each row gives `count` simple, unnamed figure cards (flat, unlit, upright,
-//! turned to the camera; the look of the E1b mock on `attention-e1`), scattered round the cell's
-//! centre on a sunflower spiral within half its `spread` (the members' widest extent), never
-//! outside the square. A row's shares pick the poses: `fighting` cards hold a spear forward,
-//! then `moving` cards walk, mirrored to the side `heading` points and stepping along it, and the
-//! rest stand. `kinds` picks a person card or an animal stand-in (one bit: all of that kind;
-//! several: shared out in turn, since the row has no count per kind). The fallen are no row: they
-//! stay the game's own remains.
+//! turned to the camera; the look of the E1b mock on `attention-e1`), scattered round the row's
+//! centroid (`origin + (centre_x, centre_y) + 0.5 m`) on a sunflower spiral within half its
+//! `spread`, never outside the square. A row's shares pick the poses: `fighting` cards hold a
+//! spear forward, then `moving` cards walk, mirrored to the side `heading` points and stepping
+//! along it, and the rest stand. Per-kind counts (`people`, `wolves`, `deer`, `others`) apportion
+//! cards across person cards and animal stand-ins. The fallen are no row: they stay the game's
+//! own remains.
 //!
-//! **No colours.** A row carries no colour or outfit (an E1b finding: a real row would need a
-//! colour summary). Until the authority sends one, every card is one neutral placeholder tint
-//! ([`PLACEHOLDER`]); [`tops`] is where the summary will be read, and the coloured card
-//! ([`person_image`] with a top colour) is ready for it. No colour is made up here.
+//! **Colours.** Each row carries its three most-worn cloth colour indices (`living_rules::look::CLOTH`)
+//! and their quantized counts (`colour_a/b/c`). One swatch per word is derived as the mean of the
+//! look book's outfit RGBs for that word (`swatches_of`); a word with no outfit in the book uses
+//! the neutral placeholder (logged once). Person cards take those swatches in proportion to the
+//! row's counts (the rest neutral), with skin and dark trousers; animal cards keep their neutral
+//! stand-in tint.
 //!
 //! **No pops.** Cards are kept per square (`(cell, size)`, as the authority writes a row in place
 //! when a field changes): a changed row moves its cards to their new places, a new card fades in
@@ -101,11 +103,40 @@ pub struct Row {
     pub moving: u16,
     pub fighting: u16,
     pub kinds: u8,
+    /// The three cloth colours most worn (most first): `(index into living_rules::look::CLOTH, count)`.
+    /// `(NO_CLOTH, 0)` where none.
+    pub colours: [(u8, u16); 3],
+    /// Quantized counts by kind (people, wolves, deer, others).
+    pub people: u16,
+    pub wolves: u16,
+    pub deer: u16,
+    pub others: u16,
+    /// Members' mean position: whole metres east and south of the square's corner (`0..side-1`).
+    pub centre_x: u8,
+    pub centre_y: u8,
 }
 
 impl Row {
     pub fn of(r: &SeenThrong) -> Row {
-        Row { id: r.id, cx: r.cell >> 16, cy: r.cell & 0xFFFF, size: r.size.max(1), count: r.count, spread: r.spread, heading: r.heading, moving: r.moving, fighting: r.fighting, kinds: r.kinds }
+        Row {
+            id: r.id,
+            cx: r.cell >> 16,
+            cy: r.cell & 0xFFFF,
+            size: r.size.max(1),
+            count: r.count,
+            spread: r.spread,
+            heading: r.heading,
+            moving: r.moving,
+            fighting: r.fighting,
+            kinds: r.kinds,
+            colours: [(r.colour_a, r.colour_a_count), (r.colour_b, r.colour_b_count), (r.colour_c, r.colour_c_count)],
+            people: r.people,
+            wolves: r.wolves,
+            deer: r.deer,
+            others: r.others,
+            centre_x: r.centre_x,
+            centre_y: r.centre_y,
+        }
     }
 
     /// How a client keys a row: by its square, as the authority updates a row in place.
@@ -123,14 +154,24 @@ impl Row {
         Vec2::new(self.cx as f32, self.cy as f32) * CELL_M
     }
 
+    /// Where the members stand (map m): `(cell corner + centre_x/centre_y + 0.5 m)`, clamped to
+    /// the square (`0..=side-1` + 0.5 m).
     pub fn centre(&self) -> Vec2 {
-        self.origin() + Vec2::splat(self.side() * 0.5)
+        let max = (self.side() - 1.0).max(0.0);
+        self.origin() + Vec2::new((self.centre_x as f32).min(max) + 0.5, (self.centre_y as f32).min(max) + 0.5)
     }
 
     /// Whether a map point lies in the square.
     pub fn holds(&self, p: Vec2) -> bool {
         let (o, s) = (self.origin(), self.side());
         p.x >= o.x && p.y >= o.y && p.x < o.x + s && p.y < o.y + s
+    }
+
+    /// Clamp a map point strictly inside the square (for `pin_at` near a card at a square's edge).
+    pub fn clamp(&self, p: Vec2) -> Vec2 {
+        let o = self.origin();
+        let hi = o + Vec2::splat((self.side() - 1e-3).max(0.0));
+        p.clamp(o, hi)
     }
 
     /// The way most move (map axes, unit), or none: still or mixed.
@@ -141,6 +182,12 @@ impl Row {
     /// The kinds present, in a fixed order.
     pub fn kinds_list(&self) -> Vec<Kind> {
         kinds_of(self.kinds)
+    }
+
+    /// Each card's kind (`count` entries), apportioned by `people`, `wolves`, `deer`, `others`
+    /// (falling back to the `kinds` bitmask only when all four counts are zero).
+    pub fn card_kinds(&self) -> Vec<Kind> {
+        card_kinds(self.count, self.kinds, [self.people, self.wolves, self.deer, self.others])
     }
 
     /// Each card's pose: the fighting share first, then the moving share (those fighting are
@@ -162,6 +209,91 @@ pub fn kinds_of(bits: u8) -> Vec<Kind> {
     if v.is_empty() { vec![Kind::Person] } else { v }
 }
 
+/// Apportion `total` seats proportionally to `weights` by largest remainder (exact when
+/// `sum(weights) == total`). When `min_one` is true and every positive weight can take at least
+/// one seat, no positive weight is rounded down to zero.
+fn apportion(total: usize, weights: &[usize], min_one: bool) -> Vec<usize> {
+    let n = weights.len();
+    if total == 0 || n == 0 {
+        return vec![0; n];
+    }
+    let sum: usize = weights.iter().sum();
+    if sum == 0 {
+        return vec![0; n];
+    }
+    if sum == total {
+        return weights.to_vec();
+    }
+    let mut out = vec![0usize; n];
+    let mut rems: Vec<(usize, f64)> = Vec::with_capacity(n);
+    let mut used = 0usize;
+    for (i, &w) in weights.iter().enumerate() {
+        let exact = (w as f64) * (total as f64) / (sum as f64);
+        let floor = exact.floor() as usize;
+        out[i] = floor;
+        used += floor;
+        rems.push((i, exact - floor as f64));
+    }
+    rems.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+    for &(i, _) in rems.iter().take(total.saturating_sub(used)) {
+        out[i] += 1;
+    }
+    if min_one && weights.iter().filter(|&&w| w > 0).count() <= total {
+        for i in 0..n {
+            if weights[i] > 0 && out[i] == 0 {
+                if let Some((j, _)) = out.iter().enumerate().filter(|&(_, &c)| c > 1).max_by_key(|&(j, &c)| (c, j)) {
+                    out[j] -= 1;
+                    out[i] = 1;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Smoothly interleave `items` (`(value, count)`) into an exact-count sequence of length
+/// `sum(count)`, deterministically, so a mixed square spreads its kinds or colours evenly across
+/// its spiral rather than forming concentric rings.
+fn distribute_smooth<T: Copy>(items: &[(T, usize)]) -> Vec<T> {
+    let total: usize = items.iter().map(|(_, c)| *c).sum();
+    if total == 0 {
+        return Vec::new();
+    }
+    let mut rem: Vec<usize> = items.iter().map(|(_, c)| *c).collect();
+    let mut err: Vec<i64> = vec![0; items.len()];
+    let mut out = Vec::with_capacity(total);
+    let total_i = total as i64;
+    for _ in 0..total {
+        for (i, &(_, c)) in items.iter().enumerate() {
+            err[i] += c as i64;
+        }
+        let best = (0..items.len()).filter(|&i| rem[i] > 0).max_by(|&a, &b| err[a].cmp(&err[b]).then(b.cmp(&a))).unwrap();
+        out.push(items[best].0);
+        rem[best] -= 1;
+        err[best] -= total_i;
+    }
+    out
+}
+
+/// `count` kinds from the row's per-kind counts (`[people, wolves, deer, others]`), apportioned to
+/// `count` (falling back to the `kinds` bitmask only when all four counts are zero).
+pub fn card_kinds(count: u16, kinds_bits: u8, by_kind: [u16; 4]) -> Vec<Kind> {
+    let n = count as usize;
+    if n == 0 {
+        return Vec::new();
+    }
+    let weights = by_kind.map(|c| c as usize);
+    if weights.iter().sum::<usize>() == 0 {
+        let present = kinds_of(kinds_bits);
+        let ones = vec![1usize; present.len()];
+        let alloc = apportion(n, &ones, true);
+        let items: Vec<(Kind, usize)> = present.into_iter().zip(alloc).collect();
+        return distribute_smooth(&items);
+    }
+    let alloc = apportion(n, &weights, true);
+    distribute_smooth(&[(Kind::Person, alloc[0]), (Kind::Wolf, alloc[1]), (Kind::Deer, alloc[2]), (Kind::Other, alloc[3])])
+}
+
 /// `count` poses: `fighting` fight, then up to `moving` walk, the rest stand (shares clamped to
 /// the count, as all three are rounded to 5 apart).
 pub fn poses(count: u16, moving: u16, fighting: u16) -> Vec<Pose> {
@@ -174,29 +306,174 @@ pub fn poses(count: u16, moving: u16, fighting: u16) -> Vec<Pose> {
     v
 }
 
-/// Where a row's cards stand (map m): `n` places round the square's centre on a sunflower
-/// spiral, within half the row's `spread`, but at least far enough apart to tell cards apart
-/// (about 0.35 m × √n) and never outside the square. The same row gives the same places.
+/// Where a row's cards stand (map m): `n` places round the row's centroid
+/// (`origin + (centre_x, centre_y) + 0.5 m`) on a sunflower spiral within half the row's `spread`
+/// (at least far enough apart to tell cards apart, `0.35 m × √n`), compressed per side into the
+/// square so cards stay centred on the centroid without leaving the square or piling on its edge.
+/// A lone card stands right on the centroid.
 pub fn places(row: &Row, n: usize) -> Vec<Vec2> {
+    if n == 0 {
+        return Vec::new();
+    }
+    let c = row.centre();
+    if n == 1 {
+        return vec![c];
+    }
     let half = row.side() * 0.5;
     let r = (row.spread as f32 * 0.5).max(0.35 * (n as f32).sqrt()).max(0.5).min(half - 0.3);
-    let c = row.centre();
+    let lo = row.origin() + Vec2::splat(0.2);
+    let hi = row.origin() + Vec2::splat(row.side() - 0.2);
+    let (rx_pos, rx_neg) = (r.min((hi.x - c.x).max(0.0)), r.min((c.x - lo.x).max(0.0)));
+    let (ry_pos, ry_neg) = (r.min((hi.y - c.y).max(0.0)), r.min((c.y - lo.y).max(0.0)));
     // A turn of the spiral per square, so neighbouring squares don't line up.
     let turn = ((row.cx.wrapping_mul(7) ^ row.cy.wrapping_mul(13)) % 97) as f32;
     (0..n)
         .map(|k| {
             let t = ((k as f32 + 0.5) / n.max(1) as f32).sqrt();
             let a = k as f32 * 2.399_963 + turn;
-            let p = c + Vec2::new(a.cos(), a.sin()) * r * t;
-            p.clamp(row.origin() + Vec2::splat(0.2), row.origin() + Vec2::splat(row.side() - 0.2))
+            let (ux, uy) = (a.cos() * t, a.sin() * t);
+            let dx = if ux >= 0.0 { ux * rx_pos } else { ux * rx_neg };
+            let dy = if uy >= 0.0 { uy * ry_pos } else { uy * ry_neg };
+            (c + Vec2::new(dx, dy)).clamp(lo, hi)
         })
         .collect()
 }
 
-/// Each card's top colour, from the row. Rows carry none yet (the authority's gap, reported):
-/// every card takes the placeholder. When `seen_throng` gains its colour summary, it is read here.
-pub fn tops(_row: &Row, n: usize) -> Vec<Option<[u8; 3]>> {
-    vec![None; n]
+/// One RGB swatch per [`living_rules::look::CLOTH`] word, derived from the look book's outfit
+/// colours (`None` where the book holds no outfit for that word).
+pub type Swatches = [Option<[u8; 3]>; living_rules::look::CLOTH.len()];
+
+/// Parse `#rrggbb` (or `rrggbb`) into sRGB bytes.
+pub fn parse_hex(hex: &str) -> Option<[u8; 3]> {
+    let h = hex.trim().trim_start_matches('#');
+    if h.len() != 6 {
+        return None;
+    }
+    let n = u32::from_str_radix(h, 16).ok()?;
+    Some([((n >> 16) & 0xFF) as u8, ((n >> 8) & 0xFF) as u8, (n & 0xFF) as u8])
+}
+
+/// Strip gender (`-f`/`-m`) and trailing numeric variant (`_58`) from an outfit piece name.
+fn outfit_stem(piece: &str) -> &str {
+    let s = piece.trim_end_matches("-f").trim_end_matches("-m");
+    s.rsplit_once('_').filter(|(_, n)| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())).map_or(s, |(stem, _)| stem)
+}
+
+/// The RGB of the top garment named by `top_words` ("a green smock with an apron", "a yellow coat",
+/// "a cream jersey") from a line's `colors.outfit` map. Matches the named garment piece first so
+/// an apron worn over a smock never shifts the smock's colour.
+pub fn top_piece_rgb(top_words: &str, outfit: &BTreeMap<String, String>) -> Option<[u8; 3]> {
+    let mut words = top_words.split_whitespace();
+    let first = words.next().unwrap_or("");
+    let colour = if first == "a" || first == "an" { words.next().unwrap_or("") } else { first };
+    let garment = words.next().unwrap_or("");
+    let _ = colour;
+    if !garment.is_empty() {
+        if let Some(hex) = outfit.iter().find(|(k, _)| outfit_stem(k) == garment).map(|(_, v)| v) {
+            if let Some(rgb) = parse_hex(hex) {
+                return Some(rgb);
+            }
+        }
+    }
+    // Fallback: main upper garment (coat/smock, then jersey), excluding aprons and trims.
+    for want in ["coat", "smock", "jersey"] {
+        if let Some(hex) = outfit.iter().find(|(k, _)| outfit_stem(k) == want).map(|(_, v)| v) {
+            if let Some(rgb) = parse_hex(hex) {
+                return Some(rgb);
+            }
+        }
+    }
+    None
+}
+
+/// Derive one swatch per [`living_rules::look::CLOTH`] word as the mean of the look book's
+/// top-garment outfit RGBs for lines naming that word. Words with no outfit in the book stay `None`.
+pub fn swatches_of(book: &crate::characters::book::LookBook) -> Swatches {
+    use living_rules::look::{cloth_index, CLOTH, NO_CLOTH};
+    let mut sum = [[0u64; 3]; CLOTH.len()];
+    let mut count = [0u64; CLOTH.len()];
+    for line in book.lines.values() {
+        let Some(top) = line.words.get("top").and_then(|v| v.as_str()) else { continue };
+        let idx = cloth_index(top);
+        if idx == NO_CLOTH || (idx as usize) >= CLOTH.len() {
+            continue;
+        }
+        let Some(rgb) = top_piece_rgb(top, &line.person.colors.outfit) else { continue };
+        let i = idx as usize;
+        sum[i][0] += rgb[0] as u64;
+        sum[i][1] += rgb[1] as u64;
+        sum[i][2] += rgb[2] as u64;
+        count[i] += 1;
+    }
+    let mut out = [None; CLOTH.len()];
+    for i in 0..CLOTH.len() {
+        if count[i] > 0 {
+            let n = count[i];
+            out[i] = Some([((sum[i][0] + n / 2) / n) as u8, ((sum[i][1] + n / 2) / n) as u8, ((sum[i][2] + n / 2) / n) as u8]);
+        }
+    }
+    out
+}
+
+/// Swatches derived once from the client's look book; any word with no outfit in the book is
+/// logged once and left `None` (neutral).
+pub fn swatches() -> &'static Swatches {
+    static CACHE: std::sync::OnceLock<Swatches> = std::sync::OnceLock::new();
+    CACHE.get_or_init(|| match crate::characters::book::book() {
+        Some(book) => {
+            let s = swatches_of(book);
+            for (i, word) in living_rules::look::CLOTH.iter().enumerate() {
+                if s[i].is_none() {
+                    info!("throng: cloth word {word:?} has no outfit in the look book; using neutral tint");
+                }
+            }
+            s
+        }
+        None => {
+            warn!("throng: no look book; throng cards use neutral tint");
+            [None; living_rules::look::CLOTH.len()]
+        }
+    })
+}
+
+/// Each card's top colour, from the row's colour summary (`colour_a/b/c`) using `palette`.
+/// Person cards take the three top colours in proportion to their counts (the rest neutral `None`,
+/// as is any colour word with no swatch in `palette`); animal cards always stay `None`.
+pub fn tops_with(row: &Row, kinds: &[Kind], palette: &Swatches) -> Vec<Option<[u8; 3]>> {
+    use living_rules::look::NO_CLOTH;
+    let n_people = kinds.iter().filter(|k| **k == Kind::Person).count();
+    if n_people == 0 {
+        return vec![None; kinds.len()];
+    }
+    let slots: Vec<(Option<[u8; 3]>, usize)> = row
+        .colours
+        .iter()
+        .filter(|&&(idx, cnt)| idx != NO_CLOTH && cnt > 0)
+        .map(|&(idx, cnt)| (palette.get(idx as usize).copied().flatten(), cnt as usize))
+        .collect();
+    let total_c: usize = slots.iter().map(|(_, c)| *c).sum();
+    let mut items: Vec<(Option<[u8; 3]>, usize)> = if total_c <= n_people {
+        let mut v = slots;
+        let rest = n_people - total_c;
+        if rest > 0 {
+            v.push((None, rest));
+        }
+        v
+    } else {
+        let weights: Vec<usize> = slots.iter().map(|(_, c)| *c).collect();
+        let alloc = apportion(n_people, &weights, false);
+        slots.into_iter().zip(alloc).map(|((rgb, _), c)| (rgb, c)).collect()
+    };
+    if items.is_empty() {
+        items.push((None, n_people));
+    }
+    let mut person_tops = distribute_smooth(&items).into_iter();
+    kinds.iter().map(|k| if *k == Kind::Person { person_tops.next().flatten() } else { None }).collect()
+}
+
+/// Each card's top colour, from the row's colour summary and the look book's derived swatches.
+pub fn tops(row: &Row, kinds: &[Kind]) -> Vec<Option<[u8; 3]>> {
+    tops_with(row, kinds, swatches())
 }
 
 /// How an unlit card is shaded under the scene's light: the key light's colour (sRGB) times its
@@ -240,6 +517,9 @@ pub struct Throng {
     /// Whether the set in place has my throng (heed for players on), and whether it is drawn.
     pub on: bool,
     pub drawn: bool,
+    /// The throng card currently under the cursor, if any: `(row, click ground point inside row)`.
+    /// Computed once per frame in [`pick`] while heed is on and drawn; always `None` when off.
+    pub under: Option<(Row, Vec2)>,
     squares: BTreeMap<(u32, u8), Square>,
     /// Cards fading out after their square went.
     leaving: Vec<Card>,
@@ -257,8 +537,43 @@ impl Throng {
             .map(|(r, at, _)| (r, at))
     }
 
+    /// The card under the cursor: front-most card whose screen outline holds `cursor`, else the
+    /// nearest card within [`PICK_M`] of `ground`. Returns `(row, click ground point clamped into row)`.
+    pub fn card_under(&self, cursor: Option<Vec2>, camera: Option<(&Camera, &GlobalTransform)>, ground: Option<Vec2>, ground_y: impl Fn(Vec2) -> f32) -> Option<(Row, Vec2)> {
+        if let (Some(cur), Some((cam, gtf))) = (cursor, camera) {
+            let eye = gtf.translation();
+            let mut best: Option<(f32, Row, Vec2)> = None;
+            for sq in self.squares.values() {
+                for c in sq.cards.iter().filter(|c| c.target > 0.5) {
+                    let (w, h) = if c.kind == Kind::Person { CARD } else { BEAST };
+                    let y = ground_y(c.at);
+                    let feet = Vec3::new(c.at.x, y, c.at.y);
+                    let head = feet + Vec3::Y * h;
+                    let (Ok(f), Ok(t)) = (cam.world_to_viewport(gtf, feet), cam.world_to_viewport(gtf, head)) else { continue };
+                    let ppm = (f.y - t.y).abs() / h.max(0.1);
+                    let half = (w * 0.5 * ppm).max(6.0);
+                    let (left, right) = (f.x.min(t.x) - half, f.x.max(t.x) + half);
+                    let (top, bottom) = (f.y.min(t.y) - 0.1 * ppm, f.y.max(t.y) + 0.1 * ppm);
+                    if cur.x >= left && cur.x <= right && cur.y >= top && cur.y <= bottom {
+                        let depth = eye.distance((feet + head) * 0.5);
+                        if best.is_none_or(|(d, _, _)| depth < d) {
+                            let pt = ground.filter(|g| sq.row.holds(*g)).unwrap_or(c.at);
+                            best = Some((depth, sq.row, sq.row.clamp(pt)));
+                        }
+                    }
+                }
+            }
+            if let Some((_, row, at)) = best {
+                return Some((row, at));
+            }
+        }
+        ground.and_then(|g| self.card_at(g).map(|(row, _)| (row, row.clamp(g))))
+    }
+
     /// The dump's view: each row with the cards drawn for it.
     pub fn json(&self) -> serde_json::Value {
+        let sw = swatches();
+        let has_book = sw.iter().any(Option::is_some);
         let rows: Vec<serde_json::Value> = self
             .squares
             .values()
@@ -267,13 +582,36 @@ impl Throng {
                 let n = |p: Pose| live.iter().filter(|c| c.pose == p).count();
                 let k = |x: Kind| live.iter().filter(|c| c.kind == x).count();
                 let r = &s.row;
+                let centroid = r.centre();
+                let mean_card = if live.is_empty() {
+                    None
+                } else {
+                    let sum = live.iter().fold(Vec2::ZERO, |acc, c| acc + c.to);
+                    let m = sum / live.len() as f32;
+                    Some([m.x, m.y])
+                };
+                let sample_card = live.first().map(|c| [c.at.x, c.at.y]);
+                let mut rgb: BTreeMap<String, usize> = BTreeMap::new();
+                for c in &live {
+                    if let Some([cr, cg, cb]) = c.top {
+                        *rgb.entry(format!("#{cr:02x}{cg:02x}{cb:02x}")).or_insert(0) += 1;
+                    }
+                }
                 serde_json::json!({
                     "id": r.id, "cell": [r.cx, r.cy], "size": r.size, "count": r.count, "spread": r.spread, "heading": r.heading,
                     "moving": r.moving, "fighting": r.fighting, "kinds": r.kinds,
+                    "by_kind": [r.people, r.wolves, r.deer, r.others],
+                    "colours": [[r.colours[0].0, r.colours[0].1], [r.colours[1].0, r.colours[1].1], [r.colours[2].0, r.colours[2].1]],
+                    "centre": [r.centre_x, r.centre_y],
+                    "centroid": [centroid.x, centroid.y],
+                    "mean_card": mean_card,
+                    "sample_card": sample_card,
                     "cards": live.len(), "stand": n(Pose::Stand), "walk": n(Pose::Walk), "fight": n(Pose::Fight),
                     "people": k(Kind::Person), "animals": live.len() - k(Kind::Person),
+                    "card_kinds": {"person": k(Kind::Person), "wolf": k(Kind::Wolf), "deer": k(Kind::Deer), "other": k(Kind::Other)},
                     "inside": live.iter().all(|c| r.holds(c.to)),
                     "tinted": live.iter().filter(|c| c.top.is_some()).count(),
+                    "rgb": rgb,
                 })
             })
             .collect();
@@ -282,7 +620,8 @@ impl Throng {
             "count": self.rows.iter().map(|r| r.count as u64).sum::<u64>(),
             "cards": self.squares.values().map(|s| s.cards.iter().filter(|c| c.target > 0.5).count()).sum::<usize>(),
             "leaving": self.leaving.len() + self.squares.values().map(|s| s.cards.iter().filter(|c| c.target < 0.5).count()).sum::<usize>(),
-            "tint": "placeholder",
+            "tint": if has_book { "book" } else { "placeholder" },
+            "under": self.under.map(|(r, at)| serde_json::json!({"cell": [r.cx, r.cy], "size": r.size, "at": [at.x, at.y]})),
             "squares": rows,
         })
     }
@@ -312,8 +651,29 @@ pub struct ThrongPlugin;
 impl Plugin for ThrongPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Throng>()
+            .add_systems(Update, pick.in_set(crate::phase::Phase::Input).after(crate::ui::UiInput).before(crate::combat::input))
             .add_systems(Update, (take, draw, rings).chain().in_set(crate::phase::Phase::Camera).after(crate::camera::follow));
     }
+}
+
+/// Update [`Throng::under`] once per frame while heed for players is on and drawn.
+#[allow(clippy::too_many_arguments)]
+fn pick(
+    pointer: Res<crate::pointer::Pointer>,
+    cam: Res<crate::camera::Cam>,
+    scene: NonSend<crate::world::Scene>,
+    island: Option<Res<crate::island::Island>>,
+    cams: Query<&Camera, With<Camera3d>>,
+    mut t: ResMut<Throng>,
+) {
+    if !t.on || !t.drawn || t.squares.is_empty() {
+        t.under = None;
+        return;
+    }
+    let camera = cams.single().ok().map(|c| (c, &cam.pose));
+    let ground_pt = cam.cursor_ground.map(|g| Vec2::new(g.x, g.z));
+    let isl = island.as_deref();
+    t.under = t.card_under(pointer.pos, camera, ground_pt, |p| ground(isl, &scene, p).y);
 }
 
 fn soft(w: u32, h: u32, alpha: impl Fn(f32, f32) -> f32) -> Image {
@@ -492,8 +852,8 @@ fn draw(
         let n = row.count as usize;
         let to = places(&row, n);
         let poses = row.poses();
-        let kinds = row.kinds_list();
-        let top = tops(&row, n);
+        let kinds = row.card_kinds();
+        let top = tops(&row, &kinds);
         // Cards past the count fade out (in place); the rest are dealt their place and pose.
         for (k, c) in sq.cards.iter_mut().enumerate() {
             if k >= n {
@@ -501,18 +861,23 @@ fn draw(
             }
         }
         for k in 0..n {
-            let (pose, kind) = (poses[k], kinds[k % kinds.len()]);
+            let (pose, kind) = (poses[k], kinds[k]);
             if k < sq.cards.len() {
                 let c = &mut sq.cards[k];
                 c.to = to[k];
                 c.target = 1.0;
                 if (c.pose, c.kind, c.top) != (pose, kind, top[k]) {
+                    let mesh_changed = (c.kind == Kind::Person) != (kind == Kind::Person);
                     c.pose = pose;
                     c.kind = kind;
                     c.top = top[k];
                     let tex = kit.tex.entry((kind, pose, top[k])).or_insert_with(|| images.add(card_image(kind, pose, top[k]))).clone();
                     if let Some(mut m) = mats.get_mut(&c.mat) {
                         m.base_color_texture = Some(tex);
+                    }
+                    if mesh_changed {
+                        let mesh = if kind == Kind::Person { kit.card.clone() } else { kit.beast.clone() };
+                        commands.entity(c.entity).insert(Mesh3d(mesh));
                     }
                 }
                 continue;
@@ -647,21 +1012,34 @@ mod tests {
     use spacetimedb_sdk::Identity;
 
     fn row(cell: u32, size: u8, count: u16, spread: u8, heading: u8, moving: u16, fighting: u16, kinds: u8) -> SeenThrong {
-        SeenThrong { id: 9, viewer: Identity::ZERO, cell, size, count, spread, heading, moving, fighting, kinds, colour_a: 255, colour_a_count: 0, colour_b: 255, colour_b_count: 0, colour_c: 255, colour_c_count: 0, people: 0, wolves: 0, deer: 0, others: 0, centre_x: 0, centre_y: 0 }
+        SeenThrong { id: 9, viewer: Identity::ZERO, cell, size, count, spread, heading, moving, fighting, kinds, colour_a: 255, colour_a_count: 0, colour_b: 255, colour_b_count: 0, colour_c: 255, colour_c_count: 0, people: 0, wolves: 0, deer: 0, others: 0, centre_x: 2, centre_y: 2 }
     }
 
     #[test]
-    fn a_row_decodes_its_cell_heading_and_kinds() {
+    fn a_row_decodes_its_cell_heading_kinds_and_centroid() {
         // x 401.5 m, y 255 m: cell (66, 42), the authority's (x / 6) << 16 | (y / 6).
-        let r = Row::of(&row((66 << 16) | 42, 1, 7, 4, 2, 3, 2, PEOPLE | WOLVES));
+        let mut st = row((66 << 16) | 42, 1, 7, 4, 2, 3, 2, PEOPLE | WOLVES);
+        st.centre_x = 4;
+        st.centre_y = 1;
+        let r = Row::of(&st);
         assert_eq!((r.cx, r.cy, r.size), (66, 42, 1));
         assert_eq!(r.origin(), Vec2::new(396.0, 252.0));
-        assert_eq!(r.centre(), Vec2::new(399.0, 255.0));
+        assert_eq!(r.centre(), Vec2::new(396.0 + 4.5, 252.0 + 1.5));
         assert!(r.holds(Vec2::new(401.5, 255.0)) && !r.holds(Vec2::new(402.0, 255.0)));
         assert_eq!(r.key(), ((66 << 16) | 42, 1));
-        // A merged square: 12 m from its top-left cell.
-        let m = Row::of(&row((10 << 16) | 20, 2, 30, 10, STILL, 0, 0, PEOPLE));
-        assert_eq!((m.side(), m.centre()), (12.0, Vec2::new(66.0, 126.0)));
+        // A merged square: 12 m from its top-left cell; centre_x/y up to 11.
+        let mut mst = row((10 << 16) | 20, 2, 30, 10, STILL, 0, 0, PEOPLE);
+        mst.centre_x = 9;
+        mst.centre_y = 11;
+        let m = Row::of(&mst);
+        assert_eq!((m.side(), m.centre()), (12.0, Vec2::new(60.0 + 9.5, 120.0 + 11.5)));
+        // Out-of-range centre_x/y clamps to side - 1 (+0.5 m).
+        let mut clamped = row((10 << 16) | 20, 1, 1, 0, STILL, 0, 0, PEOPLE);
+        clamped.centre_x = 99;
+        clamped.centre_y = 99;
+        let cr = Row::of(&clamped);
+        assert_eq!(cr.centre(), Vec2::new(65.5, 125.5));
+        assert!(cr.holds(cr.centre()));
         assert_ne!(m.key(), Row::of(&row((10 << 16) | 20, 1, 30, 10, STILL, 0, 0, PEOPLE)).key());
         // Headings: 0 east, clockwise (map y grows south): 2 south, 4 west, 6 north; 255 none.
         let near = |a: Vec2, b: Vec2| a.distance(b) < 1e-5;
@@ -692,11 +1070,26 @@ mod tests {
     }
 
     #[test]
-    fn cards_stand_within_the_spread_and_the_square() {
-        for (size, count, spread) in [(1u8, 1u16, 0u8), (1, 5, 2), (1, 20, 4), (1, 30, 8), (2, 60, 16), (2, 3, 2), (1, 100, 12)] {
-            let r = Row::of(&row((50 << 16) | 70, size, count, spread, STILL, 0, 0, PEOPLE));
+    fn cards_stand_around_the_centroid_within_spread_and_square() {
+        for (size, count, spread, cx, cy) in [
+            (1u8, 1u16, 0u8, 0u8, 0u8),
+            (1, 1, 0, 5, 5),
+            (1, 5, 2, 1, 4),
+            (1, 20, 4, 0, 0),
+            (1, 30, 8, 5, 2),
+            (2, 60, 16, 10, 11),
+            (2, 3, 2, 0, 11),
+            (1, 100, 12, 3, 3),
+        ] {
+            let mut st = row((50 << 16) | 70, size, count, spread, STILL, 0, 0, PEOPLE);
+            st.centre_x = cx;
+            st.centre_y = cy;
+            let r = Row::of(&st);
             let ps = places(&r, count as usize);
             assert_eq!(ps.len(), count as usize);
+            if count == 1 {
+                assert_eq!(ps[0], r.centre(), "a lone card stands right on the centroid");
+            }
             let reach = (spread as f32 * 0.5).max(0.35 * (count as f32).sqrt()).max(0.5) + 1e-3;
             for p in &ps {
                 assert!(r.holds(*p), "{p} outside {r:?}");
@@ -704,15 +1097,151 @@ mod tests {
             }
             // The same row, the same places.
             assert_eq!(ps, places(&r, count as usize));
-            // Apart enough to tell (no two on one spot), for counts that fit the square.
-            if count > 1 {
+            // Centroid pulls the cards to its side of the square.
+            if count > 1 && cx == 0 && cy == 0 && spread <= 4 {
+                let mean = ps.iter().copied().fold(Vec2::ZERO, |a, b| a + b) / ps.len() as f32;
+                assert!(mean.x < r.origin().x + r.side() * 0.5 && mean.y < r.origin().y + r.side() * 0.5, "mean {mean} not on centroid side");
+            }
+            // Apart enough to tell (no two stacked on a corner).
+            if count > 1 && count <= 30 {
                 let min = ps.iter().enumerate().flat_map(|(i, a)| ps[i + 1..].iter().map(move |b| a.distance(*b))).fold(f32::MAX, f32::min);
-                assert!(min > 0.05, "{count} cards in {size}: {min}");
+                assert!(min > 0.05, "{count} cards in {size} at ({cx},{cy}): {min}");
             }
         }
         // A wide spread on a small square stays in the square.
         let r = Row::of(&row((1 << 16) | 1, 1, 6, 30, STILL, 0, 0, PEOPLE));
         assert!(places(&r, 6).iter().all(|p| r.holds(*p)));
+    }
+
+    #[test]
+    fn card_kinds_follow_per_kind_counts_instead_of_equal_turns() {
+        let cnt = |v: &[Kind], k: Kind| v.iter().filter(|x| **x == k).count();
+        // Exact sum: 7 people, 2 wolves -> 7 people, 2 wolves (not 5 and 4).
+        let v = card_kinds(9, PEOPLE | WOLVES, [7, 2, 0, 0]);
+        assert_eq!((v.len(), cnt(&v, Kind::Person), cnt(&v, Kind::Wolf)), (9, 7, 2));
+        // Quantized counts summing under count: 5 people, 2 wolves, count 10 -> proportional 7 and 3.
+        let v = card_kinds(10, PEOPLE | WOLVES, [5, 2, 0, 0]);
+        assert_eq!((v.len(), cnt(&v, Kind::Person), cnt(&v, Kind::Wolf)), (10, 7, 3));
+        // Quantized counts summing over count: 10 people, 5 wolves, 5 deer, count 15 -> 7/8, 4, 4.
+        let v = card_kinds(15, PEOPLE | WOLVES | DEER, [10, 5, 5, 0]);
+        assert_eq!(v.len(), 15);
+        assert_eq!(cnt(&v, Kind::Person) + cnt(&v, Kind::Wolf) + cnt(&v, Kind::Deer), 15);
+        assert!(cnt(&v, Kind::Person) >= 7 && cnt(&v, Kind::Wolf) >= 3 && cnt(&v, Kind::Deer) >= 3);
+        // A lone wolf among many people still gets at least 1 card.
+        let v = card_kinds(20, PEOPLE | WOLVES, [20, 1, 0, 0]);
+        assert_eq!((cnt(&v, Kind::Person), cnt(&v, Kind::Wolf)), (19, 1));
+        // Fallback when all four counts are zero: uses the bitmask.
+        let v = card_kinds(6, PEOPLE | DEER, [0, 0, 0, 0]);
+        assert_eq!((cnt(&v, Kind::Person), cnt(&v, Kind::Deer)), (3, 3));
+        assert!(card_kinds(0, PEOPLE, [5, 0, 0, 0]).is_empty());
+    }
+
+    #[test]
+    fn swatches_are_derived_as_mean_of_book_outfit_rgbs_and_missing_words_stay_neutral() {
+        let text = serde_json::json!({
+            "generation": "test",
+            "lines": {
+                "lk_0000000000000001": {
+                    "person": {
+                        "type": "adult-f-a", "height": 1.65,
+                        "colors": { "outfit": { "smock_58-f": "#406080", "apron_58-f": "#f0f0f0", "trousers-f": "#202020" } },
+                        "styles": { "outfit": ["smock_58-f", "apron_58-f", "trousers-f"] }
+                    },
+                    "words": { "top": "a blue smock with an apron" }
+                },
+                "lk_0000000000000002": {
+                    "person": {
+                        "type": "adult-m-a", "height": 1.75,
+                        "colors": { "outfit": { "coat-m": "#6080a0", "jersey_coat-m": "#101010", "trousers-m": "#202020" } },
+                        "styles": { "outfit": ["coat-m", "jersey_coat-m", "trousers-m"] }
+                    },
+                    "words": { "top": "a blue coat" }
+                },
+                "lk_0000000000000003": {
+                    "person": {
+                        "type": "adult-m-a", "height": 1.75,
+                        "colors": { "outfit": { "jersey-m": "#aa3322", "trousers-m": "#202020" } },
+                        "styles": { "outfit": ["jersey-m", "trousers-m"] }
+                    },
+                    "words": { "top": "a red jersey" }
+                }
+            }
+        });
+        let book = crate::characters::book::LookBook::parse(&text.to_string()).unwrap();
+        let sw = swatches_of(&book);
+        // Blue (index 4): mean of #406080 (64,96,128) and #6080a0 (96,128,160) = (80, 112, 144).
+        // Note: the cream apron (#f0f0f0) did not contaminate blue!
+        assert_eq!(sw[4], Some([80, 112, 144]));
+        // Red (index 5): #aa3322 (170, 51, 34).
+        assert_eq!(sw[5], Some([170, 51, 34]));
+        // Grey (index 9) and every other absent word: None (neutral, never invented).
+        assert_eq!(sw[9], None);
+        assert_eq!(sw[0], None);
+    }
+
+    #[test]
+    fn tops_proportion_colours_leave_the_rest_neutral_and_never_tint_animals() {
+        let mut pal: Swatches = [None; living_rules::look::CLOTH.len()];
+        let yellow = [172, 141, 76];
+        let red = [86, 39, 34];
+        let blue = [90, 106, 122];
+        pal[0] = Some(yellow);
+        pal[5] = Some(red);
+        pal[4] = Some(blue);
+        // pal[9] (grey) stays None.
+
+        // Exact fit with remainder neutral: 10 people, 4 yellow, 3 red, 1 blue -> 2 neutral.
+        let mut st = row(0, 1, 10, 4, STILL, 0, 0, PEOPLE);
+        st.people = 10;
+        st.colour_a = 0; st.colour_a_count = 4;
+        st.colour_b = 5; st.colour_b_count = 3;
+        st.colour_c = 4; st.colour_c_count = 1;
+        let r = Row::of(&st);
+        let kinds = r.card_kinds();
+        let ts = tops_with(&r, &kinds, &pal);
+        assert_eq!(ts.len(), 10);
+        assert_eq!(ts.iter().filter(|t| **t == Some(yellow)).count(), 4);
+        assert_eq!(ts.iter().filter(|t| **t == Some(red)).count(), 3);
+        assert_eq!(ts.iter().filter(|t| **t == Some(blue)).count(), 1);
+        assert_eq!(ts.iter().filter(|t| t.is_none()).count(), 2);
+
+        // Quantized colour counts past n_people scale proportionally (e.g. 5 + 5 + 5 for 10 people).
+        st.colour_a_count = 5; st.colour_b_count = 5; st.colour_c_count = 5;
+        let r2 = Row::of(&st);
+        let ts2 = tops_with(&r2, &kinds, &pal);
+        assert_eq!(ts2.len(), 10);
+        assert_eq!(ts2.iter().filter(|t| t.is_none()).count(), 0);
+        assert_eq!(ts2.iter().filter(|t| **t == Some(yellow)).count(), 4);
+        assert_eq!(ts2.iter().filter(|t| **t == Some(red)).count(), 3);
+        assert_eq!(ts2.iter().filter(|t| **t == Some(blue)).count(), 3);
+
+        // A word with no swatch in the book (grey, index 9) produces neutral cards, never steals into B.
+        st.colour_a = 9; st.colour_a_count = 5; st.colour_b = 5; st.colour_b_count = 3; st.colour_c = 255; st.colour_c_count = 0;
+        let r3 = Row::of(&st);
+        let ts3 = tops_with(&r3, &kinds, &pal);
+        assert_eq!(ts3.iter().filter(|t| **t == Some(red)).count(), 3);
+        assert_eq!(ts3.iter().filter(|t| t.is_none()).count(), 7);
+
+        // Mixed people and wolves: only people get cloth colours; every wolf stays None.
+        let mut mix = row(0, 1, 7, 4, STILL, 0, 0, PEOPLE | WOLVES);
+        mix.people = 5; mix.wolves = 2;
+        mix.colour_a = 0; mix.colour_a_count = 3;
+        mix.colour_b = 5; mix.colour_b_count = 2;
+        let rm = Row::of(&mix);
+        let km = rm.card_kinds();
+        let tm = tops_with(&rm, &km, &pal);
+        assert_eq!(tm.len(), 7);
+        for (k, t) in km.iter().zip(&tm) {
+            if *k != Kind::Person {
+                assert_eq!(*t, None, "animals never take cloth colours");
+            }
+        }
+        assert_eq!(tm.iter().filter(|t| **t == Some(yellow)).count(), 3);
+        assert_eq!(tm.iter().filter(|t| **t == Some(red)).count(), 2);
+
+        // No colours at all: every card is neutral.
+        let none = Row::of(&row(0, 1, 5, 4, STILL, 0, 0, PEOPLE));
+        assert!(tops_with(&none, &none.card_kinds(), &pal).iter().all(Option::is_none));
     }
 
     #[test]
@@ -727,11 +1256,5 @@ mod tests {
         assert!((shade(Some(&a)) - Vec3::new(0.46, 0.6, 1.0) * NIGHT_SHADE).length() < 1e-5);
         a.active = false;
         assert_eq!(shade(Some(&a)), Vec3::ONE);
-    }
-
-    #[test]
-    fn rows_carry_no_colour_so_every_card_is_the_placeholder() {
-        let r = Row::of(&row(0, 1, 7, 4, STILL, 0, 0, PEOPLE));
-        assert!(tops(&r, 7).iter().all(|t| t.is_none()));
     }
 }
