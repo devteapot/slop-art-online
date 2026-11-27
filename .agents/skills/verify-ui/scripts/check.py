@@ -4822,11 +4822,19 @@ def far(run, c):
     r = subprocess.run([sys.executable, install, f"verify-{run}", overlay], capture_output=True, text=True)
     c.check(s, "the 4 m overlay is installed", r.returncode == 0, (r.stdout + r.stderr)[-300:])
     line = "Hello over there."
-    plan = ("ready;sync:scene;wait:2.5;point:{B};wait:0.8;shot:01_near;dump:01;"
+    # At the island arrival, passing residents can overlap the subject in screen space and
+    # correctly win the hover pick. Stage the same near/far placements on open grass.
+    spot = ""
+    syncs = []
+    if verify.load(run)["seed"] == "island":
+        ax, ay = UNHEARD_SPOT
+        spot = "sync:spot;"
+        syncs.append(f"spot=place_at|{{me}}|{ax}|{ay}")
+    plan = (f"ready;{spot}sync:scene;wait:2.5;point:{{B}};wait:0.8;shot:01_near;dump:01;"
             "sync:away;wait:3;point:{B};wait:0.8;shot:02_far;dump:02;key:Enter:tap;wait:0.6;shot:03_to_far;dump:03;"
             f"type:{line};enter;wait:1.5;dump:04;key:Escape:tap;wait:0.3;"
             "sync:back;wait:3;point:{B};wait:0.8;shot:05_close;dump:05;quit").replace("{B}", str(b))
-    syncs = [f"away=place_at|{b}|(mx+6.0)|(my)", f"back=place_at|{b}|(mx+2.0)|(my)"]
+    syncs += [f"away=place_at|{b}|(mx+6.0)|(my)", f"back=place_at|{b}|(mx+2.0)|(my)"]
     try:
         out, code, text = drive(run, s, plan, places=[f"{b}:2:0"], syncs=syncs)
     finally:
