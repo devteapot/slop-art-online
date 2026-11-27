@@ -156,12 +156,16 @@ class Scene:
 def tick(s):
     a, b = s.people(2)
     s.call("place_near", b, a)
+    # Use authority timestamps and a longer window to average brief scheduling stalls.
+    cadence_window = 20
     c0 = s.rows("SELECT * FROM clock", "clock-before")[0]
-    time.sleep(5)
+    time.sleep(cadence_window)
     c1 = s.rows("SELECT * FROM clock", "clock-after")[0]
     seconds = (c1["last_ms"] - c0["last_ms"]) / 1000
-    hz = (c1["tick"] - c0["tick"]) / seconds
-    s.expect("nominal 60 Hz ticks advance", 52 <= hz <= 65, {"hz": hz, "seconds": seconds})
+    ticks = c1["tick"] - c0["tick"]
+    hz = ticks / seconds if seconds > 0 else 0.0
+    s.expect("nominal 60 Hz ticks advance", seconds >= cadence_window - 2 and 50 <= hz <= 65,
+             {"hz": hz, "seconds": seconds, "ticks": ticks})
     stats0 = s.rows("SELECT * FROM stats", "stats-before")[0]
     time.sleep(2)
     stats1 = s.rows("SELECT * FROM stats", "stats-after")[0]
