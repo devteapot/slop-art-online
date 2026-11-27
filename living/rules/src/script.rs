@@ -570,6 +570,9 @@ pub struct Laws {
     /// `far_cap`'s trim) and the rest of its sight is counted in `seen_throng`; its pins and
     /// focus (`human_heed`) weigh in its picks. Off by default, until its own play-test.
     pub heed_players: bool,
+    /// Perception parity for `outsider`, relation-filtered `count`, and `heed` candidate relations
+    /// (off by default).
+    pub outsider_parity: bool,
     pub cover_sight_on: bool,
     /// How far a character sees ground by day (metres): the cells of `known_ground` it marks
     /// (docs/MOVEMENT_MIND.md, step 3). At night, its own sight.
@@ -947,6 +950,7 @@ impl Default for Laws {
             first_sight_gap_s: 300.0,
             heard_first_rethinks: false,
             think_framing: false,
+            outsider_parity: false,
             cue_check_s: 1.0,
             witness_wake_ms: 500.0,
             far_cap: 0.0,
@@ -3327,6 +3331,7 @@ impl Scripts {
             first_sight_gap_s: g("first_sight_gap_s", l.first_sight_gap_s).clamp(0.0, 3_600.0),
             heard_first_rethinks: flag("heard_first_rethinks", l.heard_first_rethinks),
             think_framing: flag("think_framing", l.think_framing),
+            outsider_parity: flag("outsider_parity", l.outsider_parity),
             cue_check_s: g("cue_check_s", l.cue_check_s).clamp(0.1, 60.0),
             witness_wake_ms: g("witness_wake_ms", l.witness_wake_ms).clamp(0.0, 10_000.0),
             far_cap: g("far_cap", l.far_cap).clamp(0.0, 10_000.0),
@@ -4659,6 +4664,21 @@ mod tests {
         let on = Scripts::new(&with_world_laws(src, &[("think_framing".into(), serde_json::json!(true))])).unwrap();
         on.validate().unwrap();
         assert!(on.laws().think_framing);
+    }
+
+    /// Perception parity for outsider/throng/heed relations: off by default, a world may turn it on.
+    #[test]
+    fn outsider_parity_is_the_world_s_law() {
+        let src = include_str!("../../scripts/skills.rhai");
+        let shipped = Scripts::new(src).unwrap();
+        assert!(!shipped.laws().outsider_parity);
+        let about: std::collections::HashMap<String, String> = shipped.laws_about().into_iter().collect();
+        assert!(about["outsider_parity"].contains("as before"), "{about:?}");
+        let on = Scripts::new(&with_world_laws(src, &[("outsider_parity".into(), serde_json::json!(true))])).unwrap();
+        on.validate().unwrap();
+        assert!(on.laws().outsider_parity);
+        let about_on: std::collections::HashMap<String, String> = on.laws_about().into_iter().collect();
+        assert!(about_on["outsider_parity"].contains("known or visible"), "{about_on:?}");
     }
 
     /// A line overtaken by someone else's (first-sight-crowd): off by default, a world may set it.

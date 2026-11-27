@@ -268,6 +268,10 @@ fn laws() {
         // thinking now; on, what just happened is shown beside what it perceives, and it thinks
         // about whatever matters to it now (the neutral framing, replayed as N2).
         think_framing: false,
+        // Perception parity for outsider/throng/heed relations (off as shipped): on, `outsider`
+        // requires known or visible affiliation, `count` skips throng on relation filters, and
+        // `heed` gates candidate relations on `made_out`.
+        outsider_parity: false,
         // Earshot (docs/COMMUNICATION.md §17): a person's scene says whom a line said now would
         // reach, at each way, among the people they perceive, and a player's `my_earshot` the
         // same. On as shipped since earshot-on (2026-11-13); off, neither is told.
@@ -3283,6 +3287,7 @@ fn law_about(l, name) {
         "earshot" => if l.earshot { "one knows whom one's words would reach if one spoke now, among the people one sees" } else { "one judges for oneself whom one's words would reach" },
         "first_sight_gap_s" => `a first sight brings one to think at most once in ${short(l.first_sight_gap_s)} s`,
         "think_framing" => if l.think_framing { "a mind is shown what just happened and thinks about whatever matters to it now" } else { "a mind starts from why one is thinking now" },
+        "outsider_parity" => if l.outsider_parity { "outsider and crowd relation checks use only known or visible affiliation" } else { "outsider checks membership directly as before" },
         "heard_first_rethinks" => if l.heard_first_rethinks { "a line you decided to say to someone, when you hear another address them before you speak, waits while you think again" } else { "a line you decided to say is said when it comes due, whoever spoke to them meanwhile" },
         "cue_check_s" => `what one watches for is looked for every ${short(l.cue_check_s)} s`,
         "witness_fold_ms" => if l.witness_fold_ms > 0.0 { `what one watches of others' fights is told together every ${short(l.witness_fold_ms)} ms: every blow seen, who struck whom, how many landed, and who fell` } else { "of others' fights one is told each fight's first blow, at once" },

@@ -784,7 +784,7 @@ pub fn unnamed(t: &Character, far: bool) -> String {
 }
 
 /// Build and dress as seen: from the settlement round the character's home.
-fn dress(ctx: &ReducerContext, c: &Character) -> (String, String) {
+pub(crate) fn dress(ctx: &ReducerContext, c: &Character) -> (String, String) {
     let key = (c.home_x.to_bits(), c.home_y.to_bits());
     if let Some(d) = DRESS.with(|d| d.borrow().get(&key).cloned()) {
         return d;
