@@ -61,7 +61,7 @@ The live script's steps for the UI (`living/game/src/live.rs`, its doc comment h
 | `shine:NAME` | The hair shine (`crown`, `soft`, `today`) as Settings sets it, leaving open windows be (Settings would close them): to compare shines from one view |
 | `walk:DEG:S[:run]`, `hold:DEG[:run]`, `stop`, `look:DEG`, `lookwalk:SPEC` | Walk (or run) a compass direction for S seconds, or hold it until `stop`; look a compass direction (the cursor scheme's look, until `look:`); set the look-walk preset (`twist::LookWalk::parse`: `chest`, `head,body_s=0.3`) |
 | `reconnect` | Closes the player socket so the regular reconnect path runs. |
-| `heed:ID` | Asks the authority to pin character ID as it is (heed for players), past the client's own check that it perceives ID, so the authority's refusal words show in the notes ([features/heed.md](features/heed.md)) |
+| `heed:ID` / `heed:at:X,Y` | Asks the authority to pin character ID or pick out a throng member at `(X, Y)` (map m) as it is (heed for players), past the client's own checks, so the authority's refusal words show in the notes ([features/heed.md](features/heed.md)) |
 | `preparing[:S]` | Waits until the client shows the world as still being made (staged genesis), at most S s (60): for photographs of the preparing cover ([features/preparing.md](features/preparing.md)) |
 | `notches:N` | Sends a line-wheel event through the pointer. Positive zooms in over the world or scrolls the window under the cursor. |
 | `pan:PX`, `drag:PX`, `pinch:F`, `frame:0` | A two-finger pan or left drag (Orbit turns), a pinch through either camera's zoom path, or disabling context framing (the dump's `extra.cursor`, `extra.view` and `extra.cursor_ground` show what they did) |

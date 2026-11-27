@@ -518,7 +518,7 @@ pub fn input(
     ui: Res<crate::hud::UiWants>,
     cards: Res<Cards>,
     mut scripted: ResMut<Scripted>,
-    (pointer, mut talk, rules, picking): (Res<crate::pointer::Pointer>, Option<ResMut<crate::talk::Talk>>, NonSend<crate::verbs::Rules>, Res<crate::pick::Pick>),
+    (pointer, mut talk, rules, picking, throng): (Res<crate::pointer::Pointer>, Option<ResMut<crate::talk::Talk>>, NonSend<crate::verbs::Rules>, Res<crate::pick::Pick>, Option<Res<crate::throng::Throng>>),
     mut c: ResMut<Combat>,
     (binds, roles, mut weapon, taps): (Res<crate::keys::Binds>, Res<Roles>, ResMut<crate::weapon::Weapon>, Res<crate::keys::DoubleTap>),
 ) {
@@ -558,14 +558,16 @@ pub fn input(
     }
     // Sheathed (`weapon.rs`), a tap on a person talks to them (play-test 2: the owner, tapping to
     // interact, struck the first resident who greeted him). Drawn, a tap strikes whoever is
-    // under the cursor.
+    // under the cursor. While heed for players is on, a tap on a throng figure pins it instead of
+    // striking or drawing (`heed.rs`).
     let person = |id: u32| crate::net::find_character(conn, id).is_some_and(|k| k.kind == "person");
     let tap_target = |c: &Combat| {
         let reach = roles.skill(Act::Primary).and_then(|s| cards.by_name(s)).map_or(0.0, |k| k.reach);
         c.target.or_else(|| nearest(&scene, &picking, me, aim_point(&cam, me, &input), reach + 0.4))
     };
-    let tap_talks = |c: &Combat| (!weapon.drawn).then(|| tap_target(c)).flatten().filter(|id| person(*id));
-    if !input.demo && pointer.tapped && free_mouse {
+    let tapped_throng = !input.demo && !typing && pointer.tapped && free_mouse && picking.under.is_none() && throng.as_ref().is_some_and(|t| t.on && t.under.is_some());
+    let tap_talks = |c: &Combat| (!weapon.drawn && !tapped_throng).then(|| tap_target(c)).flatten().filter(|id| person(*id));
+    if !input.demo && pointer.tapped && free_mouse && !tapped_throng {
         // Open: a tap on someone addresses them instead; closed: it opens the box to them.
         let whom = if typing { c.target.filter(|id| person(*id)) } else { tap_talks(&c) };
         if let (Some(id), Some(t)) = (whom, talk.as_mut()) {
@@ -575,7 +577,7 @@ pub fn input(
     let tapped_talk = !input.demo && !typing && pointer.tapped && talk.is_some() && tap_talks(&c).is_some();
     if !input.demo && !typing && pointer.tapped {
         let whom = tap_target(&c);
-        info!("tap: {} (at {:?}, weapon {})", if tapped_talk { "talk" } else if weapon.drawn { "strike" } else { "draw" }, whom, if weapon.drawn { "drawn" } else { "sheathed" });
+        info!("tap: {} (at {:?}, weapon {})", if tapped_talk { "talk" } else if tapped_throng { "throng" } else if weapon.drawn { "strike" } else { "draw" }, whom, if weapon.drawn { "drawn" } else { "sheathed" });
     }
     if !input.demo && !typing {
         // Held keys show their skill's indicator.
@@ -584,7 +586,7 @@ pub fn input(
         let digits = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9];
         let numbered = ui.menu && digits.iter().any(|k| keys.just_pressed(*k));
         for a in BAR_ACTS {
-            let down = binds.went_down(a, &keys, &mouse) && ok(a) && !(a == Act::Primary && tapped_talk) && !numbered;
+            let down = binds.went_down(a, &keys, &mouse) && ok(a) && !(a == Act::Primary && (tapped_talk || tapped_throng)) && !numbered;
             if let Some(s) = roles.skill(a).filter(|_| down) {
                 presses.push((s.to_string(), None, None));
             }
