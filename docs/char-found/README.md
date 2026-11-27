@@ -1,5 +1,7 @@
 # Character foundation · Stage 1 body
 
+[Stage 2 head fitting checkpoint and outstanding art gate](head-checkpoint.md)
+
 ![Five body mixes in the game at inspection and play distances](contact-sheet.png)
 
 Each column is one body. The upper rows use the shared daylight framing for front and back, with an extra profile for posture. Near and Middle use the same native-pixel center crop for every character. The viewer frames inspection shots individually.
