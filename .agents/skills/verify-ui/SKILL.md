@@ -70,7 +70,7 @@ The live script's steps for the UI (`living/game/src/live.rs`, its doc comment h
 Tags (`ui/hit.rs` `Tag`; a tag that is the start of another finds it, so `@acts:0:give` finds `acts:0:give:3`):
 - buttons and Menu: `pack`, `menu`, `menu:Character|Skills|Log|Settings|Leave`;
 - windows: `win:<Win>:head`, `win:<Win>:close` with `<Win>` `Pack`, `Log`, `Skills`, `Settings` or `Person<ID>`;
-- a person window: `person:give|wave|appraise|more:<ID>` (More… opens every act, Trade… and Introduce yourself among them), its Give rows `person:gift:<ID>:<I>`, its offer cards' acts `person:offer:<ID>:<CARD>:<ACT>` (ACT 0 is the first skill on `offer`, Accept) and `person:dismiss:<ID>:<CARD>`, a courting card's act `person:bond:<ID>:accept`, and its box `input:Person<ID>` (the log's `input:Log`);
+- a person window: `person:give|wave|appraise|more:<ID>` (More… opens every act, Trade… and Introduce yourself among them), its Give rows `person:gift:<ID>:<I>`, its offer cards' acts `person:offer:<ID>:<CARD>:<ACT>` (ACT 0 is the first skill on `offer`, Accept) and `person:dismiss:<ID>:<CARD>`, a courting card's acts `person:bond:<ID>:<ACT>` (ACT 0 is the first skill on `bond`, shipped `conceive`), and its box `input:Person<ID>` (the log's `input:Log`);
 - the cluster: `bar:Primary|Secondary|Skill1|Skill2|Skill3|Jump|Dodge|Weapon|Extra4…Extra9`, and `body` (the meters' row: hovered, the body's tooltip);
 - the clock: `clock` (left of the compass: hovered, the day's tooltip);
 - the log: `log:tab:0|1|2` (Heard, People, Events), `log:person:<I>`, and on People my family's rows `log:kin:<I>` and my community `log:community` ([features/kin.md](features/kin.md));

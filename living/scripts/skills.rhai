@@ -1949,6 +1949,9 @@ fn smoke_ui() { making_look(making_grid("smoke", "Smoking {item}"), "pot") }
 fn face_ui() { #{ on: [], tip: "You face where you look." } }
 // Saying no to an offer looks like dealing (the trade icon); what it does is its spec and check.
 fn decline_ui() { #{ on: ["person", "thing", "offer"], look: #{ icon: "trade" } } }
+// Conceive is also an answer on a courting offer's card (their window): toward the offer's
+// maker. It keeps its default places (person, thing); what it does is its spec, check and done.
+fn conceive_ui() { #{ on: ["person", "thing", "bond"] } }
 // The person wheel's acts look as they read (an icon each; what they do is their spec and check).
 fn give_ui() { #{ look: #{ icon: "give" } } }
 fn offer_ui() { #{ look: #{ icon: "trade" } } }

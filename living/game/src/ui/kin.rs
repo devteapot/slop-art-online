@@ -20,10 +20,12 @@
 //!   relation's name as the views and minds' scenes give it ("child", "partner"). The home's
 //!   way and distance are `living_rules::bearing::from_here`, the words every scene uses
 //!   ("140 m northeast", "here"); days are the clock's (`living_rules::day_of`).
-//! - **Answering a courting offer.** The rules take one up when I choose the act whose `done`
-//!   gives `op: "bond"` (shipped: `conceive`) toward its maker within the `bond_window_s` law;
-//!   the card's button sends that act through `human_act`. The rules have no act to decline or
-//!   withdraw one: it lapses at the window's end, when the card goes.
+//! - **Answering a courting offer.** The card's buttons are the skills whose `_ui()` puts them
+//!   `on` `bond` (`living_rules::ui::On::Bond`), in the script's order, each sent through
+//!   `human_act` toward the offer's maker; no skill is named here. As shipped that is `conceive`,
+//!   which takes the offer up within the `bond_window_s` law (its `done` gives `op: "bond"`). A
+//!   world with no skill on `bond` shows the card without buttons. The shipped rules have no act
+//!   to decline or withdraw one: it lapses at the window's end, when the card goes.
 
 use super::hit::{Hot, Tag};
 use super::kit::{self, Lit};
@@ -44,9 +46,15 @@ use std::collections::HashSet;
 const KIN_ROWS: usize = 8;
 /// The community's lines under its name: founded and joined, then home.
 const COMMUNITY_LINES: usize = 2;
-/// The act that takes up a courting offer as shipped: its `done` gives `op: "bond"`
-/// (`living/scripts/skills.rhai` `conceive_done`). Offered only while the rules have it.
-pub const BOND_SKILL: &str = "conceive";
+/// The rules' acts on a courting card (skills on `On::Bond`), at most this many.
+const BOND_ACTS: usize = 2;
+
+/// The rules' acts on a courting offer, in the script's order: each skill whose `_ui()` puts it
+/// `on` `bond`, as (skill, label). What each does is the rules'.
+pub fn bond_acts(sc: &living_rules::script::Scripts) -> Vec<(String, String)> {
+    let on_bond = sc.ui_specs().filter(|u| u.is_on(living_rules::ui::On::Bond)).take(BOND_ACTS);
+    on_bond.map(|u| (u.name.clone(), super::label(if u.label.trim().is_empty() { &u.name } else { &u.label }))).collect()
+}
 
 /// How I know someone, for naming them: the name my character knows, else how I see them, and
 /// whether I perceive and make them out now.
@@ -166,8 +174,8 @@ pub struct Kin {
     pub rows: Vec<KinShown>,
     pub community: Option<(String, Vec<String>)>,
     pub bonds: Vec<BondShown>,
-    /// The label of the act that takes up a courting offer, while the rules have it.
-    pub accept: Option<String>,
+    /// The rules' acts on a courting card to me ([`bond_acts`]): (skill, label).
+    pub acts: Vec<(String, String)>,
     /// Incoming offers already noted.
     noted: HashSet<u64>,
     me: Option<u32>,
@@ -212,7 +220,7 @@ impl Kin {
             "rows": self.rows.iter().map(|r| serde_json::json!({"id": r.id, "relation": r.relation, "word": r.word, "title": r.title, "note": r.note, "here": r.here, "named": r.named})).collect::<Vec<_>>(),
             "community": self.community.as_ref().map(|(name, lines)| serde_json::json!({"name": name, "lines": lines})),
             "bonds": self.bonds.iter().map(|b| serde_json::json!({"id": b.id, "with": b.with, "incoming": b.incoming, "text": b.text, "until_ms": b.until_ms})).collect::<Vec<_>>(),
-            "accept": self.accept,
+            "acts": self.acts.iter().map(|(skill, label)| serde_json::json!({"skill": skill, "label": label})).collect::<Vec<_>>(),
         })
     }
 }
@@ -228,7 +236,8 @@ pub fn fill(mut kin: ResMut<Kin>, net: NonSend<Net>, looks: Res<Looks>, (rules, 
         kin.bonds.clear();
         return;
     };
-    if kin.me != Some(me) {
+    let fresh = kin.me != Some(me);
+    if fresh {
         *kin = Kin { me: Some(me), ..default() };
     }
     let now = scene.now_ms.max(0.0) as u64;
@@ -265,9 +274,11 @@ pub fn fill(mut kin: ResMut<Kin>, net: NonSend<Net>, looks: Res<Looks>, (rules, 
         let lines = community_lines(&c, me, &who(c.founder), day, me_at);
         (c.name.clone(), lines)
     });
-    // The window the rules give to take an offer up, read again only when the laws change.
-    if window.0 != rules.laws_key || window.1 == 0 {
+    // The window the rules give to answer an offer, and their acts on one, read again only when
+    // the laws change.
+    if fresh || window.0 != rules.laws_key || window.1 == 0 {
         *window = (rules.laws_key, (sc.laws().bond_window_s.max(0.0) * 1000.0) as u64);
+        kin.acts = bond_acts(sc);
     }
     let bond_ms = window.1;
     let mut bonds: Vec<MyBondOffer> = conn.db.my_bond_offers().iter().filter(|o| now <= o.at_ms + bond_ms).collect();
@@ -280,10 +291,6 @@ pub fn fill(mut kin: ResMut<Kin>, net: NonSend<Net>, looks: Res<Looks>, (rules, 
             BondShown { id: o.id, with, incoming: o.incoming, text: wood::readable(&bond_text(o.incoming, &who(with), until, now)), until_ms: until }
         })
         .collect();
-    kin.accept = sc.skills().has(BOND_SKILL).then(|| {
-        let spec = sc.ui_specs().find(|u| u.name == BOND_SKILL).cloned().or_else(|| sc.ui_default(BOND_SKILL));
-        spec.map(|u| u.label).filter(|l| !l.trim().is_empty()).map_or_else(|| super::label(BOND_SKILL), |l| super::label(&l))
-    });
     let fresh: Vec<(u64, u32, String)> = kin.bonds.iter().filter(|b| b.incoming).map(|b| (b.id, b.with, b.text.clone())).collect();
     for (id, with, text) in fresh {
         if kin.noted.insert(id) {
@@ -349,16 +356,18 @@ pub struct BondCard(u32);
 #[derive(Component)]
 pub struct BondText(u32);
 #[derive(Component)]
-pub struct BondAct(u32);
+pub struct BondAct(u32, usize);
 #[derive(Component)]
-pub struct BondActText;
+pub struct BondActText(usize);
 
 /// The courting card of a person window (`people::spawn`), under the trade offers' cards.
 pub fn spawn_card(body: &mut ChildSpawnerCommands, f: &Fonts, id: u32) {
     body.spawn((BondCard(id), Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(6.0), padding: UiRect::all(Val::Px(10.0)), border: wood::b(2.0), border_radius: wood::r(8.0), display: Display::None, flex_shrink: 0.0, ..default() }, BackgroundColor(wood::t().hot.0), BorderColor::all(wood::edge()), Pickable::IGNORE)).with_children(|o| {
         o.spawn((BondText(id), Text::new(""), wood::ink(f, 14.0, 700), TextLayout::new(Justify::Left, LineBreak::WordBoundary), Pickable::IGNORE));
         o.spawn((Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(6.0), ..default() }, Pickable::IGNORE)).with_children(|b| {
-            kit::button_with(b, f, "", &format!("person:bond:{id}:accept"), false, BondAct(id), BondActText);
+            for j in 0..BOND_ACTS {
+                kit::button_with(b, f, "", &format!("person:bond:{id}:{j}"), j > 0, BondAct(id, j), BondActText(j));
+            }
         });
     });
 }
@@ -368,7 +377,7 @@ pub fn spawn_card(body: &mut ChildSpawnerCommands, f: &Fonts, id: u32) {
 pub fn update(
     kin: Res<Kin>,
     mut nodes: ParamSet<(Query<(&KinRow, &mut Node)>, Query<&mut Node, With<KinHead>>, Query<&mut Node, With<CommunityBox>>, Query<(&CommunityLine, &mut Node)>, Query<(&BondCard, &mut Node)>, Query<(&BondAct, &mut Node)>, Query<&mut Node, With<MetHead>>)>,
-    mut texts: ParamSet<(Query<(&KinRowText, &mut Text)>, Query<(&KinRowNote, &mut Text)>, Query<&mut Text, With<CommunityName>>, Query<(&CommunityLine, &mut Text)>, Query<(&BondText, &mut Text)>, Query<&mut Text, With<BondActText>>)>,
+    mut texts: ParamSet<(Query<(&KinRowText, &mut Text)>, Query<(&KinRowNote, &mut Text)>, Query<&mut Text, With<CommunityName>>, Query<(&CommunityLine, &mut Text)>, Query<(&BondText, &mut Text)>, Query<(&BondActText, &mut Text)>)>,
     (talks, looks, net): (Res<super::people::Talks>, Res<Looks>, NonSend<Net>),
 ) {
     let met = !super::people::people_list(&talks, net.my_id, &looks).is_empty();
@@ -392,7 +401,7 @@ pub fn update(
         show(&mut n, kin.bond_with(c.0).is_some());
     }
     for (a, mut n) in &mut nodes.p5() {
-        show(&mut n, kin.accept.is_some() && kin.bond_with(a.0).is_some_and(|b| b.incoming));
+        show(&mut n, a.1 < kin.acts.len() && kin.bond_with(a.0).is_some_and(|b| b.incoming));
     }
     for (r, mut t) in &mut texts.p0() {
         if let Some(k) = kin.rows.get(r.0) {
@@ -419,15 +428,15 @@ pub fn update(
             set_text(&mut t, &b.text);
         }
     }
-    if let Some(label) = &kin.accept {
-        for mut t in &mut texts.p5() {
+    for (a, mut t) in &mut texts.p5() {
+        if let Some((_, label)) = kin.acts.get(a.0) {
             set_text(&mut t, label);
         }
     }
 }
 
-/// Clicks: a relative's row opens their window; a courting card's button sends the act that
-/// takes the offer up, toward its maker (the rules say whether it does).
+/// Clicks: a relative's row opens their window; a courting card's button sends its act toward
+/// the offer's maker (the rules say what it does).
 pub fn clicks(ui: Res<super::hit::UiPointer>, tags: Query<&Tag>, kin: Res<Kin>, mut ws: ResMut<Windows>, mut verbs: ResMut<crate::verbs::Verbs>) {
     let Some(t) = kit::clicked(&ui, &tags) else { return };
     let parts: Vec<&str> = t.split(':').collect();
@@ -437,13 +446,13 @@ pub fn clicks(ui: Res<super::hit::UiPointer>, tags: Query<&Tag>, kin: Res<Kin>, 
                 ws.open(Win::Person(r.id));
             }
         }
-        ["person", "bond", id, "accept"] => {
-            let (Ok(id), Some(label)) = (id.parse::<u32>(), kin.accept.clone()) else { return };
+        ["person", "bond", id, j] => {
+            let (Ok(id), Some((skill, label))) = (id.parse::<u32>(), j.parse::<usize>().ok().and_then(|j| kin.acts.get(j)).cloned()) else { return };
             if kin.bond_with(id).is_none_or(|b| !b.incoming) {
                 return;
             }
-            info!("ui: {BOND_SKILL} toward #{id} (a courting offer)");
-            verbs.send.push((crate::verbs::Aim::Creature { id }, crate::verbs::Choice { skill: BOND_SKILL.to_string(), item: None, want: None, words: false, say: None, label, have: 0 }));
+            info!("ui: {skill} toward #{id} (a courting offer)");
+            verbs.send.push((crate::verbs::Aim::Creature { id }, crate::verbs::Choice { skill, item: None, want: None, words: false, say: None, label, have: 0 }));
         }
         _ => {}
     }
@@ -477,7 +486,9 @@ mod tests {
     fn the_shipped_script_has_the_words_and_the_act() {
         let sc = living_rules::script::Scripts::new(include_str!("../../../scripts/skills.rhai")).unwrap();
         assert_eq!(relation_word(sc.kin(), "parent", Some(Sex::Female)), "mother");
-        assert!(sc.skills().has(BOND_SKILL), "the act that takes up a courting offer");
+        // The act that takes up a courting offer is on the card by its declaration.
+        let acts = bond_acts(&sc);
+        assert_eq!(acts.iter().map(|(s, _)| s.as_str()).collect::<Vec<_>>(), ["conceive"], "{acts:?}");
         assert!(sc.laws().bond_window_s > 0.0);
     }
 

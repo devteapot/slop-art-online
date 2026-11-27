@@ -4470,7 +4470,7 @@ def kin(run, c):
     taken = "taken=sql|SELECT * FROM expecting WHERE b = {me};sql|SELECT * FROM bond_offer WHERE \"to\" = {me}"
     plan = ("ready;sync:scene;sync:kit;wait:3;key:KeyL:tap;wait:0.6;click:@log:tab:1;wait:1;dump:people;shot:01_people;"
             "click:@log:kin:2;wait:1;dump:partner;shot:02_partner_offer;click:@win:Person{D}:close;wait:0.5;"
-            "sync:court;wait:4;dump:court;shot:03_courted;click:@person:bond:{E}:accept;wait:4;dump:accepted;shot:04_taken_up;sync:taken;"
+            "sync:court;wait:4;dump:court;shot:03_courted;click:@person:bond:{E}:0;wait:4;dump:accepted;shot:04_taken_up;sync:taken;"
             "reconnect;wait:10;dump:recon0;key:KeyL:tap;wait:0.6;click:@log:tab:1;wait:1;dump:recon;shot:05_after_reconnect;quit").replace("{D}", str(D)).replace("{E}", str(E))
     # A, C and E in sight (E within the 2 m the rules give `conceive`); B and D far off, held still.
     places = [f"{A}:-1.8:1.2", f"{C}:1.6:1.4", f"{E}:-0.6:1.3", f"{B}:0:-40", f"{D}:40:0"]
@@ -4520,10 +4520,12 @@ def kin(run, c):
     bonds = lambda k: kin_of(k).get("bonds") or []
     mine = [b_ for b_ in bonds("partner") if b_["with"] == D and not b_["incoming"]]
     c.check(s, "a family row opens their window (Family › partner)", (f"Person{D}", "Left") in wins(d["partner"]), str(wins(d["partner"])))
-    c.check(s, "my courting offer: a card in their window, \"You asked … to start a family\", counting down, no button", mine and mine[0]["text"].startswith(f"You asked {names[D]} to start a family.") and re.search(r"\d+:\d\d left$", mine[0]["text"]) and f"person:bond:{D}:accept" not in (d["partner"].get("tags") or {}), str(mine))
+    c.check(s, "my courting offer: a card in their window, \"You asked … to start a family\", counting down, no button", mine and mine[0]["text"].startswith(f"You asked {names[D]} to start a family.") and re.search(r"\d+:\d\d left$", mine[0]["text"]) and not [t for t in d["partner"].get("tags") or {} if t.startswith(f"person:bond:{D}:")], str(mine))
     inc = [b_ for b_ in bonds("court") if b_["with"] == E and b_["incoming"]]
-    tag = f"person:bond:{E}:accept"
-    c.check(s, "a courting offer to me opens the suitor's window with the card and the rules' act", (f"Person{E}", "Left") in wins(d["court"]) and inc and inc[0]["text"].endswith("left") and " wants to start a family with you." in inc[0]["text"] and tag in (d["court"].get("tags") or {}), str((wins(d["court"]), inc, kin_of("court").get("accept"))))
+    tag = f"person:bond:{E}:0"
+    acts = kin_of("court").get("acts") or []
+    c.check(s, "a courting offer to me opens the suitor's window with the card and the rules' act", (f"Person{E}", "Left") in wins(d["court"]) and inc and inc[0]["text"].endswith("left") and " wants to start a family with you." in inc[0]["text"] and tag in (d["court"].get("tags") or {}), str((wins(d["court"]), inc, acts)))
+    c.check(s, "the card's acts are the skills the rules put on `bond` (shipped: conceive alone), one button each", [a_.get("skill") for a_ in acts] == ["conceive"] and all(a_.get("label") for a_ in acts) and f"person:bond:{E}:1" not in (d["court"].get("tags") or {}), str(acts))
     c.check(s, "the suitor is named as I see them (not known by name: no name)", inc and names[E] not in inc[0]["text"], str(inc))
     c.check(s, "it is noted once, in the authority's words", len([n for n in d["court"].get("notes") or [] if "wants to start a family with you" in n]) == 1, str(d["court"].get("notes")))
     L = log(out)
