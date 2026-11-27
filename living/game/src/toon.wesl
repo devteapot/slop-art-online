@@ -13,7 +13,7 @@ import bevy_pbr::render::{
 import living_game::toon_light::{
     toon, is_kind, hash3, noise3, rgb_to_hsv, hsv_to_rgb, scene, wetted, view_depth, sun_shadow, sun_color,
     bands, banded, puddles, wet_sheen, fresnel, rim_light, point_lights, emission, has_sun, sun_direction, eye, metres_per_pixel,
-    ld_band_pair, ld_sun_warmth, ld_value, ld_banded, ld_specular, ld_char_rim,
+    ld_band_pair, ld_sun_warmth, ld_value, ld_banded, ld_specular, ld_char_rim, ld_point_lights,
 };
 
 @if(PREPASS_PIPELINE)
@@ -618,6 +618,9 @@ fn fragment(
         if (is_kind(4.0)) {
             color = color + hair_light(albedo.rgb, N, V, L, lit, fr, strand_light(in, duv), facing(in), in) * sun * (1.0 - ink_cov);
         }
+@if(LOOKDEV)
+        color = color + ld_point_lights(lit_albedo, p.xyz, N, view_z, pbr_input.frag_coord.xy, pbr_input.is_orthographic);
+@else
         color = color + point_lights(lit_albedo, p.xyz, N, view_z, pbr_input.frag_coord.xy, pbr_input.is_orthographic);
         color = color + emission(pbr_input.material.emissive.rgb, sc);
         out.color = vec4<f32>(color, out_a);

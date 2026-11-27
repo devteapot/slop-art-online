@@ -737,6 +737,15 @@ pub fn things(
                     c.spawn((Mesh3d(g), MeshMaterial3d(mat), Transform::default()));
                 });
             }
+            // Look-dev step 2.2: outdoor lit street lamps, braziers/campfires, furnaces and ovens
+            // emit warm dusk/night point-light pools (hidden in Classic by `Lamp::lookdev_only`).
+            if lit && indoors.is_none() {
+                if let Some((light, tf)) = crate::envs::lookdev_local_light(&kind, 3.2).or_else(|| crate::envs::lookdev_local_light(&like, 3.2)) {
+                    commands.entity(e).with_children(|c| {
+                        c.spawn((light, tf, Visibility::Hidden));
+                    });
+                }
+            }
             debug!("things: {kind} #{} drawn as {file}{}", key.1, if lit { "" } else { " (out)" });
             scene.things.insert(key, e);
             continue;
@@ -757,6 +766,13 @@ pub fn things(
             commands.entity(e).with_children(|c| {
                 c.spawn((Mesh3d(g), MeshMaterial3d(mat), Transform::default()));
             });
+        }
+        if key.0 == 1 && lit && indoors.is_none() {
+            if let Some((light, tf)) = crate::envs::lookdev_local_light(&kind, 3.2).or_else(|| crate::envs::lookdev_local_light(&like, 3.2)) {
+                commands.entity(e).with_children(|c| {
+                    c.spawn((light, tf, Visibility::Hidden));
+                });
+            }
         }
         scene.things.insert(key, e);
     }
