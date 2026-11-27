@@ -158,3 +158,67 @@ Run a **melee spacing and release-timing pilot** on the R2 heavy arena. Reuse th
 A controller can overfit arena timing, exploit training rewards, pick a style the mind did not ask for, learn from hidden features, or become brittle when its observations arrive late. A body-service outage leaves assigned NPCs idle, and a reconnect can otherwise admit old input. Resolve these with changed schedules, paired brief tests, scoped trace provenance, a single controller epoch and stall/reconnect checks. The duel can establish whether the learned layer improves control. Group coordination, human-facing feel, the 216-character 30-minute gate and the 2,000-character eight-hour target each need their own evidence.
 
 **Pursue the narrower variant.** Run one CPU-first, conditioned melee controller under a legible graph leaf, with recorded player-equivalent inputs and real-authority evaluation. R2 gives a concrete timing failure and R3 gives a reason to keep the mind's preparation in the loop. Require a gain over the matched graph without loss of engagement before investing in reinforcement, personal adapters or a scaled body service.
+
+## Pilot run
+
+Status: **plan frozen** (2026-11-27, Spark, branch `neural-body-clone` from `neural-body-pilot` `f64d69f71`). Everything below is frozen **before** throughput measurement, data collection, training or evaluation.
+
+**Scope and constraints.** CPU only, pinned to Spark A725 cores `0-4,10-14` (`taskset` / Docker `--cpuset-cpus`). Zero authority rule changes (`living/authority/`, `living/rules/`, `living/scripts/skills.rhai` untouched from `f64d69f71`). No reinforcement learning, no personal adapters, no Colab or uploads, no GPU or CUDA imports, and no paid model calls. One shared policy for the `person` role plugged into `living/mind/src/body/policy.rs::for_role`. All runs use private scratch SpacetimeDB 2.14.1 container(s) and `flock -s ~/slop-mq/trial-activity.lock`.
+
+### Frozen plan (Step 0)
+
+**1. Arms (matched on the R2 heavy arena).**
+Both arms run on the exact same `island` authority build (`f64d69f71`, same WASM and installed `skills.rhai` SHA-256), same world seed (`island`, start hour 10:00, day sight, `body_delegate_on = true`), same equipment (subject: `bow`, `30 arrow`, `4 berries`, `spear`, know-how `fire`, `fire_bolt`, `wound_tending`; foe: `spear` except unarmed schedule variants, `wound_tending`), same starting coordinates, vitals (`100` HP), foe graph, re-approach trigger (`beyond 5 m for 4 s -> goto subject_xy` as in `living/trials/arena-heavy.json`), and episode horizon (**180 s** live fight time, or 5 s after either fighter dies).
+
+- **Arm G (fresh matched graph-only baseline):** an unadapted melee engage behaviour graph running directly on the authority — closes and uses `strike` against the foe, fleeing only below 15 HP (matching the delegated leaf's exit threshold and skill, with no pre-written windup dodge/block reflex):
+  ```json
+  {"first": [
+    {"if": {"cond": {"health": {"below": 15}}, "then": {"do": {"skill": "flee", "target": "$foe", "run": true}}}},
+    {"do": {"skill": "strike", "target": "$foe"}}
+  ]}
+  ```
+- **Arm L (learned clone):** subject runs the delegated leaf (`goal: "engage"`, `target: $foe`, `skills: ["strike", "dodge", "block"]`, `exit: {"health": {"below": 15}}`, fallback `flee`) with brief `goal: "engage", stance: "even", risk: 0.5, style: 0.5, traits: [0.0, 0.0], ttl_s: 300`, driven at 15 Hz (`LIVING_BODY_HZ=15`) by `living-mind body` loading the trained ~23k-parameter recurrent MLP (`RoleNet`, pure Rust FP32) from `policy::for_role("person", ...)`, consuming only player-equivalent observations (`encode::LEN = 99` + `policy::MEMORY = 48`: 16-float recurrent state + 4×8 intent history).
+
+**2. Ten predeclared paired episodes (`ep01`–`ep10`).**
+Every evaluation actor (`A`–`J`, picked by deterministic rank among living adult island residents) and every evaluation arena site is strictly disjoint from all training actors and sites.
+
+| Episode | Split / variant | Opponent schedule (unmodified authority skills) | Actor | Start range & bearing |
+| --- | --- | --- | --- | --- |
+| `ep01` | Nominal R2 heavy | `attack` (spear, 750 ms windup), heal <70 HP, 2–3 s pause | Unseen A | 6.0 m East (`+6, 0`) |
+| `ep02` | Nominal R2 heavy | `attack` (spear, 750 ms), heal <70 HP, 2–3 s pause | Unseen B | 6.0 m West (`-6, 0`) |
+| `ep03` | Nominal R2 heavy | `attack` (spear, 750 ms), heal <70 HP, 2–3 s pause | Unseen C | 6.0 m North (`0, -6`) |
+| `ep04` | Nominal R2 heavy | `attack` (spear, 750 ms), heal <70 HP, 2–3 s pause | Unseen D | 6.0 m South (`0, +6`) |
+| `ep05` | Held-out starting range (close) | `attack` (spear, 750 ms), heal <70 HP, 2–3 s pause | Unseen E | 2.5 m NW (`-1.8, -1.8`) |
+| `ep06` | Held-out starting range (far) | `attack` (spear, 750 ms), heal <70 HP, 2–3 s pause | Unseen F | 10.0 m SE (`+7.1, +7.1`) |
+| `ep07` | Held-out windup schedule (650 ms) | Unarmed `attack` (**650 ms** windup), heal <70 HP, 2–3 s pause | Unseen G | 5.0 m NE (`+3.5, -3.5`) |
+| `ep08` | Held-out pause schedule (irregular) | `attack` (spear, 750 ms), irregular pause (`0.8 / 1.8 / 4.2 s`) | Unseen H | 7.5 m SW (`-5.3, +5.3`) |
+| `ep09` | Held-out mixed windups (350 + 750 ms) | 50% `strike` (**350 ms**) / 50% `attack` (**750 ms**), 1.5–2.5 s pause | Unseen I | 4.5 m East (`+4.5, 0`) |
+| `ep10` | Held-out fast unarmed + far range | Unarmed `attack` (**650 ms**), fast pause (`1.0–1.8 s`), heal <70 HP | Unseen J | 9.0 m West (`-9.0, 0`) |
+
+**3. Measures (preserving non-answers and censoring).**
+- **R2 core:** `exposures` (pattern moves aimed at subject; for `ep09` both heavy-only and all-pattern), `perceived_exposures` (foe delivered in player sight at windup start, i.e. perceived-cue coverage), response-fit by exposure index (1, 2, 3, 4+ and total `answered / exposures`, where answered = dodged, guarded, or evaded out of reach), `first_fitting_exposure` (non-answer = `None`, ranked $\infty$ in medians), `K` (first start of 3 consecutive answered exposures; censored episodes with $<3$ exposures marked explicitly), defensive response timing relative to windup start (`def.accepted_ms - foe.accepted_ms`) and release (`foe.released_ms - def.accepted_ms`), `damage_taken` (from foe exposures and lowest HP), `survival` (`survived`, `died_s`), `win` (foe killed before subject died or horizon), `resource_use` (uses per skill, estimated stamina spent), `refusal_reasons` (every refused reducer/skill-use count by reason), and `attribution` (`skill_use.source`, policy version hash).
+- **Anti-passivity and engagement:** `contact_share` (fraction of live fight time at subject–foe distance $\le 4.0\text{ m}$), `aimed_attacks_per_contact_min` (accepted offensive uses aimed at foe per contact-minute), and `return_after_retreat` (fraction of separations from $\le 2.5\text{ m}$ to $> 4.0\text{ m}$ while foe lives that re-close to $\le 2.5\text{ m}$ within 6 s).
+- **Task predicates tied to the brief (never "stay alive"):**
+  - `engage` (commit): close to melee reach ($\le 2.5\text{ m}$), sustain contact and aimed attacks ($\ge 90\%$ of Arm G), answer incoming windups inside the window, and return after retreat.
+  - `hold`: maintain spacing band ($2.5\text{–}6.0\text{ m}$), minimal or zero offensive strikes, defend when pressed.
+  - `withdraw` (flee): open distance to $> 8.0\text{ m}$ within 10 s, zero offensive strikes, do not re-engage.
+- **Exploit diagnostics (audited on recorded rollouts):** `early_evasion` (dodges finishing $> 100\text{ ms}$ before release or initiated $> 100\text{ ms}$ before windup), `input_spam` (inputs/s and `"not ready yet"` / `"too many inputs"` refusal share), `boundary_abuse` (time near map obstacles/water or kiting $> 15\text{ m}$ from arena centre), `clock_anticipation` (defences initiated in the 300 ms *before* a foe windup starts, especially on `ep08`/`ep10`).
+
+**4. Pass screen (§7, frozen).**
+1. **Brief-swap gate (Step 4, before Step 5):** with frozen weights, changing only the brief (`withdraw` / `hold` / `engage`) separates behaviour cleanly on the brief task predicates above (`withdraw` opens $> 8\text{ m}$ with 0 strikes; `hold` keeps $2.5\text{–}6.0\text{ m}$ with minimal strikes; `engage` closes $\le 2.5\text{ m}$ and lands aimed strikes).
+2. **First-answer rate:** at least **6 of 10** paired heavy episodes have a first fitting answer by exposure 3 (`first_fitting_exposure <= 3`).
+3. **Earlier first fit:** median `first_fitting_exposure` (non-answers ranked last = $\infty$) is at least **1 exposure earlier** than Arm G.
+4. **Damage and survival:** median `damage_taken` is **no higher** than Arm G, and survival count is **no worse** than Arm G.
+5. **Anti-passivity (`engage`):** median `contact_share` and median `aimed_attacks_per_contact_min` are each at least **90%** of Arm G.
+
+**5. Stop rules (coded in `living/tools/nb_pilot_guard.py` and dry-run before any collection or training).**
+1. `STOP_NO_ENCOUNTER`: stop after 2 plumbing replicates if neither yields $\ge 1$ scoreable exposure.
+2. `STOP_LEAKAGE`: fail immediately if `body::encode::tests` fails or if any captured decision leaks an unseen target, future `release_ms`, or another viewer's feed.
+3. `STOP_HASH_MISMATCH`: fail immediately if the authority WASM SHA-256 or installed `skills.rhai` SHA-256 (sans world laws) diverges from the frozen manifest.
+4. `STOP_REPLAY_DIVERGENCE`: fail immediately if the deterministic forward-pass check on fixed probe inputs diverges across repeated invocations, or if world laws (`body_delegate_on`) drift.
+5. `STOP_BUDGET_MISS`: fail immediately if decision-loop latency exceeds p95 50 ms, lease lapses exceed 5% of epochs, or `"too many inputs"` refusals exceed 10% of calls.
+6. `STOP_RESOURCE`: fail immediately if capture directory exceeds 512 MiB, host available memory drops below 40 GiB, or free disk drops below 60 GiB.
+7. `STOP_BUDGET_CAP`: fail immediately if CUDA is imported, `~/slop-mq/battle.lock` is held, collected raw decisions exceed 160k, training epochs exceed 40, or evaluation exceeds 10 paired episodes.
+
+**6. Execution order.**
+Step 1 throughput gate (headless real-authority copies, CPUs `0-4,10-14`) → Step 2 graph-rollout collection (50k–150k decisions via player-equivalent capture, static + per-frame teacher audit excluding unperceived/privileged examples, split by encounter/session/opponent) → Step 3 CPU imitation fit (~23k-parameter recurrent MLP, one `person` policy) → Step 4 brief swap (frozen weights, flee / hold / commit) → Step 5 paired evaluation (`ep01`–`ep10`, Arm L vs Arm G) + rollout exploit inspection → Step 6 results recorded below.
