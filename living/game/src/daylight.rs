@@ -575,6 +575,7 @@ fn lamps(atmo: Res<Atmo>, look: Res<crate::style::Look>, target: Res<crate::cont
     let (cap, reach) = if lookdev { (LD_LAMPS, LD_LAMP_REACH) } else { (LAMPS, LAMP_REACH) };
     let me = target.0.unwrap_or(Vec3::ZERO);
     order.clear();
+    let mut cap_reach = reach;
     if atmo.active {
         for (e, lamp, _, g, _) in &q {
             if lamp.lookdev_only && !lookdev {
@@ -586,6 +587,11 @@ fn lamps(atmo: Res<Atmo>, look: Res<crate::style::Look>, target: Res<crate::cont
             }
         }
         order.sort_by(|a, b| a.0.total_cmp(&b.0));
+        if lookdev {
+            if let Some(&(d_cap, _)) = order.get(cap) {
+                cap_reach = d_cap.min(reach);
+            }
+        }
         order.truncate(cap);
     }
     for (e, lamp, mut light, _, mut vis) in &mut q {
@@ -607,8 +613,9 @@ fn lamps(atmo: Res<Atmo>, look: Res<crate::style::Look>, target: Res<crate::cont
                 }
                 continue;
             };
-            // Fade out toward the edge of the reach, so the cap never pops a light.
-            let edge = 1.0 - ((d - reach * 0.7) / (reach * 0.3)).clamp(0.0, 1.0);
+            // Fade out toward the edge of the reach (and in Look-dev, toward the cap cutoff),
+            // so dense streets never pop a light on cap swaps.
+            let edge = 1.0 - ((d - cap_reach * 0.7) / (cap_reach * 0.3).max(1e-3)).clamp(0.0, 1.0);
             let level = if lamp.lit_at_night { night } else { 0.55 + 0.45 * night };
             // Existing quay lamps (`fixtures.json`, 60k lm) join the richer Look-dev pool level
             // without changing their Classic brightness.

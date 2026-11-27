@@ -974,7 +974,7 @@ def graphics(run, c):
     st = os.path.join(out0, "settings.json")
     if os.path.exists(st):
         os.remove(st)
-    open_settings = "click:@menu;wait:0.4;click:@menu:Settings;wait:0.6;cursor:0.55,0.5;scroll:-400;wait:0.3;"
+    open_settings = "click:@menu;wait:0.4;click:@menu:Settings;wait:0.6;cursor:0.55,0.5;scroll:-700;wait:0.3;"
     plan = ("ready;wait:2;dump:01;shot:01_high_100;" + open_settings
             + "click:@settings:quality:low;wait:0.5;dump:02;"
             + "click:@settings:quality:medium;wait:0.3;click:@settings:render_scale:75;wait:1.0;dump:03;key:Escape:tap;wait:0.8;dump:04;shot:04_medium_75;"
@@ -1069,9 +1069,18 @@ def light(run, c):
     names = ["01_classic", "02_lookdev", "03_classic", "04_rim_strong", "05_rim_off", "06_outline_bold", "07_outline_fine"]
     shots = "".join(f"light:{l};rim:{r};outline:{o};wait:0.8;shot:{n};" for (l, r, o), n in zip(seq, names))
     # A resident held still beside me, the cursor in the world (the dump's `seen`), the start's
-    # notes faded.
+    # notes faded, and clear daytime on the clock (a prior `body-clock` run leaves the world at
+    # night, and a rainstorm transition during the shot window shifts the whole frame between
+    # the two Classic shots).
     a, _ = residents(run)
-    out2, code2, _ = drive(run, s, "ready;wait:2;dump:00;sync:scene;cursor:0.70,0.55;wait:6;" + shots + "dump:06;quit", places=[f"{a}:-1.5:1.5"])
+    out2, code2, _ = drive(
+        run,
+        s,
+        "ready;wait:2;dump:00;sync:noon;sync:scene;cursor:0.70,0.55;wait:6;" + shots + "dump:06;quit",
+        places=[f"{a}:-1.5:1.5"],
+        syncs=["noon=sql|UPDATE world SET epoch_ms = {epoch_at:15} WHERE id = 0;set_weather|false|600"],
+        env={"LIVING_GAME_WEATHER": "clear"},
+    )
     c.check(
         s,
         "the next start reads them back",

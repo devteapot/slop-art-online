@@ -960,7 +960,9 @@ fn person_width(style: &Style, distance: f32) -> f32 {
 ///   read delicately like Blue Protocol (`ref4`).
 /// - Play Near (~8–10 m) and Middle (~14 m): crisp (`0.92x` -> `0.86x`, ~1.55–1.65 px at Standard).
 /// - Play Far (~22 m) to 32 m: tapers smoothly down to `0.42x` so distant figures don't turn chunky.
-pub(crate) fn ld_person_width(style: &Style, distance: f32, submesh_scale: f32) -> f32 {
+/// - Below 100% 3D render scale, `render_scale` scales target-pixel extrusion down so upscaled
+///   display-pixel ink thickness stays consistent with native 100%.
+pub(crate) fn ld_person_width(style: &Style, distance: f32, submesh_scale: f32, render_scale: f32) -> f32 {
     let s = |a: f32, b: f32, x: f32| {
         let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
         t * t * (3.0 - 2.0 * t)
@@ -968,15 +970,16 @@ pub(crate) fn ld_person_width(style: &Style, distance: f32, submesh_scale: f32) 
     let close_to_near = 0.62 + (0.92 - 0.62) * s(1.8, 7.5, distance);
     let near_to_far = 0.92 + (0.42 - 0.92) * s(13.0, 32.0, distance);
     let curve = if distance < 10.0 { close_to_near } else { near_to_far };
-    let w = style.outline_people * curve * style.look.outline_weight * submesh_scale;
+    let w = style.outline_people * curve * style.look.outline_weight * submesh_scale * render_scale.clamp(0.67, 1.0);
     // Quantize in 1/16 px steps so close-up face outlines stay smooth while crowds rarely rewrite.
     ((w * 16.0).round() / 16.0).max(0.25)
 }
 
 /// Look-dev outline colour harmonized with the ambient fill and time of day (step 2.3):
-/// replaces fixed warm espresso (`[0.17, 0.11, 0.10]`) with a cool-harmonized dark charcoal at
-/// noon, deep twilight plum at dusk, and cool midnight indigo at night so night silhouettes never
-/// look like brown/black cutouts.
+/// replaces fixed warm espresso (`[0.17, 0.11, 0.10]`) with a subtle warm-neutral charcoal at
+/// noon (~sRGB (35, 29, 35)), deep twilight plum at dusk (~sRGB (37, 29, 40)), and soft deep
+/// midnight indigo at night (~sRGB (29, 34, 57), luma ~34) so night silhouettes harmonize without
+/// turning into harsh near-black rings.
 pub(crate) fn ld_outline_color(atmo: Option<&crate::daylight::Atmo>, style: &Style) -> Color {
     let (ambient_dir, day, warm) = match atmo.filter(|a| a.active) {
         Some(a) => {
@@ -992,11 +995,13 @@ pub(crate) fn ld_outline_color(atmo: Option<&crate::daylight::Atmo>, style: &Sty
             (Vec3::new(c.red, c.green, c.blue).normalize_or(Vec3::new(0.45, 0.50, 0.75)), 1.0, 0.5)
         }
     };
-    // Warm umber anchor by day, cool sky/ambient-hue dark ink at dusk and night.
-    let warm_ink = Vec3::new(0.020, 0.013, 0.013);
-    let cool_lum = 0.008 + 0.014 * day;
-    let cool_ink = ambient_dir * cool_lum + Vec3::splat(0.002 + 0.003 * day);
-    let mix_warm = 0.48 * warm * day;
+    // Warm umber anchor by day, cool sky/ambient-hue deep indigo ink at dusk and night.
+    let night = 1.0 - day;
+    let warm_ink = Vec3::new(0.020, 0.014, 0.013);
+    let cool_dir = (ambient_dir + Vec3::new(0.0, 0.13, 0.08) * night).normalize();
+    let cool_lum = 0.021 + 0.027 * night;
+    let cool_ink = cool_dir * cool_lum + Vec3::splat(0.003 + 0.0005 * night);
+    let mix_warm = 0.60 * warm * day;
     let lin = cool_ink.lerp(warm_ink, mix_warm);
     // Quantize to 1/255 sRGB steps so OutlineVolume isn't dirtied by sub-LSB drift.
     let srgb = Color::linear_rgb(lin.x, lin.y, lin.z).to_srgba();
@@ -1008,6 +1013,7 @@ pub(crate) fn ld_outline_color(atmo: Option<&crate::daylight::Atmo>, style: &Sty
 fn fog_outlines(
     style: Res<Style>,
     atmo: Option<Res<crate::daylight::Atmo>>,
+    upscale: Option<Res<crate::graphics::Upscale>>,
     cams: Query<(&GlobalTransform, &DistanceFog), With<Camera3d>>,
     mut outlines: Query<(&Outlined, &mut OutlineVolume, &GlobalTransform, Option<&InheritedVisibility>, Option<&bevy::mesh::MeshTag>, Has<crate::lookdev::FacePart>, Option<&OutlineScale>)>,
     (edge, target): (Option<Res<crate::sightedge::SightEdge>>, Option<Res<crate::controls::Target>>),
@@ -1019,6 +1025,7 @@ fn fog_outlines(
     let on = style.outlines && style.enabled;
     let [cr, cg, cb] = style.outline_color;
     let want_col = if style.look.on { ld_outline_color(atmo.as_deref(), &style) } else { Color::srgb(cr, cg, cb) };
+    let scale_factor = upscale.map_or(1.0, |u| u.factor);
     // Limited view fogs round my character, not by the camera's distance (sightedge.rs).
     let limit = edge.and_then(|e| e.outline_limit(target.and_then(|t| t.0)));
     for (kind, mut o, g, shown, tag, face_part, scale) in &mut outlines {
@@ -1037,7 +1044,7 @@ fn fog_outlines(
             if matches!(kind, Outlined::Person) {
                 let w = if style.look.on {
                     let submesh = scale.map_or(if face_part { FACE_OUTLINE_SCALE } else { 1.0 }, |s| if face_part { s.0.min(FACE_OUTLINE_SCALE) } else { s.0 });
-                    ld_person_width(&style, d, submesh)
+                    ld_person_width(&style, d, submesh, scale_factor)
                 } else {
                     person_width(&style, d)
                 };
@@ -1129,21 +1136,23 @@ mod tests {
     fn ld_outline_distance_curve_thins_at_portrait_and_far_and_on_faces() {
         let mut s = Style::default();
         s.look = LookParams::of(Look::Lookdev, CharRim::Subtle, OutlineWeight::Standard);
-        let portrait = ld_person_width(&s, 1.4, 1.0);
-        let portrait_face = ld_person_width(&s, 1.4, FACE_OUTLINE_SCALE);
-        let near = ld_person_width(&s, 9.4, 1.0);
-        let middle = ld_person_width(&s, 14.1, 1.0);
-        let far = ld_person_width(&s, 28.0, 1.0);
+        let portrait = ld_person_width(&s, 1.4, 1.0, 1.0);
+        let portrait_face = ld_person_width(&s, 1.4, FACE_OUTLINE_SCALE, 1.0);
+        let near = ld_person_width(&s, 9.4, 1.0, 1.0);
+        let middle = ld_person_width(&s, 14.1, 1.0, 1.0);
+        let far = ld_person_width(&s, 28.0, 1.0, 1.0);
         assert!(portrait < near, "portrait ({portrait}) is thinner than Near ({near})");
         assert!(portrait_face < portrait * 0.55, "face ({portrait_face}) is thinner than body ({portrait})");
         assert!(near >= middle && middle > far, "Near ({near}) >= Middle ({middle}) > Far ({far})");
+        let near_75 = ld_person_width(&s, 9.4, 1.0, 0.75);
+        assert!(near_75 < near && near_75 >= near * 0.70, "75% render scale compensates target px width ({near_75} vs {near})");
 
         let mut fine = s;
         fine.look = LookParams::of(Look::Lookdev, CharRim::Subtle, OutlineWeight::Fine);
         let mut bold = s;
         bold.look = LookParams::of(Look::Lookdev, CharRim::Subtle, OutlineWeight::Bold);
-        assert!(ld_person_width(&fine, 14.1, 1.0) < middle);
-        assert!(ld_person_width(&bold, 14.1, 1.0) > middle);
+        assert!(ld_person_width(&fine, 14.1, 1.0, 1.0) < middle);
+        assert!(ld_person_width(&bold, 14.1, 1.0, 1.0) > middle);
     }
 
     #[test]
@@ -1165,7 +1174,9 @@ mod tests {
         };
         let c_noon = ld_outline_color(Some(&noon), &style).to_srgba();
         let c_night = ld_outline_color(Some(&night), &style).to_srgba();
+        let night_luma = (0.2126 * c_night.red + 0.7152 * c_night.green + 0.0722 * c_night.blue) * 255.0;
         assert!(c_night.blue > c_night.red, "night outline harmonizes cool blue ({c_night:?})");
         assert!(c_noon.red > c_night.red, "noon outline is warmer/lighter than night ({c_noon:?} vs {c_night:?})");
+        assert!(night_luma >= 30.0 && night_luma <= 42.0, "night outline stays soft deep indigo, not near-black (luma {night_luma:.1}, {c_night:?})");
     }
 }

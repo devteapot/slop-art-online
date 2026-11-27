@@ -19,7 +19,7 @@ Controls in Settings › Play (`living/game/src/graphics.rs`, `living/game/src/u
 
 Preconditions: baseline.
 
-- Open Settings (`click:@menu;wait:0.3;click:@menu:Settings;wait:0.4`), scroll to the bottom of Play if needed (`cursor:0.55,0.5;scroll:-400;wait:0.3`), then click `@settings:quality:medium` / `@settings:quality:low` / `@settings:quality:high` and `@settings:render_scale:75` / `@settings:render_scale:100`.
+- Open Settings (`click:@menu;wait:0.3;click:@menu:Settings;wait:0.4`), scroll to the bottom of Play if needed (`cursor:0.55,0.5;scroll:-700;wait:0.3`), then click `@settings:quality:medium` / `@settings:quality:low` / `@settings:quality:high` and `@settings:render_scale:75` / `@settings:render_scale:100`.
 - Verify `dump:` JSON: `extra.quality`, `extra.quality_saved`, `extra.render_scale`, `extra.render_scale_saved`, `extra.render_scale_px` (the 3D camera's physical viewport `[w, h]`, matching scaled pixels when `< 100%` and full output pixels at `100%`), `extra.upscale` (`{method, sharpness}` while a scaled picture is composited, null at 100%) and `extra.shadow_filter` (the 3D camera's `ShadowFilteringMethod`: `Gaussian` on every tier; `Hardware2x2` only under `LIVING_GAME_PERF=shadowfilter=hw`).
 - `check.py --run RUN graphics` drives all of it on an island world: fresh defaults, Low, Medium + 75%, back to 100%, the settings file and the next start.
 - Verify `client.log`: `settings: quality: …`, `settings: render scale: …`, and `graphics: render scale …`.

@@ -570,7 +570,7 @@ impl DumpExtra<'_, '_> {
                 }
             }
         }
-        serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "combat_timing": self.prefs.combat_timing.name(), "windup_glint": self.prefs.windup_glint, "theme": self.theme.name.key(),
+        let mut out = serde_json::json!({"preset": self.binds.preset.name(), "control": format!("{:?}", self.prefs.control), "tips": self.prefs.tips, "auto_draw": self.prefs.auto_draw, "combat_timing": self.prefs.combat_timing.name(), "windup_glint": self.prefs.windup_glint, "theme": self.theme.name.key(),
             "glints": self.glints.as_ref().map(|g| g.log.iter().map(|e| serde_json::json!({"actor": e.actor, "act_ms": e.act_ms, "release_ms": e.release_ms, "f": e.f, "clock_ms": e.clock_ms})).collect::<Vec<_>>()),
             "drawn": self.weapon.drawn, "slots": slots, "tooltip": tip,
             "events": self.talks.events.iter().rev().take(12).rev().map(|(_, t)| t.clone()).collect::<Vec<_>>(),
@@ -578,18 +578,24 @@ impl DumpExtra<'_, '_> {
             "lines": self.talks.lines.values().rev().take(12).rev().map(|l| serde_json::json!({"speaker": l.speaker, "to": l.to, "mine": l.mine, "how": l.how, "text": l.text, "head": people::line_head(l, false, self.net.my_id, &self.looks), "head_window": people::line_head(l, true, self.net.my_id, &self.looks)})).collect::<Vec<_>>(),
             "cards": self.talks.cards.iter().map(|(who, i, text)| serde_json::json!({"with": who, "card": i, "text": text})).collect::<Vec<_>>(),
             "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": if self.cam.mode == crate::camera::Mode::TopDown { self.cam.top_zoom.shown } else { self.cam.zoom }, "mode": self.cam.mode.name(), "height": self.cam.eye_height, "ground_clearance": self.cam.ground_clearance, "pitch": self.cam.shown.pitch, "fov": self.cam.shown.fov}, "cursor_ground": ground, "lod": {"near": lod[0], "far": lod[1], "people": lod_people},
-            "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()), "film": self.film.name(), "film_saved": self.prefs.film, "hair_shine": self.shine.name(), "hair_shine_saved": self.prefs.hair_shine, "light": self.light.name(), "light_saved": self.prefs.light, "char_rim": self.char_rim.name(), "char_rim_saved": self.prefs.char_rim, "outline_weight": self.outline_weight.name(), "outline_weight_saved": self.prefs.outline_weight,
-            "quality": self.quality.name(), "quality_saved": self.prefs.quality, "render_scale": self.render_scale.name(), "render_scale_saved": self.prefs.render_scale,
-            "render_scale_px": self.lod_camera.single().ok().and_then(|c| c.physical_viewport_size()).map(|s| [s.x, s.y]),
+            "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()), "film": self.film.name(), "film_saved": self.prefs.film, "hair_shine": self.shine.name(), "hair_shine_saved": self.prefs.hair_shine, "light": self.light.name(), "light_saved": self.prefs.light, "char_rim": self.char_rim.name(), "char_rim_saved": self.prefs.char_rim, "outline_weight": self.outline_weight.name(), "outline_weight_saved": self.prefs.outline_weight});
+        if let Some(m) = out.as_object_mut() {
+            m.insert("quality".into(), serde_json::json!(self.quality.name()));
+            m.insert("quality_saved".into(), serde_json::json!(self.prefs.quality));
+            m.insert("render_scale".into(), serde_json::json!(self.render_scale.name()));
+            m.insert("render_scale_saved".into(), serde_json::json!(self.prefs.render_scale));
+            m.insert("render_scale_px".into(), serde_json::json!(self.lod_camera.single().ok().and_then(|c| c.physical_viewport_size()).map(|s| [s.x, s.y])));
             // How a scaled picture is composited (null at 100%: no extra pass), and the 3D
             // camera's shadow filter (`Quality`).
-            "upscale": self.upscale.active.then(|| serde_json::json!({"method": self.upscale.method(), "sharpness": self.upscale.sharpness})),
-            "shadow_filter": self.shadow_filter.single().ok().map(|f| format!("{:?}", f.copied().unwrap_or_default())),
+            m.insert("upscale".into(), serde_json::json!(self.upscale.active.then(|| serde_json::json!({"method": self.upscale.method(), "sharpness": self.upscale.sharpness}))));
+            m.insert("shadow_filter".into(), serde_json::json!(self.shadow_filter.single().ok().map(|f| format!("{:?}", f.copied().unwrap_or_default()))));
             // The one-shot each body plays now over its walk or stand (a gesture: `town.rs`), by
             // character id: a wave made while walking on plays on (talk-turns' `on_the_move`).
-            "onces": self.town.as_ref().map(|t| t.shows.iter().filter_map(|(id, s)| s.once.map(|a| (id.to_string(), serde_json::json!(a.clip)))).collect::<serde_json::Map<_, _>>()),
+            m.insert("onces".into(), serde_json::json!(self.town.as_ref().map(|t| t.shows.iter().filter_map(|(id, s)| s.once.map(|a| (id.to_string(), serde_json::json!(a.clip)))).collect::<serde_json::Map<_, _>>())));
             // Each speaking body's mouth now (`mouth.rs`), by character id.
-            "mouths": self.mouths.as_ref().map(|m| m.by_id.iter().map(|(id, w)| (id.to_string(), serde_json::json!(w))).collect::<serde_json::Map<_, _>>())})
+            m.insert("mouths".into(), serde_json::json!(self.mouths.as_ref().map(|m| m.by_id.iter().map(|(id, w)| (id.to_string(), serde_json::json!(w))).collect::<serde_json::Map<_, _>>())));
+        }
+        out
     }
 }
 
