@@ -3286,8 +3286,11 @@ def remains(s):
     rot = s.rows(f"SELECT * FROM rot WHERE structure = {r_a['id']}", "admin-death-rot")
     s.expect("its remains are due after the remains_h law, in real time for the day", len(rot) == 1 and rot[0]["due_ms"] - r_a["built_ms"] == REMAINS_H * s.rows("SELECT day_ms FROM world")[0]["day_ms"] // 24, rot)
 
-    # A wolf's kill: the carcass goes into the remains, not into the killer's pack.
-    b, killer, other, walker = deer[1], wolves[0], wolves[1], wolves[2]
+    # A wolf's kill: the carcass goes into the remains, not into the killer's pack. Pick a deer
+    # far from the first carcass so both wolves take from this kill under `nearest remains`.
+    deer_at = {d["id"]: (d["x"], d["y"]) for d in s.rows("SELECT id, x, y FROM body") if d["id"] in deer[1:]}
+    b = max(deer[1:], key=lambda d: math.dist(deer_at[d], (r_a["x"], r_a["y"])))
+    killer, other, walker = wolves[0], wolves[1], wolves[2]
     s.call("place_near", killer, b)
     before = s.inventory(killer, "killer-before")
     s.graph(killer, {"first": [{"do": "attack", "target": {"id": b}}, {"wait": 1}]})
@@ -5393,7 +5396,9 @@ def owners_away(s, house, owner, owner_name, fellow, newcomer):
         s.expect("a storage that shows its owner (shows_owner) names the owner to the newcomer", by_id.get(store["id"], {}).get("by") == owner_name, by_id.get(store["id"]))
         s.expect("the newcomer notices the storage as built by the owner, by name", any(f"storage built by {owner_name}" in t for t in lines), [t for t in lines if "storage" in t])
         since = s.rows("SELECT last_ms FROM clock")[0]["last_ms"]
-        s.call("place_at", fellow, hx + 2.0, hy + 6.5)
+        # Place the fellow beside the newcomer (on the same side of the house wall, in sight of
+        # the store): a fixed +y offset snaps behind a north-facing house's wall.
+        s.call("place_near", fellow, newcomer)
         s.act(newcomer, {"do": "take", "item": "berries", "qty": 1, "target": {"id": store["id"]}})
         seen = s.wait(lambda: [e["text"] for e in s.rows(f"SELECT at_ms, kind, text FROM experience WHERE observer = {fellow}") if e["at_ms"] >= since and e["kind"] == "took"], seconds=40)
         (s.out / f"{s.name}-theft-seen.json").write_text(json.dumps(seen, indent=1) + "\n")
@@ -5956,10 +5961,12 @@ def making(s):
     lit_after = s.rows(f"SELECT lit_until_ms FROM structure WHERE id = {hearth['id']}", "hearth-after-cooking")[0]["lit_until_ms"]
     s.expect("cooking draws no fuel from the hearth", lit_after == lit_before, {"before": lit_before, "after": lit_after})
 
-    # Refused in the old words until known.
+    # Refused in the old words until known (one act at a time: a second `mind_act` replaces an
+    # active act under `act_replace_on`).
     t0 = now()
     s.graph(a, {"wait": 120})
     s.act(a, {"do": "smoke", "item": "meat", "target": {"nearest": "hearth"}})
+    s.wait(lambda: len(heard(a, "did not work out", t0)) >= 1, seconds=30)
     s.act(a, {"do": "craft", "item": "spear"})
     s.wait(lambda: len(heard(a, "did not work out", t0)) >= 2, seconds=30)
     s.expect("smoking unknown is refused as before", heard(a, "you don't know how to smoke food", t0), heard(a, "", t0))
@@ -5968,8 +5975,9 @@ def making(s):
     s.call("grant_know_how", a, "smoking")
     s.call("grant_know_how", a, "spear")
     s.act(a, {"do": "smoke", "item": "meat", "target": {"nearest": "hearth"}})
+    s.wait(lambda: s.inventory(a).get("smoked_meat", 0) >= 1, seconds=60)
     s.act(a, {"do": "craft", "item": "spear"})
-    s.wait(lambda: s.inventory(a).get("spear", 0) >= 1 and s.inventory(a).get("smoked_meat", 0) >= 1, seconds=60)
+    s.wait(lambda: s.inventory(a).get("spear", 0) >= 1, seconds=60)
     inv = s.inventory(a, "after")
     s.expect("smoke meat makes smoked meat; craft spear uses 2 wood and 1 stone", inv.get("smoked_meat") == 1 and inv.get("meat", 0) == 0 and inv.get("spear") == 1 and inv.get("wood", 0) == before.get("wood", 0) - 2 and inv.get("stone", 0) == before.get("stone", 0) - 1, {"before": before, "after": inv})
 
@@ -7192,6 +7200,7 @@ def sweep_kept(s):
         s.call("place_at", fight_b, *ray[7])
         s.call("place_at", talker, *ray[3])
         s.call("place_at", dying, *ray[10])
+        _sweep_face(s, ray[1])
         name = s.rows(f"SELECT name FROM character WHERE id = {talker}")[0]["name"]
         for k in range(6):
             present()
@@ -7409,6 +7418,16 @@ def status_parts(s):
 SCENES["status_parts"] = status_parts
 
 
+def _sweep_face(s, pt):
+    """Turn the run's player to face `pt` (needed on Cullet, where fov_on narrows sight off facing)."""
+    st = json.loads((s.out / "state.json").read_text())
+    verify = str(ROOT / ".agents/skills/verify/scripts/verify.py")
+    subprocess.run(["python3", verify, "player", "--run", st["run"], "act",
+                    json.dumps({"do": {"skill": "face", "target": {"at": list(pt)}}})],
+                   check=False, capture_output=True)
+    time.sleep(0.8)
+
+
 def _sweep_player(s, name):
     """The run's player, joined and present, and its character id (as `sweep_kept`)."""
     st = json.loads((s.out / "state.json").read_text())
@@ -7479,6 +7498,7 @@ def sweep_rollback(s):
         s.call("place_at", b, *ray[far])
         s.call("place_at", c, *ray[6])
         s.call("place_at", d, *ray[3])
+        _sweep_face(s, ray[1])
         present()
         time.sleep(3)
         # (1) Ticks fail after their sweep while a and b cross the cut.

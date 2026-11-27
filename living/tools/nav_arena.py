@@ -53,6 +53,26 @@ OPAQUE = (4, 7)  # rock and wall stop sight
 ARRIVE_M = 2.5
 
 
+def ensure_nav_optimal():
+    """Return the `nav_optimal` example binary in `TARGET`, building it if absent or older than
+    `living/rules` sources (so a fresh private CARGO_TARGET_DIR works without a manual pre-build)."""
+    exe = TARGET / "release/examples/nav_optimal"
+    newest = max((p.stat().st_mtime for p in (ROOT / "living/rules").rglob("*.rs")), default=0.0)
+    if exe.exists() and exe.stat().st_mtime >= newest:
+        return exe
+    slot = Path.home() / "slop-mq/build-slot"
+    cmd = ([str(slot)] if slot.exists() and os.access(slot, os.X_OK) else []) + [
+        "cargo", "build", "--release", "--locked",
+        "--manifest-path", str(ROOT / "living/Cargo.toml"),
+        "-p", "living-rules", "--example", "nav_optimal",
+    ]
+    env = dict(os.environ, CARGO_TARGET_DIR=str(TARGET))
+    out = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True, timeout=1800)
+    if out.returncode:
+        raise RuntimeError(f"build nav_optimal (exit {out.returncode}): {out.stderr[-600:]}")
+    return exe
+
+
 def log(*a):
     print(time.strftime("%H:%M:%S"), *a, flush=True)
 
@@ -198,7 +218,7 @@ class World:
         q = [{"start": w["start"], "goal": w["goal"], "shut": shut, "known": [], "edits": [], "gates_seen": [], "road_speed": self.road, "unknown_cost": self.unknown, "path": w.get("path", False)} for w in walks]
         f = self.s.out / f"nav-opt-{time.time_ns()}.json"
         f.write_text(json.dumps(q))
-        out = subprocess.run([str(TARGET / "release/examples/nav_optimal"), str(self.tiles_file), str(self.W), str(self.H), str(f)], capture_output=True, text=True, timeout=600)
+        out = subprocess.run([str(ensure_nav_optimal()), str(self.tiles_file), str(self.W), str(self.H), str(f)], capture_output=True, text=True, timeout=600)
         if out.returncode:
             raise RuntimeError(f"nav_optimal: {out.stderr[-400:]}")
         return [json.loads(l) for l in out.stdout.splitlines() if l.startswith("{")]
@@ -494,7 +514,7 @@ def through(world, start, goal, shut, parts=3):
     q = [{"start": list(start), "goal": list(goal), "shut": shut, "known": [], "edits": [], "gates_seen": [], "road_speed": world.road, "unknown_cost": world.unknown, "path": True}]
     f = world.s.out / f"nav-path-{time.time_ns()}.json"
     f.write_text(json.dumps(q))
-    out = subprocess.run([str(TARGET / "release/examples/nav_optimal"), str(world.tiles_file), str(world.W), str(world.H), str(f)], capture_output=True, text=True, timeout=600)
+    out = subprocess.run([str(ensure_nav_optimal()), str(world.tiles_file), str(world.W), str(world.H), str(f)], capture_output=True, text=True, timeout=600)
     r = json.loads(next(l for l in out.stdout.splitlines() if l.startswith("{")))
     path = (r.get("true") or {}).get("path") or []
     if len(path) < parts + 1:

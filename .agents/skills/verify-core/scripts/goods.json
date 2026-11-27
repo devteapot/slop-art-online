@@ -7,6 +7,12 @@
   "year_days": 1800,
   "life_pace": 1.0,
   "laws_file": "worlds/cullet/laws.rhai",
+  "rules": {
+    "cover_sight_on": false,
+    "cover_brush_on": false,
+    "gaze_on": false,
+    "fov_on": false
+  },
   "bands": [
     {
       "name": "goods fixture",
