@@ -36,6 +36,8 @@ def aligned(a, b, points):
 def hand_cage(pivots, unit):
     """B1's 24-station palm, shared interdigital webs and twelve-sided sockets."""
     points, weights, faces = [], [], []
+    tips = {}
+    thumb_pad = None
 
     def vertex(p, w):
         points.append(p)
@@ -118,22 +120,37 @@ def hand_cage(pivots, unit):
         div[i] = [a, *inner, b]
 
     def digit(name, socket, radius):
+        nonlocal thumb_pad
         j1, j2, j3 = (pivots[name + str(i)] for i in range(1, 4))
         proximal, distal = nrm(j2 - j1), nrm(j3 - j2)
         root = np.mean([points[i] for i in socket], axis=0)
         tiplen = {"Thumb": 0.023, "Index": 0.022, "Middle": 0.024, "Ring": 0.022, "Little": 0.019}[
             name
         ] * unit
+        pad = distal
+        knuckle = distal
+        pad_knuckle = distal
+        crease = 0.006 * unit
+        if name == "Thumb":
+            # The pad faces the finger pads across the palm. Turn the section
+            # frames gradually across the two creases to preserve their radius.
+            j2 = j2 - 0.004 * unit * back
+            j3 = j3 + unit * (0.005 * axis - 0.014 * back + 0.001 * across)
+            proximal, distal = nrm(j2 - root), nrm(j3 - j2)
+            pad = nrm(0.70 * axis - 0.04 * across - 0.71 * back)
+            thumb_pad = pad
+            knuckle, pad_knuckle = nrm(proximal + distal), nrm(distal + pad)
+            crease = 0.010 * unit
         stations = [
             (root + 0.34 * (j2 - root), proximal, 1.04, 0.97, 1, 0),
             (j2 - 0.008 * unit * proximal, proximal, 0.98, 0.91, 1, 0.13),
-            (j2, distal, 0.99, 0.94, 1, 0.50),
+            (j2, knuckle, 0.99, 0.94, 1, 0.50),
             (j2 + 0.008 * unit * distal, distal, 0.93, 0.89, 1, 0.87),
-            (j3 - 0.006 * unit * distal, distal, 0.82, 0.80, 2, 0.12),
-            (j3, distal, 0.84, 0.81, 2, 0.50),
-            (j3 + 0.006 * unit * distal, distal, 0.80, 0.76, 2, 0.88),
-            (j3 + 0.70 * tiplen * distal, distal, 0.73, 0.68, 3, 0),
-            (j3 + 0.94 * tiplen * distal, distal, 0.50, 0.47, 3, 0),
+            (j3 - crease * distal, distal, 0.82, 0.80, 2, 0.12),
+            (j3, pad_knuckle, 0.84, 0.81, 2, 0.50),
+            (j3 + crease * pad, pad, 0.80, 0.76, 2, 0.88),
+            (j3 + 0.70 * tiplen * pad, pad, 0.73, 0.68, 3, 0),
+            (j3 + 0.94 * tiplen * pad, pad, 0.50, 0.47, 3, 0),
         ]
         prev = socket
         for center, direction, breadth, height, segment, share in stations:
@@ -147,16 +164,35 @@ def hand_cage(pivots, unit):
             if segment == 1 and share == 0:
                 palm = 0.17 if name == "Thumb" else 0.10
                 w = {"Hand": palm, name + "1": 1 - palm}
+            if name == "Thumb":
+                progress = np.clip(
+                    np.linalg.norm(center - root) / np.linalg.norm(j3 + tiplen * pad - root), 0, 1
+                )
+                # Share a little of the palm frame through the pad. This limits
+                # shear from cumulative thumb scales at a fully curled IP.
+                support = {"Hand": 0.33, "Thumb1": 0.015, "Thumb2": 0.06}
+                frac = sum(support.values()) * progress
+                w = {k: weight * (1 - frac) for k, weight in w.items()}
+                for key, val in support.items():
+                    w[key] = w.get(key, 0) + val * progress
             ring = []
             for angle in np.arange(12) * (2 * np.pi / 12):
                 normal = wide * breadth * np.sin(angle) + dorsal * height * np.cos(angle)
                 ring.append(vertex(center + radius * unit * normal, w))
             ring = aligned(prev, ring, points)
+            if name == "Thumb" and prev is socket:
+                # Blend each part of the first ring from its matching web vertex.
+                for old, new in zip(prev, ring):
+                    weights[new] = {
+                        bone: 0.4 * weights[old].get(bone, 0) + 0.6 * w.get(bone, 0)
+                        for bone in weights[old].keys() | w.keys()
+                    }
             for k in range(12):
                 q = (k + 1) % 12
                 faces.append([prev[k], prev[q], ring[q], ring[k]])
             prev = ring
-        tip = vertex(j3 + tiplen * distal, w)
+        tip = vertex(j3 + tiplen * pad, w)
+        tips[name] = tip
         for k in range(0, 12, 2):
             faces.append([prev[k], prev[k + 1], prev[(k + 2) % 12], tip])
 
@@ -171,7 +207,7 @@ def hand_cage(pivots, unit):
         + [rows[2][20]]
     )
     digit("Thumb", thumb, 0.012)
-    return np.array(points), weights, faces, rows[0]
+    return np.array(points), weights, faces, rows[0], tips, thumb_pad
 
 
 def subdivide(vertices, faces, boundary):
@@ -282,17 +318,21 @@ def orient(tris, p, wrist):
     return tris if (a * np.cross(b, c)).sum() > 0 else tris[:, ::-1]
 
 
-def hand_colors(p, normal, pivots, unit):
+def hand_colors(p, normal, pivots, unit, thumb_tip, thumb_pad):
     """Soft nail beds and the occlusion between adjacent finger roots."""
     rgb = np.ones((len(p), 3))
     across = nrm(pivots["Little1"] - pivots["Index1"])
     for name in DIGITS:
         axis = nrm(pivots[name + "3"] - pivots[name + "2"])
+        origin = pivots[name + "3"]
+        if name == "Thumb":
+            axis = thumb_pad
+            origin = thumb_tip - 0.023 * unit * axis
         wide = nrm(across - axis * (across @ axis))
         dorsal = nrm(np.cross(wide, axis))
         if dorsal[1] < 0:
             dorsal *= -1
-        v = (p - pivots[name + "3"]) / unit
+        v = (p - origin) / unit
         # Two independent falloffs keep the nail on the dorsal distal pad.
         length = {"Little": 0.019, "Thumb": 0.023, "Middle": 0.024}.get(name, 0.022)
         ellipse = ((v @ axis - 0.64 * length) / (0.40 * length)) ** 2 + ((v @ wide) / 0.0078) ** 2
@@ -346,6 +386,7 @@ def fit(source, output, size):
     colors = [np.ones((len(kept), 3))]
     shapes = [{name: [get(index)[kept]] for name, index in t.items()} for t in prim["targets"]]
     triangles_by_side = {}
+    tips_by_side = {}
     indices = [indices]
     offset = len(kept)
     landmarks = np.unique(list(boundary))
@@ -367,8 +408,27 @@ def fit(source, output, size):
             m[:3, :3] *= bind_ratio
             m[:3, 3] = wrist + bind_ratio * (m[:3, 3] - wrist)
             ibm[bones.index(prefix + bone)] = np.linalg.inv(m).T
+        # Set the metacarpal reach and the proximal phalanx breadth in
+        # joint-local coordinates. Preserve the parent's animation path and
+        # rebuild inverse binds through the distal phalanx.
+        parent_i = hand
+        original_parent = frames[hand].copy()
+        # Allow more spread on the shorter child hand and more opposition on
+        # the broad adult male hand, maintaining the grip aperture in metres.
+        spread = 0.435 + 0.215 * mix[names.index("Age_Child")] - 0.014 * mix[names.index("Sex_Male")]
+        thumb_scales = ((1.53, 0.86, spread), (1.14, 0.91, 0.84), (1.0, 1.0, 1.0))
+        for number, scale in enumerate(thumb_scales, 1):
+            index = bones.index(prefix + "Thumb" + str(number))
+            node = doc["nodes"][joints[index]]
+            if number < 3:
+                node["scale"] = (np.array(node.get("scale", [1] * 3)) * scale).tolist()
+            local = np.linalg.solve(original_parent, frames[index])
+            original_parent = frames[index].copy()
+            frames[index] = frames[parent_i] @ local @ np.diag([*scale, 1])
+            ibm[index] = np.linalg.inv(frames[index]).T
+            parent_i = index
         pivots = {bone: frames[bones.index(prefix + bone), :3, 3] for bone in ["Hand", *digits]}
-        verts, weight_maps, faces, rim = hand_cage(pivots, size * person)
+        verts, weight_maps, faces, rim, tips, thumb_pad = hand_cage(pivots, size * person)
         dense = np.zeros((len(verts), len(bones)))
         for i, wm in enumerate(weight_maps):
             for name, weight in wm.items():
@@ -405,7 +465,9 @@ def fit(source, output, size):
         for ii in triangles.T:
             np.add.at(normal, ii, np.cross(b - a, c - a))
         normal /= np.maximum(np.linalg.norm(normal, axis=1, keepdims=True), 1e-12)
-        colors_hand = hand_colors(verts, normal[: len(verts)], pivots, size * person)
+        colors_hand = hand_colors(
+            verts, normal[: len(verts)], pivots, size * person, verts[tips["Thumb"]], thumb_pad
+        )
         deltas = [
             target[k, source_ids].mean(0) + (verts - wrist) * (s / person)
             for k, s in enumerate(person_sizes)
@@ -417,6 +479,7 @@ def fit(source, output, size):
         remap = np.empty(len(p), dtype=int)
         remap[used] = offset + np.arange(len(used))
         remap[ids] = np.searchsorted(kept, source_ids)
+        tips_by_side[side] = {name: int(remap[index]) for name, index in tips.items()}
         indices.append(remap[triangles])
         triangles_by_side[side] = len(triangles)
         offset += len(used)
@@ -439,7 +502,11 @@ def fit(source, output, size):
         for name, values in parts.items():
             t[name] = acc(np.vstack(values), "VEC3")
     prim["indices"] = acc(np.vstack(indices), "SCALAR", 5123)
-    prim["extras"] = {"handTriangles": triangles_by_side, "handLinearScale": size}
+    prim["extras"] = {
+        "handTriangles": triangles_by_side,
+        "handLinearScale": size,
+        "handTips": tips_by_side,
+    }
     skin["inverseBindMatrices"] = acc(ibm, "MAT4")
     output.parent.mkdir(exist_ok=True, parents=True)
     write_glb(output, doc, buf)

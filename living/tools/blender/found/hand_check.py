@@ -1,4 +1,4 @@
-"""Check a fitted hand pair against its input and measure the animated right grip."""
+"""Check a fitted hand pair against its input and measure animated thumb opposition."""
 
 import argparse
 import json
@@ -15,7 +15,7 @@ sys.path.insert(0, str(TOOLS / "characters"))
 from cloth_check import quat
 
 
-def measure(path):
+def measure(path, side="R"):
     doc, binary, _ = glb.read(path)
 
     def get(i):
@@ -39,23 +39,44 @@ def measure(path):
     factor = nodes[root]["scale"][0]
 
     def joint(name):
-        return names.index("J_Bip_R_" + name)
+        return names.index(f"J_Bip_{side}_{name}")
 
     # Follow the distal cap selected in bind, including the blended identity shape.
+    authored_tips = p["extras"].get("handTips", {}).get(side, {})
     tips = []
     for digit in DIGITS:
-        bone = joint(digit + "3")
-        verts = np.flatnonzero((w * (j == bone)).sum(1) > 0.8)
-        axis = pivots[bone] - pivots[joint(digit + "2")]
-        tips.append(verts[np.argmax(pos[verts] @ axis)])
+        if digit in authored_tips:
+            tips.append(authored_tips[digit])
+        else:
+            bone = joint(digit + "3")
+            verts = np.flatnonzero((w * (j == bone)).sum(1) > 0.8)
+            axis = pivots[bone] - pivots[joint(digit + "2")]
+            tips.append(verts[np.argmax(pos[verts] @ axis)])
     span = np.linalg.norm(pos[tips[1]] - pivots[joint("Hand")]) * factor
     index_bones = [joint("Index" + str(i)) for i in range(1, 4)]
     index_skin = np.flatnonzero((w * np.isin(j, index_bones)).sum(1) > 0.6)
+    segment_start = pivots[joint("Index2")]
+    segment_axis = pivots[joint("Index3")] - segment_start
+    along = (pos[index_skin] - segment_start) @ segment_axis / (segment_axis @ segment_axis)
+    middle_skin = (along >= 0) & (along <= 1)
     sel = np.r_[tips, index_skin]
     hom = np.column_stack((pos[sel], np.ones(len(sel))))
     stats = {}
-    for clip, time in (("idle", 1.0), ("wave", 1.0), ("sword_slash", 16 / 30), ("sword_overhead", 0.6)):
-        anim = next(a for a in doc["animations"] if a["name"] == clip)
+    samples = [("bind", 0.0), ("idle", 1.0)]
+    if side == "R":
+        samples += [("wave", 1.0), ("sword_slash", 16 / 30), ("sword_overhead", 0.6)]
+    else:
+        samples += [("bow_shoot", 13 / 30)]
+    grip, time = samples[-1]
+    held_label = grip + "_thumb_held_idle"
+    samples.append((held_label, time))
+    for label, time in samples:
+        clip = grip if label == held_label else label
+        anim = (
+            {"channels": []}
+            if clip == "bind"
+            else next(a for a in doc["animations"] if a["name"] == clip)
+        )
         pose = {}
         for c in anim["channels"]:
             target = c["target"]
@@ -63,6 +84,13 @@ def measure(path):
             times = get(samp["input"]).ravel()
             frame = int(np.abs(times - time).argmin())
             pose[target["node"], target["path"]] = get(samp["output"])[frame]
+        if label == "idle":
+            idle_thumb = {
+                (ids[joint(f"Thumb{i}")], "rotation"): pose[ids[joint(f"Thumb{i}")], "rotation"]
+                for i in range(1, 4)
+            }
+        elif label == held_label:
+            pose.update(idle_thumb)
         frames = {}
 
         def visit(i, parent):
@@ -80,7 +108,19 @@ def measure(path):
         mat = np.array([frames[i] for i in ids]) @ ibm
         deformed = np.einsum("vk,vkij,vj->vi", w[sel], mat[j[sel]], hom)[:, :3]
         palm = 0.5 * (frames[ids[joint("Hand")]][:3, 3] + frames[ids[joint("Middle1")]][:3, 3])
-        stats[clip] = {
+        thumb_tip = deformed[DIGITS.index("Thumb")]
+        index_tip = deformed[DIGITS.index("Index")]
+        a, b = (frames[ids[joint(n)]][:3, 3] for n in ("Index2", "Index3"))
+        segment = b - a
+        t = np.clip((thumb_tip - a) @ segment / (segment @ segment), 0, 1)
+        stats[label] = {
+            "thumb_tip_to_index_middle_skin_mm": round(
+                1000 * np.linalg.norm(deformed[5:][middle_skin] - thumb_tip, axis=1).min(), 2
+            ),
+            "thumb_tip_to_index_tip_mm": round(1000 * np.linalg.norm(thumb_tip - index_tip), 2),
+            "thumb_tip_to_index_middle_segment_mm": round(
+                1000 * np.linalg.norm(thumb_tip - a - t * segment), 2
+            ),
             "seconds": round(time, 4),
             "thumb3_to_index3_pivots_mm": round(
                 1000
@@ -93,7 +133,7 @@ def measure(path):
                 zip(DIGITS, np.round(1000 * np.linalg.norm(deformed[:5] - palm, axis=1), 2))
             ),
             "thumb_tip_to_index_skin_mm": round(
-                1000 * np.linalg.norm(deformed[5:] - deformed[4], axis=1).min(), 2
+                1000 * np.linalg.norm(deformed[5:] - thumb_tip, axis=1).min(), 2
             ),
         }
     tris = lambda mesh: sum(doc["accessors"][p["indices"]]["count"] // 3 for p in mesh["primitives"])
@@ -143,13 +183,22 @@ def check(source, output):
     ids = skin["joints"]
     assert ids == before["skins"][0]["joints"] and len(ids) == 82
     for n, old in zip(doc["nodes"], before["nodes"], strict=True):
-        if n["name"] in ("J_Bip_L_Hand", "J_Bip_R_Hand"):
+        if n["name"].split("_")[-1] in ("Hand", "Thumb1", "Thumb2"):
             assert {k: v for k, v in n.items() if k != "scale"} == {
                 k: v for k, v in old.items() if k != "scale"
             }
         else:
             assert n == old
     counts, span, stats = measure(output)
+    left = measure(output, "L")[2]
+    for side, grip in ((stats, "sword_overhead"), (left, "bow_shoot")):
+        held = side[grip + "_thumb_held_idle"]
+        for field in ("thumb_tip_to_index_tip_mm", "thumb_tip_to_index_middle_segment_mm"):
+            assert side[grip][field] < held[field], (grip, field, "thumb rotation opens grip")
+    for field in ("thumb_tip_to_index_tip_mm", "thumb_tip_to_index_skin_mm"):
+        assert stats["sword_overhead"][field] < min(
+            stats[pose][field] for pose in ("bind", "idle")
+        ), field
     with tempfile.TemporaryDirectory() as directory:
         natural = Path(directory) / "natural.glb"
         fit(source, natural, 1.0)
@@ -161,6 +210,7 @@ def check(source, output):
         "natural_wrist_to_middle_tip_mm": round(1000 * reference, 2),
         "size_ratio": round(span / reference, 5),
         "right_hand": stats,
+        "left_hand": left,
     }
     print(json.dumps(report, indent=2))
 

@@ -14,43 +14,203 @@
     "natural_wrist_to_middle_tip_mm": 212.13,
     "size_ratio": 1.135,
     "right_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 51.66,
+        "thumb_tip_to_index_tip_mm": 70.29,
+        "thumb_tip_to_index_middle_segment_mm": 60.84,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 54.17,
+        "tip_to_palm_mm": {
+          "Index": 172.82,
+          "Middle": 184.2,
+          "Ring": 173.3,
+          "Little": 163.98,
+          "Thumb": 153.41
+        },
+        "thumb_tip_to_index_skin_mm": 51.66
+      },
       "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 51.66,
+        "thumb_tip_to_index_tip_mm": 65.52,
+        "thumb_tip_to_index_middle_segment_mm": 60.79,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 123.29,
+        "thumb3_to_index3_pivots_mm": 52.08,
         "tip_to_palm_mm": {
           "Index": 166.9,
           "Middle": 174.22,
           "Ring": 162.34,
           "Little": 150.93,
-          "Thumb": 143.65
+          "Thumb": 144.42
         },
-        "thumb_tip_to_index_skin_mm": 89.3
+        "thumb_tip_to_index_skin_mm": 51.66
       },
       "wave": {
+        "thumb_tip_to_index_middle_skin_mm": 51.66,
+        "thumb_tip_to_index_tip_mm": 65.52,
+        "thumb_tip_to_index_middle_segment_mm": 60.79,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 123.29,
+        "thumb3_to_index3_pivots_mm": 52.08,
         "tip_to_palm_mm": {
           "Index": 166.9,
           "Middle": 174.22,
           "Ring": 162.34,
           "Little": 150.93,
-          "Thumb": 143.65
+          "Thumb": 144.42
         },
-        "thumb_tip_to_index_skin_mm": 89.3
+        "thumb_tip_to_index_skin_mm": 51.66
       },
       "sword_slash": {
+        "thumb_tip_to_index_middle_skin_mm": 30.38,
+        "thumb_tip_to_index_tip_mm": 44.14,
+        "thumb_tip_to_index_middle_segment_mm": 38.87,
         "seconds": 0.5333,
-        "thumb3_to_index3_pivots_mm": 119.49,
+        "thumb3_to_index3_pivots_mm": 62.09,
         "tip_to_palm_mm": {
           "Index": 76.74,
           "Middle": 53.92,
           "Ring": 45.88,
           "Little": 58.15,
-          "Thumb": 169.17
+          "Thumb": 118.18
         },
-        "thumb_tip_to_index_skin_mm": 120.78
+        "thumb_tip_to_index_skin_mm": 29.48
       },
       "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 30.38,
+        "thumb_tip_to_index_tip_mm": 44.14,
+        "thumb_tip_to_index_middle_segment_mm": 38.87,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 62.09,
+        "tip_to_palm_mm": {
+          "Index": 76.74,
+          "Middle": 53.92,
+          "Ring": 45.88,
+          "Little": 58.15,
+          "Thumb": 118.18
+        },
+        "thumb_tip_to_index_skin_mm": 29.48
+      },
+      "sword_overhead_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 40.16,
+        "thumb_tip_to_index_tip_mm": 91.68,
+        "thumb_tip_to_index_middle_segment_mm": 49.08,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 61.55,
+        "tip_to_palm_mm": {
+          "Index": 76.74,
+          "Middle": 53.92,
+          "Ring": 45.88,
+          "Little": 58.15,
+          "Thumb": 144.42
+        },
+        "thumb_tip_to_index_skin_mm": 40.16
+      }
+    },
+    "left_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 51.66,
+        "thumb_tip_to_index_tip_mm": 70.29,
+        "thumb_tip_to_index_middle_segment_mm": 60.84,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 54.17,
+        "tip_to_palm_mm": {
+          "Index": 172.82,
+          "Middle": 184.2,
+          "Ring": 173.3,
+          "Little": 163.98,
+          "Thumb": 153.41
+        },
+        "thumb_tip_to_index_skin_mm": 51.66
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 40.24,
+        "thumb_tip_to_index_tip_mm": 43.32,
+        "thumb_tip_to_index_middle_segment_mm": 48.76,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 40.71,
+        "tip_to_palm_mm": {
+          "Index": 159.75,
+          "Middle": 170.22,
+          "Ring": 156.22,
+          "Little": 159.0,
+          "Thumb": 144.15
+        },
+        "thumb_tip_to_index_skin_mm": 35.87
+      },
+      "bow_shoot": {
+        "thumb_tip_to_index_middle_skin_mm": 31.94,
+        "thumb_tip_to_index_tip_mm": 40.17,
+        "thumb_tip_to_index_middle_segment_mm": 39.75,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 60.76,
+        "tip_to_palm_mm": {
+          "Index": 86.59,
+          "Middle": 65.94,
+          "Ring": 54.06,
+          "Little": 60.32,
+          "Thumb": 121.33
+        },
+        "thumb_tip_to_index_skin_mm": 29.16
+      },
+      "bow_shoot_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 36.16,
+        "thumb_tip_to_index_tip_mm": 81.35,
+        "thumb_tip_to_index_middle_segment_mm": 46.12,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 46.75,
+        "tip_to_palm_mm": {
+          "Index": 86.59,
+          "Middle": 65.94,
+          "Ring": 54.06,
+          "Little": 60.32,
+          "Thumb": 144.15
+        },
+        "thumb_tip_to_index_skin_mm": 36.16
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "31c5d4d8b0ea400927fa6987f590feb48a8b68a5d56ebce475ac64311799073a",
+    "right_hand_at_ab98fee91": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 102.19,
+        "thumb_tip_to_index_tip_mm": 142.13,
+        "thumb_tip_to_index_middle_segment_mm": 112.2,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 128.23,
+        "tip_to_palm_mm": {
+          "Index": 172.82,
+          "Middle": 184.2,
+          "Ring": 173.3,
+          "Little": 163.98,
+          "Thumb": 149.08
+        },
+        "thumb_tip_to_index_skin_mm": 95.76
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 96.33,
+        "thumb_tip_to_index_tip_mm": 130.34,
+        "thumb_tip_to_index_middle_segment_mm": 105.4,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 123.29,
+        "tip_to_palm_mm": {
+          "Index": 166.9,
+          "Middle": 174.22,
+          "Ring": 162.34,
+          "Little": 150.93,
+          "Thumb": 143.65
+        },
+        "thumb_tip_to_index_skin_mm": 89.3
+      },
+      "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 132.92,
+        "thumb_tip_to_index_tip_mm": 125.0,
+        "thumb_tip_to_index_middle_segment_mm": 138.65,
         "seconds": 0.6,
         "thumb3_to_index3_pivots_mm": 119.49,
         "tip_to_palm_mm": {
@@ -62,16 +222,7 @@
         },
         "thumb_tip_to_index_skin_mm": 120.78
       }
-    },
-    "clips_played": 87,
-    "identical_shared_clips": 87,
-    "rotation_drift_deg": 0,
-    "translation_drift_cm": 0,
-    "skin_joints": 82,
-    "used_materials": 11,
-    "embedded_images": 3,
-    "face_sidecars": 1,
-    "glb_sha256": "2eebe75bef26a662555a6d001dadf6374c240dc45f05cceedc4a3fe6e5f47ffc"
+    }
   },
   "base-l2": {
     "triangles": {
@@ -88,43 +239,203 @@
     "natural_wrist_to_middle_tip_mm": 211.71,
     "size_ratio": 1.135,
     "right_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 51.38,
+        "thumb_tip_to_index_tip_mm": 70.04,
+        "thumb_tip_to_index_middle_segment_mm": 60.6,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 54.17,
+        "tip_to_palm_mm": {
+          "Index": 172.39,
+          "Middle": 183.73,
+          "Ring": 172.87,
+          "Little": 163.62,
+          "Thumb": 153.01
+        },
+        "thumb_tip_to_index_skin_mm": 51.38
+      },
       "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 51.75,
+        "thumb_tip_to_index_tip_mm": 65.37,
+        "thumb_tip_to_index_middle_segment_mm": 60.58,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 123.29,
+        "thumb3_to_index3_pivots_mm": 52.08,
         "tip_to_palm_mm": {
           "Index": 166.51,
           "Middle": 173.82,
           "Ring": 161.96,
           "Little": 150.61,
-          "Thumb": 143.26
+          "Thumb": 144.06
         },
-        "thumb_tip_to_index_skin_mm": 87.7
+        "thumb_tip_to_index_skin_mm": 51.75
       },
       "wave": {
+        "thumb_tip_to_index_middle_skin_mm": 51.75,
+        "thumb_tip_to_index_tip_mm": 65.37,
+        "thumb_tip_to_index_middle_segment_mm": 60.58,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 123.29,
+        "thumb3_to_index3_pivots_mm": 52.08,
         "tip_to_palm_mm": {
           "Index": 166.51,
           "Middle": 173.82,
           "Ring": 161.96,
           "Little": 150.61,
-          "Thumb": 143.26
+          "Thumb": 144.06
         },
-        "thumb_tip_to_index_skin_mm": 87.7
+        "thumb_tip_to_index_skin_mm": 51.75
       },
       "sword_slash": {
+        "thumb_tip_to_index_middle_skin_mm": 30.98,
+        "thumb_tip_to_index_tip_mm": 43.92,
+        "thumb_tip_to_index_middle_segment_mm": 38.83,
         "seconds": 0.5333,
-        "thumb3_to_index3_pivots_mm": 119.49,
+        "thumb3_to_index3_pivots_mm": 62.09,
         "tip_to_palm_mm": {
           "Index": 76.97,
           "Middle": 54.33,
           "Ring": 46.25,
           "Little": 58.28,
-          "Thumb": 168.81
+          "Thumb": 118.1
         },
-        "thumb_tip_to_index_skin_mm": 121.0
+        "thumb_tip_to_index_skin_mm": 29.56
       },
       "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 30.98,
+        "thumb_tip_to_index_tip_mm": 43.92,
+        "thumb_tip_to_index_middle_segment_mm": 38.83,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 62.09,
+        "tip_to_palm_mm": {
+          "Index": 76.97,
+          "Middle": 54.33,
+          "Ring": 46.25,
+          "Little": 58.28,
+          "Thumb": 118.1
+        },
+        "thumb_tip_to_index_skin_mm": 29.56
+      },
+      "sword_overhead_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 39.95,
+        "thumb_tip_to_index_tip_mm": 91.03,
+        "thumb_tip_to_index_middle_segment_mm": 48.76,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 61.55,
+        "tip_to_palm_mm": {
+          "Index": 76.97,
+          "Middle": 54.33,
+          "Ring": 46.25,
+          "Little": 58.28,
+          "Thumb": 144.06
+        },
+        "thumb_tip_to_index_skin_mm": 39.95
+      }
+    },
+    "left_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 51.38,
+        "thumb_tip_to_index_tip_mm": 70.04,
+        "thumb_tip_to_index_middle_segment_mm": 60.6,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 54.17,
+        "tip_to_palm_mm": {
+          "Index": 172.39,
+          "Middle": 183.73,
+          "Ring": 172.87,
+          "Little": 163.62,
+          "Thumb": 153.01
+        },
+        "thumb_tip_to_index_skin_mm": 51.38
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 40.25,
+        "thumb_tip_to_index_tip_mm": 43.34,
+        "thumb_tip_to_index_middle_segment_mm": 48.58,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 40.71,
+        "tip_to_palm_mm": {
+          "Index": 159.41,
+          "Middle": 169.84,
+          "Ring": 155.92,
+          "Little": 158.67,
+          "Thumb": 143.78
+        },
+        "thumb_tip_to_index_skin_mm": 36.29
+      },
+      "bow_shoot": {
+        "thumb_tip_to_index_middle_skin_mm": 32.08,
+        "thumb_tip_to_index_tip_mm": 40.02,
+        "thumb_tip_to_index_middle_segment_mm": 39.7,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 60.76,
+        "tip_to_palm_mm": {
+          "Index": 86.75,
+          "Middle": 66.27,
+          "Ring": 54.43,
+          "Little": 60.54,
+          "Thumb": 121.23
+        },
+        "thumb_tip_to_index_skin_mm": 29.26
+      },
+      "bow_shoot_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 35.82,
+        "thumb_tip_to_index_tip_mm": 80.69,
+        "thumb_tip_to_index_middle_segment_mm": 45.74,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 46.75,
+        "tip_to_palm_mm": {
+          "Index": 86.75,
+          "Middle": 66.27,
+          "Ring": 54.43,
+          "Little": 60.54,
+          "Thumb": 143.78
+        },
+        "thumb_tip_to_index_skin_mm": 35.82
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "9abc87e6730824cf43b13abff48aa0757770d6b04e096d5eae28d5a6aab1d18e",
+    "right_hand_at_ab98fee91": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 101.91,
+        "thumb_tip_to_index_tip_mm": 141.88,
+        "thumb_tip_to_index_middle_segment_mm": 112.06,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 128.23,
+        "tip_to_palm_mm": {
+          "Index": 172.39,
+          "Middle": 183.73,
+          "Ring": 172.87,
+          "Little": 163.62,
+          "Thumb": 148.65
+        },
+        "thumb_tip_to_index_skin_mm": 94.28
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 94.97,
+        "thumb_tip_to_index_tip_mm": 130.21,
+        "thumb_tip_to_index_middle_segment_mm": 105.32,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 123.29,
+        "tip_to_palm_mm": {
+          "Index": 166.51,
+          "Middle": 173.82,
+          "Ring": 161.96,
+          "Little": 150.61,
+          "Thumb": 143.26
+        },
+        "thumb_tip_to_index_skin_mm": 87.7
+      },
+      "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 132.39,
+        "thumb_tip_to_index_tip_mm": 124.86,
+        "thumb_tip_to_index_middle_segment_mm": 138.29,
         "seconds": 0.6,
         "thumb3_to_index3_pivots_mm": 119.49,
         "tip_to_palm_mm": {
@@ -136,16 +447,7 @@
         },
         "thumb_tip_to_index_skin_mm": 121.0
       }
-    },
-    "clips_played": 87,
-    "identical_shared_clips": 87,
-    "rotation_drift_deg": 0,
-    "translation_drift_cm": 0,
-    "skin_joints": 82,
-    "used_materials": 11,
-    "embedded_images": 3,
-    "face_sidecars": 1,
-    "glb_sha256": "dbacc5d173b0e1bc4f0afd82d869ba6106f71ac34d6de3faa159e48652e3a381"
+    }
   },
   "woman-l1": {
     "triangles": {
@@ -162,43 +464,203 @@
     "natural_wrist_to_middle_tip_mm": 196.81,
     "size_ratio": 1.135,
     "right_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 47.93,
+        "thumb_tip_to_index_tip_mm": 65.22,
+        "thumb_tip_to_index_middle_segment_mm": 56.45,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 50.26,
+        "tip_to_palm_mm": {
+          "Index": 160.34,
+          "Middle": 170.9,
+          "Ring": 160.79,
+          "Little": 152.13,
+          "Thumb": 142.33
+        },
+        "thumb_tip_to_index_skin_mm": 47.93
+      },
       "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 47.93,
+        "thumb_tip_to_index_tip_mm": 60.79,
+        "thumb_tip_to_index_middle_segment_mm": 56.4,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 114.38,
+        "thumb3_to_index3_pivots_mm": 48.31,
         "tip_to_palm_mm": {
           "Index": 154.85,
           "Middle": 161.63,
           "Ring": 150.61,
           "Little": 140.02,
-          "Thumb": 133.27
+          "Thumb": 133.99
         },
-        "thumb_tip_to_index_skin_mm": 82.85
+        "thumb_tip_to_index_skin_mm": 47.93
       },
       "wave": {
+        "thumb_tip_to_index_middle_skin_mm": 47.93,
+        "thumb_tip_to_index_tip_mm": 60.79,
+        "thumb_tip_to_index_middle_segment_mm": 56.4,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 114.38,
+        "thumb3_to_index3_pivots_mm": 48.31,
         "tip_to_palm_mm": {
           "Index": 154.85,
           "Middle": 161.63,
           "Ring": 150.61,
           "Little": 140.02,
-          "Thumb": 133.27
+          "Thumb": 133.99
         },
-        "thumb_tip_to_index_skin_mm": 82.85
+        "thumb_tip_to_index_skin_mm": 47.93
       },
       "sword_slash": {
+        "thumb_tip_to_index_middle_skin_mm": 28.19,
+        "thumb_tip_to_index_tip_mm": 40.95,
+        "thumb_tip_to_index_middle_segment_mm": 36.07,
         "seconds": 0.5333,
-        "thumb3_to_index3_pivots_mm": 110.86,
+        "thumb3_to_index3_pivots_mm": 57.6,
         "tip_to_palm_mm": {
           "Index": 71.2,
           "Middle": 50.03,
           "Ring": 42.57,
           "Little": 53.95,
-          "Thumb": 156.95
+          "Thumb": 109.64
         },
-        "thumb_tip_to_index_skin_mm": 112.06
+        "thumb_tip_to_index_skin_mm": 27.35
       },
       "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 28.19,
+        "thumb_tip_to_index_tip_mm": 40.95,
+        "thumb_tip_to_index_middle_segment_mm": 36.07,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 57.6,
+        "tip_to_palm_mm": {
+          "Index": 71.2,
+          "Middle": 50.03,
+          "Ring": 42.57,
+          "Little": 53.95,
+          "Thumb": 109.64
+        },
+        "thumb_tip_to_index_skin_mm": 27.35
+      },
+      "sword_overhead_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 39.34,
+        "thumb_tip_to_index_tip_mm": 85.06,
+        "thumb_tip_to_index_middle_segment_mm": 45.54,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 57.1,
+        "tip_to_palm_mm": {
+          "Index": 71.2,
+          "Middle": 50.03,
+          "Ring": 42.57,
+          "Little": 53.95,
+          "Thumb": 133.99
+        },
+        "thumb_tip_to_index_skin_mm": 37.26
+      }
+    },
+    "left_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 47.93,
+        "thumb_tip_to_index_tip_mm": 65.22,
+        "thumb_tip_to_index_middle_segment_mm": 56.45,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 50.26,
+        "tip_to_palm_mm": {
+          "Index": 160.34,
+          "Middle": 170.9,
+          "Ring": 160.79,
+          "Little": 152.13,
+          "Thumb": 142.33
+        },
+        "thumb_tip_to_index_skin_mm": 47.93
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 39.04,
+        "thumb_tip_to_index_tip_mm": 40.19,
+        "thumb_tip_to_index_middle_segment_mm": 45.23,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 37.77,
+        "tip_to_palm_mm": {
+          "Index": 148.21,
+          "Middle": 157.92,
+          "Ring": 144.94,
+          "Little": 147.52,
+          "Thumb": 133.74
+        },
+        "thumb_tip_to_index_skin_mm": 33.28
+      },
+      "bow_shoot": {
+        "thumb_tip_to_index_middle_skin_mm": 29.63,
+        "thumb_tip_to_index_tip_mm": 37.26,
+        "thumb_tip_to_index_middle_segment_mm": 36.88,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 56.37,
+        "tip_to_palm_mm": {
+          "Index": 80.34,
+          "Middle": 61.18,
+          "Ring": 50.16,
+          "Little": 55.97,
+          "Thumb": 112.57
+        },
+        "thumb_tip_to_index_skin_mm": 27.05
+      },
+      "bow_shoot_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 33.55,
+        "thumb_tip_to_index_tip_mm": 75.48,
+        "thumb_tip_to_index_middle_segment_mm": 42.79,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 43.37,
+        "tip_to_palm_mm": {
+          "Index": 80.34,
+          "Middle": 61.18,
+          "Ring": 50.16,
+          "Little": 55.97,
+          "Thumb": 133.74
+        },
+        "thumb_tip_to_index_skin_mm": 33.55
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "b3b964ca5fb566c0a9a004612486ffbdbf397790968d22a8d11c6dbec2dacb8f",
+    "right_hand_at_ab98fee91": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 97.98,
+        "thumb_tip_to_index_tip_mm": 131.86,
+        "thumb_tip_to_index_middle_segment_mm": 104.1,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 118.97,
+        "tip_to_palm_mm": {
+          "Index": 160.34,
+          "Middle": 170.9,
+          "Ring": 160.79,
+          "Little": 152.13,
+          "Thumb": 138.31
+        },
+        "thumb_tip_to_index_skin_mm": 88.84
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 90.73,
+        "thumb_tip_to_index_tip_mm": 120.92,
+        "thumb_tip_to_index_middle_segment_mm": 97.79,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 114.38,
+        "tip_to_palm_mm": {
+          "Index": 154.85,
+          "Middle": 161.63,
+          "Ring": 150.61,
+          "Little": 140.02,
+          "Thumb": 133.27
+        },
+        "thumb_tip_to_index_skin_mm": 82.85
+      },
+      "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 123.32,
+        "thumb_tip_to_index_tip_mm": 115.97,
+        "thumb_tip_to_index_middle_segment_mm": 128.64,
         "seconds": 0.6,
         "thumb3_to_index3_pivots_mm": 110.86,
         "tip_to_palm_mm": {
@@ -210,16 +672,7 @@
         },
         "thumb_tip_to_index_skin_mm": 112.06
       }
-    },
-    "clips_played": 87,
-    "identical_shared_clips": 87,
-    "rotation_drift_deg": 0,
-    "translation_drift_cm": 0,
-    "skin_joints": 82,
-    "used_materials": 11,
-    "embedded_images": 3,
-    "face_sidecars": 1,
-    "glb_sha256": "3dedcd3e38556a0dae4e7535351b98b9e94607b2ddce7c95b50285fc06237ccc"
+    }
   },
   "woman-l2": {
     "triangles": {
@@ -236,43 +689,203 @@
     "natural_wrist_to_middle_tip_mm": 196.42,
     "size_ratio": 1.135,
     "right_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 47.67,
+        "thumb_tip_to_index_tip_mm": 64.98,
+        "thumb_tip_to_index_middle_segment_mm": 56.22,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 50.26,
+        "tip_to_palm_mm": {
+          "Index": 159.94,
+          "Middle": 170.46,
+          "Ring": 160.39,
+          "Little": 151.8,
+          "Thumb": 141.96
+        },
+        "thumb_tip_to_index_skin_mm": 47.67
+      },
       "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 48.01,
+        "thumb_tip_to_index_tip_mm": 60.65,
+        "thumb_tip_to_index_middle_segment_mm": 56.21,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 114.38,
+        "thumb3_to_index3_pivots_mm": 48.31,
         "tip_to_palm_mm": {
           "Index": 154.48,
           "Middle": 161.26,
           "Ring": 150.27,
           "Little": 139.73,
-          "Thumb": 132.91
+          "Thumb": 133.66
         },
-        "thumb_tip_to_index_skin_mm": 81.37
+        "thumb_tip_to_index_skin_mm": 48.01
       },
       "wave": {
+        "thumb_tip_to_index_middle_skin_mm": 48.01,
+        "thumb_tip_to_index_tip_mm": 60.65,
+        "thumb_tip_to_index_middle_segment_mm": 56.21,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 114.38,
+        "thumb3_to_index3_pivots_mm": 48.31,
         "tip_to_palm_mm": {
           "Index": 154.48,
           "Middle": 161.26,
           "Ring": 150.27,
           "Little": 139.73,
-          "Thumb": 132.91
+          "Thumb": 133.66
         },
-        "thumb_tip_to_index_skin_mm": 81.37
+        "thumb_tip_to_index_skin_mm": 48.01
       },
       "sword_slash": {
+        "thumb_tip_to_index_middle_skin_mm": 30.53,
+        "thumb_tip_to_index_tip_mm": 40.75,
+        "thumb_tip_to_index_middle_segment_mm": 36.02,
         "seconds": 0.5333,
-        "thumb3_to_index3_pivots_mm": 110.86,
+        "thumb3_to_index3_pivots_mm": 57.6,
         "tip_to_palm_mm": {
           "Index": 71.41,
           "Middle": 50.41,
           "Ring": 42.91,
           "Little": 54.07,
-          "Thumb": 156.62
+          "Thumb": 109.57
         },
-        "thumb_tip_to_index_skin_mm": 112.26
+        "thumb_tip_to_index_skin_mm": 27.43
       },
       "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 30.53,
+        "thumb_tip_to_index_tip_mm": 40.75,
+        "thumb_tip_to_index_middle_segment_mm": 36.02,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 57.6,
+        "tip_to_palm_mm": {
+          "Index": 71.41,
+          "Middle": 50.41,
+          "Ring": 42.91,
+          "Little": 54.07,
+          "Thumb": 109.57
+        },
+        "thumb_tip_to_index_skin_mm": 27.43
+      },
+      "sword_overhead_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 37.07,
+        "thumb_tip_to_index_tip_mm": 84.45,
+        "thumb_tip_to_index_middle_segment_mm": 45.24,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 57.1,
+        "tip_to_palm_mm": {
+          "Index": 71.41,
+          "Middle": 50.41,
+          "Ring": 42.91,
+          "Little": 54.07,
+          "Thumb": 133.66
+        },
+        "thumb_tip_to_index_skin_mm": 37.07
+      }
+    },
+    "left_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 47.67,
+        "thumb_tip_to_index_tip_mm": 64.98,
+        "thumb_tip_to_index_middle_segment_mm": 56.22,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 50.26,
+        "tip_to_palm_mm": {
+          "Index": 159.94,
+          "Middle": 170.46,
+          "Ring": 160.39,
+          "Little": 151.8,
+          "Thumb": 141.96
+        },
+        "thumb_tip_to_index_skin_mm": 47.67
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 37.34,
+        "thumb_tip_to_index_tip_mm": 40.21,
+        "thumb_tip_to_index_middle_segment_mm": 45.07,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 37.77,
+        "tip_to_palm_mm": {
+          "Index": 147.9,
+          "Middle": 157.58,
+          "Ring": 144.66,
+          "Little": 147.21,
+          "Thumb": 133.39
+        },
+        "thumb_tip_to_index_skin_mm": 33.66
+      },
+      "bow_shoot": {
+        "thumb_tip_to_index_middle_skin_mm": 30.25,
+        "thumb_tip_to_index_tip_mm": 37.13,
+        "thumb_tip_to_index_middle_segment_mm": 36.83,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 56.37,
+        "tip_to_palm_mm": {
+          "Index": 80.49,
+          "Middle": 61.48,
+          "Ring": 50.5,
+          "Little": 56.17,
+          "Thumb": 112.48
+        },
+        "thumb_tip_to_index_skin_mm": 27.14
+      },
+      "bow_shoot_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 33.23,
+        "thumb_tip_to_index_tip_mm": 74.86,
+        "thumb_tip_to_index_middle_segment_mm": 42.43,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 43.37,
+        "tip_to_palm_mm": {
+          "Index": 80.49,
+          "Middle": 61.48,
+          "Ring": 50.5,
+          "Little": 56.17,
+          "Thumb": 133.39
+        },
+        "thumb_tip_to_index_skin_mm": 33.23
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "b02a522f19c6efcf0c10a14e20af92045b97ece4db70c7e685589ffd039f9348",
+    "right_hand_at_ab98fee91": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 94.46,
+        "thumb_tip_to_index_tip_mm": 131.63,
+        "thumb_tip_to_index_middle_segment_mm": 103.97,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 118.97,
+        "tip_to_palm_mm": {
+          "Index": 159.94,
+          "Middle": 170.46,
+          "Ring": 160.39,
+          "Little": 151.8,
+          "Thumb": 137.92
+        },
+        "thumb_tip_to_index_skin_mm": 87.47
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 88.11,
+        "thumb_tip_to_index_tip_mm": 120.8,
+        "thumb_tip_to_index_middle_segment_mm": 97.71,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 114.38,
+        "tip_to_palm_mm": {
+          "Index": 154.48,
+          "Middle": 161.26,
+          "Ring": 150.27,
+          "Little": 139.73,
+          "Thumb": 132.91
+        },
+        "thumb_tip_to_index_skin_mm": 81.37
+      },
+      "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 125.27,
+        "thumb_tip_to_index_tip_mm": 115.84,
+        "thumb_tip_to_index_middle_segment_mm": 128.31,
         "seconds": 0.6,
         "thumb3_to_index3_pivots_mm": 110.86,
         "tip_to_palm_mm": {
@@ -284,16 +897,7 @@
         },
         "thumb_tip_to_index_skin_mm": 112.26
       }
-    },
-    "clips_played": 87,
-    "identical_shared_clips": 87,
-    "rotation_drift_deg": 0,
-    "translation_drift_cm": 0,
-    "skin_joints": 82,
-    "used_materials": 11,
-    "embedded_images": 3,
-    "face_sidecars": 1,
-    "glb_sha256": "fe5c73210fe554c4390f78727640f8da529d6b1b90d9f023d56ec6b037a1c3ce"
+    }
   },
   "man-l1": {
     "triangles": {
@@ -310,43 +914,203 @@
     "natural_wrist_to_middle_tip_mm": 249.2,
     "size_ratio": 1.135,
     "right_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 60.05,
+        "thumb_tip_to_index_tip_mm": 82.06,
+        "thumb_tip_to_index_middle_segment_mm": 70.81,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 62.97,
+        "tip_to_palm_mm": {
+          "Index": 203.03,
+          "Middle": 216.4,
+          "Ring": 203.59,
+          "Little": 192.64,
+          "Thumb": 179.67
+        },
+        "thumb_tip_to_index_skin_mm": 60.05
+      },
       "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 60.17,
+        "thumb_tip_to_index_tip_mm": 76.44,
+        "thumb_tip_to_index_middle_segment_mm": 70.88,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 144.83,
+        "thumb3_to_index3_pivots_mm": 60.68,
         "tip_to_palm_mm": {
           "Index": 196.07,
           "Middle": 204.67,
           "Ring": 190.71,
           "Little": 177.3,
-          "Thumb": 168.76
+          "Thumb": 169.21
         },
-        "thumb_tip_to_index_skin_mm": 104.91
+        "thumb_tip_to_index_skin_mm": 60.17
       },
       "wave": {
+        "thumb_tip_to_index_middle_skin_mm": 60.17,
+        "thumb_tip_to_index_tip_mm": 76.44,
+        "thumb_tip_to_index_middle_segment_mm": 70.88,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 144.83,
+        "thumb3_to_index3_pivots_mm": 60.68,
         "tip_to_palm_mm": {
           "Index": 196.07,
           "Middle": 204.67,
           "Ring": 190.71,
           "Little": 177.3,
-          "Thumb": 168.76
+          "Thumb": 169.21
         },
-        "thumb_tip_to_index_skin_mm": 104.91
+        "thumb_tip_to_index_skin_mm": 60.17
       },
       "sword_slash": {
+        "thumb_tip_to_index_middle_skin_mm": 36.51,
+        "thumb_tip_to_index_tip_mm": 51.04,
+        "thumb_tip_to_index_middle_segment_mm": 44.77,
         "seconds": 0.5333,
-        "thumb3_to_index3_pivots_mm": 140.37,
+        "thumb3_to_index3_pivots_mm": 71.66,
         "tip_to_palm_mm": {
           "Index": 90.15,
           "Middle": 63.35,
           "Ring": 53.9,
           "Little": 68.31,
-          "Thumb": 198.74
+          "Thumb": 138.22
         },
-        "thumb_tip_to_index_skin_mm": 141.89
+        "thumb_tip_to_index_skin_mm": 33.74
       },
       "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 36.51,
+        "thumb_tip_to_index_tip_mm": 51.04,
+        "thumb_tip_to_index_middle_segment_mm": 44.77,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 71.66,
+        "tip_to_palm_mm": {
+          "Index": 90.15,
+          "Middle": 63.35,
+          "Ring": 53.9,
+          "Little": 68.31,
+          "Thumb": 138.22
+        },
+        "thumb_tip_to_index_skin_mm": 33.74
+      },
+      "sword_overhead_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 47.53,
+        "thumb_tip_to_index_tip_mm": 107.28,
+        "thumb_tip_to_index_middle_segment_mm": 57.03,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 71.69,
+        "tip_to_palm_mm": {
+          "Index": 90.15,
+          "Middle": 63.35,
+          "Ring": 53.9,
+          "Little": 68.31,
+          "Thumb": 169.21
+        },
+        "thumb_tip_to_index_skin_mm": 46.58
+      }
+    },
+    "left_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 60.05,
+        "thumb_tip_to_index_tip_mm": 82.06,
+        "thumb_tip_to_index_middle_segment_mm": 70.81,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 62.97,
+        "tip_to_palm_mm": {
+          "Index": 203.03,
+          "Middle": 216.4,
+          "Ring": 203.59,
+          "Little": 192.64,
+          "Thumb": 179.67
+        },
+        "thumb_tip_to_index_skin_mm": 60.05
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 49.05,
+        "thumb_tip_to_index_tip_mm": 50.38,
+        "thumb_tip_to_index_middle_segment_mm": 56.83,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 47.61,
+        "tip_to_palm_mm": {
+          "Index": 187.67,
+          "Middle": 199.97,
+          "Ring": 183.53,
+          "Little": 186.79,
+          "Thumb": 168.89
+        },
+        "thumb_tip_to_index_skin_mm": 41.69
+      },
+      "bow_shoot": {
+        "thumb_tip_to_index_middle_skin_mm": 36.65,
+        "thumb_tip_to_index_tip_mm": 46.26,
+        "thumb_tip_to_index_middle_segment_mm": 45.77,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 70.07,
+        "tip_to_palm_mm": {
+          "Index": 101.72,
+          "Middle": 77.46,
+          "Ring": 63.51,
+          "Little": 70.87,
+          "Thumb": 141.92
+        },
+        "thumb_tip_to_index_skin_mm": 33.3
+      },
+      "bow_shoot_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 42.07,
+        "thumb_tip_to_index_tip_mm": 95.19,
+        "thumb_tip_to_index_middle_segment_mm": 53.72,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 54.49,
+        "tip_to_palm_mm": {
+          "Index": 101.72,
+          "Middle": 77.46,
+          "Ring": 63.51,
+          "Little": 70.87,
+          "Thumb": 168.89
+        },
+        "thumb_tip_to_index_skin_mm": 42.07
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "b019ba15a95c518d0985740a82c6c5e0f6cc851753dada4bbf27fecc988530f0",
+    "right_hand_at_ab98fee91": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 119.35,
+        "thumb_tip_to_index_tip_mm": 166.97,
+        "thumb_tip_to_index_middle_segment_mm": 131.81,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 150.64,
+        "tip_to_palm_mm": {
+          "Index": 203.03,
+          "Middle": 216.4,
+          "Ring": 203.59,
+          "Little": 192.64,
+          "Thumb": 175.13
+        },
+        "thumb_tip_to_index_skin_mm": 112.5
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 111.11,
+        "thumb_tip_to_index_tip_mm": 153.12,
+        "thumb_tip_to_index_middle_segment_mm": 123.82,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 144.83,
+        "tip_to_palm_mm": {
+          "Index": 196.07,
+          "Middle": 204.67,
+          "Ring": 190.71,
+          "Little": 177.3,
+          "Thumb": 168.76
+        },
+        "thumb_tip_to_index_skin_mm": 104.91
+      },
+      "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 158.53,
+        "thumb_tip_to_index_tip_mm": 146.84,
+        "thumb_tip_to_index_middle_segment_mm": 162.88,
         "seconds": 0.6,
         "thumb3_to_index3_pivots_mm": 140.37,
         "tip_to_palm_mm": {
@@ -358,16 +1122,7 @@
         },
         "thumb_tip_to_index_skin_mm": 141.89
       }
-    },
-    "clips_played": 87,
-    "identical_shared_clips": 87,
-    "rotation_drift_deg": 0,
-    "translation_drift_cm": 0,
-    "skin_joints": 82,
-    "used_materials": 11,
-    "embedded_images": 3,
-    "face_sidecars": 1,
-    "glb_sha256": "9a412067672c55d5082ef3cfbd6f633010009279837e8cf37d7b9dfaefbf88ea"
+    }
   },
   "man-l2": {
     "triangles": {
@@ -384,43 +1139,203 @@
     "natural_wrist_to_middle_tip_mm": 248.71,
     "size_ratio": 1.135,
     "right_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 59.7,
+        "thumb_tip_to_index_tip_mm": 81.77,
+        "thumb_tip_to_index_middle_segment_mm": 70.52,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 62.97,
+        "tip_to_palm_mm": {
+          "Index": 202.52,
+          "Middle": 215.84,
+          "Ring": 203.09,
+          "Little": 192.21,
+          "Thumb": 179.2
+        },
+        "thumb_tip_to_index_skin_mm": 59.7
+      },
       "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 60.29,
+        "thumb_tip_to_index_tip_mm": 76.26,
+        "thumb_tip_to_index_middle_segment_mm": 70.64,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 144.83,
+        "thumb3_to_index3_pivots_mm": 60.68,
         "tip_to_palm_mm": {
           "Index": 195.61,
           "Middle": 204.2,
           "Ring": 190.27,
           "Little": 176.94,
-          "Thumb": 168.3
+          "Thumb": 168.79
         },
-        "thumb_tip_to_index_skin_mm": 103.03
+        "thumb_tip_to_index_skin_mm": 60.29
       },
       "wave": {
+        "thumb_tip_to_index_middle_skin_mm": 60.29,
+        "thumb_tip_to_index_tip_mm": 76.26,
+        "thumb_tip_to_index_middle_segment_mm": 70.64,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 144.83,
+        "thumb3_to_index3_pivots_mm": 60.68,
         "tip_to_palm_mm": {
           "Index": 195.61,
           "Middle": 204.2,
           "Ring": 190.27,
           "Little": 176.94,
-          "Thumb": 168.3
+          "Thumb": 168.79
         },
-        "thumb_tip_to_index_skin_mm": 103.03
+        "thumb_tip_to_index_skin_mm": 60.29
       },
       "sword_slash": {
+        "thumb_tip_to_index_middle_skin_mm": 35.17,
+        "thumb_tip_to_index_tip_mm": 50.77,
+        "thumb_tip_to_index_middle_segment_mm": 44.71,
         "seconds": 0.5333,
-        "thumb3_to_index3_pivots_mm": 140.37,
+        "thumb3_to_index3_pivots_mm": 71.66,
         "tip_to_palm_mm": {
           "Index": 90.42,
           "Middle": 63.83,
           "Ring": 54.34,
           "Little": 68.47,
-          "Thumb": 198.32
+          "Thumb": 138.13
         },
-        "thumb_tip_to_index_skin_mm": 142.15
+        "thumb_tip_to_index_skin_mm": 33.84
       },
       "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 35.17,
+        "thumb_tip_to_index_tip_mm": 50.77,
+        "thumb_tip_to_index_middle_segment_mm": 44.71,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 71.66,
+        "tip_to_palm_mm": {
+          "Index": 90.42,
+          "Middle": 63.83,
+          "Ring": 54.34,
+          "Little": 68.47,
+          "Thumb": 138.13
+        },
+        "thumb_tip_to_index_skin_mm": 33.84
+      },
+      "sword_overhead_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 46.3,
+        "thumb_tip_to_index_tip_mm": 106.51,
+        "thumb_tip_to_index_middle_segment_mm": 56.64,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 71.69,
+        "tip_to_palm_mm": {
+          "Index": 90.42,
+          "Middle": 63.83,
+          "Ring": 54.34,
+          "Little": 68.47,
+          "Thumb": 168.79
+        },
+        "thumb_tip_to_index_skin_mm": 46.3
+      }
+    },
+    "left_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 59.7,
+        "thumb_tip_to_index_tip_mm": 81.77,
+        "thumb_tip_to_index_middle_segment_mm": 70.52,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 62.97,
+        "tip_to_palm_mm": {
+          "Index": 202.52,
+          "Middle": 215.84,
+          "Ring": 203.09,
+          "Little": 192.21,
+          "Thumb": 179.2
+        },
+        "thumb_tip_to_index_skin_mm": 59.7
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 47.93,
+        "thumb_tip_to_index_tip_mm": 50.41,
+        "thumb_tip_to_index_middle_segment_mm": 56.62,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 47.61,
+        "tip_to_palm_mm": {
+          "Index": 187.27,
+          "Middle": 199.53,
+          "Ring": 183.17,
+          "Little": 186.41,
+          "Thumb": 168.45
+        },
+        "thumb_tip_to_index_skin_mm": 42.12
+      },
+      "bow_shoot": {
+        "thumb_tip_to_index_middle_skin_mm": 39.26,
+        "thumb_tip_to_index_tip_mm": 46.09,
+        "thumb_tip_to_index_middle_segment_mm": 45.7,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 70.07,
+        "tip_to_palm_mm": {
+          "Index": 101.92,
+          "Middle": 77.85,
+          "Ring": 63.95,
+          "Little": 71.12,
+          "Thumb": 141.8
+        },
+        "thumb_tip_to_index_skin_mm": 33.39
+      },
+      "bow_shoot_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 41.57,
+        "thumb_tip_to_index_tip_mm": 94.41,
+        "thumb_tip_to_index_middle_segment_mm": 53.26,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 54.49,
+        "tip_to_palm_mm": {
+          "Index": 101.92,
+          "Middle": 77.85,
+          "Ring": 63.95,
+          "Little": 71.12,
+          "Thumb": 168.45
+        },
+        "thumb_tip_to_index_skin_mm": 41.57
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "7caeaa623cdda57842d315d16ab27289bf61e3e514911aa45067a5117ff78b18",
+    "right_hand_at_ab98fee91": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 119.61,
+        "thumb_tip_to_index_tip_mm": 166.68,
+        "thumb_tip_to_index_middle_segment_mm": 131.65,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 150.64,
+        "tip_to_palm_mm": {
+          "Index": 202.52,
+          "Middle": 215.84,
+          "Ring": 203.09,
+          "Little": 192.21,
+          "Thumb": 174.64
+        },
+        "thumb_tip_to_index_skin_mm": 110.76
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 111.57,
+        "thumb_tip_to_index_tip_mm": 152.97,
+        "thumb_tip_to_index_middle_segment_mm": 123.73,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 144.83,
+        "tip_to_palm_mm": {
+          "Index": 195.61,
+          "Middle": 204.2,
+          "Ring": 190.27,
+          "Little": 176.94,
+          "Thumb": 168.3
+        },
+        "thumb_tip_to_index_skin_mm": 103.03
+      },
+      "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 156.01,
+        "thumb_tip_to_index_tip_mm": 146.68,
+        "thumb_tip_to_index_middle_segment_mm": 162.47,
         "seconds": 0.6,
         "thumb3_to_index3_pivots_mm": 140.37,
         "tip_to_palm_mm": {
@@ -432,16 +1347,7 @@
         },
         "thumb_tip_to_index_skin_mm": 142.15
       }
-    },
-    "clips_played": 87,
-    "identical_shared_clips": 87,
-    "rotation_drift_deg": 0,
-    "translation_drift_cm": 0,
-    "skin_joints": 82,
-    "used_materials": 11,
-    "embedded_images": 3,
-    "face_sidecars": 1,
-    "glb_sha256": "d5b1a4ec71b88137184c717ec317c9bb6f7094763b9d09d85fc8ea5692ee391e"
+    }
   },
   "elder-l1": {
     "triangles": {
@@ -458,43 +1364,203 @@
     "natural_wrist_to_middle_tip_mm": 212.07,
     "size_ratio": 1.135,
     "right_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 51.53,
+        "thumb_tip_to_index_tip_mm": 70.18,
+        "thumb_tip_to_index_middle_segment_mm": 60.7,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 54.03,
+        "tip_to_palm_mm": {
+          "Index": 172.78,
+          "Middle": 184.15,
+          "Ring": 173.26,
+          "Little": 163.93,
+          "Thumb": 153.26
+        },
+        "thumb_tip_to_index_skin_mm": 51.53
+      },
       "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 51.55,
+        "thumb_tip_to_index_tip_mm": 65.41,
+        "thumb_tip_to_index_middle_segment_mm": 60.67,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 123.25,
+        "thumb3_to_index3_pivots_mm": 51.97,
         "tip_to_palm_mm": {
           "Index": 166.86,
           "Middle": 174.17,
           "Ring": 162.29,
           "Little": 150.88,
-          "Thumb": 143.61
+          "Thumb": 144.3
         },
-        "thumb_tip_to_index_skin_mm": 89.28
+        "thumb_tip_to_index_skin_mm": 51.55
       },
       "wave": {
+        "thumb_tip_to_index_middle_skin_mm": 51.55,
+        "thumb_tip_to_index_tip_mm": 65.41,
+        "thumb_tip_to_index_middle_segment_mm": 60.67,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 123.25,
+        "thumb3_to_index3_pivots_mm": 51.97,
         "tip_to_palm_mm": {
           "Index": 166.86,
           "Middle": 174.17,
           "Ring": 162.29,
           "Little": 150.88,
-          "Thumb": 143.61
+          "Thumb": 144.3
         },
-        "thumb_tip_to_index_skin_mm": 89.28
+        "thumb_tip_to_index_skin_mm": 51.55
       },
       "sword_slash": {
+        "thumb_tip_to_index_middle_skin_mm": 30.21,
+        "thumb_tip_to_index_tip_mm": 43.97,
+        "thumb_tip_to_index_middle_segment_mm": 38.69,
         "seconds": 0.5333,
-        "thumb3_to_index3_pivots_mm": 119.46,
+        "thumb3_to_index3_pivots_mm": 61.83,
         "tip_to_palm_mm": {
           "Index": 76.72,
           "Middle": 53.91,
           "Ring": 45.87,
           "Little": 58.13,
-          "Thumb": 169.12
+          "Thumb": 118.03
         },
-        "thumb_tip_to_index_skin_mm": 120.75
+        "thumb_tip_to_index_skin_mm": 29.3
       },
       "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 30.21,
+        "thumb_tip_to_index_tip_mm": 43.97,
+        "thumb_tip_to_index_middle_segment_mm": 38.69,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 61.83,
+        "tip_to_palm_mm": {
+          "Index": 76.72,
+          "Middle": 53.91,
+          "Ring": 45.87,
+          "Little": 58.13,
+          "Thumb": 118.03
+        },
+        "thumb_tip_to_index_skin_mm": 29.3
+      },
+      "sword_overhead_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 40.04,
+        "thumb_tip_to_index_tip_mm": 91.58,
+        "thumb_tip_to_index_middle_segment_mm": 48.95,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 61.42,
+        "tip_to_palm_mm": {
+          "Index": 76.72,
+          "Middle": 53.91,
+          "Ring": 45.87,
+          "Little": 58.13,
+          "Thumb": 144.3
+        },
+        "thumb_tip_to_index_skin_mm": 40.04
+      }
+    },
+    "left_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 51.53,
+        "thumb_tip_to_index_tip_mm": 70.18,
+        "thumb_tip_to_index_middle_segment_mm": 60.7,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 54.03,
+        "tip_to_palm_mm": {
+          "Index": 172.78,
+          "Middle": 184.15,
+          "Ring": 173.26,
+          "Little": 163.93,
+          "Thumb": 153.26
+        },
+        "thumb_tip_to_index_skin_mm": 51.53
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 40.15,
+        "thumb_tip_to_index_tip_mm": 43.21,
+        "thumb_tip_to_index_middle_segment_mm": 48.66,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 40.65,
+        "tip_to_palm_mm": {
+          "Index": 159.7,
+          "Middle": 170.17,
+          "Ring": 156.18,
+          "Little": 158.96,
+          "Thumb": 144.02
+        },
+        "thumb_tip_to_index_skin_mm": 35.77
+      },
+      "bow_shoot": {
+        "thumb_tip_to_index_middle_skin_mm": 31.77,
+        "thumb_tip_to_index_tip_mm": 39.98,
+        "thumb_tip_to_index_middle_segment_mm": 39.57,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 60.49,
+        "tip_to_palm_mm": {
+          "Index": 86.57,
+          "Middle": 65.92,
+          "Ring": 54.05,
+          "Little": 60.31,
+          "Thumb": 121.18
+        },
+        "thumb_tip_to_index_skin_mm": 28.97
+      },
+      "bow_shoot_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 36.07,
+        "thumb_tip_to_index_tip_mm": 81.26,
+        "thumb_tip_to_index_middle_segment_mm": 46.02,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 46.65,
+        "tip_to_palm_mm": {
+          "Index": 86.57,
+          "Middle": 65.92,
+          "Ring": 54.05,
+          "Little": 60.31,
+          "Thumb": 144.02
+        },
+        "thumb_tip_to_index_skin_mm": 36.07
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "72dd91618c75b6caad63cb7416d5b0269eb1f3da6a06b430ee8eb9e0cfaa1c9a",
+    "right_hand_at_ab98fee91": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 102.16,
+        "thumb_tip_to_index_tip_mm": 142.09,
+        "thumb_tip_to_index_middle_segment_mm": 112.17,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 128.2,
+        "tip_to_palm_mm": {
+          "Index": 172.78,
+          "Middle": 184.15,
+          "Ring": 173.26,
+          "Little": 163.93,
+          "Thumb": 149.04
+        },
+        "thumb_tip_to_index_skin_mm": 95.73
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 95.99,
+        "thumb_tip_to_index_tip_mm": 130.3,
+        "thumb_tip_to_index_middle_segment_mm": 105.37,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 123.25,
+        "tip_to_palm_mm": {
+          "Index": 166.86,
+          "Middle": 174.17,
+          "Ring": 162.29,
+          "Little": 150.88,
+          "Thumb": 143.61
+        },
+        "thumb_tip_to_index_skin_mm": 89.28
+      },
+      "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 132.49,
+        "thumb_tip_to_index_tip_mm": 124.96,
+        "thumb_tip_to_index_middle_segment_mm": 138.61,
         "seconds": 0.6,
         "thumb3_to_index3_pivots_mm": 119.46,
         "tip_to_palm_mm": {
@@ -506,16 +1572,7 @@
         },
         "thumb_tip_to_index_skin_mm": 120.75
       }
-    },
-    "clips_played": 87,
-    "identical_shared_clips": 87,
-    "rotation_drift_deg": 0,
-    "translation_drift_cm": 0,
-    "skin_joints": 82,
-    "used_materials": 11,
-    "embedded_images": 3,
-    "face_sidecars": 1,
-    "glb_sha256": "3db0e651c663b988526c8b6bed78ae5f927be31ea34085f6555edf5149ed026f"
+    }
   },
   "elder-l2": {
     "triangles": {
@@ -532,43 +1589,203 @@
     "natural_wrist_to_middle_tip_mm": 211.65,
     "size_ratio": 1.135,
     "right_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 51.24,
+        "thumb_tip_to_index_tip_mm": 69.93,
+        "thumb_tip_to_index_middle_segment_mm": 60.46,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 54.03,
+        "tip_to_palm_mm": {
+          "Index": 172.35,
+          "Middle": 183.68,
+          "Ring": 172.82,
+          "Little": 163.57,
+          "Thumb": 152.86
+        },
+        "thumb_tip_to_index_skin_mm": 51.24
+      },
       "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 51.64,
+        "thumb_tip_to_index_tip_mm": 65.25,
+        "thumb_tip_to_index_middle_segment_mm": 60.46,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 123.25,
+        "thumb3_to_index3_pivots_mm": 51.97,
         "tip_to_palm_mm": {
           "Index": 166.46,
           "Middle": 173.77,
           "Ring": 161.92,
           "Little": 150.57,
-          "Thumb": 143.22
+          "Thumb": 143.94
         },
-        "thumb_tip_to_index_skin_mm": 87.68
+        "thumb_tip_to_index_skin_mm": 51.64
       },
       "wave": {
+        "thumb_tip_to_index_middle_skin_mm": 51.64,
+        "thumb_tip_to_index_tip_mm": 65.25,
+        "thumb_tip_to_index_middle_segment_mm": 60.46,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 123.25,
+        "thumb3_to_index3_pivots_mm": 51.97,
         "tip_to_palm_mm": {
           "Index": 166.46,
           "Middle": 173.77,
           "Ring": 161.92,
           "Little": 150.57,
-          "Thumb": 143.22
+          "Thumb": 143.94
         },
-        "thumb_tip_to_index_skin_mm": 87.68
+        "thumb_tip_to_index_skin_mm": 51.64
       },
       "sword_slash": {
+        "thumb_tip_to_index_middle_skin_mm": 30.88,
+        "thumb_tip_to_index_tip_mm": 43.75,
+        "thumb_tip_to_index_middle_segment_mm": 38.65,
         "seconds": 0.5333,
-        "thumb3_to_index3_pivots_mm": 119.46,
+        "thumb3_to_index3_pivots_mm": 61.83,
         "tip_to_palm_mm": {
           "Index": 76.95,
           "Middle": 54.32,
           "Ring": 46.24,
           "Little": 58.27,
-          "Thumb": 168.77
+          "Thumb": 117.96
         },
-        "thumb_tip_to_index_skin_mm": 120.97
+        "thumb_tip_to_index_skin_mm": 29.39
       },
       "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 30.88,
+        "thumb_tip_to_index_tip_mm": 43.75,
+        "thumb_tip_to_index_middle_segment_mm": 38.65,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 61.83,
+        "tip_to_palm_mm": {
+          "Index": 76.95,
+          "Middle": 54.32,
+          "Ring": 46.24,
+          "Little": 58.27,
+          "Thumb": 117.96
+        },
+        "thumb_tip_to_index_skin_mm": 29.39
+      },
+      "sword_overhead_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 39.82,
+        "thumb_tip_to_index_tip_mm": 90.92,
+        "thumb_tip_to_index_middle_segment_mm": 48.62,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 61.42,
+        "tip_to_palm_mm": {
+          "Index": 76.95,
+          "Middle": 54.32,
+          "Ring": 46.24,
+          "Little": 58.27,
+          "Thumb": 143.94
+        },
+        "thumb_tip_to_index_skin_mm": 39.82
+      }
+    },
+    "left_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 51.24,
+        "thumb_tip_to_index_tip_mm": 69.93,
+        "thumb_tip_to_index_middle_segment_mm": 60.46,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 54.03,
+        "tip_to_palm_mm": {
+          "Index": 172.35,
+          "Middle": 183.68,
+          "Ring": 172.82,
+          "Little": 163.57,
+          "Thumb": 152.86
+        },
+        "thumb_tip_to_index_skin_mm": 51.24
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 40.3,
+        "thumb_tip_to_index_tip_mm": 43.23,
+        "thumb_tip_to_index_middle_segment_mm": 48.48,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 40.65,
+        "tip_to_palm_mm": {
+          "Index": 159.37,
+          "Middle": 169.8,
+          "Ring": 155.88,
+          "Little": 158.63,
+          "Thumb": 143.65
+        },
+        "thumb_tip_to_index_skin_mm": 36.18
+      },
+      "bow_shoot": {
+        "thumb_tip_to_index_middle_skin_mm": 32.74,
+        "thumb_tip_to_index_tip_mm": 39.84,
+        "thumb_tip_to_index_middle_segment_mm": 39.51,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 60.49,
+        "tip_to_palm_mm": {
+          "Index": 86.73,
+          "Middle": 66.25,
+          "Ring": 54.42,
+          "Little": 60.52,
+          "Thumb": 121.09
+        },
+        "thumb_tip_to_index_skin_mm": 29.06
+      },
+      "bow_shoot_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 35.71,
+        "thumb_tip_to_index_tip_mm": 80.59,
+        "thumb_tip_to_index_middle_segment_mm": 45.63,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 46.65,
+        "tip_to_palm_mm": {
+          "Index": 86.73,
+          "Middle": 66.25,
+          "Ring": 54.42,
+          "Little": 60.52,
+          "Thumb": 143.65
+        },
+        "thumb_tip_to_index_skin_mm": 35.71
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "db57c2c8ea93d24e5d7f1618ac472328d933d4ea9603d9bbd631e6597c008724",
+    "right_hand_at_ab98fee91": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 101.79,
+        "thumb_tip_to_index_tip_mm": 141.84,
+        "thumb_tip_to_index_middle_segment_mm": 112.03,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 128.2,
+        "tip_to_palm_mm": {
+          "Index": 172.35,
+          "Middle": 183.68,
+          "Ring": 172.82,
+          "Little": 163.57,
+          "Thumb": 148.61
+        },
+        "thumb_tip_to_index_skin_mm": 94.25
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 95.42,
+        "thumb_tip_to_index_tip_mm": 130.17,
+        "thumb_tip_to_index_middle_segment_mm": 105.29,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 123.25,
+        "tip_to_palm_mm": {
+          "Index": 166.46,
+          "Middle": 173.77,
+          "Ring": 161.92,
+          "Little": 150.57,
+          "Thumb": 143.22
+        },
+        "thumb_tip_to_index_skin_mm": 87.68
+      },
+      "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 132.81,
+        "thumb_tip_to_index_tip_mm": 124.82,
+        "thumb_tip_to_index_middle_segment_mm": 138.26,
         "seconds": 0.6,
         "thumb3_to_index3_pivots_mm": 119.46,
         "tip_to_palm_mm": {
@@ -580,16 +1797,7 @@
         },
         "thumb_tip_to_index_skin_mm": 120.97
       }
-    },
-    "clips_played": 87,
-    "identical_shared_clips": 87,
-    "rotation_drift_deg": 0,
-    "translation_drift_cm": 0,
-    "skin_joints": 82,
-    "used_materials": 11,
-    "embedded_images": 3,
-    "face_sidecars": 1,
-    "glb_sha256": "19a036a6bd5b86f0ea51111145271cb4f5a11833be22c563e4c859b5309ff154"
+    }
   },
   "child-l1": {
     "triangles": {
@@ -606,43 +1814,203 @@
     "natural_wrist_to_middle_tip_mm": 128.41,
     "size_ratio": 1.135,
     "right_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 37.5,
+        "thumb_tip_to_index_tip_mm": 47.64,
+        "thumb_tip_to_index_middle_segment_mm": 43.03,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 39.18,
+        "tip_to_palm_mm": {
+          "Index": 104.62,
+          "Middle": 111.51,
+          "Ring": 104.91,
+          "Little": 99.27,
+          "Thumb": 97.72
+        },
+        "thumb_tip_to_index_skin_mm": 37.5
+      },
       "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 36.39,
+        "thumb_tip_to_index_tip_mm": 44.7,
+        "thumb_tip_to_index_middle_segment_mm": 41.92,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 74.63,
+        "thumb3_to_index3_pivots_mm": 36.7,
         "tip_to_palm_mm": {
           "Index": 101.04,
           "Middle": 105.47,
           "Ring": 98.28,
           "Little": 91.37,
-          "Thumb": 86.96
+          "Thumb": 91.57
         },
-        "thumb_tip_to_index_skin_mm": 54.06
+        "thumb_tip_to_index_skin_mm": 36.39
       },
       "wave": {
+        "thumb_tip_to_index_middle_skin_mm": 36.39,
+        "thumb_tip_to_index_tip_mm": 44.7,
+        "thumb_tip_to_index_middle_segment_mm": 41.92,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 74.63,
+        "thumb3_to_index3_pivots_mm": 36.7,
         "tip_to_palm_mm": {
           "Index": 101.04,
           "Middle": 105.47,
           "Ring": 98.28,
           "Little": 91.37,
-          "Thumb": 86.96
+          "Thumb": 91.57
         },
-        "thumb_tip_to_index_skin_mm": 54.06
+        "thumb_tip_to_index_skin_mm": 36.39
       },
       "sword_slash": {
+        "thumb_tip_to_index_middle_skin_mm": 25.58,
+        "thumb_tip_to_index_tip_mm": 33.38,
+        "thumb_tip_to_index_middle_segment_mm": 30.93,
         "seconds": 0.5333,
-        "thumb3_to_index3_pivots_mm": 72.33,
+        "thumb3_to_index3_pivots_mm": 47.81,
         "tip_to_palm_mm": {
           "Index": 46.46,
           "Middle": 32.64,
           "Ring": 27.78,
           "Little": 35.2,
-          "Thumb": 102.41
+          "Thumb": 76.46
         },
-        "thumb_tip_to_index_skin_mm": 73.12
+        "thumb_tip_to_index_skin_mm": 25.21
       },
       "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 25.58,
+        "thumb_tip_to_index_tip_mm": 33.38,
+        "thumb_tip_to_index_middle_segment_mm": 30.93,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 47.81,
+        "tip_to_palm_mm": {
+          "Index": 46.46,
+          "Middle": 32.64,
+          "Ring": 27.78,
+          "Little": 35.2,
+          "Thumb": 76.46
+        },
+        "thumb_tip_to_index_skin_mm": 25.21
+      },
+      "sword_overhead_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 31.32,
+        "thumb_tip_to_index_tip_mm": 59.66,
+        "thumb_tip_to_index_middle_segment_mm": 35.8,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 43.07,
+        "tip_to_palm_mm": {
+          "Index": 46.46,
+          "Middle": 32.64,
+          "Ring": 27.78,
+          "Little": 35.2,
+          "Thumb": 91.57
+        },
+        "thumb_tip_to_index_skin_mm": 29.95
+      }
+    },
+    "left_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 37.5,
+        "thumb_tip_to_index_tip_mm": 47.64,
+        "thumb_tip_to_index_middle_segment_mm": 43.03,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 39.18,
+        "tip_to_palm_mm": {
+          "Index": 104.62,
+          "Middle": 111.51,
+          "Ring": 104.91,
+          "Little": 99.27,
+          "Thumb": 97.72
+        },
+        "thumb_tip_to_index_skin_mm": 37.5
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 28.91,
+        "thumb_tip_to_index_tip_mm": 31.49,
+        "thumb_tip_to_index_middle_segment_mm": 34.3,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 28.26,
+        "tip_to_palm_mm": {
+          "Index": 96.71,
+          "Middle": 103.04,
+          "Ring": 94.57,
+          "Little": 96.26,
+          "Thumb": 91.43
+        },
+        "thumb_tip_to_index_skin_mm": 26.79
+      },
+      "bow_shoot": {
+        "thumb_tip_to_index_middle_skin_mm": 26.71,
+        "thumb_tip_to_index_tip_mm": 31.75,
+        "thumb_tip_to_index_middle_segment_mm": 31.73,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 47.18,
+        "tip_to_palm_mm": {
+          "Index": 52.42,
+          "Middle": 39.92,
+          "Ring": 32.73,
+          "Little": 36.52,
+          "Thumb": 78.45
+        },
+        "thumb_tip_to_index_skin_mm": 25.5
+      },
+      "bow_shoot_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 26.9,
+        "thumb_tip_to_index_tip_mm": 53.18,
+        "thumb_tip_to_index_middle_segment_mm": 32.94,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 33.14,
+        "tip_to_palm_mm": {
+          "Index": 52.42,
+          "Middle": 39.92,
+          "Ring": 32.73,
+          "Little": 36.52,
+          "Thumb": 91.43
+        },
+        "thumb_tip_to_index_skin_mm": 26.9
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "62950ff5780eda40302f9a2120741c640b757cc646b46128db219a8fa51150fe",
+    "right_hand_at_ab98fee91": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 61.86,
+        "thumb_tip_to_index_tip_mm": 86.04,
+        "thumb_tip_to_index_middle_segment_mm": 67.92,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 77.63,
+        "tip_to_palm_mm": {
+          "Index": 104.62,
+          "Middle": 111.51,
+          "Ring": 104.91,
+          "Little": 99.27,
+          "Thumb": 90.25
+        },
+        "thumb_tip_to_index_skin_mm": 57.97
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 58.32,
+        "thumb_tip_to_index_tip_mm": 78.9,
+        "thumb_tip_to_index_middle_segment_mm": 63.81,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 74.63,
+        "tip_to_palm_mm": {
+          "Index": 101.04,
+          "Middle": 105.47,
+          "Ring": 98.28,
+          "Little": 91.37,
+          "Thumb": 86.96
+        },
+        "thumb_tip_to_index_skin_mm": 54.06
+      },
+      "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 80.23,
+        "thumb_tip_to_index_tip_mm": 75.67,
+        "thumb_tip_to_index_middle_segment_mm": 83.93,
         "seconds": 0.6,
         "thumb3_to_index3_pivots_mm": 72.33,
         "tip_to_palm_mm": {
@@ -654,16 +2022,7 @@
         },
         "thumb_tip_to_index_skin_mm": 73.12
       }
-    },
-    "clips_played": 87,
-    "identical_shared_clips": 87,
-    "rotation_drift_deg": 0,
-    "translation_drift_cm": 0,
-    "skin_joints": 82,
-    "used_materials": 11,
-    "embedded_images": 3,
-    "face_sidecars": 1,
-    "glb_sha256": "9c6ef0e342750d5209bb2e120f485ff52d16cacb9014dccfb003f7db3d047c30"
+    }
   },
   "child-l2": {
     "triangles": {
@@ -680,43 +2039,203 @@
     "natural_wrist_to_middle_tip_mm": 128.16,
     "size_ratio": 1.135,
     "right_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 37.37,
+        "thumb_tip_to_index_tip_mm": 47.5,
+        "thumb_tip_to_index_middle_segment_mm": 42.91,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 39.18,
+        "tip_to_palm_mm": {
+          "Index": 104.36,
+          "Middle": 111.22,
+          "Ring": 104.65,
+          "Little": 99.05,
+          "Thumb": 97.48
+        },
+        "thumb_tip_to_index_skin_mm": 37.37
+      },
       "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 36.43,
+        "thumb_tip_to_index_tip_mm": 44.62,
+        "thumb_tip_to_index_middle_segment_mm": 41.81,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 74.63,
+        "thumb3_to_index3_pivots_mm": 36.7,
         "tip_to_palm_mm": {
           "Index": 100.8,
           "Middle": 105.22,
           "Ring": 98.05,
           "Little": 91.18,
-          "Thumb": 86.72
+          "Thumb": 91.37
         },
-        "thumb_tip_to_index_skin_mm": 53.09
+        "thumb_tip_to_index_skin_mm": 36.43
       },
       "wave": {
+        "thumb_tip_to_index_middle_skin_mm": 36.43,
+        "thumb_tip_to_index_tip_mm": 44.62,
+        "thumb_tip_to_index_middle_segment_mm": 41.81,
         "seconds": 1.0,
-        "thumb3_to_index3_pivots_mm": 74.63,
+        "thumb3_to_index3_pivots_mm": 36.7,
         "tip_to_palm_mm": {
           "Index": 100.8,
           "Middle": 105.22,
           "Ring": 98.05,
           "Little": 91.18,
-          "Thumb": 86.72
+          "Thumb": 91.37
         },
-        "thumb_tip_to_index_skin_mm": 53.09
+        "thumb_tip_to_index_skin_mm": 36.43
       },
       "sword_slash": {
+        "thumb_tip_to_index_middle_skin_mm": 25.8,
+        "thumb_tip_to_index_tip_mm": 33.29,
+        "thumb_tip_to_index_middle_segment_mm": 30.94,
         "seconds": 0.5333,
-        "thumb3_to_index3_pivots_mm": 72.33,
+        "thumb3_to_index3_pivots_mm": 47.81,
         "tip_to_palm_mm": {
           "Index": 46.6,
           "Middle": 32.89,
           "Ring": 28.0,
           "Little": 35.28,
-          "Thumb": 102.19
+          "Thumb": 76.43
         },
-        "thumb_tip_to_index_skin_mm": 73.25
+        "thumb_tip_to_index_skin_mm": 25.31
       },
       "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 25.8,
+        "thumb_tip_to_index_tip_mm": 33.29,
+        "thumb_tip_to_index_middle_segment_mm": 30.94,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 47.81,
+        "tip_to_palm_mm": {
+          "Index": 46.6,
+          "Middle": 32.89,
+          "Ring": 28.0,
+          "Little": 35.28,
+          "Thumb": 76.43
+        },
+        "thumb_tip_to_index_skin_mm": 25.31
+      },
+      "sword_overhead_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 30.06,
+        "thumb_tip_to_index_tip_mm": 59.3,
+        "thumb_tip_to_index_middle_segment_mm": 35.64,
+        "seconds": 0.6,
+        "thumb3_to_index3_pivots_mm": 43.07,
+        "tip_to_palm_mm": {
+          "Index": 46.6,
+          "Middle": 32.89,
+          "Ring": 28.0,
+          "Little": 35.28,
+          "Thumb": 91.37
+        },
+        "thumb_tip_to_index_skin_mm": 30.01
+      }
+    },
+    "left_hand": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 37.37,
+        "thumb_tip_to_index_tip_mm": 47.5,
+        "thumb_tip_to_index_middle_segment_mm": 42.91,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 39.18,
+        "tip_to_palm_mm": {
+          "Index": 104.36,
+          "Middle": 111.22,
+          "Ring": 104.65,
+          "Little": 99.05,
+          "Thumb": 97.48
+        },
+        "thumb_tip_to_index_skin_mm": 37.37
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 29.03,
+        "thumb_tip_to_index_tip_mm": 31.49,
+        "thumb_tip_to_index_middle_segment_mm": 34.21,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 28.26,
+        "tip_to_palm_mm": {
+          "Index": 96.5,
+          "Middle": 102.82,
+          "Ring": 94.39,
+          "Little": 96.06,
+          "Thumb": 91.22
+        },
+        "thumb_tip_to_index_skin_mm": 27.13
+      },
+      "bow_shoot": {
+        "thumb_tip_to_index_middle_skin_mm": 26.72,
+        "thumb_tip_to_index_tip_mm": 31.71,
+        "thumb_tip_to_index_middle_segment_mm": 31.73,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 47.18,
+        "tip_to_palm_mm": {
+          "Index": 52.52,
+          "Middle": 40.12,
+          "Ring": 32.95,
+          "Little": 36.65,
+          "Thumb": 78.4
+        },
+        "thumb_tip_to_index_skin_mm": 25.59
+      },
+      "bow_shoot_thumb_held_idle": {
+        "thumb_tip_to_index_middle_skin_mm": 26.7,
+        "thumb_tip_to_index_tip_mm": 52.8,
+        "thumb_tip_to_index_middle_segment_mm": 32.74,
+        "seconds": 0.4333,
+        "thumb3_to_index3_pivots_mm": 33.14,
+        "tip_to_palm_mm": {
+          "Index": 52.52,
+          "Middle": 40.12,
+          "Ring": 32.95,
+          "Little": 36.65,
+          "Thumb": 91.22
+        },
+        "thumb_tip_to_index_skin_mm": 26.7
+      }
+    },
+    "clips_played": 87,
+    "identical_shared_clips": 87,
+    "rotation_drift_deg": 0,
+    "translation_drift_cm": 0,
+    "skin_joints": 82,
+    "used_materials": 11,
+    "embedded_images": 3,
+    "face_sidecars": 1,
+    "glb_sha256": "3c1fb3c1e6ac96d667cc0aad040989eb88326ead9d26242fab483658d78da71a",
+    "right_hand_at_ab98fee91": {
+      "bind": {
+        "thumb_tip_to_index_middle_skin_mm": 61.64,
+        "thumb_tip_to_index_tip_mm": 85.89,
+        "thumb_tip_to_index_middle_segment_mm": 67.84,
+        "seconds": 0.0,
+        "thumb3_to_index3_pivots_mm": 77.63,
+        "tip_to_palm_mm": {
+          "Index": 104.36,
+          "Middle": 111.22,
+          "Ring": 104.65,
+          "Little": 99.05,
+          "Thumb": 89.99
+        },
+        "thumb_tip_to_index_skin_mm": 57.07
+      },
+      "idle": {
+        "thumb_tip_to_index_middle_skin_mm": 57.49,
+        "thumb_tip_to_index_tip_mm": 78.82,
+        "thumb_tip_to_index_middle_segment_mm": 63.76,
+        "seconds": 1.0,
+        "thumb3_to_index3_pivots_mm": 74.63,
+        "tip_to_palm_mm": {
+          "Index": 100.8,
+          "Middle": 105.22,
+          "Ring": 98.05,
+          "Little": 91.18,
+          "Thumb": 86.72
+        },
+        "thumb_tip_to_index_skin_mm": 53.09
+      },
+      "sword_overhead": {
+        "thumb_tip_to_index_middle_skin_mm": 80.15,
+        "thumb_tip_to_index_tip_mm": 75.58,
+        "thumb_tip_to_index_middle_segment_mm": 83.72,
         "seconds": 0.6,
         "thumb3_to_index3_pivots_mm": 72.33,
         "tip_to_palm_mm": {
@@ -728,15 +2247,6 @@
         },
         "thumb_tip_to_index_skin_mm": 73.25
       }
-    },
-    "clips_played": 87,
-    "identical_shared_clips": 87,
-    "rotation_drift_deg": 0,
-    "translation_drift_cm": 0,
-    "skin_joints": 82,
-    "used_materials": 11,
-    "embedded_images": 3,
-    "face_sidecars": 1,
-    "glb_sha256": "835cfa5094b25bd819ae36eec821bbf6b95b45f0032b27d4a3eee1b0cb58424c"
+    }
   }
 }
