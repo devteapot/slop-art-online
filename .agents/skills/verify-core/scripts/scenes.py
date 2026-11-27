@@ -1210,6 +1210,138 @@ def sight(s):
 
 
 
+def perceived_holds(s):
+    """A graph's `holds` under the `perceived_holds_on` law (perception parity,
+    docs/PERCEPTION_PARITY_AUDIT.md, `stores.rs`): what a store holds is known only from looking
+    inside it, beside it (`seen_store`), never from 4 m off. On an open line W stands 4 m from a
+    storage S of H's, alone in W's sight; W's probe asks `sees nearest storage holds meat` and
+    walks 3 m north (yes) or south (no). Law off (control, the leak): no while S is empty, yes as
+    soon as H stores meat in it (W sees H, not inside S). Law on, W never having looked inside: yes with
+    meat in S and yes with S empty (worth a look; the answer no longer depends on what W cannot
+    see), and W has no `seen_store` row. W is brought beside S (S empty): its row says empty, and
+    from 4 m the probe says no; H stores meat while W stands 4 m off: still no (the refill was
+    not looked into), while the law off says yes; W beside S again: yes, and from 4 m yes. About 4 minutes."""
+    people = {c["id"] for c in s.rows("SELECT id, kind FROM character WHERE alive = true") if c["kind"] == "person"}
+    things = [(b["x"], b["y"]) for b in s.rows("SELECT id, x, y FROM body") if b["id"] in people]
+    things += [(t["x"], t["y"]) for t in s.rows("SELECT x, y FROM structure")]
+    line = open_line(s, length=24, avoid=things)
+    (s.out / f"{s.name}-line.json").write_text(json.dumps(line) + "\n")
+    w, h = cast = s.people(2)
+    (s.out / f"{s.name}-cast.json").write_text(json.dumps({"W": w, "H": h}) + "\n")
+    rounds = iter(range(1000))
+    stand = line[8]
+
+    def probe(label):
+        """W's answer to `sees nearest storage holds meat`: a walk 3 m north for yes, 3 m south
+        for no, read from W's `activity` row; W is put back where it stood afterwards."""
+        b = s.rows(f"SELECT x, y FROM body WHERE id = {w}")[0]
+        x, y = b["x"], b["y"]
+        yes, no = [x, y + 3.0], [x, y - 3.0]
+        s.graph(w, {"seq": [{"if": {"cond": {"sees": {"nearest": {"kind": "storage", "holds": "meat"}}},
+                                    "then": {"do": {"skill": "goto", "target": {"at": yes}}},
+                                    "else": {"do": {"skill": "goto", "target": {"at": no}}}}},
+                            {"wait": 60 + next(rounds)}]})
+
+        def answer():
+            for r in s.http_rows(f"SELECT * FROM activity WHERE id = {w}"):
+                t = r["target"]
+                tx, ty = (t["x"], t["y"]) if isinstance(t, dict) else (t[2], t[3])
+                if r["skill"] == "goto" and math.dist((tx, ty), yes) < 0.6:
+                    return True
+                if r["skill"] == "goto" and math.dist((tx, ty), no) < 0.6:
+                    return False
+            return None
+
+        got = s.wait(lambda: (answer(),) if answer() is not None else None, seconds=20, every=0.2)[0]
+        s.rows(f"SELECT * FROM activity WHERE id = {w}", f"probe-{label}")
+        s.graph(w, {"wait": 60 + next(rounds)})
+        s.call("place_at", w, x, y)
+        time.sleep(0.5)
+        return got
+
+    def store_meat(label):
+        s.call("grant_items", h, "meat", 3)
+        s.act(h, {"do": "store", "target": {"id": store}, "item": "meat", "qty": 3})
+        s.wait(lambda: held().get("meat", 0) >= 3, seconds=20)
+        held(label)
+
+    def take_meat(label):
+        s.act(h, {"do": "take", "target": {"id": store}, "item": "meat", "qty": held().get("meat", 0)})
+        s.wait(lambda: not held().get("meat"), seconds=20)
+        held(label)
+
+    def held(label=None):
+        return {r["item"]: r["qty"] for r in s.rows(f"SELECT item, qty FROM inventory WHERE owner = {(1 << 40) | store}", label and f"store-{label}")}
+
+    def row(label):
+        rs = s.rows(f"SELECT * FROM seen_store WHERE actor = {w}", f"seen-{label}")
+        return [r for r in rs if r["structure"] == store]
+
+    def beside(label, ready):
+        """W stands 1 m from S until its noticing looks inside (`ready` of its row), then back at 4 m."""
+        s.call("place_at", w, line[11][0] - 0.2, line[11][1])
+        try:
+            s.wait(lambda: ready(row(label)), seconds=15, every=0.5)
+        except TimeoutError:
+            pass
+        got = row(label)
+        s.call("place_at", w, stand[0], stand[1])
+        time.sleep(0.5)
+        return got
+
+    try:
+        for c in cast:
+            s.graph(c, {"wait": 120 + next(rounds)})
+        set_law(s, "perceived_holds_on", False)
+        s.call("place_at", w, stand[0], stand[1])
+        s.call("place_at", h, line[11][0], line[11][1])
+        s.call("place_structure", h, "storage")
+        store = max(r["id"] for r in s.rows(f"SELECT id FROM structure WHERE owner = {h}"))
+        sx = s.rows(f"SELECT x, y FROM structure WHERE id = {store}")[0]
+        (s.out / f"{s.name}-store.json").write_text(json.dumps({"id": store, **sx}) + "\n")
+        others = [t for t in s.rows("SELECT id, kind, x, y FROM structure") if t["kind"] in ("storage", "store") and t["id"] != store and math.dist((t["x"], t["y"]), stand) < 30]
+        s.expect("S is the only storage within 30 m of W", not others, others)
+        s.call("place_at", h, line[13][0], line[13][1])
+        time.sleep(46)  # a body is not second-guessed for 45 s after arrival (`brain.rs`)
+
+        empty_off = probe("off-empty")
+        store_meat("off-full")
+        full_off = probe("off-full")
+        s.expect("law off: no while S is empty, yes once meat is in it, from 4 m (the leak)", empty_off is False and full_off is True, {"empty": empty_off, "full": full_off})
+
+        set_law(s, "perceived_holds_on", True)
+        s.wait(lambda: own_laws(s.rows).get("perceived_holds_on") == "true", 10)
+        full_on = probe("on-full-unlooked")
+        take_meat("on-empty")
+        empty_on = probe("on-empty-unlooked")
+        s.expect("law on, never looked inside: yes with meat in S and yes with S empty (worth a look), and W has no seen_store row",
+                 full_on is True and empty_on is True and not row("unlooked"), {"full": full_on, "empty": empty_on})
+
+        seen = beside("looked-empty", lambda r: r and not r[0]["items"])
+        s.expect("law on: beside S, W's look writes what it holds (nothing)", len(seen) == 1 and not seen[0]["items"], seen)
+        after_look = probe("on-looked-empty")
+        s.expect("law on: from 4 m after looking inside an empty S, no", after_look is False, after_look)
+        store_meat("on-refill")
+        unseen_refill = probe("on-unseen-refill")
+        s.expect("law on: H's refill, W 4 m off and not looking inside, is not known (still no), and W's row still says empty",
+                 unseen_refill is False and not row("after-refill")[0]["items"], {"answer": unseen_refill})
+        set_law(s, "perceived_holds_on", False)
+        s.wait(lambda: own_laws(s.rows).get("perceived_holds_on") == "false", 10)
+        control = probe("off-refill")
+        s.expect("law off (control): the same refill, yes", control is True, control)
+        set_law(s, "perceived_holds_on", True)
+        s.wait(lambda: own_laws(s.rows).get("perceived_holds_on") == "true", 10)
+        seen = beside("looked-full", lambda r: r and "meat" in r[0]["items"])
+        s.expect("law on: beside S again, W's row says 3 meat", len(seen) == 1 and dict(zip(seen[0]["items"], seen[0]["qty"])).get("meat") == 3, seen)
+        remembered = probe("on-looked-full")
+        s.expect("law on: from 4 m after seeing the meat, yes", remembered is True, remembered)
+    finally:
+        set_law(s, "perceived_holds_on", False, check=False)
+        for c in cast:
+            s.graph(c, {"wait": 60 + next(rounds)})
+        off_the_line(s, line, cast, dy=68)
+
+
 def drop_geometry(s, cls=8):
     """On this world's own map: an `eye` tile and an `across` one on one axis with only tiles of
     class `cls` (8 a drop, 9 a low thing; 1 to 3 of them) between and walkable ground behind each
@@ -5940,6 +6072,7 @@ def workplace(s):
 SCENES["sex_seen_bound"] = sex_seen_bound
 SCENES["familiar_regard"] = familiar_regard
 SCENES["goods"] = goods
+SCENES["perceived_holds"] = perceived_holds
 SCENES["workplace"] = workplace
 SCENES["making"] = making
 SCENES["stock"] = stock

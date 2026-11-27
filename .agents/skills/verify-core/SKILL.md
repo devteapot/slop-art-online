@@ -46,6 +46,8 @@ python3 "$C/scenes.py" doing --run "$R" > "$E/doing.txt" 2>&1
 # What someone is visibly doing: the `doing` condition and the scene's `visibly`, by sight, field
 # and far label (features/doing.md, about 2 min).
 python3 "$C/scenes.py" doing_seen --run "$R" > "$E/doing_seen.txt" 2>&1
+# A store's contents known only as seen inside it under perceived_holds_on: the leak off, unseen contents unknown on, a look beside it, an unseen refill not known (features/perceived-holds.md, about 4 min).
+python3 "$C/scenes.py" perceived_holds --run "$R" > "$E/perceived_holds.txt" 2>&1
 # A continuous activity's row held to its renewal: no blink of doing nothing between two rests, the pacing unchanged, a real change still at once, the renew_in_place law (features/doing.md, about 2 min).
 python3 "$C/scenes.py" doing_renew --run "$R" > "$E/doing_renew.txt" 2>&1
 # Committed moves end early only by a wall or death (features/combat.md, about 30 s).

@@ -109,6 +109,9 @@ PRIVATE = ['attention', 'copy_state', 'lines_state', 'applied_gaze', 'cover_grou
            # What each character has seen of resources, and where a mind's character stands when
            # its talk turn asks (talk-places): the mind service's only.
            'seen_stock', 'standing',
+           # What each character saw inside stores (perception parity, `perceived_holds_on`):
+           # a player reads its own through my_seen_stores.
+           'seen_store',
            # A person's look and the world's look lines (docs/LOOK.md): a client gets only the
            # `lk_` key on its seen_characters rows.
            'look', 'look_line',
@@ -131,13 +134,13 @@ SCOPED = ['body', 'character', 'fighter', 'doing', 'vitals', 'experience', 'plac
 RLS_TABLES = ['seen_body_cue', 'seen_fighter_cue', 'seen_doing_cue', 'seen_body_copy', 'seen_character_copy', 'seen_fighter_copy', 'combat_feed', 'experience_copy', 'seen_throng']
 VIEWS = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing', 'my_body', 'my_fighter', 'my_doing', 'my_characters',
          'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how',
-         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex',
+         'my_deliberations', 'my_combat', 'my_readiness', 'my_skill_uses', 'my_records', 'my_offers', 'heard_sounds', 'my_heard', 'my_senses', 'my_senses_v2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex', 'my_seen_stores',
          # The near and far tiers of the three copy-backed views (frame-views; scripts/cues.py proves them).
          'seen_bodies_near', 'seen_bodies_far', 'seen_fighters_near', 'seen_fighters_far', 'seen_doing_near', 'seen_doing_far']
 SEEN = ['seen_bodies', 'seen_characters', 'seen_fighters', 'seen_doing']
 # The player's own living character's body, fighter and doing rows (others' come as copies in seen_*).
 BODY = ['my_body', 'my_fighter', 'my_doing']
-OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_senses_v_2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex']
+OWN = BODY + ['my_characters', 'my_vitals', 'my_experience', 'my_places', 'my_inventory', 'my_know_how', 'my_offers', 'my_heard', 'my_senses', 'my_senses_v_2', 'my_earshot', 'my_act_outcomes', 'my_known_names', 'my_sex', 'my_seen_stores']
 OPAQUE = {4, 7}             # rock, wall (living_rules::map::Terrain); a drop (8) and a low thing (9) are see-through
 UNWALKABLE = {2, 4, 7, 8, 9}  # water, rock, wall, drop, low
 # The player's combat input (docs/COMBAT.md): refusals are recorded and told through
@@ -863,7 +866,9 @@ class Run:
                     # Whom my character knows by name (owner-known): itself among them, names only.
                     and mine <= {k['id'] for k in p['my_known_names']} and all(isinstance(k['name'], str) and k['name'] for k in p['my_known_names'])
                     # My body sex (sex-1): one row, my character's, "female" or "male".
-                    and [r['id'] for r in p['my_sex']] == sorted(mine) and all(r['sex'] in ('female', 'male') for r in p['my_sex']))
+                    and [r['id'] for r in p['my_sex']] == sorted(mine) and all(r['sex'] in ('female', 'male') for r in p['my_sex'])
+                    # What my character saw inside stores (perception parity): only my character's rows.
+                    and set(p['my_seen_stores']) <= mine)
         anonymous = own['anonymous']['final']['perception']
         spoke = {l: v['final']['perception']['my_heard'] for l, v in own.items() if l != 'anonymous'}
         # Breath and focus (docs/STAMINA.md): each player's own row carries the pools, rested

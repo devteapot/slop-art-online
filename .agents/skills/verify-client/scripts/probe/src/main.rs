@@ -48,7 +48,7 @@ macro_rules! primary_tables {
             routine, routine_stat, cue, script, community, membership, join_request, genome,
             practice, land, settlement, lot, fighter, skill_card, act_card, speech_card, doing, weather, law_override,
             seen_bodies, seen_characters, seen_fighters, seen_doing, seen_bodies_near, seen_bodies_far, seen_fighters_near, seen_fighters_far, seen_doing_near, seen_doing_far, seen_character_copy, seen_fighter_copy, experience_copy, my_body, my_fighter, my_doing, my_characters, my_vitals,
-            my_experience, my_places, my_inventory, my_know_how, my_offers, my_heard, my_senses, my_senses_v_2, my_earshot, my_act_outcomes, my_known_names, my_sex, seen_throng);
+            my_experience, my_places, my_inventory, my_know_how, my_offers, my_heard, my_senses, my_senses_v_2, my_earshot, my_act_outcomes, my_known_names, my_sex, my_seen_stores, seen_throng);
     };
 }
 
@@ -204,7 +204,8 @@ fn snapshot(c: &DbConnection) -> Value {
         my_earshot,
         my_act_outcomes,
         my_known_names,
-        my_sex
+        my_sex,
+        my_seen_stores
     );
     // What the perception views returned to this identity (docs/PERCEPTION.md).
     let ids = |v: Vec<u32>| { let mut v = v; v.sort_unstable(); v };
@@ -239,6 +240,8 @@ fn snapshot(c: &DbConnection) -> Value {
         "my_known_names": c.db.my_known_names().iter().map(|r| json!({"id":r.id,"name":r.name})).collect::<Vec<_>>(),
         // My own body sex (sex-1): "female" or "male".
         "my_sex": c.db.my_sex().iter().map(|r| json!({"id":r.id,"sex":r.sex})).collect::<Vec<_>>(),
+        // What my character saw inside stores (perception parity; empty with the law off): its rows' actor.
+        "my_seen_stores": ids(c.db.my_seen_stores().iter().map(|r| r.actor).collect()),
         // What I hear and do not see (only while the world's `fov_on` law is on): no id.
         "heard_sounds": c.db.heard_sounds().iter().map(|r| json!({"key":r.key.to_string(),"kind":r.kind,"bearing":r.bearing,"band":r.band})).collect::<Vec<_>>(),
         // Who heard my own lines: speaker and line of each row (docs/COMMUNICATION.md §6).

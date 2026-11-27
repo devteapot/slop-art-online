@@ -251,6 +251,7 @@ pub mod my_places_table;
 pub mod my_readiness_table;
 pub mod my_record_type;
 pub mod my_records_table;
+pub mod my_seen_stores_table;
 pub mod my_senses_table;
 pub mod my_senses_v_2_table;
 pub mod my_sex_table;
@@ -346,6 +347,8 @@ pub mod seen_fighters_near_table;
 pub mod seen_fighters_table;
 pub mod seen_stock_table;
 pub mod seen_stock_type;
+pub mod seen_store_table;
+pub mod seen_store_type;
 pub mod seen_structures_table;
 pub mod seen_structures_type;
 pub mod seen_throng_table;
@@ -666,6 +669,7 @@ pub use my_places_table::*;
 pub use my_readiness_table::*;
 pub use my_record_type::MyRecord;
 pub use my_records_table::*;
+pub use my_seen_stores_table::*;
 pub use my_senses_table::*;
 pub use my_senses_v_2_table::*;
 pub use my_sex_table::*;
@@ -761,6 +765,8 @@ pub use seen_fighters_near_table::*;
 pub use seen_fighters_table::*;
 pub use seen_stock_table::*;
 pub use seen_stock_type::SeenStock;
+pub use seen_store_table::*;
+pub use seen_store_type::SeenStore;
 pub use seen_structures_table::*;
 pub use seen_structures_type::SeenStructures;
 pub use seen_throng_table::*;
@@ -1630,6 +1636,7 @@ pub struct DbUpdate {
     my_places: __sdk::TableUpdate<Place>,
     my_readiness: __sdk::TableUpdate<Readiness>,
     my_records: __sdk::TableUpdate<MyRecord>,
+    my_seen_stores: __sdk::TableUpdate<SeenStore>,
     my_senses: __sdk::TableUpdate<CharacterSenses>,
     my_senses_v_2: __sdk::TableUpdate<AppliedGaze>,
     my_sex: __sdk::TableUpdate<MySex>,
@@ -1675,6 +1682,7 @@ pub struct DbUpdate {
     seen_fighters_far: __sdk::TableUpdate<Fighter>,
     seen_fighters_near: __sdk::TableUpdate<Fighter>,
     seen_stock: __sdk::TableUpdate<SeenStock>,
+    seen_store: __sdk::TableUpdate<SeenStore>,
     seen_structures: __sdk::TableUpdate<SeenStructures>,
     seen_throng: __sdk::TableUpdate<SeenThrong>,
     settlement: __sdk::TableUpdate<Settlement>,
@@ -2016,6 +2024,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "my_records" => db_update
                     .my_records
                     .append(my_records_table::parse_table_update(table_update)?),
+                "my_seen_stores" => db_update
+                    .my_seen_stores
+                    .append(my_seen_stores_table::parse_table_update(table_update)?),
                 "my_senses" => db_update
                     .my_senses
                     .append(my_senses_table::parse_table_update(table_update)?),
@@ -2151,6 +2162,9 @@ impl TryFrom<__ws::v2::TransactionUpdate> for DbUpdate {
                 "seen_stock" => db_update
                     .seen_stock
                     .append(seen_stock_table::parse_table_update(table_update)?),
+                "seen_store" => db_update
+                    .seen_store
+                    .append(seen_store_table::parse_table_update(table_update)?),
                 "seen_structures" => db_update
                     .seen_structures
                     .append(seen_structures_table::parse_table_update(table_update)?),
@@ -2594,6 +2608,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.seen_stock = cache
             .apply_diff_to_table::<SeenStock>("seen_stock", &self.seen_stock)
             .with_updates_by_pk(|row| &row.id);
+        diff.seen_store = cache
+            .apply_diff_to_table::<SeenStore>("seen_store", &self.seen_store)
+            .with_updates_by_pk(|row| &row.id);
         diff.seen_structures = cache
             .apply_diff_to_table::<SeenStructures>("seen_structures", &self.seen_structures)
             .with_updates_by_pk(|row| &row.id);
@@ -2721,6 +2738,9 @@ impl __sdk::DbUpdate for DbUpdate {
         diff.my_readiness =
             cache.apply_diff_to_table::<Readiness>("my_readiness", &self.my_readiness);
         diff.my_records = cache.apply_diff_to_table::<MyRecord>("my_records", &self.my_records);
+        diff.my_seen_stores = cache
+            .apply_diff_to_table::<SeenStore>("my_seen_stores", &self.my_seen_stores)
+            .with_updates_by_pk(|row| &row.id);
         diff.my_senses = cache
             .apply_diff_to_table::<CharacterSenses>("my_senses", &self.my_senses)
             .with_updates_by_pk(|row| &row.id);
@@ -3078,6 +3098,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_records" => db_update
                     .my_records
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "my_seen_stores" => db_update
+                    .my_seen_stores
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "my_senses" => db_update
                     .my_senses
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
@@ -3212,6 +3235,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_stock" => db_update
                     .seen_stock
+                    .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
+                "seen_store" => db_update
+                    .seen_store
                     .append(__sdk::parse_row_list_as_inserts(table_rows.rows)?),
                 "seen_structures" => db_update
                     .seen_structures
@@ -3613,6 +3639,9 @@ impl __sdk::DbUpdate for DbUpdate {
                 "my_records" => db_update
                     .my_records
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "my_seen_stores" => db_update
+                    .my_seen_stores
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "my_senses" => db_update
                     .my_senses
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
@@ -3747,6 +3776,9 @@ impl __sdk::DbUpdate for DbUpdate {
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "seen_stock" => db_update
                     .seen_stock
+                    .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
+                "seen_store" => db_update
+                    .seen_store
                     .append(__sdk::parse_row_list_as_deletes(table_rows.rows)?),
                 "seen_structures" => db_update
                     .seen_structures
@@ -3946,6 +3978,7 @@ pub struct AppliedDiff<'r> {
     my_places: __sdk::TableAppliedDiff<'r, Place>,
     my_readiness: __sdk::TableAppliedDiff<'r, Readiness>,
     my_records: __sdk::TableAppliedDiff<'r, MyRecord>,
+    my_seen_stores: __sdk::TableAppliedDiff<'r, SeenStore>,
     my_senses: __sdk::TableAppliedDiff<'r, CharacterSenses>,
     my_senses_v_2: __sdk::TableAppliedDiff<'r, AppliedGaze>,
     my_sex: __sdk::TableAppliedDiff<'r, MySex>,
@@ -3991,6 +4024,7 @@ pub struct AppliedDiff<'r> {
     seen_fighters_far: __sdk::TableAppliedDiff<'r, Fighter>,
     seen_fighters_near: __sdk::TableAppliedDiff<'r, Fighter>,
     seen_stock: __sdk::TableAppliedDiff<'r, SeenStock>,
+    seen_store: __sdk::TableAppliedDiff<'r, SeenStore>,
     seen_structures: __sdk::TableAppliedDiff<'r, SeenStructures>,
     seen_throng: __sdk::TableAppliedDiff<'r, SeenThrong>,
     settlement: __sdk::TableAppliedDiff<'r, Settlement>,
@@ -4245,6 +4279,11 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<MyRecord>("my_records", &self.my_records, event);
+        callbacks.invoke_table_row_callbacks::<SeenStore>(
+            "my_seen_stores",
+            &self.my_seen_stores,
+            event,
+        );
         callbacks.invoke_table_row_callbacks::<CharacterSenses>(
             "my_senses",
             &self.my_senses,
@@ -4378,6 +4417,7 @@ impl<'r> __sdk::AppliedDiff<'r> for AppliedDiff<'r> {
             event,
         );
         callbacks.invoke_table_row_callbacks::<SeenStock>("seen_stock", &self.seen_stock, event);
+        callbacks.invoke_table_row_callbacks::<SeenStore>("seen_store", &self.seen_store, event);
         callbacks.invoke_table_row_callbacks::<SeenStructures>(
             "seen_structures",
             &self.seen_structures,
@@ -5179,6 +5219,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         my_places_table::register_table(client_cache);
         my_readiness_table::register_table(client_cache);
         my_records_table::register_table(client_cache);
+        my_seen_stores_table::register_table(client_cache);
         my_senses_table::register_table(client_cache);
         my_senses_v_2_table::register_table(client_cache);
         my_sex_table::register_table(client_cache);
@@ -5224,6 +5265,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         seen_fighters_far_table::register_table(client_cache);
         seen_fighters_near_table::register_table(client_cache);
         seen_stock_table::register_table(client_cache);
+        seen_store_table::register_table(client_cache);
         seen_structures_table::register_table(client_cache);
         seen_throng_table::register_table(client_cache);
         settlement_table::register_table(client_cache);
@@ -5355,6 +5397,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "my_places",
         "my_readiness",
         "my_records",
+        "my_seen_stores",
         "my_senses",
         "my_senses_v_2",
         "my_sex",
@@ -5400,6 +5443,7 @@ impl __sdk::SpacetimeModule for RemoteModule {
         "seen_fighters_far",
         "seen_fighters_near",
         "seen_stock",
+        "seen_store",
         "seen_structures",
         "seen_throng",
         "settlement",
