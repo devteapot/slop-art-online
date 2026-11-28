@@ -3,8 +3,9 @@
 //! - **Render scale ([`RenderScale`]):** renders the 3D scene (`Camera3d`, depth/normal prepass,
 //!   shell outlines, `Edges`, `Bloom`, tonemapping, `Smaa`) into a scaled offscreen sRGB target and
 //!   composites it onto the native output via a `Camera2d` + fullscreen [`UpscaleMaterial`] node
-//!   (`upscale.wesl`: Catmull-Rom resampling plus light contrast-adaptive sharpening, so ink lines
-//!   and eyes survive the non-integer stretch), keeping Bevy UI and HUD text razor-sharp at native
+//!   (`upscale.wesl`: Catmull-Rom resampling and contrast-adaptive sharpening in gamma 2, clamped
+//!   to the nearest source texels, so ink lines and eyes survive the non-integer stretch without
+//!   ringing), keeping Bevy UI and HUD text razor-sharp at native
 //!   resolution. At the default `100%` (or
 //!   `Auto` at ≤1440 px height), no offscreen image or extra pass is created — `Camera3d` renders
 //!   directly to the window or headless capture target, bit-for-bit identical to pre-Step-4 output.
@@ -18,9 +19,9 @@
 //! - `LIVING_GAME_QUALITY=low|medium|high`
 //! - `LIVING_GAME_PERF` flags (`nobloom`, `bloom=full|half|quarter|off`,
 //!   `shadowfilter=hw|gaussian`, `shadowmap=N`, `cascades=N`, `firstcascade=M`, `shadowfar=M`)
-//!   always override [`Quality`] for isolated pass benchmarking; `upscale=bilinear` composites a
-//!   scaled picture with plain bilinear filtering and `sharpen=S` sets the CAS sharpness (0–1,
-//!   default [`Upscale::SHARPNESS`]), for A/B stills and cost measurement.
+//!   always override [`Quality`] for isolated pass benchmarking; `upscale=bilinear|clamped|
+//!   clamped-cas` composites a scaled picture with another [`UpscaleFilter`] and `sharpen=S` sets
+//!   the CAS sharpness (0–1, default [`Upscale::SHARPNESS`]), for A/B stills and cost measurement.
 
 use bevy::asset::embedded_asset;
 use bevy::camera::{ImageRenderTarget, RenderTarget};
@@ -271,9 +272,10 @@ struct ScaledBackdrop;
 /// How a scaled 3D picture is drawn onto the native output (`upscale.wesl`).
 #[derive(Resource, Clone, Copy, PartialEq, Debug)]
 pub struct Upscale {
-    /// Catmull-Rom + CAS (true), or plain bilinear (`LIVING_GAME_PERF=upscale=bilinear`, A/B only).
-    pub sharpen: bool,
-    /// CAS sharpness, 0 (least) to 1 (most).
+    /// The filter: [`UpscaleFilter::CasClamped`] by default; the others for A/B only
+    /// (`LIVING_GAME_PERF=upscale=bilinear|clamped|clamped-cas|cas-clamped`).
+    pub filter: UpscaleFilter,
+    /// CAS sharpness, 0 (least) to 1 (most), for the filters that sharpen (`sharpen=S`).
     pub sharpness: f32,
     /// Whether a scaled picture is being composited now (false at 100%: no extra pass).
     pub active: bool,
@@ -281,24 +283,56 @@ pub struct Upscale {
     pub factor: f32,
 }
 
+/// The composite's filter. All but `Bilinear` filter in gamma 2 (sqrt of linear) and clamp to the
+/// 2x2 nearest source texels; see `upscale.wesl`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum UpscaleFilter {
+    /// Step 4's plain bilinear.
+    Bilinear,
+    /// Catmull-Rom, clamped: right ink and no halo, but soft (0.6-0.75x 100%'s detail).
+    Clamped,
+    /// Catmull-Rom, clamped, then CAS: rings again though in gamma 2 (ink near black, halos).
+    ClampedCas,
+    /// Catmull-Rom, then CAS (its cross: the Catmull-Rom ring taps), then clamped (the default).
+    CasClamped,
+}
+
 impl Upscale {
-    /// Default CAS sharpness: AMD's lightest (0 still sharpens, a peak of -1/8). On live 2x
-    /// captures (look-dev 4b) Catmull-Rom with it brought Auto's line and eye detail back to 100%
-    /// (Laplacian 0.99-1.15x of 100%, bilinear 0.53-0.65x); 0.3 overshot (up to 1.32x, beading).
-    pub const SHARPNESS: f32 = 0.0;
+    /// Default CAS sharpness: full strength, safe because the clamp follows it. On live 2x
+    /// captures (look-dev 4c) Auto keeps 100%'s ink colour (43,28,25) with no halo and a Laplacian
+    /// of 0.88-1.08x 100%'s; 4b's unclamped linear filter took the ink to (6,0,0), (39,8,0) at
+    /// night, with halos. CAS 0 under the clamp stays soft (0.79-0.94x).
+    pub const SHARPNESS: f32 = 1.0;
 
     fn from_env() -> Upscale {
-        let bilinear = crate::perf::string("upscale").is_some_and(|v| v.eq_ignore_ascii_case("bilinear"));
+        let filter = match crate::perf::string("upscale").map(|v| v.to_ascii_lowercase()).as_deref() {
+            Some("bilinear") => UpscaleFilter::Bilinear,
+            Some("clamped-cas") => UpscaleFilter::ClampedCas,
+            Some("cas-clamped") => UpscaleFilter::CasClamped,
+            Some("clamped") => UpscaleFilter::Clamped,
+            _ => UpscaleFilter::CasClamped,
+        };
         let sharpness = crate::perf::value("sharpen").map_or(Self::SHARPNESS, |v| v.clamp(0.0, 1.0));
-        Upscale { sharpen: !bilinear, sharpness, active: false, factor: 1.0 }
+        Upscale { filter, sharpness, active: false, factor: 1.0 }
     }
 
     pub fn method(self) -> &'static str {
-        if self.sharpen { "catmull-rom+cas" } else { "bilinear" }
+        match self.filter {
+            UpscaleFilter::Bilinear => "bilinear",
+            UpscaleFilter::Clamped => "catmull-rom-clamped",
+            UpscaleFilter::ClampedCas => "catmull-rom-clamped+cas",
+            UpscaleFilter::CasClamped => "catmull-rom+cas-clamped",
+        }
     }
 
     fn params(self) -> Vec4 {
-        Vec4::new(self.sharpness, if self.sharpen { 1.0 } else { 0.0 }, 0.0, 0.0)
+        let (filtered, variant) = match self.filter {
+            UpscaleFilter::Bilinear => (0.0, 0.0),
+            UpscaleFilter::Clamped => (1.0, 0.0),
+            UpscaleFilter::ClampedCas => (1.0, 1.0),
+            UpscaleFilter::CasClamped => (1.0, 2.0),
+        };
+        Vec4::new(self.sharpness, filtered, variant, 0.0)
     }
 }
 
@@ -626,6 +660,17 @@ fn apply_quality(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn upscale_filters_map_to_shader_variants() {
+        // `upscale.wesl`: y 0 plain bilinear; z 0 clamped, 1 clamped then CAS, 2 CAS then clamped.
+        let p = |filter| Upscale { filter, sharpness: Upscale::SHARPNESS, active: false, factor: 1.0 }.params();
+        assert_eq!(p(UpscaleFilter::CasClamped), Vec4::new(1.0, 1.0, 2.0, 0.0));
+        assert_eq!(p(UpscaleFilter::Clamped).z, 0.0);
+        assert_eq!(p(UpscaleFilter::ClampedCas).z, 1.0);
+        assert_eq!(p(UpscaleFilter::Bilinear).y, 0.0);
+        assert_eq!(Upscale { filter: UpscaleFilter::CasClamped, sharpness: 1.0, active: true, factor: 1.0 }.method(), "catmull-rom+cas-clamped");
+    }
 
     #[test]
     fn defaults_match_pre_step4_main() {
