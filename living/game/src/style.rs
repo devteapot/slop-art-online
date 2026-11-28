@@ -953,11 +953,28 @@ const FACE_OUTLINE_SCALE: f32 = 0.42;
 /// line breaks into dashes (dev-box's 1x 75% check: Portrait 0.61 px and Near 0.94 px before the
 /// floor); from one pixel on, every row or column the edge crosses keeps an ink pixel.
 const LD_MIN_RENDER_PX: f32 = 1.0;
+/// The thinnest a Classic close-up/Near character shell may be in pixels of a scaled 3D render
+/// target (`Upscale::active`, i.e. render scales below 100%). Classic's 1x 100% Portrait width is
+/// 1.75 render px (2 render px on 75% of rows); at 1x 75% it falls to 1.3125 render px (1 render
+/// px on 69% of rows), where SMAA running in linear light on the scaled target blends a 1-px dark
+/// line between bright noon surfaces toward grey (dev-box 1x 75% Classic noon Portrait: ink
+/// (43,28,26) -> (53,42,36), right-hair coverage 93.4% -> 68.9%). Raising the scaled floor to
+/// `base.clamp(LD_MIN_RENDER_PX, CLASSIC_MIN_RENDER_PX)` keeps Portrait/Near >= 1.5 render px
+/// (2.0 logical px at 1x 75%), keeps Far tapered (>= 1.125 render px = 1.5 logical px at 30 m),
+/// leaves 2x Retina untouched at every scale, and — gated to `scaled` — keeps 100% bit-identical
+/// to main.
+const CLASSIC_MIN_RENDER_PX: f32 = 1.5;
 
-fn person_width(style: &Style, distance: f32) -> f32 {
+pub(crate) fn person_width(style: &Style, distance: f32, px_per_logical: f32, scaled: bool) -> f32 {
     let t = ((distance - PERSON_NEAR) / (PERSON_FAR - PERSON_NEAR)).clamp(0.0, 1.0);
     let w = style.outline_people * (1.0 - (1.0 - PERSON_THIN) * t);
-    (w * 8.0).round() / 8.0
+    let base = (w * 8.0).round() / 8.0;
+    if !scaled || base <= 0.0 {
+        return base;
+    }
+    let min_px = base.clamp(LD_MIN_RENDER_PX, CLASSIC_MIN_RENDER_PX);
+    let floor = ((min_px / px_per_logical.max(0.01)) * 8.0).ceil() / 8.0;
+    base.max(floor)
 }
 
 /// Look-dev character outline distance curve (step 2.3):
@@ -1026,6 +1043,7 @@ pub(crate) fn ld_outline_color(atmo: Option<&crate::daylight::Atmo>, style: &Sty
 fn fog_outlines(
     style: Res<Style>,
     atmo: Option<Res<crate::daylight::Atmo>>,
+    upscale: Option<Res<crate::graphics::Upscale>>,
     cams: Query<(&GlobalTransform, &DistanceFog, &Camera), With<Camera3d>>,
     mut outlines: Query<(&Outlined, &mut OutlineVolume, &GlobalTransform, Option<&InheritedVisibility>, Option<&bevy::mesh::MeshTag>, Has<crate::lookdev::FacePart>, Option<&OutlineScale>)>,
     (edge, target): (Option<Res<crate::sightedge::SightEdge>>, Option<Res<crate::controls::Target>>),
@@ -1039,6 +1057,7 @@ fn fog_outlines(
     let want_col = if style.look.on { ld_outline_color(atmo.as_deref(), &style) } else { Color::srgb(cr, cg, cb) };
     // The 3D target's pixels per logical pixel: the display's scale times the render scale.
     let px_per_logical = camera.target_scaling_factor().unwrap_or(1.0);
+    let scaled = upscale.is_some_and(|u| u.active);
     // Limited view fogs round my character, not by the camera's distance (sightedge.rs).
     let limit = edge.and_then(|e| e.outline_limit(target.and_then(|t| t.0)));
     for (kind, mut o, g, shown, tag, face_part, scale) in &mut outlines {
@@ -1059,7 +1078,7 @@ fn fog_outlines(
                     let submesh = scale.map_or(if face_part { FACE_OUTLINE_SCALE } else { 1.0 }, |s| if face_part { s.0.min(FACE_OUTLINE_SCALE) } else { s.0 });
                     ld_person_width(&style, d, submesh, px_per_logical)
                 } else {
-                    person_width(&style, d)
+                    person_width(&style, d, px_per_logical, scaled)
                 };
                 if o.width != w {
                     o.width = w;
@@ -1189,6 +1208,41 @@ mod tests {
         assert_eq!(ld_person_width(&s, 1.4, 1.0, 0.75), 1.375);
         // Widths over the floor are left as they are.
         assert_eq!(ld_person_width(&s, 9.4, 1.0, 0.75), ld_person_width(&s, 9.4, 1.0, 2.0));
+    }
+
+    #[test]
+    fn classic_outline_floor_binds_only_when_scaled() {
+        let s = Style::default();
+        // At 100% (scaled = false), every distance matches main's original curve at 1x and 2x.
+        for d in [0.8, 1.4, 8.0, 10.3, 14.1, 22.0, 28.0, 40.0] {
+            let t = ((d - PERSON_NEAR) / (PERSON_FAR - PERSON_NEAR)).clamp(0.0, 1.0);
+            let want = ((s.outline_people * (1.0 - (1.0 - PERSON_THIN) * t)) * 8.0).round() / 8.0;
+            assert_eq!(person_width(&s, d, 1.0, false), want, "1x 100% d={d}");
+            assert_eq!(person_width(&s, d, 2.0, false), want, "2x 100% d={d}");
+            // On 2x Retina, even reduced render scales stay above the floor so every width is unchanged.
+            for px in [1.70, 1.50, 2.0 * 1440.0 / 1898.0, 1.34] {
+                assert_eq!(person_width(&s, d, px, true), want, "2x scaled px={px} d={d}");
+            }
+        }
+        // At 1x below 100%, close-up/Near stay >= 1.5 render px, Far stays >= 1 render px and tapered.
+        for px in [0.85, 0.75, 0.67] {
+            let portrait = person_width(&s, 1.4, px, true);
+            let near = person_width(&s, 10.3, px, true);
+            let far = person_width(&s, 30.0, px, true);
+            assert!(portrait * px >= CLASSIC_MIN_RENDER_PX - 1e-4, "1x {px} portrait: {portrait}");
+            assert!(near * px >= CLASSIC_MIN_RENDER_PX - 1e-4, "1x {px} near: {near}");
+            assert!(far * px >= LD_MIN_RENDER_PX - 1e-4, "1x {px} far: {far}");
+            assert!(portrait > far, "1x {px}: portrait ({portrait}) stays heavier than far ({far})");
+        }
+        // dev-box's case: 1x 75% Portrait/Near lift from 1.75 (1.31 rpx) to 2.0 logical (1.50 rpx);
+        // Far lifts from 1.125 (0.84 rpx) to 1.5 logical (1.125 rpx).
+        assert_eq!(person_width(&s, 1.4, 0.75, true), 2.0);
+        assert_eq!(person_width(&s, 10.3, 0.75, true), 2.0);
+        assert_eq!(person_width(&s, 30.0, 0.75, true), 1.5);
+
+        // Zero width stays off even when scaled.
+        let off = Style { outline_people: 0.0, ..s };
+        assert_eq!(person_width(&off, 1.4, 0.75, true), 0.0);
     }
 
     #[test]
