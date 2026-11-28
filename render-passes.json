@@ -657,6 +657,36 @@
     ],
     "set": "eab260ef1df8"
   },
+  "dc0d845df8e42d6be31d4423551562dc5414a505": {
+    "at": "2026-11-28T11:15:56+01:00",
+    "base": "300ce79d4be2a7a369b06c186184c07c0cbde7c8",
+    "cases": {
+      "body-clock": "pass",
+      "camera-faces": "pass",
+      "camera-lod": "pass",
+      "far": "pass",
+      "hair": "pass",
+      "looks": "pass",
+      "seat": "pass"
+    },
+    "evidence": "/home/carlid/.t3/worktrees/slop-art-online/coord-devbox-a85b508681228e52/.local/living/verify/gate-1128110459-bf0506",
+    "halves": [
+      "character",
+      "camera",
+      "ui"
+    ],
+    "head": "368db973d23462e200195ac51eab4eb8ea15dd35",
+    "host": "dev-box",
+    "load": [
+      {
+        "end": 4.03,
+        "group": "render",
+        "start": 9.84,
+        "tag": "a-render"
+      }
+    ],
+    "set": "eab260ef1df8"
+  },
   "ddfbf8390bb0730d08e9af76bd62371fc287a292": {
     "at": "2026-11-22T20:34:42+01:00",
     "base": "a42d6f9c39eae8245b5b0b42821a9ad493b0d4f8",
