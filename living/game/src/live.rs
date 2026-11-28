@@ -1459,7 +1459,7 @@ fn script(
     mut out: ResMut<crate::ui::model::Outbox>,
     (mut skills, mut gestures, mut verbs, mut talk): (ResMut<crate::combat::Scripted>, ResMut<crate::town::Scripted>, ResMut<crate::verbs::Scripted>, ResMut<crate::talk::Talk>),
     (hud, loading, mut pointer): (Res<crate::ui::model::HudModel>, Option<Res<crate::loading::Loading>>, ResMut<crate::pointer::Pointer>),
-    (target, mut sight, mut shine, mut light, mut rim, mut outline_weight): (Option<Res<crate::capture::Target>>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<crate::style::HairShine>, ResMut<crate::style::Look>, ResMut<crate::style::CharRim>, ResMut<crate::style::OutlineWeight>),
+    (target, mut sight, mut shine, mut light, mut rim, mut outline_weight, mut grade): (Option<Res<crate::capture::Target>>, Option<ResMut<crate::sightedge::SightEdge>>, ResMut<crate::style::HairShine>, ResMut<crate::style::Look>, ResMut<crate::style::CharRim>, ResMut<crate::style::OutlineWeight>, ResMut<crate::post::Grade>),
     (mut keys, mut buttons, mut motion, mut rotation): (
         ResMut<ButtonInput<KeyCode>>, ResMut<ButtonInput<MouseButton>>,
         ResMut<bevy::input::mouse::AccumulatedMouseMotion>, MessageWriter<bevy::input::gestures::RotationGesture>,
@@ -1819,6 +1819,16 @@ fn script(
                     info!("outline weight: {arg}");
                 }
                 None => warn!("live script: no outline weight {arg:?}"),
+            }
+            true
+        }
+        "grade" => {
+            match crate::post::Grade::parse(arg) {
+                Some(x) => {
+                    *grade = x;
+                    info!("colour grade: {arg}");
+                }
+                None => warn!("live script: no colour grade {arg:?}"),
             }
             true
         }

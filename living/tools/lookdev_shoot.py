@@ -155,6 +155,8 @@ def apply_setting_env(env: dict[str, str], args: argparse.Namespace) -> None:
         env["LIVING_GAME_HAIR_SHINE"] = args.hair_shine
     if args.look is not None:
         env["LIVING_GAME_LOOK"] = args.look
+    if args.grade is not None:
+        env["LIVING_GAME_GRADE"] = args.grade
     if args.perf is not None:
         env["LIVING_GAME_PERF"] = args.perf
     for item in args.env:
@@ -542,6 +544,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--hair-shine", choices=("crown", "soft", "today"), default=None, help="LIVING_GAME_HAIR_SHINE.")
     ap.add_argument("--weather", choices=("clear", "rain", "fog", "storm"), default=None, help="LIVING_GAME_WEATHER (default: clear).")
     ap.add_argument("--look", default=None, help="LIVING_GAME_LOOK (look preset, for Step 1+).")
+    ap.add_argument("--grade", choices=("natural", "vivid", "soft"), default=None, help="LIVING_GAME_GRADE (Look-dev colour grade, Step 3).")
     ap.add_argument("--perf", default=None, help="LIVING_GAME_PERF comma flags (e.g. shadowfilter=hw,bloom=half).")
     ap.add_argument("--env", action="append", default=[], help="Extra KEY=VALUE env var (repeatable).")
 

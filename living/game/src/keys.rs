@@ -403,11 +403,13 @@ pub struct Prefs {
     /// Brief glint halfway through a visible hostile fighter's windup (`f >= 0.5`); off by default.
     pub windup_glint: bool,
     /// The light and shading (`style::Look`: classic, lookdev), the character rim
-    /// (`style::CharRim`: off, subtle, strong), and the outline weight (`style::OutlineWeight`:
-    /// fine, standard, bold), once chosen in Settings; none follows the default.
+    /// (`style::CharRim`: off, subtle, strong), the outline weight (`style::OutlineWeight`:
+    /// fine, standard, bold), and the colour grade (`post::Grade`: natural, vivid, soft), once
+    /// chosen in Settings; none follows the default.
     pub light: Option<String>,
     pub char_rim: Option<String>,
     pub outline_weight: Option<String>,
+    pub grade: Option<String>,
     /// Graphics quality tier (`graphics::Quality`: low, medium, high), once chosen in Settings;
     /// none follows the default (high).
     pub quality: Option<String>,
@@ -418,7 +420,7 @@ pub struct Prefs {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Self { camera: crate::camera::Mode::default(), camera_tuning: Default::default(), camera_rotate: true, camera_rotate_speed: 1.0, camera_rotate_invert: false, facing: None, cursor_facing: crate::twist::LookWalk::cursor(), control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, throng: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None, combat_timing: crate::combat::CombatTiming::default(), windup_glint: false, light: None, char_rim: None, outline_weight: None, quality: None, render_scale: None }
+        Self { camera: crate::camera::Mode::default(), camera_tuning: Default::default(), camera_rotate: true, camera_rotate_speed: 1.0, camera_rotate_invert: false, facing: None, cursor_facing: crate::twist::LookWalk::cursor(), control: crate::controls::Control::default(), sight_edge: None, tips: true, auto_draw: true, throng: true, dirty: false, theme: None, look_walk: None, sight_look: None, film: None, hair_shine: None, combat_timing: crate::combat::CombatTiming::default(), windup_glint: false, light: None, char_rim: None, outline_weight: None, grade: None, quality: None, render_scale: None }
     }
 }
 
@@ -509,6 +511,7 @@ pub fn load() -> (Binds, Prefs) {
         light: v["light"].as_str().map(String::from),
         char_rim: v["char_rim"].as_str().map(String::from),
         outline_weight: v["outline_weight"].as_str().map(String::from),
+        grade: v["grade"].as_str().map(String::from),
         quality: v["quality"].as_str().map(String::from),
         render_scale: v["render_scale"].as_str().map(String::from),
     };
@@ -545,6 +548,7 @@ pub fn save(binds: &Binds, prefs: &Prefs) {
         "light": prefs.light,
         "char_rim": prefs.char_rim,
         "outline_weight": prefs.outline_weight,
+        "grade": prefs.grade,
         "quality": prefs.quality,
         "render_scale": prefs.render_scale,
     });

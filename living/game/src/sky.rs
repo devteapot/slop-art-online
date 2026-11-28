@@ -35,11 +35,24 @@ pub struct SkyParams {
     pub light: Vec4,
     /// xy: cloud offset at `time.x`, zw: drift per second.
     pub cloud: Vec4,
-    /// x: the shader clock (wrapped seconds) at the offset.
+    /// x: the shader clock (wrapped seconds) at the offset; y: 1 when Look-dev sky is active
+    /// (`SkyKey`, shader def `LOOKDEV`), 0 in Classic.
     pub time: Vec4,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub struct SkyKey {
+    pub lookdev: bool,
+}
+
+impl From<&Sky> for SkyKey {
+    fn from(s: &Sky) -> Self {
+        SkyKey { lookdev: s.params.time.y > 0.5 }
+    }
+}
+
 #[derive(Asset, TypePath, AsBindGroup, Clone, Default)]
+#[bind_group_data(SkyKey)]
 pub struct Sky {
     #[uniform(0)]
     pub params: SkyParams,
@@ -59,8 +72,9 @@ impl Material for Sky {
     }
 
     // Seen from inside.
-    fn specialize(_: &MaterialPipeline, descriptor: &mut RenderPipelineDescriptor, _: &MeshVertexBufferLayoutRef, _: MaterialPipelineKey<Self>) -> Result<(), SpecializedMeshPipelineError> {
+    fn specialize(_: &MaterialPipeline, descriptor: &mut RenderPipelineDescriptor, _: &MeshVertexBufferLayoutRef, key: MaterialPipelineKey<Self>) -> Result<(), SpecializedMeshPipelineError> {
         descriptor.primitive.cull_mode = None;
+        crate::style::lookdev_def(descriptor, key.bind_group_data.lookdev);
         Ok(())
     }
 }
@@ -91,6 +105,7 @@ fn spawn(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut skies: Re
 #[allow(clippy::type_complexity)]
 pub fn update(
     atmo: Res<Atmo>,
+    look: Res<crate::style::Look>,
     handle: Option<Res<SkyHandle>>,
     mut skies: ResMut<Assets<Sky>>,
     time: Res<Time>,
@@ -109,26 +124,29 @@ pub fn update(
     if !atmo.active {
         return;
     }
+    let lookdev = *look == crate::style::Look::Lookdev;
+    let want_ld = if lookdev { 1.0 } else { 0.0 };
     // Clouds drift with the wind (in cloud-plane units per second).
     let speed = Vec2::new(0.94, 0.34) * (0.004 + 0.012 * atmo.wind);
     drift.0 += speed * time.delta_secs();
     drift.1 += time.delta_secs();
-    if drift.1 < 0.2 && skies.get(&handle.0).is_some_and(|s| s.params.zenith != Vec4::ZERO) {
+    if drift.1 < 0.2 && skies.get(&handle.0).is_some_and(|s| s.params.zenith != Vec4::ZERO && s.params.time.y == want_ld) {
         return;
     }
     drift.1 = 0.0;
     let night = ((atmo.glow - 1.0) / 1.0).clamp(0.0, 1.0);
     let light = Color::srgb(atmo.light[0], atmo.light[1], atmo.light[2]).to_linear();
     let level = (atmo.lux / 9000.0).clamp(0.05, 1.2);
+    let (zen, hor, fog) = if lookdev { (atmo.ld_zenith, atmo.ld_horizon, atmo.ld_fog) } else { (atmo.zenith, atmo.horizon, atmo.fog) };
     let params = SkyParams {
-        zenith: atmo.zenith.extend(atmo.stars),
-        horizon: atmo.horizon.extend(atmo.clouds),
-        fog: atmo.fog.extend(atmo.flash),
+        zenith: zen.extend(atmo.stars),
+        horizon: hor.extend(atmo.clouds),
+        fog: fog.extend(atmo.flash),
         sun: atmo.sun.extend(atmo.rain.min(1.0)),
         moon: atmo.moon.extend(0.0),
         light: Vec4::new(light.red * level, light.green * level, light.blue * level, night),
         cloud: Vec4::new(drift.0.x, drift.0.y, speed.x, speed.y),
-        time: Vec4::new(time.elapsed_secs_wrapped(), 0.0, 0.0, 0.0),
+        time: Vec4::new(time.elapsed_secs_wrapped(), want_ld, 0.0, 0.0),
     };
     if let Some(mut s) = skies.get_mut(&handle.0) {
         s.params = params;
