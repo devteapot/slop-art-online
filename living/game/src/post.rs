@@ -85,7 +85,7 @@ pub struct Edges {
     pub ld_aerial: Vec4,
     /// Aerial depth & grade split: x haze start (m), y haze end (m), z shadow split strength, w highlight split strength.
     pub ld_aerial_range: Vec4,
-    /// Split-tone: rgb cool shadow multiply target (linear), a gentle dark-end anchor toe.
+    /// Split-tone: rgb cool shadow hue target (linear; luminance restored after), a unused.
     pub ld_split_shadow: Vec4,
     /// Split-tone: rgb clean highlight multiply target (linear), a unused.
     pub ld_split_high: Vec4,
@@ -198,9 +198,17 @@ impl Grade {
     }
 }
 
-/// Look-dev Bloom prefilter calibration (Step 3.2): catches sun scatter, sky glow, bright
-/// sun rims and night lanterns without blooming grey stone.
-pub(crate) const LD_BLOOM_THRESHOLD: f32 = 1.05;
+/// Look-dev Bloom prefilter calibration (Step 3.2), by day and at dusk: catches the sun's core and
+/// bright sun rims without blooming grey stone or the bright dusk sky round a low sun, which at
+/// 1.05 flooded foreground silhouettes (pass 2).
+pub(crate) const LD_BLOOM_THRESHOLD: f32 = 1.60;
+/// At full night, a lower threshold for the lanterns' glow (emissive at 6x their glow).
+const LD_BLOOM_THRESHOLD_NIGHT: f32 = 1.05;
+/// Look-dev bloom intensity relative to the profile's (`Grade::bloom_scale` on top), by day and
+/// at full night. Threshold and intensity are uniforms: varying them with the hour never compiles
+/// a bloom pipeline (the threshold stays above 0, so the prefilter key holds).
+const LD_BLOOM_GAIN: f32 = 0.75;
+const LD_BLOOM_GAIN_NIGHT: f32 = 1.30;
 pub(crate) const LD_BLOOM_SOFTNESS: f32 = 0.35;
 
 /// Time-of-day factors `(day, dusk, night)` derived from `Atmo` for Look-dev Step 3 grading,
@@ -218,6 +226,11 @@ fn tod_weights(atmo: Option<&crate::daylight::Atmo>) -> (f32, f32, f32, f32) {
     (day, dusk, night, a.shadow_hue)
 }
 
+/// How fully it is night with no dusk left (0 by day and at dusk, 1 at full night).
+fn full_night(dusk: f32, night: f32) -> f32 {
+    (night - dusk).clamp(0.0, 1.0)
+}
+
 /// Look-dev Bevy `ColorGrading` driven by `Atmo` and [`Grade`] (Step 3.2).
 ///
 /// Uses `ColorGrading::with_identical_sections` so `shadows == midtones == highlights`: Bevy
@@ -233,15 +246,23 @@ fn tod_weights(atmo: Option<&crate::daylight::Atmo>) -> (f32, f32, f32, f32) {
 pub(crate) fn ld_color_grading(atmo: Option<&crate::daylight::Atmo>, grade: Grade, base_sat: f32) -> bevy::render::view::ColorGrading {
     use bevy::render::view::{ColorGrading, ColorGradingGlobal, ColorGradingSection};
     let (day, dusk, night, _) = tod_weights(atmo);
-    let (g_off, gain_off, sat_off, lift_mul) = match grade {
-        Grade::Natural => (0.0, 0.0, 0.0, 1.0),
-        Grade::Vivid => (-0.036, 0.040, 0.11, 1.35),
-        Grade::Soft => (0.030, -0.030, -0.08, 0.50),
+    let (g_off, gain_off, sat_off) = match grade {
+        Grade::Natural => (0.0, 0.0, 0.0),
+        Grade::Vivid => (-0.018, 0.040, 0.11),
+        Grade::Soft => (0.012, -0.030, -0.08),
     };
-    let gamma = (0.985 - 0.015 * day - 0.010 * dusk + g_off).clamp(0.90, 1.04);
+    // Bevy raises to 1 / gamma: below 1 deepens the darks. Kept close to 1 and with no negative
+    // lift, so dark boots, trousers, hair and shadowed cloth keep their cel shading (pass 2: the
+    // stacked lift, toe and low gamma clipped them to black by day and at dusk).
+    let gamma = (0.992 - 0.006 * day - 0.004 * dusk + g_off).clamp(0.90, 1.04);
     let gain = (1.032 + 0.014 * day + 0.012 * dusk + gain_off).clamp(0.98, 1.12);
-    let lift = (-0.0008 * day - 0.0004 * dusk) * lift_mul;
-    let exposure = 0.02 + 0.01 * dusk;
+    // A small positive lift by day and at dusk anchors the darks above black. Look-dev's bloom is
+    // additive with a threshold, so it no longer lays the faint veil over dark pixels that main's
+    // energy-conserving, unthresholded bloom does (measured in pass 2: that veil, not the grade,
+    // was what kept boots and dark cloth above luma 5). Gone by full night, which never crushed.
+    let lift = 0.0022 * (1.0 - full_night(dusk, night));
+    // More light by day, for what taming the soft film took from sunlit stone.
+    let exposure = 0.02 + 0.18 * day + 0.01 * dusk;
     // Always non-zero so Bevy's WHITE_BALANCE pipeline key stays invariant across the day curve.
     let raw_temp = 0.006 * day + 0.008 * dusk - 0.016 * night;
     let temperature = if raw_temp.abs() < 0.001 { 0.001 } else { raw_temp };
@@ -364,40 +385,41 @@ pub fn update(
     // Step 3.1/3.2/3.3 Look-dev uniforms (all zero in Classic).
     let (ld_ao, ld_ao_color, ld_view_x, ld_view_y, ld_view_z, ld_aerial, ld_aerial_range, ld_split_shadow, ld_split_high) = if lookdev {
         let ao_on = on && quality.crevice_ao();
-        let ao_strength = if ao_on { 0.84 + 0.24 * day } else { 0.0 };
+        let ao_strength = if ao_on { 0.72 + 0.16 * day } else { 0.0 };
         let sh_lin = Color::hsv(shadow_hue * 360.0, 0.55, 1.0).to_linear();
         let sh_dir = Vec3::new(sh_lin.red, sh_lin.green, sh_lin.blue).normalize_or(Vec3::new(0.35, 0.42, 0.84));
         // Cool shadow-hue crevice multiply target (never black).
         let ao_tint = (Vec3::new(0.20, 0.24, 0.40) + sh_dir * 0.14).clamp(Vec3::splat(0.16), Vec3::splat(0.62));
-        // Aerial depth haze: cool-tinted mist past ~18.5-27 m (adapts gently to camera focus distance
-        // so foreground characters stay clean at Near/Middle/Far while frame edges recede).
+        // Aerial depth haze: cool-tinted mist from a little behind the camera's focus (at least
+        // 15.5 m) over the next 12 m, so the far part of the Middle and Far frames recedes while
+        // the characters round the focus stay clean (the Near frame ends before it starts).
         let focus_dist = target.as_deref().and_then(|t| t.0).map_or(14.0, |p| gtf.translation().distance(p));
-        let aerial_start = (focus_dist + 4.2).max(18.5);
-        let aerial_end = aerial_start + 28.0;
+        let aerial_start = (focus_dist + 2.6).max(15.5);
+        let aerial_end = aerial_start + 12.0;
         let base_fog = atmo.as_deref().map_or(Vec3::new(0.30, 0.50, 0.78), |a| a.ld_fog);
         let cool_target = Vec3::new(0.24, 0.46, 0.84).lerp(Vec3::new(0.13, 0.16, 0.44), dusk.max(night * 0.75))
             .lerp(Vec3::new(0.035, 0.068, 0.18), night);
         let aerial_col = base_fog.lerp(cool_target, (0.50 + 0.25 * dusk).min(0.85));
-        let aerial_alpha = (0.28 + 0.16 * dusk + 0.20 * night).min(0.50);
+        let aerial_alpha = 0.21 + 0.09 * dusk.max(night);
         let split_mul = match *grade {
             Grade::Natural => 1.0,
-            Grade::Vivid => 1.50,
+            Grade::Vivid => 1.35,
             Grade::Soft => 0.48,
         };
-        let sh_split = (0.32 + 0.16 * dusk - 0.10 * night) * split_mul;
+        // The shadow split moves hue only: `edges.wesl` restores each pixel's luminance after it.
+        let sh_split = (0.22 + 0.10 * dusk) * split_mul;
         let hi_split = (0.28 + 0.12 * dusk - 0.12 * night) * split_mul;
-        let split_shadow = Vec3::new(0.88, 0.94, 1.12).lerp(Vec3::new(0.85, 0.90, 1.16), dusk).lerp(Vec3::new(0.92, 0.97, 1.08), night);
+        let split_shadow = Vec3::new(0.93, 0.97, 1.09).lerp(Vec3::new(0.91, 0.95, 1.12), dusk).lerp(Vec3::new(0.92, 0.97, 1.08), night);
         let split_high = Vec3::new(1.035, 1.008, 0.962).lerp(Vec3::new(1.055, 1.005, 0.940), dusk).lerp(Vec3::new(0.96, 0.99, 1.04), night);
-        let toe = (0.0020 * day + 0.0010 * dusk) * split_mul;
         (
-            Vec4::new(ao_strength, 0.74, 20.0, 32.0),
+            Vec4::new(ao_strength, 0.52, 20.0, 32.0),
             ao_tint.extend(proj_scale),
             gtf.right().as_vec3().extend(tan_x),
             gtf.up().as_vec3().extend(tan_y),
             gtf.back().as_vec3().extend(1.0),
             aerial_col.extend(if on { aerial_alpha } else { 0.0 }),
             Vec4::new(aerial_start, aerial_end, sh_split, hi_split),
-            split_shadow.extend(toe),
+            split_shadow.extend(0.0),
             split_high.extend(0.0),
         )
     } else {
@@ -438,12 +460,14 @@ pub fn update(
     }
     if let Some(mut b) = bloom {
         if lookdev {
-            let want_intensity = s.bloom * grade.bloom_scale() * 1.15;
+            let nb = full_night(dusk, night);
+            let want_intensity = s.bloom * grade.bloom_scale() * (LD_BLOOM_GAIN + (LD_BLOOM_GAIN_NIGHT - LD_BLOOM_GAIN) * nb);
             if b.intensity != want_intensity {
                 b.intensity = want_intensity;
             }
-            if b.prefilter.threshold != LD_BLOOM_THRESHOLD {
-                b.prefilter.threshold = LD_BLOOM_THRESHOLD;
+            let want_threshold = LD_BLOOM_THRESHOLD + (LD_BLOOM_THRESHOLD_NIGHT - LD_BLOOM_THRESHOLD) * nb;
+            if b.prefilter.threshold != want_threshold {
+                b.prefilter.threshold = want_threshold;
             }
             if b.prefilter.threshold_softness != LD_BLOOM_SOFTNESS {
                 b.prefilter.threshold_softness = LD_BLOOM_SOFTNESS;

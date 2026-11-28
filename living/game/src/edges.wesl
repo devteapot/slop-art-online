@@ -82,7 +82,7 @@ struct Edges {
     ld_aerial: vec4<f32>,
     // Aerial depth & grade split: x haze start (m), y haze end (m), z shadow split strength, w highlight split strength.
     ld_aerial_range: vec4<f32>,
-    // Split-tone: rgb cool shadow multiply target (linear), a gentle dark-end anchor toe.
+    // Split-tone: rgb cool shadow hue target (linear; luminance restored after), a unused.
     ld_split_shadow: vec4<f32>,
     // Split-tone: rgb clean highlight multiply target (linear), a unused.
     ld_split_high: vec4<f32>,
@@ -504,6 +504,10 @@ fn view_pos_at(px: vec2<i32>, raw_d: f32) -> vec3<f32> {
 
 // Look-dev Step 3.1: lightweight 6-tap view-space depth-horizon crevice AO (High quality only).
 // Reuses the already-bound depth and normal prepass textures with zero extra render target.
+// The crevice AO's overall gain on the knee'd occlusion (pass 2: tuned so stone creases keep
+// about the grounding they had before the knee and the tighter radius).
+const AO_GAIN: f32 = 8.0;
+
 @if(CREVICE_AO)
 fn crevice_ao(px: vec2<i32>, d0: f32, raw_depth: f32, n0: vec3<f32>) -> f32 {
     let strength = edges.ld_ao.x;
@@ -517,7 +521,8 @@ fn crevice_ao(px: vec2<i32>, d0: f32, raw_depth: f32, n0: vec3<f32>) -> f32 {
     }
     let radius = edges.ld_ao.y;
     let px_per_m = select(edges.ld_ao_color.a / max(d0, 0.4), edges.ld_ao_color.a, edges.params.w < 0.0);
-    let max_px = edges.screen.y * 0.060;
+    // Capped at 2.8% of the frame height, so a close-up never samples far past a limb.
+    let max_px = edges.screen.y * 0.028;
     let r_px = clamp(radius * px_per_m, 2.5, max_px);
     let p0 = view_pos_at(px, raw_depth);
     let nv = normalize(vec3<f32>(
@@ -527,15 +532,19 @@ fn crevice_ao(px: vec2<i32>, d0: f32, raw_depth: f32, n0: vec3<f32>) -> f32 {
     ));
     // Fixed symmetric 6-tap dual-ring (3 inner at 0.42 R, 3 outer at 0.84 R, 60 degrees apart):
     // zero per-pixel checkerboard dither without needing a separate blur pass, and 100% cache-coherent.
+    // The inner ring weighs more than the outer, so the grounding hugs the crease.
     let size = vec2<i32>(edges.screen.xy) - vec2<i32>(1);
     let bias = 0.09 + 0.002 * d0;
-    let max_d = radius * 1.45;
+    let max_d = radius * 1.15;
     let max_d2 = max_d * max_d;
-    let fade_r0 = radius * 0.55;
+    let fade_r0 = radius * 0.35;
     var occ = 0.0;
+    var peak = 0.0;
     for (var i = 0; i < 6; i++) {
         let ang = f32(i) * 1.0471976 + 0.5235988;
-        let frac = select(0.42, 0.84, (i & 1) == 1);
+        let outer = (i & 1) == 1;
+        let frac = select(0.42, 0.84, outer);
+        let ring_w = select(1.3, 0.7, outer);
         let off = vec2<i32>(round(vec2<f32>(cos(ang), sin(ang)) * (r_px * frac)));
         let q = clamp(px + off, vec2<i32>(0), size);
         let dq = textureLoad(depth_texture, q, 0);
@@ -550,9 +559,15 @@ fn crevice_ao(px: vec2<i32>, d0: f32, raw_depth: f32, n0: vec3<f32>) -> f32 {
         let len = sqrt(d2);
         let ndv = dot(nv, v) / len;
         let range_w = 1.0 - smoothstep(fade_r0, max_d, len);
-        occ = occ + max(ndv - bias, 0.0) / (1.0 + d2 * 1.6) * range_w;
+        let tap = max(ndv - bias, 0.0) / (1.0 + d2 * 3.0) * range_w * ring_w;
+        occ = occ + tap;
+        peak = max(peak, tap);
     }
-    return clamp(occ * (strength / 6.0) * 2.5, 0.0, 0.62) * dist_fade;
+    // One-tap knee: drop the strongest tap. An isolated narrow limb (a boot, a shin) fills one tap
+    // and so casts nothing on the ground beside it; a crevice (a wall foot, a stair riser, a lamp
+    // plinth) fills two to four and stays grounded. Continuous in the taps, so no new edges.
+    let crease = max(occ - peak, 0.0);
+    return clamp(crease * (strength / 6.0) * AO_GAIN, 0.0, 0.55) * dist_fade;
 }
 
 @fragment
@@ -571,7 +586,9 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     let n0 = normal(px);
     let raw_depth = textureLoad(depth_texture, clamp(px, vec2(0), vec2<i32>(edges.screen.xy) - vec2(1)), 0);
 @if(CREVICE_AO) {
-    let ao = crevice_ao(px, d0, raw_depth, n0);
+    // Light sources (emissive lantern panes, HDR above ~1) take no occlusion: their recessed
+    // panes would otherwise dim before bloom and lose their night glow.
+    let ao = crevice_ao(px, d0, raw_depth, n0) * (1.0 - smoothstep(0.7, 1.4, luma(color)));
     if (ao > 0.001) {
         color = color * mix(vec3<f32>(1.0), edges.ld_ao_color.rgb, ao);
     }
@@ -706,23 +723,21 @@ fn fragment(in: FullscreenVertexOutput) -> @location(0) vec4<f32> {
     // Look-dev Step 3.3: gentle cool depth-tinted aerial haze beyond ~20-30 m (never touches
     // foreground characters or sky pixels; shade-matched over unseen ground so sight contrast holds).
     if (edges.ld_aerial.a > 0.001 && raw_depth > 1e-7 && d0 > edges.ld_aerial_range.x) {
-        let ht = smoothstep(edges.ld_aerial_range.x, edges.ld_aerial_range.y, d0);
-        let haze_a = pow(ht, 1.35) * edges.ld_aerial.a;
+        let ht = clamp((d0 - edges.ld_aerial_range.x) / max(edges.ld_aerial_range.y - edges.ld_aerial_range.x, 0.1), 0.0, 1.0);
+        let haze_a = pow(ht, 1.1) * edges.ld_aerial.a;
         let haze_c = edges.ld_aerial.rgb * mix(1.0, 0.45, shade_amount);
         color = mix(color, haze_c, haze_a);
     }
 
-    // Look-dev Step 3.2: cool shadow vs warm highlight RGB split-tone and gentle black-end anchor
-    // (complements Bevy's ColorGrading, which is scalar per section in 0.20.1).
+    // Look-dev Step 3.2: cool shadow vs warm highlight RGB split-tone (complements Bevy's
+    // ColorGrading, which is scalar per section in 0.20.1). The shadow split keeps each pixel's
+    // luminance, so warm darks (leather, hair, red cloth) cool in hue without sinking to black.
     let split_l = luma(color);
     let sh_w = (1.0 - smoothstep(0.015, 0.24, split_l)) * edges.ld_aerial_range.z;
     let hi_w = smoothstep(0.28, 0.85, split_l) * edges.ld_aerial_range.w;
-    color = mix(color, color * edges.ld_split_shadow.rgb, sh_w);
+    let cooled = mix(color, color * edges.ld_split_shadow.rgb, sh_w);
+    color = cooled * clamp(split_l / max(luma(cooled), 1e-6), 0.8, 1.25);
     color = mix(color, color * edges.ld_split_high.rgb, hi_w);
-    let toe = edges.ld_split_shadow.a;
-    if (toe > 0.0) {
-        color = max(color - vec3<f32>(toe) * (1.0 - smoothstep(0.0, 0.14, split_l)), vec3<f32>(0.0));
-    }
 }
     return vec4<f32>(color, 1.0);
 }

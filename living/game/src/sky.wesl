@@ -106,9 +106,10 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
 @if(LOOKDEV) {
     // Subtle Mie scatter & bloom-catching corona round the sun (step 3.4, Blue Protocol ref4).
     let dsc = max(ds, 0.0);
-    let mie = pow(dsc, 8.0) * 0.26 + pow(dsc, 44.0) * 0.68 + pow(dsc, 190.0) * 1.35;
+    // Kept mostly under the bloom threshold, so a low sun does not flood foreground silhouettes.
+    let mie = pow(dsc, 8.0) * 0.10 + pow(dsc, 44.0) * 0.26 + pow(dsc, 190.0) * 0.55;
     let scatter_tint = mix(light, vec3<f32>(1.0, 0.95, 0.84), 0.35);
-    bodies = bodies + scatter_tint * mie * sun_vis * (0.78 + 0.55 * low) * (1.0 - sky.sun.w * 0.65);
+    bodies = bodies + scatter_tint * mie * sun_vis * (0.60 + 0.25 * low) * (1.0 - sky.sun.w * 0.65);
 }
     let dm = dot(dir, moon);
     let moon_disc = step(0.99965, dm);
@@ -131,7 +132,7 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
 @if(LOOKDEV) {
         // Look-dev clouds (step 3.4): visible closer to the horizon for close-ups, warm-lit
         // cream/golden cloud tops over clean cool periwinkle-indigo undersides.
-        let edge = smoothstep(th - 0.01, th + 0.045, n) * smoothstep(0.015, 0.10, v);
+        let edge = smoothstep(th, th + 0.032, n) * smoothstep(0.015, 0.10, v);
         let self_shade = smoothstep(-0.015, 0.048, n2 - n);
         let belly = smoothstep(th + 0.08, th + 0.25, n) * 0.35;
         let shaded = clamp(self_shade * 0.78 + belly * 0.45, 0.0, 1.0);
