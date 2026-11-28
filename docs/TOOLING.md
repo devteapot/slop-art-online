@@ -819,20 +819,29 @@ Use a fresh `--run` name for each rep. `--look` chooses `classic` or `lookdev`, 
 
 The wrapper strips the client log's ANSI colour codes before it looks for the sample marker: on the laptop the log is coloured, and the marker's timestamp did not parse.
 
-**The 200 ms spikes (battle-spikes, 2026-11-27).** On both machines the tail came on the authority's perception sweep. Each sweep moved a few fighters at the edge of the player's sight in or out of the sent set, and the client built a new body for everyone coming back into sight. Each new body ran `anim::bind`, which read and parsed the shared clip file's glTF JSON again (`anim::clip_root`, about 5 ms on the laptop). A sweep that brought ten people back made a 30–50 ms frame. With `LIVING_GAME_PERF=diag,nokeepbodies`, 6–11 bodies a second were built new during the fight, 60–80% of them for people who had left sight within 6 s.
+**The 200 ms spikes (battle-spikes, 2026-11-27; simplified 2026-11-28).** On both machines the tail came on the authority's perception sweep. Each sweep moved a few fighters at the edge of the player's sight in or out of the sent set, and the client built a new body for everyone coming back into sight. Each new body ran `anim::bind`, which read and parsed the shared clip file's glTF JSON again (`anim::clip_root`, about 5 ms on the laptop). A sweep that brought ten people back made a 30–50 ms frame.
 
-The client now does two things:
-
-- It keeps a body that leaves sight hidden for 6 s and shows it again if the same person returns in the same look (`live.rs`, "Leaving and coming back into sight").
-- It reads each clip file's root once.
-
-Nothing drawn changes: whoever is sent is drawn, and fades in as before. Laptop results (M4 Pro, 3 reps per row, the 12 s sample) are in `.local/living/battle-spikes/laptop/`:
+`battle-spikes` originally made two changes: caching `anim::clip_root` per clip file, and keeping left-sight bodies hidden for 6 s to reuse them (`anim::afresh`, `LIVING_GAME_PERF=nokeepbodies`). Laptop results for the combined change against pre-fix main (`b95e80d08`, M4 Pro, 3 reps per row, 12 s sample; `.local/living/battle-spikes/laptop/`):
 
 | Output | Client | Mean ms | p99 ms | Over 16.7 ms | Worst ms |
 |---|---|---:|---:|---:|---:|
-| 1920×1080 | main | 6.52 | 12.7 | 21 of 5,521 | 25.8 |
+| 1920×1080 | main (`b95e80d08`) | 6.52 | 12.7 | 21 of 5,521 | 25.8 |
 | 1920×1080 | battle-spikes | 6.48 | 8.3 | 4 of 5,557 | 23.0 |
-| 3024×1964 | main | 8.55 | 13.0 | 17 of 4,209 | 28.0 |
+| 3024×1964 | main (`b95e80d08`) | 8.55 | 13.0 | 17 of 4,209 | 28.0 |
 | 3024×1964 | battle-spikes | 8.59 | 10.0 | 2 of 4,191 | 18.5 |
 
-On main, 59 of the 70 gaps between slow frames (more than 1.8× the median) fell on multiples of 200 ms at 1080p. With the change, 11 slow frames remain at 1080p, against 78, and 3 at native resolution, against 22. The plaza bench is unchanged: High 100% at 1080p, mean 5.12 against 5.24 ms and p99 6.2 against 6.3 ms. Under `LIVING_GAME_PERF=diag`, each laptop run also had one 640–660 ms frame. In it, the render thread waited for a drawable while a new character's files first arrived. It appeared in every arm and never without `diag`.
+On pre-fix main, 59 of the 70 gaps between slow frames (more than 1.8× the median) fell on multiples of 200 ms at 1080p. With the clip-root cache in place, 11 slow frames remained at 1080p (against 78) and 3 at native resolution (against 22). The plaza bench was unchanged: High 100% at 1080p, mean 5.12 against 5.24 ms and p99 6.2 against 6.3 ms. Under `LIVING_GAME_PERF=diag`, each laptop run also had one 640–660 ms frame where the render thread waited for a drawable while a new character's files first arrived; it appeared in every arm and never without `diag`.
+
+Controlled A/B runs on both platforms then isolated hidden-body reuse (`default` vs `LIVING_GAME_PERF=nokeepbodies`) and showed it added nothing measurable over the cached `clip_root`:
+
+- **dev-box (AMD 8060S):** p99 12.46 ms with `nokeepbodies` against 12.44 ms with reuse.
+- **laptop (Apple M4 Pro, `.local/living/battle-spikes/laptop/control/summary.md`, 3 reps interleaved):** 1080p p99 7.77 ms off against 8.30 ms on (0/5,755 vs 1/5,515 frames >16.7 ms); native 3024×1964 p99 9.97 ms off against 9.75 ms on (0/4,167 vs 0/4,197 frames >16.7 ms).
+
+`battle-simplify` (2026-11-28) therefore removed hidden-body reuse and `anim::afresh`, restored fade-out-then-despawn in `live.rs`, kept the single `anim::clip_root` parse, and kept `verify-ui` `body-return` as a regression test. Interleaved laptop bench against main (`f4eab28f3`, Classic, High 100%, 3 reps per row, 1-minute load < 4 before each rep; `.local/living/battle-spikes/laptop/simplify/`):
+
+| Output | Client | Mean ms (rep range) | p99 ms (rep range) | Over 16.7 ms (rep range) | Worst ms (rep max range) |
+|---|---|---:|---:|---:|---:|
+| 1920×1080 | main (`f4eab28f3`) | 6.40 (6.22–6.61) | 8.06 (7.92–8.17) | 1/5,620 (0–1) | 244.93 (9.14–244.93) |
+| 1920×1080 | battle-simplify | 6.20 (6.06–6.30) | 7.76 (7.40–8.12) | 0/5,806 (0–0) | 11.29 (9.50–11.29) |
+| 3024×1964 | main (`f4eab28f3`) | 8.63 (8.58–8.66) | 9.87 (9.78–10.05) | 0/4,172 (0–0) | 11.66 (11.21–11.66) |
+| 3024×1964 | battle-simplify | 8.63 (8.58–8.70) | 9.92 (9.71–10.03) | 0/4,170 (0–0) | 12.48 (10.51–12.48) |

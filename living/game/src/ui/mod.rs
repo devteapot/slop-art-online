@@ -406,9 +406,8 @@ fn dump(
             "cells": g.cells.iter().map(|c| serde_json::json!({"product": c.product, "item": c.item, "label": c.label, "allowed": c.allowed, "reason": c.reason, "detail": c.detail, "rows": c.rows})).collect::<Vec<_>>()})),
         "tags": ui.tags.iter().map(|(k, v)| (k.clone(), serde_json::json!([v.x, v.y]))).collect::<serde_json::Map<_, _>>(),
         "looks": extra.looks_json(),
-        // Each body drawn as it is drawn now (`live.rs`): its entity (the same one when a body
-        // kept after it left sight is shown again), its standing loop and one-shot, its clips'
-        // weights, its seat and fade; and the bodies kept hidden. The health on each plate.
+        // Each body drawn as it is drawn now (`live.rs`): its entity, standing loop and one-shot,
+        // its clips' weights, its seat and fade. The health on each plate.
         "bodies": extra.bodies_json(),
         "plates": model.actors.iter().map(|a| serde_json::json!({"id": a.id, "hp": a.hp, "exact": a.exact, "hostile": a.stance == model::Stance::Hostile})).collect::<Vec<_>>(),
         // Staged genesis (`genesis.rs`): whether the world is made, how far, and what the first
@@ -547,8 +546,7 @@ impl DumpExtra<'_, '_> {
 
     /// Each body drawn: its entity, what its `Motion` asks (standing loop, one-shot) and what its
     /// `Anim` plays (the clip showing most, the standing loops' weights, how far down on a ground
-    /// seat), its seat anchor and fade level; then the bodies kept hidden or fading out to be
-    /// shown again (`live.rs` "Leaving and coming back into sight").
+    /// seat), its seat anchor and fade level.
     fn bodies_json(&self) -> serde_json::Value {
         let Some(live) = self.live.as_ref() else { return serde_json::json!({}) };
         let mut drawn: Vec<_> = live
@@ -563,9 +561,7 @@ impl DumpExtra<'_, '_> {
             })
             .collect();
         drawn.sort_by_key(|x| x["id"].as_u64());
-        let mut kept: Vec<_> = live.kept_bodies().map(|(id, e, hidden)| serde_json::json!({"id": id, "entity": e.to_bits(), "hidden": hidden})).collect();
-        kept.sort_by_key(|x| x["id"].as_u64());
-        serde_json::json!({"drawn": drawn, "kept": kept})
+        serde_json::json!({"drawn": drawn})
     }
 
     fn json(&self) -> serde_json::Value {

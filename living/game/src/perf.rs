@@ -23,12 +23,6 @@
 //!   `LookParams::of`), to time each part;
 //! - `nocutaway`: tall things between the camera and you stay drawn (photographing your
 //!   character behind a wall or a tree, as other people are seen);
-//! - `nokeepbodies`: a body that leaves sight is always let go after its fade out, and someone
-//!   coming back into sight is built anew from their recipe (before keep-bodies, `live.rs`
-//!   "Leaving and coming back into sight"); with `diag`, `bodies:` lines every 2 s count bodies
-//!   leaving sight, drawn new (and how many of those came back within the keep time) and shown
-//!   again, and (as with a live script) each body shown again or drawn anew from a kept body in
-//!   another look has its own `bodies: #ID …` line;
 //! - `nobudget`: the island spawns a chunk's things as soon as their files have loaded, all in
 //!   one frame (island.rs `SPAWN_BUDGET`);
 //! - `hitch=MS`: every frame slower than MS milliseconds (default 30) is logged with what entered
@@ -40,7 +34,8 @@
 //! - `diag`: every 2 s, Bevy's render diagnostics (per-pass CPU time; GPU time only where the
 //!   backend reports timestamps, so not on Metal) and what each view draws: meshes, distinct
 //!   meshes and materials, triangles, and the characters' share, for the camera and each
-//!   shadow cascade; every 10 s, what the loaded assets hold (`assets:`); with `matnames` too,
+//!   shadow cascade; every 2 s, body churn (`bodies:`: left sight, drawn new, fading out, drawn);
+//!   every 10 s, what the loaded assets hold (`assets:`); with `matnames` too,
 //!   people's distinct materials in the camera's view by the file's material name;
 //! - `rebuild=S`: S seconds after the first load's cover lifts, every character's scene is
 //!   spawned again, as a changed scene asset would make Bevy do (`characters::force_rebuild`), to
