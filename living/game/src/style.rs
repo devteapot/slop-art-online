@@ -948,6 +948,11 @@ const PERSON_FAR: f32 = 30.0;
 const PERSON_THIN: f32 = 0.6;
 /// Face submesh outline width multiplier under Look-dev (`FacePart` meshes without `_OUTLINE_WIDTH`).
 const FACE_OUTLINE_SCALE: f32 = 0.42;
+/// The thinnest a Look-dev character shell may be, in pixels of the 3D render target. A shell
+/// extruded less than one pixel covers no pixel centre along stretches of its silhouette, so the
+/// line breaks into dashes (dev-box's 1x 75% check: Portrait 0.61 px and Near 0.94 px before the
+/// floor); from one pixel on, every row or column the edge crosses keeps an ink pixel.
+const LD_MIN_RENDER_PX: f32 = 1.0;
 
 fn person_width(style: &Style, distance: f32) -> f32 {
     let t = ((distance - PERSON_NEAR) / (PERSON_FAR - PERSON_NEAR)).clamp(0.0, 1.0);
@@ -960,9 +965,15 @@ fn person_width(style: &Style, distance: f32) -> f32 {
 ///   read delicately like Blue Protocol (`ref4`).
 /// - Play Near (~8–10 m) and Middle (~14 m): crisp (`0.92x` -> `0.86x`, ~1.55–1.65 px at Standard).
 /// - Play Far (~22 m) to 32 m: tapers smoothly down to `0.42x` so distant figures don't turn chunky.
-/// - Below 100% 3D render scale, `render_scale` scales target-pixel extrusion down so upscaled
-///   display-pixel ink thickness stays consistent with native 100%.
-pub(crate) fn ld_person_width(style: &Style, distance: f32, submesh_scale: f32, render_scale: f32) -> f32 {
+/// - Widths are logical pixels, as `bevy_mod_outline` takes them: it extrudes `width` times the
+///   3D target's pixels per logical pixel (`Camera::target_scaling_factor`). A scaled 3D target
+///   (`graphics.rs`) already has that factor times the render scale, so a line keeps its display
+///   thickness at every render scale with no compensation here (step 2 pass 2 multiplied by the
+///   render scale once more, which thinned lines to 0.56x in render pixels at 75%).
+/// - Never below [`LD_MIN_RENDER_PX`] render pixels: `px_per_logical` is the 3D target's pixels
+///   per logical pixel (1 at a 1x native output, 2 on a 2x display, 0.75 at 1x 75%, 1.5 at 2x
+///   75%). At 2x and 100% it changes only Standard's face lines (0.875 px to 1).
+pub(crate) fn ld_person_width(style: &Style, distance: f32, submesh_scale: f32, px_per_logical: f32) -> f32 {
     let s = |a: f32, b: f32, x: f32| {
         let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
         t * t * (3.0 - 2.0 * t)
@@ -970,9 +981,11 @@ pub(crate) fn ld_person_width(style: &Style, distance: f32, submesh_scale: f32, 
     let close_to_near = 0.62 + (0.92 - 0.62) * s(1.8, 7.5, distance);
     let near_to_far = 0.92 + (0.42 - 0.92) * s(13.0, 32.0, distance);
     let curve = if distance < 10.0 { close_to_near } else { near_to_far };
-    let w = style.outline_people * curve * style.look.outline_weight * submesh_scale * render_scale.clamp(0.67, 1.0);
-    // Quantize in 1/16 px steps so close-up face outlines stay smooth while crowds rarely rewrite.
-    ((w * 16.0).round() / 16.0).max(0.25)
+    let w = style.outline_people * curve * style.look.outline_weight * submesh_scale;
+    // Quantize in 1/16 px steps so close-up face outlines stay smooth while crowds rarely rewrite;
+    // the floor rounds up, so it is never under one render pixel.
+    let floor = ((LD_MIN_RENDER_PX / px_per_logical.max(0.01)) * 16.0).ceil() / 16.0;
+    ((w * 16.0).round() / 16.0).max(floor).max(0.25)
 }
 
 /// Look-dev outline colour harmonized with the ambient fill and time of day (step 2.3):
@@ -1013,19 +1026,19 @@ pub(crate) fn ld_outline_color(atmo: Option<&crate::daylight::Atmo>, style: &Sty
 fn fog_outlines(
     style: Res<Style>,
     atmo: Option<Res<crate::daylight::Atmo>>,
-    upscale: Option<Res<crate::graphics::Upscale>>,
-    cams: Query<(&GlobalTransform, &DistanceFog), With<Camera3d>>,
+    cams: Query<(&GlobalTransform, &DistanceFog, &Camera), With<Camera3d>>,
     mut outlines: Query<(&Outlined, &mut OutlineVolume, &GlobalTransform, Option<&InheritedVisibility>, Option<&bevy::mesh::MeshTag>, Has<crate::lookdev::FacePart>, Option<&OutlineScale>)>,
     (edge, target): (Option<Res<crate::sightedge::SightEdge>>, Option<Res<crate::controls::Target>>),
 ) {
-    let Ok((cam, fog)) = cams.single() else { return };
+    let Ok((cam, fog, camera)) = cams.single() else { return };
     let FogFalloff::Linear { start, end } = fog.falloff else { return };
     let cutoff = start + (end - start) * 0.55;
     let eye = cam.translation();
     let on = style.outlines && style.enabled;
     let [cr, cg, cb] = style.outline_color;
     let want_col = if style.look.on { ld_outline_color(atmo.as_deref(), &style) } else { Color::srgb(cr, cg, cb) };
-    let scale_factor = upscale.map_or(1.0, |u| u.factor);
+    // The 3D target's pixels per logical pixel: the display's scale times the render scale.
+    let px_per_logical = camera.target_scaling_factor().unwrap_or(1.0);
     // Limited view fogs round my character, not by the camera's distance (sightedge.rs).
     let limit = edge.and_then(|e| e.outline_limit(target.and_then(|t| t.0)));
     for (kind, mut o, g, shown, tag, face_part, scale) in &mut outlines {
@@ -1044,7 +1057,7 @@ fn fog_outlines(
             if matches!(kind, Outlined::Person) {
                 let w = if style.look.on {
                     let submesh = scale.map_or(if face_part { FACE_OUTLINE_SCALE } else { 1.0 }, |s| if face_part { s.0.min(FACE_OUTLINE_SCALE) } else { s.0 });
-                    ld_person_width(&style, d, submesh, scale_factor)
+                    ld_person_width(&style, d, submesh, px_per_logical)
                 } else {
                     person_width(&style, d)
                 };
@@ -1136,23 +1149,46 @@ mod tests {
     fn ld_outline_distance_curve_thins_at_portrait_and_far_and_on_faces() {
         let mut s = Style::default();
         s.look = LookParams::of(Look::Lookdev, CharRim::Subtle, OutlineWeight::Standard);
-        let portrait = ld_person_width(&s, 1.4, 1.0, 1.0);
-        let portrait_face = ld_person_width(&s, 1.4, FACE_OUTLINE_SCALE, 1.0);
-        let near = ld_person_width(&s, 9.4, 1.0, 1.0);
-        let middle = ld_person_width(&s, 14.1, 1.0, 1.0);
-        let far = ld_person_width(&s, 28.0, 1.0, 1.0);
+        // On a 2x display at 100% (2 render px per logical px), where only the face line meets the floor.
+        let portrait = ld_person_width(&s, 1.4, 1.0, 2.0);
+        let portrait_face = ld_person_width(&s, 1.4, FACE_OUTLINE_SCALE, 2.0);
+        let near = ld_person_width(&s, 9.4, 1.0, 2.0);
+        let middle = ld_person_width(&s, 14.1, 1.0, 2.0);
+        let far = ld_person_width(&s, 28.0, 1.0, 2.0);
         assert!(portrait < near, "portrait ({portrait}) is thinner than Near ({near})");
         assert!(portrait_face < portrait * 0.55, "face ({portrait_face}) is thinner than body ({portrait})");
         assert!(near >= middle && middle > far, "Near ({near}) >= Middle ({middle}) > Far ({far})");
-        let near_75 = ld_person_width(&s, 9.4, 1.0, 0.75);
-        assert!(near_75 < near && near_75 >= near * 0.70, "75% render scale compensates target px width ({near_75} vs {near})");
+        // The width is logical: a scaled target's own scale factor keeps its display thickness.
+        assert_eq!(ld_person_width(&s, 9.4, 1.0, 1.5), near, "2x at 75%: Near as at 100%");
 
         let mut fine = s;
         fine.look = LookParams::of(Look::Lookdev, CharRim::Subtle, OutlineWeight::Fine);
         let mut bold = s;
         bold.look = LookParams::of(Look::Lookdev, CharRim::Subtle, OutlineWeight::Bold);
-        assert!(ld_person_width(&fine, 14.1, 1.0, 1.0) < middle);
-        assert!(ld_person_width(&bold, 14.1, 1.0, 1.0) > middle);
+        assert!(ld_person_width(&fine, 14.1, 1.0, 2.0) < middle);
+        assert!(ld_person_width(&bold, 14.1, 1.0, 2.0) > middle);
+    }
+
+    #[test]
+    fn ld_outline_never_under_one_render_pixel() {
+        let mut s = Style::default();
+        for weight in [OutlineWeight::Fine, OutlineWeight::Standard, OutlineWeight::Bold] {
+            s.look = LookParams::of(Look::Lookdev, CharRim::Subtle, weight);
+            // 1x and 2x outputs at 100%, Auto's 2x factor (1440 / 1898), 85%, 75% and 67%.
+            for px in [1.0, 2.0, 2.0 * 1440.0 / 1898.0, 0.85, 0.75, 0.67, 1.5, 1.34] {
+                for d in [0.8, 1.4, 4.0, 9.4, 14.1, 22.0, 28.0, 40.0] {
+                    for sub in [1.0, FACE_OUTLINE_SCALE, 0.2] {
+                        let w = ld_person_width(&s, d, sub, px);
+                        assert!(w * px >= LD_MIN_RENDER_PX - 1e-4, "{weight:?} d {d} sub {sub} at {px} px/logical: {w} logical = {} render px", w * px);
+                    }
+                }
+            }
+        }
+        // dev-box's case: a 1x output at 75%. Portrait was 0.8125 logical (0.61 render px).
+        s.look = LookParams::of(Look::Lookdev, CharRim::Subtle, OutlineWeight::Standard);
+        assert_eq!(ld_person_width(&s, 1.4, 1.0, 0.75), 1.375);
+        // Widths over the floor are left as they are.
+        assert_eq!(ld_person_width(&s, 9.4, 1.0, 0.75), ld_person_width(&s, 9.4, 1.0, 2.0));
     }
 
     #[test]
