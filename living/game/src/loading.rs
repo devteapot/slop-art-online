@@ -29,7 +29,11 @@
 //! cache), a fire's emissive flame, the combat effects' alpha and additive blends (670 ms at a
 //! battle's first blow) and a heard sound's mark. The composed people include one wearing every
 //! kind of mesh the look book holds that the perceived looks lack (`LookBook::covering_kinds`:
-//! a braid's skinned cloth without UVs cost 323 ms when a battle's fighters arrived). Find what
+//! a braid's skinned cloth without UVs cost 323 ms when a battle's fighters arrived). The prewarm
+//! people ([`Prewarm`]) draw their full and far models at once, outside the near-model cap, and
+//! cast shadows and keep their outlines whatever their distance from the camera, which on a cold
+//! load is still easing in over multi-second frames (pipeline-prewarm-2: the braid's shadow and
+//! outline, 81 + 73 ms when a cold run's fighters arrived). Find what
 //! is still missing with `LIVING_GAME_PERF=hitch,pipedefs`: every `pipelines:` line after
 //! "the first view is in" is one, and its `pipedefs:` lines say which mesh and material.
 //!
@@ -49,6 +53,27 @@ const QUIET_S: f32 = 0.75;
 const MAX_S: f32 = 30.0;
 /// Its fade (s).
 const FADE_S: f32 = 0.35;
+
+/// A prewarm person: drawn with its full and far models at once, outside the near-model cap
+/// (`lookdev::far_models`), so both models' pipelines compile under the cover.
+#[derive(Component)]
+pub struct Prewarm;
+
+/// A mesh of a prewarm person ([`mark_meshes`]): its outline is drawn at any distance from the
+/// camera (`style::fog_outlines`).
+#[derive(Component)]
+pub struct PrewarmMesh;
+
+/// Mark the prewarm people's meshes as they come in (their scenes spawn over later frames).
+fn mark_meshes(mut commands: Commands, loading: Res<Loading>, children: Query<&Children>, meshes: Query<(), (With<Mesh3d>, Without<PrewarmMesh>)>) {
+    for &e in loading.prewarm.iter().flatten() {
+        for d in children.iter_descendants(e) {
+            if meshes.contains(d) {
+                commands.entity(d).insert(PrewarmMesh);
+            }
+        }
+    }
+}
 
 /// Pipelines the render world has created (written there each frame).
 #[derive(Resource, Clone, Default)]
@@ -101,7 +126,7 @@ impl Plugin for LoadingPlugin {
         app.insert_resource(count.clone())
             .insert_resource(Loading { fading: None, pipelines: (0, 0.0), done: false, prewarm: None, scenery: None, cover: ("Arriving…".into(), String::new(), None) })
             .add_systems(Startup, spawn)
-            .add_systems(Update, (prewarm, scenery))
+            .add_systems(Update, (prewarm, scenery, mark_meshes))
             .add_systems(Update, status)
             .add_systems(Last, lift);
         if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
@@ -282,6 +307,7 @@ fn prewarm(mut commands: Commands, assets: Res<AssetServer>, island: Option<Res<
             let a = i as f32 * 2.4;
             let p = at + Vec2::new(a.cos(), a.sin()) * (1.2 + 0.25 * i as f32);
             let e = crate::characters::spawn(&mut commands, &assets, r, Vec3::new(p.x, island.height(p.x, p.y), p.y), a);
+            commands.entity(e).insert(Prewarm);
             if i >= plain {
                 commands.entity(e).insert(crate::fade::Fade::shown());
             }
@@ -414,6 +440,7 @@ fn lift(
     let stranded = net.as_ref().is_some_and(|n| !crate::lookdev::enabled() && (!n.ever_live || n.genesis.preparing()));
     if loading.fading.is_none() && (ready || (now > MAX_S && !stranded)) {
         info!("loading: the first view is in after {now:.1} s ({n} pipelines)");
+        crate::perf::LIFTED.store(true, Ordering::Relaxed);
         loading.fading = Some(now);
         for e in loading.prewarm.take().unwrap_or_default().into_iter().chain(loading.scenery.take().unwrap_or_default()) {
             commands.entity(e).despawn();

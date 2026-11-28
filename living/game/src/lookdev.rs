@@ -160,14 +160,17 @@ pub struct FacePart;
 pub fn character_shadows(
     mut commands: Commands,
     cams: Query<&GlobalTransform, With<Camera3d>>,
-    mut chars: Query<(Entity, &GlobalTransform, &mut CastsShadow), (With<crate::characters::Character>, With<Fitted>)>,
+    mut chars: Query<(Entity, &GlobalTransform, &mut CastsShadow, Has<crate::loading::Prewarm>), (With<crate::characters::Character>, With<Fitted>)>,
     children: Query<&Children>,
     meshes: Query<(), (With<Mesh3d>, Without<FacePart>)>,
 ) {
     const NEAR: f32 = 26.0;
     let Ok(cam) = cams.single() else { return };
-    for (e, g, mut casts) in &mut chars {
-        let want = g.translation().distance(cam.translation()) < NEAR;
+    for (e, g, mut casts, prewarm) in &mut chars {
+        // The loading cover's prewarm people always cast, wherever the camera is yet: on a cold
+        // load it is still easing in over multi-second frames, and a braid's shadow pipeline
+        // was left to the first fighter (pipeline-prewarm-2).
+        let want = prewarm || g.translation().distance(cam.translation()) < NEAR;
         if casts.0 == Some(want) {
             continue;
         }
@@ -281,10 +284,17 @@ impl Lod {
 /// outlines. The animation runs on whichever shows. A mesh is far when it or a node above it
 /// below the character is named `Far*`; meshes that join a character later (an outfit piece, a
 /// style) join its lists and take the side it shows.
+///
+/// The loading cover's prewarm people ([`crate::loading::Prewarm`]) show both models at once and
+/// take no place under the cap: the cap starts everyone far and lets only the nearest few
+/// change, so with more people in sight than the cap, a prewarm person's full meshes (a braid's
+/// `Cloth`: its shadow and its outline) were never drawn under the cover and compiled in play
+/// instead, 81 + 73 ms when a battle's fighters arrived on a cold cache (pipeline-prewarm-2).
 #[allow(clippy::type_complexity)]
 pub fn far_models(
     mut commands: Commands,
     settings: Res<FarModels>,
+    prewarm: Query<(), With<crate::loading::Prewarm>>,
     cams: Query<(&Camera, &GlobalTransform, &Projection), With<Camera3d>>,
     new: Query<(Entity, &GlobalTransform, &Model, &crate::characters::Character), Without<Lod>>,
     mut chars: Query<(Entity, &GlobalTransform, &Model, &crate::characters::Character, &InheritedVisibility, &mut Lod)>,
@@ -365,7 +375,14 @@ pub fn far_models(
             }
         }
         let mut lod = Lod { near, far, far_now: None };
-        if lod.has_far() {
+        if prewarm.contains(e) {
+            // Both models drawn, never switched (`far_now` stays None).
+            for m in lod.near.iter().chain(&lod.far) {
+                if let Ok(mut x) = vis.get_mut(*m) {
+                    *x = Visibility::Inherited;
+                }
+            }
+        } else if lod.has_far() {
             debug!("far models: {} has {} full and {} far meshes", model.file, lod.near.len(), lod.far.len());
             let (pixels, _) = sample(g, model, character);
             let far = Some(e) != player && projection.is_some() && (settings.cap.is_some() || settings.far(pixels, None));
@@ -401,7 +418,7 @@ pub fn far_models(
     let mut reserved = usize::from(player.is_some());
     let mut eligible = Vec::new();
     for (entity, g, model, character, visible, lod) in &chars {
-        if Some(entity) == player || !visible.get() {
+        if Some(entity) == player || !visible.get() || prewarm.contains(entity) {
             continue;
         }
         let (pixels, in_view) = sample(g, model, character);
@@ -421,7 +438,7 @@ pub fn far_models(
     }
     let near: std::collections::HashSet<_> = eligible.into_iter().map(|(entity, _)| entity).collect();
     for (entity, _, _, _, _, mut lod) in &mut chars {
-        if !lod.has_far() {
+        if !lod.has_far() || prewarm.contains(entity) {
             continue;
         }
         let want = Some(entity) != player && !near.contains(&entity);

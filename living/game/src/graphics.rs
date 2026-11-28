@@ -504,6 +504,14 @@ fn sync_render_scale(
                 Msaa::Off,
                 IsDefaultUiCamera,
                 output_target,
+                // It draws the UI only. On the default layer it also "saw" every 3D mesh inside
+                // its orthographic frustum (±960 × ±540 m round the world's origin, where the
+                // arrival point and battles are), so each mesh's visibility was checked for it and
+                // bevy_mod_outline specialised an outline variant per mesh layout for its view
+                // (the window's format, normalised to Rgba8UnormSrgb): 1–6 pipelines compiled in
+                // play at 75% after the loading cover lifted (pipeline-prewarm-2). The UI ignores
+                // render layers.
+                bevy::camera::visibility::RenderLayers::none(),
             ))
             .id();
         let backdrop = commands

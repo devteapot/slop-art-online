@@ -32,7 +32,12 @@
 //!   (Bevy creates pipelines synchronously on macOS, inside that set: a new material, mesh
 //!   layout or pass stalls the frame that first draws it; `prewarm` in `loading.rs`); with
 //!   `pipedefs` too, each new render pipeline is logged in full (`pipedefs:` lines: vertex
-//!   layout, cull, depth, blend, shader defs), to tell which mesh and material made it;
+//!   layout, cull, depth, blend, shader defs), to tell which mesh and material made it. Once the
+//!   first load's cover has lifted, both lines say "after the cover": a stall in front of the
+//!   player. Every 60 s, and once for the cover's time when it lifts, a `hitch summary:` line
+//!   gives the frames, those over MS, the worst and what this logging took a frame. Cheap enough for play-tests: their launches set
+//!   `LIVING_GAME_PERF=hitch=33` (play.json's `client.env`), so a new build's cold Metal cache
+//!   shows in the session's `client.log` without `diag`;
 //! - `diag`: every 2 s, Bevy's render diagnostics (per-pass CPU time; GPU time only where the
 //!   backend reports timestamps, so not on Metal) and what each view draws: meshes, distinct
 //!   meshes and materials, triangles, and the characters' share, for the camera and each
@@ -73,8 +78,15 @@
 
 use bevy::prelude::*;
 
+/// `LIVING_GAME_PERF`, read once: the flags are asked for in per-frame systems, and the
+/// environment is fixed for the process (nothing in the client sets it).
+fn flags() -> Option<&'static str> {
+    static FLAGS: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    FLAGS.get_or_init(|| std::env::var("LIVING_GAME_PERF").ok()).as_deref()
+}
+
 pub fn has(flag: &str) -> bool {
-    std::env::var("LIVING_GAME_PERF").is_ok_and(|v| v.split(',').any(|f| f.trim() == flag))
+    flags().is_some_and(|v| v.split(',').any(|f| f.trim() == flag))
 }
 
 pub fn cap() -> std::time::Duration {
@@ -94,7 +106,7 @@ pub fn apply(
     mut suns: Query<&mut DirectionalLight>,
     cams: Query<(Entity, Has<bevy::core_pipeline::prepass::DepthPrepass>, Has<bevy::post_process::bloom::Bloom>), With<Camera3d>>,
 ) {
-    if std::env::var("LIVING_GAME_PERF").is_err() {
+    if flags().is_none() {
         return;
     }
     if (has("noedges") || has("noprepass")) && style.edges {
@@ -301,16 +313,88 @@ fn log_hitches(
     converted: Query<(), Added<crate::lookdev::Converted>>,
     roam: Res<crate::envs::Roam>,
     mut last: Local<(i64, [Arrivals; 3])>,
+    mut summary: Local<HitchSummary>,
 ) {
+    let started = std::time::Instant::now();
     let n = all.iter().count() as i64;
     let now = Arrivals { entities: n - last.0, meshes: meshes.iter().count(), models: models.iter().count(), characters: characters.iter().count(), converted: converted.iter().count() };
     last.0 = n;
     let ms = time.delta_secs() * 1000.0;
-    if ms > value("hitch").unwrap_or(30.0) {
+    let over = ms > hitch_ms();
+    if over {
         let [a, b, _] = last.1;
-        info!("hitch: {ms:.1} ms at ({:.0}, {:.0}); this frame {now:?}; before {a:?}; two before {b:?}", roam.pos.x, roam.pos.y);
+        info!("hitch: {ms:.1} ms{} at ({:.0}, {:.0}); this frame {now:?}; before {a:?}; two before {b:?}", cover_note(), roam.pos.x, roam.pos.y);
     }
     last.1 = [now, last.1[0], last.1[1]];
+    summary.add(ms, over, started.elapsed());
+    // A summary every minute, and one for the loading cover's time when it lifts.
+    let lifted = LIFTED.load(std::sync::atomic::Ordering::Relaxed);
+    if summary.since.is_none_or(|t| t.elapsed().as_secs_f32() >= SUMMARY_S) || lifted != summary.lifted {
+        if summary.since.is_some() {
+            summary.log();
+        }
+        *summary = HitchSummary { since: Some(std::time::Instant::now()), lifted, ..default() };
+    }
+}
+
+/// The `hitch` threshold (ms): `hitch=MS`, default 30.
+fn hitch_ms() -> f32 {
+    static MS: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+    *MS.get_or_init(|| value("hitch").unwrap_or(30.0))
+}
+
+/// Whether the first load's cover has lifted (`loading::lift` sets it): `hitch` and
+/// `pipelines:` lines after it say "after the cover", a stall in front of the player.
+pub static LIFTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn cover_note() -> &'static str {
+    if LIFTED.load(std::sync::atomic::Ordering::Relaxed) { " after the cover" } else { "" }
+}
+
+/// `hitch`: how often the summary line is logged (s).
+const SUMMARY_S: f32 = 60.0;
+
+/// The render world's `log_pipelines` time (ns), for the summary's cost.
+static RENDER_COST_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// `hitch`: every [`SUMMARY_S`], the frames, those over the threshold and the worst, and what
+/// the `hitch` logging itself took a frame (both worlds' systems, lines included).
+#[derive(Default)]
+struct HitchSummary {
+    since: Option<std::time::Instant>,
+    /// Whether these frames came after the cover lifted.
+    lifted: bool,
+    frames: u32,
+    over: u32,
+    worst_ms: f32,
+    total_ms: f64,
+    cost: std::time::Duration,
+}
+
+impl HitchSummary {
+    fn add(&mut self, ms: f32, over: bool, cost: std::time::Duration) {
+        self.frames += 1;
+        self.over += u32::from(over);
+        self.worst_ms = self.worst_ms.max(ms);
+        self.total_ms += f64::from(ms);
+        self.cost += cost;
+    }
+
+    fn log(&self) {
+        let render = std::time::Duration::from_nanos(RENDER_COST_NS.swap(0, std::sync::atomic::Ordering::Relaxed));
+        let n = self.frames.max(1);
+        info!(
+            "hitch summary{}: {} frames in {:.0} s, mean {:.1} ms, {} over {:.0} ms, worst {:.1} ms; this logging {:.1} µs a frame",
+            if self.lifted { " after the cover" } else { "" },
+            self.frames,
+            self.total_ms / 1000.0,
+            self.total_ms / f64::from(n),
+            self.over,
+            hitch_ms(),
+            self.worst_ms,
+            (self.cost + render).as_secs_f64() * 1e6 / f64::from(n)
+        );
+    }
 }
 
 /// `LIVING_GAME_FRAMES`: the per-frame record.
@@ -348,8 +432,10 @@ fn pipelines_start(mut commands: Commands) {
 /// render set's time.
 fn log_pipelines(cache: Res<bevy::render::render_resource::PipelineCache>, start: Option<Res<RenderSetStart>>, mut seen: Local<usize>) {
     use bevy::material::descriptor::PipelineDescriptor;
+    let started = std::time::Instant::now();
     let n = cache.pipelines().count();
     if n <= *seen {
+        RENDER_COST_NS.fetch_add(started.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
         return;
     }
     let mut by: std::collections::BTreeMap<String, usize> = Default::default();
@@ -370,7 +456,8 @@ fn log_pipelines(cache: Res<bevy::render::render_resource::PipelineCache>, start
     }
     *seen = n;
     let ms = start.map_or(0.0, |s| s.0.elapsed().as_secs_f64() * 1000.0);
-    info!("pipelines: +{} (now {n}) in a {ms:.0} ms render set: {}", by.values().sum::<usize>(), by.iter().map(|(k, v)| format!("{k} ×{v}")).collect::<Vec<_>>().join(", "));
+    info!("pipelines: +{} (now {n}) in a {ms:.0} ms render set{}: {}", by.values().sum::<usize>(), cover_note(), by.iter().map(|(k, v)| format!("{k} ×{v}")).collect::<Vec<_>>().join(", "));
+    RENDER_COST_NS.fetch_add(started.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// `pipedefs`: one new render pipeline in full enough to tell what drew it: label, vertex
@@ -494,10 +581,10 @@ pub fn log_views(
 
 /// A numeric flag's value (`name=value`).
 pub fn value(name: &str) -> Option<f32> {
-    std::env::var("LIVING_GAME_PERF").ok()?.split(',').find_map(|f| f.trim().strip_prefix(name)?.strip_prefix('=')?.parse().ok())
+    flags()?.split(',').find_map(|f| f.trim().strip_prefix(name)?.strip_prefix('=')?.parse().ok())
 }
 
 /// A string flag's value (`name=value`).
 pub fn string(name: &str) -> Option<String> {
-    std::env::var("LIVING_GAME_PERF").ok()?.split(',').find_map(|f| Some(f.trim().strip_prefix(name)?.strip_prefix('=')?.trim().to_string())).filter(|v| !v.is_empty())
+    flags()?.split(',').find_map(|f| Some(f.trim().strip_prefix(name)?.strip_prefix('=')?.trim().to_string())).filter(|v| !v.is_empty())
 }
