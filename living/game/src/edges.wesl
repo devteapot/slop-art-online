@@ -515,7 +515,9 @@ fn crevice_ao(px: vec2<i32>, d0: f32, raw_depth: f32, n0: vec3<f32>) -> f32 {
     if (strength <= 0.001 || raw_depth <= 1e-7 || d0 >= fade_end) {
         return 0.0;
     }
-    let dist_fade = 1.0 - smoothstep(edges.ld_ao.z, fade_end, d0);
+    // Also fades out close to the camera (2-4 m): portrait close-ups (about 1-1.5 m) otherwise
+    // get bruise-like creases on cheeks and jaws; no play camera comes this close (step 3 critic 2).
+    let dist_fade = (1.0 - smoothstep(edges.ld_ao.z, fade_end, d0)) * smoothstep(2.0, 4.0, d0);
     if (dist_fade <= 0.001) {
         return 0.0;
     }
