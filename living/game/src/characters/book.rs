@@ -159,6 +159,74 @@ impl LookBook {
     }
 }
 
+impl LookBook {
+    /// The fewest lines (greedy) to draw beside `worn` so that every kind of mesh the book's
+    /// files hold ([`mesh_kinds`]) is drawn at least once: a kind only some style files have
+    /// makes pipelines of its own, compiled when the first person wearing one comes into sight
+    /// unless the loading cover drew it (a braid's cloth, skinned and vertex-coloured with no UVs,
+    /// cost 323 ms on a cold Metal cache when a battle's fighters arrived; pipeline-prewarm).
+    /// Usually one line, often none.
+    pub fn covering_kinds(&self, worn: &[String]) -> Vec<String> {
+        let kinds = |l: &Line| -> BTreeSet<String> { l.person.files().iter().flat_map(|f| mesh_kinds(f)).collect() };
+        let have: BTreeSet<String> = worn.iter().filter_map(|k| self.lines.get(k)).flat_map(kinds).collect();
+        let want: Vec<(&str, BTreeSet<String>)> = self
+            .lines
+            .iter()
+            .filter(|(k, l)| missing_file(k, &l.person).is_none())
+            .map(|(k, l)| (k.as_str(), kinds(l).difference(&have).cloned().collect::<BTreeSet<String>>()))
+            .filter(|(_, left)| !left.is_empty())
+            .collect();
+        cover(want)
+    }
+}
+
+/// The kinds of mesh a glTF binary under the asset folder holds, by what gives a mesh pipelines
+/// of its own: each primitive's vertex attributes, whether it has morph targets, and its
+/// material's alpha mode and sidedness. Read from the file's JSON chunk once per file; empty for
+/// a file that can't be read.
+pub fn mesh_kinds(file: &str) -> BTreeSet<String> {
+    static KINDS: OnceLock<Mutex<HashMap<String, BTreeSet<String>>>> = OnceLock::new();
+    let cache = KINDS.get_or_init(Default::default);
+    if let Some(k) = cache.lock().unwrap().get(file) {
+        return k.clone();
+    }
+    let k = glb_json(&std::path::Path::new(&crate::lookdev::asset_root()).join(file)).map(|j| kinds_of(&j)).unwrap_or_default();
+    cache.lock().unwrap().insert(file.to_string(), k.clone());
+    k
+}
+
+/// A `.glb`'s JSON chunk.
+fn glb_json(path: &std::path::Path) -> Option<serde_json::Value> {
+    use std::io::Read;
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut head = [0u8; 20];
+    f.read_exact(&mut head).ok()?;
+    if &head[0..4] != b"glTF" || &head[16..20] != b"JSON" {
+        return None;
+    }
+    let mut json = vec![0u8; u32::from_le_bytes(head[12..16].try_into().ok()?) as usize];
+    f.read_exact(&mut json).ok()?;
+    serde_json::from_slice(&json).ok()
+}
+
+/// [`mesh_kinds`] of a glTF document.
+fn kinds_of(j: &serde_json::Value) -> BTreeSet<String> {
+    let materials = j["materials"].as_array().cloned().unwrap_or_default();
+    let mut out = BTreeSet::new();
+    for mesh in j["meshes"].as_array().into_iter().flatten() {
+        for p in mesh["primitives"].as_array().into_iter().flatten() {
+            let mut attrs: Vec<&str> = p["attributes"].as_object().map(|a| a.keys().map(|k| k.as_str()).collect()).unwrap_or_default();
+            attrs.sort();
+            let morphs = p["targets"].as_array().is_some_and(|t| !t.is_empty());
+            let m = p["material"].as_u64().and_then(|i| materials.get(i as usize));
+            let alpha = m.and_then(|m| m["alphaMode"].as_str()).unwrap_or("OPAQUE");
+            let sides = m.and_then(|m| m["doubleSided"].as_bool()).unwrap_or(false);
+            out.insert(format!("{}{} {alpha}{}", attrs.join("+"), if morphs { " morphs" } else { "" }, if sides { " double" } else { "" }));
+        }
+    }
+    out
+}
+
 /// Greedy set cover: each step the line that wears the most files not yet worn (ties by key).
 fn cover(mut want: Vec<(&str, BTreeSet<String>)>) -> Vec<String> {
     want.sort_by(|a, b| a.0.cmp(b.0));
@@ -250,6 +318,20 @@ fn missing_file(key: &str, p: &Person) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A mesh's kind is its attributes, morphs, alpha mode and sidedness.
+    #[test]
+    fn mesh_kinds_tell_layouts_apart() {
+        let j = serde_json::json!({
+            "materials": [{ "alphaMode": "BLEND" }, {}],
+            "meshes": [
+                { "primitives": [{ "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 }, "material": 0, "targets": [{}] }] },
+                { "primitives": [{ "attributes": { "NORMAL": 1, "POSITION": 0 }, "material": 1 }, { "attributes": { "POSITION": 0, "NORMAL": 1 } }] }
+            ]
+        });
+        let k: Vec<String> = kinds_of(&j).into_iter().collect();
+        assert_eq!(k, vec!["NORMAL+POSITION OPAQUE".to_string(), "NORMAL+POSITION+TEXCOORD_0 morphs BLEND".to_string()]);
+    }
 
     fn line(kind: &str, hair: &str, outfit: &[&str]) -> serde_json::Value {
         serde_json::json!({ "person": { "type": kind, "height": 1.6, "styles": { "hair": hair, "outfit": outfit } }, "words": { "form": "woman", "girth": 2, "height": 1, "hair": "dark-haired", "top": "a green smock", "bottom": "dark trousers" } })

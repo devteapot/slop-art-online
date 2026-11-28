@@ -30,7 +30,9 @@
 //!   and meshes converted to toon materials; in the render world, every frame that creates
 //!   pipelines logs how many, by label and vertex layout, and how long its render set took
 //!   (Bevy creates pipelines synchronously on macOS, inside that set: a new material, mesh
-//!   layout or pass stalls the frame that first draws it; `prewarm` in `island.rs`);
+//!   layout or pass stalls the frame that first draws it; `prewarm` in `loading.rs`); with
+//!   `pipedefs` too, each new render pipeline is logged in full (`pipedefs:` lines: vertex
+//!   layout, cull, depth, blend, shader defs), to tell which mesh and material made it;
 //! - `diag`: every 2 s, Bevy's render diagnostics (per-pass CPU time; GPU time only where the
 //!   backend reports timestamps, so not on Metal) and what each view draws: meshes, distinct
 //!   meshes and materials, triangles, and the characters' share, for the camera and each
@@ -359,9 +361,47 @@ fn log_pipelines(cache: Res<bevy::render::render_resource::PipelineCache>, start
         };
         *by.entry(k).or_default() += 1;
     }
+    if has("pipedefs") {
+        for p in cache.pipelines().skip(*seen) {
+            if let PipelineDescriptor::RenderPipelineDescriptor(d) = &p.descriptor {
+                info!("pipedefs: {}", describe(d));
+            }
+        }
+    }
     *seen = n;
     let ms = start.map_or(0.0, |s| s.0.elapsed().as_secs_f64() * 1000.0);
     info!("pipelines: +{} (now {n}) in a {ms:.0} ms render set: {}", by.values().sum::<usize>(), by.iter().map(|(k, v)| format!("{k} ×{v}")).collect::<Vec<_>>().join(", "));
+}
+
+/// `pipedefs`: one new render pipeline in full enough to tell what drew it: label, vertex
+/// attributes (location, format and offset) and stride (a mesh's whole layout: a pass that
+/// reads two attributes still differs by the others), cull mode, depth bias and write, targets'
+/// blend, and the vertex and fragment shader defs (prewarm enumeration, `loading.rs`).
+fn describe(d: &bevy::material::descriptor::RenderPipelineDescriptor) -> String {
+    let attrs: Vec<String> = d.vertex.buffers.iter().map(|b| format!("{} /{}", b.attributes.iter().map(|a| format!("{}:{:?}@{}", a.shader_location, a.format, a.offset)).collect::<Vec<_>>().join(" "), b.array_stride)).collect();
+    let defs = |v: &[bevy::shader::ShaderDefVal]| {
+        v.iter()
+            .map(|d| match d {
+                bevy::shader::ShaderDefVal::Bool(k, true) => k.to_string(),
+                bevy::shader::ShaderDefVal::Bool(k, false) => format!("!{k}"),
+                bevy::shader::ShaderDefVal::Int(k, i) => format!("{k}={i}"),
+                bevy::shader::ShaderDefVal::UInt(k, i) => format!("{k}={i}"),
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let depth = d.depth_stencil.as_ref().map_or("none".to_string(), |s| format!("{:?} write {:?} bias {}", s.format, s.depth_write_enabled, s.bias.constant));
+    let targets: Vec<String> = d.fragment.iter().flat_map(|f| f.targets.iter().map(|t| t.as_ref().map_or("-".into(), |t| format!("{:?} {:?}", t.format, t.blend.map(|b| (b.color.src_factor, b.color.dst_factor)))))).collect();
+    format!(
+        "{} attrs [{}] cull {:?} depth {depth} msaa {} targets [{}] vdefs [{}] fdefs [{}]",
+        d.label.as_deref().unwrap_or("?"),
+        attrs.join(" "),
+        d.primitive.cull_mode,
+        d.multisample.count,
+        targets.join(", "),
+        defs(&d.vertex.shader_defs),
+        d.fragment.as_ref().map_or(String::new(), |f| defs(&f.shader_defs)),
+    )
 }
 
 impl std::fmt::Debug for Arrivals {

@@ -559,6 +559,37 @@ fn drawn_as(kind: &str, rules: Option<Option<&living_rules::script::Scripts>>) -
     }
 }
 
+/// Throwaway things for the loading cover's prewarm (`loading.rs`), at `at`: a structure drawn
+/// from [`thing_mesh`] (a remains: position, normal and colour, generated outline directions, the
+/// shared vertex-colour toon, its stencil and a thing's outline) with a glowing part, as
+/// [`things`] draws them. On a land world the island draws its own buildings and trees, so the
+/// first such structure in sight, usually a fighter's remains, would otherwise compile its
+/// passes' pipelines in play (144–270 ms on a cold Metal cache, battle-spikes/longframe).
+pub fn prewarm(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut Assets<Toon>, palette: &mut Palette, style: &Style, at: Vec3) -> Vec<Entity> {
+    let (mesh, glow) = palette
+        .things
+        .entry("remains".into())
+        .or_insert_with(|| {
+            let (mut m, g) = thing_mesh("remains").unwrap_or_else(marker_mesh);
+            crate::style::outline_normals(&mut m);
+            (meshes.add(m), g.map(|(g, c)| (meshes.add(g), c)))
+        })
+        .clone();
+    let e = commands.spawn((Mesh3d(mesh), MeshMaterial3d(palette.vertex.clone()), Transform::from_translation(at), crate::style::stencil())).id();
+    commands.entity(e).insert(outline(Outlined::Thing, style));
+    // A fire's flame: the same layout in an emissive toon.
+    let glow = glow.map(|(g, _)| g).unwrap_or_else(|| {
+        let mut f = MeshBuf::default();
+        f.cone(Vec3::ZERO, 0.28, 0.05, 0.75, 6, [1.0, 1.0, 1.0, 1.0]);
+        meshes.add(f.build())
+    });
+    let mat = palette.color(mats, style, [255, 140, 40], true);
+    commands.entity(e).with_children(|c| {
+        c.spawn((Mesh3d(glow), MeshMaterial3d(mat), Transform::default()));
+    });
+    vec![e]
+}
+
 /// The generic marker for a kind the client has no shape for.
 fn marker_mesh() -> (Mesh, Option<(Mesh, [u8; 3])>) {
     let mut m = MeshBuf::default();

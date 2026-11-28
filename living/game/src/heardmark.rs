@@ -179,6 +179,14 @@ fn update(
 }
 
 impl HeardMarks {
+    /// A throwaway mark for the loading cover's prewarm (`loading.rs`), at `at`, in a mark's own
+    /// material (alpha blend with its depth bias, a pipeline of its own), so the first sound heard
+    /// out of sight doesn't compile it in play. Faint, and under the cover anyway.
+    pub fn prewarm(&self, commands: &mut Commands, mats: &mut Assets<StandardMaterial>, at: Vec3) -> Entity {
+        let material = mats.add(StandardMaterial { base_color: Color::srgba(TINT[0], TINT[1], TINT[2], 0.05), base_color_texture: Some(self.texture.clone()), unlit: true, alpha_mode: AlphaMode::Blend, depth_bias: 50.0, ..default() });
+        commands.spawn((Mesh3d(self.mesh.clone()), MeshMaterial3d(material), Transform::from_translation(at + Vec3::Y * 0.06).with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)), bevy::light::NotShadowCaster)).id()
+    }
+
     /// The marks for a dump: key, kind, way, band, where (sim m) and strength.
     pub fn json(&self) -> serde_json::Value {
         serde_json::Value::from(
