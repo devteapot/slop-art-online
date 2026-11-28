@@ -128,13 +128,22 @@ fn sample_layer(k: u32, p: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, bw: vec3<f
     if (bw.y > 0.0) {
         // Against tiling: patches of about three tiles switch between two variants of the layer
         // (another scale, angle and offset). Away from a patch's edge only one is sampled.
-        let mv = smoothstep(0.38, 0.62, noise2(p.xz * s * 0.37 + vec2<f32>(kf * 7.1, 3.3)));
+        var mv = 0.0;
+        var s2_mul = 0.77;
+@if(LOOKDEV) {
+        // Look-dev (step 3.3): wider blend band and gentler secondary scale so paving seams
+        // don't cut a hard line across plazas.
+        mv = smoothstep(0.20, 0.80, noise2(p.xz * s * 0.37 + vec2<f32>(kf * 7.1, 3.3)));
+        s2_mul = 0.88;
+} @else {
+        mv = smoothstep(0.38, 0.62, noise2(p.xz * s * 0.37 + vec2<f32>(kf * 7.1, 3.3)));
+}
         var top = vec4<f32>(0.0);
         if (mv < 1.0) {
             top = top + (1.0 - mv) * textureSampleGrad(layers, layer_sampler, r * p.xz * s, k, r * dpx.xz * s, r * dpy.xz * s);
         }
         if (mv > 0.0) {
-            let s2 = s * 0.77;
+            let s2 = s * s2_mul;
             let b = a + 2.1;
             let r2 = mat2x2<f32>(cos(b), sin(b), -sin(b), cos(b));
             top = top + mv * textureSampleGrad(layers, layer_sampler, r2 * p.xz * s2 + vec2<f32>(0.31, 0.57), k, r2 * dpx.xz * s2, r2 * dpy.xz * s2);
@@ -245,7 +254,12 @@ fn fragment(g: GroundOut, @builtin(front_facing) is_front: bool) -> FragmentOutp
         bw = bw / max(bw.x + bw.y + bw.z, 1e-4);
         bw = max(bw - vec3<f32>(0.06), vec3<f32>(0.0));
         bw = bw / max(bw.x + bw.y + bw.z, 1e-4);
-        let depth = ground.blend.x;
+        var depth = ground.blend.x;
+@if(LOOKDEV) {
+        // Look-dev (step 3.3): softer layer-boundary feathering and calmer cobblestone/paving
+        // tile-seam contrast so characters read cleanly against the ground.
+        depth = ground.blend.x * 1.55;
+}
         var t = array<vec4<f32>, 4>(vec4<f32>(0.5), vec4<f32>(0.5), vec4<f32>(0.5), vec4<f32>(0.5));
         var a = array<f32, 4>(-9.0, -9.0, -9.0, -9.0);
         var amax = -9.0;
@@ -261,7 +275,14 @@ fn fragment(g: GroundOut, @builtin(front_facing) is_front: bool) -> FragmentOutp
         var bsum = 0.0;
         for (var j = 0u; j < 4u; j = j + 1u) {
             let b = max(a[j] - amax + depth, 0.0);
+@if(LOOKDEV) {
+            let id = ids[j];
+            let is_paving = id == 7u || id == 8u || id == 11u || id == 15u || id == 16u;
+            let amt = layer_amount(id) * select(0.90, 0.72, is_paving);
+            acc = acc + mix(vec3<f32>(1.0), t[j].rgb * 2.0, amt) * b;
+} @else {
             acc = acc + mix(vec3<f32>(1.0), t[j].rgb * 2.0, layer_amount(ids[j])) * b;
+}
             hacc = hacc + t[j].a * b;
             bsum = bsum + b;
         }

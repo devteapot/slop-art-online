@@ -254,8 +254,7 @@ impl Quality {
         }
     }
 
-    /// Whether Step 3's crevice AO is enabled at this tier.
-    #[allow(dead_code)]
+    /// Whether Step 3's crevice AO is enabled at this tier (`post.rs`).
     pub fn crevice_ao(self) -> bool {
         self.profile().crevice_ao
     }

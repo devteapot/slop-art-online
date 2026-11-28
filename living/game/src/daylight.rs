@@ -58,6 +58,14 @@ pub struct Key {
     pub zenith: [f32; 3],
     pub horizon: [f32; 3],
     pub fog: [f32; 3],
+    /// Optional Look-dev sky & aerial-haze stops (gated on `style::Look::Lookdev`, step 3.4);
+    /// Classic ignores them completely.
+    #[serde(default)]
+    pub lookdev_zenith: Option<[f32; 3]>,
+    #[serde(default)]
+    pub lookdev_horizon: Option<[f32; 3]>,
+    #[serde(default)]
+    pub lookdev_fog: Option<[f32; 3]>,
     /// Shadows' target hue (0..1), and how much the sky's fill lifts dark surfaces.
     pub shadow_hue: f32,
     pub lift: f32,
@@ -198,6 +206,11 @@ pub struct Atmo {
     pub zenith: Vec3,
     pub horizon: Vec3,
     pub fog: Vec3,
+    /// Look-dev sky & aerial-haze colours (linear, gated on `style::Look::Lookdev`, step 3).
+    pub ld_zenith: Vec3,
+    pub ld_horizon: Vec3,
+    pub ld_fog: Vec3,
+    pub shadow_hue: f32,
     pub fog_far: f32,
     /// The sky's fill (linear, added to dark surfaces) and the glow factor.
     pub fill: Vec3,
@@ -383,6 +396,13 @@ fn key_at(keys: &[Key], hour: f32) -> Key {
     let t = ((hour - a.hour).rem_euclid(24.0) / span).clamp(0.0, 1.0);
     let t = t * t * (3.0 - 2.0 * t);
     let f = |x: f32, y: f32| x + (y - x) * t;
+    let lerp_opt = |oa: Option<[f32; 3]>, fa: [f32; 3], ob: Option<[f32; 3]>, fb: [f32; 3]| {
+        if oa.is_some() || ob.is_some() {
+            Some(lerp3(oa.unwrap_or(fa), ob.unwrap_or(fb), t))
+        } else {
+            None
+        }
+    };
     Key {
         hour,
         light: lerp3(a.light, b.light, t),
@@ -390,6 +410,9 @@ fn key_at(keys: &[Key], hour: f32) -> Key {
         zenith: lerp3(a.zenith, b.zenith, t),
         horizon: lerp3(a.horizon, b.horizon, t),
         fog: lerp3(a.fog, b.fog, t),
+        lookdev_zenith: lerp_opt(a.lookdev_zenith, a.zenith, b.lookdev_zenith, b.zenith),
+        lookdev_horizon: lerp_opt(a.lookdev_horizon, a.horizon, b.lookdev_horizon, b.horizon),
+        lookdev_fog: lerp_opt(a.lookdev_fog, a.fog, b.lookdev_fog, b.fog),
         shadow_hue: hue_lerp(a.shadow_hue, b.shadow_hue, t),
         lift: f(a.lift, b.lift),
         saturation: f(a.saturation, b.saturation),
@@ -436,6 +459,15 @@ fn compose(
         k.zenith = toward(k.zenith);
         k.horizon = toward(k.horizon);
         k.fog = toward(k.fog);
+        if let Some(c) = k.lookdev_zenith {
+            k.lookdev_zenith = Some(toward(c));
+        }
+        if let Some(c) = k.lookdev_horizon {
+            k.lookdev_horizon = Some(toward(c));
+        }
+        if let Some(c) = k.lookdev_fog {
+            k.lookdev_fog = Some(toward(c));
+        }
         k.fog_far *= shift.fog_far;
         k.lift += shift.lift;
         k.shadow_hue = hue_lerp(k.shadow_hue, shift.hue, shift.hue_mix.clamp(0.0, 1.0));
@@ -474,6 +506,10 @@ fn compose(
         zenith: lin(k.zenith) * (1.0 + flash * 2.0),
         horizon: lin(k.horizon) * (1.0 + flash * 1.5),
         fog: lin(k.fog) * (1.0 + flash * 0.8),
+        ld_zenith: lin(k.lookdev_zenith.unwrap_or(k.zenith)) * (1.0 + flash * 2.0),
+        ld_horizon: lin(k.lookdev_horizon.unwrap_or(k.horizon)) * (1.0 + flash * 1.5),
+        ld_fog: lin(k.lookdev_fog.unwrap_or(k.fog)) * (1.0 + flash * 0.8),
+        shadow_hue: k.shadow_hue,
         fog_far: k.fog_far.max(0.2),
         fill: {
             // The fill's hue is the shadows' target hue (toon.wesl reads it back).

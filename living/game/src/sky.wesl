@@ -62,15 +62,26 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let moon = normalize(sky.moon.xyz);
 
     // The gradient, with a slight step a little above the horizon (an anime sky's banding).
-    let up = pow(smoothstep(0.0, 0.6, v), 0.65);
-    var c = mix(hor, zen, up);
-    c = mix(c, mix(hor, zen, up + 0.06), step(0.2, v) * 0.5);
-    // Glow round the low sun along the horizon.
     let flat_dir = normalize(vec2<f32>(dir.x, dir.z) + vec2<f32>(1e-5, 0.0));
     let flat_sun = normalize(vec2<f32>(sun.x, sun.z) + vec2<f32>(1e-5, 0.0));
     let low = 1.0 - smoothstep(0.05, 0.45, abs(sun.y));
     let toward = pow(max(dot(flat_dir, flat_sun), 0.0), 5.0);
+    var c = vec3<f32>(0.0);
+@if(LOOKDEV) {
+    // Look-dev sky (step 3.4): cleaner azure-to-cerulean gradient, luminous horizon lift,
+    // and smooth sunward atmospheric scatter.
+    let up = pow(smoothstep(0.0, 0.50, v), 0.72);
+    c = mix(hor, zen, up);
+    let day_air = (1.0 - night) * (1.0 - sky.sun.w * 0.65);
+    c = c + hor * (1.0 - smoothstep(0.0, 0.16, v)) * 0.08 * day_air;
+    c = c + light * toward * (low * 0.42 + 0.08 * day_air) * (1.0 - smoothstep(0.0, 0.45, v));
+} @else {
+    let up = pow(smoothstep(0.0, 0.6, v), 0.65);
+    c = mix(hor, zen, up);
+    c = mix(c, mix(hor, zen, up + 0.06), step(0.2, v) * 0.5);
+    // Glow round the low sun along the horizon.
     c = c + light * toward * low * (1.0 - smoothstep(0.0, 0.4, v)) * 0.35;
+}
 
     // Stars: one possible star per cell of a fine grid on the sphere, twinkling.
     if (sky.zenith.a > 0.01 && v > 0.0) {
@@ -92,6 +103,14 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let halo = smoothstep(0.985, 0.9994, ds) * 0.35 + step(0.9975, ds) * 0.25;
     let sun_vis = smoothstep(-0.04, 0.02, sun.y);
     var bodies = (light * 14.0 + vec3<f32>(2.0)) * disc * sun_vis + light * halo * sun_vis * (0.5 + low);
+@if(LOOKDEV) {
+    // Subtle Mie scatter & bloom-catching corona round the sun (step 3.4, Blue Protocol ref4).
+    let dsc = max(ds, 0.0);
+    // Kept mostly under the bloom threshold, so a low sun does not flood foreground silhouettes.
+    let mie = pow(dsc, 8.0) * 0.10 + pow(dsc, 44.0) * 0.26 + pow(dsc, 190.0) * 0.55;
+    let scatter_tint = mix(light, vec3<f32>(1.0, 0.95, 0.84), 0.35);
+    bodies = bodies + scatter_tint * mie * sun_vis * (0.60 + 0.25 * low) * (1.0 - sky.sun.w * 0.65);
+}
     let dm = dot(dir, moon);
     let moon_disc = step(0.99965, dm);
     let bite = step(0.99965, dot(dir, normalize(moon + vec3<f32>(0.012, 0.006, 0.0))));
@@ -107,12 +126,31 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         let uv = dir.xz / (v + 0.12) * 0.9 + drift;
         let n = clouds_at(uv);
         let th = mix(0.78, 0.32, cover);
-        let edge = smoothstep(th, th + 0.035, n) * smoothstep(0.0, 0.14, v);
-        // Self-shadow: denser toward the light means this side faces away.
         let key = select(moon, sun, sun.y > -0.03);
         let n2 = clouds_at(uv + normalize(key.xz + vec2<f32>(1e-4, 0.0)) * 0.07);
-        let shaded = step(n + 0.015, n2);
         let storm = sky.sun.w;
+@if(LOOKDEV) {
+        // Look-dev clouds (step 3.4): visible closer to the horizon for close-ups, warm-lit
+        // cream/golden cloud tops over clean cool periwinkle-indigo undersides.
+        let edge = smoothstep(th, th + 0.032, n) * smoothstep(0.015, 0.10, v);
+        let self_shade = smoothstep(-0.015, 0.048, n2 - n);
+        let belly = smoothstep(th + 0.08, th + 0.25, n) * 0.35;
+        let shaded = clamp(self_shade * 0.78 + belly * 0.45, 0.0, 1.0);
+        let day_lit = hor * 0.30 + mix(light, vec3<f32>(1.08, 1.04, 0.96), 0.48 * (1.0 - night)) * 1.02;
+        let lit_c = mix(day_lit, vec3<f32>(0.58, 0.63, 0.74) * (0.3 + 0.7 * length(light)), storm * 0.75);
+        let cool_under = mix(zen * 0.86 + hor * 0.26, vec3<f32>(0.26, 0.39, 0.70) * max(length(hor), 0.15), 0.34 * (1.0 - night));
+        let shade_c = mix(cool_under + light * 0.06, vec3<f32>(0.18, 0.21, 0.30) * (0.25 + 0.6 * length(light)), storm * 0.85);
+        cloud_c = mix(lit_c, shade_c, shaded);
+        let core = smoothstep(th + 0.1, th + 0.17, n) * storm;
+        cloud_c = cloud_c * (1.0 - 0.35 * core);
+        let silver = (1.0 - smoothstep(th, th + 0.055, n)) * (0.25 + 0.75 * low) * pow(max(ds, 0.0), 3.0) * sun_vis;
+        let low_rim = (1.0 - smoothstep(th + 0.01, th + 0.05, n)) * low * toward;
+        cloud_c = cloud_c + light * (low_rim * 0.55 + silver * 0.85);
+        cloud = edge;
+} @else {
+        let edge = smoothstep(th, th + 0.035, n) * smoothstep(0.0, 0.14, v);
+        // Self-shadow: denser toward the light means this side faces away.
+        let shaded = step(n + 0.015, n2);
         // Rain clouds: pale lit tops over dark, cool undersides, darker still in their dense
         // cores, so a storm sky has depth rather than one grey.
         let lit_c = mix(hor * 0.6 + light * 0.8, vec3<f32>(0.6, 0.64, 0.72) * (0.3 + 0.7 * length(light)), storm * 0.75);
@@ -124,11 +162,16 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
         let rim = (1.0 - smoothstep(th + 0.01, th + 0.05, n)) * low * toward;
         cloud_c = cloud_c + light * rim * 0.6;
         cloud = edge;
+}
     }
     c = mix(c + bodies, cloud_c, cloud);
 
     // Into the fog toward and below the horizon.
+@if(LOOKDEV) {
+    c = mix(fog, c, smoothstep(-0.005, 0.045, v));
+} @else {
     c = mix(fog, c, smoothstep(-0.005, 0.07, v));
+}
     // Lightning.
     c = c + vec3<f32>(0.7, 0.75, 0.9) * sky.fog.a * smoothstep(-0.1, 0.4, v);
     var out = vec4<f32>(c, 1.0);

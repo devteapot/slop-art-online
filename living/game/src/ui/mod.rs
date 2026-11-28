@@ -521,6 +521,7 @@ pub struct DumpExtra<'w, 's> {
     light: Res<'w, crate::style::Look>,
     char_rim: Res<'w, crate::style::CharRim>,
     outline_weight: Res<'w, crate::style::OutlineWeight>,
+    grade: Res<'w, crate::post::Grade>,
     town: Option<Res<'w, crate::town::Town>>,
     loading: Option<Res<'w, crate::loading::Loading>>,
     combat: Option<Res<'w, crate::combat::Combat>>,
@@ -605,6 +606,9 @@ impl DumpExtra<'_, '_> {
             "cursor": cursor, "view": {"yaw": self.cam.shown_yaw, "zoom": if self.cam.mode == crate::camera::Mode::TopDown { self.cam.top_zoom.shown } else { self.cam.zoom }, "mode": self.cam.mode.name(), "height": self.cam.eye_height, "ground_clearance": self.cam.ground_clearance, "pitch": self.cam.shown.pitch, "fov": self.cam.shown.fov}, "cursor_ground": ground, "lod": {"near": lod[0], "far": lod[1], "people": lod_people},
             "facing_sight": fov, "facing_note": self.fov.as_ref().and_then(|f| f.note.clone()).map(|(t, _)| t), "heard": self.heard.as_ref().map(|h| h.json()), "sight_look": self.edge.as_ref().map(|e| e.look.name()), "sight_edge": self.edge.as_ref().map(|e| e.mode.name()), "film": self.film.name(), "film_saved": self.prefs.film, "hair_shine": self.shine.name(), "hair_shine_saved": self.prefs.hair_shine, "light": self.light.name(), "light_saved": self.prefs.light, "char_rim": self.char_rim.name(), "char_rim_saved": self.prefs.char_rim, "outline_weight": self.outline_weight.name(), "outline_weight_saved": self.prefs.outline_weight});
         if let Some(m) = out.as_object_mut() {
+            m.insert("grade".into(), serde_json::json!(self.grade.name()));
+            m.insert("grade_saved".into(), serde_json::json!(self.prefs.grade));
+            m.insert("crevice_ao".into(), serde_json::json!(*self.light == crate::style::Look::Lookdev && self.quality.crevice_ao()));
             m.insert("quality".into(), serde_json::json!(self.quality.name()));
             m.insert("quality_saved".into(), serde_json::json!(self.prefs.quality));
             m.insert("render_scale".into(), serde_json::json!(self.render_scale.name()));

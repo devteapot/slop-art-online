@@ -140,6 +140,7 @@ pub fn spawn(mut commands: Commands, bodies: Query<(Entity, &WinBody), Added<Win
                 row(pg, f, "Light", "Look-dev: sky and ground fill, deeper shadows, warm skin, highlights on metal and glass", |c| kit::seg(c, f, "settings:light", &crate::style::Look::ALL.map(|l| (l.label(), l.name()))));
                 row(pg, f, "Character rim", "With the look-dev light: a rim of light on people's sun side", |c| kit::seg(c, f, "settings:char_rim", &crate::style::CharRim::ALL.map(|r| (r.label(), r.name()))));
                 row(pg, f, "Outline weight", "With the look-dev light: how heavy character outlines draw", |c| kit::seg(c, f, "settings:outline_weight", &crate::style::OutlineWeight::ALL.map(|w| (w.label(), w.name()))));
+                row(pg, f, "Colour grade", "With the look-dev light: contrast, shadow coolness and highlight warmth", |c| kit::seg(c, f, "settings:grade", &crate::post::Grade::ALL.map(|g| (g.label(), g.name()))));
                 row(pg, f, "Weapon", "Draw it by itself when something attacks you", |c| kit::toggle(c, "settings:auto_draw"));
                 row(pg, f, "Combat timing", "Play attack animations live during the windup, or on the old delayed clock", |c| kit::seg(c, f, "settings:combat_timing", &[("Live (default)", "live"), ("Old (delayed)", "old")]));
                 row(pg, f, "Windup glint", "Brief flash halfway through a hostile windup", |c| kit::toggle(c, "settings:windup_glint"));
@@ -252,7 +253,12 @@ pub fn update(
         ResMut<crate::graphics::Quality>,
         ResMut<crate::graphics::RenderScale>,
     ),
-    (mut light, mut rim, mut outline_weight): (ResMut<crate::style::Look>, ResMut<crate::style::CharRim>, ResMut<crate::style::OutlineWeight>),
+    (mut light, mut rim, mut outline_weight, mut grade): (
+        ResMut<crate::style::Look>,
+        ResMut<crate::style::CharRim>,
+        ResMut<crate::style::OutlineWeight>,
+        ResMut<crate::post::Grade>,
+    ),
 ) {
     let mut changed = false;
     if !open.is_open(Win::Settings) {
@@ -395,6 +401,14 @@ pub fn update(
                     changed = true;
                 }
             }
+            "settings:grade" => {
+                if let Some(g) = crate::post::Grade::parse(value) {
+                    info!("settings: colour grade: {value}");
+                    *grade = g;
+                    prefs.grade = Some(value.into());
+                    changed = true;
+                }
+            }
             "settings:combat_timing" => {
                 if let Some(m) = crate::combat::CombatTiming::parse(value) {
                     info!("settings: combat timing: {}", m.name());
@@ -480,7 +494,7 @@ pub fn update(
     let control = if input.control == crate::controls::Control::Cursor { "cursor" } else { "travel" };
     let (pg, preset, theme_now, look_walk, film_now) = (*page, binds.preset.name(), theme.name.key(), lw.base().to_string(), film.name());
     let shine_now = shine.name();
-    let (light_now, rim_now, outline_now) = (light.name(), rim.name(), outline_weight.name());
+    let (light_now, rim_now, outline_now, grade_now) = (light.name(), rim.name(), outline_weight.name(), grade.name());
     let (quality_now, scale_now) = (quality.name(), render_scale.name());
     kit::light(&mut lit, |t| {
         let (what, value) = t.rsplit_once(':').unwrap_or((t, ""));
@@ -505,6 +519,7 @@ pub fn update(
             "settings:light" => Some(value == light_now),
             "settings:char_rim" => Some(value == rim_now),
             "settings:outline_weight" => Some(value == outline_now),
+            "settings:grade" => Some(value == grade_now),
             "settings:combat_timing" => Some(value == prefs.combat_timing.name()),
             "settings:quality" => Some(value == quality_now),
             "settings:render_scale" => Some(value == scale_now),
@@ -741,7 +756,12 @@ pub fn apply_prefs(
         ResMut<crate::graphics::Quality>,
         ResMut<crate::graphics::RenderScale>,
     ),
-    (mut light, mut rim, mut outline_weight): (ResMut<crate::style::Look>, ResMut<crate::style::CharRim>, ResMut<crate::style::OutlineWeight>),
+    (mut light, mut rim, mut outline_weight, mut grade): (
+        ResMut<crate::style::Look>,
+        ResMut<crate::style::CharRim>,
+        ResMut<crate::style::OutlineWeight>,
+        ResMut<crate::post::Grade>,
+    ),
     mut done: Local<bool>,
 ) {
     if *done {
@@ -768,6 +788,9 @@ pub fn apply_prefs(
     }
     if let (Some(w), None) = (prefs.outline_weight.as_deref().and_then(crate::style::OutlineWeight::parse), crate::style::OutlineWeight::from_env()) {
         *outline_weight = w;
+    }
+    if let (Some(g), None) = (prefs.grade.as_deref().and_then(crate::post::Grade::parse), crate::post::Grade::from_env()) {
+        *grade = g;
     }
     if let (Some(q), None) = (prefs.quality.as_deref().and_then(crate::graphics::Quality::parse), crate::graphics::Quality::from_env()) {
         *quality = q;
