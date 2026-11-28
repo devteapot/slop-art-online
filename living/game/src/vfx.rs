@@ -43,7 +43,7 @@ enum Kind {
 pub const GLINT_LIFE: f32 = 0.12;
 
 #[derive(Resource)]
-struct Assets3 {
+pub struct Assets3 {
     arc: Handle<Mesh>,
     arrow: Handle<Mesh>,
     ball: Handle<Mesh>,
@@ -290,6 +290,19 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut mats: Res
     commands.init_resource::<Flights>();
     commands.init_resource::<Held>();
     commands.init_resource::<Glints>();
+}
+
+/// Throwaway effects for the loading cover's prewarm (`loading.rs`), round `at`: one in each of
+/// the effects' blends, alpha (a loosed arrow's wood) and additive (every glow, the glint), on
+/// the shared meshes, so their pipelines compile under the cover and not at the first blow in
+/// sight (a 670 ms frame on a cold Metal cache, battle-spikes/longframe). Not [`Fx`]: nothing
+/// animates or ends them; the cover's lift despawns them.
+pub fn prewarm(commands: &mut Commands, a: &Assets3, at: Vec3) -> Vec<Entity> {
+    [(&a.arrow, &a.wood), (&a.ball, &a.fire), (&a.glint_mesh, &a.glint)]
+        .into_iter()
+        .enumerate()
+        .map(|(i, (mesh, mat))| commands.spawn((Mesh3d(mesh.clone()), MeshMaterial3d(mat.clone()), Transform::from_translation(at + Vec3::new(0.4 * i as f32, 1.0, 0.0)).with_scale(Vec3::splat(0.5)), NotShadowCaster)).id())
+        .collect()
 }
 
 /// Ground height under a sim point (the island's, else the tile ground).

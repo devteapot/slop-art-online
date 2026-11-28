@@ -22,6 +22,21 @@
 //! so the character variants a walk would meet later (a piece with its own vertex layout made a
 //! 300 ms frame 2 km into `road:town>village3`) compile now. They go when the cover lifts. The tour, routes and the headless script's `ready` wait for it, so photographs
 //! and route frame times never include it. The asset view has no cover.
+//!
+//! Beside them ([`scenery`], pipeline-prewarm) stand what play draws later in a pipeline the
+//! first view lacks: a structure in the shared vertex-colour toon with a thing's outline (a
+//! fallen fighter's remains: 144–270 ms when the first one came into sight on a cold Metal
+//! cache), a fire's emissive flame, the combat effects' alpha and additive blends (670 ms at a
+//! battle's first blow) and a heard sound's mark. The composed people include one wearing every
+//! kind of mesh the look book holds that the perceived looks lack (`LookBook::covering_kinds`:
+//! a braid's skinned cloth without UVs cost 323 ms when a battle's fighters arrived). Find what
+//! is still missing with `LIVING_GAME_PERF=hitch,pipedefs`: every `pipelines:` line after
+//! "the first view is in" is one, and its `pipedefs:` lines say which mesh and material.
+//!
+//! Only the settings of the session's start are prewarmed. A pipeline is keyed by its view too,
+//! so changing the light (Classic, Look-dev) or the render scale in play compiles what the new
+//! setting draws in the frames after the change, once per session: a stall the player asked
+//! for, in the settings window, accepted rather than prewarming every setting's variants.
 
 use bevy::prelude::*;
 use bevy::render::render_resource::PipelineCache;
@@ -48,6 +63,8 @@ pub struct Loading {
     pub done: bool,
     /// The prewarm characters, once spawned.
     prewarm: Option<Vec<Entity>>,
+    /// The prewarm scenery and effects, once spawned ([`scenery`]).
+    scenery: Option<Vec<Entity>>,
     /// What the cover says now: its title, its detail line and its bar's share (shown while the
     /// world is being made), for the UI dump.
     pub cover: (String, String, Option<f32>),
@@ -82,9 +99,9 @@ impl Plugin for LoadingPlugin {
     fn build(&self, app: &mut App) {
         let count = Pipelines::default();
         app.insert_resource(count.clone())
-            .insert_resource(Loading { fading: None, pipelines: (0, 0.0), done: false, prewarm: None, cover: ("Arriving…".into(), String::new(), None) })
+            .insert_resource(Loading { fading: None, pipelines: (0, 0.0), done: false, prewarm: None, scenery: None, cover: ("Arriving…".into(), String::new(), None) })
             .add_systems(Startup, spawn)
-            .add_systems(Update, prewarm)
+            .add_systems(Update, (prewarm, scenery))
             .add_systems(Update, status)
             .add_systems(Last, lift);
         if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
@@ -238,12 +255,25 @@ fn prewarm(mut commands: Commands, assets: Res<AssetServer>, island: Option<Res<
     let fallback = if fallback == Fallback::None && crate::perf::has("prewarmall") { Fallback::Asked } else { fallback };
     let mut recipes = if fallback == Fallback::None { Vec::new() } else { crate::characters::Recipe::every_piece() };
     let n_bases = recipes.len();
-    let looks: Vec<crate::characters::Recipe> = match book {
-        Some(b) if !keys.is_empty() => b.covering(&keys).iter().filter_map(|k| b.recipe(k).ok()).collect(),
-        _ => Vec::new(),
+    // With them, the lines that draw every other kind of mesh the book holds (`covering_kinds`).
+    let (looks, n_kinds): (Vec<crate::characters::Recipe>, usize) = match book {
+        Some(b) if !keys.is_empty() => {
+            let worn = b.covering(&keys);
+            let kinds = b.covering_kinds(&worn);
+            (worn.iter().chain(&kinds).filter_map(|k| b.recipe(k).ok()).collect(), kinds.len())
+        }
+        _ => (Vec::new(), 0),
     };
     let n_looks = looks.len();
+    // Connected, every person who comes into sight fades in (`live.rs`): their meshes carry the
+    // dither (`fade.rs`), pipelines of their own. The island's background people don't. So the
+    // composed lines are drawn both ways (the braid's cloth came in a fading fighter's dither
+    // variant only, pipeline-prewarm).
+    let faded: Vec<crate::characters::Recipe> = if conn.is_some() { looks.clone() } else { Vec::new() };
+    let n_faded = faded.len();
     recipes.extend(looks);
+    let plain = recipes.len();
+    recipes.extend(faded);
     let at = island.start;
     let spawned = recipes
         .iter()
@@ -251,11 +281,50 @@ fn prewarm(mut commands: Commands, assets: Res<AssetServer>, island: Option<Res<
         .map(|(i, r)| {
             let a = i as f32 * 2.4;
             let p = at + Vec2::new(a.cos(), a.sin()) * (1.2 + 0.25 * i as f32);
-            crate::characters::spawn(&mut commands, &assets, r, Vec3::new(p.x, island.height(p.x, p.y), p.y), a)
+            let e = crate::characters::spawn(&mut commands, &assets, r, Vec3::new(p.x, island.height(p.x, p.y), p.y), a);
+            if i >= plain {
+                commands.entity(e).insert(crate::fade::Fade::shown());
+            }
+            e
         })
         .collect::<Vec<_>>();
-    info!("loading: {} prewarm characters ({n_looks} composed, every type and style file of the {} looks perceived; {n_bases} on VRoid bases wearing every outfit piece: {})", spawned.len(), keys.len(), fallback.why());
+    info!("loading: {} prewarm characters ({n_looks} composed, every type and style file of the {} looks perceived and {n_kinds} for the book's other kinds of mesh, {n_faded} of them again fading; {n_bases} on VRoid bases wearing every outfit piece: {})", spawned.len(), keys.len(), fallback.why());
     loading.prewarm = Some(spawned);
+}
+
+/// Spawn the prewarm scenery and effects once the island is there, beside its arrival point:
+/// what play draws later in a material, mesh layout or blend the first view lacks (see the
+/// module's doc). `LIVING_GAME_PERF=noscenewarm` leaves them out, to measure the first-sight
+/// hitch.
+#[allow(clippy::too_many_arguments)]
+fn scenery(
+    mut commands: Commands,
+    island: Option<Res<crate::island::Island>>,
+    mut loading: ResMut<Loading>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut toons: ResMut<Assets<crate::style::Toon>>,
+    mut palette: ResMut<crate::world::Palette>,
+    style: Res<crate::style::Style>,
+    fx: Option<Res<crate::vfx::Assets3>>,
+    marks: Option<Res<crate::heardmark::HeardMarks>>,
+    mut mats: ResMut<Assets<StandardMaterial>>,
+) {
+    if loading.scenery.is_some() || loading.done || crate::perf::has("noscenewarm") {
+        return;
+    }
+    let Some(island) = island else { return };
+    let p = island.start + Vec2::new(-1.6, 1.4);
+    let at = Vec3::new(p.x, island.height(p.x, p.y), p.y);
+    let mut spawned = crate::world::prewarm(&mut commands, &mut meshes, &mut toons, &mut palette, &style, at);
+    // Combat effects and heard marks only where play has them (not look-dev's island).
+    if let Some(fx) = fx {
+        spawned.extend(crate::vfx::prewarm(&mut commands, &fx, at));
+    }
+    if let Some(marks) = marks {
+        spawned.push(marks.prewarm(&mut commands, &mut mats, at + Vec3::X));
+    }
+    info!("loading: {} prewarm things and effects", spawned.len());
+    loading.scenery = Some(spawned);
 }
 
 /// Why the prewarm wears the VRoid bases, or doesn't.
@@ -346,10 +415,11 @@ fn lift(
     if loading.fading.is_none() && (ready || (now > MAX_S && !stranded)) {
         info!("loading: the first view is in after {now:.1} s ({n} pipelines)");
         loading.fading = Some(now);
-        for e in loading.prewarm.take().unwrap_or_default() {
+        for e in loading.prewarm.take().unwrap_or_default().into_iter().chain(loading.scenery.take().unwrap_or_default()) {
             commands.entity(e).despawn();
         }
         loading.prewarm = Some(Vec::new());
+        loading.scenery = Some(Vec::new());
     }
     let Some(t0) = loading.fading else { return };
     let a = 1.0 - ((now - t0) / FADE_S).clamp(0.0, 1.0);
